@@ -1,0 +1,97 @@
+{
+  "attempt_id": "20260501T041653-b64ff2e8",
+  "bead_id": "ddx-ce9905b7",
+  "base_rev": "5e0820189ee5299d217bc30a99dbe0d746639c4e",
+  "created_at": "2026-05-01T04:16:54.31885537Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ce9905b7",
+    "title": "graph integrity repair: one-click fix for missing deps and duplicate IDs",
+    "description": "Add in-place repair actions to IntegrityPanel for auto-repairable integrity issues.\n\nBackend mutation:\n- graphRepairIssue(issueID: ID!, strategy: RepairStrategy!): GraphRepairResult\n- RepairStrategy enum: REMOVE_MISSING_DEP, APPLY_SUGGESTED_ID, CLEAN_PATH_MAP\n- GraphRepairResult: { success: Boolean!, newIssues: [GraphIssue!]!, error: String }\n- Resolver: validates path is within project root, checks current file hash matches issue snapshot, applies structured YAML/frontmatter edit atomically, re-runs graph validation, returns updated issue list.\n- NOT auto-repairable server-side: parse errors, cycles, ambiguous duplicates where both files have inbound references, missing required roots.\n\nAuto-repairable strategies:\n- REMOVE_MISSING_DEP: removes missing ID from depends_on array in frontmatter\n- APPLY_SUGGESTED_ID: renames duplicate ID to the SHA-1 suffix suggestion (only for the one file that has no inbound references)\n- CLEAN_PATH_MAP: updates stale path metadata in id_to_path map\n\nUI changes to IntegrityPanel:\n- Each auto-repairable issue shows 'Preview fix' button (in addition to existing copy-snippet)\n- Preview expands to show a before/after diff of the frontmatter change\n- 'Apply fix' button calls the mutation with confirmation (no additional modal for single-file fixes)\n- On success: issue removed from panel; graph data refreshes; success toast\n- On error (stale file, write failure, new issue introduced): inline error in issue row; no partial success hidden; copy-snippet still available as manual fallback\n\nFailure modes handled: file changed since issue computed, YAML parse failure, permission/path traversal, repair introduces new graph issue, generated file (show warning 'this file may be auto-generated'), concurrent repair (server-side file hash check).",
+    "acceptance": "1. graphRepairIssue mutation in schema; resolver atomically applies structured edit and re-validates.\n2. IntegrityPanel shows 'Preview fix' for REMOVE_MISSING_DEP and APPLY_SUGGESTED_ID issues.\n3. Preview expands inline showing frontmatter diff.\n4. Clicking 'Apply fix' calls mutation; on success issue disappears and graph refreshes.\n5. File-changed error: inline error message in issue row; copy-snippet fallback unchanged.\n6. Ambiguous or non-auto-repairable issues: no 'Preview fix' shown; copy-snippet only.\n7. Go resolver test covers: successful repair, stale file hash rejection, path traversal rejection.",
+    "labels": [
+      "area:graphql",
+      "area:server",
+      "area:ui",
+      "area:frontend",
+      "feat-008",
+      "graph"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T04:16:53Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-30T19:09:26.294626056Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "routing under-specified: pass at least one of Harness/Profile/ModelRef/Model/Provider, or auto-selection inputs\nresult_rev=255efd1637831a744a3a8315c5da1ba4b8e08bba\nbase_rev=255efd1637831a744a3a8315c5da1ba4b8e08bba\nretry_after=2026-05-01T01:09:26Z",
+          "created_at": "2026-04-30T19:09:26.634917546Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-30T19:31:26.807650562Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-30T19:31:26.934914491Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-30T19:31:27.049509432Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-30T19:31:27.247340799Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T04:16:53.27179771Z",
+      "spec-id": "FEAT-008"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-008",
+      "path": "docs/helix/01-frame/features/FEAT-008-web-ui.md",
+      "title": "Feature: DDx Server Web UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260501T041653-b64ff2e8",
+    "prompt": ".ddx/executions/20260501T041653-b64ff2e8/prompt.md",
+    "manifest": ".ddx/executions/20260501T041653-b64ff2e8/manifest.json",
+    "result": ".ddx/executions/20260501T041653-b64ff2e8/result.json",
+    "checks": ".ddx/executions/20260501T041653-b64ff2e8/checks.json",
+    "usage": ".ddx/executions/20260501T041653-b64ff2e8/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ce9905b7-20260501T041653-b64ff2e8"
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "harness": "claude",
+  "model": "opus",
+  "session_id": "/Users/erik/Projects/ddx/.ddx/agent-logs/svc-1777609473155626796.jsonl",
+  "base_rev": "f110a90c135e0e78180630260de3553cc333cb38",
+  "result_rev": "1be6492a09dbf6ab7c03d4f6359f523189f45ea1",
+  "verdict": "BLOCK",
+  "bead_id": "ddx-61d3a25f",
+  "execution_dir": ".ddx/executions/20260501T042433-261142f8",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1919,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260501T040734-0dbbcb11/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:FEAT-008",
+        "bytes_included": 69565,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/01-frame/features/FEAT-008-web-ui.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1184,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 74456,
+    "output_bytes": 910,
+    "elapsed_ms": 41327,
+    "harness": "claude",
+    "model": "opus"
+  }
+}

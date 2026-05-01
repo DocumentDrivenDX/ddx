@@ -1,0 +1,73 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only an execution result.json metadata file. No schema, resolver, UI, or e2e test changes are present to evaluate against any of the 6 acceptance criteria.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No artifactRegenerate mutation/resolver changes in diff",
+      "location": "cli/internal/server/graphql/"
+    },
+    {
+      "severity": "block",
+      "summary": "No Regenerate button UI changes in diff",
+      "location": "cli/internal/server/frontend/src/"
+    },
+    {
+      "severity": "block",
+      "summary": "No artifacts.spec.ts e2e test changes in diff",
+      "location": "cli/internal/server/frontend/tests/"
+    },
+    {
+      "severity": "info",
+      "summary": "Only execution evidence file added; actual implementation commit (083f7a78) not represented in changed-files for review",
+      "location": ".ddx/executions/20260501T040734-0dbbcb11/result.json"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1919,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260501T040734-0dbbcb11/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:FEAT-008",
+        "bytes_included": 69565,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/01-frame/features/FEAT-008-web-ui.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1184,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 74456,
+    "output_bytes": 910,
+    "elapsed_ms": 41327,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
