@@ -192,3 +192,5 @@ func (r *queryResolver) Provider(ctx context.Context, name string) (*Provider, e
 
 // CoordinatorMetrics is the resolver for the coordinatorMetrics subscription.
 // Implemented in resolver_sub_exec.go.
+
+// Run and Runs are implemented in resolver_runs.go.

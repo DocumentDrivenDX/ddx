@@ -1048,6 +1048,110 @@ type ExecutionToolCallConnection {
 }
 
 # ============================================
+# Runs (FEAT-010 three-layer work/try/run substrate)
+# ============================================
+
+"""RunLayer identifies which layer of the work/try/run hierarchy a Run belongs to"""
+enum RunLayer {
+  """Top-level queue drain: encompasses one or more try attempts"""
+  work
+  """Single bead attempt: encompasses one or more run invocations"""
+  try
+  """Single agent invocation with a specific harness/model"""
+  run
+}
+
+"""
+Run is a record in the three-layer work→try→run substrate from the FEAT-010
+agent execute workflow. It is distinct from ExecutionRun (definition-driven
+check/benchmark results) and Execution (execute-bead bundle).
+"""
+type Run implements Node {
+  """Stable identifier for this run record"""
+  id: ID!
+  """Which layer this record belongs to"""
+  layer: RunLayer!
+  """Current status (pending, running, success, failure, preserved)"""
+  status: String!
+  """When the run started"""
+  startedAt: DateTime
+  """When the run completed (null if still running)"""
+  completedAt: DateTime
+  """Bead ID associated with this run (null for work-layer records with multiple beads)"""
+  beadId: String
+  """Artifact ID produced by this run (null if none)"""
+  artifactId: String
+  """Parent run ID (null for top-level work records)"""
+  parentRunId: String
+  """IDs of child runs (try records for work, run records for try)"""
+  childRunIds: [String!]!
+
+  # ── Work-layer fields (populated when layer = work) ────────────────────
+  """Raw queue inputs as JSON (work layer only)"""
+  queueInputs: JSON
+  """Stop condition for the queue drain (work layer only)"""
+  stopCondition: String
+  """Bead IDs selected for this queue drain (work layer only)"""
+  selectedBeadIds: [String!]
+
+  # ── Try-layer fields (populated when layer = try) ──────────────────────
+  """Git revision the try attempt started from (try layer only)"""
+  baseRevision: String
+  """Git revision produced by the try attempt (try layer only)"""
+  resultRevision: String
+  """Isolated worktree path used during the attempt (try layer only)"""
+  worktreePath: String
+  """Merge or preserve outcome (try layer only)"""
+  mergeOutcome: String
+  """Check results as JSON (try layer only)"""
+  checkResults: JSON
+
+  # ── Run-layer fields (populated when layer = run) ──────────────────────
+  """Short summary of the prompt (run layer only)"""
+  promptSummary: String
+  """Minimum power/effort level requested (run layer only)"""
+  powerMin: Int
+  """Maximum power/effort level requested (run layer only)"""
+  powerMax: Int
+  """Agent harness used (run layer only)"""
+  harness: String
+  """Provider name (run layer only)"""
+  provider: String
+  """Model identifier (run layer only)"""
+  model: String
+  """Input token count (run layer only)"""
+  tokensIn: Int
+  """Output token count (run layer only)"""
+  tokensOut: Int
+  """Estimated cost in USD (run layer only)"""
+  costUsd: Float
+  """Duration in milliseconds (run layer only)"""
+  durationMs: Int
+  """Short excerpt from the agent output (run layer only)"""
+  outputExcerpt: String
+  """Links to execution evidence (bundle paths, log paths, etc.) (run layer only)"""
+  evidenceLinks: [String!]
+}
+
+"""RunEdge is one edge in a RunConnection"""
+type RunEdge {
+  """The run at this position"""
+  node: Run!
+  """Opaque cursor for pagination"""
+  cursor: String!
+}
+
+"""RunConnection is a Relay cursor connection of runs"""
+type RunConnection {
+  """Ordered list of run edges"""
+  edges: [RunEdge!]!
+  """Pagination metadata"""
+  pageInfo: PageInfo!
+  """Total number of runs matching the filter"""
+  totalCount: Int!
+}
+
+# ============================================
 # Coordinators
 # ============================================
 
@@ -2343,6 +2447,34 @@ type Query {
     """Cursor to start after."""
     after: String
   ): ExecutionToolCallConnection!
+
+  # ==========================================
+  # Run Queries (FEAT-010 three-layer substrate)
+  # ==========================================
+
+  """List FEAT-010 run records with cursor pagination and optional filters."""
+  runs(
+    """Optional project identifier to scope results; omit for node-wide view."""
+    projectID: ID,
+    """Filter to a specific layer (work, try, or run)."""
+    layer: RunLayer,
+    """Filter to runs associated with a specific bead."""
+    beadID: String,
+    """Filter to a specific status."""
+    status: String,
+    """Filter to a specific harness (run-layer only)."""
+    harness: String,
+    """Return the first N edges after the cursor."""
+    first: Int,
+    """Cursor to start after."""
+    after: String
+  ): RunConnection!
+
+  """Fetch a single FEAT-010 run record by ID. Returns null for unknown IDs."""
+  run(
+    """Run identifier"""
+    id: ID!
+  ): Run
 
   # ==========================================
   # Health Queries
