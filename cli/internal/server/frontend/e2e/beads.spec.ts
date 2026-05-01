@@ -804,6 +804,106 @@ test('detail header: long bead id truncates, exposes full id on hover, and does 
 	expect(clipboardText).toBe(LONG_ID);
 });
 
+// -----------------------------------------------------------------------
+// Dependency DAG view: parent + child/depends-on relationships rendered
+// in the bead detail panel.
+// -----------------------------------------------------------------------
+
+test('bead detail renders dependency DAG: parent and child/depends-on relationships are visible', async ({
+	page
+}) => {
+	const PARENT_ID = 'bead-parent-001';
+	const CHILD_ID = 'bead-child-001';
+	const DAG_BEAD_DETAIL = {
+		id: CHILD_ID,
+		title: 'Child bead with parent and deps',
+		status: 'open',
+		priority: 1,
+		issueType: 'feature',
+		owner: 'alice',
+		createdAt: '2026-01-01T00:00:00Z',
+		createdBy: 'alice',
+		updatedAt: '2026-01-02T00:00:00Z',
+		labels: null,
+		parent: PARENT_ID,
+		description: null,
+		acceptance: null,
+		notes: null,
+		dependencies: [
+			{
+				issueId: CHILD_ID,
+				dependsOnId: 'bead-dep-A',
+				type: 'blocks',
+				createdAt: null,
+				createdBy: null
+			},
+			{
+				issueId: CHILD_ID,
+				dependsOnId: 'bead-dep-B',
+				type: 'relates',
+				createdAt: null,
+				createdBy: null
+			}
+		]
+	};
+	const DAG_BEAD_ROW = {
+		id: CHILD_ID,
+		title: DAG_BEAD_DETAIL.title,
+		status: 'open',
+		priority: 1,
+		labels: null
+	};
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string };
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
+				})
+			});
+		} else if (body.query.includes('BeadsByProject')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeBeadsResponse([DAG_BEAD_ROW], PAGE_INFO_NO_NEXT, 1) })
+			});
+		} else if (body.query.includes('query Bead(')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { bead: DAG_BEAD_DETAIL } })
+			});
+		} else {
+			await route.continue();
+		}
+	});
+
+	await page.goto(`${BASE_URL}/${CHILD_ID}`);
+
+	// Parent relationship is rendered in the detail panel.
+	const parentTerm = page.getByText('Parent', { exact: true });
+	await expect(parentTerm).toBeVisible();
+	await expect(page.getByText(PARENT_ID)).toBeVisible();
+
+	// Child/depends-on relationships are rendered in the Dependencies block.
+	const depsTerm = page.getByText('Dependencies', { exact: true });
+	await expect(depsTerm).toBeVisible();
+	await expect(page.getByText('bead-dep-A')).toBeVisible();
+	await expect(page.getByText('bead-dep-B')).toBeVisible();
+	// The dependency type/edge label is rendered alongside each node id.
+	await expect(page.getByText('(blocks)')).toBeVisible();
+	await expect(page.getByText('(relates)')).toBeVisible();
+});
+
 test('detail header: renders without horizontal scroll or clipped action buttons for id lengths 8, 32, 60, 120', async ({
 	page
 }) => {
