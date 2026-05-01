@@ -131,6 +131,36 @@ type ComplexityRoot struct {
 		UnknownCost   func(childComplexity int) int
 	}
 
+	Artifact struct {
+		Content        func(childComplexity int) int
+		DdxFrontmatter func(childComplexity int) int
+		Description    func(childComplexity int) int
+		GeneratedBy    func(childComplexity int) int
+		ID             func(childComplexity int) int
+		MediaType      func(childComplexity int) int
+		Path           func(childComplexity int) int
+		Staleness      func(childComplexity int) int
+		Title          func(childComplexity int) int
+		UpdatedAt      func(childComplexity int) int
+	}
+
+	ArtifactConnection struct {
+		Edges      func(childComplexity int) int
+		PageInfo   func(childComplexity int) int
+		TotalCount func(childComplexity int) int
+	}
+
+	ArtifactEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
+	}
+
+	ArtifactGeneratedBy struct {
+		PromptSummary   func(childComplexity int) int
+		RunID           func(childComplexity int) int
+		SourceHashMatch func(childComplexity int) int
+	}
+
 	Bead struct {
 		Acceptance   func(childComplexity int) int
 		CreatedAt    func(childComplexity int) int
@@ -855,6 +885,8 @@ type ComplexityRoot struct {
 	Query struct {
 		AgentSession                func(childComplexity int, id string) int
 		AgentSessions               func(childComplexity int, first *int, after *string, last *int, before *string, startedAfter *string, startedBefore *string) int
+		Artifact                    func(childComplexity int, projectID string, id string) int
+		Artifacts                   func(childComplexity int, projectID string, first *int, after *string, last *int, before *string, mediaType *string, search *string) int
 		Bead                        func(childComplexity int, id string) int
 		BeadDepTree                 func(childComplexity int, beadID string) int
 		Beads                       func(childComplexity int, first *int, after *string, last *int, before *string, status *string, label *string, projectID *string) int
@@ -912,6 +944,8 @@ type ComplexityRoot struct {
 		QueueAndWorkersSummary      func(childComplexity int, projectID string) int
 		QueueSummary                func(childComplexity int, projectID string) int
 		Ready                       func(childComplexity int) int
+		Run                         func(childComplexity int, id string) int
+		Runs                        func(childComplexity int, projectID *string, layer *RunLayer, beadID *string, status *string, harness *string, first *int, after *string) int
 		Search                      func(childComplexity int, query string, first *int, after *string, last *int, before *string) int
 		SessionsCostSummary         func(childComplexity int, projectID string, since *string, until *string) int
 		Worker                      func(childComplexity int, id string) int
@@ -975,6 +1009,50 @@ type ComplexityRoot struct {
 		ReopenRate    func(childComplexity int) int
 		RevisionCount func(childComplexity int) int
 		UnknownCount  func(childComplexity int) int
+	}
+
+	Run struct {
+		ArtifactID      func(childComplexity int) int
+		BaseRevision    func(childComplexity int) int
+		BeadID          func(childComplexity int) int
+		CheckResults    func(childComplexity int) int
+		ChildRunIds     func(childComplexity int) int
+		CompletedAt     func(childComplexity int) int
+		CostUsd         func(childComplexity int) int
+		DurationMs      func(childComplexity int) int
+		EvidenceLinks   func(childComplexity int) int
+		Harness         func(childComplexity int) int
+		ID              func(childComplexity int) int
+		Layer           func(childComplexity int) int
+		MergeOutcome    func(childComplexity int) int
+		Model           func(childComplexity int) int
+		OutputExcerpt   func(childComplexity int) int
+		ParentRunID     func(childComplexity int) int
+		PowerMax        func(childComplexity int) int
+		PowerMin        func(childComplexity int) int
+		ProjectID       func(childComplexity int) int
+		PromptSummary   func(childComplexity int) int
+		Provider        func(childComplexity int) int
+		QueueInputs     func(childComplexity int) int
+		ResultRevision  func(childComplexity int) int
+		SelectedBeadIds func(childComplexity int) int
+		StartedAt       func(childComplexity int) int
+		Status          func(childComplexity int) int
+		StopCondition   func(childComplexity int) int
+		TokensIn        func(childComplexity int) int
+		TokensOut       func(childComplexity int) int
+		WorktreePath    func(childComplexity int) int
+	}
+
+	RunConnection struct {
+		Edges      func(childComplexity int) int
+		PageInfo   func(childComplexity int) int
+		TotalCount func(childComplexity int) int
+	}
+
+	RunEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
 	}
 
 	SearchResult struct {
@@ -1182,6 +1260,8 @@ type QueryResolver interface {
 	DocDiff(ctx context.Context, documentID string, ref *string) (string, error)
 	Doc(ctx context.Context, id string) (*Document, error)
 	Search(ctx context.Context, query string, first *int, after *string, last *int, before *string) (*SearchResultConnection, error)
+	Artifacts(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, mediaType *string, search *string) (*ArtifactConnection, error)
+	Artifact(ctx context.Context, projectID string, id string) (*Artifact, error)
 	Commits(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, since *string, author *string) (*CommitConnection, error)
 	Workers(ctx context.Context, first *int, after *string, last *int, before *string) (*WorkerConnection, error)
 	WorkersByProject(ctx context.Context, projectID string, first *int, after *string, last *int, before *string) (*WorkerConnection, error)
@@ -1205,6 +1285,8 @@ type QueryResolver interface {
 	ExecutionBySessionID(ctx context.Context, projectID string, sessionID string) (*Execution, error)
 	ExecutionByResultRev(ctx context.Context, projectID string, sha string) (*Execution, error)
 	ExecutionToolCalls(ctx context.Context, id string, first *int, after *string) (*ExecutionToolCallConnection, error)
+	Runs(ctx context.Context, projectID *string, layer *RunLayer, beadID *string, status *string, harness *string, first *int, after *string) (*RunConnection, error)
+	Run(ctx context.Context, id string) (*Run, error)
 	Health(ctx context.Context) (*HealthStatus, error)
 	Ready(ctx context.Context) (*ReadyStatus, error)
 	Coordinators(ctx context.Context) ([]*CoordinatorMetricsEntry, error)
@@ -1666,6 +1748,118 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AggregateSummarySessions.UnknownCost(childComplexity), true
+
+	case "Artifact.content":
+		if e.ComplexityRoot.Artifact.Content == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Artifact.Content(childComplexity), true
+	case "Artifact.ddxFrontmatter":
+		if e.ComplexityRoot.Artifact.DdxFrontmatter == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Artifact.DdxFrontmatter(childComplexity), true
+	case "Artifact.description":
+		if e.ComplexityRoot.Artifact.Description == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Artifact.Description(childComplexity), true
+	case "Artifact.generatedBy":
+		if e.ComplexityRoot.Artifact.GeneratedBy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Artifact.GeneratedBy(childComplexity), true
+	case "Artifact.id":
+		if e.ComplexityRoot.Artifact.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Artifact.ID(childComplexity), true
+	case "Artifact.mediaType":
+		if e.ComplexityRoot.Artifact.MediaType == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Artifact.MediaType(childComplexity), true
+	case "Artifact.path":
+		if e.ComplexityRoot.Artifact.Path == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Artifact.Path(childComplexity), true
+	case "Artifact.staleness":
+		if e.ComplexityRoot.Artifact.Staleness == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Artifact.Staleness(childComplexity), true
+	case "Artifact.title":
+		if e.ComplexityRoot.Artifact.Title == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Artifact.Title(childComplexity), true
+	case "Artifact.updatedAt":
+		if e.ComplexityRoot.Artifact.UpdatedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Artifact.UpdatedAt(childComplexity), true
+
+	case "ArtifactConnection.edges":
+		if e.ComplexityRoot.ArtifactConnection.Edges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactConnection.Edges(childComplexity), true
+	case "ArtifactConnection.pageInfo":
+		if e.ComplexityRoot.ArtifactConnection.PageInfo == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactConnection.PageInfo(childComplexity), true
+	case "ArtifactConnection.totalCount":
+		if e.ComplexityRoot.ArtifactConnection.TotalCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactConnection.TotalCount(childComplexity), true
+
+	case "ArtifactEdge.cursor":
+		if e.ComplexityRoot.ArtifactEdge.Cursor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactEdge.Cursor(childComplexity), true
+	case "ArtifactEdge.node":
+		if e.ComplexityRoot.ArtifactEdge.Node == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactEdge.Node(childComplexity), true
+
+	case "ArtifactGeneratedBy.promptSummary":
+		if e.ComplexityRoot.ArtifactGeneratedBy.PromptSummary == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactGeneratedBy.PromptSummary(childComplexity), true
+	case "ArtifactGeneratedBy.runId":
+		if e.ComplexityRoot.ArtifactGeneratedBy.RunID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactGeneratedBy.RunID(childComplexity), true
+	case "ArtifactGeneratedBy.sourceHashMatch":
+		if e.ComplexityRoot.ArtifactGeneratedBy.SourceHashMatch == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactGeneratedBy.SourceHashMatch(childComplexity), true
 
 	case "Bead.acceptance":
 		if e.ComplexityRoot.Bead.Acceptance == nil {
@@ -4689,6 +4883,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.AgentSessions(childComplexity, args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string), args["startedAfter"].(*string), args["startedBefore"].(*string)), true
+	case "Query.artifact":
+		if e.ComplexityRoot.Query.Artifact == nil {
+			break
+		}
+
+		args, err := ec.field_Query_artifact_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Artifact(childComplexity, args["projectID"].(string), args["id"].(string)), true
+	case "Query.artifacts":
+		if e.ComplexityRoot.Query.Artifacts == nil {
+			break
+		}
+
+		args, err := ec.field_Query_artifacts_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Artifacts(childComplexity, args["projectID"].(string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string), args["mediaType"].(*string), args["search"].(*string)), true
 	case "Query.bead":
 		if e.ComplexityRoot.Query.Bead == nil {
 			break
@@ -5247,6 +5463,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Ready(childComplexity), true
+	case "Query.run":
+		if e.ComplexityRoot.Query.Run == nil {
+			break
+		}
+
+		args, err := ec.field_Query_run_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Run(childComplexity, args["id"].(string)), true
+	case "Query.runs":
+		if e.ComplexityRoot.Query.Runs == nil {
+			break
+		}
+
+		args, err := ec.field_Query_runs_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.Runs(childComplexity, args["projectID"].(*string), args["layer"].(*RunLayer), args["beadID"].(*string), args["status"].(*string), args["harness"].(*string), args["first"].(*int), args["after"].(*string)), true
 	case "Query.search":
 		if e.ComplexityRoot.Query.Search == nil {
 			break
@@ -5529,6 +5767,219 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ReworkSummary.UnknownCount(childComplexity), true
+
+	case "Run.artifactId":
+		if e.ComplexityRoot.Run.ArtifactID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.ArtifactID(childComplexity), true
+	case "Run.baseRevision":
+		if e.ComplexityRoot.Run.BaseRevision == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.BaseRevision(childComplexity), true
+	case "Run.beadId":
+		if e.ComplexityRoot.Run.BeadID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.BeadID(childComplexity), true
+	case "Run.checkResults":
+		if e.ComplexityRoot.Run.CheckResults == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.CheckResults(childComplexity), true
+	case "Run.childRunIds":
+		if e.ComplexityRoot.Run.ChildRunIds == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.ChildRunIds(childComplexity), true
+	case "Run.completedAt":
+		if e.ComplexityRoot.Run.CompletedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.CompletedAt(childComplexity), true
+	case "Run.costUsd":
+		if e.ComplexityRoot.Run.CostUsd == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.CostUsd(childComplexity), true
+	case "Run.durationMs":
+		if e.ComplexityRoot.Run.DurationMs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.DurationMs(childComplexity), true
+	case "Run.evidenceLinks":
+		if e.ComplexityRoot.Run.EvidenceLinks == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.EvidenceLinks(childComplexity), true
+	case "Run.harness":
+		if e.ComplexityRoot.Run.Harness == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.Harness(childComplexity), true
+	case "Run.id":
+		if e.ComplexityRoot.Run.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.ID(childComplexity), true
+	case "Run.layer":
+		if e.ComplexityRoot.Run.Layer == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.Layer(childComplexity), true
+	case "Run.mergeOutcome":
+		if e.ComplexityRoot.Run.MergeOutcome == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.MergeOutcome(childComplexity), true
+	case "Run.model":
+		if e.ComplexityRoot.Run.Model == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.Model(childComplexity), true
+	case "Run.outputExcerpt":
+		if e.ComplexityRoot.Run.OutputExcerpt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.OutputExcerpt(childComplexity), true
+	case "Run.parentRunId":
+		if e.ComplexityRoot.Run.ParentRunID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.ParentRunID(childComplexity), true
+	case "Run.powerMax":
+		if e.ComplexityRoot.Run.PowerMax == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.PowerMax(childComplexity), true
+	case "Run.powerMin":
+		if e.ComplexityRoot.Run.PowerMin == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.PowerMin(childComplexity), true
+	case "Run.projectID":
+		if e.ComplexityRoot.Run.ProjectID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.ProjectID(childComplexity), true
+	case "Run.promptSummary":
+		if e.ComplexityRoot.Run.PromptSummary == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.PromptSummary(childComplexity), true
+	case "Run.provider":
+		if e.ComplexityRoot.Run.Provider == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.Provider(childComplexity), true
+	case "Run.queueInputs":
+		if e.ComplexityRoot.Run.QueueInputs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.QueueInputs(childComplexity), true
+	case "Run.resultRevision":
+		if e.ComplexityRoot.Run.ResultRevision == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.ResultRevision(childComplexity), true
+	case "Run.selectedBeadIds":
+		if e.ComplexityRoot.Run.SelectedBeadIds == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.SelectedBeadIds(childComplexity), true
+	case "Run.startedAt":
+		if e.ComplexityRoot.Run.StartedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.StartedAt(childComplexity), true
+	case "Run.status":
+		if e.ComplexityRoot.Run.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.Status(childComplexity), true
+	case "Run.stopCondition":
+		if e.ComplexityRoot.Run.StopCondition == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.StopCondition(childComplexity), true
+	case "Run.tokensIn":
+		if e.ComplexityRoot.Run.TokensIn == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.TokensIn(childComplexity), true
+	case "Run.tokensOut":
+		if e.ComplexityRoot.Run.TokensOut == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.TokensOut(childComplexity), true
+	case "Run.worktreePath":
+		if e.ComplexityRoot.Run.WorktreePath == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.WorktreePath(childComplexity), true
+
+	case "RunConnection.edges":
+		if e.ComplexityRoot.RunConnection.Edges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunConnection.Edges(childComplexity), true
+	case "RunConnection.pageInfo":
+		if e.ComplexityRoot.RunConnection.PageInfo == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunConnection.PageInfo(childComplexity), true
+	case "RunConnection.totalCount":
+		if e.ComplexityRoot.RunConnection.TotalCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunConnection.TotalCount(childComplexity), true
+
+	case "RunEdge.cursor":
+		if e.ComplexityRoot.RunEdge.Cursor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunEdge.Cursor(childComplexity), true
+	case "RunEdge.node":
+		if e.ComplexityRoot.RunEdge.Node == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunEdge.Node(childComplexity), true
 
 	case "SearchResult.name":
 		if e.ComplexityRoot.SearchResult.Name == nil {
@@ -6641,6 +7092,63 @@ func (ec *executionContext) field_Query_agentSessions_args(ctx context.Context, 
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_artifact_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectID", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectID"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_artifacts_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectID", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["projectID"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "last", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["last"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "before", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["before"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "mediaType", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["mediaType"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "search", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["search"] = arg6
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_beadDepTree_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -7461,6 +7969,58 @@ func (ec *executionContext) field_Query_queueSummary_args(ctx context.Context, r
 		return nil, err
 	}
 	args["projectId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_run_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_runs_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "projectID", ec.unmarshalOID2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["projectID"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "layer", ec.unmarshalORunLayer2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunLayer)
+	if err != nil {
+		return nil, err
+	}
+	args["layer"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "beadID", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["beadID"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "status", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["status"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "harness", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["harness"] = arg4
+	arg5, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg6
 	return args, nil
 }
 
@@ -9834,6 +10394,574 @@ func (ec *executionContext) fieldContext_AggregateSummarySessions_costUsd(_ cont
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Artifact_id(ctx context.Context, field graphql.CollectedField, obj *Artifact) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Artifact_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Artifact_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Artifact",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Artifact_path(ctx context.Context, field graphql.CollectedField, obj *Artifact) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Artifact_path,
+		func(ctx context.Context) (any, error) {
+			return obj.Path, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Artifact_path(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Artifact",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Artifact_title(ctx context.Context, field graphql.CollectedField, obj *Artifact) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Artifact_title,
+		func(ctx context.Context) (any, error) {
+			return obj.Title, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Artifact_title(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Artifact",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Artifact_mediaType(ctx context.Context, field graphql.CollectedField, obj *Artifact) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Artifact_mediaType,
+		func(ctx context.Context) (any, error) {
+			return obj.MediaType, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Artifact_mediaType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Artifact",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Artifact_generatedBy(ctx context.Context, field graphql.CollectedField, obj *Artifact) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Artifact_generatedBy,
+		func(ctx context.Context) (any, error) {
+			return obj.GeneratedBy, nil
+		},
+		nil,
+		ec.marshalOArtifactGeneratedBy2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactGeneratedBy,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Artifact_generatedBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Artifact",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "runId":
+				return ec.fieldContext_ArtifactGeneratedBy_runId(ctx, field)
+			case "promptSummary":
+				return ec.fieldContext_ArtifactGeneratedBy_promptSummary(ctx, field)
+			case "sourceHashMatch":
+				return ec.fieldContext_ArtifactGeneratedBy_sourceHashMatch(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ArtifactGeneratedBy", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Artifact_staleness(ctx context.Context, field graphql.CollectedField, obj *Artifact) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Artifact_staleness,
+		func(ctx context.Context) (any, error) {
+			return obj.Staleness, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Artifact_staleness(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Artifact",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Artifact_ddxFrontmatter(ctx context.Context, field graphql.CollectedField, obj *Artifact) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Artifact_ddxFrontmatter,
+		func(ctx context.Context) (any, error) {
+			return obj.DdxFrontmatter, nil
+		},
+		nil,
+		ec.marshalOJSON2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Artifact_ddxFrontmatter(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Artifact",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type JSON does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Artifact_description(ctx context.Context, field graphql.CollectedField, obj *Artifact) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Artifact_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Artifact_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Artifact",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Artifact_updatedAt(ctx context.Context, field graphql.CollectedField, obj *Artifact) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Artifact_updatedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.UpdatedAt, nil
+		},
+		nil,
+		ec.marshalODateTime2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Artifact_updatedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Artifact",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type DateTime does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Artifact_content(ctx context.Context, field graphql.CollectedField, obj *Artifact) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Artifact_content,
+		func(ctx context.Context) (any, error) {
+			return obj.Content, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Artifact_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Artifact",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactConnection_edges(ctx context.Context, field graphql.CollectedField, obj *ArtifactConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactConnection_edges,
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		ec.marshalNArtifactEdge2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactEdgeᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "node":
+				return ec.fieldContext_ArtifactEdge_node(ctx, field)
+			case "cursor":
+				return ec.fieldContext_ArtifactEdge_cursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ArtifactEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *ArtifactConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactConnection_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐPageInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactConnection_totalCount(ctx context.Context, field graphql.CollectedField, obj *ArtifactConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactConnection_totalCount,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactConnection_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactEdge_node(ctx context.Context, field graphql.CollectedField, obj *ArtifactEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactEdge_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalNArtifact2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifact,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Artifact_id(ctx, field)
+			case "path":
+				return ec.fieldContext_Artifact_path(ctx, field)
+			case "title":
+				return ec.fieldContext_Artifact_title(ctx, field)
+			case "mediaType":
+				return ec.fieldContext_Artifact_mediaType(ctx, field)
+			case "generatedBy":
+				return ec.fieldContext_Artifact_generatedBy(ctx, field)
+			case "staleness":
+				return ec.fieldContext_Artifact_staleness(ctx, field)
+			case "ddxFrontmatter":
+				return ec.fieldContext_Artifact_ddxFrontmatter(ctx, field)
+			case "description":
+				return ec.fieldContext_Artifact_description(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Artifact_updatedAt(ctx, field)
+			case "content":
+				return ec.fieldContext_Artifact_content(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Artifact", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *ArtifactEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactEdge_cursor,
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactGeneratedBy_runId(ctx context.Context, field graphql.CollectedField, obj *ArtifactGeneratedBy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactGeneratedBy_runId,
+		func(ctx context.Context) (any, error) {
+			return obj.RunID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactGeneratedBy_runId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactGeneratedBy",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactGeneratedBy_promptSummary(ctx context.Context, field graphql.CollectedField, obj *ArtifactGeneratedBy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactGeneratedBy_promptSummary,
+		func(ctx context.Context) (any, error) {
+			return obj.PromptSummary, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactGeneratedBy_promptSummary(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactGeneratedBy",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactGeneratedBy_sourceHashMatch(ctx context.Context, field graphql.CollectedField, obj *ArtifactGeneratedBy) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactGeneratedBy_sourceHashMatch,
+		func(ctx context.Context) (any, error) {
+			return obj.SourceHashMatch, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactGeneratedBy_sourceHashMatch(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactGeneratedBy",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -25900,6 +27028,118 @@ func (ec *executionContext) fieldContext_Query_search(ctx context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_artifacts(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_artifacts,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Artifacts(ctx, fc.Args["projectID"].(string), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string), fc.Args["mediaType"].(*string), fc.Args["search"].(*string))
+		},
+		nil,
+		ec.marshalNArtifactConnection2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactConnection,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_artifacts(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "edges":
+				return ec.fieldContext_ArtifactConnection_edges(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_ArtifactConnection_pageInfo(ctx, field)
+			case "totalCount":
+				return ec.fieldContext_ArtifactConnection_totalCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ArtifactConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_artifacts_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_artifact(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_artifact,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Artifact(ctx, fc.Args["projectID"].(string), fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalOArtifact2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifact,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_artifact(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Artifact_id(ctx, field)
+			case "path":
+				return ec.fieldContext_Artifact_path(ctx, field)
+			case "title":
+				return ec.fieldContext_Artifact_title(ctx, field)
+			case "mediaType":
+				return ec.fieldContext_Artifact_mediaType(ctx, field)
+			case "generatedBy":
+				return ec.fieldContext_Artifact_generatedBy(ctx, field)
+			case "staleness":
+				return ec.fieldContext_Artifact_staleness(ctx, field)
+			case "ddxFrontmatter":
+				return ec.fieldContext_Artifact_ddxFrontmatter(ctx, field)
+			case "description":
+				return ec.fieldContext_Artifact_description(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Artifact_updatedAt(ctx, field)
+			case "content":
+				return ec.fieldContext_Artifact_content(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Artifact", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_artifact_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_commits(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -27339,6 +28579,158 @@ func (ec *executionContext) fieldContext_Query_executionToolCalls(ctx context.Co
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_executionToolCalls_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_runs(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_runs,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Runs(ctx, fc.Args["projectID"].(*string), fc.Args["layer"].(*RunLayer), fc.Args["beadID"].(*string), fc.Args["status"].(*string), fc.Args["harness"].(*string), fc.Args["first"].(*int), fc.Args["after"].(*string))
+		},
+		nil,
+		ec.marshalNRunConnection2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunConnection,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_runs(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "edges":
+				return ec.fieldContext_RunConnection_edges(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_RunConnection_pageInfo(ctx, field)
+			case "totalCount":
+				return ec.fieldContext_RunConnection_totalCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RunConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_runs_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_run(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_run,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().Run(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalORun2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRun,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_run(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Run_id(ctx, field)
+			case "layer":
+				return ec.fieldContext_Run_layer(ctx, field)
+			case "status":
+				return ec.fieldContext_Run_status(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Run_projectID(ctx, field)
+			case "startedAt":
+				return ec.fieldContext_Run_startedAt(ctx, field)
+			case "completedAt":
+				return ec.fieldContext_Run_completedAt(ctx, field)
+			case "beadId":
+				return ec.fieldContext_Run_beadId(ctx, field)
+			case "artifactId":
+				return ec.fieldContext_Run_artifactId(ctx, field)
+			case "parentRunId":
+				return ec.fieldContext_Run_parentRunId(ctx, field)
+			case "childRunIds":
+				return ec.fieldContext_Run_childRunIds(ctx, field)
+			case "queueInputs":
+				return ec.fieldContext_Run_queueInputs(ctx, field)
+			case "stopCondition":
+				return ec.fieldContext_Run_stopCondition(ctx, field)
+			case "selectedBeadIds":
+				return ec.fieldContext_Run_selectedBeadIds(ctx, field)
+			case "baseRevision":
+				return ec.fieldContext_Run_baseRevision(ctx, field)
+			case "resultRevision":
+				return ec.fieldContext_Run_resultRevision(ctx, field)
+			case "worktreePath":
+				return ec.fieldContext_Run_worktreePath(ctx, field)
+			case "mergeOutcome":
+				return ec.fieldContext_Run_mergeOutcome(ctx, field)
+			case "checkResults":
+				return ec.fieldContext_Run_checkResults(ctx, field)
+			case "promptSummary":
+				return ec.fieldContext_Run_promptSummary(ctx, field)
+			case "powerMin":
+				return ec.fieldContext_Run_powerMin(ctx, field)
+			case "powerMax":
+				return ec.fieldContext_Run_powerMax(ctx, field)
+			case "harness":
+				return ec.fieldContext_Run_harness(ctx, field)
+			case "provider":
+				return ec.fieldContext_Run_provider(ctx, field)
+			case "model":
+				return ec.fieldContext_Run_model(ctx, field)
+			case "tokensIn":
+				return ec.fieldContext_Run_tokensIn(ctx, field)
+			case "tokensOut":
+				return ec.fieldContext_Run_tokensOut(ctx, field)
+			case "costUsd":
+				return ec.fieldContext_Run_costUsd(ctx, field)
+			case "durationMs":
+				return ec.fieldContext_Run_durationMs(ctx, field)
+			case "outputExcerpt":
+				return ec.fieldContext_Run_outputExcerpt(ctx, field)
+			case "evidenceLinks":
+				return ec.fieldContext_Run_evidenceLinks(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Run", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_run_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -29590,6 +30982,1099 @@ func (ec *executionContext) fieldContext_ReworkSummary_revisionCount(_ context.C
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_id(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_layer(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_layer,
+		func(ctx context.Context) (any, error) {
+			return obj.Layer, nil
+		},
+		nil,
+		ec.marshalNRunLayer2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunLayer,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_layer(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type RunLayer does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_status(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_projectID(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_projectID,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_projectID(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_startedAt(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_startedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.StartedAt, nil
+		},
+		nil,
+		ec.marshalODateTime2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_startedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type DateTime does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_completedAt(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_completedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.CompletedAt, nil
+		},
+		nil,
+		ec.marshalODateTime2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_completedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type DateTime does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_beadId(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_beadId,
+		func(ctx context.Context) (any, error) {
+			return obj.BeadID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_beadId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_artifactId(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_artifactId,
+		func(ctx context.Context) (any, error) {
+			return obj.ArtifactID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_artifactId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_parentRunId(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_parentRunId,
+		func(ctx context.Context) (any, error) {
+			return obj.ParentRunID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_parentRunId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_childRunIds(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_childRunIds,
+		func(ctx context.Context) (any, error) {
+			return obj.ChildRunIds, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_childRunIds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_queueInputs(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_queueInputs,
+		func(ctx context.Context) (any, error) {
+			return obj.QueueInputs, nil
+		},
+		nil,
+		ec.marshalOJSON2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_queueInputs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type JSON does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_stopCondition(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_stopCondition,
+		func(ctx context.Context) (any, error) {
+			return obj.StopCondition, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_stopCondition(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_selectedBeadIds(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_selectedBeadIds,
+		func(ctx context.Context) (any, error) {
+			return obj.SelectedBeadIds, nil
+		},
+		nil,
+		ec.marshalOString2ᚕstringᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_selectedBeadIds(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_baseRevision(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_baseRevision,
+		func(ctx context.Context) (any, error) {
+			return obj.BaseRevision, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_baseRevision(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_resultRevision(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_resultRevision,
+		func(ctx context.Context) (any, error) {
+			return obj.ResultRevision, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_resultRevision(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_worktreePath(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_worktreePath,
+		func(ctx context.Context) (any, error) {
+			return obj.WorktreePath, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_worktreePath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_mergeOutcome(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_mergeOutcome,
+		func(ctx context.Context) (any, error) {
+			return obj.MergeOutcome, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_mergeOutcome(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_checkResults(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_checkResults,
+		func(ctx context.Context) (any, error) {
+			return obj.CheckResults, nil
+		},
+		nil,
+		ec.marshalOJSON2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_checkResults(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type JSON does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_promptSummary(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_promptSummary,
+		func(ctx context.Context) (any, error) {
+			return obj.PromptSummary, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_promptSummary(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_powerMin(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_powerMin,
+		func(ctx context.Context) (any, error) {
+			return obj.PowerMin, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_powerMin(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_powerMax(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_powerMax,
+		func(ctx context.Context) (any, error) {
+			return obj.PowerMax, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_powerMax(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_harness(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_harness,
+		func(ctx context.Context) (any, error) {
+			return obj.Harness, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_harness(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_provider(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_provider,
+		func(ctx context.Context) (any, error) {
+			return obj.Provider, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_provider(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_model(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_model,
+		func(ctx context.Context) (any, error) {
+			return obj.Model, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_model(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_tokensIn(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_tokensIn,
+		func(ctx context.Context) (any, error) {
+			return obj.TokensIn, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_tokensIn(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_tokensOut(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_tokensOut,
+		func(ctx context.Context) (any, error) {
+			return obj.TokensOut, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_tokensOut(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_costUsd(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_costUsd,
+		func(ctx context.Context) (any, error) {
+			return obj.CostUsd, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_costUsd(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_durationMs(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_durationMs,
+		func(ctx context.Context) (any, error) {
+			return obj.DurationMs, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_durationMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_outputExcerpt(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_outputExcerpt,
+		func(ctx context.Context) (any, error) {
+			return obj.OutputExcerpt, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_outputExcerpt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_evidenceLinks(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_evidenceLinks,
+		func(ctx context.Context) (any, error) {
+			return obj.EvidenceLinks, nil
+		},
+		nil,
+		ec.marshalOString2ᚕstringᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_evidenceLinks(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunConnection_edges(ctx context.Context, field graphql.CollectedField, obj *RunConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunConnection_edges,
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		ec.marshalNRunEdge2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunEdgeᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "node":
+				return ec.fieldContext_RunEdge_node(ctx, field)
+			case "cursor":
+				return ec.fieldContext_RunEdge_cursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RunEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *RunConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunConnection_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐPageInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunConnection_totalCount(ctx context.Context, field graphql.CollectedField, obj *RunConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunConnection_totalCount,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunConnection_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunEdge_node(ctx context.Context, field graphql.CollectedField, obj *RunEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunEdge_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalNRun2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRun,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Run_id(ctx, field)
+			case "layer":
+				return ec.fieldContext_Run_layer(ctx, field)
+			case "status":
+				return ec.fieldContext_Run_status(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Run_projectID(ctx, field)
+			case "startedAt":
+				return ec.fieldContext_Run_startedAt(ctx, field)
+			case "completedAt":
+				return ec.fieldContext_Run_completedAt(ctx, field)
+			case "beadId":
+				return ec.fieldContext_Run_beadId(ctx, field)
+			case "artifactId":
+				return ec.fieldContext_Run_artifactId(ctx, field)
+			case "parentRunId":
+				return ec.fieldContext_Run_parentRunId(ctx, field)
+			case "childRunIds":
+				return ec.fieldContext_Run_childRunIds(ctx, field)
+			case "queueInputs":
+				return ec.fieldContext_Run_queueInputs(ctx, field)
+			case "stopCondition":
+				return ec.fieldContext_Run_stopCondition(ctx, field)
+			case "selectedBeadIds":
+				return ec.fieldContext_Run_selectedBeadIds(ctx, field)
+			case "baseRevision":
+				return ec.fieldContext_Run_baseRevision(ctx, field)
+			case "resultRevision":
+				return ec.fieldContext_Run_resultRevision(ctx, field)
+			case "worktreePath":
+				return ec.fieldContext_Run_worktreePath(ctx, field)
+			case "mergeOutcome":
+				return ec.fieldContext_Run_mergeOutcome(ctx, field)
+			case "checkResults":
+				return ec.fieldContext_Run_checkResults(ctx, field)
+			case "promptSummary":
+				return ec.fieldContext_Run_promptSummary(ctx, field)
+			case "powerMin":
+				return ec.fieldContext_Run_powerMin(ctx, field)
+			case "powerMax":
+				return ec.fieldContext_Run_powerMax(ctx, field)
+			case "harness":
+				return ec.fieldContext_Run_harness(ctx, field)
+			case "provider":
+				return ec.fieldContext_Run_provider(ctx, field)
+			case "model":
+				return ec.fieldContext_Run_model(ctx, field)
+			case "tokensIn":
+				return ec.fieldContext_Run_tokensIn(ctx, field)
+			case "tokensOut":
+				return ec.fieldContext_Run_tokensOut(ctx, field)
+			case "costUsd":
+				return ec.fieldContext_Run_costUsd(ctx, field)
+			case "durationMs":
+				return ec.fieldContext_Run_durationMs(ctx, field)
+			case "outputExcerpt":
+				return ec.fieldContext_Run_outputExcerpt(ctx, field)
+			case "evidenceLinks":
+				return ec.fieldContext_Run_evidenceLinks(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Run", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *RunEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunEdge_cursor,
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -34646,6 +37131,13 @@ func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj
 			return graphql.Null
 		}
 		return ec._Worker(ctx, sel, obj)
+	case Run:
+		return ec._Run(ctx, sel, &obj)
+	case *Run:
+		if obj == nil {
+			return graphql.Null
+		}
+		return ec._Run(ctx, sel, obj)
 	case Provider:
 		return ec._Provider(ctx, sel, &obj)
 	case *Provider:
@@ -34709,6 +37201,13 @@ func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj
 			return graphql.Null
 		}
 		return ec._Bead(ctx, sel, obj)
+	case Artifact:
+		return ec._Artifact(ctx, sel, &obj)
+	case *Artifact:
+		if obj == nil {
+			return graphql.Null
+		}
+		return ec._Artifact(ctx, sel, obj)
 	case AgentSession:
 		return ec._AgentSession(ctx, sel, &obj)
 	case *AgentSession:
@@ -35298,6 +37797,217 @@ func (ec *executionContext) _AggregateSummarySessions(ctx context.Context, sel a
 			}
 		case "costUsd":
 			out.Values[i] = ec._AggregateSummarySessions_costUsd(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var artifactImplementors = []string{"Artifact", "Node"}
+
+func (ec *executionContext) _Artifact(ctx context.Context, sel ast.SelectionSet, obj *Artifact) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, artifactImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Artifact")
+		case "id":
+			out.Values[i] = ec._Artifact_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "path":
+			out.Values[i] = ec._Artifact_path(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "title":
+			out.Values[i] = ec._Artifact_title(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mediaType":
+			out.Values[i] = ec._Artifact_mediaType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "generatedBy":
+			out.Values[i] = ec._Artifact_generatedBy(ctx, field, obj)
+		case "staleness":
+			out.Values[i] = ec._Artifact_staleness(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "ddxFrontmatter":
+			out.Values[i] = ec._Artifact_ddxFrontmatter(ctx, field, obj)
+		case "description":
+			out.Values[i] = ec._Artifact_description(ctx, field, obj)
+		case "updatedAt":
+			out.Values[i] = ec._Artifact_updatedAt(ctx, field, obj)
+		case "content":
+			out.Values[i] = ec._Artifact_content(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var artifactConnectionImplementors = []string{"ArtifactConnection"}
+
+func (ec *executionContext) _ArtifactConnection(ctx context.Context, sel ast.SelectionSet, obj *ArtifactConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, artifactConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ArtifactConnection")
+		case "edges":
+			out.Values[i] = ec._ArtifactConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._ArtifactConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCount":
+			out.Values[i] = ec._ArtifactConnection_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var artifactEdgeImplementors = []string{"ArtifactEdge"}
+
+func (ec *executionContext) _ArtifactEdge(ctx context.Context, sel ast.SelectionSet, obj *ArtifactEdge) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, artifactEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ArtifactEdge")
+		case "node":
+			out.Values[i] = ec._ArtifactEdge_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cursor":
+			out.Values[i] = ec._ArtifactEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var artifactGeneratedByImplementors = []string{"ArtifactGeneratedBy"}
+
+func (ec *executionContext) _ArtifactGeneratedBy(ctx context.Context, sel ast.SelectionSet, obj *ArtifactGeneratedBy) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, artifactGeneratedByImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ArtifactGeneratedBy")
+		case "runId":
+			out.Values[i] = ec._ArtifactGeneratedBy_runId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "promptSummary":
+			out.Values[i] = ec._ArtifactGeneratedBy_promptSummary(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sourceHashMatch":
+			out.Values[i] = ec._ArtifactGeneratedBy_sourceHashMatch(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -40531,6 +43241,47 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "artifacts":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_artifacts(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "artifact":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_artifact(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "commits":
 			field := field
 
@@ -41001,6 +43752,47 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "runs":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_runs(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "run":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_run(ctx, field)
 				return res
 			}
 
@@ -41906,6 +44698,205 @@ func (ec *executionContext) _ReworkSummary(ctx context.Context, sel ast.Selectio
 			}
 		case "revisionCount":
 			out.Values[i] = ec._ReworkSummary_revisionCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var runImplementors = []string{"Run", "Node"}
+
+func (ec *executionContext) _Run(ctx context.Context, sel ast.SelectionSet, obj *Run) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, runImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("Run")
+		case "id":
+			out.Values[i] = ec._Run_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "layer":
+			out.Values[i] = ec._Run_layer(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._Run_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "projectID":
+			out.Values[i] = ec._Run_projectID(ctx, field, obj)
+		case "startedAt":
+			out.Values[i] = ec._Run_startedAt(ctx, field, obj)
+		case "completedAt":
+			out.Values[i] = ec._Run_completedAt(ctx, field, obj)
+		case "beadId":
+			out.Values[i] = ec._Run_beadId(ctx, field, obj)
+		case "artifactId":
+			out.Values[i] = ec._Run_artifactId(ctx, field, obj)
+		case "parentRunId":
+			out.Values[i] = ec._Run_parentRunId(ctx, field, obj)
+		case "childRunIds":
+			out.Values[i] = ec._Run_childRunIds(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "queueInputs":
+			out.Values[i] = ec._Run_queueInputs(ctx, field, obj)
+		case "stopCondition":
+			out.Values[i] = ec._Run_stopCondition(ctx, field, obj)
+		case "selectedBeadIds":
+			out.Values[i] = ec._Run_selectedBeadIds(ctx, field, obj)
+		case "baseRevision":
+			out.Values[i] = ec._Run_baseRevision(ctx, field, obj)
+		case "resultRevision":
+			out.Values[i] = ec._Run_resultRevision(ctx, field, obj)
+		case "worktreePath":
+			out.Values[i] = ec._Run_worktreePath(ctx, field, obj)
+		case "mergeOutcome":
+			out.Values[i] = ec._Run_mergeOutcome(ctx, field, obj)
+		case "checkResults":
+			out.Values[i] = ec._Run_checkResults(ctx, field, obj)
+		case "promptSummary":
+			out.Values[i] = ec._Run_promptSummary(ctx, field, obj)
+		case "powerMin":
+			out.Values[i] = ec._Run_powerMin(ctx, field, obj)
+		case "powerMax":
+			out.Values[i] = ec._Run_powerMax(ctx, field, obj)
+		case "harness":
+			out.Values[i] = ec._Run_harness(ctx, field, obj)
+		case "provider":
+			out.Values[i] = ec._Run_provider(ctx, field, obj)
+		case "model":
+			out.Values[i] = ec._Run_model(ctx, field, obj)
+		case "tokensIn":
+			out.Values[i] = ec._Run_tokensIn(ctx, field, obj)
+		case "tokensOut":
+			out.Values[i] = ec._Run_tokensOut(ctx, field, obj)
+		case "costUsd":
+			out.Values[i] = ec._Run_costUsd(ctx, field, obj)
+		case "durationMs":
+			out.Values[i] = ec._Run_durationMs(ctx, field, obj)
+		case "outputExcerpt":
+			out.Values[i] = ec._Run_outputExcerpt(ctx, field, obj)
+		case "evidenceLinks":
+			out.Values[i] = ec._Run_evidenceLinks(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var runConnectionImplementors = []string{"RunConnection"}
+
+func (ec *executionContext) _RunConnection(ctx context.Context, sel ast.SelectionSet, obj *RunConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, runConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RunConnection")
+		case "edges":
+			out.Values[i] = ec._RunConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._RunConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCount":
+			out.Values[i] = ec._RunConnection_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var runEdgeImplementors = []string{"RunEdge"}
+
+func (ec *executionContext) _RunEdge(ctx context.Context, sel ast.SelectionSet, obj *RunEdge) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, runEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RunEdge")
+		case "node":
+			out.Values[i] = ec._RunEdge_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cursor":
+			out.Values[i] = ec._RunEdge_cursor(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -43374,6 +46365,56 @@ func (ec *executionContext) marshalNAggregateSummarySessions2ᚖgithubᚗcomᚋD
 	return ec._AggregateSummarySessions(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNArtifact2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifact(ctx context.Context, sel ast.SelectionSet, v *Artifact) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Artifact(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNArtifactConnection2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactConnection(ctx context.Context, sel ast.SelectionSet, v ArtifactConnection) graphql.Marshaler {
+	return ec._ArtifactConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNArtifactConnection2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactConnection(ctx context.Context, sel ast.SelectionSet, v *ArtifactConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ArtifactConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNArtifactEdge2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*ArtifactEdge) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNArtifactEdge2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactEdge(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNArtifactEdge2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactEdge(ctx context.Context, sel ast.SelectionSet, v *ArtifactEdge) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ArtifactEdge(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNBead2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐBead(ctx context.Context, sel ast.SelectionSet, v Bead) graphql.Marshaler {
 	return ec._Bead(ctx, sel, &v)
 }
@@ -44222,6 +47263,21 @@ func (ec *executionContext) marshalNInt2int(ctx context.Context, sel ast.Selecti
 	return res
 }
 
+func (ec *executionContext) unmarshalNInt2ᚕintᚄ(ctx context.Context, v any) ([]int, error) {
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]int, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNInt2int(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
 func (ec *executionContext) marshalNInt2ᚕintᚄ(ctx context.Context, sel ast.SelectionSet, v []int) graphql.Marshaler {
 	ret := make(graphql.Array, len(v))
 	for i := range v {
@@ -44821,6 +47877,66 @@ func (ec *executionContext) marshalNReworkSummary2ᚖgithubᚗcomᚋDocumentDriv
 	return ec._ReworkSummary(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNRun2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRun(ctx context.Context, sel ast.SelectionSet, v *Run) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._Run(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRunConnection2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunConnection(ctx context.Context, sel ast.SelectionSet, v RunConnection) graphql.Marshaler {
+	return ec._RunConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRunConnection2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunConnection(ctx context.Context, sel ast.SelectionSet, v *RunConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RunConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRunEdge2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*RunEdge) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRunEdge2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunEdge(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNRunEdge2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunEdge(ctx context.Context, sel ast.SelectionSet, v *RunEdge) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RunEdge(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNRunLayer2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunLayer(ctx context.Context, v any) (RunLayer, error) {
+	var res RunLayer
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRunLayer2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunLayer(ctx context.Context, sel ast.SelectionSet, v RunLayer) graphql.Marshaler {
+	return v
+}
+
 func (ec *executionContext) marshalNSearchResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐSearchResult(ctx context.Context, sel ast.SelectionSet, v *SearchResult) graphql.Marshaler {
 	if v == nil {
 		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
@@ -45278,6 +48394,20 @@ func (ec *executionContext) marshalOAgentSession2ᚖgithubᚗcomᚋDocumentDrive
 	return ec._AgentSession(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalOArtifact2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifact(ctx context.Context, sel ast.SelectionSet, v *Artifact) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Artifact(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalOArtifactGeneratedBy2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactGeneratedBy(ctx context.Context, sel ast.SelectionSet, v *ArtifactGeneratedBy) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._ArtifactGeneratedBy(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalOBead2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐBead(ctx context.Context, sel ast.SelectionSet, v *Bead) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
@@ -45553,6 +48683,24 @@ func (ec *executionContext) marshalOFloat2ᚖfloat64(ctx context.Context, sel as
 	return graphql.WrapContextMarshaler(ctx, res)
 }
 
+func (ec *executionContext) unmarshalOID2ᚖstring(ctx context.Context, v any) (*string, error) {
+	if v == nil {
+		return nil, nil
+	}
+	res, err := graphql.UnmarshalID(v)
+	return &res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOID2ᚖstring(ctx context.Context, sel ast.SelectionSet, v *string) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	_ = sel
+	_ = ctx
+	res := graphql.MarshalID(*v)
+	return res
+}
+
 func (ec *executionContext) unmarshalOInt2ᚖint(ctx context.Context, v any) (*int, error) {
 	if v == nil {
 		return nil, nil
@@ -45728,6 +48876,29 @@ func (ec *executionContext) marshalOReworkRow2ᚕᚖgithubᚗcomᚋDocumentDrive
 	}
 
 	return ret
+}
+
+func (ec *executionContext) marshalORun2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRun(ctx context.Context, sel ast.SelectionSet, v *Run) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._Run(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalORunLayer2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunLayer(ctx context.Context, v any) (*RunLayer, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(RunLayer)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalORunLayer2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunLayer(ctx context.Context, sel ast.SelectionSet, v *RunLayer) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
 }
 
 func (ec *executionContext) marshalOSourceRef2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐSourceRefᚄ(ctx context.Context, sel ast.SelectionSet, v []*SourceRef) graphql.Marshaler {

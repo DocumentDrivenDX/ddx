@@ -1,0 +1,20 @@
+{
+  "bead_id": "ddx-0bbfa9c1",
+  "attempt_id": "20260430T190917-d4fe5e4f",
+  "base_rev": "69dec5cb6ef393ad616d6b39195845a2702f1106",
+  "result_rev": "69dec5cb6ef393ad616d6b39195845a2702f1106",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "routing under-specified: pass at least one of Harness/Profile/ModelRef/Model/Provider, or auto-selection inputs",
+  "session_id": "eb-2ea65be8",
+  "duration_ms": 4,
+  "exit_code": 1,
+  "error": "routing under-specified: pass at least one of Harness/Profile/ModelRef/Model/Provider, or auto-selection inputs",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260430T190917-d4fe5e4f",
+  "prompt_file": ".ddx/executions/20260430T190917-d4fe5e4f/prompt.md",
+  "manifest_file": ".ddx/executions/20260430T190917-d4fe5e4f/manifest.json",
+  "result_file": ".ddx/executions/20260430T190917-d4fe5e4f/result.json",
+  "started_at": "2026-04-30T19:09:18.082422295Z",
+  "finished_at": "2026-04-30T19:09:18.086802879Z"
+}

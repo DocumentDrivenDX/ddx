@@ -1,0 +1,96 @@
+{
+  "attempt_id": "20260501T015153-0e17571b",
+  "bead_id": "ddx-fbf57b89",
+  "base_rev": "633a42da9b809afce843bb6a1184a4098a569a1f",
+  "created_at": "2026-05-01T01:52:20.121968291Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-fbf57b89",
+    "title": "artifacts list: /artifacts page with search, filter chips, URL state, pagination",
+    "description": "Build the artifact browser list page at /nodes/:nodeId/projects/:projectId/artifacts.\n\n- Category filter chips from mediaType enum (text/markdown, image/svg+xml, image/*, application/pdf, application/vnd.excalidraw+json, unknown)\n- Full-text search bar (client-side across title + path)\n- URL encodes active filter + search: ?mediaType=...\u0026q=...\n- Relay cursor pagination with load-more button\n- Row click navigates to /artifacts/:artifactId\n- Staleness badge per row (fresh/stale indicator from Artifact.staleness)\n- Update /documents route to redirect to /artifacts?mediaType=text%2Fmarkdown\n- NavShell nav tab: Artifacts (replaces Documents in primary tab set)\n\nDepends on ddx-ccbf6172 (artifacts backend).",
+    "acceptance": "1. /artifacts renders artifact list with category chips and search bar.\n2. Clicking a chip filters by mediaType; URL updates; reload restores filter.\n3. Typing in search bar filters list client-side; URL updates.\n4. Load-more button appears when hasNextPage=true; clicking loads next page and appends rows.\n5. Each row shows staleness badge (fresh=green, stale=amber, missing=red).\n6. /documents redirects to /artifacts?mediaType=text%2Fmarkdown.\n7. NavShell shows Artifacts tab; active tab highlights correctly.",
+    "labels": [
+      "area:ui",
+      "area:frontend",
+      "feat-008",
+      "feat-021",
+      "artifacts"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T01:51:53Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3376840",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-04-30T19:09:06.593334748Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "routing under-specified: pass at least one of Harness/Profile/ModelRef/Model/Provider, or auto-selection inputs\nresult_rev=fe5fd431a7933938ced82783ae8f912f04b5457f\nbase_rev=fe5fd431a7933938ced82783ae8f912f04b5457f\nretry_after=2026-05-01T01:09:06Z",
+          "created_at": "2026-04-30T19:09:06.936739113Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-30T19:30:58.145265557Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-04-30T19:30:58.253193837Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-04-30T19:30:58.353477748Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-04-30T19:30:58.548688493Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T01:51:53.833055612Z",
+      "spec-id": "FEAT-008"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-008",
+      "path": "docs/helix/01-frame/features/FEAT-008-web-ui.md",
+      "title": "Feature: DDx Server Web UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260501T015153-0e17571b",
+    "prompt": ".ddx/executions/20260501T015153-0e17571b/prompt.md",
+    "manifest": ".ddx/executions/20260501T015153-0e17571b/manifest.json",
+    "result": ".ddx/executions/20260501T015153-0e17571b/result.json",
+    "checks": ".ddx/executions/20260501T015153-0e17571b/checks.json",
+    "usage": ".ddx/executions/20260501T015153-0e17571b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-fbf57b89-20260501T015153-0e17571b"
+  }
+}

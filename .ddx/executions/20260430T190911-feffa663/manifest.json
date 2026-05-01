@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260430T190911-feffa663",
+  "bead_id": "ddx-a1d0b136",
+  "base_rev": "551768184d3b125ec89ba63a2e5a25a7f207dd55",
+  "created_at": "2026-04-30T19:09:12.188916198Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a1d0b136",
+    "title": "runs list: combined /nodes/:nodeId/runs + project /runs pages with URL-backed filters",
+    "description": "Build the run history list pages.\n\n1. /nodes/:nodeId/runs (combined, all projects)\n   - Shows run records from all registered projects\n   - Each row: project badge, layer badge (work/try/run), status, beadId (linked), startedAt, durationMs\n   - Filter chips: layer, status\n   - Rows link to /nodes/:nodeId/projects/:projectId/runs/:runId\n\n2. /nodes/:nodeId/projects/:projectId/runs (project-scoped)\n   - Same layout but scoped to one project\n   - Filter chips: layer, status, harness; time range picker\n   - URL encodes active filters: ?layer=try\u0026status=success\u0026harness=claude\n   - Reload restores filters exactly\n   - NavShell shows Runs tab in project nav\n\nBoth pages use Relay pagination with load-more.\n\nDepends on ddx-37a24699 (runs backend).",
+    "acceptance": "1. /nodes/:nodeId/runs renders cross-project run list with project and layer badges.\n2. /nodes/:nodeId/projects/:projectId/runs renders project-scoped list with filter chips.\n3. Filter chip selection updates URL and filters list; reload restores same view.\n4. Combined view: row click navigates to correct project-scoped detail URL (carries projectId).\n5. Empty state shown when no runs match filters (not a blank page).\n6. NavShell Runs tab highlights when on either runs route.",
+    "labels": [
+      "area:ui",
+      "area:frontend",
+      "feat-008",
+      "feat-021",
+      "runs"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T19:09:11Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3272787",
+      "execute-loop-heartbeat-at": "2026-04-30T19:09:11.193364568Z",
+      "spec-id": "FEAT-021"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-021",
+      "path": "docs/helix/01-frame/features/FEAT-021-dashboard-ui.md",
+      "title": "Feature: Multi-Node Dashboard UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260430T190911-feffa663",
+    "prompt": ".ddx/executions/20260430T190911-feffa663/prompt.md",
+    "manifest": ".ddx/executions/20260430T190911-feffa663/manifest.json",
+    "result": ".ddx/executions/20260430T190911-feffa663/result.json",
+    "checks": ".ddx/executions/20260430T190911-feffa663/checks.json",
+    "usage": ".ddx/executions/20260430T190911-feffa663/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a1d0b136-20260430T190911-feffa663"
+  }
+}

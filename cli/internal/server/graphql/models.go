@@ -193,6 +193,63 @@ type AggregateSummarySessions struct {
 	CostUsd float64 `json:"costUsd"`
 }
 
+// Artifact represents a DDx-tracked file with optional sidecar metadata.
+type Artifact struct {
+	// Globally unique artifact identifier
+	ID string `json:"id"`
+	// File path relative to the project root
+	Path string `json:"path"`
+	// Human-readable title
+	Title string `json:"title"`
+	// MIME type (e.g. text/markdown, image/png)
+	MediaType string `json:"mediaType"`
+	// Provenance information when the artifact was produced by a DDx run
+	GeneratedBy *ArtifactGeneratedBy `json:"generatedBy,omitempty"`
+	// Staleness: fresh, stale, or missing
+	Staleness string `json:"staleness"`
+	// Raw ddx: frontmatter or sidecar content as JSON
+	DdxFrontmatter *string `json:"ddxFrontmatter,omitempty"`
+	// Human-readable description
+	Description *string `json:"description,omitempty"`
+	// Last modified timestamp
+	UpdatedAt *string `json:"updatedAt,omitempty"`
+	// Raw file content (text-based artifacts only; null for binary types)
+	Content *string `json:"content,omitempty"`
+}
+
+func (Artifact) IsNode() {}
+
+// Globally unique identifier
+func (this Artifact) GetID() string { return this.ID }
+
+// ArtifactConnection is a Relay cursor connection for Artifact.
+type ArtifactConnection struct {
+	// List of artifact edges
+	Edges []*ArtifactEdge `json:"edges"`
+	// Pagination metadata
+	PageInfo *PageInfo `json:"pageInfo"`
+	// Total number of matching artifacts
+	TotalCount int `json:"totalCount"`
+}
+
+// ArtifactEdge wraps an Artifact for Relay cursor connections.
+type ArtifactEdge struct {
+	// The artifact
+	Node *Artifact `json:"node"`
+	// Relay opaque cursor
+	Cursor string `json:"cursor"`
+}
+
+// ArtifactGeneratedBy holds provenance for a generated artifact.
+type ArtifactGeneratedBy struct {
+	// Run ID that produced this artifact
+	RunID string `json:"runId"`
+	// Summary of the prompt or generator
+	PromptSummary string `json:"promptSummary"`
+	// Whether the source hash currently matches
+	SourceHashMatch bool `json:"sourceHashMatch"`
+}
+
 // Bead is a portable work item with lifecycle metadata
 type Bead struct {
 	// Unique bead identifier (e.g. "ddx-a1b2c3d4")
@@ -1485,8 +1542,8 @@ type ProviderStatus struct {
 	// Profile names where this row is the default candidate (may be empty).
 	DefaultForProfile []string `json:"defaultForProfile"`
 	// Hourly token totals for the last 24 hours, oldest-first. Empty when fewer
-	// than 6 non-zero hourly buckets are available; the UI uses that floor to
-	// decide whether to render the inline sparkline (FEAT-014 AC 2).
+	//   than 6 non-zero hourly buckets are available; the UI uses that floor to
+	//   decide whether to render the inline sparkline (FEAT-014 AC 2).
 	Sparkline []int `json:"sparkline"`
 }
 
@@ -1628,6 +1685,95 @@ type ReworkSummary struct {
 	ReopenRate float64 `json:"reopenRate"`
 	// Total number of post-close revisions
 	RevisionCount int `json:"revisionCount"`
+}
+
+// Run is a record in the three-layer work→try→run substrate from the FEAT-010
+// agent execute workflow. It is distinct from ExecutionRun (definition-driven
+// check/benchmark results) and Execution (execute-bead bundle).
+type Run struct {
+	// Stable identifier for this run record
+	ID string `json:"id"`
+	// Which layer this record belongs to
+	Layer RunLayer `json:"layer"`
+	// Current status (pending, running, success, failure, preserved)
+	Status string `json:"status"`
+	// Project ID this run belongs to (set for all runs; enables combined cross-project views)
+	ProjectID *string `json:"projectID,omitempty"`
+	// When the run started
+	StartedAt *string `json:"startedAt,omitempty"`
+	// When the run completed (null if still running)
+	CompletedAt *string `json:"completedAt,omitempty"`
+	// Bead ID associated with this run (null for work-layer records with multiple beads)
+	BeadID *string `json:"beadId,omitempty"`
+	// Artifact ID produced by this run (null if none)
+	ArtifactID *string `json:"artifactId,omitempty"`
+	// Parent run ID (null for top-level work records)
+	ParentRunID *string `json:"parentRunId,omitempty"`
+	// IDs of child runs (try records for work, run records for try)
+	ChildRunIds []string `json:"childRunIds"`
+	// Raw queue inputs as JSON (work layer only)
+	QueueInputs *string `json:"queueInputs,omitempty"`
+	// Stop condition for the queue drain (work layer only)
+	StopCondition *string `json:"stopCondition,omitempty"`
+	// Bead IDs selected for this queue drain (work layer only)
+	SelectedBeadIds []string `json:"selectedBeadIds,omitempty"`
+	// Git revision the try attempt started from (try layer only)
+	BaseRevision *string `json:"baseRevision,omitempty"`
+	// Git revision produced by the try attempt (try layer only)
+	ResultRevision *string `json:"resultRevision,omitempty"`
+	// Isolated worktree path used during the attempt (try layer only)
+	WorktreePath *string `json:"worktreePath,omitempty"`
+	// Merge or preserve outcome (try layer only)
+	MergeOutcome *string `json:"mergeOutcome,omitempty"`
+	// Check results as JSON (try layer only)
+	CheckResults *string `json:"checkResults,omitempty"`
+	// Short summary of the prompt (run layer only)
+	PromptSummary *string `json:"promptSummary,omitempty"`
+	// Minimum power/effort level requested (run layer only)
+	PowerMin *int `json:"powerMin,omitempty"`
+	// Maximum power/effort level requested (run layer only)
+	PowerMax *int `json:"powerMax,omitempty"`
+	// Agent harness used (run layer only)
+	Harness *string `json:"harness,omitempty"`
+	// Provider name (run layer only)
+	Provider *string `json:"provider,omitempty"`
+	// Model identifier (run layer only)
+	Model *string `json:"model,omitempty"`
+	// Input token count (run layer only)
+	TokensIn *int `json:"tokensIn,omitempty"`
+	// Output token count (run layer only)
+	TokensOut *int `json:"tokensOut,omitempty"`
+	// Estimated cost in USD (run layer only)
+	CostUsd *float64 `json:"costUsd,omitempty"`
+	// Duration in milliseconds (run layer only)
+	DurationMs *int `json:"durationMs,omitempty"`
+	// Short excerpt from the agent output (run layer only)
+	OutputExcerpt *string `json:"outputExcerpt,omitempty"`
+	// Links to execution evidence (bundle paths, log paths, etc.) (run layer only)
+	EvidenceLinks []string `json:"evidenceLinks,omitempty"`
+}
+
+func (Run) IsNode() {}
+
+// Globally unique identifier
+func (this Run) GetID() string { return this.ID }
+
+// RunConnection is a Relay cursor connection of runs
+type RunConnection struct {
+	// Ordered list of run edges
+	Edges []*RunEdge `json:"edges"`
+	// Pagination metadata
+	PageInfo *PageInfo `json:"pageInfo"`
+	// Total number of runs matching the filter
+	TotalCount int `json:"totalCount"`
+}
+
+// RunEdge is one edge in a RunConnection
+type RunEdge struct {
+	// The run at this position
+	Node *Run `json:"node"`
+	// Opaque cursor for pagination
+	Cursor string `json:"cursor"`
 }
 
 // SearchResult represents a single search hit from the library
@@ -1980,6 +2126,67 @@ func (e *ProviderKind) UnmarshalJSON(b []byte) error {
 }
 
 func (e ProviderKind) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// RunLayer identifies which layer of the work/try/run hierarchy a Run belongs to
+type RunLayer string
+
+const (
+	// Top-level queue drain: encompasses one or more try attempts
+	RunLayerWork RunLayer = "work"
+	// Single bead attempt: encompasses one or more run invocations
+	RunLayerTry RunLayer = "try"
+	// Single agent invocation with a specific harness/model
+	RunLayerRun RunLayer = "run"
+)
+
+var AllRunLayer = []RunLayer{
+	RunLayerWork,
+	RunLayerTry,
+	RunLayerRun,
+}
+
+func (e RunLayer) IsValid() bool {
+	switch e {
+	case RunLayerWork, RunLayerTry, RunLayerRun:
+		return true
+	}
+	return false
+}
+
+func (e RunLayer) String() string {
+	return string(e)
+}
+
+func (e *RunLayer) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = RunLayer(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid RunLayer", str)
+	}
+	return nil
+}
+
+func (e RunLayer) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *RunLayer) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e RunLayer) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

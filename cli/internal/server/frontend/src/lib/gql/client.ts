@@ -72,6 +72,14 @@ function fallbackDataForQuery(query: string): object | null {
 		};
 	}
 
+	if (query.includes('artifacts')) {
+		data.artifacts = {
+			edges: [],
+			pageInfo: EMPTY_PAGE_INFO,
+			totalCount: 0
+		};
+	}
+
 	if (query.includes('docGraph')) {
 		data.docGraph = {
 			rootDir: '',
@@ -209,6 +217,18 @@ function fallbackDataForQuery(query: string): object | null {
 
 	if (query.includes('providerTrend')) {
 		data.providerTrend = null;
+	}
+
+	if (query.includes('NodeRuns') || query.includes('ProjectRuns')) {
+		data.runs = {
+			edges: [],
+			pageInfo: EMPTY_PAGE_INFO,
+			totalCount: 0
+		};
+	}
+
+	if (query.includes('RunDetail')) {
+		data.run = null;
 	}
 
 	if (query.includes('beadClose')) {

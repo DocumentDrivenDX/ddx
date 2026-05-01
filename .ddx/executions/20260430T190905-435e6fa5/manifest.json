@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260430T190905-435e6fa5",
+  "bead_id": "ddx-fbf57b89",
+  "base_rev": "fe5fd431a7933938ced82783ae8f912f04b5457f",
+  "created_at": "2026-04-30T19:09:06.324275648Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-fbf57b89",
+    "title": "artifacts list: /artifacts page with search, filter chips, URL state, pagination",
+    "description": "Build the artifact browser list page at /nodes/:nodeId/projects/:projectId/artifacts.\n\n- Category filter chips from mediaType enum (text/markdown, image/svg+xml, image/*, application/pdf, application/vnd.excalidraw+json, unknown)\n- Full-text search bar (client-side across title + path)\n- URL encodes active filter + search: ?mediaType=...\u0026q=...\n- Relay cursor pagination with load-more button\n- Row click navigates to /artifacts/:artifactId\n- Staleness badge per row (fresh/stale indicator from Artifact.staleness)\n- Update /documents route to redirect to /artifacts?mediaType=text%2Fmarkdown\n- NavShell nav tab: Artifacts (replaces Documents in primary tab set)\n\nDepends on ddx-ccbf6172 (artifacts backend).",
+    "acceptance": "1. /artifacts renders artifact list with category chips and search bar.\n2. Clicking a chip filters by mediaType; URL updates; reload restores filter.\n3. Typing in search bar filters list client-side; URL updates.\n4. Load-more button appears when hasNextPage=true; clicking loads next page and appends rows.\n5. Each row shows staleness badge (fresh=green, stale=amber, missing=red).\n6. /documents redirects to /artifacts?mediaType=text%2Fmarkdown.\n7. NavShell shows Artifacts tab; active tab highlights correctly.",
+    "labels": [
+      "area:ui",
+      "area:frontend",
+      "feat-008",
+      "feat-021",
+      "artifacts"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T19:09:05Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3272787",
+      "execute-loop-heartbeat-at": "2026-04-30T19:09:05.341917604Z",
+      "spec-id": "FEAT-008"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-008",
+      "path": "docs/helix/01-frame/features/FEAT-008-web-ui.md",
+      "title": "Feature: DDx Server Web UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260430T190905-435e6fa5",
+    "prompt": ".ddx/executions/20260430T190905-435e6fa5/prompt.md",
+    "manifest": ".ddx/executions/20260430T190905-435e6fa5/manifest.json",
+    "result": ".ddx/executions/20260430T190905-435e6fa5/result.json",
+    "checks": ".ddx/executions/20260430T190905-435e6fa5/checks.json",
+    "usage": ".ddx/executions/20260430T190905-435e6fa5/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-fbf57b89-20260430T190905-435e6fa5"
+  }
+}

@@ -6,13 +6,61 @@
 	import { tick } from 'svelte';
 	import { marked } from 'marked';
 	import DOMPurify from 'isomorphic-dompurify';
-	import { ArrowLeft, Pencil } from 'lucide-svelte';
+	import { ArrowLeft, Pencil, Search, GitBranch, X } from 'lucide-svelte';
 	import { gql } from 'graphql-request';
 	import { createClient } from '$lib/gql/client';
 
 	let { data }: { data: PageData } = $props();
 
 	let content = $derived(data.content ?? '');
+
+	// Search
+	let searchQuery = $state('');
+	let searchOpen = $state(false);
+	const searchResults = $derived(
+		searchQuery.trim().length < 2
+			? []
+			: (data.allDocuments ?? [])
+					.filter(
+						(d) =>
+							d.path !== data.path &&
+							(d.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
+								d.path.toLowerCase().includes(searchQuery.toLowerCase()))
+					)
+					.slice(0, 12)
+	);
+
+	function openSearch() {
+		searchOpen = true;
+		tick().then(() => {
+			(document.getElementById('doc-search-input') as HTMLInputElement | null)?.focus();
+		});
+	}
+
+	function closeSearch() {
+		searchOpen = false;
+		searchQuery = '';
+	}
+
+	function navigateToDoc(path: string) {
+		const p = $page.params as Record<string, string>;
+		closeSearch();
+		goto(
+			resolve(
+				`/nodes/${p['nodeId']}/projects/${p['projectId']}/documents/${path.split('/').map(encodeURIComponent).join('/')}`
+			)
+		);
+	}
+
+	// Related documents helpers
+	const allDocumentsByPath = $derived(
+		new Map((data.allDocuments ?? []).map((d) => [d.path, d]))
+	);
+
+	function labelForId(id: string): string {
+		const doc = allDocumentsByPath.get(id);
+		return doc ? doc.title || id : id;
+	}
 	let editing = $state(false);
 	let editContent = $state('');
 	let editorMode = $state<'wysiwyg' | 'plain'>('wysiwyg');
@@ -284,16 +332,68 @@
 			Documents
 		</button>
 		<span class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">{data.path}</span>
-		{#if !editing && content}
+		<div class="ml-auto flex items-center gap-2">
 			<button
-				onclick={startEdit}
-				class="ml-auto flex items-center gap-1.5 px-2 py-1.5 text-body-sm text-fg-muted hover:bg-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
+				onclick={openSearch}
+				aria-label="Search documents"
+				class="flex items-center gap-1.5 px-2 py-1.5 text-body-sm text-fg-muted hover:bg-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
 			>
-				<Pencil class="h-4 w-4" />
-				Edit
+				<Search class="h-4 w-4" />
+				Search
 			</button>
-		{/if}
+			{#if !editing && content}
+				<button
+					onclick={startEdit}
+					class="flex items-center gap-1.5 px-2 py-1.5 text-body-sm text-fg-muted hover:bg-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
+				>
+					<Pencil class="h-4 w-4" />
+					Edit
+				</button>
+			{/if}
+		</div>
 	</div>
+
+	<!-- Search overlay -->
+	{#if searchOpen}
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<div
+			class="fixed inset-0 z-40 bg-fg-ink/30 dark:bg-black/50"
+			onclick={closeSearch}
+		></div>
+		<div class="fixed left-1/2 top-24 z-50 w-full max-w-lg -translate-x-1/2 border border-border-line bg-bg-elevated shadow-xl dark:border-dark-border-line dark:bg-dark-bg-elevated">
+			<div class="flex items-center gap-2 border-b border-border-line px-3 py-2 dark:border-dark-border-line">
+				<Search class="h-4 w-4 shrink-0 text-fg-muted dark:text-dark-fg-muted" />
+				<input
+					id="doc-search-input"
+					type="text"
+					placeholder="Search documents…"
+					bind:value={searchQuery}
+					onkeydown={(e) => e.key === 'Escape' && closeSearch()}
+					class="flex-1 bg-transparent text-body-sm text-fg-ink outline-none dark:text-dark-fg-ink"
+				/>
+				<button onclick={closeSearch} class="text-fg-muted hover:text-fg-ink dark:text-dark-fg-muted dark:hover:text-dark-fg-ink">
+					<X class="h-4 w-4" />
+				</button>
+			</div>
+			{#if searchResults.length > 0}
+				<ul>
+					{#each searchResults as result}
+						<li>
+							<button
+								onclick={() => navigateToDoc(result.path)}
+								class="flex w-full flex-col gap-0.5 px-4 py-2.5 text-left hover:bg-bg-surface dark:hover:bg-dark-bg-surface"
+							>
+								<span class="text-body-sm font-medium text-fg-ink dark:text-dark-fg-ink">{result.title || result.path}</span>
+								<span class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">{result.path}</span>
+							</button>
+						</li>
+					{/each}
+				</ul>
+			{:else if searchQuery.trim().length >= 2}
+				<div class="px-4 py-3 text-body-sm text-fg-muted dark:text-dark-fg-muted">No documents found.</div>
+			{/if}
+		</div>
+	{/if}
 
 	{#if editing}
 		<div class="space-y-2">
@@ -389,12 +489,61 @@
 			</div>
 		</div>
 	{:else if content}
-		<div
-			bind:this={renderedElement}
-			class="doc-content border border-border-line bg-bg-elevated p-6 dark:border-dark-border-line dark:bg-dark-bg-elevated"
-		>
-			<!-- eslint-disable-next-line svelte/no-at-html-tags -->
-			{@html rendered}
+		<div class="flex gap-6 items-start">
+			<div
+				bind:this={renderedElement}
+				class="doc-content min-w-0 flex-1 border border-border-line bg-bg-elevated p-6 dark:border-dark-border-line dark:bg-dark-bg-elevated"
+			>
+				<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+				{@html rendered}
+			</div>
+
+			{#if (data.dependsOn?.length ?? 0) > 0 || (data.dependents?.length ?? 0) > 0}
+				<aside class="w-56 shrink-0 space-y-4">
+					{#if (data.dependsOn?.length ?? 0) > 0}
+						<div>
+							<h3 class="mb-2 flex items-center gap-1.5 font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted">
+								<GitBranch class="h-3 w-3" />
+								Depends on
+							</h3>
+							<ul class="space-y-1">
+								{#each data.dependsOn ?? [] as depId}
+									<li>
+										<button
+											onclick={() => navigateToDoc(depId)}
+											class="w-full truncate text-left text-body-sm text-accent-lever hover:underline dark:text-dark-accent-lever"
+											title={depId}
+										>
+											{labelForId(depId)}
+										</button>
+									</li>
+								{/each}
+							</ul>
+						</div>
+					{/if}
+					{#if (data.dependents?.length ?? 0) > 0}
+						<div>
+							<h3 class="mb-2 flex items-center gap-1.5 font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted">
+								<GitBranch class="h-3 w-3 rotate-180" />
+								Used by
+							</h3>
+							<ul class="space-y-1">
+								{#each data.dependents ?? [] as depId}
+									<li>
+										<button
+											onclick={() => navigateToDoc(depId)}
+											class="w-full truncate text-left text-body-sm text-accent-lever hover:underline dark:text-dark-accent-lever"
+											title={depId}
+										>
+											{labelForId(depId)}
+										</button>
+									</li>
+								{/each}
+							</ul>
+						</div>
+					{/if}
+				</aside>
+			{/if}
 		</div>
 	{:else}
 		<div

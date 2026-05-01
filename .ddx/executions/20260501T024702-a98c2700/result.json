@@ -1,0 +1,69 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "rationale": "Renderers, sidecar metadata, back-state, DOMPurify sanitization, and binary affordances are present, but markdown intra-repo relative links are not rewritten to artifact routes — they remain raw relative .md hrefs that won't resolve to in-UI navigation.",
+  "findings": [
+    {
+      "severity": "warn",
+      "summary": "AC2: relative intra-repo markdown links (e.g. `../features/FEAT-006.md`) are left as-is. SvelteKit client routing won't map them to artifact detail routes; clicking yields a 404 or full-page navigation rather than in-UI navigation. processMarkdownHtml only handles target=_blank for external; no resolution to /artifacts/:id.",
+      "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/[artifactId]/+page.svelte:96"
+    },
+    {
+      "severity": "info",
+      "summary": "AC4: Excalidraw iframe embeds https://excalidraw.com/embed without passing the artifact JSON, so the user sees an empty Excalidraw rather than the actual diagram. AC literal text is satisfied (iframe loads + offline fallback) but practical preview is missing.",
+      "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/[artifactId]/+page.svelte:194"
+    },
+    {
+      "severity": "info",
+      "summary": "AC1: no fixture artifacts added in diff to verify each mediaType end-to-end. Renderer logic exists per type but verification fixtures aren't visible.",
+      "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/[artifactId]/+page.svelte"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1934,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260501T022308-ad545d2a/manifest.json",
+          ".ddx/executions/20260501T022308-ad545d2a/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:FEAT-008",
+        "bytes_included": 69565,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/01-frame/features/FEAT-008-web-ui.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 7020,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 80379,
+    "output_bytes": 1611,
+    "elapsed_ms": 40755,
+    "harness": "claude",
+    "model": "opus"
+  }
+}

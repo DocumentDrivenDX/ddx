@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260430T190923-25e95f4f",
+  "bead_id": "ddx-669e1c2f",
+  "base_rev": "97249a57c91e42b45ccf99f7411e3a5393c167ac",
+  "created_at": "2026-04-30T19:09:24.017905443Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-669e1c2f",
+    "title": "runs cross-links + e2e: bead↔run, run↔artifact, runs.spec.ts",
+    "description": "Wire up cross-navigation links and write the runs.spec.ts e2e test.\n\nCross-links:\n- Bead detail: linked run records (layer=try or run) with status, click → runs detail\n- Run detail (work/try): beadId links to bead detail (/beads/:beadId)\n- Run detail (run layer): if artifactId present, shows 'Produced artifact: \u003ctitle\u003e' link to /artifacts/:artifactId\n- Artifact detail: if producing run exists, 'View producing run' link is live (navigates to run detail)\n- Combined /nodes/:nodeId/runs: row links navigate to correct project-scoped /runs/:runId (carrying projectId from row data)\n\nE2E (runs.spec.ts):\nFull US-086b + US-094b workflow:\n1. Navigate to project runs\n2. Apply layer=work filter → verify URL + filtered list\n3. Click work record → verify work detail fields\n4. Click child try → verify try fields (bead link, revisions, worktreePath, mergeOutcome)\n5. Click child run → verify run fields (power, harness, tokens, cost, evidence)\n6. Follow evidence link → verify artifact link present\n7. Navigate breadcrumbs back up: run → try → work → list\n8. Verify filter state restored after navigating back\n\nDepends on ddx-a9c6ad1c (runs detail), ddx-43684ac1 (artifact provenance for backlink).",
+    "acceptance": "1. Bead detail shows linked run records; clicking navigates to run detail.\n2. Run try/work detail: beadId links navigate to bead detail; Back returns to run detail.\n3. Run-layer detail: artifact link present when artifactId set; link is live.\n4. Artifact detail: 'View producing run' link is live and navigates to run detail.\n5. Combined runs list: row click carries correct projectId in URL.\n6. runs.spec.ts passes: complete work→try→run drill-down, breadcrumb back-navigation, artifact link.",
+    "labels": [
+      "area:ui",
+      "area:frontend",
+      "feat-008",
+      "feat-021",
+      "runs"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T19:09:23Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3272787",
+      "execute-loop-heartbeat-at": "2026-04-30T19:09:23.045283109Z",
+      "spec-id": "FEAT-021"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-021",
+      "path": "docs/helix/01-frame/features/FEAT-021-dashboard-ui.md",
+      "title": "Feature: Multi-Node Dashboard UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260430T190923-25e95f4f",
+    "prompt": ".ddx/executions/20260430T190923-25e95f4f/prompt.md",
+    "manifest": ".ddx/executions/20260430T190923-25e95f4f/manifest.json",
+    "result": ".ddx/executions/20260430T190923-25e95f4f/result.json",
+    "checks": ".ddx/executions/20260430T190923-25e95f4f/checks.json",
+    "usage": ".ddx/executions/20260430T190923-25e95f4f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-669e1c2f-20260430T190923-25e95f4f"
+  }
+}

@@ -1,5 +1,8 @@
 <script lang="ts">
 	import type { PageData } from './$types';
+	import { goto } from '$app/navigation';
+	import { resolve } from '$app/paths';
+	import { page } from '$app/stores';
 	import D3Graph from '$lib/components/D3Graph.svelte';
 	import IntegrityPanel from '$lib/components/IntegrityPanel.svelte';
 
@@ -12,9 +15,18 @@
 	);
 
 	const issues = $derived(data.graph.issues ?? []);
+
+	function handleNodeClick(node: { path: string }) {
+		const p = $page.params as Record<string, string>;
+		goto(
+			resolve(
+				`/nodes/${p['nodeId']}/projects/${p['projectId']}/documents/${node.path.split('/').map(encodeURIComponent).join('/')}`
+			)
+		);
+	}
 </script>
 
-<div class="flex h-full flex-col gap-4">
+<div class="flex flex-col gap-4" style="height: calc(100dvh - 40px - 3rem)">
 	<div class="flex shrink-0 items-center justify-between">
 		<div class="flex items-center gap-3">
 			<h1 class="text-xl font-semibold dark:text-white">Document Graph</h1>
@@ -42,10 +54,8 @@
 			No documents in graph.
 		</div>
 	{:else}
-		<div
-			class="min-h-0 flex-1 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700"
-		>
-			<D3Graph nodes={data.graph.documents} {links} />
+		<div class="min-h-0 flex-1 overflow-hidden rounded-lg border border-gray-200 dark:border-gray-700">
+			<D3Graph nodes={data.graph.documents} {links} onNodeClick={handleNodeClick} />
 		</div>
 	{/if}
 </div>

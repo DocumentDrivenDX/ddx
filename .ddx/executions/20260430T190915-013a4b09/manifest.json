@@ -1,0 +1,45 @@
+{
+  "attempt_id": "20260430T190915-013a4b09",
+  "bead_id": "ddx-ff45858b",
+  "base_rev": "eec5e78159cb28f3db021585aa90ada4ddd09dc1",
+  "created_at": "2026-04-30T19:09:15.991589388Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ff45858b",
+    "title": "graph navigation: click-to-navigate, viewport persistence, pan/zoom fix, staleness filter",
+    "description": "Fix the document dependency graph interactivity. Addresses US-081 AC which is specced but unimplemented.\n\nBugs to fix:\n1. Pan/zoom sizing race: D3Graph.svelte uses el.clientWidth at init time which may be 0. Replace with ResizeObserver: set up simulation once observer fires with non-zero dimensions. This also handles window resize.\n2. Node click = no handler: nodeGroup has mouseenter/mousemove/mouseleave but no onclick. Add click handler that navigates to /nodes/:nodeId/projects/:projectId/documents/:path (for markdown artifacts) or /artifacts/:artifactId (for other types). Distinguish by mediaType from graph node data.\n\nViewport persistence:\n- Save zoom transform (x, y, k) to component state or URL param (e.g. ?zoom=1.2\u0026pan=120,45) on each zoom/pan end event.\n- On Back navigation, restore the saved transform before the D3 effect runs.\n\nNew features:\n- Filter chips on graph page: filter nodes by mediaType (markdown, image, unknown) and staleness (fresh, stale, missing). Hidden nodes removed from simulation; edges to hidden nodes removed.\n- Node color = staleness: green=fresh, amber=stale, red=missing (not dependsOn.length as today).\n- 'View document list' link on graph page → /documents (which redirects to /artifacts).\n- 'View in Graph' link on artifact detail page (once ddx-d7d1119d exists) → /graph with node pre-selected.\n\nIntegrityPanel path links: currently link to /documents/... — update to /artifacts/:artifactId once /artifacts route exists; keep /documents fallback until then.",
+    "acceptance": "1. Pan/zoom works on first render with ResizeObserver; resizing window re-layouts graph.\n2. Clicking a graph node navigates to the document/artifact detail without a full page reload.\n3. Pressing Back from a document opened via graph click returns to graph with the same zoom/pan position.\n4. Filter chips filter visible nodes + edges; node colors reflect staleness (green/amber/red).\n5. 'View document list' link on graph page navigates to /artifacts?mediaType=text%2Fmarkdown.\n6. graph.spec.ts covers: initial render → pan/zoom → click node → verify navigation → Back → verify viewport restored → apply staleness filter → verify node count changes.",
+    "labels": [
+      "area:ui",
+      "area:frontend",
+      "feat-008",
+      "graph",
+      "bug"
+    ],
+    "metadata": {
+      "claimed-at": "2026-04-30T19:09:15Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3272787",
+      "execute-loop-heartbeat-at": "2026-04-30T19:09:15.018180888Z",
+      "spec-id": "FEAT-008"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-008",
+      "path": "docs/helix/01-frame/features/FEAT-008-web-ui.md",
+      "title": "Feature: DDx Server Web UI"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260430T190915-013a4b09",
+    "prompt": ".ddx/executions/20260430T190915-013a4b09/prompt.md",
+    "manifest": ".ddx/executions/20260430T190915-013a4b09/manifest.json",
+    "result": ".ddx/executions/20260430T190915-013a4b09/result.json",
+    "checks": ".ddx/executions/20260430T190915-013a4b09/checks.json",
+    "usage": ".ddx/executions/20260430T190915-013a4b09/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ff45858b-20260430T190915-013a4b09"
+  }
+}
