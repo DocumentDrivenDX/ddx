@@ -1,0 +1,54 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Vision adds Productivity Shift paragraph and 6 named, DDx-mapped pain points immediately before the Physics section; PRD links to them and frames its existing clusters as the named problem clusters. All AC items satisfied.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Each of the 6 pain points includes an explicit DDx capability mapping in italics, satisfying the 'no pain points that don't map to DDx capabilities' constraint.",
+      "location": "docs/helix/00-discover/product-vision.md:22"
+    },
+    {
+      "severity": "info",
+      "summary": "PRD update is a link/framing change rather than a duplicated list, which keeps vision as the single source of truth for the 6 pain points.",
+      "location": "docs/helix/01-frame/prd.md:110"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 433,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260501T073824-54745989/manifest.json",
+          ".ddx/executions/20260501T073824-54745989/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 2915,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 5154,
+    "output_bytes": 809,
+    "elapsed_ms": 20385,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
