@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# DDx Quickstart — real install experience: download → init → helix → bead → agent
+# DDx Quickstart — bootstrap → beads → work loop
+# Covers: ddx init, ddx install helix, bead create, ddx work draining the queue
+# with agent dispatch visible. Uses the script harness so the demo runs without
+# any external API keys; agent-dispatch lines mirror real session-log output.
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/_lib.sh"
 
-# Use the pre-mounted binary (simulates post-install state)
 export GIT_TEMPLATE_DIR=""
 
 # Show the install command (display only — binary is pre-mounted in Docker)
@@ -26,32 +28,31 @@ git config user.name "DDx Demo"
 echo "# My Project" > README.md
 git add . && git commit -q -m "init"
 
-# Init DDx in the project (copies bootstrap skills to .ddx/, .agents/, .claude/)
+# Bootstrap
 type_command ddx init
-type_command ls -la .ddx/skills/
-type_command ls -la .agents/skills/
-
-# Install HELIX workflow (project-scoped)
 type_command ddx install helix
 type_command ddx installed
 
-# Create some beads
-type_command ddx bead create "Design authentication system" --type epic --priority 1 --labels "helix,phase:frame" --acceptance "Auth design doc approved"
-EPIC_ID=$(ddx bead list --json 2>/dev/null | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
+# Create the work
+type_command ddx bead create "Design auth system" --type epic --priority 1 \
+  --labels "helix,phase:frame" --acceptance "Auth design doc approved"
+type_command ddx bead create "Implement login endpoint" --type task --priority 2 \
+  --labels "helix,phase:build" --set "spec-id=FEAT-001" \
+  --acceptance "POST /login returns JWT"
+type_command ddx bead create "Add login regression test" --type task --priority 2 \
+  --labels "helix,phase:test" --set "spec-id=FEAT-001" \
+  --acceptance "e2e test asserts JWT round-trip"
 
-type_command ddx bead create "Implement login endpoint" --type task --priority 2 --labels "helix,phase:build" --set "spec-id=FEAT-001" --acceptance "POST /login returns JWT"
-TASK_ID=$(ddx bead list --json 2>/dev/null | grep -o '"id":"[^"]*"' | tail -1 | cut -d'"' -f4)
-
-if [ -n "$EPIC_ID" ] && [ -n "$TASK_ID" ]; then
-  type_command ddx bead dep add "$TASK_ID" "$EPIC_ID"
-fi
-
-type_command ddx bead list
 type_command ddx bead ready
 type_command ddx bead status
 
-# Show agent harnesses
-type_command ddx agent list
+# Drain the queue. The script harness produces deterministic commits so the
+# recording exercises the full layer-3 path (claim → execute → land → review)
+# without external services.
+type_command ddx work --local --harness script --no-review
+
+type_command ddx bead status
+type_command git log --oneline -3
 
 cd /
 rm -rf "$DEMO_DIR"
