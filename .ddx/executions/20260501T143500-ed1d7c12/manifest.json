@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260501T143500-ed1d7c12",
+  "bead_id": "ddx-7b4a39f5",
+  "base_rev": "0bccaf7c2fdba38f17eddd50d0e7b7f9c8620dd0",
+  "created_at": "2026-05-01T14:35:01.891777789Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7b4a39f5",
+    "title": "IntegrityPanel: badge-status-blocked used for non-status UI (IDs, apply buttons); missing dark mode on status-merged/status-blocked prose colors",
+    "description": "src/lib/components/IntegrityPanel.svelte has several token misuse issues:\n\n1. Lines 274, 295, 315: badge-status-blocked is applied to UI elements that are NOT status badges — an issue ID chip (line 274), a 'Copy suggested unique ID' button (line 295), and an 'Apply fix' button (line 315). badge-status-blocked is a semantic badge class for the 'blocked' bead status; repurposing it for arbitrary UI elements breaks the semantic contract.\n\n2. Lines 332-333: The diff preview uses text-status-blocked (before) and text-status-merged (after). text-status-merged may not be a defined token — check app.css. If it is a CSS utility, it lacks a dark: variant pairing that matches the dark-mode pattern used everywhere else.\n\n3. Lines 338-339: error text uses text-status-blocked which is semantically wrong — a repair error should use text-error / dark:text-dark-error.\n\n4. The panel header (line 215) uses font-semibold directly without a semantic typography class.",
+    "acceptance": "badge-status-blocked is removed from non-status-badge elements. Issue ID chips get a neutral style (bg-bg-canvas border-border-line text-fg-muted). Action buttons use accent/semantic button patterns. Diff text uses appropriate semantic colors with dark variants. Error text uses text-error / dark:text-dark-error. Panel header uses text-headline-md font-headline-md.",
+    "labels": [
+      "area:ui",
+      "kind:design",
+      "design-tokens"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T14:35:00Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "360683",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-01T14:34:29.054746162Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260501T143140-719e465c\",\"harness\":\"claude\",\"input_tokens\":32,\"output_tokens\":8885,\"total_tokens\":8917,\"cost_usd\":1.2375699999999996,\"duration_ms\":167275,\"exit_code\":0}",
+          "created_at": "2026-05-01T14:34:29.167358323Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=8917 cost_usd=1.2376"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-01T14:34:33.37866688Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff contains only an execution result.json artifact; no changes to IntegrityPanel.svelte. None of the AC items (badge-status-blocked removal, neutral ID chip, semantic button styles, diff text dark variants, text-error usage, headline typography) can be evaluated as implemented.\nharness=claude\nmodel=opus\ninput_bytes=4589\noutput_bytes=733\nelapsed_ms=10531",
+          "created_at": "2026-05-01T14:34:44.107108635Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-01T14:34:44.217028382Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json artifact; no changes to IntegrityPanel.svelte. None of the AC items (badge-status-blocked removal, neutral ID chip, semantic button styles, diff text dark variants, text-error usage, headline typography) can be evaluated as implemented.\nresult_rev=5722538e2acef809431ee7c1e44f6fabaa40a8f1\nbase_rev=ea0ee1e4d5ca550971c89bdf50f7a4e3e59e7f73",
+          "created_at": "2026-05-01T14:34:44.448024075Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-01T14:35:00.874657382Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T143500-ed1d7c12",
+    "prompt": ".ddx/executions/20260501T143500-ed1d7c12/prompt.md",
+    "manifest": ".ddx/executions/20260501T143500-ed1d7c12/manifest.json",
+    "result": ".ddx/executions/20260501T143500-ed1d7c12/result.json",
+    "checks": ".ddx/executions/20260501T143500-ed1d7c12/checks.json",
+    "usage": ".ddx/executions/20260501T143500-ed1d7c12/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-7b4a39f5-20260501T143500-ed1d7c12"
+  }
+}
