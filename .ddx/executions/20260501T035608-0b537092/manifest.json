@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T035608-0b537092",
+  "bead_id": "ddx-dc2249e9",
+  "base_rev": "35cf79ad1dd8ff37f246730572a6a8cc4394a1cf",
+  "created_at": "2026-05-01T03:56:09.660514545Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-dc2249e9",
+    "title": "e2e: executions.spec.ts — add cost tier / power bounds display test",
+    "acceptance": "executions.spec.ts has test that verifies MinPower/MaxPower or cost tier information is rendered in execution detail view; test passes in CI",
+    "parent": "ddx-4b202bbb",
+    "labels": [
+      "area:e2e",
+      "playwright",
+      "executions"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T03:56:08Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T03:56:08.914793857Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T035608-0b537092",
+    "prompt": ".ddx/executions/20260501T035608-0b537092/prompt.md",
+    "manifest": ".ddx/executions/20260501T035608-0b537092/manifest.json",
+    "result": ".ddx/executions/20260501T035608-0b537092/result.json",
+    "checks": ".ddx/executions/20260501T035608-0b537092/checks.json",
+    "usage": ".ddx/executions/20260501T035608-0b537092/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-dc2249e9-20260501T035608-0b537092"
+  }
+}
