@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T143448-88423c71",
+  "bead_id": "ddx-e658e2ae",
+  "base_rev": "c6b168485ed21082da1594664823ddc6f2550c39",
+  "created_at": "2026-05-01T14:34:49.845674947Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e658e2ae",
+    "title": "BeadForm: input text uses text-sm; select status uses inline style with CSS vars that don't exist",
+    "description": "src/lib/components/BeadForm.svelte has two issues:\n\n1. Line 130: inputClass uses text-sm — should be text-body-sm (13px/400). Similarly line 131: labelClass uses text-xs — should be text-label-caps (11px/700) since these are uppercase field labels.\n\n2. Lines 162-163: The status \u003cselect\u003e applies an inline style:\n   style=\"background-color: var(--status-{status}-surface); border-color: var(--status-{status}-border);\"\n   These CSS variables (--status-open-surface, --status-open-border, etc.) may not be defined for all status values consistently, and using raw CSS variable injection via a template string is fragile. This sidesteps the Tailwind token system entirely. The dynamic color should be achieved through Tailwind class composition (as done everywhere else in the codebase) rather than inline styles.\n\n3. Cancel/Submit button text uses text-sm — should be text-body-sm.",
+    "acceptance": "inputClass uses text-body-sm, labelClass uses text-label-caps. Status select color is expressed through Tailwind classes, not inline style CSS variable injection. Button text uses text-body-sm.",
+    "labels": [
+      "area:ui",
+      "kind:design",
+      "design-tokens"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T14:34:48Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "360683",
+      "execute-loop-heartbeat-at": "2026-05-01T14:34:48.899735359Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T143448-88423c71",
+    "prompt": ".ddx/executions/20260501T143448-88423c71/prompt.md",
+    "manifest": ".ddx/executions/20260501T143448-88423c71/manifest.json",
+    "result": ".ddx/executions/20260501T143448-88423c71/result.json",
+    "checks": ".ddx/executions/20260501T143448-88423c71/checks.json",
+    "usage": ".ddx/executions/20260501T143448-88423c71/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e658e2ae-20260501T143448-88423c71"
+  }
+}
