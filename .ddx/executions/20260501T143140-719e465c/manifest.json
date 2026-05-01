@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260501T143140-719e465c",
+  "bead_id": "ddx-7b4a39f5",
+  "base_rev": "ea0ee1e4d5ca550971c89bdf50f7a4e3e59e7f73",
+  "created_at": "2026-05-01T14:31:41.776727873Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7b4a39f5",
+    "title": "IntegrityPanel: badge-status-blocked used for non-status UI (IDs, apply buttons); missing dark mode on status-merged/status-blocked prose colors",
+    "description": "src/lib/components/IntegrityPanel.svelte has several token misuse issues:\n\n1. Lines 274, 295, 315: badge-status-blocked is applied to UI elements that are NOT status badges — an issue ID chip (line 274), a 'Copy suggested unique ID' button (line 295), and an 'Apply fix' button (line 315). badge-status-blocked is a semantic badge class for the 'blocked' bead status; repurposing it for arbitrary UI elements breaks the semantic contract.\n\n2. Lines 332-333: The diff preview uses text-status-blocked (before) and text-status-merged (after). text-status-merged may not be a defined token — check app.css. If it is a CSS utility, it lacks a dark: variant pairing that matches the dark-mode pattern used everywhere else.\n\n3. Lines 338-339: error text uses text-status-blocked which is semantically wrong — a repair error should use text-error / dark:text-dark-error.\n\n4. The panel header (line 215) uses font-semibold directly without a semantic typography class.",
+    "acceptance": "badge-status-blocked is removed from non-status-badge elements. Issue ID chips get a neutral style (bg-bg-canvas border-border-line text-fg-muted). Action buttons use accent/semantic button patterns. Diff text uses appropriate semantic colors with dark variants. Error text uses text-error / dark:text-dark-error. Panel header uses text-headline-md font-headline-md.",
+    "labels": [
+      "area:ui",
+      "kind:design",
+      "design-tokens"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T14:31:40Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "360683",
+      "execute-loop-heartbeat-at": "2026-05-01T14:31:40.857152729Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T143140-719e465c",
+    "prompt": ".ddx/executions/20260501T143140-719e465c/prompt.md",
+    "manifest": ".ddx/executions/20260501T143140-719e465c/manifest.json",
+    "result": ".ddx/executions/20260501T143140-719e465c/result.json",
+    "checks": ".ddx/executions/20260501T143140-719e465c/checks.json",
+    "usage": ".ddx/executions/20260501T143140-719e465c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-7b4a39f5-20260501T143140-719e465c"
+  }
+}
