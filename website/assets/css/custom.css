@@ -46,12 +46,40 @@
   --ddx-accent-brass: #C79B5B;
 }
 
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    --primary-lightness: 55%;
+
+    --ddx-bg-canvas:  #0F1117;
+    --ddx-bg-surface: #1A1E2A;
+
+    --ddx-fg-ink:   #E8EAF0;
+    --ddx-fg-muted: #9CA3AF;
+
+    --ddx-border-line: #2D3340;
+    --ddx-accent-brass: #C79B5B;
+  }
+
+  :root:not(.light) .ddx-maturity--stable {
+    background: #064e3b;
+    color: #6ee7b7;
+  }
+
+  :root:not(.light) .ddx-maturity--beta {
+    background: #451a03;
+    color: #fcd34d;
+  }
+
+  :root:not(.light) .ddx-maturity--planned {
+    background: #1f2937;
+    color: #9ca3af;
+  }
+}
+
 body.ddx-editorial-home {
   margin: 0;
   min-height: 100vh;
-  background:
-    linear-gradient(180deg, rgba(255, 253, 248, 0.92), rgba(244, 239, 230, 0.98)),
-    var(--ddx-bg-canvas);
+  background: var(--ddx-bg-canvas);
   color: var(--ddx-fg-ink);
   font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   letter-spacing: 0;
@@ -109,6 +137,35 @@ body.ddx-editorial-home *::after {
 
 .ddx-home-nav__links a {
   color: var(--ddx-fg-muted);
+}
+
+.ddx-theme-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--ddx-border-line);
+  background: transparent;
+  color: var(--ddx-fg-muted);
+  cursor: pointer;
+}
+
+.ddx-theme-toggle:hover {
+  color: var(--ddx-fg-ink);
+  border-color: var(--ddx-fg-muted);
+}
+
+/* Show sun in dark mode, moon in light mode */
+.ddx-theme-toggle__sun { display: none; }
+.ddx-theme-toggle__moon { display: block; }
+.dark .ddx-theme-toggle__sun { display: block; }
+.dark .ddx-theme-toggle__moon { display: none; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) .ddx-theme-toggle__sun { display: block; }
+  :root:not(.light) .ddx-theme-toggle__moon { display: none; }
 }
 
 .ddx-home-nav__links a:hover,
@@ -176,25 +233,33 @@ body.ddx-editorial-home *::after {
   border-bottom: 2px solid var(--ddx-accent-brass);
 }
 
-.ddx-home-quote {
-  margin: 0;
-  padding: 0 0 0 24px;
-  border-left: 2px solid var(--ddx-accent-brass);
-  color: var(--ddx-fg-ink);
-  font-family: "Newsreader", Georgia, serif;
-  font-size: 25px;
-  line-height: 1.28;
+.ddx-home-hero__install {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  align-self: center;
 }
 
-.ddx-home-quote cite {
-  display: block;
-  margin-top: 18px;
+.ddx-home-install-block {
+  margin: 0;
+  padding: 24px 28px;
+  border: 1px solid var(--ddx-border-line);
+  background: var(--ddx-bg-surface);
+  color: var(--ddx-fg-ink);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 14px;
+  line-height: 1.8;
+  overflow-x: auto;
+}
+
+.ddx-home-install-caption {
+  margin: 0;
+  padding: 0 0 0 4px;
+  border-left: 2px solid var(--ddx-accent-brass);
   color: var(--ddx-fg-muted);
-  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
-  font-size: 12px;
-  font-style: normal;
-  font-weight: 600;
-  text-transform: uppercase;
+  font-family: "Newsreader", Georgia, serif;
+  font-size: 15px;
+  line-height: 1.5;
 }
 
 .ddx-home-principles {

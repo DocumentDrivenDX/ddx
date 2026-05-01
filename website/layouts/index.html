@@ -7,6 +7,15 @@
     <title>{{ site.Title }}</title>
     <meta name="description" content="{{ site.Params.description }}">
     <link rel="stylesheet" href="{{ $css.RelPermalink }}">
+    <script>
+      (function() {
+        var stored = localStorage.getItem('theme');
+        var prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (stored === 'dark' || (!stored && prefersDark)) {
+          document.documentElement.classList.add('dark');
+        }
+      })();
+    </script>
   </head>
   <body class="ddx-editorial-home">
     <nav class="ddx-home-nav" aria-label="Primary">
@@ -16,6 +25,10 @@
           <a href="{{ relLangURL "features/" }}">Features</a>
           <a href="{{ relLangURL "docs/" }}">Docs</a>
           <a href="{{ relLangURL "docs/concepts/" }}">Concepts</a>
+          <button class="ddx-theme-toggle" aria-label="Toggle dark mode" onclick="(function(){var h=document.documentElement;var dark=h.classList.toggle('dark');localStorage.setItem('theme',dark?'dark':'light');})()">
+            <svg class="ddx-theme-toggle__sun" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+            <svg class="ddx-theme-toggle__moon" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+          </button>
         </div>
       </div>
     </nav>
@@ -25,22 +38,13 @@
       <!-- Section 1: Hero -->
       <section class="ddx-home-hero" aria-labelledby="ddx-home-title">
         <div class="ddx-home-hero__lede">
-          <p class="ddx-home-kicker">Document-driven development</p>
+          <p class="ddx-home-kicker">Document-driven AI development</p>
           <h1 id="ddx-home-title" class="ddx-home-title">Documents drive the agents. DDx drives the documents.</h1>
           <p class="ddx-home-prose">
-            DDx is the local-first platform for the documents AI agents consume to
-            build software — beads carry work, specs carry intent, plugins package
-            workflows, and every agent run leaves evidence behind.
+            AI agents write code fast. DDx keeps the work structured — every task
+            has acceptance criteria, every run executes in isolation, and every
+            result leaves auditable evidence behind.
           </p>
-
-          <aside class="ddx-home-helix" aria-label="HELIX">
-            <span class="ddx-home-helix__tag">Pairs with HELIX</span>
-            <p>
-              DDx is the platform. <strong>HELIX</strong> is the opinionated
-              workflow that runs on top of it — phases, gates, and bounded actions
-              for teams that want a methodology out of the box.
-            </p>
-          </aside>
 
           <div class="ddx-home-actions" aria-label="Install">
             <a class="ddx-home-action-primary" href="{{ relLangURL "docs/getting-started/" }}">Get Started</a>
@@ -48,18 +52,21 @@
           </div>
         </div>
 
-        <blockquote class="ddx-home-quote">
-          Work moves when the load, lever, and fulcrum are visible.
-          <cite>DDx operating principle</cite>
-        </blockquote>
+        <div class="ddx-home-hero__install">
+          <pre class="ddx-home-install-block"><code>brew install ddx
+ddx init
+ddx install helix
+ddx work</code></pre>
+          <p class="ddx-home-install-caption">HELIX is the opinionated workflow that runs on top of DDx — phases, gates, and bounded actions for teams that want a methodology out of the box.</p>
+        </div>
       </section>
 
       <!-- Section 2: The gap AI agents cannot close alone -->
       <section class="ddx-home-problem" aria-labelledby="ddx-problem-title">
-        <p id="ddx-problem-title" class="ddx-home-section-label">The gap</p>
+        <p id="ddx-problem-title" class="ddx-home-section-label">The problem</p>
         <div class="ddx-home-problem__body">
           <h2 class="ddx-home-problem__headline">AI agents can write code. They cannot hold context across a codebase, a sprint, or a team.</h2>
-          <p class="ddx-home-problem__prose">DDx closes that gap. Specs encode intent. Beads carry acceptance criteria forward. Agents execute against a defined contract — and leave evidence when they are done.</p>
+          <p class="ddx-home-problem__prose">Without structure, agents drift — regenerating work, ignoring dependencies, reverting to bad states. DDx gives agents a contract to execute against: acceptance criteria on every task, specs that encode intent, and evidence that makes every run inspectable.</p>
         </div>
       </section>
 
@@ -69,18 +76,18 @@
         <div class="ddx-home-how__steps">
           <div class="ddx-home-how__step">
             <span class="ddx-home-how__step-num">01</span>
-            <h3>Track work as beads</h3>
-            <p>Create beads with acceptance criteria and dependency graphs. The queue tells agents what to do next.</p>
+            <h3>Define the work</h3>
+            <p>Each task declares acceptance criteria and its dependencies upfront. Nothing runs without a contract.</p>
           </div>
           <div class="ddx-home-how__step">
             <span class="ddx-home-how__step-num">02</span>
             <h3>Execute in isolation</h3>
-            <p>Each bead runs in its own worktree. Results are merged — or preserved — with a full audit trail.</p>
+            <p>Agents run in dedicated git worktrees — no shared state, no context bleed. Results merge cleanly or are preserved for review.</p>
           </div>
           <div class="ddx-home-how__step">
             <span class="ddx-home-how__step-num">03</span>
-            <h3>Review and close</h3>
-            <p>A review pass checks every acceptance criterion. Passing beads close. Failing beads re-queue with findings.</p>
+            <h3>Review against criteria</h3>
+            <p>Every run is graded against its acceptance criteria. Work that passes closes. Work that fails re-queues with the findings attached.</p>
           </div>
         </div>
       </section>
@@ -93,31 +100,31 @@
         </div>
         <div class="ddx-home-grid ddx-home-grid--4">
           <article class="ddx-home-card ddx-home-card--feature">
-            <span class="ddx-home-card__number">bead tracker</span>
+            <span class="ddx-home-card__number">01</span>
             <div>
-              <h2>Work Queue</h2>
-              <p>Beads encode work with acceptance criteria, dependency graphs, and agent claims.</p>
+              <h2>Structured Work Queue</h2>
+              <p>Tasks carry acceptance criteria, dependency graphs, and a full history of every agent attempt.</p>
             </div>
           </article>
           <article class="ddx-home-card ddx-home-card--feature">
-            <span class="ddx-home-card__number">agent dispatch</span>
+            <span class="ddx-home-card__number">02</span>
             <div>
-              <h2>Execution Engine</h2>
-              <p>Agents run in isolated worktrees. Evidence is captured with every invocation.</p>
+              <h2>Isolated Execution</h2>
+              <p>Every task runs in its own git worktree. Inputs, outputs, cost, and diffs are captured automatically.</p>
             </div>
           </article>
           <article class="ddx-home-card ddx-home-card--feature">
-            <span class="ddx-home-card__number">plugin registry</span>
+            <span class="ddx-home-card__number">03</span>
             <div>
-              <h2>Plugin System</h2>
-              <p>Install workflow methodologies with one command. Everything stays project-local.</p>
+              <h2>Installable Workflows</h2>
+              <p>One command adds a full methodology to your project. HELIX is the first. Build your own or share one.</p>
             </div>
           </article>
           <article class="ddx-home-card ddx-home-card--feature">
-            <span class="ddx-home-card__number">mcp server</span>
+            <span class="ddx-home-card__number">04</span>
             <div>
-              <h2>MCP Server</h2>
-              <p>Serve beads and documents over MCP. Remote supervisors can observe and steer work.</p>
+              <h2>MCP Access</h2>
+              <p>Expose your work queue and documents over MCP so any agent or supervisor can observe and steer.</p>
             </div>
           </article>
         </div>
@@ -218,7 +225,7 @@
 
       <footer class="ddx-home-footer">
         <span class="ddx-home-footer__mark">DDX</span>
-        <span>local-first document orchestration for agentic software work</span>
+        <span>Agent work infrastructure for document-driven development</span>
       </footer>
 
     </main>

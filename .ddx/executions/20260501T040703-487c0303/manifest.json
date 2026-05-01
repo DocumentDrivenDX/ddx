@@ -1,0 +1,58 @@
+{
+  "harness": "claude",
+  "model": "opus",
+  "session_id": "/Users/erik/Projects/ddx/.ddx/agent-logs/svc-1777608423610482471.jsonl",
+  "base_rev": "c183cc00cbbc84b1c89ec1bfa8ce30d9853fa2aa",
+  "result_rev": "139d25e62db0f78939a08e2b1ad064ad4c9c25a8",
+  "verdict": "APPROVE",
+  "bead_id": "ddx-43684ac1",
+  "execution_dir": ".ddx/executions/20260501T040703-487c0303",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1548,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260501T040332-b8df9380/manifest.json",
+          ".ddx/executions/20260501T040332-b8df9380/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:FEAT-008",
+        "bytes_included": 69565,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/01-frame/features/FEAT-008-web-ui.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 6624,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 79597,
+    "output_bytes": 1041,
+    "elapsed_ms": 27751,
+    "harness": "claude",
+    "model": "opus"
+  }
+}

@@ -1,0 +1,64 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Provenance panel renders run id, truncated prompt, and fresh/stale source-hash badge; producing-run link with disabled fallback when run not found; run detail shows 'Produced artifact' backlink. Artifact-local staleness model preserved (no depends_on cascade introduced).",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "AC5 (list staleness reflects source-hash, not cascade) is not modified by this diff — it relies on the existing backend `staleness` field semantics. Behavior depends on resolver, not on these frontend changes.",
+      "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/+page.svelte:98"
+    },
+    {
+      "severity": "info",
+      "summary": "Run-existence probe issues a second GraphQL request per artifact load; acceptable but adds a round-trip when generatedBy is present.",
+      "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/[artifactId]/+page.ts:75"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1548,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260501T040332-b8df9380/manifest.json",
+          ".ddx/executions/20260501T040332-b8df9380/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:FEAT-008",
+        "bytes_included": 69565,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/01-frame/features/FEAT-008-web-ui.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 6624,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 79597,
+    "output_bytes": 1041,
+    "elapsed_ms": 27751,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
