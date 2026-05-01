@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260501T165030-979aff9f",
+  "bead_id": "ddx-76175851",
+  "base_rev": "13bda64d1113e7d322388533a62df08899587405",
+  "created_at": "2026-05-01T16:50:30.850358568Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-76175851",
+    "title": "[visual-suite] V10 author + generate user-workflow capstone",
+    "description": "Per plan: docs/helix/02-design/plan-2026-04-29-visual-suite.md. The coup de grace. Iterative diagram showing how a user works with DDx over time: author/refine artifact -\u003e graph synthesizes context -\u003e bead created -\u003e agent runs (ddx try / ddx work) -\u003e evidence captured -\u003e human re-aligns -\u003e loop closes. Explanatory register; load-bearing artifact. Lives at docs/helix/01-frame/visuals/user-workflow.{prompt.md,png,png.ddx.yaml}. HARD BLOCKED on artifact infrastructure (same as V6/V9). Depends on V6 and V9 outcomes (visual style established).",
+    "labels": [
+      "generate",
+      "plan-2026-04-29-vis",
+      "workflow",
+      "capstone"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T16:50:29Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "566701",
+      "execute-loop-heartbeat-at": "2026-05-01T16:50:29.990199227Z",
+      "execution-eligible": true
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T165030-979aff9f",
+    "prompt": ".ddx/executions/20260501T165030-979aff9f/prompt.md",
+    "manifest": ".ddx/executions/20260501T165030-979aff9f/manifest.json",
+    "result": ".ddx/executions/20260501T165030-979aff9f/result.json",
+    "checks": ".ddx/executions/20260501T165030-979aff9f/checks.json",
+    "usage": ".ddx/executions/20260501T165030-979aff9f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-76175851-20260501T165030-979aff9f"
+  }
+}
