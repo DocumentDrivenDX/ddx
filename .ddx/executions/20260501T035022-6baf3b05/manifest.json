@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260501T035022-6baf3b05",
+  "bead_id": "ddx-790b66fc",
+  "base_rev": "25479b6aec7904692aff74224b89b7fd95c98754",
+  "created_at": "2026-05-01T03:50:23.67431983Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-790b66fc",
+    "title": "website: rebuild layouts/index.html as 7-section editorial scroll with new hero copy and pain points",
+    "acceptance": "Homepage has: (1) Hero with 'Documents drive the agents. DDx drives the documents.' + HELIX callout + install CTA; (2) New Reality; (3) 6 pain point cards; (4) Physics 3-line callout; (5) DDx capability table with shipped badges; (6) Demo placeholder; (7) CTA with role entry points. relLangURL used for all links.",
+    "parent": "ddx-4b202bbb",
+    "labels": [
+      "area:website",
+      "homepage"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-01T03:50:22Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3396374",
+      "execute-loop-heartbeat-at": "2026-05-01T03:50:22.759840695Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260501T035022-6baf3b05",
+    "prompt": ".ddx/executions/20260501T035022-6baf3b05/prompt.md",
+    "manifest": ".ddx/executions/20260501T035022-6baf3b05/manifest.json",
+    "result": ".ddx/executions/20260501T035022-6baf3b05/result.json",
+    "checks": ".ddx/executions/20260501T035022-6baf3b05/checks.json",
+    "usage": ".ddx/executions/20260501T035022-6baf3b05/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-790b66fc-20260501T035022-6baf3b05"
+  }
+}
