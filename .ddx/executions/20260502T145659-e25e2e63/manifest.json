@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T145659-e25e2e63",
+  "bead_id": "ddx-e315ad80",
+  "base_rev": "fb3e20cb30e2353f9e1776ecd3258104da5831b4",
+  "created_at": "2026-05-02T14:57:00.771019724Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e315ad80",
+    "title": "perf: Story 5/6 contract note on page-local vs corpus-wide",
+    "description": "Document the contract: Story 5 grouping is page-local unless server-side groupBy is added. Story 6 search/filter MUST be server-side. Triggers for adding server-side groupBy or virtualization listed.",
+    "acceptance": "1. Contract note in TD or FEAT-008 inline section. 2. Story 5/6 owners aware of triggers.",
+    "parent": "ddx-97335425",
+    "labels": [
+      "phase:2",
+      "story:7",
+      "area:specs",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:56:59Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T14:56:59.52779144Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T145659-e25e2e63",
+    "prompt": ".ddx/executions/20260502T145659-e25e2e63/prompt.md",
+    "manifest": ".ddx/executions/20260502T145659-e25e2e63/manifest.json",
+    "result": ".ddx/executions/20260502T145659-e25e2e63/result.json",
+    "checks": ".ddx/executions/20260502T145659-e25e2e63/checks.json",
+    "usage": ".ddx/executions/20260502T145659-e25e2e63/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e315ad80-20260502T145659-e25e2e63"
+  }
+}
