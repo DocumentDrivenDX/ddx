@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T145728-556d595d",
+  "bead_id": "ddx-6af3ae8f",
+  "base_rev": "691b41378aa0226a634d34709a34c84ea72c6522",
+  "created_at": "2026-05-02T14:57:29.625332714Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6af3ae8f",
+    "title": "bd fallback: document how to wire bd as the bead-tracker backend (fallback path)",
+    "description": "Single artifact under docs/ explaining how to wire bd as the backend if axon adoption stalls. Touches: install bd, point .ddx/config.yaml backend: bd, validate. No code change required if backend.go already supports it.",
+    "acceptance": "1. docs page exists with concrete steps. 2. Verified by running locally with bd installed (or noting the gap if bd isn't installable on the dev machine).",
+    "parent": "ddx-5d49b14e",
+    "labels": [
+      "phase:2",
+      "area:docs",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:57:28Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T14:57:28.361516819Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T145728-556d595d",
+    "prompt": ".ddx/executions/20260502T145728-556d595d/prompt.md",
+    "manifest": ".ddx/executions/20260502T145728-556d595d/manifest.json",
+    "result": ".ddx/executions/20260502T145728-556d595d/result.json",
+    "checks": ".ddx/executions/20260502T145728-556d595d/checks.json",
+    "usage": ".ddx/executions/20260502T145728-556d595d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6af3ae8f-20260502T145728-556d595d"
+  }
+}
