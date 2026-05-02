@@ -215,6 +215,10 @@ type ExecuteBeadLoopStore interface {
 	// Notes field and recording a reopen event. Used by the post-merge review
 	// step when the reviewer returns REQUEST_CHANGES or BLOCK.
 	Reopen(id, reason, notes string) error
+	// Update mutates a bead in place. Used by the post-merge triage step to
+	// add labels (e.g. "needs_human") and metadata hints (e.g. tier-pin) when
+	// the triage policy escalates after repeated review BLOCKs.
+	Update(id string, mutate func(*bead.Bead)) error
 }
 
 // readyDiagnoser is the optional interface the work loop uses to explain an
@@ -801,6 +805,13 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						report.Status = ExecuteBeadStatusReviewBlock
 						report.Detail = "post-merge review: BLOCK (flagged for human)"
 						reviewApproved = false
+					}
+					// After the BLOCK / REQUEST_CHANGES branches have recorded
+					// their verdict event and reopened the bead, consult the
+					// triage policy for the next action (re-attempt, escalate
+					// tier, or needs_human).
+					if reviewRes.Verdict == VerdictBlock || reviewRes.Verdict == VerdictRequestChanges {
+						_ = w.applyReviewTriageDecision(candidate.ID, assignee, now().UTC(), report.Tier)
 					}
 				}
 			}
