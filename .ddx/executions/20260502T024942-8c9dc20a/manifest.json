@@ -1,0 +1,71 @@
+{
+  "attempt_id": "20260502T024942-8c9dc20a",
+  "bead_id": "ddx-619643fe",
+  "base_rev": "f948cfe8abbf69ad5eeb590a31b90f5178d01b2e",
+  "created_at": "2026-05-02T02:49:43.645811279Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-619643fe",
+    "title": "Maturity honesty pass: re-badge quorum review framing, plugin API not-started, server UI screenshots",
+    "description": "Re-badge multi-model review (quorum) from 'beta' to 'framing' (matches FEAT-013 status). Re-badge plugin API from 'stable' to 'not-started' (matches FEAT-018). Inventory server UI screenshots (find website/static -name 'feature-*' -o -name 'ui-*'); update or mark as planned.",
+    "acceptance": "1. quorum review badged 'framing' on features page. 2. plugin API badged 'not-started' on plugins page. 3. Server UI screenshot inventory documented; placeholder images either replaced or labelled 'planned UI'. 4. 'find website/static -type f \\( -name \"*.png\" -o -name \"*.jpg\" \\) \u003e /tmp/site-image-inventory.txt' run as evidence.",
+    "parent": "ddx-629ec5b4",
+    "labels": [
+      "site-redesign",
+      "area:website",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T02:49:42Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-02T01:36:59.550505703Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-02T01:36:59.67530235Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-05-02T01:36:59.786428846Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-05-02T01:37:00.004021969Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T02:49:42.043838248Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T024942-8c9dc20a",
+    "prompt": ".ddx/executions/20260502T024942-8c9dc20a/prompt.md",
+    "manifest": ".ddx/executions/20260502T024942-8c9dc20a/manifest.json",
+    "result": ".ddx/executions/20260502T024942-8c9dc20a/result.json",
+    "checks": ".ddx/executions/20260502T024942-8c9dc20a/checks.json",
+    "usage": ".ddx/executions/20260502T024942-8c9dc20a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-619643fe-20260502T024942-8c9dc20a"
+  }
+}
