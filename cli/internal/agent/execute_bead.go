@@ -1273,6 +1273,18 @@ If too big, decompose — do not attempt the work:
 
 A clean decomposition is a successful attempt. Do not mix partial implementation with decomposition.`
 
+// instrNoChangesContract is the shared NoChangesContract (TD-031 §8.1) rule.
+const instrNoChangesContract = `
+
+## no_changes contract
+
+If you write ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + `, it MUST carry one of:
+
+- ` + "`verification_command: <one-line shell command>`" + ` — the loop runs it (cwd = project root, 60s); exit 0 closes the bead, non-zero rejects.
+- ` + "`status: needs_investigation`" + ` + ` + "`reason: <why>`" + ` — bead stays open for triage.
+
+Bare rationales ("nothing to do") are rejected.`
+
 // instrInvestigationReports is the shared report-output rule.
 const instrInvestigationReports = `
 
@@ -1323,6 +1335,7 @@ const executeBeadInstructionsClaudeText = `You are executing one bead inside an 
 - Commit exactly once when green; conventional-commit subject ending with ` + "`[<bead-id>]`" + `. Stop after the commit.
 - Do not modify files outside the bead's scope.
 - If you cannot finish, write ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` (what is done, what blocks, what a follow-up needs) before exiting. No commit and no rationale ⇒ DDx records ` + "`no_evidence_produced`" + `. A well-justified no_changes beats a bad commit.` +
+	instrNoChangesContract +
 	instrInvestigationReports +
 	instrBeadOverride +
 	instrReviewGate +
@@ -1354,6 +1367,7 @@ The bead's <description> and <acceptance> are the completion contract. Every AC 
 - Stop immediately after the commit succeeds. Do not keep reading, testing, or following up — that risks runaway loops.
 - Do not modify files outside the bead's scope.
 - If you cannot finish, write ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` (done / blocking / follow-up) before exiting. No commit and no rationale ⇒ ` + "`no_evidence_produced`" + `.` +
+	instrNoChangesContract +
 	instrInvestigationReports +
 	instrBeadOverride +
 	instrReviewGate +

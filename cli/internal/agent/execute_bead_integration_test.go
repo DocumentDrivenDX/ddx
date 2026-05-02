@@ -486,18 +486,16 @@ func TestIntegration_ScriptHarness_ContextCancelBetweenIterations(t *testing.T) 
 // Test 9: no_changes + specific rationale → closes as already_satisfied fast
 // ---------------------------------------------------------------------------
 
-// TestIntegration_ScriptHarness_NoChangesRationale_ClosesBeadFast verifies that
-// when the directive writes a no_changes_rationale.txt containing a commit SHA,
-// the bead is closed as already_satisfied without waiting for the 3-strike
-// cooldown.
+// TestIntegration_ScriptHarness_NoChangesRationale_ClosesBeadFast verifies the
+// NoChangesContract verified path end-to-end: when the directive writes a
+// no_changes_rationale.txt containing a passing verification_command, the bead
+// closes as already_satisfied on the first attempt.
 func TestIntegration_ScriptHarness_NoChangesRationale_ClosesBeadFast(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	ddxDir := filepath.Join(projectRoot, ".ddx")
 	const beadID = "ddx-int-0001"
 
-	// Get a real commit SHA to embed in the rationale.
-	existingSHA := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
-	rationale := fmt.Sprintf("Work already present in commit %s (output.txt). TestSomeFunc confirms.", existingSHA[:12])
+	rationale := "verification_command: true"
 
 	// Build directive lines that write the rationale file using $DDX_ATTEMPT_ID.
 	dirFile := filepath.Join(t.TempDir(), "directive.txt")

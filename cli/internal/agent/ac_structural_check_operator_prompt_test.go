@@ -40,9 +40,12 @@ func TestStructuralACSkippedForOperatorPromptBeads(t *testing.T) {
 			return ExecuteBeadReport{
 				BeadID:             id,
 				Status:             ExecuteBeadStatusNoChanges,
-				NoChangesRationale: "work already present in commit 1da6495",
+				NoChangesRationale: "verification_command: true\noutput: ok",
 			}, nil
 		}),
+		VerificationRunner: func(ctx context.Context, projectRoot, command string) (int, string, error) {
+			return 0, "", nil
+		},
 	}
 
 	rcfg := loopConfigForACTest(t)

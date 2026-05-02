@@ -279,8 +279,12 @@ type ExecuteBeadLoopResult struct {
 type ExecuteBeadWorker struct {
 	Store               ExecuteBeadLoopStore
 	Executor            ExecuteBeadExecutor
-	SatisfactionChecker SatisfactionChecker // nil → count-based default
-	Now                 func() time.Time
+	SatisfactionChecker SatisfactionChecker // nil → NoChangesContract default
+	// VerificationRunner runs a verification_command parsed out of a
+	// no_changes_rationale.txt under NoChangesContract (TD-031 §8.1). When
+	// nil, DefaultVerificationCommandRunner is used.
+	VerificationRunner VerificationCommandRunner
+	Now                func() time.Time
 	// Reviewer, when non-nil, is called after every successful merge to
 	// validate the commit against the bead's acceptance criteria. When nil,
 	// post-merge review is skipped (same behaviour as --no-review).
@@ -880,14 +884,40 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					}
 					return result, ctx.Err()
 				}
-				satisfied, evidence, aerr := w.adjudicateNoChanges(ctx, candidate.ID, count, maxNoChangesBeforeClose, report.NoChangesRationale, candidate.Acceptance, candidate.IssueType, runtime.ProjectRoot)
+				satisfied, evidence, ncEvent, ncLabel, ncBody, aerr := w.adjudicateNoChangesContract(ctx, candidate, count, maxNoChangesBeforeClose, report, runtime)
 				if aerr != nil {
 					if w.handleOutcomeStoreError(ctx, candidate.ID, "adjudicateNoChanges", aerr, assignee, result, runtime, now) {
 						continue
 					}
 					return result, ctx.Err()
 				}
+				if !satisfied && ncEvent != "" {
+					if lerr := addBeadLabel(w.Store, candidate.ID, ncLabel); lerr != nil {
+						if w.handleOutcomeStoreError(ctx, candidate.ID, "addBeadLabel", lerr, assignee, result, runtime, now) {
+							continue
+						}
+						return result, ctx.Err()
+					}
+					_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+						Kind:      ncEvent,
+						Summary:   ncEvent,
+						Body:      ncBody,
+						Actor:     assignee,
+						Source:    "ddx agent execute-loop",
+						CreatedAt: now().UTC(),
+					})
+				}
 				if satisfied {
+					if ncEvent != "" {
+						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+							Kind:      ncEvent,
+							Summary:   ncEvent,
+							Body:      ncBody,
+							Actor:     assignee,
+							Source:    "ddx agent execute-loop",
+							CreatedAt: now().UTC(),
+						})
+					}
 					// Adjudication confirmed bead is already satisfied.
 					// Set the terminal status BEFORE the close so the late
 					// executeBeadLoopEvent append captures "already_satisfied"
@@ -1314,6 +1344,84 @@ func rationaleIsSpecific(rationale string) bool {
 		return false
 	}
 	return reCommitSHA.MatchString(rationale) || reTestFuncName.MatchString(rationale)
+}
+
+// adjudicateNoChangesContract is the NoChangesContract (TD-031 §8.1)
+// adjudication path. It returns whether the bead should be closed as
+// already_satisfied, the evidence string for the close, and the contract
+// event/label/body to record on the bead's event stream.
+//
+// Resolution order:
+//   - When SatisfactionChecker is configured it is consulted first and its
+//     result wins; ncEvent/ncLabel are empty (legacy escape valve, used by
+//     tests and integrations that pre-date the contract).
+//   - Otherwise the rationale is parsed for NoChangesContract markers:
+//   - verification_command: run it; exit 0 → already_satisfied with the
+//     no_changes_verified event recorded; non-zero → bead stays open with
+//     triage:no-changes-unverified label and no_changes_unverified event.
+//   - status: needs_investigation → bead stays open with
+//     triage:needs-investigation label and no_changes_needs_investigation
+//     event capturing the agent's reason.
+//   - neither marker present → bead stays open with
+//     triage:no-changes-unjustified label and no_changes_unjustified event.
+//
+// satisfied is the only signal the loop uses to decide close vs stay-open;
+// ncEvent/ncLabel/ncBody are recorded by the caller. Status is NEVER mutated
+// here to a non-canonical value (bd/br compatibility, ADR-004).
+func (w *ExecuteBeadWorker) adjudicateNoChangesContract(ctx context.Context, candidate bead.Bead, noChangesCount, maxNoChangesBeforeClose int, report ExecuteBeadReport, runtime ExecuteBeadLoopRuntime) (satisfied bool, evidence, ncEvent, ncLabel, ncBody string, err error) {
+	if w.SatisfactionChecker != nil {
+		s, ev, cerr := w.SatisfactionChecker.CheckSatisfied(ctx, candidate.ID, noChangesCount)
+		return s, ev, "", "", "", cerr
+	}
+	parsed := ParseNoChangesRationale(report.NoChangesRationale)
+	switch parsed.Kind {
+	case NoChangesKindVerified:
+		runner := w.VerificationRunner
+		if runner == nil {
+			runner = DefaultVerificationCommandRunner
+		}
+		exitCode, output, runErr := runner(ctx, runtime.ProjectRoot, parsed.VerificationCommand)
+		body := fmt.Sprintf("verification_command=%s\nexit_code=%d", parsed.VerificationCommand, exitCode)
+		if output != "" {
+			body += "\noutput:\n" + output
+		}
+		if runErr != nil {
+			body += "\nrun_error: " + runErr.Error()
+		}
+		if runErr == nil && exitCode == 0 {
+			ev := fmt.Sprintf("verification_command passed: %s", parsed.VerificationCommand)
+			return true, ev, NoChangesEventVerified, "", body, nil
+		}
+		return false, "", NoChangesEventUnverified, NoChangesLabelUnverified, body, nil
+	case NoChangesKindNeedsInvestigation:
+		body := parsed.NeedsInvestigationReason
+		if body == "" {
+			body = "(no reason provided)"
+		}
+		return false, "", NoChangesEventNeedsInvestigation, NoChangesLabelNeedsInvestigation, body, nil
+	default: // NoChangesKindUnjustified
+		body := strings.TrimSpace(report.NoChangesRationale)
+		if body == "" {
+			body = "(rationale absent)"
+		}
+		return false, "", NoChangesEventUnjustified, NoChangesLabelUnjustified, body, nil
+	}
+}
+
+// addBeadLabel mutates the bead in place to add a label idempotently. The
+// store handles persistence; concurrent callers serialize via the store lock.
+func addBeadLabel(store ExecuteBeadLoopStore, beadID, label string) error {
+	if label == "" {
+		return nil
+	}
+	return store.Update(beadID, func(b *bead.Bead) {
+		for _, existing := range b.Labels {
+			if existing == label {
+				return
+			}
+		}
+		b.Labels = append(b.Labels, label)
+	})
 }
 
 // adjudicateNoChanges runs the no-change adjudication step for a bead.

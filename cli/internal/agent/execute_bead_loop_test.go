@@ -271,9 +271,21 @@ func TestExecuteBeadWorkerNoChangesStaysOpenAndContinues(t *testing.T) {
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, ExecuteBeadStatusNoChanges, events[0].Summary)
-	assert.Contains(t, events[0].Body, "agent made no commits")
+	// NoChangesContract emits a triage event (no_changes_unjustified) plus the
+	// terminal executeBeadLoopEvent describing the attempt outcome.
+	require.Len(t, events, 2)
+	var sawTerminal, sawTriage bool
+	for _, ev := range events {
+		if ev.Summary == ExecuteBeadStatusNoChanges {
+			sawTerminal = true
+			assert.Contains(t, ev.Body, "agent made no commits")
+		}
+		if ev.Kind == NoChangesEventUnjustified {
+			sawTriage = true
+		}
+	}
+	assert.True(t, sawTerminal, "executeBeadLoopEvent must be appended")
+	assert.True(t, sawTriage, "no_changes_unjustified triage event must be appended")
 }
 
 func TestExecuteBeadWorkerNoChangesSuppressesImmediateRetryAcrossRuns(t *testing.T) {
@@ -709,61 +721,54 @@ func TestExecuteBeadWorkerEmitsLoopEventsWithNoReadyWork(t *testing.T) {
 	assert.EqualValues(t, 0, endData["attempts"])
 }
 
-// TestExecuteBeadWorkerNoChangesAutoClosesAtThreshold verifies that the default
-// count-based adjudication closes a bead as already_satisfied once the
-// no-changes count reaches the configured threshold.
-func TestExecuteBeadWorkerNoChangesAutoClosesAtThreshold(t *testing.T) {
+// TestExecuteBeadWorkerNoChangesUnjustifiedStaysOpenWithLabel verifies the
+// NoChangesContract (TD-031 §8.1, ddx-b24e9630) "unjustified" path: when the
+// rationale carries neither verification_command nor needs_investigation, the
+// bead stays open with a triage:no-changes-unjustified label and a
+// no_changes_unjustified event. There is no count-based fallback under the new
+// contract — only structured rationales close the bead.
+func TestExecuteBeadWorkerNoChangesUnjustifiedStaysOpenWithLabel(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
 	b := &bead.Bead{ID: "ddx-nc01", Title: "Always no-changes"}
 	require.NoError(t, store.Create(b))
 
-	callCount := 0
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			callCount++
-			// No BaseRev/ResultRev so shouldSuppressNoProgress returns false
-			// and no cooldown is applied — bead stays immediately retryable.
 			return ExecuteBeadReport{
-				BeadID: beadID,
-				Status: ExecuteBeadStatusNoChanges,
-				Detail: "nothing to do",
+				BeadID:             beadID,
+				Status:             ExecuteBeadStatusNoChanges,
+				Detail:             "nothing to do",
+				NoChangesRationale: "the work seems done",
 			}, nil
 		}),
 	}
 
-	const threshold = 2
-
-	cfgOpts := config.TestLoopConfigOpts{
-		Assignee:                "worker",
-		MaxNoChangesBeforeClose: threshold,
-	}
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
-	// First pass: count=1 < threshold, bead stays open.
-	r1, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	r, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
-	assert.Equal(t, 1, r1.Attempts)
-	assert.Equal(t, 0, r1.Successes)
-	assert.Equal(t, ExecuteBeadStatusNoChanges, r1.LastFailureStatus)
+	assert.Equal(t, 1, r.Attempts)
+	assert.Equal(t, 0, r.Successes)
+	assert.Equal(t, 1, r.Failures)
+
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Equal(t, bead.StatusOpen, got.Status, "unjustified rationale must NOT close the bead")
+	assert.Contains(t, got.Labels, NoChangesLabelUnjustified)
 
-	// Second pass: count=2 == threshold, bead is closed as already_satisfied.
-	r2, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	events, err := store.Events(b.ID)
 	require.NoError(t, err)
-	assert.Equal(t, 1, r2.Attempts)
-	assert.Equal(t, 1, r2.Successes)
-	require.Len(t, r2.Results, 1)
-	assert.Equal(t, ExecuteBeadStatusAlreadySatisfied, r2.Results[0].Status)
-
-	got, err = store.Get(b.ID)
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, got.Status)
-	assert.Equal(t, 2, callCount)
+	var sawUnjustified bool
+	for _, ev := range events {
+		if ev.Kind == NoChangesEventUnjustified {
+			sawUnjustified = true
+		}
+	}
+	assert.True(t, sawUnjustified, "no_changes_unjustified event must be emitted")
 }
 
 // TestExecuteBeadWorkerCustomSatisfactionCheckerClosesBeadWhenSatisfied verifies
@@ -864,9 +869,9 @@ func TestExecuteBeadWorkerCustomSatisfactionCheckerLeavesBeadOpenWhenUnresolved(
 
 // TestExecuteBeadWorkerNoChangesDoesNotStarveQueue verifies that a bead with
 // repeated no_changes results cannot prevent other ready beads from being
-// executed across multiple queue passes. It also verifies the full adjudication
-// lifecycle: other beads run unblocked while the no-changes bead is open, and
-// the no-changes bead is eventually closed as already_satisfied at the threshold.
+// executed across multiple queue passes. Under NoChangesContract the
+// no-changes bead stays open across passes (no count-based close); other
+// beads run unblocked.
 func TestExecuteBeadWorkerNoChangesDoesNotStarveQueue(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
@@ -935,31 +940,17 @@ func TestExecuteBeadWorkerNoChangesDoesNotStarveQueue(t *testing.T) {
 	assert.Equal(t, bead.StatusClosed, w2.Status)
 	assert.Equal(t, bead.StatusOpen, nc.Status, "ncBead must stay open after first no_changes")
 
-	// Pass 2: only ncBead remains; count reaches threshold → closed as already_satisfied.
+	// Pass 2: only ncBead remains; under NoChangesContract there is no
+	// count-based close — the bead stays open with the unjustified label.
 	result2, err := worker.Run(context.Background(), rcfg, runtime)
 	require.NoError(t, err)
 	assert.Equal(t, 1, result2.Attempts)
-	assert.Equal(t, 1, result2.Successes, "ncBead must be closed as already_satisfied")
-	require.Len(t, result2.Results, 1)
-	assert.Equal(t, ExecuteBeadStatusAlreadySatisfied, result2.Results[0].Status)
+	assert.Equal(t, 0, result2.Successes)
+	assert.Equal(t, 1, result2.Failures)
 
 	nc, _ = store.Get(ncBead.ID)
-	assert.Equal(t, bead.StatusClosed, nc.Status)
-
-	// Pass 3: queue is empty.
-	result3, err := worker.Run(context.Background(), rcfg, runtime)
-	require.NoError(t, err)
-	assert.True(t, result3.NoReadyWork)
-	assert.Equal(t, 0, result3.Attempts)
-
-	// ncBead was attempted exactly twice (once per pass), never a third time.
-	ncExec := 0
-	for _, id := range executed {
-		if id == ncBead.ID {
-			ncExec++
-		}
-	}
-	assert.Equal(t, 2, ncExec, "ncBead must be executed exactly twice across all passes")
+	assert.Equal(t, bead.StatusOpen, nc.Status, "ncBead stays open under NoChangesContract")
+	assert.Contains(t, nc.Labels, NoChangesLabelUnjustified)
 }
 
 // TestRationaleIsSpecific verifies the heuristic that decides whether a
@@ -994,19 +985,18 @@ func TestRationaleIsSpecific(t *testing.T) {
 	}
 }
 
-// TestExecuteBeadWorkerNoChangesWithCommitSHARationaleClosesImmediately verifies
-// that when a no_changes report carries a rationale referencing a prior commit
-// SHA, the loop closes the bead as already_satisfied on the first attempt without
-// waiting for the count-based threshold.
-func TestExecuteBeadWorkerNoChangesWithCommitSHARationaleClosesImmediately(t *testing.T) {
+// TestExecuteBeadWorkerNoChangesVerifiedClosesImmediately verifies the
+// NoChangesContract verified path (ddx-b24e9630): a rationale carrying a
+// verification_command that exits 0 closes the bead as already_satisfied on
+// the first attempt and emits a no_changes_verified event.
+func TestExecuteBeadWorkerNoChangesVerifiedClosesImmediately(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
 	b := &bead.Bead{ID: "ddx-sha01", Title: "Already in prior commit"}
 	require.NoError(t, store.Create(b))
 
-	const rationale = "Work already present in commit 1da6495 (cli/internal/bead/store.go). " +
-		"TestReadyExecutionExcludesEpics confirms the epic filter passes."
+	const rationale = "verification_command: true\noutput: passes"
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -1020,22 +1010,20 @@ func TestExecuteBeadWorkerNoChangesWithCommitSHARationaleClosesImmediately(t *te
 				NoChangesRationale: rationale,
 			}, nil
 		}),
+		VerificationRunner: func(ctx context.Context, projectRoot, command string) (int, string, error) {
+			return 0, "ok", nil
+		},
 	}
 
-	// MaxNoChangesBeforeClose=3 to confirm the heuristic fires before threshold.
-	cfgOpts := config.TestLoopConfigOpts{
-		Assignee:                "worker",
-		MaxNoChangesBeforeClose: 3,
-	}
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, 1, result.Attempts)
-	assert.Equal(t, 1, result.Successes, "commit-SHA rationale must close bead on first attempt")
+	assert.Equal(t, 1, result.Successes, "verification_command pass must close bead on first attempt")
 	require.Len(t, result.Results, 1)
 	assert.Equal(t, ExecuteBeadStatusAlreadySatisfied, result.Results[0].Status)
-	assert.Equal(t, rationale, result.Results[0].Detail)
 
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
@@ -1043,57 +1031,112 @@ func TestExecuteBeadWorkerNoChangesWithCommitSHARationaleClosesImmediately(t *te
 
 	events, err := store.Events(b.ID)
 	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, ExecuteBeadStatusAlreadySatisfied, events[0].Summary)
-	assert.Contains(t, events[0].Body, "rationale:")
+	var sawVerified, sawTerminal bool
+	for _, ev := range events {
+		if ev.Kind == NoChangesEventVerified {
+			sawVerified = true
+			assert.Contains(t, ev.Body, "exit_code=0")
+		}
+		if ev.Summary == ExecuteBeadStatusAlreadySatisfied {
+			sawTerminal = true
+		}
+	}
+	assert.True(t, sawVerified, "no_changes_verified event must be emitted")
+	assert.True(t, sawTerminal, "terminal already_satisfied event must be appended")
 }
 
-// TestExecuteBeadWorkerNoChangesVagueRationaleUsesCountThreshold verifies that
-// a vague rationale (no commit SHA, no test name) does not trigger early close
-// and the count-based threshold still applies.
-func TestExecuteBeadWorkerNoChangesVagueRationaleUsesCountThreshold(t *testing.T) {
+// TestExecuteBeadWorkerNoChangesVerificationFailsKeepsBeadOpen verifies the
+// NoChangesContract unverified path: a verification_command that exits non-zero
+// does NOT close the bead. The bead stays open with a
+// triage:no-changes-unverified label and a no_changes_unverified event.
+func TestExecuteBeadWorkerNoChangesVerificationFailsKeepsBeadOpen(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
-	b := &bead.Bead{ID: "ddx-vague01", Title: "Vague rationale bead"}
+	b := &bead.Bead{ID: "ddx-unv01", Title: "Bead whose verification fails"}
 	require.NoError(t, store.Create(b))
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			// Non-empty but vague rationale — no commit SHA or test name.
 			return ExecuteBeadReport{
 				BeadID:             beadID,
 				Status:             ExecuteBeadStatusNoChanges,
-				Detail:             "nothing to do",
-				NoChangesRationale: "the work seems done",
+				NoChangesRationale: "verification_command: false\noutput: nothing matched",
+			}, nil
+		}),
+		VerificationRunner: func(ctx context.Context, projectRoot, command string) (int, string, error) {
+			return 1, "test failure", nil
+		},
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	r, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	assert.Equal(t, 0, r.Successes)
+	assert.Equal(t, 1, r.Failures)
+
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status, "verification failure must NOT close the bead")
+	assert.Contains(t, got.Labels, NoChangesLabelUnverified)
+
+	events, err := store.Events(b.ID)
+	require.NoError(t, err)
+	var sawUnverified bool
+	for _, ev := range events {
+		if ev.Kind == NoChangesEventUnverified {
+			sawUnverified = true
+			assert.Contains(t, ev.Body, "exit_code=1")
+		}
+	}
+	assert.True(t, sawUnverified, "no_changes_unverified event must be emitted")
+}
+
+// TestExecuteBeadWorkerNoChangesNeedsInvestigationKeepsBeadOpen verifies the
+// NoChangesContract needs_investigation path: when the agent declares it cannot
+// make progress, the bead stays open with a triage:needs-investigation label
+// and a no_changes_needs_investigation event capturing the reason.
+func TestExecuteBeadWorkerNoChangesNeedsInvestigationKeepsBeadOpen(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{ID: "ddx-inv01", Title: "Bead the agent cannot make progress on"}
+	require.NoError(t, store.Create(b))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:             beadID,
+				Status:             ExecuteBeadStatusNoChanges,
+				NoChangesRationale: "status: needs_investigation\nreason: spec ambiguous; need operator input",
 			}, nil
 		}),
 	}
 
-	const threshold = 2
-
-	cfgOpts := config.TestLoopConfigOpts{
-		Assignee:                "worker",
-		MaxNoChangesBeforeClose: threshold,
-	}
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-
-	// Pass 1: vague rationale → bead stays open.
-	r1, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	r, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
-	assert.Equal(t, 0, r1.Successes)
+	assert.Equal(t, 0, r.Successes)
+
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Equal(t, bead.StatusOpen, got.Status, "needs_investigation must NOT close the bead")
+	assert.Contains(t, got.Labels, NoChangesLabelNeedsInvestigation)
 
-	// Pass 2: count reaches threshold → closed as already_satisfied.
-	r2, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	events, err := store.Events(b.ID)
 	require.NoError(t, err)
-	assert.Equal(t, 1, r2.Successes)
-	got, err = store.Get(b.ID)
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, got.Status)
+	var sawNeedsInv bool
+	for _, ev := range events {
+		if ev.Kind == NoChangesEventNeedsInvestigation {
+			sawNeedsInv = true
+			assert.Contains(t, ev.Body, "spec ambiguous")
+		}
+	}
+	assert.True(t, sawNeedsInv, "no_changes_needs_investigation event must be emitted")
 }
 
 // TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead verifies that when
@@ -1572,19 +1615,23 @@ func TestExecuteBeadWorkerEndToEndThreeBeadDrain(t *testing.T) {
 					ResultRev: "bbb",
 				}, nil
 			case c.ID:
-				// Returning no_changes with a specific commit-SHA rationale causes
-				// adjudication to close it as already_satisfied on the first attempt.
+				// Returning no_changes with a verification_command that exits 0
+				// (NoChangesContract verified path) closes the bead as
+				// already_satisfied on the first attempt.
 				return ExecuteBeadReport{
 					BeadID:             beadID,
 					Status:             ExecuteBeadStatusNoChanges,
 					BaseRev:            "ccc",
 					ResultRev:          "ccc",
-					NoChangesRationale: "already done in commit abc1234 (cli/foo.go)",
+					NoChangesRationale: "verification_command: true\noutput: passes",
 				}, nil
 			default:
 				return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess}, nil
 			}
 		}),
+		VerificationRunner: func(ctx context.Context, projectRoot, command string) (int, string, error) {
+			return 0, "", nil
+		},
 	}
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
