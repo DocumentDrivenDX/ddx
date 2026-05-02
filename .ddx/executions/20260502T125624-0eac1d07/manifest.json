@@ -1,0 +1,88 @@
+{
+  "attempt_id": "20260502T125624-0eac1d07",
+  "bead_id": "ddx-a9edd569",
+  "base_rev": "49f65219b4bdc59c556e04c7c22e39c148cd3f51",
+  "created_at": "2026-05-02T12:56:25.771797889Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a9edd569",
+    "title": "doc-graph: label-aware collision, degree-tuned forces, bounded convergence, settle/freeze semantics",
+    "description": "Replace forceCollide(48) circle-only collision with custom quadtree force that includes label bounding boxes (labels at x=24, up to 32 chars). Tune forceManyBody and forceLink for degree distribution. Add bounded-convergence (auto-freeze after settle). Drag-end semantics: release fx/fy (codex's recommendation, not re-pin).",
+    "acceptance": "1. Custom label-aware collision force lands in D3Graph.svelte. 2. No two node circles overlap after settle on the 128-node fixture (Playwright bounding-box check). 3. Label bounding boxes do not overlap other nodes' circles after settle. 4. Settle completes within 2s (reported, not gated, per codex).",
+    "parent": "ddx-86ccbb75",
+    "labels": [
+      "phase:2",
+      "story:3",
+      "area:web",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:56:24Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T12:50:23.831295604Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T123925-886ca4b8\",\"harness\":\"claude\",\"input_tokens\":45,\"output_tokens\":24182,\"total_tokens\":24227,\"cost_usd\":2.49623875,\"duration_ms\":657355,\"exit_code\":0}",
+          "created_at": "2026-05-02T12:50:23.842776924Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=24227 cost_usd=2.4962"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T12:50:28.470606046Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only an execution result.json receipt; no changes to D3Graph.svelte or any source files. Cannot evaluate any AC item against actual implementation.\nharness=claude\nmodel=opus\ninput_bytes=3835\noutput_bytes=1050\nelapsed_ms=12389",
+          "created_at": "2026-05-02T12:50:40.887085255Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T12:50:40.897855909Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json receipt; no changes to D3Graph.svelte or any source files. Cannot evaluate any AC item against actual implementation.\nresult_rev=94aa74d450dcf22ef75d1b58dd20011243f0f661\nbase_rev=6f7b4782ef24678cd1d5e96d2d59a6dd1ccacb64",
+          "created_at": "2026-05-02T12:50:40.90776244Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T12:56:24.503475541Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T125624-0eac1d07",
+    "prompt": ".ddx/executions/20260502T125624-0eac1d07/prompt.md",
+    "manifest": ".ddx/executions/20260502T125624-0eac1d07/manifest.json",
+    "result": ".ddx/executions/20260502T125624-0eac1d07/result.json",
+    "checks": ".ddx/executions/20260502T125624-0eac1d07/checks.json",
+    "usage": ".ddx/executions/20260502T125624-0eac1d07/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a9edd569-20260502T125624-0eac1d07"
+  }
+}
