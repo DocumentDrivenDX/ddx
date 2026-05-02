@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T115139-210a06e8",
+  "bead_id": "ddx-781af038",
+  "base_rev": "98f6bb1b30d552271f6b4cb6c00a7299f72c575d",
+  "created_at": "2026-05-02T11:51:41.13704632Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-781af038",
+    "title": "Story 4: doc viewer scope to docs/ + dedupe scanner",
+    "description": "Sub-epic for Story 4. Full plan at /tmp/story-4-final.md. Children listed under this epic carry the testable ACs.",
+    "acceptance": "All child beads closed. Locked decisions from the planning round honored.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "story:4"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:51:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T11:51:39.831781939Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T115139-210a06e8",
+    "prompt": ".ddx/executions/20260502T115139-210a06e8/prompt.md",
+    "manifest": ".ddx/executions/20260502T115139-210a06e8/manifest.json",
+    "result": ".ddx/executions/20260502T115139-210a06e8/result.json",
+    "checks": ".ddx/executions/20260502T115139-210a06e8/checks.json",
+    "usage": ".ddx/executions/20260502T115139-210a06e8/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-781af038-20260502T115139-210a06e8"
+  }
+}

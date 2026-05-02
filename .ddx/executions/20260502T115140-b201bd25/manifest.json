@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T115140-b201bd25",
+  "bead_id": "ddx-ffb678fc",
+  "base_rev": "1a6e0edf326da4de8e58a64d7f1d47dc0fedf6ef",
+  "created_at": "2026-05-02T11:51:41.362918416Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ffb678fc",
+    "title": "Story 5: artifact viewer categorization by metadata",
+    "description": "Sub-epic for Story 5. Full plan at /tmp/story-5-final.md. Children listed under this epic carry the testable ACs.",
+    "acceptance": "All child beads closed. Locked decisions from the planning round honored.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "story:5"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:51:40Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T11:51:40.419557796Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T115140-b201bd25",
+    "prompt": ".ddx/executions/20260502T115140-b201bd25/prompt.md",
+    "manifest": ".ddx/executions/20260502T115140-b201bd25/manifest.json",
+    "result": ".ddx/executions/20260502T115140-b201bd25/result.json",
+    "checks": ".ddx/executions/20260502T115140-b201bd25/checks.json",
+    "usage": ".ddx/executions/20260502T115140-b201bd25/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ffb678fc-20260502T115140-b201bd25"
+  }
+}
