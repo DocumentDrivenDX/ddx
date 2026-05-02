@@ -153,13 +153,64 @@ start overwrites it. If a stale PID is recorded and the process no longer
 exists, CLI clients fall back to the default URL. No locking or multi-instance
 coordination is required.
 
-### Coordinator Path (Future)
+### Federation Path (FEAT-026)
 
-The node-aware state file is the forward compatibility contract for eventual
-multi-node federation. A future `ddx coordinator` process would accept periodic
-heartbeats from nodes and aggregate their project registries into a global view.
-The `schema_version` field reserves the right to evolve the format. No
-coordinator functionality is implemented in FEAT-020.
+The node-aware state file is the forward compatibility contract for multi-node
+federation, which is owned end-to-end by FEAT-026 ("Federation /
+Hub-Spoke Coordinator") and ADR-007 ("Federation Topology"). FEAT-020
+contributes only the compatibility hooks below; no federation behavior is
+implemented in FEAT-020 itself.
+
+**Naming convention:** federation uses **federation / hub / spoke**. The terms
+`coordinator`, `primary`, and `replica` are reserved or avoided per ADR-007;
+the historical `coordinator` naming inside FEAT-010's per-project bead-landing
+serializer is unrelated to federation.
+
+#### Federation Role Field
+
+`/api/node` and the corresponding GraphQL `node` query expose
+`federation_role`:
+
+```json
+{
+  "name": "eitri",
+  "id": "node-7029e8d6",
+  "started_at": "2026-04-13T19:58:33Z",
+  "last_seen": "2026-04-13T20:00:00Z",
+  "federation_role": "standalone"
+}
+```
+
+`federation_role` is one of:
+
+| Value | Meaning |
+|-------|---------|
+| `standalone` | Default. No federation flags set. |
+| `hub` | `--hub-mode` set; this node accepts spoke registrations. |
+| `spoke` | `--hub=<host>` set; this node registers with that hub. |
+| `hub_spoke` | Both flags set. |
+
+#### Federation Flags
+
+The server CLI accepts three federation flags whose semantics are fully
+defined in ADR-007 and FEAT-026:
+
+| Flag | Effect |
+|------|--------|
+| `--hub-mode` | Run as the federation hub; expose `/api/federation/*`. |
+| `--hub=<host[:port]>` | Run as a spoke; register and heartbeat with this hub. |
+| `--federation-allow-plain-http` | Permit non-ts-net peers; valid only with `--hub-mode` on the hub side, and required on the spoke side to send plain-HTTP. Emits a warning log on each accepted exchange. |
+
+FEAT-020 wires these flags through to server startup configuration and stamps
+the resulting `federation_role`. The actual federation endpoints, registry,
+fan-out, and UI are owned by FEAT-026.
+
+#### federation-state.json (FEAT-026)
+
+When the node runs as a hub, FEAT-026 persists the federation registry at
+`~/.local/share/ddx/federation-state.json` alongside `server-state.json`.
+The schema is owned by FEAT-026; FEAT-020's `~/.local/share/ddx/` directory
+contract (mode `0700`, files mode `0600`) extends to that file unchanged.
 
 ## Requirements
 
@@ -261,7 +312,11 @@ auto-generated). This is already the case in `serverreg`.
 
 ## Out of Scope
 
-- Multi-node coordinator / federation
+- Multi-node federation behavior (registry, hub/spoke endpoints, fan-out,
+  federated UI). Owned by FEAT-026 and ADR-007. FEAT-020 contributes only the
+  `federation_role` field, the federation flags, and the
+  `~/.local/share/ddx/` directory contract that `federation-state.json`
+  inherits.
 - Cross-machine state aggregation
 - Authentication for /api/node and /api/projects endpoints
 - TTL-based eviction of stale project entries

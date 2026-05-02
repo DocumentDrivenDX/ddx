@@ -55,6 +55,7 @@ All routes embed context so every view is directly addressable:
 
 ```
 /                                     → redirect to /nodes/:nodeId
+/federation                           → federation overview (hub-mode only); see FEAT-026
 /nodes/:nodeId                        → node overview (health, project list)
 /nodes/:nodeId/runs                   → combined run history (all projects)
 /nodes/:nodeId/beads                  → combined bead queue (all projects)
@@ -70,8 +71,11 @@ All routes embed context so every view is directly addressable:
 
 **Combined views** (`/nodes/:nodeId/runs`, `/nodes/:nodeId/beads`) operate
 across all registered projects. They call node-scoped read APIs for beads and
-the unified run substrate (since one server = one node). A future multi-node
-coordinator would fan these out across nodes.
+the unified run substrate (since one server = one node). When the node is a
+**federation hub** (FEAT-026, ADR-007), these combined views accept
+`?scope=federation` to fan out across registered spokes; the default scope
+remains node-local. The hub also serves `/nodes/:spokeId/...` for any
+registered spoke, resolving the route through the federated read fan-out.
 
 **Project-scoped views** (`/nodes/:nodeId/projects/:projectId/...`) pass the
 project ID to the existing `/api/projects/:project/...` API routes defined in
@@ -555,10 +559,38 @@ mocking of the GraphQL or HTTP layer.
 - FEAT-010 (unified run substrate and run read APIs)
 - FEAT-012 (git awareness — for commit log endpoint)
 
+## Federation Compatibility Hooks (FEAT-026)
+
+When the node runs as a **federation hub** (FEAT-026, ADR-007), the UI gains:
+
+- `/federation` — federation overview route showing the hub, its registered
+  spokes, each spoke's liveness (`live` / `stale` / `offline`), and
+  compatibility status (`live` / `degraded` / `rejected`). Owned by FEAT-026.
+- `/nodes/:nodeId/...` resolves across the federation: when `:nodeId` is a
+  registered spoke, the hub serves the route from the spoke's federated read
+  surface. Spoke UIs remain directly reachable as a fallback.
+- Combined views (`/nodes/:nodeId/beads`, `/nodes/:nodeId/runs`) accept the
+  `?scope=federation` query parameter; when set on a hub, the view fans out
+  across all spokes and tags each row with `node_id`, `project_id`, and a
+  `node` badge in addition to the existing project badge.
+- Rows sourced from a `stale`, `offline`, or `degraded` spoke carry the
+  matching badge; the page does not fail when a spoke is unreachable.
+
+The naming convention from ADR-007 applies to UI copy: prefer
+**federation / hub / spoke** over `coordinator`, `primary`, `replica`.
+
+FEAT-021 contributes only the URL grammar and route stubs above; the
+federation registry, hub endpoints, fan-out, version handshake, and
+`?scope=federation` data plumbing are owned by FEAT-026.
+
 ## Out of Scope
 
-- Multi-node federation (coordinator aggregating state from multiple servers)
-- Cross-machine views (each node's UI shows only what that node knows)
-- Authentication
-- Real-time push (polling is sufficient for v1)
-- Mobile layout
+- Federation registry, hub/spoke HTTP endpoints, fan-out client, federated
+  GraphQL fields, and version handshake. Owned by FEAT-026 and ADR-007.
+  FEAT-021 contributes only the route grammar (`/federation`,
+  hub-resolved `/nodes/:nodeId/...`, `?scope=federation`).
+- Cross-machine writes (federation is read-only aggregation in v1; see
+  ADR-007 write-routing contract for Story 15).
+- Authentication beyond ts-net (ADR-006).
+- Real-time push (polling is sufficient for v1).
+- Mobile layout.
