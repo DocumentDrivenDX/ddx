@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T123549-d9f9c327",
+  "bead_id": "ddx-0e6ff1c5",
+  "base_rev": "858d021410e04c93437dd8bd033aa6f745dbac10",
+  "created_at": "2026-05-02T12:35:50.43810811Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0e6ff1c5",
+    "title": "doc-graph: profile current layout — label widths, settle time, degree distribution",
+    "description": "Profile current d3-force layout in D3Graph.svelte. Measure: label widths (text bounding boxes), settle time, degree distribution. Document baseline so Story 3.B has measurement-anchored ACs.",
+    "acceptance": "1. Profiling script + results saved under .ddx/executions/\u003crun-id\u003e/layout-baseline.md. 2. Identifies max in-degree, max out-degree, label-width range, current settle time on 128-node fixture.",
+    "parent": "ddx-86ccbb75",
+    "labels": [
+      "phase:2",
+      "story:3",
+      "area:web",
+      "kind:investigation"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:35:49Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T12:35:49.219243584Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T123549-d9f9c327",
+    "prompt": ".ddx/executions/20260502T123549-d9f9c327/prompt.md",
+    "manifest": ".ddx/executions/20260502T123549-d9f9c327/manifest.json",
+    "result": ".ddx/executions/20260502T123549-d9f9c327/result.json",
+    "checks": ".ddx/executions/20260502T123549-d9f9c327/checks.json",
+    "usage": ".ddx/executions/20260502T123549-d9f9c327/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-0e6ff1c5-20260502T123549-d9f9c327"
+  }
+}
