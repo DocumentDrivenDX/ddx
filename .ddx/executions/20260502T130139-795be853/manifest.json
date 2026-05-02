@@ -1,0 +1,88 @@
+{
+  "attempt_id": "20260502T130139-795be853",
+  "bead_id": "ddx-345226c9",
+  "base_rev": "401639176d2d77c5c91c195d9d12686cb1983d31",
+  "created_at": "2026-05-02T13:01:41.047130132Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-345226c9",
+    "title": "artifacts: group-by control + grouping.ts + urlState.ts shared helper",
+    "description": "Add a group-by selector to the artifacts list page (cli/internal/server/frontend/src/routes/.../artifacts/). Default groupBy=Folder. Implement grouping.ts (group derivations: Folder, Prefix, MediaType) and urlState.ts (shared URL-state helper for q, mediaType, groupBy, sort, filters; preserves unrelated keys + ?back=). Use generic 'Workflow stage' label (not 'HELIX phase'); axis hidden when axisAvailable() is false.",
+    "acceptance": "1. Group-by dropdown visible; default Folder. 2. grouping.ts exports prefixOf, folderOf, workflowStageOf with regex-based derivation. 3. urlState.ts is the single source of truth for URL state. 4. ARIA roles for group headers. 5. sessionStorage persistence with stable keys. 6. cd cli/internal/server/frontend \u0026\u0026 bun test passes.",
+    "parent": "ddx-ffb678fc",
+    "labels": [
+      "phase:2",
+      "story:5",
+      "area:web",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T13:01:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T12:56:07.676642912Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T125032-7a33e609\",\"harness\":\"claude\",\"input_tokens\":42,\"output_tokens\":19878,\"total_tokens\":19920,\"cost_usd\":1.88070925,\"duration_ms\":333433,\"exit_code\":0}",
+          "created_at": "2026-05-02T12:56:07.688744648Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=19920 cost_usd=1.8807"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T12:56:12.764248663Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only an execution result.json evidence file; the actual implementation commit (19b3008b) introducing group-by control, grouping.ts, and urlState.ts is not present in the changed files. Cannot verify any AC item.\nharness=claude\nmodel=opus\ninput_bytes=3934\noutput_bytes=855\nelapsed_ms=10425",
+          "created_at": "2026-05-02T12:56:24.374638567Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T12:56:24.384744888Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json evidence file; the actual implementation commit (19b3008b) introducing group-by control, grouping.ts, and urlState.ts is not present in the changed files. Cannot verify any AC item.\nresult_rev=86bbb5bfeb951c8733f81e21e92635584bca0dca\nbase_rev=c37608177d14941e1e7115d59f4147fd2df69267",
+          "created_at": "2026-05-02T12:56:24.395039668Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T13:01:39.788594523Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T130139-795be853",
+    "prompt": ".ddx/executions/20260502T130139-795be853/prompt.md",
+    "manifest": ".ddx/executions/20260502T130139-795be853/manifest.json",
+    "result": ".ddx/executions/20260502T130139-795be853/result.json",
+    "checks": ".ddx/executions/20260502T130139-795be853/checks.json",
+    "usage": ".ddx/executions/20260502T130139-795be853/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-345226c9-20260502T130139-795be853"
+  }
+}
