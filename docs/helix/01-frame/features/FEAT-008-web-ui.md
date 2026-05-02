@@ -377,6 +377,7 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 - Given I apply a type filter chip, then only nodes of that media type remain visible
 - Given I am on the graph page, then a `View documents` link is visible that navigates to the artifact browser filtered to markdown
 - Given I am on an artifact detail page, then a `View in Graph` link navigates to the graph with that node highlighted
+- Given the graph is rendered in either light or dark theme, then doc graph edges and arrowheads meet WCAG AA non-text contrast (>=3:1 against the canvas background) in both themes
 
 **E2E Test:** `graph.spec.ts` — full workflow: open graph → verify non-zero render → pan and zoom → click stale node → verify amber color → click node → verify artifact detail → Back → verify same viewport → apply staleness filter → verify node count changes → follow `View documents` link
 
