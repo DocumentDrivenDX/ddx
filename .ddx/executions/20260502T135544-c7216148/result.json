@@ -1,0 +1,63 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only an execution result.json artifact; no ladder code, no tests, no NoViableProviderError type are present in this changeset to evaluate against the acceptance criteria.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No ladder.Next implementation visible in diff (AC1)",
+      "location": "cli/internal/agent/escalation/"
+    },
+    {
+      "severity": "block",
+      "summary": "No unit tests for transitions visible in diff (AC2)",
+      "location": "cli/internal/agent/escalation/"
+    },
+    {
+      "severity": "block",
+      "summary": "No NoViableProviderError type visible in diff (AC3)",
+      "location": "cli/internal/agent/escalation/"
+    },
+    {
+      "severity": "block",
+      "summary": "No tests asserting RoutingActual.Power input visible in diff (AC4)",
+      "location": "cli/internal/agent/escalation/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 985,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T134946-d770eb2c/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1181,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 3900,
+    "output_bytes": 859,
+    "elapsed_ms": 8895,
+    "harness": "claude",
+    "model": "opus"
+  }
+}

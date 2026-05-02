@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T135003-ba252f19",
+  "bead_id": "ddx-a8939a2b",
+  "base_rev": "808c4087971cc16a3f9ca2bb5bbf70e29ea8edab",
+  "created_at": "2026-05-02T13:50:04.280794167Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a8939a2b",
+    "title": "S15-2: Bead schema/template/status-model — operator-prompt issueType",
+    "description": "Extend bead schema validator to accept issueType=operator-prompt. Add 'proposed' status to status model. Add prompt→bead template (auto-AC stub, default labels kind:operator-prompt+source:web-ui, default tier from project policy). Enforce no-self-mutation rule: operator-prompt bead executions cannot create/edit/close other operator-prompt beads. See /tmp/story-15-final.md §Implementation #1 and §Additional security controls last bullet.",
+    "acceptance": "issueType=operator-prompt accepted by validator; new 'proposed' status recognized in state machine with valid transitions (proposed→ready, proposed→cancelled); template applied on create populates labels/tier/auto-AC; structural AC check skipped for issueType=operator-prompt; runtime guard prevents operator-prompt beads from mutating operator-prompt beads (unit tests cover allow/deny matrix).",
+    "parent": "ddx-1d85c927",
+    "labels": [
+      "phase:2",
+      "story:15",
+      "kind:schema"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T13:50:02Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T13:50:02.998299545Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T135003-ba252f19",
+    "prompt": ".ddx/executions/20260502T135003-ba252f19/prompt.md",
+    "manifest": ".ddx/executions/20260502T135003-ba252f19/manifest.json",
+    "result": ".ddx/executions/20260502T135003-ba252f19/result.json",
+    "checks": ".ddx/executions/20260502T135003-ba252f19/checks.json",
+    "usage": ".ddx/executions/20260502T135003-ba252f19/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a8939a2b-20260502T135003-ba252f19"
+  }
+}
