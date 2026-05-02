@@ -1,0 +1,53 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Shared instr* blocks tightened with full sections (Step 0/Reports/Bead-override/Review-gate/Constraints), per-variant prose collapsed to bullets. FEAT-022 guardrail comment block added; selector at executeBeadInstructionsText preserved (agent/fiz/embedded→Agent, default→Claude). Comprehensive guardrail/selector/invariant/governing/size-floor tests cover AC2-AC6 and AC10.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "AC2 size-floor test hard-codes baselines (1048/968) from parent commit 63bb619; commit reports 597/582 — comfortably under the 0.70 floor.",
+      "location": "cli/internal/agent/execute_bead_guardrails_test.go:225"
+    },
+    {
+      "severity": "info",
+      "summary": "AC4 'no git add -A' invariant is enforced indirectly: the required-substring list includes 'git add -A' which only appears as part of the prohibition phrase 'never `git add -A`' in the constants. Acceptable but a stricter check (e.g. forbid bare 'git add -A' not preceded by 'never') would be more robust.",
+      "location": "cli/internal/agent/execute_bead_guardrails_test.go:178"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2302,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T121655-038c230f/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1184,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 5220,
+    "output_bytes": 1146,
+    "elapsed_ms": 49868,
+    "harness": "claude",
+    "model": "opus"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260502T122358-49b0e22a",
+  "bead_id": "ddx-6019fa66",
+  "base_rev": "95b88ff25d33abcc7f01cd7a76b1b07adf248414",
+  "created_at": "2026-05-02T12:23:59.652516409Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6019fa66",
+    "title": "test(web): e2e regression for doc graph edge color tokens",
+    "description": "Playwright e2e regression check for doc graph edge color tokens. Verify computed style of edge stroke + arrowhead fill in both light and dark mode meets \u003e=3:1 contrast. May need to add a GraphQL fixture with at least one edge if none exists.",
+    "acceptance": "1. New e2e test in cli/internal/server/frontend/e2e/graph.spec.ts (or extend existing). 2. Test toggles theme + asserts contrast ratio. 3. Test runs in cd cli/internal/server/frontend \u0026\u0026 bun run test:e2e -- graph. 4. Test fixture has at least one edge if none existed.",
+    "parent": "ddx-db5e0227",
+    "labels": [
+      "phase:2",
+      "story:1",
+      "area:web",
+      "area:tests",
+      "kind:test"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:23:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T12:23:58.4179946Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T122358-49b0e22a",
+    "prompt": ".ddx/executions/20260502T122358-49b0e22a/prompt.md",
+    "manifest": ".ddx/executions/20260502T122358-49b0e22a/manifest.json",
+    "result": ".ddx/executions/20260502T122358-49b0e22a/result.json",
+    "checks": ".ddx/executions/20260502T122358-49b0e22a/checks.json",
+    "usage": ".ddx/executions/20260502T122358-49b0e22a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6019fa66-20260502T122358-49b0e22a"
+  }
+}
