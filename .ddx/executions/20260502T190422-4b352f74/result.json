@@ -1,0 +1,49 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Playwright spec spawns hub+spoke, asserts /federation listing, scope=federation merge, scope toggle, stop-spoke→offline poll, restart→active, plus ts-net guard rejection without flag and acceptance+WARN with flag (skipped cleanly when no external IPv4). Hub GraphQL provider wired.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "ts-net guard tests skip when no non-loopback IPv4 available; acceptable fallback documented in spec header.",
+      "location": "cli/internal/server/frontend/e2e/federation-2node.spec.ts"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1182,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T184812-4d8532c9/manifest.json",
+          ".ddx/executions/20260502T184812-4d8532c9/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3763,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 6751,
+    "output_bytes": 768,
+    "elapsed_ms": 22609,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
