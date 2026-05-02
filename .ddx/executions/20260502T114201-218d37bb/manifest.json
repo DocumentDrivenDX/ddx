@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260502T114201-218d37bb",
+  "bead_id": "ddx-8f1ac866",
+  "base_rev": "0bd502f0182aa5d32844c723b3a3f5f28a0b93fe",
+  "created_at": "2026-05-02T11:42:03.290333823Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8f1ac866",
+    "title": "fizeau: CONTRACT-003 extension for ExcludeProvider + ProviderID/Class/ActualPower + review cost",
+    "description": "Upstream extension to Fizeau (CONTRACT-003): ExecuteRequest gets ExcludeProvider field; ExecuteResponse gets ProviderID, ProviderClass, ActualPower; reviewer cost reported separately. **Blocks** S10_3, S10_5, S10_6. Endpoint-first redesign coupling — must ship in tight parallel with the upstream work.",
+    "acceptance": "1. CONTRACT-003 update merged upstream. 2. ddx imports the new agent module via tagged release (NEVER go.mod replace). 3. Schema changes documented.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:upstream",
+      "area:contracts",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:42:01Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T11:42:01.977316776Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T114201-218d37bb",
+    "prompt": ".ddx/executions/20260502T114201-218d37bb/prompt.md",
+    "manifest": ".ddx/executions/20260502T114201-218d37bb/manifest.json",
+    "result": ".ddx/executions/20260502T114201-218d37bb/result.json",
+    "checks": ".ddx/executions/20260502T114201-218d37bb/checks.json",
+    "usage": ".ddx/executions/20260502T114201-218d37bb/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-8f1ac866-20260502T114201-218d37bb"
+  }
+}
