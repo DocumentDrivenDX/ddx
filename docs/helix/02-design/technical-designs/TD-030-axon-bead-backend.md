@@ -152,13 +152,32 @@ Axon's `expected_version` (OCC) plus `CommitTransaction` (ACID over
 batched ops) replace **both** of the current JSONL backend's
 serialization mechanisms:
 
-- the `flock` on `.ddx/beads.jsonl`
-- the git tracker-commit lock that motivated bead `ddx-da11a34a`
+- the `flock` on `.ddx/beads.jsonl` (acquired via
+  `JSONLBackend.WithLock` per `cli/internal/bead/backend_jsonl.go:74`)
+- the git tracker-commit lock that motivated bead `ddx-da11a34a` (the
+  v1 patch in `cli/internal/bead/lock.go` serializing
+  `git add .ddx/beads.jsonl && git commit`)
 
 Multi-worker concurrency falls out for free — each DDx worker is just
 another gRPC client. The `git add .ddx/beads.jsonl && git commit` step
 retires entirely under the Axon backend: bead state lives in Axon, not
 on disk under git.
+
+### Multi-machine story (Story 14 prerequisite)
+
+FEAT-026 / Story 14 (per ADR-007 federation topology) needs a single
+authoritative bead store that multiple machines can read and mutate
+without git as the synchronisation channel. The JSONL backend cannot
+satisfy that contract — it relies on a shared filesystem and a single
+git remote as the merge point, and ADR-021 already calls out that the
+Axon path "gets the right answer for free" for the multi-node story.
+This TD is the prerequisite work: once `bead_tracker.backend: axon` is
+the configured backend, every DDx worker on every machine speaks gRPC
+to the same Axon endpoint and OCC handles cross-machine races
+identically to single-machine cross-process races. No new federation
+machinery is needed inside DDx; FEAT-026 reduces to "operators run one
+Axon and point all `.ddx/config.yaml` files at it" plus the auth story
+in D2 (localhost / tsnet via ADR-006).
 
 ## Deployment and configuration
 
@@ -257,7 +276,144 @@ on the target entity ids.
    subcommand and `ddx work` exit non-zero with the
    `axon unreachable at <addr>` message; no local writes occur.
 
-## What this design fixes
+## Backend interface (Go)
+
+The current `cli/internal/bead/backend.go` interface is too coarse for
+Axon — `WriteAll(beads []Bead)` cannot reasonably be implemented
+against a remote entity store, and `WithLock` assumes a process-local
+mutex around an in-memory rewrite. This TD replaces the existing
+interface with a per-entity surface that both backends can satisfy.
+Existing JSONL semantics are preserved by a thin adapter that wraps
+the existing `ReadAll`/`WriteAll`/`flock` pair.
+
+```go
+// cli/internal/bead/backend.go
+package bead
+
+import "context"
+
+// Backend is the storage contract for the bead tracker. Both the
+// JSONL backend (cli/internal/bead/backend_jsonl.go) and the axon
+// backend (cli/internal/bead/axon/) implement this surface. The
+// chaos tests under cli/internal/bead/ run against any registered
+// Backend via newTestStore(t, BackendName).
+type Backend interface {
+    // Init prepares storage (create JSONL file + lock dir; or for
+    // axon: ensure collections exist and registered schema is current).
+    Init(ctx context.Context) error
+
+    // Get returns one bead with its OCC version. ErrNotFound for missing.
+    Get(ctx context.Context, id string) (Bead, Version, error)
+
+    // List returns all beads in the tracker collection (open + in_progress
+    // + closed not yet archived). Order is unspecified.
+    List(ctx context.Context) ([]Bead, error)
+
+    // Create persists a new bead. Bead.ID may be empty; backend assigns
+    // a ddx-<8hex> id and returns the assigned id. Fails if id is set
+    // and already exists.
+    Create(ctx context.Context, b Bead) (string, Version, error)
+
+    // Update applies mutate to the bead identified by id under
+    // optimistic concurrency control: read at version V, apply mutate,
+    // write iff stored version == V. ErrVersionMismatch on conflict;
+    // caller retries. Used by claim, status transitions, and any
+    // field edit. Backend MUST serialize concurrent Update calls on
+    // the same id (jsonl: via flock; axon: via expected_version).
+    Update(ctx context.Context, id string, mutate func(*Bead) error) error
+
+    // AppendEvent records an immutable audit event linked to a bead.
+    // For jsonl: appends to the inline events array under the same
+    // lock as the bead row. For axon: CreateEntity in
+    // ddx_bead_events + CreateLink(event_of) in one CommitTransaction.
+    AppendEvent(ctx context.Context, beadID string, ev Event) error
+
+    // AddDep / RemoveDep maintain the depends_on graph. For jsonl:
+    // mutate Dependencies on the bead row. For axon: CreateLink /
+    // DeleteLink with type=depends_on.
+    AddDep(ctx context.Context, fromID, toID string) error
+    RemoveDep(ctx context.Context, fromID, toID string) error
+
+    // Ready returns beads with Status==open whose every dependency
+    // is Status==closed. Implementations are free to compute this
+    // server-side; the JSONL implementation does it client-side.
+    Ready(ctx context.Context) ([]Bead, error)
+
+    // Close is sugar for Update(id, b -> b.Status = closed) plus
+    // AppendEvent(closed). Provided so the backend can fuse both
+    // writes into a single transaction (axon) or single locked
+    // rewrite (jsonl).
+    Close(ctx context.Context, id string) error
+
+    // Export streams beads in bd/br JSONL interchange shape (events
+    // materialised inline). Round-trip with Import is verified by
+    // schema_compat_test.go.
+    Export(ctx context.Context, w BeadWriter) error
+    Import(ctx context.Context, r BeadReader) error
+}
+
+// Version is an opaque OCC token (jsonl: monotonic int from the
+// in-memory snapshot; axon: EntityProto.version).
+type Version uint64
+
+var (
+    ErrNotFound        = errors.New("bead: not found")
+    ErrVersionMismatch = errors.New("bead: version mismatch (concurrent update)")
+    ErrBackendOffline  = errors.New("bead: backend unreachable")
+)
+```
+
+The `BackendType` constants in `backend.go` extend with
+`BackendAxon = "axon"`. The factory in `cli/internal/bead/registry.go`
+selects the implementation from `bead_tracker.backend` in
+`.ddx/config.yaml`. The existing `JSONLBackend` becomes an internal
+adapter behind this interface; call sites in `cli/internal/bead/` and
+`cli/cmd/bead_*.go` migrate to the new methods (mechanical change —
+the operations already exist, just on `Store` rather than `Backend`).
+
+## Chaos contract the new backend must satisfy
+
+The contract under `cli/internal/bead/chaos_test.go` is the
+parameterised conformance suite for any `Backend` implementation. The
+tests already operate on a `Store` value via `newTestStore(t)`; this TD
+parameterises that helper by backend selector
+(`newTestStore(t, BackendJSONL)` / `newTestStore(t, BackendAxon)`) and
+both runs MUST pass identically. The following invariants are the
+contract surface:
+
+| Test | Invariant the backend must guarantee |
+|---|---|
+| `TestChaos_ConcurrentAppendSafety` | 100 concurrent `Create` calls from 10 goroutines all succeed and all 100 beads are present afterwards with unique ids. No duplicate ids, no lost writes, no torn rows. |
+| `TestChaos_AtomicStatusTransitions` | 5 goroutines × 20 cycles of `Update(status)` on the same bead leave the bead with a valid status (`open` / `in_progress` / `closed`) and the store fully readable. Transient `ErrVersionMismatch` is acceptable (caller's retry concern); corruption is not. |
+| `TestChaos_ConcurrentCloseAndAppend` | A `Close(idA)` racing a `Create(B)` never loses either op: B exists with the right title; A's row remains parseable. Reproduces the original JSONL bug; required of every backend. |
+| `TestChaos_ConcurrentCloseNotLost` | After a `Close(idA)` racing a `Create(B)` completes, `Get(idA).Status == closed` deterministically. The backend MUST serialize the read-modify-write of A (jsonl: flock; axon: OCC + retry on mismatch). The "close is never lost" invariant is the strict regression test for the JSONL bug and the acceptance criterion for axon. |
+| `TestChaos_JSONLRoundTripIntegrity` | Renamed to `TestChaos_RoundTripIntegrity` once parameterised. Beads with unicode, emoji, embedded JSON-injection bytes, tabs, multi-line descriptions, and 200/1000/500-char field maxima survive `Create → ReadAll` field-for-field (Title, Description, Notes, Priority, Status, Labels). Validates that the wire format and schema preserve all `Bead` fields without truncation or escape-sequence loss. |
+| `TestChaos_*` (all of the above) | No partial writes are visible to a concurrent reader. For jsonl this is the `writeAtomicFile` + `flock` guarantee; for axon this is the `CommitTransaction` ACID guarantee. |
+
+Companion suites that the axon backend must also pass once
+parameterised: `chaos2_test.go`, `property_test.go`, `fuzz_test.go`,
+`merge_test.go`, and `schema_compat_test.go` (the bd/br JSONL
+round-trip). `schema_compat_test.go` is the strictest
+interoperability check — `Export` then `Import` then `Export` must
+produce byte-equal output regardless of backend.
+
+## Archive policy under axon
+
+ADR-004 specifies that closed-bead events are externalised to
+`.ddx/attachments/` and that eligible closed beads move to
+`.ddx/beads-archive.jsonl` to keep the active tracker file small. Under
+the axon backend the externalisation problem disappears: events are
+already separate entities in `ddx_bead_events` (per D3), so the active
+`ddx_beads` row never carries the events array on the wire. The
+"archive" distinction collapses to a soft index: `ddx bead migrate`
+under the axon backend is a no-op for archive-split purposes; closed
+beads remain in the same `ddx_beads` collection, distinguished only by
+`status=closed`. Queries that historically scanned only the active
+file (`bead list`, `bead ready`) become `QueryEntities` calls with a
+`status` filter and pay nothing for closed-bead volume. The
+attachments mechanism remains the canonical location for non-event
+artifacts (large logs, screenshots) referenced from event payloads;
+nothing in this TD changes the attachments contract.
 
 | Current pain (JSONL backend) | Axon backend fix |
 |---|---|
@@ -307,6 +463,14 @@ reports surface a concrete need.
 - FEAT-004: Beads
 - TD-027: Bead-Backed Collection Abstraction (defines the
   `bead_tracker.backend` switch)
+- ADR-007: Federation Topology
+- ADR-021: Operator-Prompt Beads Web Write Path (multi-node story note)
+- FEAT-026 / Story 14: multi-machine federation prerequisite
+- Lock-contention v1 patch: bead `ddx-da11a34a` (`cli/internal/bead/lock.go`)
+- Backend interface today: `cli/internal/bead/backend.go`,
+  `cli/internal/bead/backend_jsonl.go`
+- Conformance suite: `cli/internal/bead/chaos_test.go`,
+  `cli/internal/bead/schema_compat_test.go`
 - Axon `axon.proto`: `crates/axon-server/proto/axon.proto`
 - Axon `bead.rs` (informational, not consumed):
   `crates/axon-api/src/bead.rs`
