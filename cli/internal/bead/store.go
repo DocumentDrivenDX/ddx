@@ -91,8 +91,8 @@ func NewStore(dir string, opts ...StoreOption) *Store {
 			opt(s)
 		}
 	}
-	s.File = filepath.Join(dir, s.Collection+".jsonl")
-	s.LockDir = filepath.Join(dir, s.Collection+".lock")
+	spec := DefaultRegistry().Resolve(CollectionID(s.Collection))
+	s.File, s.LockDir = spec.PathsUnder(dir)
 
 	// Set up external backend if configured
 	switch backendType {
