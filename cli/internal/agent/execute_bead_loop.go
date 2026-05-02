@@ -880,7 +880,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					}
 					return result, ctx.Err()
 				}
-				satisfied, evidence, aerr := w.adjudicateNoChanges(ctx, candidate.ID, count, maxNoChangesBeforeClose, report.NoChangesRationale, candidate.Acceptance, runtime.ProjectRoot)
+				satisfied, evidence, aerr := w.adjudicateNoChanges(ctx, candidate.ID, count, maxNoChangesBeforeClose, report.NoChangesRationale, candidate.Acceptance, candidate.IssueType, runtime.ProjectRoot)
 				if aerr != nil {
 					if w.handleOutcomeStoreError(ctx, candidate.ID, "adjudicateNoChanges", aerr, assignee, result, runtime, now) {
 						continue
@@ -1325,7 +1325,7 @@ func rationaleIsSpecific(rationale string) bool {
 //   - When the report carries a specific rationale (cites a commit SHA or test
 //     name), the bead is closed as already_satisfied on the first occurrence.
 //   - Otherwise the default count-based rule applies (close after maxNoChangesBeforeClose).
-func (w *ExecuteBeadWorker) adjudicateNoChanges(ctx context.Context, beadID string, noChangesCount, maxNoChangesBeforeClose int, rationale, acceptance, projectRoot string) (bool, string, error) {
+func (w *ExecuteBeadWorker) adjudicateNoChanges(ctx context.Context, beadID string, noChangesCount, maxNoChangesBeforeClose int, rationale, acceptance, issueType, projectRoot string) (bool, string, error) {
 	if w.SatisfactionChecker != nil {
 		return w.SatisfactionChecker.CheckSatisfied(ctx, beadID, noChangesCount)
 	}
@@ -1346,9 +1346,15 @@ func (w *ExecuteBeadWorker) adjudicateNoChanges(ctx context.Context, beadID stri
 	// deleted files, removed struct fields), refuse already_satisfied unless
 	// each property holds in the worktree / rationale. Prevents false closes
 	// where a regression suite passes but the AC's specific contract is unmet.
-	if claims := ParseACClaims(acceptance); len(claims) > 0 {
-		if ok, why := VerifyACClaims(claims, projectRoot, rationale); !ok {
-			return false, why, nil
+	//
+	// operator-prompt beads carry an auto-generated AC stub (the prompt body
+	// IS the contract); the structural verifier does not apply and is
+	// skipped per Story 15 §Implementation #1.
+	if issueType != bead.IssueTypeOperatorPrompt {
+		if claims := ParseACClaims(acceptance); len(claims) > 0 {
+			if ok, why := VerifyACClaims(claims, projectRoot, rationale); !ok {
+				return false, why, nil
+			}
 		}
 	}
 	return true, evidence, nil
