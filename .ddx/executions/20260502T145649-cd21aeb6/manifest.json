@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T145649-cd21aeb6",
+  "bead_id": "ddx-23cbcb4b",
+  "base_rev": "aa8272f741a59526a558370a2fe67822bc47d146",
+  "created_at": "2026-05-02T14:56:50.750212875Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-23cbcb4b",
+    "title": "artifacts: TD-NNN artifact search semantics (title→path→description→frontmatter→body)",
+    "description": "Author TD documenting artifact search semantics: scope progression (title → path → description → frontmatter → body), size caps, binary skip, perf benchmark. Body search gated on this TD's recommendations.",
+    "acceptance": "1. docs/helix/02-design/technical-designs/TD-\u003cNNN\u003e-artifact-search.md exists. 2. Defines scope, size caps, binary handling, perf budget. 3. ddx doc audit clean.",
+    "parent": "ddx-4728ae0f",
+    "labels": [
+      "phase:2",
+      "story:6",
+      "area:specs",
+      "kind:design"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:56:49Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T14:56:49.511789336Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T145649-cd21aeb6",
+    "prompt": ".ddx/executions/20260502T145649-cd21aeb6/prompt.md",
+    "manifest": ".ddx/executions/20260502T145649-cd21aeb6/manifest.json",
+    "result": ".ddx/executions/20260502T145649-cd21aeb6/result.json",
+    "checks": ".ddx/executions/20260502T145649-cd21aeb6/checks.json",
+    "usage": ".ddx/executions/20260502T145649-cd21aeb6/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-23cbcb4b-20260502T145649-cd21aeb6"
+  }
+}
