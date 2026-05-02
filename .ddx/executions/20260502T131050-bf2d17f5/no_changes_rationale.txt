@@ -1,0 +1,45 @@
+Decomposition rationale for ddx-3c154349
+========================================
+
+This bead asks for an auto-triage step in the drain loop covering FOUR
+distinct failure modes (review BLOCK, lock contention, execution_failed,
+no_changes), a configurable per-failure-mode policy, a 3-step ladder for
+BLOCK with state tracking across attempts, integration with existing
+review-pairing-degraded events, and tests for at least three of those
+modes. The AC explicitly mixes design (a triage policy framework),
+implementation across multiple unrelated terminal-event paths in
+execute_bead_loop.go, config schema work, prompt-context plumbing, and
+multi-mode testing as separate top-level deliverables.
+
+Touched subsystems include cli/internal/agent/execute_bead_loop.go (loop
+integration in 4+ branches), cli/internal/escalation (tier-escalation
+hint plumbing), cli/internal/config (new config schema block), a new
+cli/internal/triage package (decision engine), and three or more new
+test files. A best-case implementation comfortably exceeds 500 LOC and
+five files in unrelated packages — well into "decompose first" territory
+per the size-check rules in the execute-bead instructions.
+
+Decomposed into three children, all parented on ddx-3c154349:
+
+1. Triage policy framework: config schema + decision engine
+   ID: .execute-bead-wt-ddx-3c154349-20260502T131050-bf2d17f5-0a700bd2
+   Scope: standalone cli/internal/triage package, default policy, config
+   block, unit tests. No loop integration.
+
+2. Triage integration: review BLOCK / REQUEST_CHANGES paths
+   ID: .execute-bead-wt-ddx-3c154349-20260502T131050-bf2d17f5-5f67936e
+   Depends on (1). Wires triage.Decide into the existing VerdictBlock /
+   VerdictRequestChanges branches; covers the BLOCK ladder and the
+   review-pairing-degraded surfacing (parent AC#3 and AC#6).
+
+3. Triage integration: lock contention + execution_failed + no_changes
+   ID: .execute-bead-wt-ddx-3c154349-20260502T131050-bf2d17f5-2b64cb0a
+   Depends on (1). Covers the remaining three failure modes and their
+   tests (parent AC#4 partial, AC#5 lock-error case).
+
+Each child is independently sized for one bounded execute-bead attempt,
+has crisp acceptance criteria, and avoids spanning unrelated subsystems.
+Together they cover every AC item of the parent.
+
+No code changes were landed in this attempt — decomposition only. The
+parent bead has been updated with notes pointing at the three children.
