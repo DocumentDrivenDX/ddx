@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T145711-0b36aa5a",
+  "bead_id": "ddx-25069ce4",
+  "base_rev": "3735a97dad0e086e27045580f197f4a5495c5d85",
+  "created_at": "2026-05-02T14:57:12.449741981Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-25069ce4",
+    "title": "agentmetrics: rollup-engine TD (filed only)",
+    "description": "Author TD for rollup engine; built when scale (~5k attempts) forces it. v1 ships ad-hoc scan with revision-keyed cache.",
+    "acceptance": "1. docs/helix/02-design/technical-designs/TD-\u003cNNN\u003e-agentmetrics-rollup.md exists. 2. Defines trigger threshold, schema, invalidation strategy. 3. ddx doc audit clean.",
+    "parent": "ddx-64b9a198",
+    "labels": [
+      "phase:2",
+      "story:11",
+      "area:specs",
+      "kind:design"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:57:11Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T14:57:11.18054284Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T145711-0b36aa5a",
+    "prompt": ".ddx/executions/20260502T145711-0b36aa5a/prompt.md",
+    "manifest": ".ddx/executions/20260502T145711-0b36aa5a/manifest.json",
+    "result": ".ddx/executions/20260502T145711-0b36aa5a/result.json",
+    "checks": ".ddx/executions/20260502T145711-0b36aa5a/checks.json",
+    "usage": ".ddx/executions/20260502T145711-0b36aa5a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-25069ce4-20260502T145711-0b36aa5a"
+  }
+}
