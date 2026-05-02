@@ -270,6 +270,76 @@ func TestArtifacts_SortByTitleStable(t *testing.T) {
 	}
 }
 
+// TestArtifacts_SortAllValuesTieBreak runs every ArtifactSort enum value
+// through the resolver and asserts that ties on the primary key fall back to
+// ascending id ordering — the contract that makes cursor pagination
+// deterministic when filters or sorts change.
+func TestArtifacts_SortAllValuesTieBreak(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workDir, store := setupIntegrationDir(t)
+	workDir = setupArtifactFixtureInDir(t, workDir)
+
+	srv := httptest.NewServer(newArtifactGQLHandler(workDir, store))
+	defer srv.Close()
+
+	projID := "proj-integration-" + filepath.Base(workDir)
+
+	type sortKey struct {
+		name   string
+		field  string // node field used as the primary sort key for the assertion
+		gqlVal string
+	}
+	keys := []sortKey{
+		{"ID", "id", "ID"},
+		{"PATH", "path", "PATH"},
+		{"TITLE", "title", "TITLE"},
+		{"MODIFIED", "updatedAt", "MODIFIED"},
+		{"DEPS_COUNT", "id", "DEPS_COUNT"}, // depsCount is not exposed; verify only the id tie-breaker
+	}
+
+	for _, k := range keys {
+		t.Run(k.name, func(t *testing.T) {
+			body := bytes.NewBufferString(`{"query":"{ artifacts(projectID: \"` + projID + `\", sort: ` + k.gqlVal + `) { edges { node { id path title updatedAt } } } }"}`)
+			resp, err := http.Post(srv.URL+"/graphql", "application/json", body)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+
+			var result map[string]interface{}
+			if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+				t.Fatal(err)
+			}
+			if errs, ok := result["errors"]; ok {
+				t.Fatalf("GraphQL errors: %v", errs)
+			}
+			edges := result["data"].(map[string]interface{})["artifacts"].(map[string]interface{})["edges"].([]interface{})
+			if len(edges) < 2 {
+				t.Fatalf("need ≥2 artifacts to verify ordering, got %d", len(edges))
+			}
+
+			var prevPrimary, prevID string
+			for i, e := range edges {
+				node := e.(map[string]interface{})["node"].(map[string]interface{})
+				id := node["id"].(string)
+				var primary string
+				if v, ok := node[k.field]; ok && v != nil {
+					primary, _ = v.(string)
+				}
+				if i > 0 {
+					if primary < prevPrimary {
+						t.Errorf("sort=%s: primary key not ascending at index %d: %q before %q", k.name, i, prevPrimary, primary)
+					}
+					if primary == prevPrimary && id < prevID {
+						t.Errorf("sort=%s: id tie-breaker violated at index %d: %q before %q", k.name, i, prevID, id)
+					}
+				}
+				prevPrimary, prevID = primary, id
+			}
+		})
+	}
+}
+
 func TestArtifacts_MissingSidecarGraceful(t *testing.T) {
 	// Verifies the resolver does not crash when the sidecar directory is absent.
 	t.Setenv("HOME", t.TempDir())
