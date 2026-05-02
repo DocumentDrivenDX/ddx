@@ -5,8 +5,8 @@ import { readState } from '$lib/urlState'
 import type { GroupBy } from './grouping'
 
 export const ARTIFACTS_QUERY = gql`
-	query Artifacts($projectID: ID!, $first: Int, $after: String, $mediaType: String, $search: String, $sort: ArtifactSort, $staleness: String) {
-		artifacts(projectID: $projectID, first: $first, after: $after, mediaType: $mediaType, search: $search, sort: $sort, staleness: $staleness) {
+	query Artifacts($projectID: ID!, $first: Int, $after: String, $mediaType: String, $search: String, $sort: ArtifactSort, $staleness: String, $phase: String, $prefix: [String!]) {
+		artifacts(projectID: $projectID, first: $first, after: $after, mediaType: $mediaType, search: $search, sort: $sort, staleness: $staleness, phase: $phase, prefix: $prefix) {
 			edges {
 				node {
 					id
@@ -88,6 +88,8 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 	const groupBy: GroupBy = state.groupBy
 	const sort = parseSort(state.sort)
 	const staleness = parseStaleness(state.staleness)
+	const phase = state.phase
+	const prefix = state.prefix
 
 	const client = createClient(fetch as unknown as typeof globalThis.fetch)
 	const data = await client.request<ArtifactsResult>(ARTIFACTS_QUERY, {
@@ -96,7 +98,9 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		mediaType: mediaType ?? undefined,
 		search: q ? q : undefined,
 		sort,
-		staleness: staleness ?? undefined
+		staleness: staleness ?? undefined,
+		phase: phase ?? undefined,
+		prefix: prefix.length > 0 ? prefix : undefined
 	})
 	return {
 		nodeId: params.nodeId,
@@ -106,6 +110,8 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		q,
 		groupBy,
 		sort,
-		staleness
+		staleness,
+		phase,
+		prefix
 	}
 }

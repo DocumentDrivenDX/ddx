@@ -40,7 +40,7 @@ type ddxGeneratedBy struct {
 // It returns a paginated, optionally-filtered list of DDx-tracked artifacts
 // for the given project. Documents come from the FEAT-007 doc graph; other
 // artifacts come from .ddx.yaml sidecar files found under .ddx/plugins/.
-func (r *queryResolver) Artifacts(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, mediaType *string, search *string, sortKey *ArtifactSort, staleness *string) (*ArtifactConnection, error) {
+func (r *queryResolver) Artifacts(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, mediaType *string, search *string, sortKey *ArtifactSort, staleness *string, phase *string, prefix []string) (*ArtifactConnection, error) {
 	root := r.projectRoot(projectID)
 
 	artifacts, err := collectArtifacts(root)
@@ -79,6 +79,40 @@ func (r *queryResolver) Artifacts(ctx context.Context, projectID string, first *
 			}
 		}
 		artifacts = filtered
+	}
+
+	// Apply phase filter: matches when path is under docs/helix/<phase>/
+	// where <phase> is either an exact match (e.g. "01-frame") or a numeric
+	// prefix (e.g. "01") matching docs/helix/01-*/.
+	if phase != nil && *phase != "" {
+		ph := *phase
+		filtered := artifacts[:0]
+		for _, a := range artifacts {
+			if matchesPhase(a.Path, ph) {
+				filtered = append(filtered, a)
+			}
+		}
+		artifacts = filtered
+	}
+
+	// Apply prefix filter (multi-value OR over id-prefix segments,
+	// e.g. ADR, SD, FEAT, US, RSCH).
+	if len(prefix) > 0 {
+		set := make(map[string]struct{}, len(prefix))
+		for _, p := range prefix {
+			if p != "" {
+				set[strings.ToUpper(p)] = struct{}{}
+			}
+		}
+		if len(set) > 0 {
+			filtered := artifacts[:0]
+			for _, a := range artifacts {
+				if _, ok := set[idPrefixSegment(a.ID)]; ok {
+					filtered = append(filtered, a)
+				}
+			}
+			artifacts = filtered
+		}
 	}
 
 	// Apply search filter across title and path.
@@ -194,6 +228,50 @@ func sortArtifacts(artifacts []*Artifact, key *ArtifactSort) {
 		}
 		return less
 	})
+}
+
+// matchesPhase reports whether a path falls under docs/helix/<phase>/.
+// It accepts either an exact directory name match (e.g. "01-frame") or
+// a numeric prefix match (e.g. "01") matching docs/helix/01-*/.
+func matchesPhase(path, phase string) bool {
+	const root = "docs/helix/"
+	p := filepath.ToSlash(path)
+	if !strings.HasPrefix(p, root) {
+		return false
+	}
+	rest := p[len(root):]
+	slash := strings.IndexByte(rest, '/')
+	if slash < 0 {
+		return false
+	}
+	dir := rest[:slash]
+	if dir == phase {
+		return true
+	}
+	// numeric prefix match: phase="01" matches dir="01-frame"
+	if dash := strings.IndexByte(dir, '-'); dash > 0 && dir[:dash] == phase {
+		return true
+	}
+	return false
+}
+
+// idPrefixSegment extracts the leading prefix segment from an artifact ID.
+// IDs are typically formatted as "doc:<PREFIX>-..." (e.g. "doc:ADR-001-foo")
+// or "<PREFIX>-..." for sidecar artifacts. The "doc:" / "sidecar:" namespace
+// prefix, if present, is stripped before extraction. Returns empty string
+// when no prefix segment can be identified.
+func idPrefixSegment(id string) string {
+	s := id
+	for _, ns := range []string{"doc:", "sidecar:"} {
+		if strings.HasPrefix(s, ns) {
+			s = s[len(ns):]
+			break
+		}
+	}
+	if i := strings.IndexByte(s, '-'); i > 0 {
+		return strings.ToUpper(s[:i])
+	}
+	return ""
 }
 
 // dependsOnCount returns the number of depends_on entries declared in the

@@ -448,6 +448,174 @@ func setupArtifactFixtureInDir(t *testing.T, workDir string) string {
 	return workDir
 }
 
+// setupPhasePrefixFixtureInDir adds HELIX-style phase docs to exercise the
+// phase + prefix filters. Returns the workDir for chaining.
+func setupPhasePrefixFixtureInDir(t *testing.T, workDir string) string {
+	t.Helper()
+
+	frame := filepath.Join(workDir, "docs", "helix", "01-frame")
+	design := filepath.Join(workDir, "docs", "helix", "02-design")
+	for _, d := range []string{frame, design} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(filepath.Join(frame, "PRD.md"), []byte(
+		"---\nddx:\n  id: PRD-100\n  title: Product Requirements\n---\n# PRD\n",
+	), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(frame, "FEAT-200.md"), []byte(
+		"---\nddx:\n  id: FEAT-200\n  title: Search feature\n---\n# Feature\n",
+	), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(design, "ADR-300.md"), []byte(
+		"---\nddx:\n  id: ADR-300\n  title: Storage decision\n---\n# ADR\n",
+	), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return workDir
+}
+
+func TestArtifacts_PhaseFilter(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workDir, store := setupIntegrationDir(t)
+	workDir = setupPhasePrefixFixtureInDir(t, workDir)
+
+	srv := httptest.NewServer(newArtifactGQLHandler(workDir, store))
+	defer srv.Close()
+
+	projID := "proj-integration-" + filepath.Base(workDir)
+	body := bytes.NewBufferString(`{"query":"{ artifacts(projectID: \"` + projID + `\", phase: \"01-frame\") { totalCount edges { node { id path } } } }"}`)
+	resp, err := http.Post(srv.URL+"/graphql", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if errs, ok := result["errors"]; ok {
+		t.Fatalf("GraphQL errors: %v", errs)
+	}
+	artifacts := result["data"].(map[string]interface{})["artifacts"].(map[string]interface{})
+	if total := int(artifacts["totalCount"].(float64)); total != 2 {
+		t.Errorf("phase=01-frame: expected 2, got %d", total)
+	}
+	for _, e := range artifacts["edges"].([]interface{}) {
+		path := e.(map[string]interface{})["node"].(map[string]interface{})["path"].(string)
+		if !containsCI(path, "docs/helix/01-frame/") {
+			t.Errorf("phase filter returned out-of-phase path: %s", path)
+		}
+	}
+
+	// Numeric prefix form: phase=01 should also match docs/helix/01-frame/.
+	body = bytes.NewBufferString(`{"query":"{ artifacts(projectID: \"` + projID + `\", phase: \"01\") { totalCount } }"}`)
+	resp2, err := http.Post(srv.URL+"/graphql", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp2.Body.Close()
+	var r2 map[string]interface{}
+	if err := json.NewDecoder(resp2.Body).Decode(&r2); err != nil {
+		t.Fatal(err)
+	}
+	if total := int(r2["data"].(map[string]interface{})["artifacts"].(map[string]interface{})["totalCount"].(float64)); total != 2 {
+		t.Errorf("phase=01: expected 2, got %d", total)
+	}
+}
+
+func TestArtifacts_PrefixFilter(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workDir, store := setupIntegrationDir(t)
+	workDir = setupPhasePrefixFixtureInDir(t, workDir)
+
+	srv := httptest.NewServer(newArtifactGQLHandler(workDir, store))
+	defer srv.Close()
+
+	projID := "proj-integration-" + filepath.Base(workDir)
+
+	// Single prefix.
+	body := bytes.NewBufferString(`{"query":"{ artifacts(projectID: \"` + projID + `\", prefix: [\"ADR\"]) { totalCount edges { node { id } } } }"}`)
+	resp, err := http.Post(srv.URL+"/graphql", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var r map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+		t.Fatal(err)
+	}
+	if errs, ok := r["errors"]; ok {
+		t.Fatalf("GraphQL errors: %v", errs)
+	}
+	artifacts := r["data"].(map[string]interface{})["artifacts"].(map[string]interface{})
+	if total := int(artifacts["totalCount"].(float64)); total != 1 {
+		t.Errorf("prefix=[ADR]: expected 1, got %d", total)
+	}
+	for _, e := range artifacts["edges"].([]interface{}) {
+		id := e.(map[string]interface{})["node"].(map[string]interface{})["id"].(string)
+		if !containsCI(id, "ADR-") {
+			t.Errorf("prefix filter returned non-ADR id: %s", id)
+		}
+	}
+
+	// Multi prefix OR.
+	body = bytes.NewBufferString(`{"query":"{ artifacts(projectID: \"` + projID + `\", prefix: [\"ADR\",\"FEAT\"]) { totalCount } }"}`)
+	resp2, err := http.Post(srv.URL+"/graphql", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp2.Body.Close()
+	var r2 map[string]interface{}
+	if err := json.NewDecoder(resp2.Body).Decode(&r2); err != nil {
+		t.Fatal(err)
+	}
+	if total := int(r2["data"].(map[string]interface{})["artifacts"].(map[string]interface{})["totalCount"].(float64)); total != 2 {
+		t.Errorf("prefix=[ADR,FEAT]: expected 2, got %d", total)
+	}
+}
+
+func TestArtifacts_PhasePrefixComposeWithOtherFilters(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workDir, store := setupIntegrationDir(t)
+	workDir = setupPhasePrefixFixtureInDir(t, workDir)
+
+	srv := httptest.NewServer(newArtifactGQLHandler(workDir, store))
+	defer srv.Close()
+
+	projID := "proj-integration-" + filepath.Base(workDir)
+	// phase=01-frame AND prefix=[FEAT] should narrow to one.
+	body := bytes.NewBufferString(`{"query":"{ artifacts(projectID: \"` + projID + `\", phase: \"01-frame\", prefix: [\"FEAT\"], mediaType: \"text/markdown\", staleness: \"fresh\", sort: TITLE) { totalCount edges { node { id } } } }"}`)
+	resp, err := http.Post(srv.URL+"/graphql", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+	var r map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&r); err != nil {
+		t.Fatal(err)
+	}
+	if errs, ok := r["errors"]; ok {
+		t.Fatalf("GraphQL errors: %v", errs)
+	}
+	artifacts := r["data"].(map[string]interface{})["artifacts"].(map[string]interface{})
+	if total := int(artifacts["totalCount"].(float64)); total != 1 {
+		t.Errorf("composed filter: expected 1, got %d", total)
+	}
+	edges := artifacts["edges"].([]interface{})
+	if len(edges) != 1 {
+		t.Fatalf("expected 1 edge, got %d", len(edges))
+	}
+	id := edges[0].(map[string]interface{})["node"].(map[string]interface{})["id"].(string)
+	if !containsCI(id, "FEAT-") {
+		t.Errorf("expected FEAT artifact, got %s", id)
+	}
+}
+
 func containsCI(s, sub string) bool {
 	return bytes.Contains(
 		bytes.ToLower([]byte(s)),
