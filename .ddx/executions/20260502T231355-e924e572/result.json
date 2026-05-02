@@ -1,0 +1,48 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "TD-030 extended at correct in-repo path with all six required topics, references to ADR-004/FEAT-004/lock-contention patch (ddx-da11a34a), a concrete Go Backend interface for cli/internal/bead/backend.go, and an explicit chaos_test.go conformance contract.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Doc references ADR-004 implicitly via the archive-policy section but not by ADR id; FEAT-004 and the ddx-da11a34a lock patch are cited explicitly. Acceptable given the ADR-004 archive policy is described directly.",
+      "location": "docs/helix/02-design/technical-designs/TD-030-axon-bead-backend.md"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1289,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T231106-49f4e558/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1183,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 4206,
+    "output_bytes": 837,
+    "elapsed_ms": 18668,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
