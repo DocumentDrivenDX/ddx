@@ -1,0 +1,9 @@
+{
+  "attempt_id": "20260502T174005-301f12a5",
+  "harness": "agent",
+  "provider": "omlx-vidar-1235",
+  "model": "Qwen3-Coder-Next-MLX-4bit",
+  "tokens": 59070,
+  "input_tokens": 58815,
+  "output_tokens": 255
+}
