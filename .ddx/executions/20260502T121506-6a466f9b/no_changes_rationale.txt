@@ -1,0 +1,41 @@
+Bead ddx-a8a18cb7 ("Story 16: expose server task session logs for review") is a sub-epic
+whose acceptance is "All child beads closed." The plan at /tmp/story-16-final.md prescribes a
+4-bead breakdown spanning a backend resolver+persistence change, a frontend tabbed-page
+rewrite, an evidence tab with whitelist enforcement, and spec updates plus cross-cutting e2e.
+This exceeds Step 0 size limits (multiple subsystems, mixed backend/frontend/spec/test
+deliverables, AC explicitly enumerated as separate feature-sized pieces), so this attempt
+performs decomposition only — no implementation.
+
+Children created (all parented to ddx-a8a18cb7, labels phase:2,story:16):
+
+- ddx-6d132f62 — Story 16.0: Backend run-detail resolver + tool-call persistence + bundle-file confinement.
+  Slice: Persist normalized ToolCallEntry at drain time; extend Run GraphQL with
+  prompt/response/stderr/toolCalls/bundleFiles/bundleFile; canonical-path bundle-root
+  confinement; resolver unit tests (path traversal, size cap, whitelist).
+
+- ddx-f04faa86 — Story 16.1: Frontend rebuild runs/[runId]/+page.svelte as tabbed run-detail page.
+  Slice: Promote shared subcomponents into lib/runDetail/; rebuild page as tabbed
+  Overview/Prompt/Response/Tools/Session with URL-driven tab state; Tools tab pagination;
+  link to worker page for running runs; page e2e for tab switching + deep-link round-trip.
+  Depends on 16.0.
+
+- ddx-4cd64068 — Story 16.2: Evidence tab — bundle-file list + download + whitelist inline view.
+  Slice: Evidence tab UI; whitelist enforcement (allowed exts, <64KB inline); large-file
+  download-only path; e2e for whitelist + missing-path 404. Depends on 16.0 and 16.1.
+
+- ddx-70a432b5 — Story 16.3: Specs + cross-cutting e2e + raw-transcript-viewed audit event.
+  Slice: FEAT-008 (run-detail subsection + trust boundary + whitelist), FEAT-010 (resolver
+  contract + drain-time persistence), FEAT-019 (review surface link); cross-cutting e2e for
+  full prompt/response/tool-trace/evidence-list; raw-transcript-viewed audit event.
+  Depends on 16.1 and 16.2.
+
+Dependency edges added: 16.1->16.0, 16.2->16.0, 16.2->16.1, 16.3->16.1, 16.3->16.2.
+
+Parent bead annotated via `ddx bead update --notes` recording the child IDs and edges.
+
+Rationale for decomposition rather than implementation in a single attempt: the AC of the
+parent epic is structurally a roll-up over child closure, and a single attempt at all four
+slices would mix Go resolver work, schema/persistence at drain time, SvelteKit page rewrite,
+evidence-browser UI with whitelist, three spec doc edits, and cross-cutting e2e — well past
+~6 ACs and ~5 unrelated packages. Each child is independently sized for one execute-bead
+attempt and can be queued in dependency order.
