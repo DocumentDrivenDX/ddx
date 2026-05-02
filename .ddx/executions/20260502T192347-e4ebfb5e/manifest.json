@@ -1,0 +1,54 @@
+{
+  "attempt_id": "20260502T192347-e4ebfb5e",
+  "bead_id": "ddx-da11a34a",
+  "base_rev": "d9d1c1b8f9d74d3a4aa5da0cc8f04359fe8d33c6",
+  "created_at": "2026-05-02T19:23:48.966449438Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-da11a34a",
+    "title": "ddx work: lock around tracker-commit (git add/commit on primary .git) to prevent multi-worker contention",
+    "description": "Bead-store locking is intact and well-tested (cli/internal/bead/lock_unix.go + lock_windows.go, plus the TestChaos_* family in chaos_test.go covering concurrent append/close/claim/dep/event-append). Those tests confirm the JSONL writes themselves are atomic and never lose data under concurrent workers.\n\nThe failure observed in the Phase 2 drain is NOT bead-store contention. It's at cli/internal/agent/execute_bead.go:1050 in the tracker-commit step:\n\n  // Approximate flow at execute_bead.go:1047–1054:\n  msg := fmt.Sprintf(\"chore: update tracker (execute-bead %s)\", time.Now().UTC().Format(\"20060102T150405\"))\n  // git add .ddx/beads.jsonl                        ← line ~1050 (staging tracker)\n  // git commit -m msg                               ← line ~1054 (committing tracker)\n\nThese run against the project's primary .git directory (not a per-worker worktree). When two workers ('ddx work --local' running concurrently) reach this step in overlapping windows, both invoke 'git add' and one fails with:\n\n  fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nThe error surfaces to the loop as 'staging tracker: ...' and the bead is dropped from that drain pass. Observed failures in this drain (single-window): ddx-c77a809c, ddx-cd2ecf79, ddx-6f41aa55.\n\nFix: wrap the tracker-commit pair (and any other git operations on the primary .git from the agent package) in a process-shared file lock, e.g. flock on .ddx/.git-tracker.lock. Reuse the existing flock primitive pattern from cli/internal/bead/lock_unix.go (and lock_windows.go) — same shape, different lockfile.\n\nOut of scope for this bead:\n- Bead-store locking (already works; see chaos_test.go)\n- Worktree branch merging in the worktree itself (each worker has its own .ddx/worktrees/\u003cid\u003e/ that's already isolated)\n- Federation / multi-machine workers (Story 14)",
+    "acceptance": "1. Tracker-commit pair at cli/internal/agent/execute_bead.go:1050+1054 wrapped in process-shared file lock. 2. Lockfile lives at .ddx/.git-tracker.lock. 3. Lock primitive reuses pattern from cli/internal/bead/lock_unix.go + lock_windows.go (flock-based, with stale-lock-by-age fallback). 4. This bead OWNS the lock-error retry policy implementation, including backoff curve, max retries, and stale-lock recovery. ddx-3c154349 (auto-triage) calls into this implementation but does not duplicate the logic. 5. Lock contention behavior aligns with TD-NNN LockContentionContract (per ddx-673833f4): retry-with-backoff is the default response, NOT bead failure. **No persisted status change from lock contention; bd/br compatibility (ADR-004) preserved.** 6. New tests in cli/internal/agent/: TestTrackerCommit_ConcurrentSafety + TestTrackerCommit_StaleLockRecovery + TestTrackerCommit_RetryBackoffPolicy. 7. After fix: re-run drain with 2 workers; zero 'staging tracker' errors over 5+ minutes.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "area:git",
+      "kind:fix",
+      "observed-failure"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T19:23:47Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3518486",
+      "closing_commit_sha": "ae5d00a10ed6f998a1224d21f3c14468d5f65012",
+      "events": [
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T18:09:03.674639241Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "Auto-closed by drain with only execution-evidence files (no implementation). Reopening per the no_changes pattern that auto-triage (ddx-3c154349 itself) should fix. Real work pending."
+        }
+      ],
+      "events_attachment": "ddx-da11a34a/events.jsonl",
+      "execute-loop-heartbeat-at": "2026-05-02T19:23:47.625737108Z",
+      "session_id": "eb-69eaf51e"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T192347-e4ebfb5e",
+    "prompt": ".ddx/executions/20260502T192347-e4ebfb5e/prompt.md",
+    "manifest": ".ddx/executions/20260502T192347-e4ebfb5e/manifest.json",
+    "result": ".ddx/executions/20260502T192347-e4ebfb5e/result.json",
+    "checks": ".ddx/executions/20260502T192347-e4ebfb5e/checks.json",
+    "usage": ".ddx/executions/20260502T192347-e4ebfb5e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-da11a34a-20260502T192347-e4ebfb5e"
+  },
+  "prompt_sha": "607d86b892a8bb00b0317b494fde117fddf212e52d7cf889511fed863febd5a5"
+}
