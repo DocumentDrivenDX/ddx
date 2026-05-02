@@ -1,6 +1,10 @@
 package config
 
-import "time"
+import (
+	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/triage"
+)
 
 // NewConfig represents the simplified DDx configuration structure
 // This aligns with the schema defined in ADR-005 and SD-003
@@ -23,6 +27,48 @@ type NewConfig struct {
 	// parks the bead (FEAT-022 §14). Zero or unset uses the binary default
 	// (3). Negative values are treated as unset.
 	ReviewMaxRetries *int `yaml:"review_max_retries,omitempty" json:"review_max_retries,omitempty"`
+	// Triage configures the post-attempt triage decision module
+	// (cli/internal/triage). Optional; when unset the binary default policy
+	// is used. Distinct from agent.triage, which controls the pre-claim
+	// complexity gate.
+	Triage *TriagePolicyConfig `yaml:"triage,omitempty" json:"triage,omitempty"`
+}
+
+// TriagePolicyConfig is the project-config form of triage.TriagePolicy.
+// Each entry of `policies` maps a failure mode name to an ordered ladder
+// of action names; missing modes inherit the binary default ladder.
+type TriagePolicyConfig struct {
+	Policies map[string][]string `yaml:"policies,omitempty" json:"policies,omitempty"`
+}
+
+// ResolveTriagePolicy returns the effective triage policy for this config,
+// layering any `triage.policies` entries on top of the binary default
+// ladders. Unknown failure-mode names and unknown action names are
+// silently dropped (schema validation surfaces typos at load time).
+func (c *NewConfig) ResolveTriagePolicy() triage.TriagePolicy {
+	policy := triage.DefaultPolicy()
+	if c == nil || c.Triage == nil || len(c.Triage.Policies) == 0 {
+		return policy
+	}
+	for modeStr, actionStrs := range c.Triage.Policies {
+		mode, err := triage.ParseFailureMode(modeStr)
+		if err != nil {
+			continue
+		}
+		ladder := make([]triage.Action, 0, len(actionStrs))
+		for _, a := range actionStrs {
+			act, err := triage.ParseAction(a)
+			if err != nil {
+				continue
+			}
+			ladder = append(ladder, act)
+		}
+		if len(ladder) == 0 {
+			continue
+		}
+		policy.Ladders[mode] = ladder
+	}
+	return policy
 }
 
 // ResolveReviewMaxRetries returns the effective reviewer retry cap for this

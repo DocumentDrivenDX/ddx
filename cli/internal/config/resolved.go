@@ -4,6 +4,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
+	"github.com/DocumentDrivenDX/ddx/internal/triage"
 )
 
 // CLIOverrides carries per-invocation flag values that override
@@ -126,6 +127,8 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 		r.mirrorConfig = c.Executions.Mirror.Clone()
 	}
 
+	r.triagePolicy = c.ResolveTriagePolicy()
+
 	return r
 }
 
@@ -185,6 +188,7 @@ type ResolvedConfig struct {
 	mirrorConfig            *ExecutionsMirrorConfig
 	reasoningLevels         map[string][]string
 	providerRequestTimeout  time.Duration
+	triagePolicy            triage.TriagePolicy
 }
 
 // requireSealed panics if r was not produced by Resolve / LoadAndResolve.
@@ -329,6 +333,14 @@ func (r ResolvedConfig) MirrorConfig() *ExecutionsMirrorConfig {
 func (r ResolvedConfig) ReasoningLevels() map[string][]string {
 	r.requireSealed()
 	return cloneStringSliceMap(r.reasoningLevels)
+}
+
+// TriagePolicy returns the post-attempt triage decision policy resolved
+// from the project config (top-level `triage:` block) layered onto the
+// binary default policy.
+func (r ResolvedConfig) TriagePolicy() triage.TriagePolicy {
+	r.requireSealed()
+	return r.triagePolicy
 }
 
 func cloneStringSliceMap(m map[string][]string) map[string][]string {
