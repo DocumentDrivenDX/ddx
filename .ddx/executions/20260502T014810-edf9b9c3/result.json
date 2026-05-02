@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "The implementation cleanly adds an `escalation.InferTier` engine with a sensible priority order (explicit `tier:` label → priority floor → kind → description-length scope heuristic) and wires it into `runAgentExecuteLoopImpl` only when zero-config auto-route is active, preserving operator overrides. Cheap-by-default semantics are kept, matching the endpoint-first redesign intent. Test coverage spans the major branches."
+}
