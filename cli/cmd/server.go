@@ -45,6 +45,8 @@ func (f *CommandFactory) newServerCommand() *cobra.Command {
 	var tsnetEnabled bool
 	var tsnetHostname string
 	var tsnetAuthKey string
+	var hubMode bool
+	var federationAllowPlainHTTP bool
 
 	cmd := &cobra.Command{
 		Use:   "server",
@@ -92,9 +94,19 @@ MCP (POST /mcp):
   ddx_doc_deps                 Upstream dependencies
   ddx_agent_sessions           List agent sessions`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if federationAllowPlainHTTP && !hubMode {
+				return fmt.Errorf("--federation-allow-plain-http requires --hub-mode")
+			}
 			listenAddr := fmt.Sprintf("%s:%d", addr, port)
 			fmt.Fprintf(cmd.OutOrStdout(), "DDx server listening on https://%s\n", listenAddr)
 			srv := server.New(listenAddr, f.WorkingDir)
+			if hubMode {
+				srv.EnableHubMode(federationAllowPlainHTTP)
+				fmt.Fprintf(cmd.OutOrStdout(), "DDx hub-mode enabled (federation routes mounted)\n")
+				if federationAllowPlainHTTP {
+					fmt.Fprintf(cmd.OutOrStdout(), "WARNING: --federation-allow-plain-http is ON; non-ts-net peers may register\n")
+				}
+			}
 
 			// Build tsnet config. tsnet is on by default — flags override config,
 			// and --tsnet=false disables it. Hostname defaults to ddx-<hostname>.
@@ -129,6 +141,8 @@ MCP (POST /mcp):
 	cmd.Flags().BoolVar(&tsnetEnabled, "tsnet", true, "Enable Tailscale ts-net listener (use --tsnet=false to disable; see ADR-006)")
 	cmd.Flags().StringVar(&tsnetHostname, "tsnet-hostname", "", "Tailscale hostname (default: ddx-<hostname>)")
 	cmd.Flags().StringVar(&tsnetAuthKey, "tsnet-auth-key", "", "Tailscale auth key for headless/CI use (SECURITY: visible in ps/history; prefer TS_AUTHKEY env var)")
+	cmd.Flags().BoolVar(&hubMode, "hub-mode", false, "Run as a federation hub: mount /api/federation/* routes (FEAT-026)")
+	cmd.Flags().BoolVar(&federationAllowPlainHTTP, "federation-allow-plain-http", false, "Accept federation registrations from non-loopback non-ts-net peers (hub-mode only; logs WARN on each accepted plain-HTTP registration)")
 
 	// Worker management
 	cmd.AddCommand(f.newServerWorkersCommand())

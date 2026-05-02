@@ -104,6 +104,12 @@ type Server struct {
 	operatorPromptAutoApproveAllowlist []string
 
 	routePatterns []string // every pattern registered via route(); used by gate tests
+
+	// HubMode is true once EnableHubMode has been called; the federation
+	// HTTP routes are mounted only in that case (B14.3 AC: "Routes mounted
+	// only when --hub-mode").
+	HubMode bool
+	hub     *federationHub
 }
 
 // New creates a new DDx server bound to addr, serving data from workingDir.
