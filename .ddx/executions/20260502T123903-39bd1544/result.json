@@ -1,0 +1,54 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Both ACs satisfied: profile-layout.mjs script and layout-baseline.md report saved under the run-id execution dir; baseline reports max in-degree=10, max out-degree=4, label-width range 95–224 px, and ~5.0 s settle time on the 128-node fixture.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Label widths derived from a per-character approximation rather than browser getBBox; limitation is documented and within ±5% of native rendering, acceptable for an investigation baseline.",
+      "location": ".ddx/executions/20260502T123549-d9f9c327/layout-baseline.md:131"
+    },
+    {
+      "severity": "info",
+      "summary": "Settle wall-clock is compute-only; the report extrapolates browser settle time as 300 × 16.67 ms ≈ 5.0 s. Reasonable lower bound, called out explicitly.",
+      "location": ".ddx/executions/20260502T123549-d9f9c327/layout-baseline.md:96"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 678,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T123549-d9f9c327/manifest.json",
+          ".ddx/executions/20260502T123549-d9f9c327/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3197,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 5681,
+    "output_bytes": 929,
+    "elapsed_ms": 20515,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
