@@ -41,15 +41,9 @@
 		}
 	})
 
-	const filtered = $derived(
-		q.trim()
-			? allEdges.filter(
-					(e) =>
-						e.node.title.toLowerCase().includes(q.toLowerCase()) ||
-						e.node.path.toLowerCase().includes(q.toLowerCase())
-				)
-			: allEdges
-	)
+	// Server-side search: q is sent to the backend so results are correct
+	// across all pages, not just the loaded edges.
+	const filtered = $derived(allEdges)
 
 	const groups = $derived(
 		groupItems(
@@ -122,7 +116,8 @@
 				projectID: data.projectId,
 				first: PAGE_SIZE,
 				after: pageInfo.endCursor,
-				mediaType: data.mediaType ?? undefined
+				mediaType: data.mediaType ?? undefined,
+				search: q ? q : undefined
 			})
 			allEdges = [...allEdges, ...result.artifacts.edges]
 			pageInfo = result.artifacts.pageInfo

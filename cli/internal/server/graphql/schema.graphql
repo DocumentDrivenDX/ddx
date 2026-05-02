@@ -1998,6 +1998,20 @@ type ArtifactConnection {
   totalCount: Int!
 }
 
+"""ArtifactSort selects the field used to order Artifact results."""
+enum ArtifactSort {
+  """Sort by globally unique artifact ID"""
+  ID
+  """Sort by file path relative to the project root"""
+  PATH
+  """Sort by last modified timestamp"""
+  MODIFIED
+  """Sort by human-readable title"""
+  TITLE
+  """Sort by number of depends_on references in the artifact's frontmatter"""
+  DEPS_COUNT
+}
+
 """ArtifactRegenerateResult is the response from the artifactRegenerate mutation."""
 type ArtifactRegenerateResult {
   """Run ID of the dispatched regeneration worker"""
@@ -2216,10 +2230,14 @@ type Query {
     last: Int,
     """Cursor to end before"""
     before: String,
-    """Filter by media type (e.g. text/markdown, image/png)"""
+    """Filter by media type (e.g. text/markdown, image/png). Supports wildcard suffix like image/*."""
     mediaType: String,
     """Search across title and path"""
-    search: String
+    search: String,
+    """Sort key for ordering results (defaults to PATH)"""
+    sort: ArtifactSort,
+    """Filter by staleness: fresh, stale, or missing"""
+    staleness: String
   ): ArtifactConnection!
 
   """Fetch a single artifact by ID within a project (includes content for text-based types)."""

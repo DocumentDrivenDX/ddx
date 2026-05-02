@@ -40,7 +40,7 @@ type ddxGeneratedBy struct {
 // It returns a paginated, optionally-filtered list of DDx-tracked artifacts
 // for the given project. Documents come from the FEAT-007 doc graph; other
 // artifacts come from .ddx.yaml sidecar files found under .ddx/plugins/.
-func (r *queryResolver) Artifacts(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, mediaType *string, search *string) (*ArtifactConnection, error) {
+func (r *queryResolver) Artifacts(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, mediaType *string, search *string, sortKey *ArtifactSort, staleness *string) (*ArtifactConnection, error) {
 	root := r.projectRoot(projectID)
 
 	artifacts, err := collectArtifacts(root)
@@ -48,17 +48,33 @@ func (r *queryResolver) Artifacts(ctx context.Context, projectID string, first *
 		return nil, fmt.Errorf("collecting artifacts: %w", err)
 	}
 
-	// Sort by path for stable ordering.
-	sort.Slice(artifacts, func(i, j int) bool {
-		return artifacts[i].Path < artifacts[j].Path
-	})
-
-	// Apply mediaType filter.
+	// Apply mediaType filter (supports X/* wildcard suffix).
 	if mediaType != nil && *mediaType != "" {
 		mt := *mediaType
 		filtered := artifacts[:0]
+		if strings.HasSuffix(mt, "/*") {
+			prefix := strings.TrimSuffix(mt, "*") // keep trailing slash
+			for _, a := range artifacts {
+				if strings.HasPrefix(a.MediaType, prefix) {
+					filtered = append(filtered, a)
+				}
+			}
+		} else {
+			for _, a := range artifacts {
+				if a.MediaType == mt {
+					filtered = append(filtered, a)
+				}
+			}
+		}
+		artifacts = filtered
+	}
+
+	// Apply staleness filter.
+	if staleness != nil && *staleness != "" {
+		st := *staleness
+		filtered := artifacts[:0]
 		for _, a := range artifacts {
-			if a.MediaType == mt {
+			if a.Staleness == st {
 				filtered = append(filtered, a)
 			}
 		}
@@ -77,6 +93,9 @@ func (r *queryResolver) Artifacts(ctx context.Context, projectID string, first *
 		}
 		artifacts = filtered
 	}
+
+	// Sort with (sortKey, id) tie-breaker for stable cursor pagination.
+	sortArtifacts(artifacts, sortKey)
 
 	// Build Relay edges.
 	all := make([]*ArtifactEdge, len(artifacts))
@@ -137,6 +156,61 @@ func (r *queryResolver) Artifacts(ctx context.Context, projectID string, first *
 		PageInfo:   pageInfo,
 		TotalCount: len(all),
 	}, nil
+}
+
+// sortArtifacts orders artifacts by the requested sort key with a stable
+// (sortKey, id) tie-breaker so cursor pagination is deterministic across
+// pages even when the primary key has duplicate values.
+func sortArtifacts(artifacts []*Artifact, key *ArtifactSort) {
+	k := ArtifactSortPath
+	if key != nil {
+		k = *key
+	}
+	sort.SliceStable(artifacts, func(i, j int) bool {
+		a, b := artifacts[i], artifacts[j]
+		var less, equal bool
+		switch k {
+		case ArtifactSortID:
+			less, equal = a.ID < b.ID, a.ID == b.ID
+		case ArtifactSortTitle:
+			less, equal = a.Title < b.Title, a.Title == b.Title
+		case ArtifactSortModified:
+			ai, bi := "", ""
+			if a.UpdatedAt != nil {
+				ai = *a.UpdatedAt
+			}
+			if b.UpdatedAt != nil {
+				bi = *b.UpdatedAt
+			}
+			less, equal = ai < bi, ai == bi
+		case ArtifactSortDepsCount:
+			ac, bc := dependsOnCount(a), dependsOnCount(b)
+			less, equal = ac < bc, ac == bc
+		default: // PATH
+			less, equal = a.Path < b.Path, a.Path == b.Path
+		}
+		if equal {
+			return a.ID < b.ID
+		}
+		return less
+	})
+}
+
+// dependsOnCount returns the number of depends_on entries declared in the
+// artifact's frontmatter, or 0 if none / unparseable.
+func dependsOnCount(a *Artifact) int {
+	if a.DdxFrontmatter == nil {
+		return 0
+	}
+	var fm map[string]interface{}
+	if err := json.Unmarshal([]byte(*a.DdxFrontmatter), &fm); err != nil {
+		return 0
+	}
+	deps, ok := fm["depends_on"].([]interface{})
+	if !ok {
+		return 0
+	}
+	return len(deps)
 }
 
 // collectArtifacts gathers all DDx-tracked artifacts from two sources:
