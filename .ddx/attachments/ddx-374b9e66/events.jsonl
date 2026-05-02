@@ -1,0 +1,1 @@
+{"actor":"ddx","body":"merge failed\npreserve_ref=refs/ddx/iterations/ddx-374b9e66/20260414T090951Z-2195235625b2\nresult_rev=af7c19aff2231be948813ae388b79b409137129e\nbase_rev=2195235625b270f0bb9f356f16da08928fbd1f6e","created_at":"2026-04-14T09:09:51.629153498Z","kind":"execute-bead","source":"ddx agent execute-loop","summary":"land_conflict"}

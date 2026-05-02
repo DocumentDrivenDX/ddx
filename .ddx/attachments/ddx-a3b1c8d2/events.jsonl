@@ -1,0 +1,2 @@
+{"actor":"ddx","body":"resolving HEAD: git rev-parse HEAD: exit status 128","created_at":"2026-04-13T22:12:05.549820527Z","kind":"execute-bead","source":"ddx agent execute-loop","summary":"execution_failed"}
+{"actor":"ddx","body":"success\nresult_rev=3208a93e0727810fc5519204e0f4cca52817aafc\nbase_rev=736058f02c00fb2db330d637d2a3bfae46841927","created_at":"2026-04-14T10:13:21.999568006Z","kind":"execute-bead","source":"ddx agent execute-loop","summary":"success"}

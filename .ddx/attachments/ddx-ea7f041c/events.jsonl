@@ -1,0 +1,2 @@
+{"actor":"ddx","body":"{\"resolved_provider\":\"codex\",\"fallback_chain\":[]}","created_at":"2026-04-21T16:08:30.056810471Z","kind":"routing","source":"ddx agent execute-bead","summary":"provider=codex"}
+{"actor":"ddx","body":"{\"attempt_id\":\"20260421T155615-07f799e2\",\"harness\":\"codex\",\"input_tokens\":3891290,\"output_tokens\":17294,\"total_tokens\":3908584,\"cost_usd\":0,\"duration_ms\":734747,\"exit_code\":0}","created_at":"2026-04-21T16:08:30.117163364Z","kind":"cost","source":"ddx agent execute-bead","summary":"tokens=3908584"}

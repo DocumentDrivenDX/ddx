@@ -1,0 +1,11 @@
+=== Sample of 5 archived beads with events ===
+--- ddx-9a309f67 ---
+sidecar_lines=1 status=closed inline_events=1 archived_at=2026-05-02T04:37:57Z
+--- ddx-b2ce2335 ---
+sidecar_lines=5 status=closed inline_events=5 archived_at=2026-05-02T04:37:57Z
+--- ddx-cc96ba8e ---
+sidecar_lines=5 status=closed inline_events=5 archived_at=2026-05-02T04:37:57Z
+--- ddx-947cb331 ---
+sidecar_lines=5 status=closed inline_events=5 archived_at=2026-05-02T04:37:57Z
+--- ddx-9a6a85c1 ---
+sidecar_lines=5 status=closed inline_events=5 archived_at=2026-05-02T04:37:57Z

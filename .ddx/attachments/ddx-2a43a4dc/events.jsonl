@@ -1,0 +1,1 @@
+{"actor":"ddx","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"claude-sonnet-4-6\",\"fallback_chain\":[]}","created_at":"2026-04-15T11:45:46.952847686Z","kind":"routing","source":"ddx agent execute-bead","summary":"provider=claude model=claude-sonnet-4-6"}

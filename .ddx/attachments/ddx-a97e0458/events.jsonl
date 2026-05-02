@@ -1,0 +1,4 @@
+{"actor":"erik","body":"loading bead ddx-a97e0458 from execution snapshot: bead: not found: ddx-a97e0458","created_at":"2026-04-11T16:40:40.510222014Z","kind":"execute-bead","source":"ddx agent execute-loop","summary":"execution_failed"}
+{"actor":"erik","body":"loading bead ddx-a97e0458 from execution snapshot: bead: not found: ddx-a97e0458","created_at":"2026-04-11T16:41:01.755516686Z","kind":"execute-bead","source":"ddx agent execute-loop","summary":"execution_failed"}
+{"actor":"erik","body":"loading bead ddx-a97e0458 from execution snapshot: bead: not found: ddx-a97e0458","created_at":"2026-04-11T16:47:46.892710272Z","kind":"execute-bead","source":"ddx agent execute-loop","summary":"execution_failed"}
+{"actor":"erik","body":"loading bead ddx-a97e0458 from execution snapshot: bead: not found: ddx-a97e0458","created_at":"2026-04-11T16:48:03.160773642Z","kind":"execute-bead","source":"ddx agent execute-loop","summary":"execution_failed"}
