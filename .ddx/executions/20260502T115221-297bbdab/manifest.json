@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T115221-297bbdab",
+  "bead_id": "ddx-97335425",
+  "base_rev": "bdfd3df4b7a39840dd866724175f1615a1a4e915",
+  "created_at": "2026-05-02T11:52:22.849264843Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-97335425",
+    "title": "Story 7: artifact listing scale to thousands",
+    "description": "Sub-epic for Story 7. Full plan at /tmp/story-7-final.md. Children listed under this epic carry the testable ACs.",
+    "acceptance": "All child beads closed. Locked decisions from the planning round honored.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "story:7"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:52:21Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T11:52:21.674634346Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T115221-297bbdab",
+    "prompt": ".ddx/executions/20260502T115221-297bbdab/prompt.md",
+    "manifest": ".ddx/executions/20260502T115221-297bbdab/manifest.json",
+    "result": ".ddx/executions/20260502T115221-297bbdab/result.json",
+    "checks": ".ddx/executions/20260502T115221-297bbdab/checks.json",
+    "usage": ".ddx/executions/20260502T115221-297bbdab/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-97335425-20260502T115221-297bbdab"
+  }
+}
