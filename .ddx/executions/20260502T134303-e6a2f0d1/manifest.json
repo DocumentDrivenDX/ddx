@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260502T134303-e6a2f0d1",
+  "bead_id": "ddx-791a4f65",
+  "base_rev": "a278f11618f824f2f85c826c4a42acab81198acd",
+  "created_at": "2026-05-02T13:43:05.170272866Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-791a4f65",
+    "title": "availability: cached providerModels(name, kind) query + refreshProviderModels mutation",
+    "description": "Add GraphQL query providerModels(name, kind) returning model identifiers per provider, with a server-side cache (60s TTL by default). Add refreshProviderModels mutation (auth-gated, in-flight guarded, sanitized baseURL). Use a separate cached query rather than bolting onto the 2.5s-polled provider table — fizeau.ListModels does live discovery and would hammer providers.",
+    "acceptance": "1. providerModels query in GraphQL schema. 2. 60s cache; manual refresh via mutation. 3. baseURL sanitized for ts-net safety. 4. In-flight guard prevents duplicate concurrent fetches. 5. Auth: requireTrusted gate.",
+    "parent": "ddx-12e97cb9",
+    "labels": [
+      "phase:2",
+      "story:9",
+      "area:server",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T13:43:03Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128",
+          "created_at": "2026-05-02T13:01:01.523842716Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T13:43:03.023594287Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T134303-e6a2f0d1",
+    "prompt": ".ddx/executions/20260502T134303-e6a2f0d1/prompt.md",
+    "manifest": ".ddx/executions/20260502T134303-e6a2f0d1/manifest.json",
+    "result": ".ddx/executions/20260502T134303-e6a2f0d1/result.json",
+    "checks": ".ddx/executions/20260502T134303-e6a2f0d1/checks.json",
+    "usage": ".ddx/executions/20260502T134303-e6a2f0d1/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-791a4f65-20260502T134303-e6a2f0d1"
+  }
+}
