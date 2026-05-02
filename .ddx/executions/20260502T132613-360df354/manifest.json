@@ -1,0 +1,49 @@
+{
+  "attempt_id": "20260502T132613-360df354",
+  "bead_id": "ddx-4caba860",
+  "base_rev": "c72dd00d84153a2b5d8a3e1c932832fd7adfc80a",
+  "created_at": "2026-05-02T13:26:14.835334943Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4caba860",
+    "title": "workers: project-scope audit + e2e",
+    "description": "Audit Workers tab to confirm it scopes to currently selected repo only. Add e2e covering the scope filter.",
+    "acceptance": "1. Workers list shows only currently-selected-project workers. 2. e2e covers a multi-project setup and asserts scoping.",
+    "parent": "ddx-723d93f2",
+    "labels": [
+      "phase:2",
+      "story:8",
+      "area:web",
+      "area:tests",
+      "kind:test"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T13:26:13Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128",
+          "created_at": "2026-05-02T13:01:01.359094784Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T13:26:13.487318268Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T132613-360df354",
+    "prompt": ".ddx/executions/20260502T132613-360df354/prompt.md",
+    "manifest": ".ddx/executions/20260502T132613-360df354/manifest.json",
+    "result": ".ddx/executions/20260502T132613-360df354/result.json",
+    "checks": ".ddx/executions/20260502T132613-360df354/checks.json",
+    "usage": ".ddx/executions/20260502T132613-360df354/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4caba860-20260502T132613-360df354"
+  }
+}
