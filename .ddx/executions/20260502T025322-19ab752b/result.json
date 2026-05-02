@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "The Multi-Model Review section, including the `--quorum=majority` example, was cleanly removed from `website/content/features/_index.md`. Homepage had no prior quorum mention. All three acceptance criteria are satisfied."
+}
