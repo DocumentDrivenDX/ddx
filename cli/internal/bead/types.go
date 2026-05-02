@@ -1,6 +1,10 @@
 package bead
 
-import "time"
+import (
+	"fmt"
+	"strings"
+	"time"
+)
 
 // Bead represents a portable work item with metadata.
 // The schema matches bd/br JSONL format for interchange compatibility.
@@ -62,7 +66,126 @@ const (
 	// human intervention after a triage-overflow event. Blocked beads are
 	// excluded from ReadyExecution and will not be auto-dispatched.
 	StatusBlocked = "blocked"
+	// StatusProposed marks an operator-prompt bead awaiting approval. It is
+	// excluded from execute-loop drain until transitioned to open via the
+	// approval flow, or to cancelled when the operator declines it.
+	StatusProposed = "proposed"
+	// StatusCancelled marks a bead that was rejected before any execution
+	// took place (e.g. an operator-prompt bead the user chose not to run).
+	StatusCancelled = "cancelled"
 )
+
+// IssueType constants
+const (
+	// IssueTypeOperatorPrompt is the bead type used for operator-submitted
+	// prompts that the execute-loop runs as instructions.
+	IssueTypeOperatorPrompt = "operator-prompt"
+)
+
+// Default labels and other defaults for operator-prompt beads.
+const (
+	OperatorPromptLabelKind   = "kind:operator-prompt"
+	OperatorPromptLabelSource = "source:web-ui"
+	// OperatorPromptDefaultAcceptance is the auto-AC stub used when an
+	// operator submits a prompt without explicit acceptance criteria. The
+	// structural AC verifier is skipped for operator-prompt beads, so this
+	// stub stands as a human-readable contract only.
+	OperatorPromptDefaultAcceptance = "Agent must produce a diff or no_changes rationale; the prompt body is the contract."
+)
+
+// IsValidStatusTransition reports whether a bead may move from `from` to `to`
+// under the documented state machine. Self-transitions (from == to) and
+// transitions to/from the empty string (used by Create defaults) are rejected;
+// callers that want to seed a fresh status should set b.Status directly before
+// validateBead runs.
+//
+// Allowed transitions:
+//
+//	open        → in_progress, closed, blocked
+//	in_progress → open, closed, blocked
+//	blocked     → open, closed
+//	proposed    → open, cancelled
+//	closed      → open                (reopen)
+//	cancelled   → open                (reopen)
+func IsValidStatusTransition(from, to string) bool {
+	if from == "" || to == "" || from == to {
+		return false
+	}
+	allowed := map[string]map[string]bool{
+		StatusOpen:       {StatusInProgress: true, StatusClosed: true, StatusBlocked: true},
+		StatusInProgress: {StatusOpen: true, StatusClosed: true, StatusBlocked: true},
+		StatusBlocked:    {StatusOpen: true, StatusClosed: true},
+		StatusProposed:   {StatusOpen: true, StatusCancelled: true},
+		StatusClosed:     {StatusOpen: true},
+		StatusCancelled:  {StatusOpen: true},
+	}
+	if next, ok := allowed[from]; ok {
+		return next[to]
+	}
+	return false
+}
+
+// OperatorPromptMutationGuard enforces the no-self-mutation rule from
+// Story 15: an operator-prompt bead's execution may not create, edit, or
+// close another operator-prompt bead. The guard returns nil when the
+// mutation is allowed and a non-nil error when it must be rejected.
+//
+// actorIssueType is the issue_type of the bead currently being executed
+// (empty when no operator-prompt context is active). targetIssueType is
+// the issue_type of the bead about to be mutated.
+//
+// Allow/deny matrix:
+//
+//	actor=""               , target=*                → allow
+//	actor="task"           , target=*                → allow
+//	actor="operator-prompt", target!="operator-prompt" → allow
+//	actor="operator-prompt", target=="operator-prompt" → deny
+func OperatorPromptMutationGuard(actorIssueType, targetIssueType string) error {
+	if actorIssueType != IssueTypeOperatorPrompt {
+		return nil
+	}
+	if targetIssueType != IssueTypeOperatorPrompt {
+		return nil
+	}
+	return fmt.Errorf("bead: operator-prompt bead may not mutate another operator-prompt bead")
+}
+
+// NewOperatorPromptBead constructs a fresh operator-prompt bead from a raw
+// prompt string, applying the Story 15 template defaults: title is the first
+// non-empty line of the prompt, full prompt body is preserved verbatim in the
+// description, default labels are kind:operator-prompt + source:web-ui, the
+// status starts in `proposed` (approval flow), priority defaults to the
+// caller-supplied tier (clamped to MinPriority..MaxPriority), and the
+// acceptance field carries the auto-AC stub.
+//
+// The returned bead is not persisted; callers feed it to Store.Create which
+// will assign the ID and CreatedAt/UpdatedAt timestamps.
+func NewOperatorPromptBead(prompt string, defaultTier int) *Bead {
+	body := strings.TrimSpace(prompt)
+	title := body
+	if i := strings.IndexByte(body, '\n'); i >= 0 {
+		title = strings.TrimSpace(body[:i])
+	}
+	if title == "" {
+		title = "(empty operator prompt)"
+	}
+	tier := defaultTier
+	if tier < MinPriority {
+		tier = MinPriority
+	}
+	if tier > MaxPriority {
+		tier = MaxPriority
+	}
+	return &Bead{
+		Title:       title,
+		IssueType:   IssueTypeOperatorPrompt,
+		Status:      StatusProposed,
+		Priority:    tier,
+		Labels:      []string{OperatorPromptLabelKind, OperatorPromptLabelSource},
+		Description: body,
+		Acceptance:  OperatorPromptDefaultAcceptance,
+	}
+}
 
 // Default values
 const (
