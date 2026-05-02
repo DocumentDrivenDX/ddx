@@ -2963,6 +2963,12 @@ type Mutation {
 
   """Submit an operator prompt as a proposed bead. Requires a valid CSRF token via the X-CSRF-Token request header (HTTP transport), and an idempotency key that dedupes repeated submissions within a 24-hour window. The resulting bead is in the proposed status (not auto-queued for execution); audit captures the originating identity (localhost user OR ts-net WhoIs)."""
   operatorPromptSubmit(input: OperatorPromptSubmitInput!): OperatorPromptSubmitResult!
+
+  """Approve a proposed operator-prompt bead, transitioning it from proposed → open so the execute-loop can claim it. Requires a valid CSRF token. The originating identity must be on the per-project auto-approve allowlist; ts-net identities are never permitted (locked decision). An audit event of kind operator_prompt_approve records the approver. Errors when the bead is missing, is not an operator-prompt, is not in the proposed status, or the caller is not on the allowlist."""
+  operatorPromptApprove(id: ID!): OperatorPromptApproveResult!
+
+  """Cancel a proposed operator-prompt bead, transitioning it from proposed → cancelled so it never enters the execute-loop. Requires a valid CSRF token. Any trusted identity (localhost OR ts-net) may cancel a proposal — the allowlist gates auto-approval, not rejection. An audit event of kind operator_prompt_cancel records the canceller. Errors when the bead is missing, is not an operator-prompt, or is not in the proposed status."""
+  operatorPromptCancel(id: ID!): OperatorPromptCancelResult!
 }
 
 # ============================================
@@ -3033,6 +3039,8 @@ input OperatorPromptSubmitInput {
   tier: Int
   """Idempotency key. Repeat submissions with the same key within a 24-hour window return the original bead unchanged (deduplicated=true)."""
   idempotencyKey: String!
+  """When true, ask the server to immediately approve (proposed → open) the resulting bead so it enters the execute-loop without a separate operatorPromptApprove call. The server enforces the per-project auto-approve allowlist: only configured-localhost identities are eligible — ts-net identities are NEVER auto-approved (locked decision). When the caller is not eligible the bead is still created in the proposed status and autoApproved is false."""
+  autoApprove: Boolean
 }
 
 """Result of operatorPromptSubmit. When deduplicated=true, the request matched an idempotency key submitted within the last 24 hours and the original bead is returned unchanged."""
@@ -3041,6 +3049,20 @@ type OperatorPromptSubmitResult {
   bead: Bead!
   """True if the request matched a prior idempotency-key submission within 24h."""
   deduplicated: Boolean!
+  """True when the bead was auto-approved (status=open) rather than left in the proposed status. Only set on first submission for callers on the per-project auto-approve allowlist."""
+  autoApproved: Boolean!
+}
+
+"""Result of operatorPromptApprove. The bead has transitioned from proposed → open and an audit event has been appended."""
+type OperatorPromptApproveResult {
+  """The bead after approval (status=open)."""
+  bead: Bead!
+}
+
+"""Result of operatorPromptCancel. The bead has transitioned from proposed → cancelled and an audit event has been appended."""
+type OperatorPromptCancelResult {
+  """The bead after cancellation (status=cancelled)."""
+  bead: Bead!
 }
 
 # ============================================

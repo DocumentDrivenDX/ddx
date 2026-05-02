@@ -680,6 +680,8 @@ type ComplexityRoot struct {
 		BeadUpdate            func(childComplexity int, id string, input BeadUpdateInput) int
 		ComparisonDispatch    func(childComplexity int, arms []*ComparisonArmInput) int
 		DocumentWrite         func(childComplexity int, path string, content string) int
+		OperatorPromptApprove func(childComplexity int, id string) int
+		OperatorPromptCancel  func(childComplexity int, id string) int
 		OperatorPromptSubmit  func(childComplexity int, input OperatorPromptSubmitInput) int
 		PersonaBind           func(childComplexity int, role string, persona string, projectID string) int
 		PersonaCreate         func(childComplexity int, name string, body string, projectID string) int
@@ -700,7 +702,16 @@ type ComplexityRoot struct {
 		StartedAt func(childComplexity int) int
 	}
 
+	OperatorPromptApproveResult struct {
+		Bead func(childComplexity int) int
+	}
+
+	OperatorPromptCancelResult struct {
+		Bead func(childComplexity int) int
+	}
+
 	OperatorPromptSubmitResult struct {
+		AutoApproved func(childComplexity int) int
 		Bead         func(childComplexity int) int
 		Deduplicated func(childComplexity int) int
 	}
@@ -1317,6 +1328,8 @@ type MutationResolver interface {
 	RefreshProviderModels(ctx context.Context, name string, kind ProviderKind) (*ProviderModelsResult, error)
 	ArtifactRegenerate(ctx context.Context, artifactID string) (*ArtifactRegenerateResult, error)
 	OperatorPromptSubmit(ctx context.Context, input OperatorPromptSubmitInput) (*OperatorPromptSubmitResult, error)
+	OperatorPromptApprove(ctx context.Context, id string) (*OperatorPromptApproveResult, error)
+	OperatorPromptCancel(ctx context.Context, id string) (*OperatorPromptCancelResult, error)
 }
 type QueryResolver interface {
 	Node(ctx context.Context, id string) (Node, error)
@@ -4111,6 +4124,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DocumentWrite(childComplexity, args["path"].(string), args["content"].(string)), true
+	case "Mutation.operatorPromptApprove":
+		if e.ComplexityRoot.Mutation.OperatorPromptApprove == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_operatorPromptApprove_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.OperatorPromptApprove(childComplexity, args["id"].(string)), true
+	case "Mutation.operatorPromptCancel":
+		if e.ComplexityRoot.Mutation.OperatorPromptCancel == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_operatorPromptCancel_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.OperatorPromptCancel(childComplexity, args["id"].(string)), true
 	case "Mutation.operatorPromptSubmit":
 		if e.ComplexityRoot.Mutation.OperatorPromptSubmit == nil {
 			break
@@ -4258,6 +4293,26 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.NodeInfo.StartedAt(childComplexity), true
 
+	case "OperatorPromptApproveResult.bead":
+		if e.ComplexityRoot.OperatorPromptApproveResult.Bead == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorPromptApproveResult.Bead(childComplexity), true
+
+	case "OperatorPromptCancelResult.bead":
+		if e.ComplexityRoot.OperatorPromptCancelResult.Bead == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorPromptCancelResult.Bead(childComplexity), true
+
+	case "OperatorPromptSubmitResult.autoApproved":
+		if e.ComplexityRoot.OperatorPromptSubmitResult.AutoApproved == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorPromptSubmitResult.AutoApproved(childComplexity), true
 	case "OperatorPromptSubmitResult.bead":
 		if e.ComplexityRoot.OperatorPromptSubmitResult.Bead == nil {
 			break
@@ -7284,6 +7339,28 @@ func (ec *executionContext) field_Mutation_documentWrite_args(ctx context.Contex
 		return nil, err
 	}
 	args["content"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_operatorPromptApprove_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_operatorPromptCancel_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
 	return args, nil
 }
 
@@ -23057,6 +23134,8 @@ func (ec *executionContext) fieldContext_Mutation_operatorPromptSubmit(ctx conte
 				return ec.fieldContext_OperatorPromptSubmitResult_bead(ctx, field)
 			case "deduplicated":
 				return ec.fieldContext_OperatorPromptSubmitResult_deduplicated(ctx, field)
+			case "autoApproved":
+				return ec.fieldContext_OperatorPromptSubmitResult_autoApproved(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type OperatorPromptSubmitResult", field.Name)
 		},
@@ -23069,6 +23148,96 @@ func (ec *executionContext) fieldContext_Mutation_operatorPromptSubmit(ctx conte
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Mutation_operatorPromptSubmit_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_operatorPromptApprove(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_operatorPromptApprove,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().OperatorPromptApprove(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalNOperatorPromptApproveResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐOperatorPromptApproveResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_operatorPromptApprove(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "bead":
+				return ec.fieldContext_OperatorPromptApproveResult_bead(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type OperatorPromptApproveResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_operatorPromptApprove_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_operatorPromptCancel(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_operatorPromptCancel,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().OperatorPromptCancel(ctx, fc.Args["id"].(string))
+		},
+		nil,
+		ec.marshalNOperatorPromptCancelResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐOperatorPromptCancelResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_operatorPromptCancel(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "bead":
+				return ec.fieldContext_OperatorPromptCancelResult_bead(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type OperatorPromptCancelResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_operatorPromptCancel_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -23191,6 +23360,132 @@ func (ec *executionContext) fieldContext_NodeInfo_lastSeen(_ context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _OperatorPromptApproveResult_bead(ctx context.Context, field graphql.CollectedField, obj *OperatorPromptApproveResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorPromptApproveResult_bead,
+		func(ctx context.Context) (any, error) {
+			return obj.Bead, nil
+		},
+		nil,
+		ec.marshalNBead2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐBead,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorPromptApproveResult_bead(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorPromptApproveResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Bead_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Bead_title(ctx, field)
+			case "status":
+				return ec.fieldContext_Bead_status(ctx, field)
+			case "priority":
+				return ec.fieldContext_Bead_priority(ctx, field)
+			case "issueType":
+				return ec.fieldContext_Bead_issueType(ctx, field)
+			case "owner":
+				return ec.fieldContext_Bead_owner(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Bead_createdAt(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Bead_createdBy(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Bead_updatedAt(ctx, field)
+			case "labels":
+				return ec.fieldContext_Bead_labels(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
+			case "parent":
+				return ec.fieldContext_Bead_parent(ctx, field)
+			case "description":
+				return ec.fieldContext_Bead_description(ctx, field)
+			case "acceptance":
+				return ec.fieldContext_Bead_acceptance(ctx, field)
+			case "notes":
+				return ec.fieldContext_Bead_notes(ctx, field)
+			case "dependencies":
+				return ec.fieldContext_Bead_dependencies(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Bead", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorPromptCancelResult_bead(ctx context.Context, field graphql.CollectedField, obj *OperatorPromptCancelResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorPromptCancelResult_bead,
+		func(ctx context.Context) (any, error) {
+			return obj.Bead, nil
+		},
+		nil,
+		ec.marshalNBead2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐBead,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorPromptCancelResult_bead(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorPromptCancelResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Bead_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Bead_title(ctx, field)
+			case "status":
+				return ec.fieldContext_Bead_status(ctx, field)
+			case "priority":
+				return ec.fieldContext_Bead_priority(ctx, field)
+			case "issueType":
+				return ec.fieldContext_Bead_issueType(ctx, field)
+			case "owner":
+				return ec.fieldContext_Bead_owner(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Bead_createdAt(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Bead_createdBy(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Bead_updatedAt(ctx, field)
+			case "labels":
+				return ec.fieldContext_Bead_labels(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
+			case "parent":
+				return ec.fieldContext_Bead_parent(ctx, field)
+			case "description":
+				return ec.fieldContext_Bead_description(ctx, field)
+			case "acceptance":
+				return ec.fieldContext_Bead_acceptance(ctx, field)
+			case "notes":
+				return ec.fieldContext_Bead_notes(ctx, field)
+			case "dependencies":
+				return ec.fieldContext_Bead_dependencies(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Bead", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _OperatorPromptSubmitResult_bead(ctx context.Context, field graphql.CollectedField, obj *OperatorPromptSubmitResult) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -23271,6 +23566,35 @@ func (ec *executionContext) _OperatorPromptSubmitResult_deduplicated(ctx context
 }
 
 func (ec *executionContext) fieldContext_OperatorPromptSubmitResult_deduplicated(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorPromptSubmitResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorPromptSubmitResult_autoApproved(ctx context.Context, field graphql.CollectedField, obj *OperatorPromptSubmitResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorPromptSubmitResult_autoApproved,
+		func(ctx context.Context) (any, error) {
+			return obj.AutoApproved, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorPromptSubmitResult_autoApproved(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "OperatorPromptSubmitResult",
 		Field:      field,
@@ -39187,7 +39511,7 @@ func (ec *executionContext) unmarshalInputOperatorPromptSubmitInput(ctx context.
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"prompt", "tier", "idempotencyKey"}
+	fieldsInOrder := [...]string{"prompt", "tier", "idempotencyKey", "autoApprove"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -39215,6 +39539,13 @@ func (ec *executionContext) unmarshalInputOperatorPromptSubmitInput(ctx context.
 				return it, err
 			}
 			it.IdempotencyKey = data
+		case "autoApprove":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("autoApprove"))
+			data, err := ec.unmarshalOBoolean2ᚖbool(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.AutoApprove = data
 		}
 	}
 	return it, nil
@@ -43612,6 +43943,20 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "operatorPromptApprove":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_operatorPromptApprove(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "operatorPromptCancel":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_operatorPromptCancel(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -43689,6 +44034,84 @@ func (ec *executionContext) _NodeInfo(ctx context.Context, sel ast.SelectionSet,
 	return out
 }
 
+var operatorPromptApproveResultImplementors = []string{"OperatorPromptApproveResult"}
+
+func (ec *executionContext) _OperatorPromptApproveResult(ctx context.Context, sel ast.SelectionSet, obj *OperatorPromptApproveResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, operatorPromptApproveResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OperatorPromptApproveResult")
+		case "bead":
+			out.Values[i] = ec._OperatorPromptApproveResult_bead(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var operatorPromptCancelResultImplementors = []string{"OperatorPromptCancelResult"}
+
+func (ec *executionContext) _OperatorPromptCancelResult(ctx context.Context, sel ast.SelectionSet, obj *OperatorPromptCancelResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, operatorPromptCancelResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OperatorPromptCancelResult")
+		case "bead":
+			out.Values[i] = ec._OperatorPromptCancelResult_bead(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var operatorPromptSubmitResultImplementors = []string{"OperatorPromptSubmitResult"}
 
 func (ec *executionContext) _OperatorPromptSubmitResult(ctx context.Context, sel ast.SelectionSet, obj *OperatorPromptSubmitResult) graphql.Marshaler {
@@ -43707,6 +44130,11 @@ func (ec *executionContext) _OperatorPromptSubmitResult(ctx context.Context, sel
 			}
 		case "deduplicated":
 			out.Values[i] = ec._OperatorPromptSubmitResult_deduplicated(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "autoApproved":
+			out.Values[i] = ec._OperatorPromptSubmitResult_autoApproved(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -50106,6 +50534,34 @@ func (ec *executionContext) marshalNNodeInfo2ᚖgithubᚗcomᚋDocumentDrivenDX�
 		return graphql.Null
 	}
 	return ec._NodeInfo(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNOperatorPromptApproveResult2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐOperatorPromptApproveResult(ctx context.Context, sel ast.SelectionSet, v OperatorPromptApproveResult) graphql.Marshaler {
+	return ec._OperatorPromptApproveResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNOperatorPromptApproveResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐOperatorPromptApproveResult(ctx context.Context, sel ast.SelectionSet, v *OperatorPromptApproveResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OperatorPromptApproveResult(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNOperatorPromptCancelResult2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐOperatorPromptCancelResult(ctx context.Context, sel ast.SelectionSet, v OperatorPromptCancelResult) graphql.Marshaler {
+	return ec._OperatorPromptCancelResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNOperatorPromptCancelResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐOperatorPromptCancelResult(ctx context.Context, sel ast.SelectionSet, v *OperatorPromptCancelResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OperatorPromptCancelResult(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNOperatorPromptSubmitInput2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐOperatorPromptSubmitInput(ctx context.Context, v any) (OperatorPromptSubmitInput, error) {

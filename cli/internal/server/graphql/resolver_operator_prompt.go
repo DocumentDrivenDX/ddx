@@ -27,6 +27,23 @@ const OperatorPromptIdempotencyTTL = 24 * time.Hour
 // identity (localhost OR ts-net WhoIs).
 const OperatorPromptEventKind = "operator_prompt_submit"
 
+// OperatorPromptApproveEventKind is the BeadEvent.Kind appended to an
+// operator-prompt bead's audit log when it transitions proposed → open
+// (either via operatorPromptApprove or via the auto-approve path on
+// operatorPromptSubmit).
+const OperatorPromptApproveEventKind = "operator_prompt_approve"
+
+// OperatorPromptCancelEventKind is the BeadEvent.Kind appended to an
+// operator-prompt bead's audit log when it transitions proposed → cancelled
+// via operatorPromptCancel.
+const OperatorPromptCancelEventKind = "operator_prompt_cancel"
+
+// OperatorPromptAllowlistLocalhostSentinel is the sentinel allowlist entry
+// that grants any localhost-kind identity auto-approve / approve rights.
+// Per the locked Story 15 decision, ts-net identities are never eligible
+// regardless of the allowlist contents.
+const OperatorPromptAllowlistLocalhostSentinel = "localhost"
+
 // httpRequestKey is the context key used by the server to plumb the
 // originating *http.Request into GraphQL resolver calls so the resolver can
 // validate CSRF tokens and capture the originating identity.
@@ -161,6 +178,14 @@ func (s *StaticCSRFTokenStore) Validate(presented string) bool {
 // resolver itself only emits the error.
 var errCSRF = errors.New("operator-prompts: CSRF token missing or invalid (status: 403)")
 
+// errAutoApproveDenied is returned by OperatorPromptApprove (and is the
+// reason auto-approve gets demoted to a plain proposed bead inside
+// OperatorPromptSubmit) when the caller's identity is not on the per-project
+// allowlist. ts-net identities always hit this path regardless of allowlist
+// contents (locked Story 15 decision: ts-net peers may not blanket
+// auto-approve operator prompts).
+var errAutoApproveDenied = errors.New("operator-prompts: identity not on per-project auto-approve allowlist (status: 403)")
+
 // OperatorPromptSubmit implements the operatorPromptSubmit mutation: it
 // validates the CSRF token from the request header, deduplicates within a
 // 24h window by idempotency key, and (on first submission) creates a new
@@ -236,6 +261,32 @@ func (r *mutationResolver) OperatorPromptSubmit(ctx context.Context, input Opera
 
 	cache.Store(input.IdempotencyKey, b.ID)
 
+	// Auto-approve path: only when the caller asked for it AND the identity
+	// is on the per-project allowlist. ts-net identities never qualify
+	// (locked Story 15 decision). On denial we leave the bead in proposed
+	// and return autoApproved=false; the caller can still issue a manual
+	// operatorPromptApprove later from a permitted identity.
+	autoApproved := false
+	if input.AutoApprove != nil && *input.AutoApprove {
+		if r.canAutoApprove(identity) {
+			if err := store.Update(b.ID, func(updated *bead.Bead) {
+				updated.Status = bead.StatusOpen
+			}); err != nil {
+				return nil, fmt.Errorf("operator-prompts: auto-approve update: %w", err)
+			}
+			if err := store.AppendEvent(b.ID, bead.BeadEvent{
+				Kind:    OperatorPromptApproveEventKind,
+				Summary: "operator prompt auto-approved on submit",
+				Body:    fmt.Sprintf("identity=%s actor=%s", identity.kind, identity.actor),
+				Actor:   identity.actor,
+				Source:  "graphql:operatorPromptSubmit",
+			}); err != nil {
+				return nil, fmt.Errorf("operator-prompts: append auto-approve event: %w", err)
+			}
+			autoApproved = true
+		}
+	}
+
 	// Re-read so the audit event materializes in the returned snapshot.
 	persisted, err := store.Get(b.ID)
 	if err != nil {
@@ -244,7 +295,142 @@ func (r *mutationResolver) OperatorPromptSubmit(ctx context.Context, input Opera
 	return &OperatorPromptSubmitResult{
 		Bead:         beadModelFromBead(persisted),
 		Deduplicated: false,
+		AutoApproved: autoApproved,
 	}, nil
+}
+
+// OperatorPromptApprove implements the operatorPromptApprove mutation:
+// validates CSRF, verifies the bead is a proposed operator-prompt, enforces
+// the per-project allowlist (ts-net identities are never eligible per
+// locked decision), transitions proposed → open, and appends an audit event
+// recording the approver.
+func (r *mutationResolver) OperatorPromptApprove(ctx context.Context, id string) (*OperatorPromptApproveResult, error) {
+	httpReq, ident, err := r.requireOperatorPromptCSRF(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if !r.canAutoApprove(ident) {
+		return nil, errAutoApproveDenied
+	}
+
+	store := r.beadStore()
+	existing, err := store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	if existing.IssueType != bead.IssueTypeOperatorPrompt {
+		return nil, fmt.Errorf("operator-prompts: bead %s is not an operator-prompt (issue_type=%q)", id, existing.IssueType)
+	}
+	if existing.Status != bead.StatusProposed {
+		return nil, fmt.Errorf("operator-prompts: bead %s is not in proposed status (got %q); cannot approve", id, existing.Status)
+	}
+	if err := store.Update(id, func(b *bead.Bead) {
+		b.Status = bead.StatusOpen
+	}); err != nil {
+		return nil, err
+	}
+	if err := store.AppendEvent(id, bead.BeadEvent{
+		Kind:    OperatorPromptApproveEventKind,
+		Summary: "operator prompt approved",
+		Body:    fmt.Sprintf("identity=%s actor=%s remote_addr=%s", ident.kind, ident.actor, httpReq.RemoteAddr),
+		Actor:   ident.actor,
+		Source:  "graphql:operatorPromptApprove",
+	}); err != nil {
+		return nil, fmt.Errorf("operator-prompts: append approve audit event: %w", err)
+	}
+	persisted, err := store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	return &OperatorPromptApproveResult{Bead: beadModelFromBead(persisted)}, nil
+}
+
+// OperatorPromptCancel implements the operatorPromptCancel mutation:
+// validates CSRF, verifies the bead is a proposed operator-prompt,
+// transitions proposed → cancelled, and appends an audit event recording
+// the canceller. Cancellation is open to any trusted identity (the
+// allowlist gates auto-approval, not rejection) so an operator who
+// regrets a submission can withdraw it without first being added to the
+// approval allowlist.
+func (r *mutationResolver) OperatorPromptCancel(ctx context.Context, id string) (*OperatorPromptCancelResult, error) {
+	httpReq, ident, err := r.requireOperatorPromptCSRF(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	store := r.beadStore()
+	existing, err := store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	if existing.IssueType != bead.IssueTypeOperatorPrompt {
+		return nil, fmt.Errorf("operator-prompts: bead %s is not an operator-prompt (issue_type=%q)", id, existing.IssueType)
+	}
+	if existing.Status != bead.StatusProposed {
+		return nil, fmt.Errorf("operator-prompts: bead %s is not in proposed status (got %q); cannot cancel", id, existing.Status)
+	}
+	if err := store.Update(id, func(b *bead.Bead) {
+		b.Status = bead.StatusCancelled
+	}); err != nil {
+		return nil, err
+	}
+	if err := store.AppendEvent(id, bead.BeadEvent{
+		Kind:    OperatorPromptCancelEventKind,
+		Summary: "operator prompt cancelled",
+		Body:    fmt.Sprintf("identity=%s actor=%s remote_addr=%s", ident.kind, ident.actor, httpReq.RemoteAddr),
+		Actor:   ident.actor,
+		Source:  "graphql:operatorPromptCancel",
+	}); err != nil {
+		return nil, fmt.Errorf("operator-prompts: append cancel audit event: %w", err)
+	}
+	persisted, err := store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	return &OperatorPromptCancelResult{Bead: beadModelFromBead(persisted)}, nil
+}
+
+// requireOperatorPromptCSRF is the shared preamble for the approve and
+// cancel mutations. It pulls the originating *http.Request from context
+// (the server's GraphQL handler installs it via WithHTTPRequest), enforces
+// the CSRF token check against the configured store, and returns the
+// classified identity.
+func (r *mutationResolver) requireOperatorPromptCSRF(ctx context.Context) (*http.Request, operatorPromptIdentityInfo, error) {
+	if r.WorkingDir == "" {
+		return nil, operatorPromptIdentityInfo{}, fmt.Errorf("working directory not configured")
+	}
+	httpReq := httpRequestFromContext(ctx)
+	if httpReq == nil {
+		return nil, operatorPromptIdentityInfo{}, errCSRF
+	}
+	presented := httpReq.Header.Get(CSRFHeaderName)
+	if r.CSRFTokens == nil || !r.CSRFTokens.Validate(presented) {
+		return nil, operatorPromptIdentityInfo{}, errCSRF
+	}
+	return httpReq, operatorPromptIdentity(httpReq), nil
+}
+
+// canAutoApprove reports whether ident is authorized to approve operator
+// prompts under the resolver's allowlist. ts-net identities are denied
+// unconditionally (locked Story 15 decision). For localhost identities,
+// the literal sentinel "localhost" matches any actor; otherwise the
+// allowlist entry must equal the identity's actor string.
+func (r *Resolver) canAutoApprove(ident operatorPromptIdentityInfo) bool {
+	if ident.kind != "localhost" {
+		return false
+	}
+	if len(r.OperatorPromptAutoApproveAllowlist) == 0 {
+		return false
+	}
+	for _, entry := range r.OperatorPromptAutoApproveAllowlist {
+		if entry == OperatorPromptAllowlistLocalhostSentinel {
+			return true
+		}
+		if entry == ident.actor {
+			return true
+		}
+	}
+	return false
 }
 
 type operatorPromptIdentityInfo struct {

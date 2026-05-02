@@ -94,6 +94,14 @@ type Server struct {
 	// idempotency key within a 24-hour window. Process-local; survives
 	// only for the lifetime of the server process.
 	operatorPromptIdempotency *ddxgraphql.MemoryIdempotencyCache
+	// operatorPromptAutoApproveAllowlist is the per-project allowlist of
+	// localhost identity actors permitted to auto-approve their own
+	// operator-prompt submissions and to invoke operatorPromptApprove. The
+	// locked Story 15 decision restricts approval to configured-localhost
+	// identities; ts-net peers are never eligible. Seeded from
+	// DDX_OPERATOR_PROMPT_ALLOWLIST (comma-separated) at server construction
+	// and may be overridden by tests via SetOperatorPromptAutoApproveAllowlist.
+	operatorPromptAutoApproveAllowlist []string
 
 	routePatterns []string // every pattern registered via route(); used by gate tests
 }
@@ -116,15 +124,16 @@ func New(addr, workingDir string) *Server {
 		csrfStore = ddxgraphql.NewStaticCSRFTokenStoreWithToken("")
 	}
 	s := &Server{
-		Addr:                      addr,
-		WorkingDir:                workingDir,
-		mux:                       http.NewServeMux(),
-		startTime:                 time.Now().UTC(),
-		workers:                   workers,
-		beadHub:                   beadHub,
-		state:                     state,
-		csrfTokens:                csrfStore,
-		operatorPromptIdempotency: ddxgraphql.NewMemoryIdempotencyCache(),
+		Addr:                               addr,
+		WorkingDir:                         workingDir,
+		mux:                                http.NewServeMux(),
+		startTime:                          time.Now().UTC(),
+		workers:                            workers,
+		beadHub:                            beadHub,
+		state:                              state,
+		csrfTokens:                         csrfStore,
+		operatorPromptIdempotency:          ddxgraphql.NewMemoryIdempotencyCache(),
+		operatorPromptAutoApproveAllowlist: parseOperatorPromptAllowlistEnv(os.Getenv("DDX_OPERATOR_PROMPT_ALLOWLIST")),
 	}
 	state.coordinatorReg = workers.LandCoordinators
 
@@ -134,6 +143,33 @@ func New(addr, workingDir string) *Server {
 
 	s.routes()
 	return s
+}
+
+// parseOperatorPromptAllowlistEnv parses a comma-separated identity list
+// (DDX_OPERATOR_PROMPT_ALLOWLIST) into a normalized allowlist. Empty entries
+// are skipped; whitespace is trimmed. The literal sentinel "localhost"
+// matches any localhost-kind actor.
+func parseOperatorPromptAllowlistEnv(raw string) []string {
+	if raw = strings.TrimSpace(raw); raw == "" {
+		return nil
+	}
+	parts := strings.Split(raw, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		out = append(out, p)
+	}
+	return out
+}
+
+// SetOperatorPromptAutoApproveAllowlist replaces the in-memory allowlist
+// used by operatorPromptSubmit (with autoApprove=true) and operatorPromptApprove.
+// Tests use this to install a deterministic allowlist without juggling env vars.
+func (s *Server) SetOperatorPromptAutoApproveAllowlist(allowlist []string) {
+	s.operatorPromptAutoApproveAllowlist = append([]string(nil), allowlist...)
 }
 
 // resolveNodeName returns DDX_NODE_NAME env, or the system hostname.
@@ -4558,15 +4594,16 @@ func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	// Create gqlgen server with the DDX GraphQL schema
 	gqlServer := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
 		Resolvers: &ddxgraphql.Resolver{
-			State:                     s.state,
-			WorkingDir:                s.WorkingDir,
-			Workers:                   s.workers,
-			BeadBus:                   s.beadHub,
-			Actions:                   &workerDispatchAdapter{manager: s.workers},
-			ExecLogs:                  &execLogAdapter{workingDir: s.WorkingDir},
-			CoordMetrics:              &coordMetricsAdapter{reg: s.workers.LandCoordinators},
-			CSRFTokens:                s.csrfTokens,
-			OperatorPromptIdempotency: s.operatorPromptIdempotency,
+			State:                              s.state,
+			WorkingDir:                         s.WorkingDir,
+			Workers:                            s.workers,
+			BeadBus:                            s.beadHub,
+			Actions:                            &workerDispatchAdapter{manager: s.workers},
+			ExecLogs:                           &execLogAdapter{workingDir: s.WorkingDir},
+			CoordMetrics:                       &coordMetricsAdapter{reg: s.workers.LandCoordinators},
+			CSRFTokens:                         s.csrfTokens,
+			OperatorPromptIdempotency:          s.operatorPromptIdempotency,
+			OperatorPromptAutoApproveAllowlist: s.operatorPromptAutoApproveAllowlist,
 		},
 		Directives: ddxgraphql.DirectiveRoot{},
 	}))
