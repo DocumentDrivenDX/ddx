@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T115500-e71872c8",
+  "bead_id": "ddx-a61bf8ee",
+  "base_rev": "6a32127f6355af4cc908a9f4a145d0b75a4237aa",
+  "created_at": "2026-05-02T11:55:01.61967231Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a61bf8ee",
+    "title": "Story 12: optimize ddx run/try/work prompts",
+    "description": "Sub-epic for Story 12. Full plan at /tmp/story-12-final.md. Children listed under this epic carry the testable ACs.",
+    "acceptance": "All child beads closed. Locked decisions from the planning round honored.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "story:12"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:55:00Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T11:55:00.410858428Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T115500-e71872c8",
+    "prompt": ".ddx/executions/20260502T115500-e71872c8/prompt.md",
+    "manifest": ".ddx/executions/20260502T115500-e71872c8/manifest.json",
+    "result": ".ddx/executions/20260502T115500-e71872c8/result.json",
+    "checks": ".ddx/executions/20260502T115500-e71872c8/checks.json",
+    "usage": ".ddx/executions/20260502T115500-e71872c8/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a61bf8ee-20260502T115500-e71872c8"
+  }
+}
