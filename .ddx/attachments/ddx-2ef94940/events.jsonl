@@ -1,0 +1,2 @@
+{"actor":"ddx","body":"failed to read worktree HEAD: git rev-parse HEAD: exit status 128","created_at":"2026-04-13T22:12:05.258556042Z","kind":"execute-bead","source":"ddx agent execute-loop","summary":"execution_failed"}
+{"actor":"ddx","body":"success\nresult_rev=e0f5fca79640c9ba54c8ef27113597e7e4dfaeaa\nbase_rev=4f27f2a93e352e755caba62918ae191dee4a20f6","created_at":"2026-04-14T08:13:37.367269172Z","kind":"execute-bead","source":"ddx agent execute-loop","summary":"success"}

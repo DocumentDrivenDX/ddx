@@ -1,0 +1,188 @@
+=== hx-03e23ec9 ===
+ID:       hx-03e23ec9
+Title:    correctness: preserve closing provenance for non-metadata review beads
+Type:     task
+Status:   closed
+Priority: 0
+Labels:   helix, phase:build, review-finding, severity:medium, area:cli, area:bead
+Owner:    erik
+Desc:     Review finding from fresh-eyes review.
+File: cli/cmd/bead.go:175
+Category: correctness
+Severity: medium
+Description: Commit 91f17a05b054b92d6d2b883bb4563e18fc2ce4d8 treats every bead carrying review labels as metadata-only by setting `recordClosingProvenance := !isMetadataOnlyReviewBead(beadBeforeClose)` and defining `isMetadataOnlyReviewBead` purely from labels. That is broader than the fix described in the commit message and FEAT-019: only metadata-only review closes should omit `closing_commit_sha`. Review beads can legitimately govern real docs or code changes, and this patch now drops their provenance even when the caller provides `--commit` or the close lands alongside real staged work. In a throwaway git repo with the current CLI binary, closing a normal bead with `--commit <short-head>` recorded `closing_commit_sha`, while closing an otherwise identical `action:review` bead with the same explicit commit omitted the field entirely. That makes replay and audit for non-metadata review passes fall back to sessionless/manual mode despite an exact implementation boundary being available.
+Suggested fix: Narrow the suppression check to actual metadata-only review closes instead of all review-labeled beads, and add regression coverage for both explicit-commit and mixed-close review flows so non-metadata review beads still retain exact closing provenance.
+Accept:   A review-labeled bead closed with an explicit `--commit` or with real staged implementation/docs changes records the exact closing_commit_sha unless the close is metadata-only, and regression coverage proves metadata-only review closes still omit the field while non-metadata review closes preserve it.
+Created:  2026-04-10 06:20:47
+Updated:  2026-04-10 10:05:15
+Commit:   2ede83adaf2c2f28020b01e820f8deffc159b886
+Claimed:  2026-04-10T10:03:45Z
+Machine:  eitri
+spec-id: cli/cmd/bead.go
+archived_at: 2026-05-02T04:37:57Z
+
+=== hx-fee1dec1 ===
+ID:       hx-fee1dec1
+Title:    correctness: do not close hx-6855d237 before its acceptance is true
+Type:     task
+Status:   closed
+Priority: 0
+Labels:   helix, phase:build, review-finding, severity:medium, area:bead, area:docs
+Owner:    erik
+Desc:     Review finding from fresh-eyes review.
+File: .ddx/beads.jsonl:86
+Category: correctness
+Severity: medium
+Description: Commit f58e708dc6672763e7adb31e294fc26d4da1b7db appends hx-6855d237 as a closed review-finding bead, but its acceptance requires ddx bead show hx-7c184555 --json to omit closing_commit_sha and that condition is still false after the commit. The reviewed diff only adds the hx-6855d237 row; it does not repair hx-7c184555, and ddx bead show hx-7c184555 --json still reports closing_commit_sha=2361670c68103160987c9851851819317a3b357e. The newly added row also records closing_commit_sha=89d7b1193c0d8c8f980e955576da6a7545f36b04, so replay/audit now shows hx-6855d237 as complete even though the governed repair never landed.
+Suggested fix: Reopen or otherwise repair hx-6855d237 through supported ddx bead commands, clear hx-7c184555.closing_commit_sha as its acceptance requires, and only close hx-6855d237 after the tracker state actually satisfies that acceptance with non-misleading provenance.
+Accept:   ddx bead show hx-7c184555 --json omits closing_commit_sha, and ddx bead show hx-6855d237 --json no longer reports closing_commit_sha=89d7b1193c0d8c8f980e955576da6a7545f36b04 while remaining open until that repair lands or closing only after its acceptance is satisfied
+Created:  2026-04-10 05:09:17
+Updated:  2026-04-10 08:05:45
+Claimed:  2026-04-10T08:05:04Z
+Machine:  eitri
+archived_at: 2026-05-02T04:37:57Z
+spec-id: .ddx/beads.jsonl
+
+=== ddx-3d64fd16 ===
+ID:       ddx-3d64fd16
+Title:    Visibility 2: bump github.com/DocumentDrivenDX/agent to v0.3.5+
+Type:     task
+Status:   closed
+Priority: 1
+Labels:   ddx, phase:build, kind:agent-routing, area:agent, area:cli
+Owner:    ddx
+Parent:   ddx-bd0691fe
+Deps:     ddx-48cee66e
+Desc:     Update cli/go.mod to bump github.com/DocumentDrivenDX/agent from v0.3.3 to v0.3.5 (or latest available GitHub release). Run `go mod tidy`. Fix any compile errors from API changes. Keep the pin to a GitHub release tag — do NOT add a `replace` directive pointing at /home/erik/Projects/agent. If the bump exposes breaking changes that affect ddx-agent integration, document them in the bead's completion note.
+Accept:   (1) cli/go.mod shows the new version. (2) `cd cli && go build ./...` passes. (3) `cd cli && go test ./internal/agent/... -count=1` passes. (4) No replace directive in go.mod pointing at a local path. (5) Completion note lists any API changes that required ddx-side adjustments.
+Created:  2026-04-14 20:34:10
+Updated:  2026-04-15 01:11:16
+Session:  eb-1077fb7f
+Commit:   c4d4a0ebeecec3287be04a0dcf6f9b1d82320a05
+Claimed:  2026-04-15T01:09:48Z
+Machine:  eitri
+execute-loop-heartbeat-at: 2026-04-15T01:10:48.638309069Z
+archived_at: 2026-05-02T04:37:57Z
+events_attachment: ddx-3d64fd16/events.jsonl
+
+=== ddx-869848ec ===
+ID:       ddx-869848ec
+Title:    bug: script test-harness leaks into production tier fallback chain
+Type:     bug
+Status:   closed
+Priority: 1
+Labels:   kind:bugfix, area:agent, area:routing
+Owner:    erik
+Desc:     ## Problem
+
+The `script` harness is a test-only sentinel (`cli/internal/agent/registry.go:127` — comment says "Binary: ddx-script-agent // sentinel — never actually exec'd") that interprets directive files for deterministic test execution. It has no LLM and cannot produce real work.
+
+Despite being test-only, it shows up in production tier fallback chains. Observed 2026-04-17 on bead agent-ecc79bf0:
+
+```
+22:28:39  tier=cheap      harness=lmstudio  model=qwen3.5-27b    execution_failed (exec: no command)
+22:28:43  tier=standard   harness=script    model=<prompt.md>    execution_failed (unknown directive "<execute-bead>")
+22:28:47  tier=smart      harness=codex     model=gpt-5.4        (succeeded)
+```
+
+The `<execute-bead>` XML prompt that execute-bead emits is obviously not a valid script directive file — script's parser choked on it on the first line.
+
+## Root cause
+
+`cli/internal/agent/registry.go:125-132` registers `script` with:
+- `CostClass: "local"`
+- `IsLocal: true`
+
+`cli/internal/agent/routing.go:scoreCandidate` rewards any `local` harness with +25 (standard profile) or +40 (cheap profile). Because script is registered as local AND always "available" (it doesn't need an LLM or network), it scores highly whenever real local harnesses (LM Studio, ollama, embedded agent) are missing or failed.
+
+There is no filter in the routing logic that excludes `script` (or `virtual`) from execute-bead candidate selection.
+
+## Expected behavior
+
+`script` and `virtual` should be test-only harnesses, never selected by execute-bead / execute-loop production routing. They should only be reachable via an explicit `--harness script` / `--harness virtual` override, not via tier-based profile routing.
+
+## Proposed fix
+
+1. Add a `TestOnly bool` field on the registry struct (or reuse an existing negative marker).
+2. Filter test-only harnesses out of the candidate list in routing.go before scoring.
+3. Keep explicit opt-in (`--harness script`) working so the existing script tests still pass.
+4. Add a regression test that execute-loop never selects script/virtual when real harnesses are unavailable.
+
+## Files likely touched
+- cli/internal/agent/registry.go — add TestOnly flag
+- cli/internal/agent/routing.go — filter TestOnly before scoring
+- cli/internal/agent/routing_test.go — regression test
+Accept:   execute-loop never selects `script` or `virtual` harness via tier routing (cheap/standard/smart). Explicit `--harness script` still works. Regression test covers the fallback-when-real-harnesses-fail case.
+Created:  2026-04-17 22:35:38
+Updated:  2026-04-17 22:49:08
+Claimed:  2026-04-17T22:41:46Z
+
+=== ddx-996f77d7 ===
+ID:       ddx-996f77d7
+Title:    CRITICAL: replace serviceconfig.go ServiceConfigAdapter with Options.ConfigPath plumbing
+Type:     task
+Status:   closed
+Priority: 0
+Labels:   phase:build, area:agent, kind:critical-path
+Parent:   ddx-ac5c7fdb
+Desc:     cli/internal/agent/serviceconfig.go currently loads agent config in DDx (agentconfig.Load) and wraps it in ServiceConfigAdapter to satisfy agentlib.ServiceConfig interface. This pattern was a workaround until ConfigPath was plumbed.
+
+Per CONTRACT-003 ServiceOptions: "ConfigPath string — optional override; default $XDG_CONFIG_HOME/ddx-agent/config.yaml". Agent loads its own config from the path. Verify this works end-to-end and migrate.
+
+Two-step verification:
+1. Confirm agentlib.New(ServiceOptions{ConfigPath: ...}) actually loads config from the given path. If yes:
+2. Replace NewServiceFromWorkDir to pass ConfigPath instead of constructing ServiceConfigAdapter.
+
+If agent does NOT yet support the ConfigPath load pattern, file an agent-side bead for it (small).
+
+After this lands, serviceconfig.go either (a) deletes entirely, or (b) shrinks to a small workdir-derives-config-path helper.
+Accept:   - [ ] cli/internal/agent/serviceconfig.go does not import agent/config
+- [ ] All cmd/ + server/ calls to NewServiceFromWorkDir continue to work
+- [ ] cd cli && go build ./... clean; tests pass
+Created:  2026-04-19 03:51:24
+Updated:  2026-04-19 04:10:40
+Commit:   d328a6aff02b1ff96f52ea59f55b6fe19b4ec054
+archived_at: 2026-05-02T04:37:57Z
+
+Error: bead: not found: hx-03e23ec9
+Usage:
+  ddx bead evidence list <id> [flags]
+
+Flags:
+  -h, --help   help for list
+      --json   Output as JSON
+
+Global Flags:
+      --config string              config file (default is $HOME/.ddx.yml)
+Error: bead: not found: hx-fee1dec1
+Usage:
+  ddx bead evidence list <id> [flags]
+
+Flags:
+  -h, --help   help for list
+      --json   Output as JSON
+
+Global Flags:
+      --config string              config file (default is $HOME/.ddx.yml)
+events.jsonl
+=== events for ddx-3d64fd16 ===
+Error: bead: not found: ddx-3d64fd16
+Usage:
+  ddx bead evidence list <id> [flags]
+
+Flags:
+  -h, --help   help for list
+      --json   Output as JSON
+
+Global Flags:
+      --config string              config file (default is $HOME/.ddx.yml)
+Error: bead: not found: ddx-869848ec
+Usage:
+  ddx bead evidence list <id> [flags]
+
+Flags:
+  -h, --help   help for list
+      --json   Output as JSON
+
+Global Flags:
+      --config string              config file (default is $HOME/.ddx.yml)

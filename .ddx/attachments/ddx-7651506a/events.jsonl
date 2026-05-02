@@ -1,0 +1,1 @@
+{"actor":"erik","body":"agent execution failed\nresult_rev=cbf4b38db2194aa169b1169ae5f01cbecad1a8b2\nbase_rev=cbf4b38db2194aa169b1169ae5f01cbecad1a8b2\nretry_after=2026-04-14T02:45:54Z","created_at":"2026-04-13T20:45:54.129399523Z","kind":"execute-bead","source":"ddx agent execute-loop","summary":"execution_failed"}

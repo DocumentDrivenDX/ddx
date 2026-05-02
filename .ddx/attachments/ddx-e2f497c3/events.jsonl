@@ -1,0 +1,1 @@
+{"actor":"ddx","body":"{\"resolved_provider\":\"agent\",\"resolved_model\":\"qwen/qwen3-coder-next\",\"route_reason\":\"first-available\",\"fallback_chain\":[],\"base_url\":\"http://vidar:1234/v1\"}","created_at":"2026-04-17T00:37:24.424216074Z","kind":"routing","source":"ddx agent execute-bead","summary":"provider=agent model=qwen/qwen3-coder-next reason=first-available"}

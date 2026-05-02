@@ -1,0 +1,2 @@
+{"actor":"ddx","body":"{\"resolved_provider\":\"\",\"fallback_chain\":[]}","created_at":"2026-04-16T20:28:42.206067014Z","kind":"routing","source":"ddx agent execute-bead","summary":"provider="}
+{"actor":"ddx","body":"{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}","created_at":"2026-04-16T21:49:08.186538004Z","kind":"routing","source":"ddx agent execute-bead","summary":"provider=claude"}
