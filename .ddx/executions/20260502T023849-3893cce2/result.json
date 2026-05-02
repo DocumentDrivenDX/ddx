@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean rewrite: software-factory framing intro, 10 ordered principle sections with correct slugs, each within the word budget and pointing to the deep page. One soft note: the intro links to `/docs/concepts/software-factory/`, but only `architecture.md`, `principles.md`, etc. exist under `content/docs/concepts/` — the target page is not in this diff, so the cross-link is currently dangling. AC only requires the link to be present in the intro, which it is, so this does not block; worth filing as a follow-up bead to land the software-factory concept page."
+}
