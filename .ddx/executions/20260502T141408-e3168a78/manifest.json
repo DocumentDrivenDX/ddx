@@ -1,0 +1,88 @@
+{
+  "attempt_id": "20260502T141408-e3168a78",
+  "bead_id": "ddx-ad77c46d",
+  "base_rev": "2f6141356b6b3a41c0a82e59fa1b87f6f8fcee02",
+  "created_at": "2026-05-02T14:14:10.242873422Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ad77c46d",
+    "title": "operator-prompts: schema/template/status-model — operator-prompt type, proposed status, no-self-mutation rule",
+    "description": "New bead.issueType: operator-prompt with new status: proposed. Operator-prompt cannot mutate other operator-prompts (hard ban). Library template for operator-prompt artifacts.",
+    "acceptance": "1. Bead schema accepts operator-prompt. 2. proposed status implemented. 3. Self-mutation rejected at bead-create time. 4. Tests cover all three.",
+    "parent": "ddx-1d85c927",
+    "labels": [
+      "phase:2",
+      "story:15",
+      "area:beads",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:14:08Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T14:09:30.586653855Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T140540-155225b7\",\"harness\":\"claude\",\"input_tokens\":48,\"output_tokens\":11677,\"total_tokens\":11725,\"cost_usd\":1.7738884999999998,\"duration_ms\":228368,\"exit_code\":0}",
+          "created_at": "2026-05-02T14:09:30.606683876Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=11725 cost_usd=1.7739"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T14:09:35.911935957Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only execution evidence (manifest.json, result.json) — no schema changes, no status implementation, no self-mutation guard, and no tests. None of the four acceptance criteria can be evaluated as implemented from this diff.\nharness=claude\nmodel=opus\ninput_bytes=5589\noutput_bytes=1216\nelapsed_ms=10422",
+          "created_at": "2026-05-02T14:09:46.374483684Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T14:09:46.384561049Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only execution evidence (manifest.json, result.json) — no schema changes, no status implementation, no self-mutation guard, and no tests. None of the four acceptance criteria can be evaluated as implemented from this diff.\nresult_rev=90ee4794ab527b86714760c51677d5070e75e6fb\nbase_rev=7b1ec8eda06cd65ed0e5e0264b9e1e7c81c7611a",
+          "created_at": "2026-05-02T14:09:46.394782205Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T14:14:08.885700338Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T141408-e3168a78",
+    "prompt": ".ddx/executions/20260502T141408-e3168a78/prompt.md",
+    "manifest": ".ddx/executions/20260502T141408-e3168a78/manifest.json",
+    "result": ".ddx/executions/20260502T141408-e3168a78/result.json",
+    "checks": ".ddx/executions/20260502T141408-e3168a78/checks.json",
+    "usage": ".ddx/executions/20260502T141408-e3168a78/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ad77c46d-20260502T141408-e3168a78"
+  }
+}
