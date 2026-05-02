@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T023933-3b830549",
+  "bead_id": "ddx-99a16fbd",
+  "base_rev": "a760cc3bb41d47743d33c7dcb62311d6fd3ce0b7",
+  "created_at": "2026-05-02T02:39:34.691976063Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-99a16fbd",
+    "title": "Add Lineage section to product-vision.md citing software-factory + spec-driven REF artifacts",
+    "description": "Add a 'Lineage' section near the top of docs/helix/00-discover/product-vision.md citing the three traditions DDx draws from: 1) software factories (REF-007 Greenfield/Short Microsoft 2004), 2) spec-driven development (REF-005 spec-kit, REF-006 Kiro), 3) bounded-context agent execution (REF-008 Lost in Middle, REF-009 Chroma context rot). Use ddx.depends_on to register the link in the artifact graph.",
+    "acceptance": "1. product-vision.md has a 'Lineage' section. 2. References REF-005, REF-006, REF-007, REF-008, REF-009 inline as links or citations. 3. ddx.depends_on includes those REF IDs. 4. ddx doc audit shows the new edges.",
+    "parent": "ddx-629ec5b4",
+    "labels": [
+      "site-redesign",
+      "area:specs",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T02:39:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "execute-loop-heartbeat-at": "2026-05-02T02:39:33.103795365Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T023933-3b830549",
+    "prompt": ".ddx/executions/20260502T023933-3b830549/prompt.md",
+    "manifest": ".ddx/executions/20260502T023933-3b830549/manifest.json",
+    "result": ".ddx/executions/20260502T023933-3b830549/result.json",
+    "checks": ".ddx/executions/20260502T023933-3b830549/checks.json",
+    "usage": ".ddx/executions/20260502T023933-3b830549/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-99a16fbd-20260502T023933-3b830549"
+  }
+}
