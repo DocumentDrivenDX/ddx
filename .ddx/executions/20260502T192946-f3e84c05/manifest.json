@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260502T192946-f3e84c05",
+  "bead_id": "ddx-b24e9630",
+  "base_rev": "a6105492fabd023966ef3cbd66f98687b359204f",
+  "created_at": "2026-05-02T19:29:47.542539122Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b24e9630",
+    "title": "execute-bead: distinguish 'AC verified, nothing to do' from 'gave up without progress'; do not silently close on no_changes",
+    "description": "Today execute-bead's no_changes outcome conflates two cases:\n1. Legitimate already_satisfied: the AC is currently met by prior commits; agent correctly says 'nothing to do'\n2. Silent failure: agent didn't know how to do the work, gave up, wrote no_changes_rationale.txt; loop closes the bead anyway\n\nBoth result in the same artifact (no_changes_rationale.txt) and the same close. The second case is a serious failure mode masquerading as success.\n\n**Constraint (per ADR-004)**: bd/br compatibility forbids adding new persisted status values. The bead's status stays in the canonical 6 (open/in_progress/closed/blocked/proposed/cancelled). DDx-specific execution semantics live in LABELS or EVENTS, NOT in new statuses.\n\nFix has two halves:\n\nA) Execute-bead PROMPT change (cli/internal/agent/execute_bead.go executeBeadInstructionsClaudeText / AgentText):\n- When the agent decides 'no changes', it MUST include in the no_changes_rationale.txt one of:\n  - verification_command: \u003cshell command that proves the AC is currently met\u003e AND its output showing pass\n  - status: needs_investigation + reason: \u003cwhy I cannot make progress\u003e\n- Bare 'no changes' without either is rejected by the loop\n\nB) LOOP-side verification (cli/internal/agent/execute_bead_loop.go):\n- Parse no_changes_rationale.txt\n- If verification_command present: run it; if exit 0, legitimate already_satisfied → close. If non-zero, fail to verify → bead STAYS OPEN with label 'triage:no-changes-unverified' added + emit no_changes_unverified event\n- If status: needs_investigation: bead STAYS OPEN with label 'triage:needs-investigation' added (NOT a status change), event captures the agent's reason\n- If neither present: reject — bead stays open with label 'triage:no-changes-unjustified' added + emit no_changes_unjustified event\n\nStatus NEVER changes to needs_investigation (that would violate bd/br compatibility). Auto-triage (ddx-3c154349) consumes the labels + events to drive its triage policy.",
+    "acceptance": "1. Execute-bead prompt requires verification_command OR explicit needs-investigation marker in any no_changes_rationale.txt. 2. Loop verifies the verification_command before closing as already_satisfied. 3. Implementation aligns exactly with TD-NNN NoChangesContract (per ddx-673833f4) — uses LABELS not new statuses (e.g., 'triage:needs-investigation', 'triage:no-changes-unverified', 'triage:no-changes-unjustified'). **bd/br round-trip via ddx bead export must produce a bd-importable record after this bead lands.** 4. New events use canonical names from TD: no_changes_unverified, no_changes_unjustified, no_changes_verified. 5. Tests cover all paths: verified→close, unverified→stay-open+label, unjustified→stay-open+label, needs-investigation→stay-open+label. 6. Existing beads currently in 'closed via no_changes' state are not retroactively reopened. 7. Auto-triage (ddx-3c154349) consumes the triage:* labels per TriageContract. 8. **Verify schema_compat_test.go passes.**",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "kind:fix",
+      "observed-failure"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T19:29:46Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3518486",
+      "execute-loop-heartbeat-at": "2026-05-02T19:29:46.209717326Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T192946-f3e84c05",
+    "prompt": ".ddx/executions/20260502T192946-f3e84c05/prompt.md",
+    "manifest": ".ddx/executions/20260502T192946-f3e84c05/manifest.json",
+    "result": ".ddx/executions/20260502T192946-f3e84c05/result.json",
+    "checks": ".ddx/executions/20260502T192946-f3e84c05/checks.json",
+    "usage": ".ddx/executions/20260502T192946-f3e84c05/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b24e9630-20260502T192946-f3e84c05"
+  },
+  "prompt_sha": "831041a0dc4de31a598e37348fe2e1ac40d2f55ed354ffa52817e07b240cfd39"
+}
