@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T043358-b631ab83",
+  "bead_id": "ddx-c860f82b",
+  "base_rev": "9bd0882d40f9a1e4e34d3fc85615f9c418d710dd",
+  "created_at": "2026-05-02T04:34:00.030415475Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c860f82b",
+    "title": "Run migration on this repo's beads.jsonl and verify queue operates normally",
+    "description": "After C5 lands, run the migration on the active repo's .ddx/beads.jsonl (currently 5.4MB) and verify all queue operations behave identically. Commit the resulting beads.jsonl + beads-archive.jsonl + attachments/. Re-evaluate whether the lefthook large-files exclusion for beads.jsonl is still needed (it should be — but archive may also need it).",
+    "acceptance": "1. After migration, .ddx/beads.jsonl \u003c 1MB. 2. ddx bead status shows the same Open/Closed/Ready/Blocked counts as pre-migration. 3. ddx bead show on a sample of 5 archived beads returns full data including events. 4. ddx work --once succeeds on a ready bead post-migration. 5. lefthook.yml exclusion list updated if beads-archive.jsonl will exceed 5MB. 6. Commit captures pre/post status as evidence under .ddx/executions/\u003crun-id\u003e/.",
+    "parent": "ddx-0c0565f3",
+    "labels": [
+      "area:beads",
+      "kind:operations"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T04:33:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1329405",
+      "execute-loop-heartbeat-at": "2026-05-02T04:33:58.430638624Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T043358-b631ab83",
+    "prompt": ".ddx/executions/20260502T043358-b631ab83/prompt.md",
+    "manifest": ".ddx/executions/20260502T043358-b631ab83/manifest.json",
+    "result": ".ddx/executions/20260502T043358-b631ab83/result.json",
+    "checks": ".ddx/executions/20260502T043358-b631ab83/checks.json",
+    "usage": ".ddx/executions/20260502T043358-b631ab83/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c860f82b-20260502T043358-b631ab83"
+  }
+}
