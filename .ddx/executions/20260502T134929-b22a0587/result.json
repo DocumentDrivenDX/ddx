@@ -1,0 +1,49 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "ADR-021 added at docs/helix/02-design/adr/ with Status: Accepted. Covers requireTrusted, audit-as-bead (no parallel table), no synchronous in-process mutation, multi-node delegation, prompt-injection threat model, and allowed-mutation scope. Cross-linked from FEAT-006 and FEAT-008.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "ADR placed under docs/helix/02-design/adr/ rather than docs/helix/adrs/; acceptance allows project ADR dir, and this matches existing convention.",
+      "location": "docs/helix/02-design/adr/ADR-021-operator-prompt-beads-web-write-path.md"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 823,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T134628-b06c4b1f/manifest.json",
+          ".ddx/executions/20260502T134628-b06c4b1f/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3330,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 5959,
+    "output_bytes": 893,
+    "elapsed_ms": 33557,
+    "harness": "claude",
+    "model": "opus"
+  }
+}

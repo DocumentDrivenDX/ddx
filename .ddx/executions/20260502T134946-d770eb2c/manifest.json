@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260502T134946-d770eb2c",
+  "bead_id": "ddx-51ac997b",
+  "base_rev": "7dcf538522fd2677c60539677d6afa8a0eeaa112",
+  "created_at": "2026-05-02T13:49:48.145978425Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-51ac997b",
+    "title": "escalation: ladder.Next (MinPower-only output) + tests",
+    "description": "Implement the escalation ladder as MinPower-only floors. NO vendor names. ladder.Next picks next floor on substantive failure. Skip-tier (no viable provider at floor) returns typed NoViableProviderError so the loop bumps further. Uses MinPower/MaxPower fields on ExecuteRequest that ALREADY exist in fizeau v0.9.28 (agent-79e194aa closed) — no upstream work needed for this bead. Reads previous attempt's RoutingActual.Power (lands via agent-3bb96bf5 / S10_1) to compute next floor.",
+    "acceptance": "1. Ladder type + Next() method in cli/internal/agent/escalation/. 2. Unit tests cover all transitions. 3. Skip-tier returns typed NoViableProviderError. 4. Tests assert ladder uses RoutingActual.Power as the input for next-floor computation.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:routing",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T13:49:46Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128",
+          "created_at": "2026-05-02T13:01:01.729214976Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T13:49:46.926576312Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T134946-d770eb2c",
+    "prompt": ".ddx/executions/20260502T134946-d770eb2c/prompt.md",
+    "manifest": ".ddx/executions/20260502T134946-d770eb2c/manifest.json",
+    "result": ".ddx/executions/20260502T134946-d770eb2c/result.json",
+    "checks": ".ddx/executions/20260502T134946-d770eb2c/checks.json",
+    "usage": ".ddx/executions/20260502T134946-d770eb2c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-51ac997b-20260502T134946-d770eb2c"
+  }
+}
