@@ -1,0 +1,61 @@
+# Redesign Final Verification — 2026-05-01T23:10:56-04:00
+
+## AC1: cd website && hugo builds
+(exit=0)
+
+## AC2: ddx doc audit
+  - duplicate document id "SD-021" in "/Users/erik/Projects/ddx/docs/helix/02-design/solution-designs/SD-021-service-backed-multi-node-topology.md"
+  - duplicate document id "SD-022" in "/Users/erik/Projects/ddx/docs/helix/02-design/solution-designs/SD-022-gql-svelte-migration.md"
+  - duplicate document id "SD-023" in "/Users/erik/Projects/ddx/docs/helix/02-design/solution-designs/SD-023-agent-evaluation.md"
+  - duplicate document id "TD-004" in "/Users/erik/Projects/ddx/docs/helix/02-design/technical-designs/TD-004-beads-claims-evidence.md"
+  - duplicate document id "TD-005" in "/Users/erik/Projects/ddx/docs/helix/02-design/technical-designs/TD-005-metric-runtime-history.md"
+  - duplicate document id "TD-006" in "/Users/erik/Projects/ddx/docs/helix/02-design/technical-designs/TD-006-agent-session-capture.md"
+  - duplicate document id "TD-010" in "/Users/erik/Projects/ddx/docs/helix/02-design/technical-designs/TD-010-executions.md"
+  - duplicate document id "TD-011" in "/Users/erik/Projects/ddx/docs/helix/02-design/workers-sessions-operator-surface.md"
+  - duplicate document id "TP-002" in "/Users/erik/Projects/ddx/docs/helix/03-test/test-plans/TP-002-server-web-ui.md"
+  - duplicate document id "TP-004" in "/Users/erik/Projects/ddx/docs/helix/03-test/test-plans/TP-004-beads-claims-evidence.md"
+  - duplicate document id "TP-005" in "/Users/erik/Projects/ddx/docs/helix/03-test/test-plans/TP-005-metric-runtime-history.md"
+  - duplicate document id "TP-006" in "/Users/erik/Projects/ddx/docs/helix/03-test/test-plans/TP-006-agent-session-capture.md"
+  - duplicate document id "TP-007" in "/Users/erik/Projects/ddx/docs/helix/03-test/test-plans/TP-007-e2e-smoke-tests.md"
+  - duplicate document id "TP-010" in "/Users/erik/Projects/ddx/docs/helix/03-test/test-plans/TP-010-executions.md"
+  - duplicate document id "TP-014" in "/Users/erik/Projects/ddx/docs/helix/03-test/test-plans/TP-014-token-awareness.md"
+  - duplicate document id "TP-015" in "/Users/erik/Projects/ddx/docs/helix/03-test/test-plans/TP-015-onboarding-journey.md"
+  - duplicate document id "TP-019" in "/Users/erik/Projects/ddx/docs/helix/03-test/test-plans/TP-019-agent-evaluation.md"
+  - duplicate document id "TP-020" in "/Users/erik/Projects/ddx/docs/helix/03-test/test-plans/TP-020-agent-routing-and-catalog-resolution.md"
+  - duplicate document id "ddx-concerns" in "/Users/erik/Projects/ddx/docs/helix/01-frame/concerns.md"
+  - duplicate document id "exec.FEAT-006.execute-bead-cli-regressions" in "/Users/erik/Projects/ddx/docs/helix/03-test/executions/EXEC-006-execute-bead-cli-regressions.md"
+  - duplicate document id "exec.FEAT-006.go-build" in "/Users/erik/Projects/ddx/docs/helix/03-test/executions/EXEC-006-go-build.md"
+  - duplicate document id "exec.FEAT-011.skills-validation" in "/Users/erik/Projects/ddx/docs/helix/03-test/executions/EXEC-011-skills-validation.md"
+  - duplicate document id "helix.prd" in "/Users/erik/Projects/ddx/docs/helix/01-frame/prd.md"
+  - duplicate document id "helix.workflow.principles" in "/Users/erik/Projects/ddx/docs/helix/01-frame/principles.md"
+  - duplicate document id "product-vision" in "/Users/erik/Projects/ddx/docs/helix/00-discover/product-vision.md"
+missing_dep (2):
+  - document "helix.workflow.principles" declares dependency "helix.workflow" which is not in the graph
+  - document "read-coverage-audit-2026-04-29" declares dependency "plan-2026-04-29-artifact-and-run-architecture" which is not in the graph
+
+90 integrity issue(s) found
+(exit=0)
+
+## AC3: rg -n 'Dun' website/content/ docs/
+(matches=0)
+
+## AC4: rg -n 'execute-loop|execute-bead' website/content/_index.md website/content/why/ website/content/docs/concepts/
+
+## AC5: rg -n -i 'quorum' website/content/_index.md website/content/features/_index.md
+
+## AC6: ls website/content/docs/principles/
+_index.md
+audit-trail-required
+avoid-vendor-lock-in
+context-is-king
+drift-is-debt
+executable-specifications
+inspect-and-adapt
+least-privilege-for-agents
+right-size-the-model
+spec-first-development
+work-is-a-dag
+
+## AC7: ddx bead list --status closed (children of epic ddx-629ec5b4)
+23
+ddx-abd000f7  open          P2  Final verification: hugo build, ddx doc audit, drift checks for Dun/execute-loop/quorum [site-redesign,area:website,area:specs,kind:verification]
