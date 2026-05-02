@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T131904-3c1cc2d3",
+  "bead_id": ".execute-bead-wt-ddx-3c154349-20260502T131050-bf2d17f5-0a700bd2",
+  "base_rev": "f541689dbd781dd1fd979bd2f83d4bc95bbb83e1",
+  "created_at": "2026-05-02T13:19:05.475761357Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-3c154349-20260502T131050-bf2d17f5-0a700bd2",
+    "title": "Triage policy framework: config schema + decision engine",
+    "description": "Foundation for the auto-triage feature (parent: ddx-3c154349). Build the standalone triage decision module that the drain loop will call after each terminal event, plus its config schema. No loop integration in this bead — that lands in a follow-up child once this module is in place.\n\nScope:\n- New package cli/internal/triage/ with TriagePolicy struct, FailureMode enum (review_block, lock_contention, execution_failed, no_changes), Action enum (re_attempt_with_context, escalate_tier, retry_with_backoff, file_followup, needs_human), and Decide(beadID, mode, history) Action method.\n- Default policy mirrors AC#3 of parent: BLOCK→re_attempt_with_context (1st), escalate_tier (2nd), needs_human (3rd). Other modes get sensible defaults.\n- Config block 'triage:' added to .ddx/config.yaml schema and ResolvedConfig (cli/internal/config/). Optional; defaults applied when absent.\n- Unit tests for the policy engine: ladder progression for BLOCK, default for other modes, config override path.\n\nOut of scope:\n- Wiring this into execute_bead_loop.go (next child).\n- Lock contention retry mechanics (handled by sibling lock bead + next child).\n- Reviewer-pairing-degraded surfacing (next child).",
+    "acceptance": "1. cli/internal/triage package exists with TriagePolicy, FailureMode, Action, and Decide(). 2. Default policy implements BLOCK ladder: re_attempt → escalate_tier → needs_human. 3. .ddx/config.yaml triage: block accepted by schema and unmarshals into ResolvedConfig. 4. Unit tests cover ladder progression, default for non-BLOCK modes, config override of default policy.",
+    "parent": "ddx-3c154349",
+    "labels": [
+      "phase:2",
+      " story:10",
+      " area:agent",
+      " kind:fix"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T13:19:04Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T13:19:04.250465303Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T131904-3c1cc2d3",
+    "prompt": ".ddx/executions/20260502T131904-3c1cc2d3/prompt.md",
+    "manifest": ".ddx/executions/20260502T131904-3c1cc2d3/manifest.json",
+    "result": ".ddx/executions/20260502T131904-3c1cc2d3/result.json",
+    "checks": ".ddx/executions/20260502T131904-3c1cc2d3/checks.json",
+    "usage": ".ddx/executions/20260502T131904-3c1cc2d3/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-3c154349-20260502T131050-bf2d17f5-0a700bd2-20260502T131904-3c1cc2d3"
+  }
+}
