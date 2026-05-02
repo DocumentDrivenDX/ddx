@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T130148-99e92001",
+  "bead_id": "ddx-2436fa73",
+  "base_rev": "1b1c578b27c46ee2a6f3b90bfce799e221b3b69e",
+  "created_at": "2026-05-02T13:01:49.822131271Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2436fa73",
+    "title": "review: BuildReviewExecuteRequest; remove implHarness default; emit review-pairing-degraded",
+    "description": "Today reviewer defaults to implementer harness (cli/internal/agent/execute_bead_review.go:521) — directly violating R4 (different reviewer). Build the reviewer ExecuteRequest with: Role='reviewer'; SAME CorrelationID as the implementer call (joins them in events / session log / aggregations); MinPower = implementer.RoutingActual.Power + 1.\n\n'Different provider' Day 1 is BEST-EFFORT EMERGENT — the MinPower bump usually forces Fizeau to pick a different candidate, but not guaranteed. When same-provider results, log a 'review-pairing-degraded' event with implementer + reviewer routing details so operators can see degradation. No ExcludePinned / Exclude-provider field is requested upstream Day 1; future Fizeau routing intelligence may use Role + CorrelationID to bias toward diversity (Fizeau-internal evolution, not specified by DDx).",
+    "acceptance": "1. execute_bead_review.go no longer defaults to implementer harness. 2. Reviewer call carries Role='reviewer' + same CorrelationID as implementer + MinPower=actualPower+1. 3. review-pairing-degraded event emitted when reviewer's RoutingActual.Provider == implementer's. 4. Tests cover: happy path (different provider), degraded path (same provider), and event payload includes both routing details.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:routing",
+      "kind:fix"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T13:01:48Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T13:01:48.569825071Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T130148-99e92001",
+    "prompt": ".ddx/executions/20260502T130148-99e92001/prompt.md",
+    "manifest": ".ddx/executions/20260502T130148-99e92001/manifest.json",
+    "result": ".ddx/executions/20260502T130148-99e92001/result.json",
+    "checks": ".ddx/executions/20260502T130148-99e92001/checks.json",
+    "usage": ".ddx/executions/20260502T130148-99e92001/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2436fa73-20260502T130148-99e92001"
+  }
+}
