@@ -1,6 +1,8 @@
 import type { PageLoad } from './$types'
 import { createClient } from '$lib/gql/client'
 import { gql } from 'graphql-request'
+import { readState } from '$lib/urlState'
+import type { GroupBy } from './grouping'
 
 export const ARTIFACTS_QUERY = gql`
 	query Artifacts($projectID: ID!, $first: Int, $after: String, $mediaType: String) {
@@ -55,8 +57,10 @@ interface ArtifactsResult {
 export const PAGE_SIZE = 50
 
 export const load: PageLoad = async ({ params, url, fetch }) => {
-	const mediaType = url.searchParams.get('mediaType') ?? null
-	const q = url.searchParams.get('q') ?? ''
+	const state = readState(url.searchParams)
+	const mediaType = state.mediaType
+	const q = state.q
+	const groupBy: GroupBy = state.groupBy
 
 	const client = createClient(fetch as unknown as typeof globalThis.fetch)
 	const data = await client.request<ArtifactsResult>(ARTIFACTS_QUERY, {
@@ -69,6 +73,7 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		projectId: params.projectId,
 		artifacts: data.artifacts,
 		mediaType,
-		q
+		q,
+		groupBy
 	}
 }
