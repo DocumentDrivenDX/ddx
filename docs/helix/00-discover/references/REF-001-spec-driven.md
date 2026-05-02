@@ -1,5 +1,12 @@
 ---
-source: https://github.com/github/spec-kit/blob/main/spec-driven.md
+id: REF-001
+title: "Specification-Driven Development (SDD)"
+kind: reference
+source_url: https://github.com/github/spec-kit/blob/main/spec-driven.md
+source_author: GitHub spec-kit
+accessed: 2025-09-14
+summary: "Argues that specifications, not code, should be the primary development artifact, with implementation generated from precise, executable specs."
+tags: [spec-driven, sdd, methodology]
 ---
 
 # Specification-Driven Development (SDD)

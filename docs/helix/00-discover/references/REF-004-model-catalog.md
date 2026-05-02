@@ -1,3 +1,14 @@
+---
+id: REF-004
+title: "Model Catalog"
+kind: reference
+source_url: https://openrouter.ai/api/v1/models
+source_author: DDx maintainers (pricing via OpenRouter)
+accessed: 2026-04-12
+summary: "Routing tier assignment, SWE-bench/LiveCodeBench scores, and pricing for models used by agent routing (smart/standard/fast tiers)."
+tags: [models, routing, benchmarks, pricing]
+---
+
 # Model Catalog
 
 Reference table for routing tier assignment, benchmark scores, and pricing.

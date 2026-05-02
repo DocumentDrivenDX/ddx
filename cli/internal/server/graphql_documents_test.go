@@ -129,9 +129,9 @@ func TestGraphQLDocuments_SkipsClaudeWorktreesAndUsesRelativePaths(t *testing.T)
 	workDir := setupTestDir(t)
 
 	files := map[string]string{
-		filepath.Join(workDir, "docs", "resources", "agent-harness-ac.md"): "---\nddx:\n  id: agent-harness-ac\n---\n# Agent Harness AC\n",
+		filepath.Join(workDir, "docs", "helix", "00-discover", "research", "AC-AGENT-001-agent-harness-ac.md"): "---\nddx:\n  id: agent-harness-ac\n---\n# Agent Harness AC\n",
 		// Agent scratch copy with frontmatter — must be ignored.
-		filepath.Join(workDir, ".claude", "worktrees", "agent-a0673989", "docs", "resources", "agent-harness-ac.md"): "---\nddx:\n  id: worktree-shadow\n---\n# Shadow Copy\n",
+		filepath.Join(workDir, ".claude", "worktrees", "agent-a0673989", "docs", "helix", "00-discover", "research", "AC-AGENT-001-agent-harness-ac.md"): "---\nddx:\n  id: worktree-shadow\n---\n# Shadow Copy\n",
 	}
 	for path, content := range files {
 		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -185,13 +185,13 @@ func TestGraphQLDocuments_SkipsClaudeWorktreesAndUsesRelativePaths(t *testing.T)
 		}
 		if e.Node.ID == "agent-harness-ac" {
 			sawCanonical = true
-			if want := "docs/resources/agent-harness-ac.md"; path != want {
+			if want := "docs/helix/00-discover/research/AC-AGENT-001-agent-harness-ac.md"; path != want {
 				t.Errorf("got agent-harness-ac path %q, want %q", e.Node.Path, want)
 			}
 		}
 	}
 	if !sawCanonical {
-		t.Error("expected canonical docs/resources/agent-harness-ac.md document in response")
+		t.Error("expected canonical docs/helix/00-discover/research/AC-AGENT-001-agent-harness-ac.md document in response")
 	}
 }
 
@@ -205,7 +205,7 @@ func TestGraphQLDocumentByPath_ResolvesDocgraphTrackedDoc(t *testing.T) {
 	t.Setenv("DDX_NODE_NAME", "gql-doc-test-node")
 
 	workDir := setupTestDir(t)
-	docPath := filepath.Join(workDir, "docs", "resources", "agent-harness-ac.md")
+	docPath := filepath.Join(workDir, "docs", "helix", "00-discover", "research", "AC-AGENT-001-agent-harness-ac.md")
 	if err := os.MkdirAll(filepath.Dir(docPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -216,7 +216,7 @@ func TestGraphQLDocumentByPath_ResolvesDocgraphTrackedDoc(t *testing.T) {
 
 	srv := New(":0", workDir)
 
-	query := `{"query": "{ documentByPath(path: \"docs/resources/agent-harness-ac.md\") { id path content } }"}`
+	query := `{"query": "{ documentByPath(path: \"docs/helix/00-discover/research/AC-AGENT-001-agent-harness-ac.md\") { id path content } }"}`
 	req := httptest.NewRequest(http.MethodPost, "/graphql", bytes.NewBufferString(query))
 	req.Header.Set("Content-Type", "application/json")
 	req.RemoteAddr = "127.0.0.1:12345"
@@ -262,7 +262,7 @@ func TestGraphQLDocumentByPath_ResolvesLegacyAbsoluteDocgraphPath(t *testing.T) 
 	t.Setenv("DDX_NODE_NAME", "gql-doc-test-node")
 
 	workDir := setupTestDir(t)
-	docPath := filepath.Join(workDir, "docs", "resources", "agent-harness-ac.md")
+	docPath := filepath.Join(workDir, "docs", "helix", "00-discover", "research", "AC-AGENT-001-agent-harness-ac.md")
 	if err := os.MkdirAll(filepath.Dir(docPath), 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -308,7 +308,7 @@ func TestGraphQLDocumentByPath_ResolvesLegacyAbsoluteDocgraphPath(t *testing.T) 
 	if resp.Data.DocumentByPath.ID != "agent-harness-ac" {
 		t.Errorf("got id %q, want %q", resp.Data.DocumentByPath.ID, "agent-harness-ac")
 	}
-	if got, want := filepath.ToSlash(resp.Data.DocumentByPath.Path), "docs/resources/agent-harness-ac.md"; got != want {
+	if got, want := filepath.ToSlash(resp.Data.DocumentByPath.Path), "docs/helix/00-discover/research/AC-AGENT-001-agent-harness-ac.md"; got != want {
 		t.Errorf("got returned path %q, want %q", got, want)
 	}
 	if !strings.Contains(resp.Data.DocumentByPath.Content, "Legacy absolute path content.") {

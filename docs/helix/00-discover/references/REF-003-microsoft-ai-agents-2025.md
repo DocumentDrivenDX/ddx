@@ -1,8 +1,11 @@
 ---
+id: REF-003
 title: "Microsoft Build 2025: The Age of AI Agents and Building the Open Agentic Web"
+kind: reference
 source_url: https://blogs.microsoft.com/blog/2025/05/19/microsoft-build-2025-the-age-of-ai-agents-and-building-the-open-agentic-web/
-date_accessed: 2025-09-14
-category: AI Agents
+source_author: Microsoft Blog
+accessed: 2025-09-14
+summary: "Microsoft Build 2025 announcements framing the 'Open Agentic Web' — agents acting across individual, team, and business contexts with open interoperability standards."
 tags: [microsoft, ai-agents, open-web, 2025]
 ---
 

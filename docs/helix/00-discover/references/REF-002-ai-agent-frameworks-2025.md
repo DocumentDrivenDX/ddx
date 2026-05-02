@@ -1,8 +1,11 @@
 ---
+id: REF-002
 title: "Top AI Agent Frameworks in 2025"
+kind: reference
 source_url: https://www.analyticsvidhya.com/blog/2024/07/ai-agent-frameworks/
-date_accessed: 2025-09-14
-category: AI Frameworks
+source_author: Analytics Vidhya
+accessed: 2025-09-14
+summary: "Survey of major AI agent frameworks in 2025 (LangChain, CrewAI, AutoGen, etc.) covering architecture, capabilities, and integration patterns."
 tags: [ai-agents, frameworks, langchain, crewai, autogen, 2025]
 ---
 

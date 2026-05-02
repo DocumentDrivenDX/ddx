@@ -4,6 +4,11 @@ ddx:
   status: complete
   depends_on:
     - AC-AGENT-001
+id: AC-AGENT-002
+title: "Agent Harness Test Completion"
+kind: research-synthesis
+summary: "Completion record for AC-AGENT-001: pi and gemini harness definitions, unit/integration tests, and cost tracking; cursor support removed."
+tags: [agent, harness, completion, AC-AGENT-001]
 ---
 # Agent Harness Test Completion - COMPLETED
 

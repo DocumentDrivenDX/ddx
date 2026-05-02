@@ -4,6 +4,11 @@ ddx:
   status: draft
   depends_on:
     - FEAT-006
+id: AC-AGENT-001
+title: "Agent Harness Acceptance Criteria"
+kind: research-synthesis
+summary: "Mandatory and recommended acceptance criteria each built-in DDx agent harness must satisfy (registry, RunOptions, output parsing, cost tracking)."
+tags: [agent, harness, acceptance, FEAT-006]
 ---
 # Agent Harness Acceptance Criteria
 

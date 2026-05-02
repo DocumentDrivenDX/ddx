@@ -214,7 +214,7 @@ test('ddx-12cae4dd: documents list only shows clean relative paths and opens rea
 	const CLEAN_DOCS = [
 		{
 			id: 'doc-ac',
-			path: 'docs/resources/agent-harness-ac.md',
+			path: 'docs/helix/00-discover/research/AC-AGENT-001-agent-harness-ac.md',
 			title: 'Agent Harness Acceptance'
 		},
 		{ id: 'doc-prd', path: 'docs/helix/01-frame/prd.md', title: 'PRD' }
@@ -281,9 +281,9 @@ test('ddx-12cae4dd: documents list only shows clean relative paths and opens rea
 
 	// Click the real docs/ entry and verify it renders its content (no 404).
 	await page.getByRole('cell', { name: /^Agent Harness Acceptance$/ }).click();
-	await expect(page).toHaveURL(/\/documents\/docs\/resources\/agent-harness-ac\.md$/);
+	await expect(page).toHaveURL(/\/documents\/docs\/helix\/00-discover\/research\/AC-AGENT-001-agent-harness-ac\.md$/);
 	await expect(page).not.toHaveURL(/\/documents\/\//);
-	await expect(page.getByText(/Content of docs\/resources\/agent-harness-ac\.md/)).toBeVisible();
+	await expect(page.getByText(/Content of docs\/helix\/00-discover\/research\/AC-AGENT-001-agent-harness-ac\.md/)).toBeVisible();
 	await expect(page.getByText('Document not found.')).toHaveCount(0);
 });
 

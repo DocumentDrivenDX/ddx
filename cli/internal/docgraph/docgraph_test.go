@@ -838,7 +838,7 @@ func TestGraph_CleanFixtureHasNoIssues(t *testing.T) {
 
 func TestSuggestUniqueID_Stable(t *testing.T) {
 	id := "AC-AGENT-001"
-	path := ".claude/worktrees/agent-a2818c5c/docs/resources/agent-harness-ac.md"
+	path := ".claude/worktrees/agent-a2818c5c/docs/helix/00-discover/research/AC-AGENT-001-agent-harness-ac.md"
 	first := SuggestUniqueID(id, path)
 	second := SuggestUniqueID(id, path)
 	if first != second {
