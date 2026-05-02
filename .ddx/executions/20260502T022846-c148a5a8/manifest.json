@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T022846-c148a5a8",
+  "bead_id": "ddx-5b3629fb",
+  "base_rev": "b3f9bcfee15f6c593297a6dcf9baa0cc5889c8f5",
+  "created_at": "2026-05-02T02:28:47.970617193Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-5b3629fb",
+    "title": "Rewrite docs/helix/01-frame/principles.md with 10 domain principles + software-factory preface",
+    "description": "Replace existing 8 principles in docs/helix/01-frame/principles.md with the 10 locked domain principles. Add preface paragraph framing them as 'factory-floor design choices given that DDx is a document-driven software factory.' Each principle: headline, supporting paragraph (~150 words), DDx response, ddx.depends_on linking to RSCH-NNN. Cross-reference at top: 'For internal engineering principles, see docs/dev/engineering-principles.md.' Locked headlines: 1) Spec-first development. 2) Executable specifications. 3) Audit trail required. 4) Context is king. 5) Work is a DAG. 6) Right-size the model. 7) Avoid vendor lock-in. 8) Drift is debt. 9) Least privilege for agents. 10) Inspect and adapt.",
+    "acceptance": "1. principles.md has all 10 headline principles with paragraphs and DDx response sections. 2. Software-factory preface paragraph added. 3. Cross-link to engineering-principles.md present. 4. ddx.depends_on lists RSCH-001 through RSCH-010 across the principles. 5. 'grep -c \"^### \" docs/helix/01-frame/principles.md' returns 10. 6. No reference to Dun.",
+    "parent": "ddx-629ec5b4",
+    "labels": [
+      "site-redesign",
+      "area:specs",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T02:28:46Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "execute-loop-heartbeat-at": "2026-05-02T02:28:46.561066298Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T022846-c148a5a8",
+    "prompt": ".ddx/executions/20260502T022846-c148a5a8/prompt.md",
+    "manifest": ".ddx/executions/20260502T022846-c148a5a8/manifest.json",
+    "result": ".ddx/executions/20260502T022846-c148a5a8/result.json",
+    "checks": ".ddx/executions/20260502T022846-c148a5a8/checks.json",
+    "usage": ".ddx/executions/20260502T022846-c148a5a8/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-5b3629fb-20260502T022846-c148a5a8"
+  }
+}
