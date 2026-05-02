@@ -1,0 +1,10 @@
+[
+  {
+    "kind": "cycle",
+    "message": "cycle detected: ADR-007 -\u003e FEAT-026 -\u003e ADR-007"
+  },
+  {
+    "kind": "cycle",
+    "message": "cycle detected: FEAT-002 -\u003e FEAT-008 -\u003e FEAT-013 -\u003e FEAT-014 -\u003e FEAT-020 -\u003e SD-013 -\u003e SD-019 -\u003e FEAT-002"
+  }
+]

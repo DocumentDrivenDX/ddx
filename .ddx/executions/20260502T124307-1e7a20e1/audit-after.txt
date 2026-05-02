@@ -1,0 +1,3 @@
+cycle (2):
+  - cycle detected: ADR-007 -> FEAT-026 -> ADR-007
+  - cycle detected: FEAT-002 -> FEAT-008 -> FEAT-013 -> FEAT-014 -> FEAT-020 -> SD-013 -> SD-019 -> FEAT-002

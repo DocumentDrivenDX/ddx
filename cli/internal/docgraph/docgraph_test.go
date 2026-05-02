@@ -627,6 +627,72 @@ func TestBuildGraph_ExcludesClaudeWorktreesAndStoresRelativePaths(t *testing.T) 
 	}
 }
 
+// TestBuildGraph_ExcludesDDxPluginsTree pins down the skip-list for
+// `.ddx/plugins/`. Plugin trees check in their own copies of canonical
+// docs (e.g. `.ddx/plugins/helix/docs/...`); those copies must never be
+// merged into the project's documents graph because they would collide
+// with the canonical `docs/` entries and produce duplicate_id issues.
+//
+// The basename skip on `.ddx` already handles a default top-level walk.
+// This test additionally exercises the path-based defense for the case
+// where a graph config configures a root that points directly inside
+// `.ddx/`, bypassing the basename rule.
+func TestBuildGraph_ExcludesDDxPluginsTree(t *testing.T) {
+	root := setupTestRepo(t, map[string]string{
+		"docs/feat.md":                              "---\nddx:\n  id: FEAT-001\n---\n# Canonical\n",
+		".ddx/plugins/helix/docs/feat.md":           "---\nddx:\n  id: FEAT-001\n---\n# Plugin Shadow\n",
+		".ddx/plugins/helix/docs/orphan.md":         "---\nddx:\n  id: plugin.orphan\n---\n# Plugin Orphan\n",
+		".ddx/plugins/ddx/templates/library/lib.md": "---\nddx:\n  id: plugin.lib\n---\n# Plugin Lib\n",
+	})
+
+	// Default walk: basename rule on `.ddx` excludes the whole subtree.
+	graph, err := BuildGraph(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if graph.Documents["FEAT-001"] == nil {
+		t.Fatal("expected canonical FEAT-001 in graph")
+	}
+	if graph.Documents["plugin.orphan"] != nil {
+		t.Error("plugin doc plugin.orphan must be excluded by .ddx skip")
+	}
+	if graph.Documents["plugin.lib"] != nil {
+		t.Error("plugin doc plugin.lib must be excluded by .ddx skip")
+	}
+	for _, issue := range filterIssuesByKind(graph.Issues, IssueDuplicateID) {
+		t.Errorf("unexpected duplicate_id issue: %+v", issue)
+	}
+
+	// Direct walk into `.ddx/plugins/...`: simulates a graph config that
+	// pointed roots at the plugin tree. The path-based defense must still
+	// skip the contents.
+	pluginRoot := filepath.Join(root, ".ddx", "plugins", "helix", "docs")
+	files, err := findMarkdownFiles(root, []string{pluginRoot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Errorf("expected zero files under .ddx/plugins/ root, got %v", files)
+	}
+}
+
+func TestIsInsideDDxPlugins(t *testing.T) {
+	cases := map[string]bool{
+		"/repo/.ddx/plugins/helix/docs/foo.md":  true,
+		"/repo/.ddx/plugins":                    true,
+		".ddx/plugins/helix/docs/foo.md":        true,
+		".ddx/plugins":                          true,
+		"/repo/.ddx/library/foo.md":             false,
+		"/repo/docs/.ddx/plugins-not-this/x.md": false,
+		"/repo/docs/foo.md":                     false,
+	}
+	for path, want := range cases {
+		if got := isInsideDDxPlugins(filepath.FromSlash(path)); got != want {
+			t.Errorf("isInsideDDxPlugins(%q) = %v, want %v", path, got, want)
+		}
+	}
+}
+
 func filterIssuesByKind(issues []GraphIssue, kind IssueKind) []GraphIssue {
 	out := []GraphIssue{}
 	for _, issue := range issues {
