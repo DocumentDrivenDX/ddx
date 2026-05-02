@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T130348-342eb3e0",
+  "bead_id": "ddx-5af9ae07",
+  "base_rev": "a69e071b9260d387840b13875fc2b7c5e1d874d3",
+  "created_at": "2026-05-02T13:03:49.475763531Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-5af9ae07",
+    "title": "artifacts: sort dropdown + staleness chips + URL state contract; client resets after on param change",
+    "description": "Frontend UI for sort dropdown, staleness filter chips. URL state contract via Story 5's urlState.ts. Client resets pagination cursor on filter/sort/search change.",
+    "acceptance": "1. Sort dropdown visible; URL state round-trips. 2. Staleness chips (fresh/stale/missing) toggle filter. 3. Param change resets cursor. 4. e2e covers sort/filter/search composition.",
+    "parent": "ddx-4728ae0f",
+    "labels": [
+      "phase:2",
+      "story:6",
+      "area:web",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T13:03:48Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T13:03:48.150235364Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T130348-342eb3e0",
+    "prompt": ".ddx/executions/20260502T130348-342eb3e0/prompt.md",
+    "manifest": ".ddx/executions/20260502T130348-342eb3e0/manifest.json",
+    "result": ".ddx/executions/20260502T130348-342eb3e0/result.json",
+    "checks": ".ddx/executions/20260502T130348-342eb3e0/checks.json",
+    "usage": ".ddx/executions/20260502T130348-342eb3e0/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-5af9ae07-20260502T130348-342eb3e0"
+  }
+}
