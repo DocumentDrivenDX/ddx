@@ -4,7 +4,7 @@ go 1.26.2
 
 require (
 	github.com/99designs/gqlgen v0.17.89
-	github.com/DocumentDrivenDX/fizeau v0.10.1
+	github.com/DocumentDrivenDX/fizeau v0.10.3
 	github.com/fatih/color v1.18.0
 	github.com/gorilla/websocket v1.5.4-0.20250319132907-e064f32e3674
 	github.com/itchyny/gojq v0.12.19
