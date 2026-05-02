@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T122017-c1710035",
+  "bead_id": "ddx-42b917fe",
+  "base_rev": "188a42fa1785e51e0c23c2444a730004afe4437a",
+  "created_at": "2026-05-02T12:20:18.388432358Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-42b917fe",
+    "title": "Story 18: interactive artifact review (template + chat)",
+    "description": "Sub-epic for Story 18. Full plan at /tmp/story-18-final.md. Children listed under this epic carry the testable ACs.",
+    "acceptance": "All child beads closed. Locked decisions from the planning round honored.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "story:18"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:20:17Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T12:20:17.229824137Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T122017-c1710035",
+    "prompt": ".ddx/executions/20260502T122017-c1710035/prompt.md",
+    "manifest": ".ddx/executions/20260502T122017-c1710035/manifest.json",
+    "result": ".ddx/executions/20260502T122017-c1710035/result.json",
+    "checks": ".ddx/executions/20260502T122017-c1710035/checks.json",
+    "usage": ".ddx/executions/20260502T122017-c1710035/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-42b917fe-20260502T122017-c1710035"
+  }
+}
