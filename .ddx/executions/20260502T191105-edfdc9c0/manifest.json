@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T191105-edfdc9c0",
+  "bead_id": "ddx-e2c5180b",
+  "base_rev": "f22586168cd2d834c823dc14f947fd714dfa0d93",
+  "created_at": "2026-05-02T19:11:07.088833534Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e2c5180b",
+    "title": "B14.8b-pre: Wire FederationProvider into hub-mode GraphQL resolver",
+    "description": "Production wiring gap discovered while attempting B14.8b (Playwright e2e). The graphql.Resolver.Federation field is never assigned in internal/server/server.go (only in resolver_federation_test.go). Consequence: federationNodes/federatedBeads/federatedRuns/federatedProjects always return [] when running with --hub-mode. /federation page shows no rows even when spokes are registered, blocking any e2e test that asserts UI federation state.\n\nAdd an adapter on *Server satisfying graphql.FederationProvider (Spokes(), FanOut(ctx, req)) and wire it into the Resolver only when s.hub != nil. Adapter contract:\n- Spokes() returns a defensive copy of registry spokes (via locked read of s.hub.registry).\n- FanOut() runs federation.NewFanOutClient() with hubDDxVersion/hubSchemaVer pinned from s.hub, applies StatusUpdates back to s.hub.registry under s.hub.mu so subsequent reads observe offline transitions, and persists registry changes via persistFederationLocked.\n\nAdd a Go integration test that boots Server.New + EnableHubMode, registers a spoke via /api/federation/register, posts { federationNodes { nodeId status } } to /graphql, and asserts the spoke is returned (proving the production wiring path).",
+    "acceptance": "1. internal/server/server.go injects Federation: \u003cadapter\u003e into ddxgraphql.Resolver only when s.hub != nil (nil-safe when hub mode is off).\n2. Adapter type implements graphql.FederationProvider; Spokes returns defensive copy; FanOut applies StatusUpdates under s.hub.mu and persists registry.\n3. Integration test posts federationNodes query and asserts registered spoke surfaces.\n4. go test ./internal/server/... ./internal/server/graphql/... is green.",
+    "parent": "ddx-a038a090",
+    "labels": [
+      "phase:2",
+      "story:14"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T19:11:05Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3446284",
+      "execute-loop-heartbeat-at": "2026-05-02T19:11:05.777019341Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T191105-edfdc9c0",
+    "prompt": ".ddx/executions/20260502T191105-edfdc9c0/prompt.md",
+    "manifest": ".ddx/executions/20260502T191105-edfdc9c0/manifest.json",
+    "result": ".ddx/executions/20260502T191105-edfdc9c0/result.json",
+    "checks": ".ddx/executions/20260502T191105-edfdc9c0/checks.json",
+    "usage": ".ddx/executions/20260502T191105-edfdc9c0/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e2c5180b-20260502T191105-edfdc9c0"
+  },
+  "prompt_sha": "5289e4acf106bb2dd53ea9bc9541e07feebb59575342abc8a7d83f578f76582d"
+}
