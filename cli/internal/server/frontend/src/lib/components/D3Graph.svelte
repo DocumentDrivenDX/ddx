@@ -210,8 +210,7 @@
 				.attr('orient', 'auto')
 				.append('path')
 				.attr('d', 'M0,-5L10,0L0,5')
-				.attr('fill', 'currentColor')
-				.attr('class', 'text-fg-muted dark:text-dark-fg-muted')
+				.attr('class', 'fill-fg-muted dark:fill-dark-fg-muted')
 
 			const g = svgSel.append('g')
 
@@ -292,10 +291,10 @@
 				.selectAll<SVGLineElement, (typeof freshSimLinks)[0]>('line')
 				.data(freshSimLinks)
 				.join('line')
-				.attr('class', 'text-fg-muted dark:text-dark-fg-muted')
-				.attr('stroke', 'currentColor')
-				.attr('stroke-width', 1.5)
-				.attr('stroke-opacity', 0.85)
+				.attr('class', 'stroke-fg-muted dark:stroke-dark-fg-muted')
+				.attr('stroke-width', 1.75)
+				.attr('stroke-opacity', 0.9)
+				.attr('stroke-linecap', 'round')
 				.attr('marker-end', 'url(#ddx-arrow)')
 
 			const nodeGroup = g
