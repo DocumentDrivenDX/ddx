@@ -7,6 +7,7 @@ model: gemini-3-pro-image-preview
 aspect_ratio: "16:9"
 size: "2K"
 depends_on:
+  - website/assets/img-prompts/_preamble.md
   - .stitch/DESIGN.md
   - docs/helix/01-frame/prd.md
   - docs/helix/01-frame/visuals/tool-tracker.prompt.md
@@ -14,6 +15,17 @@ depends_on:
   - docs/helix/01-frame/visuals/tool-execution.prompt.md
   - docs/helix/01-frame/visuals/tool-plugins.prompt.md
 ---
+
+# Preamble
+
+Apply the shared DDx visual preamble at `website/assets/img-prompts/_preamble.md`:
+patent-grade engineering schematic on a factory blueprint, software-factory
+mood, slightly steampunk in materiality (brass cartouche, copper rivet
+punctuation at the chrome only) and slightly cyberpunk in lighting (faint
+terminal-cyan readouts, restrained amber signal lamps). The diagram below is
+the subject; the industrial framing lives at the perimeter — corner cartouche,
+registration ticks, blueprint-grid bleed, and a small `DDx · FIG.T5`
+maker's mark in the bottom-right registration block.
 
 # Prompt
 
@@ -48,6 +60,27 @@ Background: flat **#FFFFFF** with subtle 4%-opacity grid registration marks in *
 - No anthropomorphism (no hands, no faces, no characters, no avatars for "human" or "agent" — the human-AI seam is communicated by the fulcrum glyph and the green accent only).
 - The numbered loop must read clockwise, must close (no broken or open arc), and must carry six and only six stages. No additional decorative nodes.
 - Metaphor must parse without caption: a closed iterative loop with the human re-entering at the seam and evidence flowing inward to update artifacts.
+
+# Industrial framing (preamble enforcement)
+
+Wrap the figure in a thin **brass `#9A6A2F` cartouche** (1 px stroke, 6 px inset
+from the canvas edge) with four small registration ticks at the corners. The
+canvas background is blueprint paper (`#F7F1E7` light variant) overlaid with
+the existing 4 % `#E5E7EB` registration grid; allow a 2 % brushed-steel vignette
+at the deep margins. Place a small bottom-right registration block reading
+**`DDx · FIG.T5`** in JetBrains Mono 0.625 rem `#6B7280`, and at top-left a
+**`DOC-DRIVEN SOFTWARE FACTORY`** kicker in Space Grotesk small-caps 0.625 rem
+`#9A6A2F` (brass), letter-spacing 0.08 em. Permit at most **two** pinpoint
+amber `#C79B5B` or terminal-cyan `#7FE3D4` signal-lamp dots (≤ 6 px diameter,
+matte, no halation) as instrument punctuation; never as the figure's subject.
+Optional: a single faint copper rivet glyph at each cartouche corner. The
+diagram itself (six-stage closed loop — DDx in operation) must remain the dominant read at first glance —
+the industrial framing rewards the second look without competing with the
+metaphor.
+
+# Anchoring (recently-landed positioning)
+
+Capstone of the tools lens. The loop is the dogfood path of DDx itself: an artifact change triggers context synthesis from the document graph, a bead enters the queue, an agent runs in a bounded-context worktree (Ralph loop), evidence is captured, the human re-aligns at the fulcrum, the loop closes. This is the **document-driven software factory** in steady-state operation.
 
 # Negative prompt
 

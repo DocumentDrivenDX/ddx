@@ -7,9 +7,21 @@ model: gemini-3-pro-image-preview
 aspect_ratio: "16:9"
 size: "2K"
 depends_on:
+  - website/assets/img-prompts/_preamble.md
   - .stitch/DESIGN.md
   - docs/helix/01-frame/prd.md
 ---
+
+# Preamble
+
+Apply the shared DDx visual preamble at `website/assets/img-prompts/_preamble.md`:
+patent-grade engineering schematic on a factory blueprint, software-factory
+mood, slightly steampunk in materiality (brass cartouche, copper rivet
+punctuation at the chrome only) and slightly cyberpunk in lighting (faint
+terminal-cyan readouts, restrained amber signal lamps). The diagram below is
+the subject; the industrial framing lives at the perimeter — corner cartouche,
+registration ticks, blueprint-grid bleed, and a small `DDx · FIG.T2`
+maker's mark in the bottom-right registration block.
 
 # Prompt
 
@@ -31,6 +43,27 @@ Background: flat **#FFFFFF** with subtle 4%-opacity grid registration marks in *
 - No gradient washes, glows, lens flares, particles, dreamy lighting, or AI-art treatments.
 - No anthropomorphism (no hands, no faces, no characters, no robot avatars for "agent").
 - Metaphor must parse without caption: three nested layers with the middle layer visibly isolated as a worktree.
+
+# Industrial framing (preamble enforcement)
+
+Wrap the figure in a thin **brass `#9A6A2F` cartouche** (1 px stroke, 6 px inset
+from the canvas edge) with four small registration ticks at the corners. The
+canvas background is blueprint paper (`#F7F1E7` light variant) overlaid with
+the existing 4 % `#E5E7EB` registration grid; allow a 2 % brushed-steel vignette
+at the deep margins. Place a small bottom-right registration block reading
+**`DDx · FIG.T2`** in JetBrains Mono 0.625 rem `#6B7280`, and at top-left a
+**`DOC-DRIVEN SOFTWARE FACTORY`** kicker in Space Grotesk small-caps 0.625 rem
+`#9A6A2F` (brass), letter-spacing 0.08 em. Permit at most **two** pinpoint
+amber `#C79B5B` or terminal-cyan `#7FE3D4` signal-lamp dots (≤ 6 px diameter,
+matte, no halation) as instrument punctuation; never as the figure's subject.
+Optional: a single faint copper rivet glyph at each cartouche corner. The
+diagram itself (three-layer run architecture — `ddx run` / `try` / `work`) must remain the dominant read at first glance —
+the industrial framing rewards the second look without competing with the
+metaphor.
+
+# Anchoring (recently-landed positioning)
+
+Anchored to **Bounded-context execution / Ralph loop** (vision §Physics of Generative AI, principle 6) and to **Audit Trail Required**. The middle worktree boundary is the bounded-context contract: each `ddx try` attempt runs in a fresh, narrowly-scoped context against an explicit acceptance criterion, with persistent state landing on disk as evidence rather than carried forward as transcript.
 
 # Negative prompt
 

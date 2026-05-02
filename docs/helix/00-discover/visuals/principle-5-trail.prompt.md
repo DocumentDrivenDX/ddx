@@ -7,9 +7,21 @@ model: gemini-3-pro-image-preview
 aspect_ratio: "16:9"
 size: "2K"
 depends_on:
+  - website/assets/img-prompts/_preamble.md
   - .stitch/DESIGN.md
   - docs/helix/00-discover/product-vision.md
 ---
+
+# Preamble
+
+Apply the shared DDx visual preamble at `website/assets/img-prompts/_preamble.md`:
+patent-grade engineering schematic on a factory blueprint, software-factory
+mood, slightly steampunk in materiality (brass cartouche, copper rivet
+punctuation at the chrome only) and slightly cyberpunk in lighting (faint
+terminal-cyan readouts, restrained amber signal lamps). The diagram below is
+the subject; the industrial framing lives at the perimeter — corner cartouche,
+registration ticks, blueprint-grid bleed, and a small `DDx · FIG.P5`
+maker's mark in the bottom-right registration block.
 
 # Prompt
 
@@ -31,6 +43,27 @@ Background: **#FFFFFF** with 4% **#E5E7EB** registration grid. Typography: Inter
 - Receipts must read as discrete printed artifacts, not as glowing UI cards.
 - No gradient washes, glows, particles, cinematic lighting.
 - Metaphor must parse without caption: a lever leaves a trail of receipts.
+
+# Industrial framing (preamble enforcement)
+
+Wrap the figure in a thin **brass `#9A6A2F` cartouche** (1 px stroke, 6 px inset
+from the canvas edge) with four small registration ticks at the corners. The
+canvas background is blueprint paper (`#F7F1E7` light variant) overlaid with
+the existing 4 % `#E5E7EB` registration grid; allow a 2 % brushed-steel vignette
+at the deep margins. Place a small bottom-right registration block reading
+**`DDx · FIG.P5`** in JetBrains Mono 0.625 rem `#6B7280`, and at top-left a
+**`DOC-DRIVEN SOFTWARE FACTORY`** kicker in Space Grotesk small-caps 0.625 rem
+`#9A6A2F` (brass), letter-spacing 0.08 em. Permit at most **two** pinpoint
+amber `#C79B5B` or terminal-cyan `#7FE3D4` signal-lamp dots (≤ 6 px diameter,
+matte, no halation) as instrument punctuation; never as the figure's subject.
+Optional: a single faint copper rivet glyph at each cartouche corner. The
+diagram itself (audit trail of evidence receipts left by the moving lever) must remain the dominant read at first glance —
+the industrial framing rewards the second look without competing with the
+metaphor.
+
+# Anchoring (recently-landed positioning)
+
+Anchored to **Evidence provides memory** and to the locked **Audit Trail Required** principle (`/docs/principles/audit-trail-required/`). Each receipt is a real DDx execution evidence bundle: bead id, commit hash, harness, cost. The chain of dockets is the substrate that survives a fresh-context Ralph-loop iteration.
 
 # Negative prompt
 
