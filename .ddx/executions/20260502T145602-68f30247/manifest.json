@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T145602-68f30247",
+  "bead_id": "ddx-297f840c",
+  "base_rev": "df12ebe45eec9f04211e69b90ce6baeab92e58fb",
+  "created_at": "2026-05-02T14:56:03.769491869Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-297f840c",
+    "title": "Story 6 B4c: frontend snippet rendering + match highlight + e2e for full-text path",
+    "description": "Frontend rendering for B4b's snippet field. Depends on B4b.\n\nChanges:\n- routes/nodes/[nodeId]/projects/[projectId]/artifacts/+page.svelte: render snippet under each artifact row when present; highlight match terms (reuse highlight helper from command palette / document detail overlay if available).\n- Houdini GraphQL doc(s): include snippet in the artifacts query selection set; run 'bun run houdini:generate'.\n- Playwright e2e in artifacts.spec.ts: query that matches body text shows highlighted snippet; back-navigation from artifact detail preserves filter+search state and snippet display.",
+    "acceptance": "- Snippets render with visible highlight when q matches body/metadata.\n- Generated Houdini types include the new snippet field.\n- Playwright e2e: full-text body match shows snippet with highlight; back-navigation preserves URL state.\n- 'cd cli/internal/server/frontend \u0026\u0026 bun run test \u0026\u0026 bun run test:e2e' passes.",
+    "parent": "ddx-4728ae0f",
+    "labels": [
+      "phase:2",
+      " story:6"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:56:02Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T14:56:02.503464892Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T145602-68f30247",
+    "prompt": ".ddx/executions/20260502T145602-68f30247/prompt.md",
+    "manifest": ".ddx/executions/20260502T145602-68f30247/manifest.json",
+    "result": ".ddx/executions/20260502T145602-68f30247/result.json",
+    "checks": ".ddx/executions/20260502T145602-68f30247/checks.json",
+    "usage": ".ddx/executions/20260502T145602-68f30247/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-297f840c-20260502T145602-68f30247"
+  }
+}
