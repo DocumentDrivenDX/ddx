@@ -1,0 +1,63 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only a result.json execution evidence file. No source changes for resolver, drain-time persistence, bundle-file confinement, whitelist enforcement, or unit tests. No AC item is implemented in this diff.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No resolver changes exposing prompt/response/stderr/toolCalls/bundleFiles/bundleFile",
+      "location": "cli/internal/server/"
+    },
+    {
+      "severity": "block",
+      "summary": "No drain-time ToolCallEntry persistence changes in service_run.go / agent_runner_service.go",
+      "location": "cli/internal/server/service_run.go"
+    },
+    {
+      "severity": "block",
+      "summary": "No bundle-root confinement, whitelist, or 64KB cap logic added",
+      "location": "cli/internal/server/"
+    },
+    {
+      "severity": "block",
+      "summary": "No unit tests for traversal/symlink/absolute path/size cap/whitelist/persistence",
+      "location": "cli/internal/server/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1601,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T135904-ecd434db/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1183,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 4518,
+    "output_bytes": 963,
+    "elapsed_ms": 9156,
+    "harness": "claude",
+    "model": "opus"
+  }
+}

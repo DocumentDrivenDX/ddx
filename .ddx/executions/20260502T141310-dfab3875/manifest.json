@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260502T141310-dfab3875",
+  "bead_id": "ddx-6f41aa55",
+  "base_rev": "cf0213f92e4ac8eb8edcfb13fb1db6bb936a9e3c",
+  "created_at": "2026-05-02T14:13:11.603032474Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6f41aa55",
+    "title": "fix(web): doc graph edges and arrowheads use foreground token, not border-line",
+    "description": "Swap edge stroke and arrow marker fill in cli/internal/server/frontend/src/lib/components/D3Graph.svelte from border-line/dark-border-line tokens to fg-muted/dark-fg-muted, so edges meet WCAG AA 3:1 contrast for non-text graphics. Surface: D3Graph.svelte lines 107 (arrow marker fill) and 165 (edge line stroke). Bump stroke-width 1.5 -\u003e 1.75 and stroke-opacity 0.6 -\u003e 0.9; add stroke-linecap=\"round\". Sole consumer is routes/nodes/[nodeId]/projects/[projectId]/graph/+page.svelte. See /tmp/story-1-final.md (bead-A).",
+    "acceptance": "AC1: D3Graph.svelte line 107 arrow marker uses fill-fg-muted dark:fill-dark-fg-muted (not border-line).\nAC2: D3Graph.svelte line 165 edge \u003cline\u003e uses stroke-fg-muted dark:stroke-dark-fg-muted.\nAC3: stroke-width is 1.75, stroke-opacity is 0.9, stroke-linecap=\"round\" present on edges.\nAC4: bun run build (or equivalent typecheck) succeeds in cli/internal/server/frontend.\nAC6: No other files modified outside D3Graph.svelte.\nAC7: Light theme edge color resolves to fg-muted (#4B5563) and dark to dark-fg-muted (#B8AF9C) — verified via tailwind.config.js token lookup.",
+    "parent": "ddx-db5e0227",
+    "labels": [
+      "phase:2",
+      " story:1",
+      " tier:cheap"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:13:10Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128",
+          "created_at": "2026-05-02T13:01:02.514005807Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T14:13:10.332832927Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T141310-dfab3875",
+    "prompt": ".ddx/executions/20260502T141310-dfab3875/prompt.md",
+    "manifest": ".ddx/executions/20260502T141310-dfab3875/manifest.json",
+    "result": ".ddx/executions/20260502T141310-dfab3875/result.json",
+    "checks": ".ddx/executions/20260502T141310-dfab3875/checks.json",
+    "usage": ".ddx/executions/20260502T141310-dfab3875/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6f41aa55-20260502T141310-dfab3875"
+  }
+}
