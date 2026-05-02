@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260502T231106-49f4e558",
+  "bead_id": "ddx-6bb51a52",
+  "base_rev": "0a47cf7d7fe0077e0dea5b899a9a8a1ede81c6b7",
+  "created_at": "2026-05-02T23:11:07.817293767Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6bb51a52",
+    "title": "TD: design axon-backend integration for bead tracker",
+    "description": "Author a technical design doc for adopting axon as the primary bead-tracker backend. Cover: data-model mapping from current bead schema (id, status, claim, events, deps) to axon collections; claim/lock semantics (replacing flock + git tracker-commit lock); archive policy (events array growth, when/how to externalize per ADR-004); multi-machine concurrency story (Story 14 federation prerequisite); JSONL interchange compatibility for bd/br round-trip; failure modes and migration strategy. Land the doc as .ddx/td/TD-axon-bead-backend.md (or under docs/helix/ if the project convention dictates — check existing TDs first). No code changes.",
+    "acceptance": "1. TD doc lands at the correct in-repo path covering all six topics above. 2. Doc references ADR-004 / SD-004 / FEAT-004 and the lock-contention v1 patch (ddx-da11a34a). 3. Doc proposes a concrete backend interface (Go) for cli/internal/bead/backend.go that both JSONL and axon can implement. 4. Doc identifies the chaos_test.go contract the new backend must satisfy.",
+    "parent": "ddx-5d49b14e",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:storage",
+      "kind:design",
+      "backend-migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T23:11:06Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4025192",
+      "execute-loop-heartbeat-at": "2026-05-02T23:11:06.496900241Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T231106-49f4e558",
+    "prompt": ".ddx/executions/20260502T231106-49f4e558/prompt.md",
+    "manifest": ".ddx/executions/20260502T231106-49f4e558/manifest.json",
+    "result": ".ddx/executions/20260502T231106-49f4e558/result.json",
+    "checks": ".ddx/executions/20260502T231106-49f4e558/checks.json",
+    "usage": ".ddx/executions/20260502T231106-49f4e558/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6bb51a52-20260502T231106-49f4e558"
+  },
+  "prompt_sha": "6a3dcace8e5fe62c361b19fa4f0d466a619a935df2bc01adba9011e5f600a1ac"
+}
