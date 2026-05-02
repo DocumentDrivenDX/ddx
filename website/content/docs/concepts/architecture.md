@@ -4,8 +4,10 @@ weight: 3
 ---
 
 This page covers the concrete moving parts: how beads flow through the queue,
-how the execute-loop runs an agent against a bead, how personas attach to
-roles, and what the project-local install model means on disk.
+how `ddx work` drains it by composing `ddx try` on top of `ddx run`, how
+personas attach to roles, and what the project-local install model means on
+disk. For the layered run model in detail, see
+[Run Architecture](../run-architecture/).
 
 For exhaustive specifications, follow the `FEAT-*` references into
 `docs/helix/01-frame/features/` in the repository.
@@ -57,25 +59,24 @@ an external tracker. They diff, they merge, they branch with the code.
 Importing from `bd`/`br` keeps you portable.
 {{< /callout >}}
 
-## The Execute-Loop
+## The Run Architecture
 
-The execute-loop is how DDx drains the bead queue with agents. The loop
-picks a ready bead, runs an agent against it in an isolated worktree, and
-either merges the result or escalates.
+DDx drains the bead queue through three layered run primitives. Each
+higher layer composes the layer beneath it.
 
 ```
 ┌────────────────────────────────────────────────────┐
-│  ddx work  (alias for ddx agent execute-loop)      │
+│  ddx work — drain the bead queue                   │
 └────────────────────────────────────────────────────┘
-        │
+        │  iterates
         ▼
-   pick ready bead ── no ready beads ──▶ exit
+   ddx try <bead>  ── no ready beads ──▶ exit
         │
         ▼
    create execution worktree from base rev
         │
         ▼
-   run agent (cheap tier) with bead prompt
+   ddx run  (cheap tier)  with bead prompt
         │
         ▼
    review by stronger model against acceptance criteria
@@ -91,14 +92,17 @@ either merges the result or escalates.
    next bead
 ```
 
-The loop is **cost-tiered by design**: the implementer is a cheap model, the
-reviewer is a stronger one, and deterministic checks (Dun) sit above review
-catching what slipped through. Failed reviews thread the findings into the
-next attempt's prompt so the escalating model knows exactly what was missed.
+The three layers — `ddx run`, `ddx try`, `ddx work` — are **cost-tiered by
+design**: the implementer is a cheap model, the reviewer is a stronger one,
+and deterministic checks (Dun) sit above review catching what slipped
+through. Failed reviews thread the findings into the next attempt's prompt
+so the escalating model knows exactly what was missed.
 
-`ddx work` is the user-facing entry point. Under the hood it calls
-`ddx agent execute-loop` with all flags passed through. See **FEAT-006**
-(agent service) and **FEAT-010** (executions) for the runtime contract.
+`ddx work` is the user-facing queue-drain entry point. Under the hood it
+iterates `ddx try <bead>`, which in turn wraps one or more `ddx run`
+invocations. See [Run Architecture](../run-architecture/) for the layered
+contract and **FEAT-006** (agent service) plus **FEAT-010** (run
+architecture) for the underlying specifications.
 
 ```mermaid
 flowchart TD
@@ -146,9 +150,10 @@ the prompt envelope along with bead context, project config, and any
 relevant patterns. Swapping a persona is a one-line config change, not a
 code change.
 
-This separation is why execute-loop's cost tiering works cleanly — the
-implementer role binds to a cheap-tier persona, the reviewer role binds to
-a strong-tier one, and the loop never hardcodes a model name.
+This separation is why the layered run architecture's cost tiering works
+cleanly — the implementer role binds to a cheap-tier persona, the reviewer
+role binds to a strong-tier one, and `ddx work` never hardcodes a model
+name.
 
 ```mermaid
 flowchart LR
@@ -197,7 +202,7 @@ After `ddx init`:
 │   ├── config.yaml          # project DDx config
 │   ├── plugins/             # installed plugins (local only)
 │   │   └── ddx/             # the default DDx plugin (library)
-│   ├── executions/          # execute-loop evidence
+│   ├── executions/          # ddx try / ddx work evidence
 │   └── beads/               # bead store (JSONL)
 ├── .agents/
 │   └── skills/              # agent-facing skills
@@ -245,9 +250,10 @@ flowchart TB
 ## How the Pieces Fit
 
 The bead tracker decides **what** to do. The persona system decides **how**
-the agent should approach it. The execute-loop runs the agent and routes
-results. The project-local install model means all of that is in the repo,
-not in a developer's home directory or a remote service.
+the agent should approach it. The three-layer run architecture
+(`ddx run` / `ddx try` / `ddx work`) runs the agent and routes results. The
+project-local install model means all of that is in the repo, not in a
+developer's home directory or a remote service.
 
 That's the whole platform. Phases, gates, and methodology live one layer up
 in HELIX; deterministic verification lives in Dun.

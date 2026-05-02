@@ -132,7 +132,9 @@ documents. Better documents produce better code, every time.
 ## Read Next
 
 - [Principles](principles/) — the load-bearing decisions behind DDx.
-- [Architecture](architecture/) — how beads, the execute-loop, personas, and
-  the project-local install model fit together.
+- [Architecture](architecture/) — how beads, personas, and the
+  project-local install model fit together.
+- [Run Architecture](run-architecture/) — the layered `ddx run` /
+  `ddx try` / `ddx work` model that drains the bead queue.
 - [Glossary](glossary/) — quick definitions for the terms used across the
   docs.

@@ -62,10 +62,11 @@ models review; deterministic checks (Dun) sit at the top of the ladder
 catching what review missed. Routing is by capability and endpoint, not by
 hardcoded provider name.
 
-**In practice:** the execute-loop runs implementation on a cheap model in an
-isolated worktree, then routes the diff to a stronger reviewer. Failed
-reviews escalate to a higher tier on the next attempt. The agent service
-discovers models from endpoints rather than wiring named providers.
+**In practice:** `ddx try` runs implementation on a cheap model in an
+isolated worktree, then routes the diff to a stronger reviewer; `ddx work`
+drains the queue across many attempts. Failed reviews escalate to a higher
+tier on the next attempt. The agent service discovers models from endpoints
+rather than wiring named providers.
 
 ## Git-Native, File-First
 

@@ -14,8 +14,9 @@ check the criteria, not the developer's memory of the conversation. See
 ## Agent Service
 
 The DDx subsystem that dispatches work to AI harnesses behind a unified
-prompt envelope. Handles routing, session logging, quorum review, and
-execute-loop runtime. Surfaced as `ddx agent ...`.
+prompt envelope. Handles routing, session logging, quorum review, and the
+underlying invocation runtime that `ddx run` / `ddx try` / `ddx work`
+compose on top of. Surfaced as `ddx agent ...`.
 
 ## Bead
 
@@ -34,11 +35,13 @@ The structured collection of agent-facing artifacts in a project — prompts,
 personas, patterns, templates, MCP server registry, and more. Versioned in
 git, syncable across projects.
 
-## Execute-Loop
+## `ddx run` / `ddx try` / `ddx work`
 
-The runtime that drains the bead queue. Picks a ready bead, runs an agent in
-an isolated worktree, has a stronger model review the result, and either
-merges or escalates. Invoked as `ddx work` or `ddx agent execute-loop`.
+The three-layer run architecture. `ddx run` is one agent invocation
+(layer 1). `ddx try <bead>` is one bead attempt in an isolated worktree
+(layer 2), wrapping one or more `ddx run` invocations. `ddx work` is one
+queue drain (layer 3), iterating `ddx try` until a stop condition is met.
+See [Run Architecture](../run-architecture/) and **FEAT-010**.
 
 ## Harness
 
@@ -90,15 +93,15 @@ and a configured policy (e.g. `majority`) decides the outcome.
 ## Ready Queue
 
 The subset of beads whose dependencies are all closed — the work that's
-pickable right now. Surfaced via `ddx bead ready` and consumed by the
-execute-loop.
+pickable right now. Surfaced via `ddx bead ready` and consumed by
+`ddx work`.
 
 ## Role
 
 An abstract function (e.g. "the reviewer", "the implementer") that a
-project binds to a specific persona in `.ddx.yml`. The execute-loop
-dispatches by role; bindings decide which persona, and which tier of
-model, fulfills it.
+project binds to a specific persona in `.ddx.yml`. `ddx try` and `ddx work`
+dispatch by role; bindings decide which persona, and which tier of model,
+fulfills it.
 
 ## Skill
 
@@ -115,6 +118,6 @@ quality checks). Each layer is independently useful and replaceable. See
 
 ## Worktree (Isolated)
 
-A dedicated git worktree the execute-loop creates per bead so the agent's
+A dedicated git worktree `ddx try` creates per bead attempt so the agent's
 edits never collide with the user's working tree. The worktree is merged
 back to the base ref on success or preserved for diagnosis on failure.

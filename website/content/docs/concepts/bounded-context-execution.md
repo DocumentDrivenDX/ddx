@@ -77,13 +77,13 @@ DDx is built around this loop:
 - **Beads** are the bounded contract. Each bead carries its own description,
   acceptance criteria, and dependency context — enough to be executed
   in isolation.
-- **`ddx agent execute-bead`** runs a single bounded attempt in an isolated
-  git worktree. The agent sees the bead, the worktree, and a tight set of
+- **`ddx try <bead>`** runs a single bounded attempt in an isolated git
+  worktree. The agent sees the bead, the worktree, and a tight set of
   instructions. When the attempt ends, the worktree's state is captured as
   evidence and either merged or preserved.
-- **`ddx work` (the execute-loop)** drains the bead queue by repeatedly
-  invoking `execute-bead`. Each iteration is a fresh agent invocation with a
-  fresh context. There is no shared session state across beads.
+- **`ddx work`** drains the bead queue by repeatedly invoking `ddx try`.
+  Each iteration is a fresh agent invocation with a fresh context. There is
+  no shared session state across beads.
 - **Evidence under `.ddx/executions/`** is the durable memory between
   iterations. Tokens, model, files changed, exit reason, review findings —
   all on disk, all readable by the next iteration if relevant.
@@ -101,4 +101,5 @@ small, fresh, and accountable to a contract on disk.
 
 - [Why DDx](/why/) — the pain that this loop addresses, in plain terms.
 - [Principles](../principles/) — the load-bearing decisions behind DDx.
-- [Execute-loop feature](/features/#execute-loop) — the `ddx work` surface.
+- [Run Architecture](../run-architecture/) — the layered `ddx run` /
+  `ddx try` / `ddx work` model.
