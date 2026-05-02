@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Docs-only change cleanly registers `RSCH` and `REF` artifact kinds in the Common Artifact Types table and adds a clear schema example demonstrating type-specific metadata at the top level alongside the `ddx:` identity block. All four acceptance criteria are satisfied."
+}
