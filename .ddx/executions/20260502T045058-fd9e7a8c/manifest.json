@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T045058-fd9e7a8c",
+  "bead_id": "ddx-cd1f0f7e",
+  "base_rev": "3e7413b07069bd178dc8bd5ae185b6b0a915e3b2",
+  "created_at": "2026-05-02T04:50:59.390036111Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cd1f0f7e",
+    "title": "Sidecar attachment storage for closed-bead events (ADR-004 step 3)",
+    "description": "Implement attachment sidecar storage at .ddx/attachments/\u003cbead-id\u003e/events.jsonl. The bead record in beads-archive carries a reference (preserved-extra field, e.g. 'attachments': {'events': '\u003crelative-path\u003e'}) instead of an inline events array, so the archive row stays small. ddx bead show lazy-loads events from the sidecar when present and merges them into the displayed history. Active beads keep events inline (no behavior change) — the move to sidecar only happens when a bead is archived (handled in the archive-command bead).\n\nReferences: ADR-004 §Attachment Model. Depends on ddx-2f453147.",
+    "acceptance": "1. New attachment helper API in cli/internal/bead reads/writes .ddx/attachments/\u003cbead-id\u003e/events.jsonl. 2. Bead schema preserves an 'attachments' extras field round-trip without losing it. 3. ddx bead show \u003cid\u003e displays events sourced from the sidecar when the bead row uses an attachment reference, identically to inline-events display. 4. schema_compat_test.go still green; bd/br round-trip preserves the attachments extra. 5. Tests cover sidecar read, missing-sidecar fallback, and round-trip preservation.",
+    "parent": "ddx-0c0565f3",
+    "labels": [
+      "area:beads",
+      "area:storage",
+      "kind:feature",
+      "adr:004"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T04:50:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1329405",
+      "execute-loop-heartbeat-at": "2026-05-02T04:50:58.022899668Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T045058-fd9e7a8c",
+    "prompt": ".ddx/executions/20260502T045058-fd9e7a8c/prompt.md",
+    "manifest": ".ddx/executions/20260502T045058-fd9e7a8c/manifest.json",
+    "result": ".ddx/executions/20260502T045058-fd9e7a8c/result.json",
+    "checks": ".ddx/executions/20260502T045058-fd9e7a8c/checks.json",
+    "usage": ".ddx/executions/20260502T045058-fd9e7a8c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-cd1f0f7e-20260502T045058-fd9e7a8c"
+  }
+}
