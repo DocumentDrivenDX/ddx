@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Minimal, well-scoped change: a single 4-line block adds the linked sub-claim under the hero in `_index.md`, matching all four ACs. Link uses a relative path (`docs/...`) instead of absolute (`/docs/...`), but on the root `_index.md` it resolves to the same URL, so AC #2 is functionally satisfied."
+}
