@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-012
+  status: published
 id: REF-012
 title: "EchoLeak — CVE-2025-32711"
 kind: reference

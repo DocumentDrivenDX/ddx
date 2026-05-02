@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-006
+  status: published
 id: REF-006
 title: "AWS Kiro"
 kind: reference

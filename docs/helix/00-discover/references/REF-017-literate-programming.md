@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-017
+  status: published
 id: REF-017
 title: "Literate Programming"
 kind: reference

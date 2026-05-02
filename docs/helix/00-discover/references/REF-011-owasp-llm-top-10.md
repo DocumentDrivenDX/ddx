@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-011
+  status: published
 id: REF-011
 title: "OWASP Top 10 for Large Language Model Applications (2025)"
 kind: reference

@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-025
+  status: published
 id: REF-025
 title: "Language Server Protocol (LSP)"
 kind: reference

@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-030
+  status: published
 id: REF-030
 title: "Portability Lineage: OCI, POSIX, SQL"
 kind: reference

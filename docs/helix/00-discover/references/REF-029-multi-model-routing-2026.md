@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-029
+  status: published
 id: REF-029
 title: "Multi-Model Routing — 2026 Industry Consensus"
 kind: reference

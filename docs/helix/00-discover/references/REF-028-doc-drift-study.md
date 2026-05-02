@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-028
+  status: published
 id: REF-028
 title: "Empirical Study of Documentation Drift in Software Projects"
 kind: reference

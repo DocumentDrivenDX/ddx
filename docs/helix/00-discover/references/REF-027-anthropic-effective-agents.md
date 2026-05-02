@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-027
+  status: published
 id: REF-027
 title: "Building Effective Agents"
 kind: reference

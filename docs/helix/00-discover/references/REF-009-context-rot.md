@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-009
+  status: published
 id: REF-009
 title: "Context Rot: How Increasing Input Tokens Degrades LLM Performance"
 kind: reference

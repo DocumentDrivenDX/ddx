@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-008
+  status: published
 id: REF-008
 title: "Lost in the Middle: How Language Models Use Long Contexts"
 kind: reference

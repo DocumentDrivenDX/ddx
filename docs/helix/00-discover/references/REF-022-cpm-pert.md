@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-022
+  status: published
 id: REF-022
 title: "Critical Path Method (CPM) and PERT"
 kind: reference

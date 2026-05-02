@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-005
+  status: published
 id: REF-005
 title: "GitHub Spec Kit"
 kind: reference

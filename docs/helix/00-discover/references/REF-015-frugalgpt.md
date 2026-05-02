@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-015
+  status: published
 id: REF-015
 title: "FrugalGPT: How to Use Large Language Models While Reducing Cost and Improving Performance"
 kind: reference

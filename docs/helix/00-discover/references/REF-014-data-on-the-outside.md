@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-014
+  status: published
 id: REF-014
 title: "Data on the Outside vs. Data on the Inside"
 kind: reference

@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-024
+  status: published
 id: REF-024
 title: "Dask — Parallel Computing with Task Graphs"
 kind: reference

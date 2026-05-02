@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-016
+  status: published
 id: REF-016
 title: "Self-Refine: Iterative Refinement with Self-Feedback"
 kind: reference

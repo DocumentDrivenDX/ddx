@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-013
+  status: published
 id: REF-013
 title: "MAST: A Multi-Agent System Failure Taxonomy"
 kind: reference

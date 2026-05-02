@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-020
+  status: published
 id: REF-020
 title: "Designing Data-Intensive Applications"
 kind: reference
