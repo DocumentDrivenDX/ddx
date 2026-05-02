@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T124307-1e7a20e1",
+  "bead_id": "ddx-2502ad71",
+  "base_rev": "2c2b6c60674bede7867f95e933b07008d5610438",
+  "created_at": "2026-05-02T12:43:10.043044552Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2502ad71",
+    "title": "scanner: extend skip-list to .ddx/plugins/* + complete duplicate-ID cleanup",
+    "description": "Predecessor ddx-58764e1b closed but only partially fixed the issue. Scanner skip-list now excludes .agents/.claude (good), but .ddx/plugins/helix/docs/ still gets scanned and produces duplicates for SD-021..023, TD-004..010, TP-002..020, helix.workflow.principles, helix.prd, product-vision, etc. Current ddx doc audit still reports 86 duplicate_id issues. Fix: extend skip-list to also exclude .ddx/plugins/*/docs/ (or .ddx/plugins/* entirely if no other paths there matter). Also resolve missing-dep helix.workflow.principles → helix.workflow.",
+    "acceptance": "1. cli/internal/docgraph/docgraph.go skip-list excludes .ddx/plugins/* (or narrower if justified). 2. After fix: ddx doc audit reports 0 duplicate_id issues. 3. Missing-dep resolved or explicitly justified. 4. New unit test in docgraph_test.go for the .ddx/plugins/* skip. 5. Audit before/after captured under .ddx/executions/\u003crun-id\u003e/. 6. FEAT-005 prose amendment: replace 'directory-agnostic' wording with 'content-based discovery within configured roots, subject to an exclusion list of tool-managed/storage dirs'.",
+    "parent": "ddx-781af038",
+    "labels": [
+      "phase:2",
+      "story:4",
+      "area:docgraph",
+      "kind:fix"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:43:07Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T12:43:07.400387442Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T124307-1e7a20e1",
+    "prompt": ".ddx/executions/20260502T124307-1e7a20e1/prompt.md",
+    "manifest": ".ddx/executions/20260502T124307-1e7a20e1/manifest.json",
+    "result": ".ddx/executions/20260502T124307-1e7a20e1/result.json",
+    "checks": ".ddx/executions/20260502T124307-1e7a20e1/checks.json",
+    "usage": ".ddx/executions/20260502T124307-1e7a20e1/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2502ad71-20260502T124307-1e7a20e1"
+  }
+}
