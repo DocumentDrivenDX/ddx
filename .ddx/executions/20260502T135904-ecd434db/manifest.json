@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T135904-ecd434db",
+  "bead_id": "ddx-6d132f62",
+  "base_rev": "8d9483cf5d6253469022eb4ccad7e1af45f59ed2",
+  "created_at": "2026-05-02T13:59:05.945027015Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6d132f62",
+    "title": "Story 16.0: Backend run-detail resolver + tool-call persistence + bundle-file confinement",
+    "description": "Persist normalized ToolCallEntry at drain time onto AgentSession/Run detail backing (extend existing drain in service_run.go / agent_runner_service.go). Extend Run GraphQL resolver with: prompt, response, stderr, toolCalls(first, after), bundleFiles[] (path, size, mimeType), bundleFile(path) -\u003e {content, truncated, sizeBytes}. Bundle-root confinement: canonical-path check rejecting any path outside \u003cprojectRoot\u003e/.ddx/executions/\u003crunId\u003e/. Whitelist enforcement for inline content (allowed extensions: *.txt, *.md, manifest.json, prompt.md, result.json; \u003c64KB). Resolver unit tests cover: path traversal (.., symlink, absolute), size cap (\u003e64KB returns truncated=true with sizeBytes), whitelist enforcement, tool-call persistence-at-drain (not log parsing). See /tmp/story-16-final.md.",
+    "acceptance": "Run resolver exposes prompt/response/stderr/toolCalls(first,after)/bundleFiles[]/bundleFile(path). ToolCallEntry persisted at drain time (not parsed from logs at resolver time). bundleFile rejects path traversal, symlink escape, absolute paths outside bundle root with 404. Files \u003e64KB or non-whitelisted extensions return truncated=true,sizeBytes=N (no content). Unit tests cover all of the above. Existing drain code in service_run.go / agent_runner_service.go updated to write normalized ToolCallEntry to detail backing.",
+    "parent": "ddx-a8a18cb7",
+    "labels": [
+      "phase:2",
+      "story:16"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T13:59:04Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T13:59:04.692443744Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T135904-ecd434db",
+    "prompt": ".ddx/executions/20260502T135904-ecd434db/prompt.md",
+    "manifest": ".ddx/executions/20260502T135904-ecd434db/manifest.json",
+    "result": ".ddx/executions/20260502T135904-ecd434db/result.json",
+    "checks": ".ddx/executions/20260502T135904-ecd434db/checks.json",
+    "usage": ".ddx/executions/20260502T135904-ecd434db/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6d132f62-20260502T135904-ecd434db"
+  }
+}
