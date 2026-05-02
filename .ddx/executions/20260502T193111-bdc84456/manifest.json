@@ -1,0 +1,141 @@
+{
+  "attempt_id": "20260502T193111-bdc84456",
+  "bead_id": "ddx-da11a34a",
+  "base_rev": "8c0f4bdd2ae3f12165f9510dd69180dfe98596bb",
+  "created_at": "2026-05-02T19:31:12.910614451Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-da11a34a",
+    "title": "ddx work: lock around tracker-commit (git add/commit on primary .git) to prevent multi-worker contention",
+    "description": "Bead-store locking is intact and well-tested (cli/internal/bead/lock_unix.go + lock_windows.go, plus the TestChaos_* family in chaos_test.go covering concurrent append/close/claim/dep/event-append). Those tests confirm the JSONL writes themselves are atomic and never lose data under concurrent workers.\n\nThe failure observed in the Phase 2 drain is NOT bead-store contention. It's at cli/internal/agent/execute_bead.go:1050 in the tracker-commit step:\n\n  // Approximate flow at execute_bead.go:1047–1054:\n  msg := fmt.Sprintf(\"chore: update tracker (execute-bead %s)\", time.Now().UTC().Format(\"20060102T150405\"))\n  // git add .ddx/beads.jsonl                        ← line ~1050 (staging tracker)\n  // git commit -m msg                               ← line ~1054 (committing tracker)\n\nThese run against the project's primary .git directory (not a per-worker worktree). When two workers ('ddx work --local' running concurrently) reach this step in overlapping windows, both invoke 'git add' and one fails with:\n\n  fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nThe error surfaces to the loop as 'staging tracker: ...' and the bead is dropped from that drain pass. Observed failures in this drain (single-window): ddx-c77a809c, ddx-cd2ecf79, ddx-6f41aa55.\n\nFix: wrap the tracker-commit pair (and any other git operations on the primary .git from the agent package) in a process-shared file lock, e.g. flock on .ddx/.git-tracker.lock. Reuse the existing flock primitive pattern from cli/internal/bead/lock_unix.go (and lock_windows.go) — same shape, different lockfile.\n\nOut of scope for this bead:\n- Bead-store locking (already works; see chaos_test.go)\n- Worktree branch merging in the worktree itself (each worker has its own .ddx/worktrees/\u003cid\u003e/ that's already isolated)\n- Federation / multi-machine workers (Story 14)",
+    "acceptance": "1. Tracker-commit pair at cli/internal/agent/execute_bead.go:1050+1054 wrapped in process-shared file lock. 2. Lockfile lives at .ddx/.git-tracker.lock. 3. Lock primitive reuses pattern from cli/internal/bead/lock_unix.go + lock_windows.go (flock-based, with stale-lock-by-age fallback). 4. This bead OWNS the lock-error retry policy implementation, including backoff curve, max retries, and stale-lock recovery. ddx-3c154349 (auto-triage) calls into this implementation but does not duplicate the logic. 5. Lock contention behavior aligns with TD-NNN LockContentionContract (per ddx-673833f4): retry-with-backoff is the default response, NOT bead failure. **No persisted status change from lock contention; bd/br compatibility (ADR-004) preserved.** 6. New tests in cli/internal/agent/: TestTrackerCommit_ConcurrentSafety + TestTrackerCommit_StaleLockRecovery + TestTrackerCommit_RetryBackoffPolicy. 7. After fix: re-run drain with 2 workers; zero 'staging tracker' errors over 5+ minutes.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "area:git",
+      "kind:fix",
+      "observed-failure"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T19:31:11Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3446284",
+      "closing_commit_sha": "ae5d00a10ed6f998a1224d21f3c14468d5f65012",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T131531-98ddf974\",\"harness\":\"claude\",\"input_tokens\":37,\"output_tokens\":15425,\"total_tokens\":15462,\"cost_usd\":1.5325055,\"duration_ms\":398828,\"exit_code\":0}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=15462 cost_usd=1.5325"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "APPROVE\nTracker-commit add/commit pair is wrapped in withTrackerLock at execute_bead.go:1037-1071, lockfile at .ddx/.git-tracker.lock, mkdir-based primitive parallels cli/internal/bead/lock.go with pid + acquired_at stale detection. Both required tests present; re-check inside lock and cached-diff bailout add nice robustness.\nartifact: .ddx/executions/20260502T131531-98ddf974/reviewer-stream.log\nharness=claude\nmodel=opus\ninput_bytes=5872\noutput_bytes=1170\nelapsed_ms=45385",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "APPROVE"
+        },
+        {
+          "actor": "erik",
+          "body": "merged onto current tip\nTracker-commit add/commit pair is wrapped in withTrackerLock at execute_bead.go:1037-1071, lockfile at .ddx/.git-tracker.lock, mkdir-based primitive parallels cli/internal/bead/lock.go with pid + acquired_at stale detection. Both required tests present; re-check inside lock and cached-diff bailout add nice robustness.\nresult_rev=ae5d00a10ed6f998a1224d21f3c14468d5f65012\nbase_rev=c3d890b571079967350c0b7980dac406b3b3cce9",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T192347-e4ebfb5e\",\"harness\":\"claude\",\"input_tokens\":35,\"output_tokens\":12123,\"total_tokens\":12158,\"cost_usd\":1.4380022499999998,\"duration_ms\":338673,\"exit_code\":0}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=12158 cost_usd=1.4380"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff contains only a result.json execution-evidence file. No code changes for the tracker-commit lock, no lockfile, no tests. None of the 7 acceptance criteria are implemented in the reviewable diff.\nharness=claude\nmodel=opus\ninput_bytes=6108\noutput_bytes=1147\nelapsed_ms=11502",
+          "created_at": "0001-01-01T00:00:00Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T19:29:44.029879408Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"action\":\"re_attempt_with_context\",\"mode\":\"review_block\"}",
+          "created_at": "2026-05-02T19:29:44.042406272Z",
+          "kind": "triage-decision",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block: re_attempt_with_context"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only a result.json execution-evidence file. No code changes for the tracker-commit lock, no lockfile, no tests. None of the 7 acceptance criteria are implemented in the reviewable diff.\nresult_rev=f97caec4e3206084ac5b19aa19f2b26d0bcb707d\nbase_rev=d9d1c1b8f9d74d3a4aa5da0cc8f04359fe8d33c6",
+          "created_at": "2026-05-02T19:29:44.059049717Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T19:31:11.562435986Z",
+      "session_id": "eb-69eaf51e"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T193111-bdc84456",
+    "prompt": ".ddx/executions/20260502T193111-bdc84456/prompt.md",
+    "manifest": ".ddx/executions/20260502T193111-bdc84456/manifest.json",
+    "result": ".ddx/executions/20260502T193111-bdc84456/result.json",
+    "checks": ".ddx/executions/20260502T193111-bdc84456/checks.json",
+    "usage": ".ddx/executions/20260502T193111-bdc84456/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-da11a34a-20260502T193111-bdc84456"
+  },
+  "prompt_sha": "fb20d9f311fc768aa37289c22c34d741477cff8ef9b2b59dac783b61f565a8e0"
+}
