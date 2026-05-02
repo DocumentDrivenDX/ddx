@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260502T142308-cce20cdd",
+  "bead_id": "ddx-8ec3e08e",
+  "base_rev": "77a0ab3e64a357b31e83df161210ecceeb0a59a3",
+  "created_at": "2026-05-02T14:23:10.032797476Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8ec3e08e",
+    "title": "Story 6 B1: wire frontend q to server search, fix mediaType wildcard, add sort enum + staleness arg",
+    "description": "Phase 1 plumbing for Story 6 artifact listing. See /tmp/story-6-final.md.\n\nChanges:\n- cli/internal/server/graphql/resolver_artifacts.go: translate 'image/*'-style mediaType arg to a prefix match (HasPrefix on 'image/'); current code uses exact equality so the Images chip never matches image/png or image/svg+xml.\n- cli/internal/server/graphql/schema.graphql: add 'sort: ArtifactSort' arg on Query.artifacts with enum values PATH_ASC|PATH_DESC|TITLE_ASC|TITLE_DESC|UPDATED_DESC|UPDATED_ASC|STALENESS, plus 'staleness: String' arg.\n- Resolver: implement sort with deterministic (sortKey, id) tie-breaker; implement staleness filter; keep existing search (title+path substring, case-insensitive) unchanged in this bead.\n- Frontend routes/nodes/[nodeId]/projects/[projectId]/artifacts/+page.ts: pass URL 'q' as the GraphQL 'search' arg instead of client-side substring filter on already-loaded edges. Drop the client-side fallback so search covers the full set.\n- Frontend +page.svelte: when q/sort/mediaType/staleness change, reset 'after' cursor before reloading.\n\nOut of scope: sort dropdown UI, staleness chip UI, URL state for new params, snippet rendering, body-text search, phase/prefix filters.",
+    "acceptance": "- mediaType='image/*' returns image/png and image/svg+xml artifacts (resolver test).\n- ArtifactSort enum present in schema; each value sorts deterministically with id tie-breaker (resolver test).\n- staleness filter narrows result set (resolver test).\n- Frontend artifacts page calls GraphQL with 'search' arg from URL 'q' (no client-side filter remaining).\n- Changing q/sort/mediaType/staleness clears 'after' cursor.\n- 'cd cli \u0026\u0026 go test -v ./internal/server/graphql/...' passes.\n- 'cd cli/internal/server/frontend \u0026\u0026 bun run test' passes.",
+    "parent": "ddx-4728ae0f",
+    "labels": [
+      "phase:2",
+      " story:6"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:23:08Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T13:43:57.874655985Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T133823-f8df7c6d\",\"harness\":\"claude\",\"input_tokens\":41,\"output_tokens\":13425,\"total_tokens\":13466,\"cost_usd\":2.17845775,\"duration_ms\":332799,\"exit_code\":0}",
+          "created_at": "2026-05-02T13:43:57.888746829Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=13466 cost_usd=2.1785"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T13:44:04.530778703Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff for this bead contains only result.json (execution metadata) and the bead-range commits add only test files (artifacts_test.go) + evidence — no resolver, schema, or frontend changes required by the AC. mediaType wildcard, ArtifactSort enum, staleness arg, server-side search wiring, and cursor-reset are not implemented in this bead's diff (appear to live under separate bead ddx-0ac5f35d, commit 13896420).\nharness=claude\nmodel=opus\ninput_bytes=4942\noutput_bytes=1727\nelapsed_ms=36968",
+          "created_at": "2026-05-02T13:44:41.535866047Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T13:44:41.550266973Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff for this bead contains only result.json (execution metadata) and the bead-range commits add only test files (artifacts_test.go) + evidence — no resolver, schema, or frontend changes required by the AC. mediaType wildcard, ArtifactSort enum, staleness arg, server-side search wiring, and cursor-reset are not implemented in this bead's diff (appear to live under separate bead ddx-0ac5f35d, commit 13896420).\nresult_rev=9978c5ac1e8411afe59db12cb25d19afa36ecea8\nbase_rev=2675f38be08c65dc6312d6c527c50c24f22245ec",
+          "created_at": "2026-05-02T13:44:41.561244782Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T14:23:08.651379622Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T142308-cce20cdd",
+    "prompt": ".ddx/executions/20260502T142308-cce20cdd/prompt.md",
+    "manifest": ".ddx/executions/20260502T142308-cce20cdd/manifest.json",
+    "result": ".ddx/executions/20260502T142308-cce20cdd/result.json",
+    "checks": ".ddx/executions/20260502T142308-cce20cdd/checks.json",
+    "usage": ".ddx/executions/20260502T142308-cce20cdd/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-8ec3e08e-20260502T142308-cce20cdd"
+  }
+}
