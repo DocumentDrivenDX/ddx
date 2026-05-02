@@ -1,0 +1,58 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only an execution result.json evidence file. No GraphQL mutations, config changes, allowlist enforcement, or tests are present. Cannot evaluate any AC item.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No source changes for operatorPromptApprove/Cancel mutations",
+      "location": "cli/internal/server"
+    },
+    {
+      "severity": "block",
+      "summary": "No config additions for web.operator_prompt.auto_approve or allow_identities",
+      "location": "cli/internal/config"
+    },
+    {
+      "severity": "block",
+      "summary": "No tests covering approve/cancel/denied paths or config matrix",
+      "location": "cli"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1048,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T230542-d74b3541/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1184,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 3966,
+    "output_bytes": 685,
+    "elapsed_ms": 11097,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
