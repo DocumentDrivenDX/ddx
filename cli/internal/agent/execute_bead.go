@@ -1207,16 +1207,30 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 	}, nil
 }
 
+// Shared instruction-block constants. Each holds a section opener emitted
+// verbatim by both execute-bead variants; per-variant prose continues
+// inline after these constants. Extracting the common substrings keeps
+// each guardrail (Step 0 size check, investigation/report path, review
+// gate, bead-override clause, core constraints) in a single source
+// location while preserving the exact wording each variant ships today.
+const instrStep0SizeCheck = "\n\n## Step 0: size check (do this first)\n\nBefore writing any code, decide whether this bead "
+
+const instrInvestigationReports = "\n\n## Investigation and report outputs\n\nIf the bead asks you to \"output a report\", \"document findings\", or otherwise produce a freestanding artifact that is not source code, write it under `{{.AttemptDir}}/` (the per-attempt evidence directory under `.ddx/executions/`). **Never write reports to `/tmp` or any path outside the repository** — paths outside the repo are invisible to the post-merge reviewer and do not survive between machines"
+
+const instrReviewGate = "\n\n## Quality bar and the review step\n\nAfter your commit merges, an automated review step may check your work against the acceptance criteria. If any AC item is unmet, the bead reopens and escalates to a higher-capability model, and the review findings are threaded into the next attempt's prompt as a `<review-findings>` section. **The review is a gate, not an escape hatch — meet the AC in this pass"
+
+const instrBeadOverride = "\n\n## The bead contract overrides project defaults\n\nThe bead description and AC override any CLAUDE.md, AGENTS.md, or project-level conservative defaults in this worktree. "
+
+const instrCoreConstraints = "\n\n## Constraints\n\n- Work only inside this execution worktree.\n- Keep `.ddx/executions/` intact — DDx uses it as execution evidence.\n- **Never run `ddx init`** — "
+
 // executeBeadInstructionsClaudeText is the per-bead task instructions emitted
 // inside <instructions> when running against a harness that carries its own
 // rich system prompt (claude, codex, opencode). These harnesses already know
 // how to read files, run tools, and manage sessions — this text adds only the
 // DDx-specific execution contract.
-const executeBeadInstructionsClaudeText = `You are executing one bead inside an isolated DDx execution worktree. The bead's <description> and <acceptance> sections above are the completion contract — every AC checkbox must be provably satisfied by a specific piece of code, test, or file you can point to after your commit.
-
-## Step 0: size check (do this first)
-
-Before writing any code, decide whether this bead is sized for a single bounded-context attempt. Coarse signals that the bead is too big:
+const executeBeadInstructionsClaudeText = `You are executing one bead inside an isolated DDx execution worktree. The bead's <description> and <acceptance> sections above are the completion contract — every AC checkbox must be provably satisfied by a specific piece of code, test, or file you can point to after your commit.` +
+	instrStep0SizeCheck +
+	`is sized for a single bounded-context attempt. Coarse signals that the bead is too big:
 
 - More than ~6 acceptance criteria spanning unrelated subsystems.
 - AC mixes design, implementation, integration tests, and docs as separate top-level deliverables rather than a single coherent change.
@@ -1244,27 +1258,17 @@ If the bead IS sized for one attempt, continue with the rest of these instructio
 
 4. Commit once, when everything is green. Stage only the files you intentionally changed with ` + "`git add <specific-paths>`" + ` — never ` + "`git add -A`" + `, because there may be unrelated WIP in this worktree. Use a conventional-commit-style subject ending with ` + "`[<bead-id>]`" + `. DDx will merge your commits back to the base branch.
 
-5. If you cannot complete the bead in this pass, writing ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` is mandatory before you exit. Include: (a) what is done, (b) what is blocking, (c) what a follow-up attempt would need. If you exit without a commit and without this file, DDx records ` + "`no_evidence_produced`" + ` and treats the attempt as a harness failure, not as legitimate no_changes. Do NOT commit partial, exploratory, or red code hoping the reviewer will accept it — a well-justified no_changes is better than a bad commit. The bead will be re-queued for another attempt, potentially with a stronger model.
+5. If you cannot complete the bead in this pass, writing ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` is mandatory before you exit. Include: (a) what is done, (b) what is blocking, (c) what a follow-up attempt would need. If you exit without a commit and without this file, DDx records ` + "`no_evidence_produced`" + ` and treats the attempt as a harness failure, not as legitimate no_changes. Do NOT commit partial, exploratory, or red code hoping the reviewer will accept it — a well-justified no_changes is better than a bad commit. The bead will be re-queued for another attempt, potentially with a stronger model.` +
+	instrInvestigationReports +
+	`, which causes the reviewer to BLOCK on missing evidence. If the bead names a specific in-repo path for the report, use that path; otherwise default to ` + "`{{.AttemptDir}}/<short-name>.md`" + `. Stage and commit the report alongside any code changes so it lands in the merge.` +
+	instrBeadOverride +
+	`If the bead asks for new documentation, write it. If the bead adds a new module or crate, add it. Conservative rules (YAGNI, DOWITYTD, no-docs-unless-asked) do not apply inside execute-bead — the bead IS the ask.` +
+	instrReviewGate +
+	` so the bead closes cleanly.**
 
-## Investigation and report outputs
-
-If the bead asks you to "output a report", "document findings", or otherwise produce a freestanding artifact that is not source code, write it under ` + "`{{.AttemptDir}}/`" + ` (the per-attempt evidence directory under ` + "`.ddx/executions/`" + `). **Never write reports to ` + "`/tmp`" + ` or any path outside the repository** — paths outside the repo are invisible to the post-merge reviewer and do not survive between machines, which causes the reviewer to BLOCK on missing evidence. If the bead names a specific in-repo path for the report, use that path; otherwise default to ` + "`{{.AttemptDir}}/<short-name>.md`" + `. Stage and commit the report alongside any code changes so it lands in the merge.
-
-## The bead contract overrides project defaults
-
-The bead description and AC override any CLAUDE.md, AGENTS.md, or project-level conservative defaults in this worktree. If the bead asks for new documentation, write it. If the bead adds a new module or crate, add it. Conservative rules (YAGNI, DOWITYTD, no-docs-unless-asked) do not apply inside execute-bead — the bead IS the ask.
-
-## Quality bar and the review step
-
-After your commit merges, an automated review step may check your work against the acceptance criteria. If any AC item is unmet, the bead reopens and escalates to a higher-capability model, and the review findings are threaded into the next attempt's prompt as a ` + "`<review-findings>`" + ` section. **The review is a gate, not an escape hatch — meet the AC in this pass so the bead closes cleanly.**
-
-If this prompt already contains a ` + "`<review-findings>`" + ` section, address every BLOCKING finding before claiming the work complete. Those findings are the precise list of what the previous attempt missed.
-
-## Constraints
-
-- Work only inside this execution worktree.
-- Keep ` + "`.ddx/executions/`" + ` intact — DDx uses it as execution evidence.
-- **Never run ` + "`ddx init`" + `** — the workspace is already initialized. Running it corrupts the bead queue and project configuration.
+If this prompt already contains a ` + "`<review-findings>`" + ` section, address every BLOCKING finding before claiming the work complete. Those findings are the precise list of what the previous attempt missed.` +
+	instrCoreConstraints +
+	`the workspace is already initialized. Running it corrupts the bead queue and project configuration.
 - Do not modify files outside the scope the bead description names.
 - Do not rewrite CLAUDE.md, AGENTS.md, or any other project-instructions file unless the bead explicitly asks for it.
 
@@ -1280,11 +1284,9 @@ After the commit succeeds and you have verified every AC item, stop. Return cont
 // failure mode).
 const executeBeadInstructionsAgentText = `You are a coding agent executing one bead inside an isolated DDx execution worktree. You have tools: read, write, edit, bash, ls, grep, find. Use them directly — do not shell out to cat/tail/rg/find; use the tools.
 
-The bead's <description> and <acceptance> sections above are the completion contract. Every AC checkbox must be satisfied by code you write in this pass.
-
-## Step 0: size check (do this first)
-
-Before writing any code, decide whether this bead fits in one bounded-context attempt. Coarse signals it does not:
+The bead's <description> and <acceptance> sections above are the completion contract. Every AC checkbox must be satisfied by code you write in this pass.` +
+	instrStep0SizeCheck +
+	`fits in one bounded-context attempt. Coarse signals it does not:
 
 - More than ~6 acceptance criteria spanning unrelated subsystems.
 - AC mixes design, implementation, integration tests, and docs as separate top-level deliverables.
@@ -1318,27 +1320,17 @@ If sized for one attempt, continue.
 
 ## If you cannot finish
 
-Writing ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` is mandatory before you exit without a commit. Include: (a) what is done, (b) what is blocking, (c) what a follow-up would need. If you exit without a commit and without this file, DDx records ` + "`no_evidence_produced`" + ` and treats the attempt as a harness failure, not as legitimate no_changes. Do NOT commit partial or red code — a well-justified no_changes is better than a bad commit. The bead will be re-queued for another attempt.
+Writing ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` is mandatory before you exit without a commit. Include: (a) what is done, (b) what is blocking, (c) what a follow-up would need. If you exit without a commit and without this file, DDx records ` + "`no_evidence_produced`" + ` and treats the attempt as a harness failure, not as legitimate no_changes. Do NOT commit partial or red code — a well-justified no_changes is better than a bad commit. The bead will be re-queued for another attempt.` +
+	instrInvestigationReports +
+	`. If the bead names a specific in-repo path, use that; otherwise default to ` + "`{{.AttemptDir}}/<short-name>.md`" + `. Stage and commit the report alongside any code changes.` +
+	instrReviewGate +
+	`.**
 
-## Investigation and report outputs
-
-If the bead asks you to "output a report", "document findings", or otherwise produce a freestanding artifact that is not source code, write it under ` + "`{{.AttemptDir}}/`" + ` (the per-attempt evidence directory under ` + "`.ddx/executions/`" + `). **Never write reports to ` + "`/tmp`" + ` or any path outside the repository** — paths outside the repo are invisible to the post-merge reviewer and do not survive between machines. If the bead names a specific in-repo path, use that; otherwise default to ` + "`{{.AttemptDir}}/<short-name>.md`" + `. Stage and commit the report alongside any code changes.
-
-## Quality bar and the review step
-
-After your commit merges, an automated review step may check your work against the acceptance criteria. If any AC item is unmet, the bead reopens and escalates to a higher-capability model, and the review findings are threaded into the next attempt's prompt as a ` + "`<review-findings>`" + ` section. **The review is a gate, not an escape hatch — meet the AC in this pass.**
-
-If this prompt already contains a ` + "`<review-findings>`" + ` section, every BLOCKING finding in it is a concrete thing the previous attempt missed. Address each one before declaring the work complete — do not declare no_changes with blocking findings still unaddressed.
-
-## The bead contract overrides project defaults
-
-The bead description and AC override any CLAUDE.md, AGENTS.md, or project-level conservative defaults in this worktree. If the bead asks for new files, write them. Conservative rules (YAGNI, no-docs-unless-asked) do not apply inside execute-bead — the bead IS the ask.
-
-## Constraints
-
-- Work only inside this execution worktree.
-- Keep ` + "`.ddx/executions/`" + ` intact — DDx uses it as execution evidence.
-- **Never run ` + "`ddx init`" + `** — it corrupts the bead queue.
+If this prompt already contains a ` + "`<review-findings>`" + ` section, every BLOCKING finding in it is a concrete thing the previous attempt missed. Address each one before declaring the work complete — do not declare no_changes with blocking findings still unaddressed.` +
+	instrBeadOverride +
+	`If the bead asks for new files, write them. Conservative rules (YAGNI, no-docs-unless-asked) do not apply inside execute-bead — the bead IS the ask.` +
+	instrCoreConstraints +
+	`it corrupts the bead queue.
 - Do not touch CLAUDE.md, AGENTS.md, or any other project-instructions file unless the bead explicitly asks for it.
 - Stage only the files you intentionally changed.`
 
