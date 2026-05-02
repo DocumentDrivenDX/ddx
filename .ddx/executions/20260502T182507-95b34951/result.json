@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Implementation is clean and complete: a new `/federation` overview, a NodePicker in the nav shell, scope-toggled federated queries on both beads and runs lists, per-row colored node badges with spoke deep-links, and a shared `federationStatus.ts` mapping each status to a distinct visual treatment. The Houdini AC item was correctly identified as not applicable to this project (graphql-request + inline `gql` is the established pattern) and the implementer documented this in `.ddx/executions/.../notes.md`."
+}
