@@ -151,8 +151,9 @@ type ComplexityRoot struct {
 	}
 
 	ArtifactEdge struct {
-		Cursor func(childComplexity int) int
-		Node   func(childComplexity int) int
+		Cursor  func(childComplexity int) int
+		Node    func(childComplexity int) int
+		Snippet func(childComplexity int) int
 	}
 
 	ArtifactGeneratedBy struct {
@@ -1937,6 +1938,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ArtifactEdge.Node(childComplexity), true
+	case "ArtifactEdge.snippet":
+		if e.ComplexityRoot.ArtifactEdge.Snippet == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactEdge.Snippet(childComplexity), true
 
 	case "ArtifactGeneratedBy.promptSummary":
 		if e.ComplexityRoot.ArtifactGeneratedBy.PromptSummary == nil {
@@ -11319,6 +11326,8 @@ func (ec *executionContext) fieldContext_ArtifactConnection_edges(_ context.Cont
 				return ec.fieldContext_ArtifactEdge_node(ctx, field)
 			case "cursor":
 				return ec.fieldContext_ArtifactEdge_cursor(ctx, field)
+			case "snippet":
+				return ec.fieldContext_ArtifactEdge_snippet(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ArtifactEdge", field.Name)
 		},
@@ -11462,6 +11471,35 @@ func (ec *executionContext) _ArtifactEdge_cursor(ctx context.Context, field grap
 }
 
 func (ec *executionContext) fieldContext_ArtifactEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactEdge_snippet(ctx context.Context, field graphql.CollectedField, obj *ArtifactEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactEdge_snippet,
+		func(ctx context.Context) (any, error) {
+			return obj.Snippet, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactEdge_snippet(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "ArtifactEdge",
 		Field:      field,
@@ -40465,6 +40503,8 @@ func (ec *executionContext) _ArtifactEdge(ctx context.Context, sel ast.Selection
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "snippet":
+			out.Values[i] = ec._ArtifactEdge_snippet(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

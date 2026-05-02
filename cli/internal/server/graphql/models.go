@@ -238,6 +238,11 @@ type ArtifactEdge struct {
 	Node *Artifact `json:"node"`
 	// Relay opaque cursor
 	Cursor string `json:"cursor"`
+	// Excerpt showing the match context for the current search query, or null
+	// when the result was admitted by a non-body match (title, path,
+	// description, frontmatter) or no search was supplied. Mirrors the
+	// SearchResult.snippet contract.
+	Snippet *string `json:"snippet,omitempty"`
 }
 
 // ArtifactGeneratedBy holds provenance for a generated artifact.

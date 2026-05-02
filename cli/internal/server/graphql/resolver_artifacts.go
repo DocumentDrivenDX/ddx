@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -16,6 +17,54 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	"gopkg.in/yaml.v3"
 )
+
+// searchBodySizeCapBytes is the maximum number of bytes per file scanned
+// during body search. See TD-029: the cap keeps the linear-scan O(N) safe
+// without an inverted index.
+const searchBodySizeCapBytes = 256 * 1024
+
+// snippetWindowChars controls the leading/trailing context around a body
+// match in the rendered snippet. The window is character-based; the marker
+// "**…**" wraps the matched substring.
+const snippetWindowChars = 60
+
+// binarySearchExtensions lists file extensions we never read for body
+// search. Per TD-029 these are skipped *before* opening the file. SVG and
+// Excalidraw JSON are deliberately treated as text and are NOT in this set.
+var binarySearchExtensions = map[string]struct{}{
+	".png":   {},
+	".jpg":   {},
+	".jpeg":  {},
+	".gif":   {},
+	".webp":  {},
+	".ico":   {},
+	".pdf":   {},
+	".zip":   {},
+	".tar":   {},
+	".gz":    {},
+	".bz2":   {},
+	".xz":    {},
+	".7z":    {},
+	".mp3":   {},
+	".mp4":   {},
+	".mov":   {},
+	".avi":   {},
+	".webm":  {},
+	".wasm":  {},
+	".so":    {},
+	".dylib": {},
+	".dll":   {},
+	".exe":   {},
+	".bin":   {},
+	".o":     {},
+	".a":     {},
+	".class": {},
+	".jar":   {},
+	".ttf":   {},
+	".otf":   {},
+	".woff":  {},
+	".woff2": {},
+}
 
 // ddxSidecarFile is the YAML structure of a .ddx.yaml sidecar file.
 type ddxSidecarFile struct {
@@ -115,14 +164,18 @@ func (r *queryResolver) Artifacts(ctx context.Context, projectID string, first *
 		}
 	}
 
-	// Apply search filter across title and path.
+	// Apply search filter across title, path, description, frontmatter, and
+	// body text per TD-029 precedence. Matches are recorded so each edge can
+	// surface a context-window snippet on ArtifactEdge.snippet.
+	matchSnippets := map[string]string{}
 	if search != nil && *search != "" {
 		q := strings.ToLower(*search)
 		filtered := artifacts[:0]
 		for _, a := range artifacts {
-			if strings.Contains(strings.ToLower(a.Title), q) ||
-				strings.Contains(strings.ToLower(a.Path), q) {
+			snippet, ok := matchArtifactForSearch(a, root, q)
+			if ok {
 				filtered = append(filtered, a)
+				matchSnippets[a.ID] = snippet
 			}
 		}
 		artifacts = filtered
@@ -135,10 +188,15 @@ func (r *queryResolver) Artifacts(ctx context.Context, projectID string, first *
 	all := make([]*ArtifactEdge, len(artifacts))
 	for i, a := range artifacts {
 		cp := a
-		all[i] = &ArtifactEdge{
+		edge := &ArtifactEdge{
 			Node:   cp,
 			Cursor: encodeStableCursor(cp.ID),
 		}
+		if sn, ok := matchSnippets[cp.ID]; ok && sn != "" {
+			s := sn
+			edge.Snippet = &s
+		}
+		all[i] = edge
 	}
 
 	startIdx := 0
@@ -272,6 +330,139 @@ func idPrefixSegment(id string) string {
 		return strings.ToUpper(s[:i])
 	}
 	return ""
+}
+
+// matchArtifactForSearch implements the TD-029 search precedence:
+//
+//  1. title
+//  2. path
+//  3. description
+//  4. ddxFrontmatter (raw JSON)
+//  5. body text (only when the file is text and within the size cap)
+//
+// The first matching field wins; later fields are not consulted. Returns
+// the snippet (with the match marked) and whether the artifact matched.
+// qLower must already be lowercased by the caller.
+func matchArtifactForSearch(a *Artifact, root, qLower string) (string, bool) {
+	if qLower == "" {
+		return "", false
+	}
+	if hit, ok := substringSnippet(a.Title, qLower); ok {
+		return hit, true
+	}
+	if hit, ok := substringSnippet(a.Path, qLower); ok {
+		return hit, true
+	}
+	if a.Description != nil {
+		if hit, ok := substringSnippet(*a.Description, qLower); ok {
+			return hit, true
+		}
+	}
+	if a.DdxFrontmatter != nil {
+		if hit, ok := substringSnippet(*a.DdxFrontmatter, qLower); ok {
+			return hit, true
+		}
+	}
+	// Body search — bounded by size cap and binary skip.
+	if shouldSearchBody(a.Path) {
+		body, ok := readBodyForSearch(filepath.Join(root, filepath.FromSlash(a.Path)))
+		if ok {
+			if hit, ok := substringSnippet(body, qLower); ok {
+				return hit, true
+			}
+		}
+	}
+	return "", false
+}
+
+// substringSnippet finds the (case-insensitive) first occurrence of qLower
+// in text and returns a windowed snippet around it with the match wrapped
+// in "**…**" markers. Reports false when no match is found.
+func substringSnippet(text, qLower string) (string, bool) {
+	if text == "" || qLower == "" {
+		return "", false
+	}
+	lower := strings.ToLower(text)
+	idx := strings.Index(lower, qLower)
+	if idx < 0 {
+		return "", false
+	}
+	matchLen := len(qLower)
+	// Compute window in rune-aware-ish bounds; falling back to bytes is
+	// safe for the predominantly-ASCII content we search, and the marker
+	// preserves the original casing of the matched substring.
+	start := idx - snippetWindowChars
+	if start < 0 {
+		start = 0
+	}
+	end := idx + matchLen + snippetWindowChars
+	if end > len(text) {
+		end = len(text)
+	}
+	var b strings.Builder
+	if start > 0 {
+		b.WriteString("…")
+	}
+	b.WriteString(text[start:idx])
+	b.WriteString("**")
+	b.WriteString(text[idx : idx+matchLen])
+	b.WriteString("**")
+	b.WriteString(text[idx+matchLen : end])
+	if end < len(text) {
+		b.WriteString("…")
+	}
+	return b.String(), true
+}
+
+// shouldSearchBody reports whether a file at the given relative path is
+// eligible for body content search. Binary file extensions are skipped per
+// the TD-029 allowlist. SVG and Excalidraw JSON are explicitly text.
+func shouldSearchBody(relPath string) bool {
+	lower := strings.ToLower(relPath)
+	// Excalidraw JSON variants are text.
+	if strings.HasSuffix(lower, ".excalidraw") || strings.HasSuffix(lower, ".excalidraw.json") {
+		return true
+	}
+	// .excalidraw.png is binary (covered by .png extension below).
+	ext := filepath.Ext(lower)
+	if ext == "" {
+		return true
+	}
+	if _, isBinary := binarySearchExtensions[ext]; isBinary {
+		return false
+	}
+	return true
+}
+
+// readBodyForSearch reads up to searchBodySizeCapBytes from absPath. Files
+// whose first 512 bytes contain a NUL byte are classified as binary and
+// skipped. Returns the trimmed content and whether it should be searched.
+func readBodyForSearch(absPath string) (string, bool) {
+	f, err := os.Open(absPath)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+	buf := make([]byte, searchBodySizeCapBytes)
+	n, err := io.ReadFull(f, buf)
+	if err != nil && err != io.ErrUnexpectedEOF && err != io.EOF {
+		return "", false
+	}
+	if n == 0 {
+		return "", false
+	}
+	data := buf[:n]
+	// Binary content sniff: NUL byte in the first 512 bytes signals binary.
+	sniffEnd := 512
+	if len(data) < sniffEnd {
+		sniffEnd = len(data)
+	}
+	for i := 0; i < sniffEnd; i++ {
+		if data[i] == 0 {
+			return "", false
+		}
+	}
+	return string(data), true
 }
 
 // dependsOnCount returns the number of depends_on entries declared in the
