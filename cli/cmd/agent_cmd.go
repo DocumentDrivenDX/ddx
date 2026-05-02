@@ -1612,15 +1612,17 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 
 	// Zero-config auto-route (ddx-b790449b): when the operator passes no
 	// routing flags and the project has no .ddx/config.yaml routing block,
-	// default to the "cheap" profile so dispatch flows through the global
-	// agent config (~/.config/agent/config.yaml). Without this fallback the
-	// upstream resolveExecuteRoute short-circuits with "routing under-specified"
-	// for any project that hasn't authored per-project routing.
+	// dispatch flows through the global agent config (~/.config/agent/config.yaml).
+	// Without this fallback the upstream resolveExecuteRoute short-circuits
+	// with "routing under-specified" for any project that hasn't authored
+	// per-project routing.
+	//
+	// ddx-b2c9a245: replaces the prior 'always cheap' fallback with
+	// metadata-driven tier inference (escalation.InferTier) evaluated per
+	// bead inside the executor closure below.
 	noRoutingFlags := harness == "" && model == "" && provider == "" && modelRef == "" &&
 		!cmd.Flags().Changed("profile")
-	if noRoutingFlags && !projectHasRoutingConfig(projectRoot) {
-		profile = "cheap"
-	}
+	autoInferTier := noRoutingFlags && !projectHasRoutingConfig(projectRoot)
 
 	// Pre-flight: if neither project nor global agent config has any providers
 	// configured, fail fast with a clear pointer at the global config rather
@@ -1736,12 +1738,20 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			attemptProvider = resolvedProvider
 		}
 
+		// ddx-b2c9a245: when zero-config auto-route is active, derive the
+		// per-attempt profile from the inferred tier rather than the static
+		// "always cheap" fallback the previous hot-fix used.
+		attemptProfile := profile
+		if autoInferTier && tier != "" {
+			attemptProfile = escalation.TierToProfile(tier)
+		}
+
 		loopOverrides := config.CLIOverrides{
 			Harness:           resolvedHarness,
 			Model:             resolvedModel,
 			Provider:          attemptProvider,
 			ModelRef:          modelRef,
-			Profile:           profile,
+			Profile:           attemptProfile,
 			Effort:            effort,
 			MinPower:          minPower,
 			MaxPower:          maxPower,
@@ -1814,7 +1824,19 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			// Pass operator intent (harness/provider/model) directly to
 			// Execute via singleTierAttempt; do not pre-resolve the route
 			// (CONTRACT-003 / ddx-da19756a).
-			report, err := singleTierAttempt(ctx, beadID, "", harness, provider, model)
+			//
+			// ddx-b2c9a245: under zero-config auto-route, infer the tier
+			// from bead metadata (labels, kind, scope) and pass it through
+			// so singleTierAttempt selects the matching profile.
+			var inferredTier escalation.ModelTier
+			if autoInferTier {
+				if b, getErr := store.Get(beadID); getErr == nil {
+					inferredTier = escalation.InferTier(b)
+				} else {
+					inferredTier = escalation.TierCheap
+				}
+			}
+			report, err := singleTierAttempt(ctx, beadID, inferredTier, harness, provider, model)
 			if err == nil {
 				accumulateBilledCost(report)
 				if cappedReport, capped := costCapTripped(); capped {
