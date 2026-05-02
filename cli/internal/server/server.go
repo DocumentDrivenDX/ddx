@@ -4634,6 +4634,10 @@ func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	// Create gqlgen server with the DDX GraphQL schema
+	var fedProvider ddxgraphql.FederationProvider
+	if s.hub != nil {
+		fedProvider = newHubFederationProvider(s)
+	}
 	gqlServer := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
 		Resolvers: &ddxgraphql.Resolver{
 			State:                              s.state,
@@ -4646,6 +4650,7 @@ func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 			CSRFTokens:                         s.csrfTokens,
 			OperatorPromptIdempotency:          s.operatorPromptIdempotency,
 			OperatorPromptAutoApproveAllowlist: s.operatorPromptAutoApproveAllowlist,
+			Federation:                         fedProvider,
 		},
 		Directives: ddxgraphql.DirectiveRoot{},
 	}))
