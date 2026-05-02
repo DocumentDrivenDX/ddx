@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T115300-31d5c745",
+  "bead_id": "ddx-723d93f2",
+  "base_rev": "5548a264ee911194dd7e51ba739d1a2b0cd807ad",
+  "created_at": "2026-05-02T11:53:02.072971219Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-723d93f2",
+    "title": "Story 8: workers/runs tabs reorganization",
+    "description": "Sub-epic for Story 8. Full plan at /tmp/story-8-final.md. Children listed under this epic carry the testable ACs.",
+    "acceptance": "All child beads closed. Locked decisions from the planning round honored.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "story:8"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:53:00Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T11:53:00.956510444Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T115300-31d5c745",
+    "prompt": ".ddx/executions/20260502T115300-31d5c745/prompt.md",
+    "manifest": ".ddx/executions/20260502T115300-31d5c745/manifest.json",
+    "result": ".ddx/executions/20260502T115300-31d5c745/result.json",
+    "checks": ".ddx/executions/20260502T115300-31d5c745/checks.json",
+    "usage": ".ddx/executions/20260502T115300-31d5c745/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-723d93f2-20260502T115300-31d5c745"
+  }
+}
