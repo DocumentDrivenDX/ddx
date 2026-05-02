@@ -1030,30 +1030,43 @@ func CommitTracker(projectRoot string) error {
 		return nil
 	}
 
-	out, err = internalgit.Command(context.Background(), projectRoot, "diff", "--", ".ddx/beads.jsonl").Output()
-	if err != nil {
-		return fmt.Errorf("checking tracker diff: %w", err)
-	}
-	if strings.TrimSpace(string(out)) == "" {
-		out, err = internalgit.Command(context.Background(), projectRoot, "ls-files", "--others", "--exclude-standard", ".ddx/beads.jsonl").Output()
+	msg := fmt.Sprintf("chore: update tracker (execute-bead %s)", time.Now().UTC().Format("20060102T150405"))
+	// Serialize git add/commit on the primary .git across processes so that
+	// concurrent workers (multiple `ddx work --local`) do not race on
+	// .git/index.lock. See cli/internal/agent/tracker_lock.go.
+	return withTrackerLock(projectRoot, func() error {
+		// Re-check inside the lock: a sibling worker may have already
+		// committed the tracker changes between our pre-lock check and now.
+		diff, err := internalgit.Command(context.Background(), projectRoot, "diff", "--", ".ddx/beads.jsonl").Output()
 		if err != nil {
-			return fmt.Errorf("checking tracker untracked: %w", err)
+			return fmt.Errorf("checking tracker diff: %w", err)
 		}
-		if strings.TrimSpace(string(out)) == "" {
+		if strings.TrimSpace(string(diff)) == "" {
+			untracked, err := internalgit.Command(context.Background(), projectRoot, "ls-files", "--others", "--exclude-standard", ".ddx/beads.jsonl").Output()
+			if err != nil {
+				return fmt.Errorf("checking tracker untracked: %w", err)
+			}
+			if strings.TrimSpace(string(untracked)) == "" {
+				return nil
+			}
+		}
+
+		commitOut, err := internalgit.Command(context.Background(), projectRoot, "add", ".ddx/beads.jsonl").CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("staging tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
+		}
+		// `git commit` would fail with "nothing to commit" if the file's
+		// content is byte-identical to HEAD even though `git diff` saw a
+		// diff (e.g. mode/whitespace race). Bail cleanly in that case.
+		if cached, err := internalgit.Command(context.Background(), projectRoot, "diff", "--cached", "--", ".ddx/beads.jsonl").Output(); err == nil && strings.TrimSpace(string(cached)) == "" {
 			return nil
 		}
-	}
-
-	msg := fmt.Sprintf("chore: update tracker (execute-bead %s)", time.Now().UTC().Format("20060102T150405"))
-	commitOut, err := internalgit.Command(context.Background(), projectRoot, "add", ".ddx/beads.jsonl").CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("staging tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
-	}
-	commitOut, err = internalgit.Command(context.Background(), projectRoot, "commit", "--no-verify", "-m", msg).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("committing tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
-	}
-	return nil
+		commitOut, err = internalgit.Command(context.Background(), projectRoot, "commit", "--no-verify", "-m", msg).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("committing tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
+		}
+		return nil
+	})
 }
 
 func resolveBase(gitOps GitOps, workDir, fromRev string) (string, error) {
