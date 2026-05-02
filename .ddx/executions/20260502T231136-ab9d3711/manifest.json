@@ -1,0 +1,96 @@
+{
+  "attempt_id": "20260502T231136-ab9d3711",
+  "bead_id": "ddx-f3c7149d",
+  "base_rev": "75e0d9472387b305869e5bf5009891e7da304d51",
+  "created_at": "2026-05-02T23:11:37.661270405Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f3c7149d",
+    "title": "S15-4: operatorPromptApprove/cancel + per-project allowlist + auto-approve",
+    "description": "Add operatorPromptApprove and operatorPromptCancel mutations transitioning proposed→ready or proposed→cancelled. Add config web.operator_prompt.auto_approve (default ON for localhost, OFF for ts-net). Add web.operator_prompt.allow_identities per-project allowlist keyed on ts-net identity. Default empty allowlist → ts-net peers see read-only UI. See /tmp/story-15-final.md §Implementation #5 and §Additional security controls bullet 3.",
+    "acceptance": "Approve mutation transitions proposed→ready (trusted only); Cancel transitions to cancelled; auto-approve config skips proposed for configured localhost identity only and never for ts-net by default; allowlist enforced per-project — non-listed ts-net peers get 403 on submit; tests cover approve/cancel/denied paths and config matrix.",
+    "parent": "ddx-1d85c927",
+    "labels": [
+      "phase:2",
+      "story:15",
+      "kind:graphql"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T23:11:36Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3924346",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T23:10:49.116369344Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T230542-d74b3541\",\"harness\":\"claude\",\"input_tokens\":39,\"output_tokens\":12864,\"total_tokens\":12903,\"cost_usd\":1.9377262500000008,\"duration_ms\":305600,\"exit_code\":0}",
+          "created_at": "2026-05-02T23:10:49.1384215Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=12903 cost_usd=1.9377"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T23:10:55.124459678Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only an execution result.json evidence file. No GraphQL mutations, config changes, allowlist enforcement, or tests are present. Cannot evaluate any AC item.\nharness=claude\nmodel=opus\ninput_bytes=3966\noutput_bytes=685\nelapsed_ms=11097",
+          "created_at": "2026-05-02T23:11:06.273027975Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T23:11:06.298161212Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"action\":\"re_attempt_with_context\",\"mode\":\"review_block\"}",
+          "created_at": "2026-05-02T23:11:06.315884871Z",
+          "kind": "triage-decision",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block: re_attempt_with_context"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json evidence file. No GraphQL mutations, config changes, allowlist enforcement, or tests are present. Cannot evaluate any AC item.\nresult_rev=34330480d01a2795f390d58fc8e4d1cc4500f2ab\nbase_rev=b037dd053fb2097a6231576d2e176ea0f23e4b8b",
+          "created_at": "2026-05-02T23:11:06.339455484Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T23:11:36.310029478Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T231136-ab9d3711",
+    "prompt": ".ddx/executions/20260502T231136-ab9d3711/prompt.md",
+    "manifest": ".ddx/executions/20260502T231136-ab9d3711/manifest.json",
+    "result": ".ddx/executions/20260502T231136-ab9d3711/result.json",
+    "checks": ".ddx/executions/20260502T231136-ab9d3711/checks.json",
+    "usage": ".ddx/executions/20260502T231136-ab9d3711/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-f3c7149d-20260502T231136-ab9d3711"
+  },
+  "prompt_sha": "549e40c67366a58af490b9fda2737840f36a85634a7d92b7518b1680585e9084"
+}
