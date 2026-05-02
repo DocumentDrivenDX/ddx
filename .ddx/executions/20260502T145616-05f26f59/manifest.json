@@ -1,0 +1,87 @@
+{
+  "attempt_id": "20260502T145616-05f26f59",
+  "bead_id": "ddx-a8939a2b",
+  "base_rev": "6aabcdadf96ae555841be53791d3bf89d0b64672",
+  "created_at": "2026-05-02T14:56:18.195269427Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a8939a2b",
+    "title": "S15-2: Bead schema/template/status-model — operator-prompt issueType",
+    "description": "Extend bead schema validator to accept issueType=operator-prompt. Add 'proposed' status to status model. Add prompt→bead template (auto-AC stub, default labels kind:operator-prompt+source:web-ui, default tier from project policy). Enforce no-self-mutation rule: operator-prompt bead executions cannot create/edit/close other operator-prompt beads. See /tmp/story-15-final.md §Implementation #1 and §Additional security controls last bullet.",
+    "acceptance": "issueType=operator-prompt accepted by validator; new 'proposed' status recognized in state machine with valid transitions (proposed→ready, proposed→cancelled); template applied on create populates labels/tier/auto-AC; structural AC check skipped for issueType=operator-prompt; runtime guard prevents operator-prompt beads from mutating operator-prompt beads (unit tests cover allow/deny matrix).",
+    "parent": "ddx-1d85c927",
+    "labels": [
+      "phase:2",
+      "story:15",
+      "kind:schema"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:56:16Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T13:58:45.902839265Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T135003-ba252f19\",\"harness\":\"claude\",\"input_tokens\":64,\"output_tokens\":20524,\"total_tokens\":20588,\"cost_usd\":3.8985082500000012,\"duration_ms\":521619,\"exit_code\":0}",
+          "created_at": "2026-05-02T13:58:45.918782041Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=20588 cost_usd=3.8985"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T13:58:52.064067306Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only an execution result.json artifact; no source changes for schema validator, status model, template, AC-skip, or self-mutation guard. Insufficient evidence to evaluate any AC item.\nharness=claude\nmodel=opus\ninput_bytes=4022\noutput_bytes=900\nelapsed_ms=10416",
+          "created_at": "2026-05-02T13:59:04.518508629Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T13:59:04.535976653Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json artifact; no source changes for schema validator, status model, template, AC-skip, or self-mutation guard. Insufficient evidence to evaluate any AC item.\nresult_rev=2ea4b7289bd637f1d535c89beffb9ed84b6e1312\nbase_rev=808c4087971cc16a3f9ca2bb5bbf70e29ea8edab",
+          "created_at": "2026-05-02T13:59:04.546881892Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T14:56:16.922948121Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T145616-05f26f59",
+    "prompt": ".ddx/executions/20260502T145616-05f26f59/prompt.md",
+    "manifest": ".ddx/executions/20260502T145616-05f26f59/manifest.json",
+    "result": ".ddx/executions/20260502T145616-05f26f59/result.json",
+    "checks": ".ddx/executions/20260502T145616-05f26f59/checks.json",
+    "usage": ".ddx/executions/20260502T145616-05f26f59/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a8939a2b-20260502T145616-05f26f59"
+  }
+}
