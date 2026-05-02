@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260502T230553-951f7943",
+  "bead_id": "ddx-256af8b5",
+  "base_rev": "29672a8871fc563d016c2c753afb5772bd1cff14",
+  "created_at": "2026-05-02T23:05:54.407663452Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-256af8b5",
+    "title": "S15-7: Multi-node trust attestation forwarding (Story-14 coupling)",
+    "description": "BLOCKING for any non-localhost write enablement. In Story-14 coordinator topology, ensure originating peer identity attestation is forwarded unchanged from coordinator → client; client authorizes on both origin and coordinator identity. Add ADR-conformance lint that flags any new mutation resolver bypassing requireTrusted or omitting CSRF/Origin check on prompt-driven endpoints. Requires Story 14 to land. See /tmp/story-15-final.md §Risks 'Multi-node authorization gap' and §Tests Multi-node line.",
+    "acceptance": "Coordinator forwards origin identity unchanged in mutation envelope; client-side authorization checks both origin and coordinator identity; ADR-conformance lint added to CI and fails on any new mutation resolver missing requireTrusted or CSRF/Origin checks; integration test exercises coordinator→client operator-prompt path with identity attestation.",
+    "parent": "ddx-1d85c927",
+    "labels": [
+      "phase:2",
+      "story:15",
+      "kind:multi-node",
+      "blocking"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T23:05:53Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3924346",
+      "execute-loop-heartbeat-at": "2026-05-02T23:05:53.111446246Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T230553-951f7943",
+    "prompt": ".ddx/executions/20260502T230553-951f7943/prompt.md",
+    "manifest": ".ddx/executions/20260502T230553-951f7943/manifest.json",
+    "result": ".ddx/executions/20260502T230553-951f7943/result.json",
+    "checks": ".ddx/executions/20260502T230553-951f7943/checks.json",
+    "usage": ".ddx/executions/20260502T230553-951f7943/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-256af8b5-20260502T230553-951f7943"
+  },
+  "prompt_sha": "e3a145f9c9842a4719879b7cd86efeaa0e4819af3369029c231b2e88b22768e1"
+}
