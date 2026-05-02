@@ -1,6 +1,6 @@
-For user-facing domain principles, see docs/helix/01-frame/principles.md.
-
 # Engineering Principles
+
+> For user-facing domain principles, see [docs/helix/01-frame/principles.md](../helix/01-frame/principles.md).
 
 These are the internal engineering principles that shape how DDx is built. They guide architectural decisions, feature scoping, and tradeoffs across the codebase.
 
