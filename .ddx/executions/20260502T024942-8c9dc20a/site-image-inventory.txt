@@ -1,0 +1,15 @@
+website/static/visuals/user-workflow.png
+website/static/visuals/tool-tracker.png
+website/static/visuals/tool-plugins.png
+website/static/visuals/tool-execution.jpg
+website/static/visuals/tool-doc-graph.jpg
+website/static/visuals/principle-composite.jpg
+website/static/ui/homepage.png
+website/static/ui/features.png
+website/static/ui/feature-skills.png
+website/static/ui/feature-multi-model-review.png
+website/static/ui/feature-execute-loop.png
+website/static/ui/feature-evidence-capture.png
+website/static/ui/feature-beads-dag.png
+website/static/ui/feature-artifact-graph.png
+website/static/ui/feature-agent-dispatch.png

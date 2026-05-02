@@ -3,9 +3,16 @@ title: Plugins
 weight: 6
 ---
 
+# Plugins {{< maturity "not-started" >}}
+
 DDx plugins extend the platform with workflow methodologies, agent skills, CLI
 tools, and library resources. HELIX is the reference plugin. You can create
 your own.
+
+The plugin API itself — versioned manifests, capability negotiation, and a
+stable contract for third-party plugins — has not started. The install path
+described below works today for HELIX and DDx-internal plugins; it is not yet
+a public, supported integration surface.
 
 ## What a Plugin Provides
 

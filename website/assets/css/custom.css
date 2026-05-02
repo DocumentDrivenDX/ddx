@@ -74,6 +74,16 @@
     background: #1f2937;
     color: #9ca3af;
   }
+
+  :root:not(.light) .ddx-maturity--framing {
+    background: #2e1065;
+    color: #c4b5fd;
+  }
+
+  :root:not(.light) .ddx-maturity--not-started {
+    background: #1f2937;
+    color: #9ca3af;
+  }
 }
 
 body.ddx-editorial-home {
@@ -521,6 +531,16 @@ body.ddx-editorial-home *::after {
   color: #374151;
 }
 
+.ddx-maturity--framing {
+  background: #ede9fe;
+  color: #5b21b6;
+}
+
+.ddx-maturity--not-started {
+  background: #e5e7eb;
+  color: #374151;
+}
+
 .dark .ddx-maturity--stable {
   background: #064e3b;
   color: #6ee7b7;
@@ -532,6 +552,16 @@ body.ddx-editorial-home *::after {
 }
 
 .dark .ddx-maturity--planned {
+  background: #1f2937;
+  color: #9ca3af;
+}
+
+.dark .ddx-maturity--framing {
+  background: #2e1065;
+  color: #c4b5fd;
+}
+
+.dark .ddx-maturity--not-started {
   background: #1f2937;
   color: #9ca3af;
 }

@@ -1,4 +1,4 @@
 {{ $status := .Get 0 | default "stable" }}
-{{ $labels := dict "stable" "Stable" "beta" "Beta" "planned" "Planned" "deprecated" "Deprecated" }}
+{{ $labels := dict "stable" "Stable" "beta" "Beta" "framing" "Framing" "planned" "Planned" "not-started" "Not Started" "deprecated" "Deprecated" }}
 {{ $label := index $labels $status | default ($status | title) }}
 <span class="ddx-maturity ddx-maturity--{{ $status }}" aria-label="Maturity: {{ $label }}">{{ $label }}</span>
