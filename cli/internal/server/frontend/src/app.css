@@ -83,6 +83,11 @@
 	--doc-table-border: #E4DDD0;
 	--doc-row-hover-surface: #F4EFE6;
 	--doc-rule-border: #E4DDD0;
+
+	/* graph edges — solid mid-tone gray that meets WCAG non-text 3:1 against
+	   the warm canvas in both themes. No alpha — color carries subtlety. */
+	--graph-edge: #766F65;
+	--graph-edge-arrow: #766F65;
 }
 
 :root.dark,
@@ -160,6 +165,9 @@
 	--doc-table-border: #34302A;
 	--doc-row-hover-surface: #26231F;
 	--doc-rule-border: #34302A;
+
+	--graph-edge: #9C9486;
+	--graph-edge-arrow: #9C9486;
 }
 
 @layer utilities {
@@ -326,5 +334,14 @@
 	.node-fresh {
 		fill: var(--status-closed-border);
 		stroke: var(--status-closed-text);
+	}
+
+	/* graph edges — color-only subtlety (no stroke-opacity) so the line stays
+	   above 3:1 contrast against the canvas in light and dark modes. */
+	.graph-edge {
+		stroke: var(--graph-edge);
+	}
+	.graph-edge-arrow {
+		fill: var(--graph-edge-arrow);
 	}
 }

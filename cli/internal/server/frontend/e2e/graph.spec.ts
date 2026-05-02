@@ -53,7 +53,7 @@ interface GraphIssueFixture {
 }
 
 function makeGraphResponse(
-	docs = GRAPH_DOCS,
+	docs: readonly { id: string; path: string; title: string; dependsOn: string[]; dependents: string[]; staleness?: string }[] = GRAPH_DOCS,
 	warnings: string[] = [],
 	issues: GraphIssueFixture[] = []
 ) {
@@ -75,9 +75,11 @@ function makeGraphResponse(
 /**
  * Set up GraphQL route mocking for the graph page.
  */
+type FixtureDoc = (typeof GRAPH_DOCS)[number] & { staleness?: string };
+
 async function mockGraphQL(
 	page: import('@playwright/test').Page,
-	docs = GRAPH_DOCS,
+	docs: readonly FixtureDoc[] = GRAPH_DOCS,
 	warnings: string[] = [],
 	issues: GraphIssueFixture[] = [],
 	staleDocIds: string[] = []
@@ -484,6 +486,156 @@ test('TC-041: staleness filter chips update visible node count', async ({ page }
 
 	// Back to all 3 nodes
 	await expect(page.getByText(/3 nodes/)).toBeVisible();
+});
+
+// TC-042: Edges and arrowheads remain visible in dark mode.
+//
+// Regression guard for the previous styling, which painted edges with
+// border-line tokens at stroke-opacity 0.6 — alpha-blended that landed at
+// roughly 1.1:1 against the canvas, well below the WCAG 3:1 non-text floor.
+//
+// We compute contrast against the actual canvas pixel the edge paints onto,
+// folding any residual alpha/parent opacity into a flattened sRGB color before
+// running the luminance ratio. Asserting on the resolved color (not the token
+// string the source happens to reference) means the test catches both
+// regressions: a token rename AND a silent alpha multiplier sneaking back in.
+test('TC-042: edges and arrowheads meet WCAG 3:1 against canvas in dark mode', async ({
+	page
+}) => {
+	await page.addInitScript(() => {
+		window.localStorage.setItem('mode-watcher-mode', 'dark');
+	});
+
+	// Fixture renders fresh / stale / missing in one frame so the contrast
+	// check exercises the same edge color across every node-state pairing the
+	// graph can produce. doc-001=fresh, doc-002=stale, doc-003=missing.
+	const STALENESS_FIXTURE_DOCS = [
+		{
+			id: 'doc-001',
+			path: 'docs/vision.md',
+			title: 'Vision',
+			dependsOn: [],
+			dependents: ['doc-002', 'doc-003'],
+			staleness: 'fresh'
+		},
+		{
+			id: 'doc-002',
+			path: 'docs/prd.md',
+			title: 'PRD',
+			dependsOn: ['doc-001'],
+			dependents: ['doc-003'],
+			staleness: 'stale'
+		},
+		{
+			id: 'doc-003',
+			path: 'docs/design.md',
+			title: 'Design',
+			dependsOn: ['doc-001', 'doc-002'],
+			dependents: [],
+			staleness: 'missing'
+		}
+	];
+
+	await mockGraphQL(page, STALENESS_FIXTURE_DOCS);
+	await page.goto(BASE_URL);
+	await expect(page.getByTestId('doc-graph-svg')).toBeVisible();
+	// Let the simulation settle so edges have non-zero coordinates.
+	await page.waitForTimeout(800);
+
+	// All three staleness classes are in the DOM — confirms the fixture really
+	// does render every state the test claims to cover.
+	await expect(page.locator('[data-testid="doc-graph-svg"] circle.node-fresh')).toHaveCount(1);
+	await expect(page.locator('[data-testid="doc-graph-svg"] circle.node-stale')).toHaveCount(1);
+	await expect(page.locator('[data-testid="doc-graph-svg"] circle.node-missing')).toHaveCount(1);
+
+	// Pull computed colors (already resolved through the CSS var cascade), the
+	// canvas background, and any opacity applied to edges or their ancestors.
+	// page.evaluate runs in the browser, so getComputedStyle gives us the real
+	// painted RGB. We return raw strings and parse on the test side.
+	const sample = await page.evaluate(() => {
+		function readEffectiveOpacity(el: Element | null): number {
+			let o = 1;
+			let cur: Element | null = el;
+			while (cur) {
+				const cs = getComputedStyle(cur);
+				const v = parseFloat(cs.opacity);
+				if (!Number.isNaN(v)) o *= v;
+				cur = cur.parentElement;
+			}
+			return o;
+		}
+		const svg = document.querySelector('[data-testid="doc-graph-svg"]') as SVGSVGElement | null;
+		const line = svg?.querySelector('line.graph-edge') as SVGLineElement | null;
+		const arrow = svg?.querySelector('marker#ddx-arrow path.graph-edge-arrow') as
+			| SVGPathElement
+			| null;
+		const canvas = svg?.parentElement;
+		if (!svg || !line || !arrow || !canvas) {
+			return null;
+		}
+		const lineCs = getComputedStyle(line);
+		const arrowCs = getComputedStyle(arrow);
+		const canvasCs = getComputedStyle(canvas);
+		return {
+			edgeStroke: lineCs.stroke,
+			arrowFill: arrowCs.fill,
+			strokeOpacityAttr: line.getAttribute('stroke-opacity'),
+			edgeOpacity: readEffectiveOpacity(line),
+			arrowOpacity: readEffectiveOpacity(arrow),
+			canvasBg: canvasCs.backgroundColor
+		};
+	});
+
+	expect(sample, 'graph DOM should expose a graph-edge line and graph-edge-arrow path').not.toBeNull();
+	const s = sample!;
+
+	// AC2 belt-and-braces: no inline stroke-opacity attribute survives.
+	expect(s.strokeOpacityAttr).toBeNull();
+
+	function parseRgb(c: string): [number, number, number, number] {
+		const m = /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)\s*(?:,\s*([\d.]+))?\s*\)/.exec(c);
+		if (!m) throw new Error(`unrecognised color: ${c}`);
+		const a = m[4] !== undefined ? parseFloat(m[4]) : 1;
+		return [parseFloat(m[1]), parseFloat(m[2]), parseFloat(m[3]), a];
+	}
+
+	// Alpha-composite a stroke color (with combined alpha) onto the canvas so
+	// the contrast check reflects what the user actually sees.
+	function flatten(
+		fg: [number, number, number, number],
+		bg: [number, number, number, number],
+		extraAlpha: number
+	): [number, number, number] {
+		const a = fg[3] * extraAlpha;
+		return [
+			fg[0] * a + bg[0] * (1 - a),
+			fg[1] * a + bg[1] * (1 - a),
+			fg[2] * a + bg[2] * (1 - a)
+		];
+	}
+
+	function srgb(c: number): number {
+		const v = c / 255;
+		return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+	}
+	function lum(rgb: [number, number, number]): number {
+		return 0.2126 * srgb(rgb[0]) + 0.7152 * srgb(rgb[1]) + 0.0722 * srgb(rgb[2]);
+	}
+	function ratio(a: [number, number, number], b: [number, number, number]): number {
+		const la = lum(a);
+		const lb = lum(b);
+		const [hi, lo] = la > lb ? [la, lb] : [lb, la];
+		return (hi + 0.05) / (lo + 0.05);
+	}
+
+	const bg = parseRgb(s.canvasBg);
+	const bgRgb: [number, number, number] = [bg[0], bg[1], bg[2]];
+
+	const edgeFlat = flatten(parseRgb(s.edgeStroke), bg, s.edgeOpacity);
+	const arrowFlat = flatten(parseRgb(s.arrowFill), bg, s.arrowOpacity);
+
+	expect(ratio(edgeFlat, bgRgb)).toBeGreaterThanOrEqual(3);
+	expect(ratio(arrowFlat, bgRgb)).toBeGreaterThanOrEqual(3);
 });
 
 // TC-036: Graph page re-fetches DocGraph query on navigation (interaction with query)
