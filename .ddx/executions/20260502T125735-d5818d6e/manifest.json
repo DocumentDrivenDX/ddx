@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260502T125735-d5818d6e",
+  "bead_id": "ddx-7a26141e",
+  "base_rev": "97a8add6ed6b79287abd690da468c7e53ba2db48",
+  "created_at": "2026-05-02T12:57:36.775793075Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7a26141e",
+    "title": "doc-graph: Playwright test for non-overlapping layout + no regression",
+    "description": "Deterministic e2e test for non-overlapping layout. Bounding-box checks for nodes; bounding-box-vs-circle checks for labels. No regression on existing graph e2e.",
+    "acceptance": "1. New Playwright test asserts no node-bbox overlap and no label-bbox-vs-circle overlap after settle. 2. cd cli/internal/server/frontend \u0026\u0026 bun run test:e2e -- graph passes. 3. Existing graph e2e still passes.",
+    "parent": "ddx-86ccbb75",
+    "labels": [
+      "phase:2",
+      "story:3",
+      "area:web",
+      "area:tests",
+      "kind:test"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:57:35Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T12:57:35.508075559Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T125735-d5818d6e",
+    "prompt": ".ddx/executions/20260502T125735-d5818d6e/prompt.md",
+    "manifest": ".ddx/executions/20260502T125735-d5818d6e/manifest.json",
+    "result": ".ddx/executions/20260502T125735-d5818d6e/result.json",
+    "checks": ".ddx/executions/20260502T125735-d5818d6e/checks.json",
+    "usage": ".ddx/executions/20260502T125735-d5818d6e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-7a26141e-20260502T125735-d5818d6e"
+  }
+}
