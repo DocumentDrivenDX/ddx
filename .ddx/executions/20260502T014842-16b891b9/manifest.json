@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260502T014842-16b891b9",
+  "bead_id": "ddx-5089b1ec",
+  "base_rev": "44ce441e0be2bd43ac972d4700a4430e434a41bc",
+  "created_at": "2026-05-02T01:48:44.172720513Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-5089b1ec",
+    "title": "Verify retry/escalation policy with zero-config routing path",
+    "description": "Follow-up to ddx-b790449b AC6. Hot-fix did not change retry/escalation logic, only the auto-route default. This bead verifies that transient failures retry within tier and substantive failures escalate to next tier as expected when the loop starts from the new 'profile=cheap' default. Add an integration test that simulates a transient failure on the cheap tier and asserts escalation to standard, then smart.",
+    "labels": [
+      "area:routing",
+      "kind:test",
+      "priority:medium"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T01:48:42Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "execute-loop-heartbeat-at": "2026-05-02T01:48:42.816218505Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T014842-16b891b9",
+    "prompt": ".ddx/executions/20260502T014842-16b891b9/prompt.md",
+    "manifest": ".ddx/executions/20260502T014842-16b891b9/manifest.json",
+    "result": ".ddx/executions/20260502T014842-16b891b9/result.json",
+    "checks": ".ddx/executions/20260502T014842-16b891b9/checks.json",
+    "usage": ".ddx/executions/20260502T014842-16b891b9/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-5089b1ec-20260502T014842-16b891b9"
+  }
+}
