@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T025340-195666bf",
+  "bead_id": "ddx-b3319694",
+  "base_rev": "1c162d0ad0bc97ffa540d5133be594518bd3eb55",
+  "created_at": "2026-05-02T02:53:41.474376804Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b3319694",
+    "title": "Replace website/content/docs/concepts/principles.md with redirect to new principles index",
+    "description": "The existing concepts/principles page carries old/internal principles. Replace with a thin index that redirects or links to the new /docs/principles/\u003cslug\u003e/ pages. Either delete and add nav redirect, or keep as a brief umbrella page describing the 10 principles with links to deep pages.",
+    "acceptance": "1. website/content/docs/concepts/principles.md no longer carries the 9-principle outdated list. 2. Either redirects to /docs/principles/ (umbrella) or deleted with nav update. 3. cd website \u0026\u0026 hugo builds without 404 warnings on principle internal links.",
+    "parent": "ddx-629ec5b4",
+    "labels": [
+      "site-redesign",
+      "area:website",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T02:53:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "execute-loop-heartbeat-at": "2026-05-02T02:53:39.959393622Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T025340-195666bf",
+    "prompt": ".ddx/executions/20260502T025340-195666bf/prompt.md",
+    "manifest": ".ddx/executions/20260502T025340-195666bf/manifest.json",
+    "result": ".ddx/executions/20260502T025340-195666bf/result.json",
+    "checks": ".ddx/executions/20260502T025340-195666bf/checks.json",
+    "usage": ".ddx/executions/20260502T025340-195666bf/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b3319694-20260502T025340-195666bf"
+  }
+}
