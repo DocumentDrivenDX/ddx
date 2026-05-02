@@ -247,6 +247,24 @@ flowchart TB
     class DDxDir,AgentsDir,ClaudeDir local;
 ```
 
+## Multi-Machine Sync
+
+DDx is checked out per-project on every machine an operator uses. During an
+execute-loop drain, `beads.jsonl` and `executions/` churn every few minutes,
+and manually pulling/stashing/pushing across machines is friction that gets
+skipped — leading to divergent tracker state.
+
+`ddx sync` is the canonical flow for keeping DDx-managed paths
+(`.ddx/beads.jsonl`, `.ddx/executions/`, `.ddx/plugins/`) aligned with
+`origin/main`. Run it as a one-shot (`ddx sync`) or as a daemon
+(`ddx sync --watch`) that loops on an interval. The command is constrained
+to the DDx-managed allowlist — it never touches paths outside it — and any
+condition it cannot auto-resolve (stash-pop conflict, divergent base,
+double push failure) aborts cleanly, writes a failure record, and surfaces
+through `ddx doctor`.
+
+See **FEAT-023** for the full sync specification.
+
 ## How the Pieces Fit
 
 The bead tracker decides **what** to do. The persona system decides **how**
