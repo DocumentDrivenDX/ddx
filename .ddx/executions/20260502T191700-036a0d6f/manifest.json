@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260502T191700-036a0d6f",
+  "bead_id": "ddx-7d7a17c8",
+  "base_rev": "ae2fd6ba8102457bbfaa9b800354d750188016a9",
+  "created_at": "2026-05-02T19:17:01.391065632Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7d7a17c8",
+    "title": "TD-driven reconciliation: FEAT-004/SD-004 docs + Go status constants + IsValidStatusTransition matrix",
+    "description": "Sibling of ddx-673833f4 (state-machine TD). After the TD lands, this bead reconciles all source-of-truth files to match the TD's canonical state list (the bd/br-compatible 6 — schema is NOT modified).\n\nMechanical work driven by the TD's decisions:\n\n1. Update FEAT-004 docs/helix/01-frame/features/FEAT-004-beads.md line 65 — change documented status list from 3 values to the canonical 6 (open, in_progress, closed, blocked, proposed, cancelled).\n2. Update SD-004 docs/helix/02-design/solution-designs/SD-004-beads-tracker.md — cross-reference the new TD.\n3. Audit cli/internal/bead/types.go status constants (lines 59-75) — convert any non-canonical status references to use the canonical Status* constants.\n4. Audit cli/internal/agent/ for non-canonical persisted-status writes — convert event-kind/phase/derived-category names that were misused as statuses (per the TD's naming-role decision matrix).\n5. Update IsValidStatusTransition (cli/internal/bead/types.go:110-125) to match the TD's transition matrix.\n\nNO functional behavior change. Pure documentation + code-vocabulary alignment to the TD.",
+    "acceptance": "1. FEAT-004 line 65 documents the canonical 6-value status list. 2. SD-004 cross-references the new TD. 3. cli/internal/bead/types.go Status* constants match the canonical 6; no off-list constants exist. 4. No persisted status WRITES in cli/internal/agent/ use string literals outside the canonical 6 (verified via grep). 5. IsValidStatusTransition matches TD transition matrix; existing tests pass. 6. cd cli \u0026\u0026 go test ./internal/bead/... ./internal/agent/... passes. 7. ddx doc audit clean.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:specs",
+      "area:beads",
+      "kind:reconciliation"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T19:17:00Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3446284",
+      "execute-loop-heartbeat-at": "2026-05-02T19:17:00.0896641Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T191700-036a0d6f",
+    "prompt": ".ddx/executions/20260502T191700-036a0d6f/prompt.md",
+    "manifest": ".ddx/executions/20260502T191700-036a0d6f/manifest.json",
+    "result": ".ddx/executions/20260502T191700-036a0d6f/result.json",
+    "checks": ".ddx/executions/20260502T191700-036a0d6f/checks.json",
+    "usage": ".ddx/executions/20260502T191700-036a0d6f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-7d7a17c8-20260502T191700-036a0d6f"
+  },
+  "prompt_sha": "6aa91f362ab8c3071b4f6002f1aea203e7c8973d398a6dbfc65645c309302221"
+}
