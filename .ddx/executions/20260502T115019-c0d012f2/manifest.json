@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T115019-c0d012f2",
+  "bead_id": "ddx-bc346d44",
+  "base_rev": "2aed1eab9dfafbb227610dc7501580346605876b",
+  "created_at": "2026-05-02T11:50:20.891537049Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bc346d44",
+    "title": "Story 2: doc graph dark mode visibility",
+    "description": "Sub-epic for Story 2. Full plan at /tmp/story-2-final.md. Children listed under this epic carry the testable ACs.",
+    "acceptance": "All child beads closed. Locked decisions from the planning round honored.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "story:2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:50:19Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T11:50:19.670559181Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T115019-c0d012f2",
+    "prompt": ".ddx/executions/20260502T115019-c0d012f2/prompt.md",
+    "manifest": ".ddx/executions/20260502T115019-c0d012f2/manifest.json",
+    "result": ".ddx/executions/20260502T115019-c0d012f2/result.json",
+    "checks": ".ddx/executions/20260502T115019-c0d012f2/checks.json",
+    "usage": ".ddx/executions/20260502T115019-c0d012f2/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-bc346d44-20260502T115019-c0d012f2"
+  }
+}
