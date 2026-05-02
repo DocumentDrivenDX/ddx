@@ -222,6 +222,16 @@ func promptCapError(observed, cap int) error {
 // auto-approve operator prompts).
 var errAutoApproveDenied = errors.New("operator-prompts: identity not on per-project auto-approve allowlist (status: 403)")
 
+// errSubmitDenied is returned by OperatorPromptSubmit when the caller is a
+// ts-net peer whose identity is not on the per-project allowlist
+// (web.operator_prompt.allow_identities). Localhost callers are always
+// allowed to submit because they have already cleared the requireTrusted
+// loopback gate; ts-net peers carry only network-layer trust, so the
+// per-project allowlist is the authorization step. Empty allowlist →
+// every ts-net peer is rejected (the locked Story 15 default that yields a
+// "ts-net peers see read-only UI" outcome).
+var errSubmitDenied = errors.New("operator-prompts: ts-net identity not on per-project allow_identities allowlist (status: 403)")
+
 // OperatorPromptSubmit implements the operatorPromptSubmit mutation: it
 // validates the CSRF token from the request header, deduplicates within a
 // 24h window by idempotency key, and (on first submission) creates a new
@@ -250,6 +260,11 @@ func (r *mutationResolver) OperatorPromptSubmit(ctx context.Context, input Opera
 	presented := httpReq.Header.Get(CSRFHeaderName)
 	if r.CSRFTokens == nil || !r.CSRFTokens.Validate(presented) {
 		return nil, errCSRF
+	}
+
+	identity := operatorPromptIdentity(httpReq)
+	if !r.canSubmit(identity) {
+		return nil, errSubmitDenied
 	}
 
 	cap := r.PromptCapBytes
@@ -287,7 +302,6 @@ func (r *mutationResolver) OperatorPromptSubmit(ctx context.Context, input Opera
 		return nil, err
 	}
 
-	identity := operatorPromptIdentity(httpReq)
 	originNodeID := httpReq.Header.Get("X-Tailscale-Node")
 	if originNodeID == "" {
 		// Loopback callers do not carry an X-Tailscale-Node header; the
@@ -485,6 +499,30 @@ func (r *mutationResolver) requireOperatorPromptCSRF(ctx context.Context) (*http
 		return nil, operatorPromptIdentityInfo{}, errCSRF
 	}
 	return httpReq, operatorPromptIdentity(httpReq), nil
+}
+
+// canSubmit reports whether ident is authorized to submit operator prompts
+// for this project. Localhost identities are always allowed (they have
+// already cleared the requireTrusted loopback gate, which is the project's
+// strongest trust signal). ts-net identities must appear in the per-project
+// OperatorPromptAutoApproveAllowlist (the same list that gates approval —
+// per Story 15 the project's "allow_identities" config is one allowlist
+// serving both submit-by-tsnet and approve-by-localhost). An empty list
+// rejects every ts-net peer, yielding the documented "ts-net peers see
+// read-only UI" default.
+func (r *Resolver) canSubmit(ident operatorPromptIdentityInfo) bool {
+	if ident.kind == "localhost" {
+		return true
+	}
+	if ident.kind != "tsnet" {
+		return false
+	}
+	for _, entry := range r.OperatorPromptAutoApproveAllowlist {
+		if entry == ident.actor {
+			return true
+		}
+	}
+	return false
 }
 
 // canAutoApprove reports whether ident is authorized to approve operator

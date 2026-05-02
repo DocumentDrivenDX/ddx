@@ -248,7 +248,11 @@ func TestOperatorPromptApprove_DeniedEmptyAllowlist(t *testing.T) {
 // when the allowlist contains the localhost sentinel. The submission
 // succeeds (bead is created in proposed) but autoApproved=false.
 func TestOperatorPromptSubmit_AutoApproveDeniedForTsnet(t *testing.T) {
-	h, store, token := setupApprovalHarness(t, []string{ddxgraphql.OperatorPromptAllowlistLocalhostSentinel}, "alice@example.com")
+	// Allowlist contains both the localhost sentinel (so localhost may
+	// auto-approve) AND the ts-net actor (so the ts-net peer is permitted
+	// to submit at all). The locked Story 15 decision still denies the
+	// auto-approve transition for ts-net regardless of allowlist contents.
+	h, store, token := setupApprovalHarness(t, []string{ddxgraphql.OperatorPromptAllowlistLocalhostSentinel, "alice@example.com"}, "alice@example.com")
 
 	autoApprove := true
 	id, raw := submitProposed(t, h, token, "do a ts-net thing", "k1", &autoApprove)
@@ -363,6 +367,43 @@ func TestOperatorPromptApprove_RejectsNonProposed(t *testing.T) {
 	resp := postGQL(t, h, token, approveMutation, map[string]any{"id": id})
 	if _, ok := resp["errors"]; !ok {
 		t.Fatal("approve on cancelled bead must error")
+	}
+}
+
+// AC #4: per-project allowlist enforced — a ts-net peer not on the
+// allow_identities allowlist receives a 403 on operatorPromptSubmit and no
+// bead is created. This is the "default empty allowlist → ts-net peers see
+// read-only UI" guarantee enforced server-side.
+func TestOperatorPromptSubmit_TsnetNotInAllowlistRejected(t *testing.T) {
+	h, _, token := setupApprovalHarness(t, nil, "bob@example.com")
+
+	resp := postGQL(t, h, token, submitMutation, map[string]any{
+		"input": map[string]any{
+			"prompt":         "from a ts-net peer",
+			"idempotencyKey": "k1",
+		},
+	})
+	errs, ok := resp["errors"]
+	if !ok {
+		t.Fatalf("expected ts-net submit to be denied, got data %s", resp["data"])
+	}
+	var parsed []struct {
+		Message string `json:"message"`
+	}
+	_ = json.Unmarshal(errs, &parsed)
+	if len(parsed) == 0 || !contains(parsed[0].Message, "allow_identities") || !contains(parsed[0].Message, "403") {
+		t.Errorf("denial must reference allow_identities and 403, got %q", parsed)
+	}
+}
+
+// AC #4: a ts-net peer that IS on the per-project allowlist may submit
+// (still proposed; auto-approve remains localhost-only).
+func TestOperatorPromptSubmit_TsnetOnAllowlistAccepted(t *testing.T) {
+	h, _, token := setupApprovalHarness(t, []string{"carol@example.com"}, "carol@example.com")
+
+	id, _ := submitProposed(t, h, token, "from a permitted ts-net peer", "k1", nil)
+	if id == "" {
+		t.Fatal("expected submit to succeed when ts-net actor is on allowlist")
 	}
 }
 
