@@ -250,67 +250,6 @@ type ArtifactGeneratedBy struct {
 	SourceHashMatch bool `json:"sourceHashMatch"`
 }
 
-// ArtifactSort selects the field used to order Artifact results.
-type ArtifactSort string
-
-const (
-	ArtifactSortID        ArtifactSort = "ID"
-	ArtifactSortPath      ArtifactSort = "PATH"
-	ArtifactSortModified  ArtifactSort = "MODIFIED"
-	ArtifactSortTitle     ArtifactSort = "TITLE"
-	ArtifactSortDepsCount ArtifactSort = "DEPS_COUNT"
-)
-
-var AllArtifactSort = []ArtifactSort{
-	ArtifactSortID,
-	ArtifactSortPath,
-	ArtifactSortModified,
-	ArtifactSortTitle,
-	ArtifactSortDepsCount,
-}
-
-func (e ArtifactSort) IsValid() bool {
-	switch e {
-	case ArtifactSortID, ArtifactSortPath, ArtifactSortModified, ArtifactSortTitle, ArtifactSortDepsCount:
-		return true
-	}
-	return false
-}
-
-func (e ArtifactSort) String() string {
-	return string(e)
-}
-
-func (e *ArtifactSort) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-	*e = ArtifactSort(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid ArtifactSort", str)
-	}
-	return nil
-}
-
-func (e ArtifactSort) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *ArtifactSort) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e ArtifactSort) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
-}
-
 // ArtifactRegenerateResult is the response from the artifactRegenerate mutation.
 type ArtifactRegenerateResult struct {
 	// Run ID of the dispatched regeneration worker
@@ -1575,6 +1514,32 @@ func (Provider) IsNode() {}
 // Globally unique identifier
 func (this Provider) GetID() string { return this.ID }
 
+// ProviderModelEntry is one model identifier published by a provider's discovery endpoint.
+type ProviderModelEntry struct {
+	// Model identifier (e.g. "gpt-4o", "claude-opus-4-7").
+	ID string `json:"id"`
+	// Optional context-window length, when known.
+	ContextLength *int `json:"contextLength,omitempty"`
+	// Whether the model is currently routable (configured and reachable).
+	Available bool `json:"available"`
+}
+
+// ProviderModelsResult bundles a cached discovery snapshot for one provider or harness.
+type ProviderModelsResult struct {
+	// Provider or harness name.
+	Name string `json:"name"`
+	// Provider kind.
+	Kind ProviderKind `json:"kind"`
+	// Discovered models.
+	Models []*ProviderModelEntry `json:"models"`
+	// Sanitized base URL (scheme + host[:port][/path], no credentials/query/fragment). Empty for HARNESS.
+	BaseURL string `json:"baseURL"`
+	// When this snapshot was last refreshed (ISO-8601 UTC).
+	FetchedAt string `json:"fetchedAt"`
+	// True when the result was served from cache without a live fetch.
+	FromCache bool `json:"fromCache"`
+}
+
 // ProviderQuota captures the ceiling reported by the harness/provider, when known.
 // All fields are nullable; null means "not reported" (no fabrication).
 type ProviderQuota struct {
@@ -2152,6 +2117,73 @@ type WorkerRecentEvent struct {
 	Inputs *string `json:"inputs,omitempty"`
 	// Tool call output text
 	Output *string `json:"output,omitempty"`
+}
+
+// ArtifactSort selects the field used to order Artifact results.
+type ArtifactSort string
+
+const (
+	// Sort by globally unique artifact ID
+	ArtifactSortID ArtifactSort = "ID"
+	// Sort by file path relative to the project root
+	ArtifactSortPath ArtifactSort = "PATH"
+	// Sort by last modified timestamp
+	ArtifactSortModified ArtifactSort = "MODIFIED"
+	// Sort by human-readable title
+	ArtifactSortTitle ArtifactSort = "TITLE"
+	// Sort by number of depends_on references in the artifact's frontmatter
+	ArtifactSortDepsCount ArtifactSort = "DEPS_COUNT"
+)
+
+var AllArtifactSort = []ArtifactSort{
+	ArtifactSortID,
+	ArtifactSortPath,
+	ArtifactSortModified,
+	ArtifactSortTitle,
+	ArtifactSortDepsCount,
+}
+
+func (e ArtifactSort) IsValid() bool {
+	switch e {
+	case ArtifactSortID, ArtifactSortPath, ArtifactSortModified, ArtifactSortTitle, ArtifactSortDepsCount:
+		return true
+	}
+	return false
+}
+
+func (e ArtifactSort) String() string {
+	return string(e)
+}
+
+func (e *ArtifactSort) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = ArtifactSort(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ArtifactSort", str)
+	}
+	return nil
+}
+
+func (e ArtifactSort) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ArtifactSort) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ArtifactSort) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
 }
 
 // ProviderKind distinguishes endpoint providers from subprocess harnesses.
