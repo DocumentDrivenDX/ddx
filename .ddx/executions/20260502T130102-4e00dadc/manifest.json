@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T130102-4e00dadc",
+  "bead_id": "ddx-0ba83363",
+  "base_rev": "63af87f9a0861d203928cad5358b66226554b029",
+  "created_at": "2026-05-02T13:01:03.617783847Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0ba83363",
+    "title": "docs(spec): FEAT-008 AC for graph edge contrast (WCAG AA non-text)",
+    "description": "Add an acceptance criterion to docs/helix/01-frame/features/FEAT-008-web-ui.md stating that doc graph edges and arrowheads must meet WCAG AA non-text contrast (\u003e=3:1 against canvas) in both light and dark themes. Single-file spec edit. See /tmp/story-1-final.md (bead-C).",
+    "acceptance": "AC1: docs/helix/01-frame/features/FEAT-008-web-ui.md contains a new AC entry referencing WCAG AA 3:1 non-text contrast for doc graph edges and arrowheads in both themes.\nAC2: No other files modified.",
+    "parent": "ddx-db5e0227",
+    "labels": [
+      "phase:2",
+      " story:1",
+      " tier:cheap"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T13:01:02Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T13:01:02.63604883Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T130102-4e00dadc",
+    "prompt": ".ddx/executions/20260502T130102-4e00dadc/prompt.md",
+    "manifest": ".ddx/executions/20260502T130102-4e00dadc/manifest.json",
+    "result": ".ddx/executions/20260502T130102-4e00dadc/result.json",
+    "checks": ".ddx/executions/20260502T130102-4e00dadc/checks.json",
+    "usage": ".ddx/executions/20260502T130102-4e00dadc/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-0ba83363-20260502T130102-4e00dadc"
+  }
+}
