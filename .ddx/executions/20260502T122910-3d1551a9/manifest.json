@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T122910-3d1551a9",
+  "bead_id": "ddx-d7740325",
+  "base_rev": "1569316b633938539491f1e4fa6e8ec0874a8f55",
+  "created_at": "2026-05-02T12:29:11.503222084Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d7740325",
+    "title": "B4b: Author TD for prompt versioning, DDX_PROMPT_VARIANT selector, offline comparison",
+    "description": "Author a new technical-design (TD) document capturing the measurement roadmap per /tmp/story-12-final.md 'New TD' section. Covers: prompt_version field on manifest (after prompt_sha lands in B3), DDX_PROMPT_VARIANT=\u003cname\u003e environment selector for offline A/B, offline-comparison roadmap leveraging existing telemetry (usage.json, session_index.go session tokens, resolver_feat008.go efficacy view). NOT implementing the selector or version field in this story — TD captures the design only.",
+    "acceptance": "AC8 (TD portion): New TD document authored under docs/helix/ (or appropriate TD location) describing prompt_version, DDX_PROMPT_VARIANT selector, and the offline-comparison roadmap. TD is explicit that implementation is deferred.",
+    "parent": "ddx-a61bf8ee",
+    "labels": [
+      "phase:2",
+      "story:12",
+      "tier:cheap"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:29:10Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T12:29:10.321580032Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T122910-3d1551a9",
+    "prompt": ".ddx/executions/20260502T122910-3d1551a9/prompt.md",
+    "manifest": ".ddx/executions/20260502T122910-3d1551a9/manifest.json",
+    "result": ".ddx/executions/20260502T122910-3d1551a9/result.json",
+    "checks": ".ddx/executions/20260502T122910-3d1551a9/checks.json",
+    "usage": ".ddx/executions/20260502T122910-3d1551a9/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d7740325-20260502T122910-3d1551a9"
+  }
+}
