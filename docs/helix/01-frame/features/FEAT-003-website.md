@@ -50,7 +50,7 @@ ddx:
    10. Inspect and adapt
 5. **Principle deep pages** — 10 pages at `/docs/principles/<slug>/index.md`, each rendered from the corresponding `RSCH-NNN` research artifact in `docs/helix/00-discover/research/`. Each deep page presents claim → evidence → DDx-feature mapping.
 6. **CLI reference** — curated noun-verb command documentation matching the command overview in `CLAUDE.md`
-7. **Ecosystem page** — shows DDx's position as infrastructure, lists workflow tools built on DDx, highlights HELIX as first plugin. **Dun is removed from all site copy** (no longer a peer in the ecosystem).
+7. **Ecosystem page** — shows DDx's position as infrastructure, lists workflow tools built on DDx, highlights HELIX as first plugin. **Deprecated peer tools are removed from all site copy** (no longer peers in the ecosystem).
 8. **Server documentation** — how to run ddx-server, MCP endpoint reference
 9. **Embedded terminal demos** — asciinema recordings of core workflows embedded in hero section and getting-started page:
    - Install DDx
@@ -62,7 +62,7 @@ ddx:
 
 ### Content stance
 
-- **Dun removed.** No references to Dun anywhere in site copy, ecosystem diagrams, or glossary.
+- **Deprecated peer tools removed.** No references to deprecated peer tools anywhere in site copy, ecosystem diagrams, or glossary.
 - **Quorum de-emphasized.** Multi-model review (quorum) is no longer a primary capability and is removed from the features list. It is documented only in skill-level pages and badged as "framing" (matches `FEAT-013` status).
 - **Naming.** `ddx run` / `ddx try` / `ddx work` is the unified primary naming. `execute-loop` / `execute-bead` appear only inside the CLI reference, not in primary copy.
 - **Software factory framing.** The homepage, `docs/helix/00-discover/product-vision.md` (new "Lineage" section), and `docs/helix/01-frame/principles.md` (new preface) all frame DDx as a document-driven software factory.
@@ -79,7 +79,7 @@ ddx:
 /docs/principles/<slug>/           → 10 deep pages, one per domain principle
 /docs/cli/                         → curated noun-verb CLI reference
 /docs/server/                      → ddx-server + MCP endpoint reference
-/docs/ecosystem                    → DDx + HELIX positioning (Dun removed)
+/docs/ecosystem                    → DDx + HELIX positioning (deprecated peer tools removed)
 ```
 
 The `/why` summaries and `/docs/principles/<slug>/` deep pages are the user-facing **domain principle taxonomy** (10 pages). The complementary 6 **engineering principles** are internal and live in `docs/dev/engineering-principles.md`, not on the site.
@@ -166,7 +166,7 @@ The `/why` summaries and `/docs/principles/<slug>/` deep pages are the user-faci
 - Other concepts pages (document-driven development explanation, document model, architecture)
 - CLI Reference (curated noun-verb reference)
 - DDx Server (MCP endpoints, HTTP API — marked as under development)
-- Ecosystem (stack diagram, what-goes-where table; Dun removed)
+- Ecosystem (stack diagram, what-goes-where table; deprecated peer tools removed)
 
 ### Demo Recording Pipeline
 

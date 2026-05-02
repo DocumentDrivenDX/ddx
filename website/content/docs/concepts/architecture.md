@@ -249,10 +249,10 @@ flowchart TB
 
 ## Multi-Machine Sync
 
-DDx is checked out per-project on every machine an operator uses. During an
-execute-loop drain, `beads.jsonl` and `executions/` churn every few minutes,
-and manually pulling/stashing/pushing across machines is friction that gets
-skipped — leading to divergent tracker state.
+DDx is checked out per-project on every machine an operator uses. While
+agents drain the queue, `beads.jsonl` and `executions/` churn every few
+minutes, and manually pulling/stashing/pushing across machines is friction
+that gets skipped — leading to divergent tracker state.
 
 `ddx sync` is the canonical flow for keeping DDx-managed paths
 (`.ddx/beads.jsonl`, `.ddx/executions/`, `.ddx/plugins/`) aligned with
