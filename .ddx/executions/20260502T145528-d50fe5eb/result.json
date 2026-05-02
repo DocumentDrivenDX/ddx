@@ -1,0 +1,48 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Search extended across title/path/description/frontmatter/body with TD-029 precedence; ArtifactEdge.snippet added with marker-wrapped context window; 256KB size cap and binary-extension+NUL-sniff skip enforced; pagination preserved through existing sort path; resolver tests added (373 lines).",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Schema docstring says snippet is null for non-body matches, but implementation populates it for any match (title/path/description/frontmatter/body). Minor doc/behavior mismatch — behavior matches AC; consider tightening the schema comment.",
+      "location": "cli/internal/server/graphql/schema.graphql:2085"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1542,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T144856-628a40db/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1184,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 4460,
+    "output_bytes": 738,
+    "elapsed_ms": 33851,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
