@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T044812-68cf1712",
+  "bead_id": "ddx-f7f09b6e",
+  "base_rev": "c69689ec723aa9854e9ea502e841caf4ad0013bf",
+  "created_at": "2026-05-02T04:48:14.299955332Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f7f09b6e",
+    "title": "Add beads-archive collection with transparent read-through (ADR-004 step 2)",
+    "description": "Build on the named-collection abstraction to add a 'beads-archive' collection backed by .ddx/beads-archive.jsonl. Update bead reads (ddx bead list/show/ready/blocked, ddx work queue scan) so they transparently see archived beads when looked up by id, but treat the active 'beads' file as the queue source for ready/blocked computation. Archive remains append-only for normal commands; only the archive command (separate bead) writes there.\n\nReferences: ADR-004 §Collection Model. Depends on ddx-2f453147.",
+    "acceptance": "1. .ddx/beads-archive.jsonl is recognized as a valid bead collection. 2. ddx bead show \u003cid\u003e finds beads in either active or archive. 3. ddx bead list has a --include-archive flag (or equivalent) and the default behavior is documented. 4. ddx bead ready / blocked still operate only on the active collection (archive entries are closed and irrelevant). 5. ddx work / agent execute-loop ignores archive when picking next work. 6. New tests cover read-through for show, and active-only behavior for ready/blocked.",
+    "parent": "ddx-0c0565f3",
+    "labels": [
+      "area:beads",
+      "area:storage",
+      "kind:feature",
+      "adr:004"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T04:48:12Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1329405",
+      "execute-loop-heartbeat-at": "2026-05-02T04:48:12.932661876Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T044812-68cf1712",
+    "prompt": ".ddx/executions/20260502T044812-68cf1712/prompt.md",
+    "manifest": ".ddx/executions/20260502T044812-68cf1712/manifest.json",
+    "result": ".ddx/executions/20260502T044812-68cf1712/result.json",
+    "checks": ".ddx/executions/20260502T044812-68cf1712/checks.json",
+    "usage": ".ddx/executions/20260502T044812-68cf1712/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-f7f09b6e-20260502T044812-68cf1712"
+  }
+}
