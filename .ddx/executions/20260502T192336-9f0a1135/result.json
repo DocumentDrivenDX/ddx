@@ -1,0 +1,63 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only an execution result.json artifact; no code changes implementing the singleton flock guard, writeAddrFile ordering, pid-alive validation, or the required tests. None of the 8 acceptance criteria are satisfied by this diff.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No server-side flock singleton guard implemented",
+      "location": "cli/internal/server/server.go"
+    },
+    {
+      "severity": "block",
+      "summary": "No client-side pid-alive validation in ReadServerAddr or callers",
+      "location": "cli/internal/server/server.go:328"
+    },
+    {
+      "severity": "block",
+      "summary": "Required tests TestServer_SingletonGuardRefusesSecondLaunch and TestServer_StaleAddressFallbackWithWarning are absent",
+      "location": "cli/internal/server/"
+    },
+    {
+      "severity": "block",
+      "summary": "Diff only adds an execution evidence result.json; no source code modified",
+      "location": ".ddx/executions/20260502T191634-fc858450/result.json"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 3741,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T191634-fc858450/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1183,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 6658,
+    "output_bytes": 1012,
+    "elapsed_ms": 9166,
+    "harness": "claude",
+    "model": "opus"
+  }
+}

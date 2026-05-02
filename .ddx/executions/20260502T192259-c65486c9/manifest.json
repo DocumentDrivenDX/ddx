@@ -1,0 +1,54 @@
+{
+  "attempt_id": "20260502T192259-c65486c9",
+  "bead_id": "ddx-3c154349",
+  "base_rev": "4221a8f3596a23aedd4bab355865d023c9b3f344",
+  "created_at": "2026-05-02T19:23:00.543718766Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3c154349",
+    "title": "ddx work: auto-triage on review BLOCK + substantive execution failures",
+    "description": "Currently when a bead hits a post-merge review BLOCK, the drain loop emits the BLOCK event, leaves the bead open, and moves to the next ready bead. The BLOCK then sits in the queue waiting for a human. Same for many substantive execution_failed cases — no automated triage.\n\nThis bead handles BLOCK + substantive failures only. Two SEPARATE beads cover related-but-distinct concerns:\n- ddx-aede917d: drain pause/resume on quota exhaustion (Fizeau-side state, DDx consumes typed error)\n- ddx-c6e3db02: per-bead rate-limit retry honoring Retry-After (provider stays in rotation)\n\nFailure modes triaged HERE:\n- post-merge review BLOCK → either (a) re-attempt-with-context (BLOCK reasons embedded in next prompt), (b) escalate to next tier in the S10_2 ladder, or (c) file follow-up bead capturing BLOCK reasons + mark original needs_human\n- 'staging tracker: Unable to create .git/index.lock' (git contention — see  / ddx-da11a34a) → retry with backoff after lock clears\n- substantive execution_failed (probe_ok+exec_fail; agent finished but produced no useful diff or wrong shape) → escalate per S10 ladder\n- 'no_changes' (agent decided nothing to do) → re-evaluate against the bead AC; if still seems valid, file a clarification follow-up rather than mark already_satisfied\n\nTriage policy is config-driven, per-failure-mode mapping in .ddx/config.yaml triage:. Default: BLOCK→re-attempt-with-context, then escalate-tier on second BLOCK, then needs_human on third.\n\nNOT in scope: rate-limit handling (ddx-c6e3db02) and quota-pause handling (ddx-aede917d) — those are separate beads with their own infrastructure.",
+    "acceptance": "1. Loop has triage step after each attempt's terminal event. 2. Per-failure-mode triage policy in .ddx/config.yaml. 3. Triage outcomes (re-attempt-with-context, escalate-tier, needs_human) align exactly with TD-NNN TriageContract (per ddx-673833f4). **No new persisted statuses introduced — all triage state lives in labels (e.g., triage:needs-human) and events per bd/br compatibility (ADR-004).** 4. Default: BLOCK→re-attempt-with-context, then escalate-tier, then add 'triage:needs-human' label. 5. Lock-error handling delegates to ddx-da11a34a's implementation; this bead does NOT duplicate retry/backoff logic. Triage policy entry for lock errors invokes the lock-bead's published API. 6. Tests: BLOCK→re-attempt, BLOCK→escalate, lock-error→delegates-to-lock-bead, no_changes→re-evaluate. 7. Out of scope: rate-limit handling, quota-pause handling, lock-retry implementation, status-enum modification. 8. needs_human stays a LABEL per current code (cli/internal/agent/execute_bead_review_triage.go:19-23) and TD's resolution. 9. **schema_compat_test.go round-trip passes after this bead lands.**",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "kind:fix",
+      "observed-failure"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T19:22:59Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3446284",
+      "closing_commit_sha": "aac5e76c0a05dedd67c6fec79d2c8b257b3c428d",
+      "events": [
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T18:09:03.619482987Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "Auto-closed by drain with only execution-evidence files (no implementation). Reopening per the no_changes pattern that auto-triage (ddx-3c154349 itself) should fix. Real work pending."
+        }
+      ],
+      "events_attachment": "ddx-3c154349/events.jsonl",
+      "execute-loop-heartbeat-at": "2026-05-02T19:22:59.287156906Z",
+      "execute-loop-no-changes-count": 1,
+      "session_id": "eb-7c0473fb"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T192259-c65486c9",
+    "prompt": ".ddx/executions/20260502T192259-c65486c9/prompt.md",
+    "manifest": ".ddx/executions/20260502T192259-c65486c9/manifest.json",
+    "result": ".ddx/executions/20260502T192259-c65486c9/result.json",
+    "checks": ".ddx/executions/20260502T192259-c65486c9/checks.json",
+    "usage": ".ddx/executions/20260502T192259-c65486c9/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3c154349-20260502T192259-c65486c9"
+  },
+  "prompt_sha": "37754fef2ac068b8d2f098b4da1ea873d972be588f895dbbbeda3b49d0ba5e8d"
+}
