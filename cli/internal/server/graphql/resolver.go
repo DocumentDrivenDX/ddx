@@ -74,6 +74,20 @@ type Resolver struct {
 	// (e.g. "localhost:127.0.0.1:55812"). An empty allowlist disables both
 	// auto-approve and the manual approve mutation for this project.
 	OperatorPromptAutoApproveAllowlist []string
+	// PromptCapBytes caps the prompt body size accepted by
+	// operatorPromptSubmit. When zero the resolver falls back to
+	// DefaultOperatorPromptCapBytes (= evidence.DefaultMaxPromptBytes), which
+	// matches the inline-prompt cap on /api/agent/run.
+	PromptCapBytes int
+	// BuildSHA is the server build commit recorded on the operator-prompt
+	// audit event so the immutable first event captures the binary version
+	// that accepted the submission. Empty -> "unknown".
+	BuildSHA string
+	// NodeID is the receiving server's stable node ID, captured on the
+	// operator-prompt audit event. Used together with the originating
+	// X-Tailscale-Node header (which identifies the *peer*'s node) so the
+	// audit trail records both ends of the trust attestation.
+	NodeID string
 	// Federation, when non-nil, supplies the spoke registry and fan-out
 	// client used by the federationNodes / federated{Beads,Runs,Projects}
 	// query resolvers. Nil → those queries return empty lists (the default

@@ -3,16 +3,26 @@ package graphql
 import (
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/evidence"
+	"github.com/vektah/gqlparser/v2/gqlerror"
 )
+
+// DefaultOperatorPromptCapBytes is the fallback prompt-body cap when the
+// resolver was constructed without an explicit PromptCapBytes value. It
+// mirrors the inline-prompt cap enforced by the REST /api/agent/run handler
+// (evidence.DefaultMaxPromptBytes) so the two write surfaces share a limit.
+const DefaultOperatorPromptCapBytes = evidence.DefaultMaxPromptBytes
 
 // CSRFHeaderName is the HTTP header that must carry the server-issued CSRF
 // token on operatorPromptSubmit calls (FEAT operator-prompts, Story 15).
@@ -178,6 +188,32 @@ func (s *StaticCSRFTokenStore) Validate(presented string) bool {
 // resolver itself only emits the error.
 var errCSRF = errors.New("operator-prompts: CSRF token missing or invalid (status: 403)")
 
+// errCrossOrigin is returned by OperatorPromptSubmit when the request carries
+// an Origin header whose host portion does not match the request Host. This
+// blocks browser cross-origin POSTs even from a trusted-loopback peer (CSRF
+// defense in depth alongside the per-session token).
+var errCrossOrigin = errors.New("operator-prompts: cross-origin request rejected (status: 403)")
+
+// promptCapError builds the structured cap-error envelope returned by
+// operatorPromptSubmit when the prompt body exceeds the configured cap. The
+// envelope is surfaced inside `errors[].extensions` so the SvelteKit
+// frontend can show observed/cap bytes without parsing the message string.
+func promptCapError(observed, cap int) error {
+	return &gqlerror.Error{
+		Message: fmt.Sprintf(
+			"operator-prompts: prompt body exceeds cap: observed %d bytes, cap %d bytes (status: 400)",
+			observed, cap,
+		),
+		Extensions: map[string]any{
+			"code":           "PROMPT_TOO_LARGE",
+			"status":         400,
+			"observed_bytes": observed,
+			"cap_bytes":      cap,
+			"config_hint":    ".ddx/config.yaml:evidence_caps.max_prompt_bytes",
+		},
+	}
+}
+
 // errAutoApproveDenied is returned by OperatorPromptApprove (and is the
 // reason auto-approve gets demoted to a plain proposed bead inside
 // OperatorPromptSubmit) when the caller's identity is not on the per-project
@@ -208,9 +244,20 @@ func (r *mutationResolver) OperatorPromptSubmit(ctx context.Context, input Opera
 		// whole point of the gate. Refuse rather than fail open.
 		return nil, errCSRF
 	}
+	if err := validateSameOrigin(httpReq); err != nil {
+		return nil, err
+	}
 	presented := httpReq.Header.Get(CSRFHeaderName)
 	if r.CSRFTokens == nil || !r.CSRFTokens.Validate(presented) {
 		return nil, errCSRF
+	}
+
+	cap := r.PromptCapBytes
+	if cap <= 0 {
+		cap = DefaultOperatorPromptCapBytes
+	}
+	if observed := len(input.Prompt); observed > cap {
+		return nil, promptCapError(observed, cap)
 	}
 
 	cache := r.OperatorPromptIdempotency
@@ -241,12 +288,42 @@ func (r *mutationResolver) OperatorPromptSubmit(ctx context.Context, input Opera
 	}
 
 	identity := operatorPromptIdentity(httpReq)
+	originNodeID := httpReq.Header.Get("X-Tailscale-Node")
+	if originNodeID == "" {
+		// Loopback callers do not carry an X-Tailscale-Node header; the
+		// origin and the receiving node are the same machine, so record the
+		// receiving node ID for symmetry.
+		originNodeID = r.NodeID
+	}
+	buildSHA := r.BuildSHA
+	if buildSHA == "" {
+		buildSHA = "unknown"
+	}
+	approvalMode := "manual"
+	if input.AutoApprove != nil && *input.AutoApprove {
+		approvalMode = "auto-requested"
+	}
+	requestID := httpReq.Header.Get("X-Request-Id")
+	if requestID == "" {
+		requestID = newRequestID()
+	}
+	promptHash := sha256.Sum256([]byte(input.Prompt))
+	promptSHA := hex.EncodeToString(promptHash[:])
 	auditBody := fmt.Sprintf(
-		"identity=%s remote_addr=%s tailscale_user=%s tailscale_node=%s idempotency_key=%s",
+		"identity=%s remote_addr=%s tailscale_user=%s tailscale_node=%s "+
+			"origin_node_id=%s receiving_node_id=%s build_sha=%s "+
+			"approval_mode=%s request_id=%s prompt_sha256=%s "+
+			"idempotency_key=%s",
 		identity.kind,
 		httpReq.RemoteAddr,
 		httpReq.Header.Get("X-Tailscale-User"),
 		httpReq.Header.Get("X-Tailscale-Node"),
+		originNodeID,
+		r.NodeID,
+		buildSHA,
+		approvalMode,
+		requestID,
+		promptSHA,
 		input.IdempotencyKey,
 	)
 	if err := store.AppendEvent(b.ID, bead.BeadEvent{
@@ -452,4 +529,64 @@ func operatorPromptIdentity(r *http.Request) operatorPromptIdentityInfo {
 		return operatorPromptIdentityInfo{kind: "localhost", actor: "localhost:" + r.RemoteAddr}
 	}
 	return operatorPromptIdentityInfo{kind: "unknown", actor: "anonymous"}
+}
+
+// validateSameOrigin enforces strict Origin/Host equality on prompt-driven
+// mutations. When the request carries an Origin header (every browser POST
+// does), the host portion must match the request Host — this rejects
+// browser cross-origin POSTs even from a trusted-loopback peer (defense in
+// depth alongside the per-session CSRF token). Non-browser clients (curl,
+// the SvelteKit fetch wrapper running same-origin) either omit Origin or
+// emit an Origin matching Host, so they pass through unchanged.
+func validateSameOrigin(r *http.Request) error {
+	origin := r.Header.Get("Origin")
+	if origin == "" {
+		// No Origin -> not a browser cross-origin POST. CSRF token is the
+		// remaining gate.
+		return nil
+	}
+	parsed, err := url.Parse(origin)
+	if err != nil || parsed.Host == "" {
+		return errCrossOrigin
+	}
+	if !sameHost(parsed.Host, r.Host) {
+		return errCrossOrigin
+	}
+	return nil
+}
+
+// sameHost compares two host[:port] strings tolerating an absent port (a
+// browser may omit :443 from Origin while the request Host carries it, or
+// vice versa). The comparison is case-insensitive on the host component.
+func sameHost(a, b string) bool {
+	ah, _ := splitHostPort(a)
+	bh, _ := splitHostPort(b)
+	if !strings.EqualFold(ah, bh) {
+		return false
+	}
+	// Reject when both sides carry a port and they disagree; tolerate the
+	// "one side omits the port" case (default-port elision by the browser).
+	_, ap := splitHostPort(a)
+	_, bp := splitHostPort(b)
+	if ap != "" && bp != "" && ap != bp {
+		return false
+	}
+	return true
+}
+
+func splitHostPort(hp string) (string, string) {
+	if i := strings.LastIndex(hp, ":"); i > 0 && !strings.Contains(hp[i:], "]") {
+		return hp[:i], hp[i+1:]
+	}
+	return hp, ""
+}
+
+// newRequestID returns a 16-byte hex random string used as the request ID
+// recorded on the audit event when the caller does not supply X-Request-Id.
+func newRequestID() string {
+	var buf [16]byte
+	if _, err := rand.Read(buf[:]); err != nil {
+		return "no-request-id"
+	}
+	return hex.EncodeToString(buf[:])
 }

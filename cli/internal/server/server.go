@@ -19,6 +19,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"sort"
 	"strconv"
 	"strings"
@@ -48,6 +49,22 @@ import (
 // cap without writing multi-MB request bodies. Production callers must not
 // mutate it.
 var serverPromptCapBytes = evidence.DefaultMaxPromptBytes
+
+// serverBuildSHA returns the build's VCS revision for inclusion on
+// operator-prompt audit events. Falls back to "unknown" when build info is
+// unavailable (e.g. `go test` without -buildvcs or development builds).
+func serverBuildSHA() string {
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return "unknown"
+	}
+	for _, s := range info.Settings {
+		if s.Key == "vcs.revision" && s.Value != "" {
+			return s.Value
+		}
+	}
+	return "unknown"
+}
 
 // serverInlineCapBytes caps inline content bodies returned on egress paths
 // — MCP tool responses and REST JSON responses that carry library-doc,
@@ -4690,6 +4707,9 @@ func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 			CSRFTokens:                         s.csrfTokens,
 			OperatorPromptIdempotency:          s.operatorPromptIdempotency,
 			OperatorPromptAutoApproveAllowlist: s.operatorPromptAutoApproveAllowlist,
+			PromptCapBytes:                     serverPromptCapBytes,
+			BuildSHA:                           serverBuildSHA(),
+			NodeID:                             s.state.Node.ID,
 			Federation:                         fedProvider,
 		},
 		Directives: ddxgraphql.DirectiveRoot{},
