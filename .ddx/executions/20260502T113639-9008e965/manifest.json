@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T113639-9008e965",
+  "bead_id": "ddx-b18d9ce6",
+  "base_rev": "2b34ceab6e6f2ca1a20c930fc6014e00f889d6e6",
+  "created_at": "2026-05-02T11:36:40.556616234Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b18d9ce6",
+    "title": "Phase 2: post-redesign UX, ops, topology, autonomy",
+    "description": "Umbrella epic for the 17-story batch following the 2026-05 redesign. Each sub-epic corresponds to one user story with its plan at /tmp/story-N-final.md. Locked decisions baked in: Story 4 fold strategy moot (predecessor closed; successor bead needed); Story 8 Sessions tab keeps AgentSession as backing store; Story 10 keeps --no-review as break-glass with required ack flag; Story 15 full agent toolkit for operator prompts.",
+    "acceptance": "All 17 sub-epics closed. Drain completes without unresolved review BLOCKs. ddx doc audit passes on any new specs/research artifacts. Locked decisions honored.",
+    "labels": [
+      "phase:2",
+      "initiative",
+      "umbrella"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:36:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T11:36:39.423678091Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T113639-9008e965",
+    "prompt": ".ddx/executions/20260502T113639-9008e965/prompt.md",
+    "manifest": ".ddx/executions/20260502T113639-9008e965/manifest.json",
+    "result": ".ddx/executions/20260502T113639-9008e965/result.json",
+    "checks": ".ddx/executions/20260502T113639-9008e965/checks.json",
+    "usage": ".ddx/executions/20260502T113639-9008e965/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b18d9ce6-20260502T113639-9008e965"
+  }
+}
