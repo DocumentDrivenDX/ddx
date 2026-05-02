@@ -1,0 +1,72 @@
+{
+  "attempt_id": "20260502T020601-5475a766",
+  "bead_id": "ddx-b12e4593",
+  "base_rev": "ddd87c88bf34385fa4690f6a3cf6ca561700317f",
+  "created_at": "2026-05-02T02:06:02.498226562Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b12e4593",
+    "title": "Drop Dun references from site copy, product-vision.md, and any other DDx repo docs",
+    "description": "Remove all references to 'Dun' from website content, docs/helix/00-discover/product-vision.md, and any concept/glossary pages. Per locked decision, Dun is not a peer and may never happen. Three-layer stack mentions update to DDx (platform) + HELIX (workflow); third layer omitted.",
+    "acceptance": "1. Run 'rg -n \"\\\\bDun\\\\b\" website/content/ docs/helix/' returns no matches (case-sensitive on Dun, not 'fun' etc.). 2. product-vision.md three-layer stack updated to DDx + HELIX with no third project named. 3. Glossary page (if exists) has no Dun entry.",
+    "parent": "ddx-629ec5b4",
+    "labels": [
+      "site-redesign",
+      "area:docs",
+      "area:website",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T02:06:01Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-02T01:36:50.811973125Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-02T01:36:50.948240509Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-05-02T01:36:51.061677336Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-05-02T01:36:51.278464918Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T02:06:01.066235804Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T020601-5475a766",
+    "prompt": ".ddx/executions/20260502T020601-5475a766/prompt.md",
+    "manifest": ".ddx/executions/20260502T020601-5475a766/manifest.json",
+    "result": ".ddx/executions/20260502T020601-5475a766/result.json",
+    "checks": ".ddx/executions/20260502T020601-5475a766/checks.json",
+    "usage": ".ddx/executions/20260502T020601-5475a766/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b12e4593-20260502T020601-5475a766"
+  }
+}
