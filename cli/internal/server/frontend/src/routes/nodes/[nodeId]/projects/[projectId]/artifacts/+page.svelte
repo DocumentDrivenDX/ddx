@@ -5,6 +5,12 @@
 	import { createClient } from '$lib/gql/client'
 	import { ARTIFACTS_QUERY, PAGE_SIZE } from './+page'
 	import type { ArtifactEdge, ArtifactConnection, PageInfo } from './+page'
+	import { writeState } from '$lib/urlState'
+	import {
+		groupItems,
+		GROUP_BY_LABELS,
+		type GroupBy
+	} from './grouping'
 
 	let { data }: { data: PageData } = $props()
 
@@ -18,6 +24,22 @@
 	})
 
 	let q = $state(data.q)
+	let groupBy = $state<GroupBy>(data.groupBy)
+
+	// sessionStorage persistence with stable keys (per project).
+	const SS_KEY_GROUP_BY = `artifacts:groupBy:${data.projectId}`
+	const SS_KEY_MEDIA_TYPE = `artifacts:mediaType:${data.projectId}`
+
+	$effect(() => {
+		if (typeof sessionStorage === 'undefined') return
+		try {
+			sessionStorage.setItem(SS_KEY_GROUP_BY, groupBy)
+			if (data.mediaType) sessionStorage.setItem(SS_KEY_MEDIA_TYPE, data.mediaType)
+			else sessionStorage.removeItem(SS_KEY_MEDIA_TYPE)
+		} catch {
+			// sessionStorage may be unavailable (private mode, SSR); ignore.
+		}
+	})
 
 	const filtered = $derived(
 		q.trim()
@@ -29,12 +51,27 @@
 			: allEdges
 	)
 
+	const groups = $derived(
+		groupItems(
+			filtered.map((e) => ({ ...e, path: e.node.path, mediaType: e.node.mediaType })),
+			groupBy
+		)
+	)
+
 	function onSearchInput(e: Event) {
 		q = (e.target as HTMLInputElement).value
 		const url = new URL(window.location.href)
-		if (q) url.searchParams.set('q', q)
-		else url.searchParams.delete('q')
+		const next = writeState(url.searchParams, { q })
+		url.search = next.toString()
 		history.replaceState(null, '', url.toString())
+	}
+
+	function selectGroupBy(next: GroupBy) {
+		groupBy = next
+		const url = new URL(window.location.href)
+		const params = writeState(url.searchParams, { groupBy: next })
+		const search = params.toString()
+		goto(url.pathname + (search ? `?${search}` : ''))
 	}
 
 	const MEDIA_TYPES: { label: string; value: string | null }[] = [
@@ -48,11 +85,10 @@
 	]
 
 	function selectMediaType(mediaType: string | null) {
-		const base = `/nodes/${data.nodeId}/projects/${data.projectId}/artifacts`
-		const url = new URL(base, window.location.origin)
-		if (mediaType) url.searchParams.set('mediaType', mediaType)
-		if (q) url.searchParams.set('q', q)
-		goto(url.pathname + url.search)
+		const url = new URL(window.location.href)
+		const params = writeState(url.searchParams, { mediaType, q })
+		const search = params.toString()
+		goto(url.pathname + (search ? `?${search}` : ''))
 	}
 
 	function openGraph() {
@@ -149,18 +185,33 @@
 		{/each}
 	</div>
 
-	<!-- Search bar -->
-	<div class="relative">
-		<Search
-			class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted dark:text-dark-fg-muted"
-		/>
-		<input
-			type="search"
-			placeholder="Search title or path…"
-			value={q}
-			oninput={onSearchInput}
-			class="w-full rounded border border-border-line bg-bg-surface py-2 pl-9 pr-3 text-body-sm text-fg-ink placeholder:text-fg-muted focus:outline-none focus:ring-1 focus:ring-accent-lever dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink dark:placeholder:text-dark-fg-muted dark:focus:ring-dark-accent-lever"
-		/>
+	<!-- Search bar + group-by selector -->
+	<div class="flex items-center gap-3">
+		<div class="relative flex-1">
+			<Search
+				class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted dark:text-dark-fg-muted"
+			/>
+			<input
+				type="search"
+				placeholder="Search title or path…"
+				value={q}
+				oninput={onSearchInput}
+				class="w-full rounded border border-border-line bg-bg-surface py-2 pl-9 pr-3 text-body-sm text-fg-ink placeholder:text-fg-muted focus:outline-none focus:ring-1 focus:ring-accent-lever dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink dark:placeholder:text-dark-fg-muted dark:focus:ring-dark-accent-lever"
+			/>
+		</div>
+		<label class="flex items-center gap-2 text-body-sm text-fg-muted dark:text-dark-fg-muted">
+			<span>Group by</span>
+			<select
+				aria-label="Group by"
+				value={groupBy}
+				onchange={(e) => selectGroupBy((e.target as HTMLSelectElement).value as GroupBy)}
+				class="rounded border border-border-line bg-bg-surface px-2 py-1.5 text-body-sm text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink"
+			>
+				<option value="folder">{GROUP_BY_LABELS.folder}</option>
+				<option value="prefix">{GROUP_BY_LABELS.prefix}</option>
+				<option value="mediaType">{GROUP_BY_LABELS.mediaType}</option>
+			</select>
+		</label>
 	</div>
 
 	<!-- Table -->
@@ -189,42 +240,57 @@
 					<th class="px-4 py-3"></th>
 				</tr>
 			</thead>
-			<tbody>
-				{#each filtered as edge (edge.cursor)}
-					{@const badge = stalenessBadge(edge.node.staleness)}
-					<tr
-						onclick={() => openArtifact(edge.node.id)}
-						class="cursor-pointer border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface"
-					>
-						<td class="px-4 py-3 text-fg-ink dark:text-dark-fg-ink">
-							{edge.node.title}
-						</td>
-						<td
-							class="px-4 py-3 font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted"
+			{#each groups as group (group.key)}
+				<tbody role="rowgroup" aria-label="{GROUP_BY_LABELS[groupBy]}: {group.key}">
+					<tr class="bg-bg-elevated dark:bg-dark-bg-elevated">
+						<th
+							colspan="5"
+							scope="rowgroup"
+							role="rowheader"
+							class="px-4 py-2 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
 						>
-							{edge.node.path}
-						</td>
-						<td class="px-4 py-3 font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
-							{edge.node.mediaType}
-						</td>
-						<td class="px-4 py-3">
-							<span
-								class="inline-block rounded-full px-2 py-0.5 font-label-caps text-label-caps uppercase {badge.cls}"
-							>
-								{badge.label}
-							</span>
-						</td>
-						<td class="px-4 py-3">
-							<button
-								onclick={(e) => { e.stopPropagation(); viewInGraph(edge.node.id) }}
-								class="rounded border border-border-line bg-bg-surface px-2 py-0.5 font-label-caps text-label-caps uppercase text-fg-muted hover:bg-bg-elevated hover:text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink"
-							>
-								View in Graph
-							</button>
-						</td>
+							{group.key}
+							<span class="ml-2 normal-case text-fg-muted dark:text-dark-fg-muted">({group.items.length})</span>
+						</th>
 					</tr>
-				{/each}
-				{#if filtered.length === 0}
+					{#each group.items as edge (edge.cursor)}
+						{@const badge = stalenessBadge(edge.node.staleness)}
+						<tr
+							onclick={() => openArtifact(edge.node.id)}
+							class="cursor-pointer border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface"
+						>
+							<td class="px-4 py-3 text-fg-ink dark:text-dark-fg-ink">
+								{edge.node.title}
+							</td>
+							<td
+								class="px-4 py-3 font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted"
+							>
+								{edge.node.path}
+							</td>
+							<td class="px-4 py-3 font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
+								{edge.node.mediaType}
+							</td>
+							<td class="px-4 py-3">
+								<span
+									class="inline-block rounded-full px-2 py-0.5 font-label-caps text-label-caps uppercase {badge.cls}"
+								>
+									{badge.label}
+								</span>
+							</td>
+							<td class="px-4 py-3">
+								<button
+									onclick={(e) => { e.stopPropagation(); viewInGraph(edge.node.id) }}
+									class="rounded border border-border-line bg-bg-surface px-2 py-0.5 font-label-caps text-label-caps uppercase text-fg-muted hover:bg-bg-elevated hover:text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink"
+								>
+									View in Graph
+								</button>
+							</td>
+						</tr>
+					{/each}
+				</tbody>
+			{/each}
+			{#if filtered.length === 0}
+				<tbody>
 					<tr>
 						<td
 							colspan="5"
@@ -233,8 +299,8 @@
 							No artifacts found.
 						</td>
 					</tr>
-				{/if}
-			</tbody>
+				</tbody>
+			{/if}
 		</table>
 	</div>
 
