@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Page is well-structured, hits every required section, and cites all three REF documents inline plus in a \"Read next\" footer. Content stays consistent with the platform/workflow split documented elsewhere in CLAUDE.md and adds useful cross-links to bounded-context-execution and spec-first-development principles. Only caveat: hugo build was not executed in this review environment, but the file uses plain Markdown with standard frontmatter and should build cleanly."
+}
