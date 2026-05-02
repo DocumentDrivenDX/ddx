@@ -354,6 +354,135 @@ test('artifacts: sort + staleness chips + search compose into URL state and refe
 	expect(calls[calls.length - 1].variables?.staleness).toBeUndefined()
 })
 
+// Full-text body match path (Story 6 B4c): server returns a snippet wrapped
+// in markdown emphasis markers; the list renders it with the matched span
+// highlighted, and back-navigation from the detail page preserves the
+// filter+search URL state and the snippet is shown again on return.
+test('artifacts: body-match snippet renders with highlight and back-nav preserves state', async ({
+	page
+}) => {
+	const ARTIFACT_BODY = {
+		id: 'artifact-body-001',
+		path: 'docs/notes.md',
+		title: 'Architecture Notes',
+		mediaType: 'text/markdown',
+		staleness: 'fresh',
+		description: null,
+		updatedAt: '2026-04-30T12:00:00Z',
+		ddxFrontmatter: null,
+		content: '# Notes\n\nThe quick brown fox jumps over the lazy dog.\n',
+		generatedBy: null
+	};
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, unknown>;
+		};
+		const q = body.query;
+		if (q.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+			return;
+		}
+		if (q.includes('Projects') && !q.includes('projectID')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
+				})
+			});
+			return;
+		}
+		if (q.includes('query Artifacts(')) {
+			const search = body.variables?.search ? String(body.variables.search) : '';
+			// Body-match path: title/path don't match "fox", but the body does;
+			// the resolver returns a windowed snippet with **fox** marker.
+			const matches = search.toLowerCase() === 'fox';
+			const edges = matches
+				? [
+						{
+							node: {
+								id: ARTIFACT_BODY.id,
+								path: ARTIFACT_BODY.path,
+								title: ARTIFACT_BODY.title,
+								mediaType: ARTIFACT_BODY.mediaType,
+								staleness: ARTIFACT_BODY.staleness
+							},
+							cursor: 'c0',
+							snippet: '…The quick brown **fox** jumps over the lazy dog.'
+						}
+					]
+				: [
+						{
+							node: {
+								id: ARTIFACT_BODY.id,
+								path: ARTIFACT_BODY.path,
+								title: ARTIFACT_BODY.title,
+								mediaType: ARTIFACT_BODY.mediaType,
+								staleness: ARTIFACT_BODY.staleness
+							},
+							cursor: 'c0',
+							snippet: null
+						}
+					];
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						artifacts: {
+							edges,
+							pageInfo: { hasNextPage: false, endCursor: null },
+							totalCount: edges.length
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (q.includes('ArtifactDetail')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { artifact: ARTIFACT_BODY } })
+			});
+			return;
+		}
+		await route.continue();
+	});
+
+	// 1. Initial load shows the artifact without a snippet (no search).
+	await page.goto(BASE_URL);
+	await expect(page.getByRole('cell', { name: 'Architecture Notes' })).toBeVisible();
+	await expect(page.getByTestId(`artifact-snippet-${ARTIFACT_BODY.id}`)).toHaveCount(0);
+
+	// 2. Search "fox" — body-match returns snippet with **fox** marker.
+	await page.getByPlaceholder(/Search/i).first().fill('fox');
+	await expect(page).toHaveURL(/[?&]q=fox\b/);
+	const snippetRow = page.getByTestId(`artifact-snippet-${ARTIFACT_BODY.id}`);
+	await expect(snippetRow).toBeVisible();
+	// Match is wrapped in <mark>; surrounding text rendered as plain text.
+	await expect(snippetRow.locator('mark')).toHaveText('fox');
+	await expect(snippetRow).toContainText('The quick brown');
+	await expect(snippetRow).toContainText('jumps over the lazy dog');
+
+	// 3. Open detail — the list URL (with q=fox) is passed via ?back=…
+	await page.getByRole('cell', { name: 'Architecture Notes' }).click();
+	await expect(page).toHaveURL(new RegExp(`/artifacts/${ARTIFACT_BODY.id}`));
+	await expect(page).toHaveURL(/[?&]back=/);
+
+	// 4. goBack() returns to the filtered list with q=fox preserved and the
+	//    snippet displayed again (verifies URL state survived round-trip).
+	await page.goBack();
+	await expect(page).toHaveURL(/[?&]q=fox\b/);
+	await expect(snippetRow).toBeVisible();
+	await expect(snippetRow.locator('mark')).toHaveText('fox');
+});
+
 // Mutation error path: server returns a typed error → inline message in the
 // provenance panel, page does not crash (AC#4).
 test('Regenerate error renders inline without crashing the page', async ({ page }) => {

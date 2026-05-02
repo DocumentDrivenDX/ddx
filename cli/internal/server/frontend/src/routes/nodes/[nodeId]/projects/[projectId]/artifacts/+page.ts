@@ -16,6 +16,7 @@ export const ARTIFACTS_QUERY = gql`
 					staleness
 				}
 				cursor
+				snippet
 			}
 			pageInfo {
 				hasNextPage
@@ -37,6 +38,7 @@ export interface ArtifactNode {
 export interface ArtifactEdge {
 	node: ArtifactNode
 	cursor: string
+	snippet?: string | null
 }
 
 export interface PageInfo {

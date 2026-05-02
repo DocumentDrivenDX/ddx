@@ -191,6 +191,26 @@
 		}
 	}
 
+	// Render a server-supplied snippet to HTML. The resolver wraps the matched
+	// substring in markdown emphasis ("**…**"); we escape the rest and convert
+	// the marker pairs to <mark> for visual highlighting. Only the first
+	// matching pair is highlighted (resolver emits a single match per snippet).
+	function escapeHtml(s: string): string {
+		return s
+			.replace(/&/g, '&amp;')
+			.replace(/</g, '&lt;')
+			.replace(/>/g, '&gt;')
+			.replace(/"/g, '&quot;')
+			.replace(/'/g, '&#39;')
+	}
+	function renderSnippet(snippet: string): string {
+		const escaped = escapeHtml(snippet)
+		return escaped.replace(
+			/\*\*([\s\S]+?)\*\*/,
+			'<mark class="rounded bg-yellow-200 px-0.5 text-fg-ink dark:bg-yellow-500/40 dark:text-dark-fg-ink">$1</mark>'
+		)
+	}
+
 	function stalenessBadge(staleness: string): { label: string; cls: string } {
 		switch (staleness) {
 			case 'fresh':
@@ -441,6 +461,21 @@
 								</button>
 							</td>
 						</tr>
+						{#if edge.snippet}
+							<tr
+								data-testid="artifact-snippet-{edge.node.id}"
+								onclick={() => openArtifact(edge.node.id)}
+								class="cursor-pointer border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface"
+							>
+								<td
+									colspan="5"
+									class="px-4 pb-3 text-body-sm text-fg-muted dark:text-dark-fg-muted"
+								>
+									<!-- eslint-disable-next-line svelte/no-at-html-tags -->
+									<span class="block leading-snug">{@html renderSnippet(edge.snippet)}</span>
+								</td>
+							</tr>
+						{/if}
 					{/each}
 				</tbody>
 			{/each}
