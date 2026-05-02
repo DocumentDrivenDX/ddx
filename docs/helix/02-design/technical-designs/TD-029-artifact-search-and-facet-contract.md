@@ -109,6 +109,116 @@ update to this TD:
 
 A filter narrows the set; grouping organizes the remaining set.
 
+## Search semantics
+
+The `q` filter is a single-pass case-insensitive substring scan with the
+following per-artifact field precedence. The first field that matches
+is enough to admit the artifact; later fields are not consulted, so the
+ordering controls which artifacts surface earliest when scoring is
+introduced (Story 6 B4b) and keeps the resolver O(N) on cold cache:
+
+1. `title`
+2. `path`
+3. `description` (sidecar `ddx.description` or doc subtitle if present)
+4. `frontmatter` (raw stringified `ddxFrontmatter` JSON — covers
+   `id`, `depends_on`, sidecar `generated_by`, etc.)
+5. `body` (file contents — only consulted under the rules below)
+
+Until B4b lands, the resolver only consults fields 1–2 (`title`, `path`);
+fields 3–5 are reserved by this contract so that adding them later does
+not change ordering for existing matches.
+
+### Body search rules
+
+Body content is only consulted when fields 1–4 did not match. To keep
+the scan bounded:
+
+- **Per-file size cap:** `256 KiB` (262 144 bytes). Files larger than the
+  cap are read up to the cap only; the remainder is not searched. The
+  cap is a constant in `resolver_artifacts.go`
+  (`searchBodySizeCapBytes`) so callers can audit the limit without
+  reading the resolver.
+- **Binary-file skip:** files are classified as binary and skipped when
+  either:
+  - the path's extension is in the binary allowlist
+    (`.png .jpg .jpeg .gif .webp .ico .pdf .zip .tar .gz .bz2 .xz .7z
+     .mp3 .mp4 .mov .avi .webm .wasm .so .dylib .dll .exe .bin .o .a
+     .class .jar .ttf .otf .woff .woff2 .excalidraw.png`), or
+  - the first 512 bytes of the file contain a NUL byte (`0x00`) — a
+    cheap content sniff that catches misnamed binaries while preserving
+    UTF-8 text.
+
+  SVG (`.svg`) and Excalidraw JSON (`.excalidraw`,
+  `.excalidraw.json`) are deliberately treated as **text** because their
+  content-search value (titles, comments, label text) outweighs the
+  scan cost.
+
+### Deterministic ordering on score ties
+
+When B4b introduces score-based ranking (e.g. exact-token > prefix >
+substring), ties on the score MUST resolve via the existing
+`(sortKey, id)` lexicographic tie-break used by `sortArtifacts` in
+`resolver_artifacts.go`. The tie-break is a hard guarantee: two
+artifacts with identical scores ordered identically across pages, on
+every machine, every run. This is what cursor pagination depends on,
+and it is non-negotiable.
+
+### Upgrade trigger to bleve / sqlite-FTS
+
+The in-process linear scan is intentionally simple. We upgrade to a
+real index (bleve, or sqlite-FTS5) when **any** of the following
+sustained-state thresholds is crossed:
+
+- Steady-state corpus exceeds **10 000 artifacts** in a single project
+  (≈20× the benchmark fixture below).
+- p95 latency for a `q` query at the project's actual corpus size
+  exceeds **150 ms** for two consecutive weekly measurements on the
+  reference dev hardware.
+- Total scanned bytes per `q` query exceeds **128 MiB** with the size
+  cap and binary skip already applied (i.e. the corpus itself is
+  text-heavy enough that the cap is not enough).
+
+Crossing one threshold is sufficient — we do not wait for two. The
+bleve/FTS migration lives behind a feature flag so projects can stay
+on the linear scan if they prefer the simpler dependency footprint.
+
+### Performance budget
+
+The reference benchmark (`BenchmarkArtifactsSearch_500Fixture` in
+`cli/internal/server/graphql/resolver_artifacts_bench_test.go`) builds
+a 500-sidecar fixture with a realistic mix:
+
+| Class               | Count | Size range  |
+|---------------------|-------|-------------|
+| Small markdown      | 200   | 1–8 KiB     |
+| Medium markdown     | 100   | 8–64 KiB    |
+| Large markdown      | 50    | 64–256 KiB  |
+| Oversize markdown   | 25    | 1–4 MiB     |
+| PNG (binary)        | 75    | 4–32 KiB    |
+| Tarball (binary)    | 50    | 32–256 KiB  |
+
+**p95 budget for end-to-end `q`-only search at this fixture size:
+200 ms** on the reference dev hardware (Linux arm64 / Apple M-series,
+Go 1.22+, warm filesystem cache). The benchmark prints observed p50,
+p95, and p99 microseconds per op so regressions are visible in CI.
+
+The budget is dominated by `collectArtifacts`, which today re-walks
+`.ddx/plugins/` and re-parses every `.ddx.yaml` on each call. The
+substring scan itself is sub-millisecond at 500 entries. The headroom
+above pure search is intentional — it preserves the linear-scan
+design through B4b (which adds body search, also bounded by the
+256 KiB / binary-skip rules). When B4b lands, the budget is
+re-verified against the same fixture and tightened if the body scan
+fits underneath.
+
+Measured baseline at the time of writing
+(`go test -bench=BenchmarkArtifactsSearch_500Fixture -run=^$ -benchtime=3x`,
+Linux arm64, in-CI runner): p95 ≈ 148 ms — within the 200 ms budget.
+
+If the measured p95 deviates by more than ±50% from the budget on a
+new platform, document the delta in the benchmark output and update
+this section rather than silently moving the budget.
+
 ## Implementation pointers
 
 - Schema: `cli/internal/server/graphql/schema.graphql` →
@@ -123,3 +233,6 @@ A filter narrows the set; grouping organizes the remaining set.
   (`TestArtifacts_PhaseFilter`, `TestArtifacts_PrefixFilter`,
   `TestArtifacts_PhasePrefixComposeWithOtherFilters`);
   `cli/internal/server/frontend/src/lib/urlState.test.ts`.
+- Benchmark:
+  `cli/internal/server/graphql/resolver_artifacts_bench_test.go`
+  (`BenchmarkArtifactsSearch_500Fixture`).
