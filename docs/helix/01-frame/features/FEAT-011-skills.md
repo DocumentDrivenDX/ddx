@@ -10,7 +10,7 @@ ddx:
 # Feature: DDx Agent Skills
 
 **ID:** FEAT-011
-**Status:** Revising (consolidation in progress; see Phase 1 epic in beads)
+**Status:** Implemented (single `ddx` skill present in `skills/`, `cli/internal/skills/`, `.agents/skills/`, and `.claude/skills/`; site copy pending)
 **Priority:** P1
 **Owner:** DDx Team
 
