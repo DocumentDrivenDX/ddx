@@ -1,0 +1,30 @@
+{
+  "attempt_id": "20260502T034358-5cb371cb",
+  "bead_id": "ddx-58566cbf",
+  "base_rev": "f598ca3f4e09ffd87b5804031c4be4625c4afa1a",
+  "created_at": "2026-05-02T03:44:00.490942349Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-58566cbf",
+    "title": "Test evidence path: write hello.md with go version",
+    "description": "Verification bead for execute-bead /tmp evidence pattern fix. The agent should write a file named hello.md under the per-attempt evidence directory describing the current Go version (output of 'go version'). This bead exists solely to confirm that v0.6.2-alpha4 steers agents to in-repo evidence dir rather than /tmp.",
+    "acceptance": "Write a one-line report named hello.md describing the current Go version (e.g. 'go version go1.23.x linux/amd64'). The file MUST be located under .ddx/executions/\u003crun-id\u003e/hello.md (NOT /tmp). Stage and commit it as part of the bead's commit.",
+    "labels": [
+      "area:agent",
+      "kind:test",
+      "validation"
+    ]
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T034358-5cb371cb",
+    "prompt": ".ddx/executions/20260502T034358-5cb371cb/prompt.md",
+    "manifest": ".ddx/executions/20260502T034358-5cb371cb/manifest.json",
+    "result": ".ddx/executions/20260502T034358-5cb371cb/result.json",
+    "checks": ".ddx/executions/20260502T034358-5cb371cb/checks.json",
+    "usage": ".ddx/executions/20260502T034358-5cb371cb/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-58566cbf-20260502T034358-5cb371cb"
+  }
+}
