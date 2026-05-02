@@ -1,0 +1,97 @@
+{
+  "attempt_id": "20260502T193235-b165bf37",
+  "bead_id": "ddx-61357e13",
+  "base_rev": "325312e2232e843b13632a06ebadd28b06c162af",
+  "created_at": "2026-05-02T19:32:36.557834262Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-61357e13",
+    "title": "server: singleton-per-machine guard + CLI validates pid-alive before trusting server.addr",
+    "description": "Two related bugs causing 'ddx server workers list' (and other server-talking CLI commands) to fail with 'connection refused dial tcp 127.0.0.1:\u003cstale-port\u003e' even when a live server is running.\n\n## Diagnosis\n\n**writeAddrFile already exists** at cli/internal/server/server.go:287-312 and is called from line 273 on every startup. So the file IS written. The real bugs are:\n\n**Bug A: No singleton-server guard.** Multiple 'ddx server' instances can start on the same machine concurrently. Each one calls writeAddrFile and overwrites the previous record. When one dies (e.g., a manual launch test), it leaves the address-file pointing to itself even though it's no longer running. systemd unit (Type=simple) prevents systemd-spawned duplicates of the same unit name but does NOT stop a manual 'ddx server' from racing.\n\nObserved today: live systemd server PID 3442304 listening on 7743 (started ~14:27), but address file shows PID 3482077 / port 4174 (started ~15:01, died). Some manual or test launch overwrote the file then died.\n\n**Bug B: CLI doesn't validate pid-alive before trusting the address file.** ReadServerAddr at cli/internal/server/server.go:328+ returns whatever's in the file. CLI commands then dial the recorded URL. If the recorded pid is dead, dial fails. No fallback to the systemd default (127.0.0.1:7743), no warning.\n\n## Fix\n\nTwo halves, same surface (server bootstrap + CLI client read path):\n\n**Server-side (singleton guard):**\n- On startup, server acquires flock on ~/.local/share/ddx/server.lock\n- If lock is held by an alive process: refuse to start with clear error ('ddx server already running, pid=\u003cN\u003e, addr=\u003cURL\u003e; only one ddx server per machine'). Exit non-zero.\n- If lock is acquired (or stale — held by dead pid): proceed; release-on-exit handler clears the lock.\n- writeAddrFile happens AFTER the lock acquires — so the address file always corresponds to the lock-holder.\n\n**Client-side (defense in depth):**\n- ReadServerAddr (or its callers) validates the recorded pid is alive (kill -0 equivalent on Unix, OpenProcess on Windows)\n- If pid is dead: emit warning ('server.addr points to a dead pid \u003cN\u003e; falling back to default 127.0.0.1:7743') and use the default\n- Optionally clear the stale file (best-effort; don't fail if unwritable)\n\n## Out of scope\n\n- Multi-server-per-machine support (the singleton guard is intentional — one server per machine is the design per FEAT-020)\n- Federation: hub/spoke topology (Story 14) is multi-node, NOT multi-server-per-node",
+    "acceptance": "1. Server acquires flock on ~/.local/share/ddx/server.lock at startup. 2. Second 'ddx server' launch refuses with clear error message naming the existing pid + addr; exits non-zero. 3. Lock release on graceful shutdown (SIGTERM); stale-lock detection via dead-pid check on next startup. 4. writeAddrFile only runs after lock acquisition (file is consistent with lock holder). 5. ReadServerAddr (or its callers) validates recorded pid is alive before connecting. 6. If pid is dead, CLI emits a warning and falls back to default 127.0.0.1:7743. 7. New tests in cli/internal/server/: TestServer_SingletonGuardRefusesSecondLaunch + TestServer_StaleAddressFallbackWithWarning. 8. Manual verification: kill the live server; launch a new one; address-file matches the new server. Launch a second 'ddx server' while first is running; second refuses. 'ddx server workers list' succeeds against the live server after this fix.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "area:server",
+      "kind:bug",
+      "observed-failure"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T19:32:35Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3446284",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T19:23:31.364112708Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T191634-fc858450\",\"harness\":\"claude\",\"input_tokens\":44,\"output_tokens\":19686,\"total_tokens\":19730,\"cost_usd\":2.145058250000001,\"duration_ms\":415194,\"exit_code\":0}",
+          "created_at": "2026-05-02T19:23:31.379899069Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=19730 cost_usd=2.1451"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T19:23:36.259204797Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff contains only an execution result.json artifact; no code changes implementing the singleton flock guard, writeAddrFile ordering, pid-alive validation, or the required tests. None of the 8 acceptance criteria are satisfied by this diff.\nharness=claude\nmodel=opus\ninput_bytes=6658\noutput_bytes=1012\nelapsed_ms=9166",
+          "created_at": "2026-05-02T19:23:45.452894436Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T19:23:45.466070259Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"action\":\"re_attempt_with_context\",\"mode\":\"review_block\"}",
+          "created_at": "2026-05-02T19:23:45.476562708Z",
+          "kind": "triage-decision",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block: re_attempt_with_context"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json artifact; no code changes implementing the singleton flock guard, writeAddrFile ordering, pid-alive validation, or the required tests. None of the 8 acceptance criteria are satisfied by this diff.\nresult_rev=a282d05f4950d2e5520174aadab92096628bc38f\nbase_rev=f55074ac001b0819f33fb7221886e7f35c58e0d6",
+          "created_at": "2026-05-02T19:23:45.491279446Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T19:32:35.232744874Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T193235-b165bf37",
+    "prompt": ".ddx/executions/20260502T193235-b165bf37/prompt.md",
+    "manifest": ".ddx/executions/20260502T193235-b165bf37/manifest.json",
+    "result": ".ddx/executions/20260502T193235-b165bf37/result.json",
+    "checks": ".ddx/executions/20260502T193235-b165bf37/checks.json",
+    "usage": ".ddx/executions/20260502T193235-b165bf37/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-61357e13-20260502T193235-b165bf37"
+  },
+  "prompt_sha": "0d1cfa453f3b6cd0f2aa6e7de54dd60cc5da5f0abf5d8c155b66e7f60ccc2b47"
+}
