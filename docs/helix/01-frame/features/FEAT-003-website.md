@@ -31,19 +31,58 @@ ddx:
 
 ### Functional
 
-1. **Landing page** — hero section explaining DDx in one sentence, visual ecosystem diagram, call-to-action to install
+1. **Landing page** — hero section explaining DDx in one sentence, with the sub-claim **"A document-driven software factory."** Includes visual ecosystem diagram, call-to-action to install, and a link to the new `/docs/concepts/software-factory/` page.
 2. **Quick start** — copy-pasteable installation command, 3-step getting started guide
-3. **Concepts page** — explains document-driven development, document types, how DDx fits with agents and workflow tools
-4. **CLI reference** — command documentation (can be generated from CLI help text)
-5. **Ecosystem page** — shows DDx's position as infrastructure, lists workflow tools built on DDx, highlights HELIX as first plugin
-6. **Server documentation** — how to run ddx-server, MCP endpoint reference
-7. **Embedded terminal demos** — asciinema recordings of core workflows embedded in hero section and getting-started page:
+3. **Concepts pages** — explain document-driven development, document types, how DDx fits with agents and workflow tools. Includes:
+   - `/docs/concepts/software-factory.md` — DDx as a document-driven software factory (lineage, what is inherited, what is added, what is intentionally not done)
+   - `/docs/concepts/run-architecture.md` — three-layer run model (`ddx run` / `ddx try` / `ddx work`); retires `execute-loop` / `execute-bead` from primary copy
+   - Existing concept pages (architecture, document model, etc.) updated to use the new naming
+4. **Why DDx (`/why`)** — top-level page rewritten as 10 sections, one per **domain principle**. Each section has a 50–80 word summary linking to a deep page at `/docs/principles/<slug>/`. The 10 domain principles (locked):
+   1. Spec-first development
+   2. Executable specifications
+   3. Audit trail required
+   4. Context is king
+   5. Work is a DAG
+   6. Right-size the model
+   7. Avoid vendor lock-in
+   8. Drift is debt
+   9. Least privilege for agents
+   10. Inspect and adapt
+5. **Principle deep pages** — 10 pages at `/docs/principles/<slug>/index.md`, each rendered from the corresponding `RSCH-NNN` research artifact in `docs/helix/00-discover/research/`. Each deep page presents claim → evidence → DDx-feature mapping.
+6. **CLI reference** — curated noun-verb command documentation matching the command overview in `CLAUDE.md`
+7. **Ecosystem page** — shows DDx's position as infrastructure, lists workflow tools built on DDx, highlights HELIX as first plugin. **Dun is removed from all site copy** (no longer a peer in the ecosystem).
+8. **Server documentation** — how to run ddx-server, MCP endpoint reference
+9. **Embedded terminal demos** — asciinema recordings of core workflows embedded in hero section and getting-started page:
    - Install DDx
    - `ddx init` + `ddx list` + `ddx doctor`
    - `ddx install helix` (plugin bootstrap)
    - One-shot project creation with HELIX
    - Feature evolution with HELIX
-8. **README** — animated GIF/SVG demos, badge row, plugin quick start, link to microsite. The README is the GitHub-facing landing page and must sell at a glance.
+10. **README** — animated GIF/SVG demos, badge row, plugin quick start, link to microsite. The README is the GitHub-facing landing page and must sell at a glance.
+
+### Content stance
+
+- **Dun removed.** No references to Dun anywhere in site copy, ecosystem diagrams, or glossary.
+- **Quorum de-emphasized.** Multi-model review (quorum) is no longer a primary capability and is removed from the features list. It is documented only in skill-level pages and badged as "framing" (matches `FEAT-013` status).
+- **Naming.** `ddx run` / `ddx try` / `ddx work` is the unified primary naming. `execute-loop` / `execute-bead` appear only inside the CLI reference, not in primary copy.
+- **Software factory framing.** The homepage, `docs/helix/00-discover/product-vision.md` (new "Lineage" section), and `docs/helix/01-frame/principles.md` (new preface) all frame DDx as a document-driven software factory.
+
+### Information architecture
+
+```
+/                                  → homepage (sub-claim: "A document-driven software factory.")
+/why                               → 10 principle summaries (domain principles)
+/docs/getting-started              → install + first steps
+/docs/concepts/software-factory    → factory framing
+/docs/concepts/run-architecture    → run/try/work three-layer model
+/docs/concepts/<existing>          → architecture, document model, etc.
+/docs/principles/<slug>/           → 10 deep pages, one per domain principle
+/docs/cli/                         → curated noun-verb CLI reference
+/docs/server/                      → ddx-server + MCP endpoint reference
+/docs/ecosystem                    → DDx + HELIX positioning (Dun removed)
+```
+
+The `/why` summaries and `/docs/principles/<slug>/` deep pages are the user-facing **domain principle taxonomy** (10 pages). The complementary 6 **engineering principles** are internal and live in `docs/dev/engineering-principles.md`, not on the site.
 
 ### Non-Functional
 
@@ -118,12 +157,16 @@ ddx:
 
 ### Pages Built
 
-- Landing page with hero, feature grid, CTAs
+- Landing page with hero, feature grid, CTAs, software-factory sub-claim
 - Getting Started (install, init, first steps)
-- Concepts (document-driven development explanation)
-- CLI Reference (all commands)
+- `/why` — 10 domain principle summaries with links to deep pages
+- `/docs/principles/<slug>/` — 10 deep pages backed by `RSCH-NNN` research artifacts
+- `/docs/concepts/software-factory.md` — software-factory framing
+- `/docs/concepts/run-architecture.md` — `ddx run` / `ddx try` / `ddx work` three-layer model
+- Other concepts pages (document-driven development explanation, document model, architecture)
+- CLI Reference (curated noun-verb reference)
 - DDx Server (MCP endpoints, HTTP API — marked as under development)
-- Ecosystem (stack diagram, what-goes-where table)
+- Ecosystem (stack diagram, what-goes-where table; Dun removed)
 
 ### Demo Recording Pipeline
 
