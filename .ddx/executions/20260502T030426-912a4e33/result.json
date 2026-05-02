@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "AC1–7: No evidence of any verification command being run is captured in the diff. The bead required a verification report, but the only files added are `.ddx/executions/20260502T025942-0d468cab/manifest.json` and `result.json`, which are execution metadata rather than verification output.\nAC8: The required `/tmp/redesign-verify.txt` is (a) not in the diff and (b) located in `/tmp` which cannot persist as evidence. The next iteration should write the verification report into the execution dir (e.g. `.ddx/executions/\u003cid\u003e/verify.txt`) or under `docs/`/`website/` so it is captured by the commit.\nRe-run all eight checks and commit the captured outputs (hugo build log, `ddx doc audit` output, the four `rg` invocations, `ls website/content/docs/principles/`, and `ddx bead list --parent ddx-629ec5b4 --status closed`) as a single tracked report file."
+}
