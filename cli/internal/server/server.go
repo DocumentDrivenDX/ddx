@@ -16,11 +16,13 @@ import (
 	"net"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/99designs/gqlgen/graphql/handler"
@@ -240,6 +242,13 @@ func (s *Server) Shutdown() error {
 // ListenAndServe starts the server. If TsnetConfig.Enabled is true, a parallel
 // Tailscale ts-net listener is started alongside the standard localhost listener.
 func (s *Server) ListenAndServe() error {
+	release, err := acquireSingletonLock()
+	if err != nil {
+		return err
+	}
+	defer release()
+	s.installSingletonReleaseOnSignal(release)
+	s.writeAddrFile("http")
 	if s.TsnetConfig != nil && s.TsnetConfig.Enabled {
 		errCh := make(chan error, 2)
 
@@ -262,9 +271,15 @@ func (s *Server) ListenAndServe() error {
 // empty, a self-signed certificate is auto-generated and cached under
 // workingDir/.ddx/server/tls/.
 func (s *Server) ListenAndServeTLS(certFile, keyFile string) error {
+	release, err := acquireSingletonLock()
+	if err != nil {
+		return err
+	}
+	defer release()
+	s.installSingletonReleaseOnSignal(release)
 	if certFile == "" || keyFile == "" {
-		tlsDir := filepath.Join(s.WorkingDir, ".ddx", "server", "tls")
 		var err error
+		tlsDir := filepath.Join(s.WorkingDir, ".ddx", "server", "tls")
 		certFile, keyFile, err = ensureSelfSignedCert(tlsDir)
 		if err != nil {
 			return fmt.Errorf("generating self-signed cert: %w", err)
@@ -326,10 +341,13 @@ func serverAddrDir() string {
 }
 
 // ReadServerAddr reads the last-written server address from the user-level
-// addr file. Returns "" if none is present.
+// addr file. Returns "" if none is present, or if the recorded pid is not
+// alive (in which case a warning is emitted and the stale file is best-effort
+// cleared so callers fall back to the default URL).
 func ReadServerAddr() string {
 	type addrFile struct {
 		URL string `json:"url"`
+		PID int    `json:"pid"`
 	}
 	path := filepath.Join(serverAddrDir(), "server.addr")
 	data, err := os.ReadFile(path)
@@ -340,7 +358,29 @@ func ReadServerAddr() string {
 	if err := json.Unmarshal(data, &af); err != nil {
 		return ""
 	}
+	if af.PID > 0 && !processAlive(af.PID) {
+		fmt.Fprintf(addrFallbackWarnWriter,
+			"warning: server.addr points to a dead pid %d; falling back to default 127.0.0.1:7743\n",
+			af.PID)
+		_ = os.Remove(path)
+		return ""
+	}
 	return af.URL
+}
+
+// installSingletonReleaseOnSignal arranges for the singleton lock to be
+// released on SIGTERM/SIGINT so that the next ddx-server can start without
+// having to wait for stale-lock detection. The handler exits the process
+// with a conventional non-zero status; defers in ListenAndServe(TLS) do not
+// run, but the lock release fires explicitly here.
+func (s *Server) installSingletonReleaseOnSignal(release func()) {
+	ch := make(chan os.Signal, 1)
+	signal.Notify(ch, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-ch
+		release()
+		os.Exit(130)
+	}()
 }
 
 // ensureSelfSignedCert returns paths to a self-signed cert/key in dir,
