@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "All four acceptance items are satisfied. The maturity shortcode was extended to support the new `framing` and `not-started` statuses with matching light/dark CSS, the two badges were applied to the correct pages, and the screenshot inventory is documented with both raw `find` output and a markdown summary. Image alt-text was consistently updated from \"placeholder\" to \"planned UI\" across all seven feature sections."
+}
