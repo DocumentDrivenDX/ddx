@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T034518-54992614",
+  "bead_id": "ddx-58764e1b",
+  "base_rev": "7c1587755eb841bfa01b200d194213148b8e19ec",
+  "created_at": "2026-05-02T03:45:19.39161671Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-58764e1b",
+    "title": "Resolve 90 duplicate-ID issues reported by ddx doc audit",
+    "description": "ddx doc audit reports 87 duplicate_id and 2 missing_dep issues, all pre-existing (not caused by the 2026-05 redesign). Two distinct sources observed during the redesign verification:\n\n1. **Migration leftovers**: docs/resources/ still contains agent-harness-ac.md, agent-harness-ac-work.md, ai-agent-frameworks-2025.md, microsoft-ai-agents-2025.md, model-catalog.md, spec-driven.md AND README.md, despite B2 (ddx-a812e176) having moved them under docs/helix/00-discover/. The duplicate IDs (e.g. AC-AGENT-001 in both docs/resources/ and docs/helix/00-discover/research/) are because B2 created the new artifacts but didn't delete the originals. Fix: delete docs/resources/*.md (keeping only the README.md stub if it still serves a purpose, or deleting the directory entirely).\n\n2. **In-repo single-file duplicates**: SD-021..023, TD-004..011, TP-002..020, ddx-concerns, helix.prd, helix.workflow.principles, product-vision, exec.FEAT-006.*, exec.FEAT-011.* — these IDs appear once in their canonical file but the docgraph scanner is finding them twice. Investigation needed: scanner may be picking up frontmatter blocks twice within the same file, or there's a scan-path overlap (e.g., .agents/skills/ or .claude/skills/ trees that contain doc copies). Run 'ddx doc audit -v' for verbose paths and 'rg -l \"id: SD-021\"' to find true duplicates.\n\nMissing-dep (2): helix.workflow.principles → helix.workflow (the parent doc), and read-coverage-audit-2026-04-29 → plan-2026-04-29-artifact-and-run-architecture. Either restore the missing docs or update the depends_on.",
+    "acceptance": "1. After the bead's commits land, 'ddx doc audit' reports zero duplicate_id issues. 2. 'ddx doc audit' reports zero missing_dep issues OR the remaining missing_dep entries are explicitly justified in commit message. 3. docs/resources/ either deleted or contains only an explanatory stub. 4. Commit captures audit output before/after as evidence under .ddx/executions/\u003crun-id\u003e/audit-before.txt and audit-after.txt.",
+    "labels": [
+      "area:docs",
+      "kind:cleanup",
+      "docgraph"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T03:45:17Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1329405",
+      "execute-loop-heartbeat-at": "2026-05-02T03:45:17.986354236Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T034518-54992614",
+    "prompt": ".ddx/executions/20260502T034518-54992614/prompt.md",
+    "manifest": ".ddx/executions/20260502T034518-54992614/manifest.json",
+    "result": ".ddx/executions/20260502T034518-54992614/result.json",
+    "checks": ".ddx/executions/20260502T034518-54992614/checks.json",
+    "usage": ".ddx/executions/20260502T034518-54992614/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-58764e1b-20260502T034518-54992614"
+  }
+}
