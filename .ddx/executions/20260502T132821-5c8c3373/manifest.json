@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T132821-5c8c3373",
+  "bead_id": ".execute-bead-wt-ddx-3c154349-20260502T131050-bf2d17f5-5f67936e",
+  "base_rev": "444be02cc06a4c34e634a53ba7adb32aee06391f",
+  "created_at": "2026-05-02T13:28:23.22109539Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-3c154349-20260502T131050-bf2d17f5-5f67936e",
+    "title": "Triage integration: wire decision engine into review BLOCK / REQUEST_CHANGES paths",
+    "description": "Second of three children of ddx-3c154349. Depends on the triage policy framework child landing first.\n\nScope:\n- In cli/internal/agent/execute_bead_loop.go, after the VerdictBlock and VerdictRequestChanges branches that already record events and reopen, call into triage.Decide(beadID, mode=review_block, history) to choose the next action.\n- Track the per-bead BLOCK count by reading prior 'review' events with Summary='BLOCK' from the bead store. No new persistent state needed.\n- Implement the three actions for review_block:\n  - re_attempt_with_context: leave bead reopened (current behavior) so next drain pass picks it up; ensure the prompt assembler picks up the BLOCK rationale (already in bead notes via Reopen()).\n  - escalate_tier: set a metadata hint or tier-pin so the next attempt runs at a higher tier (use existing escalation.ModelTier mechanism).\n  - needs_human: add 'needs_human' label to the bead and emit a triage-decision event.\n- Surface review-pairing-degraded events in the triage decision (AC#6 of parent): when the latest BLOCK was paired with a degraded reviewer, prefer re_attempt_with_context with a fresh reviewer pair rather than escalating.\n\nOut of scope:\n- Lock-contention retry path (next child).\n- no_changes / execution_failed triage paths (this child is review-only).",
+    "acceptance": "1. Loop calls triage.Decide() after VerdictBlock and VerdictRequestChanges branches in execute_bead_loop.go. 2. BLOCK ladder progression works: 1st BLOCK → re-attempt; 2nd → tier escalation hint applied; 3rd → needs_human label + triage-decision event. 3. review-pairing-degraded events found in bead history are passed into the decision context. 4. Tests for BLOCK→re-attempt, BLOCK→escalate at 2nd attempt, BLOCK→needs_human at 3rd, and review-pairing-degraded biases toward re-attempt.",
+    "parent": "ddx-3c154349",
+    "labels": [
+      "phase:2",
+      " story:10",
+      " area:agent",
+      " kind:fix"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T13:28:21Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T13:28:21.518740436Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T132821-5c8c3373",
+    "prompt": ".ddx/executions/20260502T132821-5c8c3373/prompt.md",
+    "manifest": ".ddx/executions/20260502T132821-5c8c3373/manifest.json",
+    "result": ".ddx/executions/20260502T132821-5c8c3373/result.json",
+    "checks": ".ddx/executions/20260502T132821-5c8c3373/checks.json",
+    "usage": ".ddx/executions/20260502T132821-5c8c3373/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-3c154349-20260502T131050-bf2d17f5-5f67936e-20260502T132821-5c8c3373"
+  }
+}
