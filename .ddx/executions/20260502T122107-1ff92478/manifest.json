@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T122107-1ff92478",
+  "bead_id": "ddx-67c7bb46",
+  "base_rev": "1451df40d3bfba484fc863ae8166e886472baa77",
+  "created_at": "2026-05-02T12:21:08.576239053Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-67c7bb46",
+    "title": "fix(web): doc graph edges and arrowheads use foreground token, not border-line",
+    "description": "D3Graph.svelte:107,165 uses border-line/dark-border-line tokens that resolve to ~1.05:1 / ~1.4:1 contrast against canvas backgrounds (well below WCAG AA 3:1 for non-text). Swap to foreground tokens. D3Graph has exactly one consumer (graph/+page.svelte), so the change is fully scoped.",
+    "acceptance": "1. cli/internal/server/frontend/src/lib/components/D3Graph.svelte uses fg-default/fg-muted (or new graph-edge token) for stroke + arrowhead fill. 2. Computed-style assertions show \u003e=3:1 contrast in both light and dark mode. 3. cd cli/internal/server/frontend \u0026\u0026 bun test passes. 4. Existing edge geometry untouched.",
+    "parent": "ddx-db5e0227",
+    "labels": [
+      "phase:2",
+      "story:1",
+      "area:web",
+      "kind:fix"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:21:07Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T12:21:07.38918268Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T122107-1ff92478",
+    "prompt": ".ddx/executions/20260502T122107-1ff92478/prompt.md",
+    "manifest": ".ddx/executions/20260502T122107-1ff92478/manifest.json",
+    "result": ".ddx/executions/20260502T122107-1ff92478/result.json",
+    "checks": ".ddx/executions/20260502T122107-1ff92478/checks.json",
+    "usage": ".ddx/executions/20260502T122107-1ff92478/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-67c7bb46-20260502T122107-1ff92478"
+  }
+}
