@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T050110-b24c47a7",
+  "bead_id": "ddx-cb2eb7e3",
+  "base_rev": "78e54b6b2eef3fed8f7aec6526cf493d7780cfd8",
+  "created_at": "2026-05-02T05:01:12.260952195Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cb2eb7e3",
+    "title": "Migration: split current beads.jsonl into active + archive + attachments (ADR-004 step 5)",
+    "description": "One-shot migration tool that splits the existing 5.4MB .ddx/beads.jsonl into the active+archive+attachments layout introduced by earlier steps. Implemented as 'ddx bead migrate-archive' (or equivalent subcommand). Idempotent: re-running on an already-migrated repo is a no-op. Dry-run flag prints what would move without writing. Uses the same archive API as ddx bead archive, so logic is shared.\n\nDepends on ddx-f7f09b6e, ddx-cd1f0f7e, and the archive command in ddx-\u003carchive-id\u003e.",
+    "acceptance": "1. Migration command exists with --dry-run flag. 2. Running it on a fresh checkout of this repo (with the 5.4MB beads.jsonl) produces a beads.jsonl under 4MB, a beads-archive.jsonl with the moved closed beads, and attachment sidecars for their events. 3. Re-running is a no-op (no changes, exit 0). 4. ddx bead show works for migrated beads (active and archived). 5. ddx bead list and ready/blocked still produce sensible output post-migration. 6. Test runs the migration on a synthetic large fixture and verifies the split.",
+    "parent": "ddx-0c0565f3",
+    "labels": [
+      "area:beads",
+      "area:storage",
+      "kind:tooling",
+      "adr:004"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T05:01:10Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1329405",
+      "execute-loop-heartbeat-at": "2026-05-02T05:01:10.950439674Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T050110-b24c47a7",
+    "prompt": ".ddx/executions/20260502T050110-b24c47a7/prompt.md",
+    "manifest": ".ddx/executions/20260502T050110-b24c47a7/manifest.json",
+    "result": ".ddx/executions/20260502T050110-b24c47a7/result.json",
+    "checks": ".ddx/executions/20260502T050110-b24c47a7/checks.json",
+    "usage": ".ddx/executions/20260502T050110-b24c47a7/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-cb2eb7e3-20260502T050110-b24c47a7"
+  }
+}
