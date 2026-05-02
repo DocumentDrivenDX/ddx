@@ -1,0 +1,54 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "ddx bead archive added with size-gated default (4MB), --max-size/--older-than/--max-count overrides, event externalization via shared ArchiveWithEvents path, and tests covering help, no-op below threshold, flag overrides, and the synthetic 5MB shrink-under-threshold AC7 case.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Archive command reuses Store.Archive's existing crash-safe primitive (archive-row written before active row removed) — relies on prior bead's correctness rather than introducing new atomicity logic.",
+      "location": "cli/cmd/bead_archive.go:80"
+    },
+    {
+      "severity": "info",
+      "summary": "AC6 (read-through for archived beads) is exercised by TestBeadArchiveSizeTrigger via `ddx bead show ddx-c0000` after archival.",
+      "location": "cli/cmd/bead_archive_test.go:108"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1625,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T045420-3ab0acb7/manifest.json",
+          ".ddx/executions/20260502T045420-3ab0acb7/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 4139,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 7570,
+    "output_bytes": 876,
+    "elapsed_ms": 20259,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
