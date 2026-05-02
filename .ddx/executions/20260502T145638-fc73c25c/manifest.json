@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T145638-fc73c25c",
+  "bead_id": "ddx-31fba984",
+  "base_rev": "18e5b89c93e64dac716e22d6b170bae2619c0c16",
+  "created_at": "2026-05-02T14:56:39.355226583Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-31fba984",
+    "title": "artifacts: workflow-stage axis + paginated count wording + sessionStorage persistence",
+    "description": "Add Workflow Stage as a group-by axis (derived from generic \u003cNN\u003e-\u003cslug\u003e path regex; hidden when no artifacts have a matching path). Group counts under pagination show 'of N loaded' to be honest about page-locality. sessionStorage persists groupBy across navigations.",
+    "acceptance": "1. Workflow Stage axis available when applicable; hidden otherwise. 2. Group counts label honestly: 'X of N loaded' under pagination. 3. sessionStorage round-trip works.",
+    "parent": "ddx-ffb678fc",
+    "labels": [
+      "phase:2",
+      "story:5",
+      "area:web",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:56:38Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T14:56:38.134026491Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T145638-fc73c25c",
+    "prompt": ".ddx/executions/20260502T145638-fc73c25c/prompt.md",
+    "manifest": ".ddx/executions/20260502T145638-fc73c25c/manifest.json",
+    "result": ".ddx/executions/20260502T145638-fc73c25c/result.json",
+    "checks": ".ddx/executions/20260502T145638-fc73c25c/checks.json",
+    "usage": ".ddx/executions/20260502T145638-fc73c25c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-31fba984-20260502T145638-fc73c25c"
+  }
+}
