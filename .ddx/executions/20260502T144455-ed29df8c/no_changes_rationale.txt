@@ -1,0 +1,34 @@
+Bead ddx-5d49b14e is an epic (kind:strategy, type:epic). Its description
+explicitly says "Children break down the work" and the AC list spans six
+unrelated subsystem deliverables: design doc, implementation, migration tool,
+chaos tests, fallback documentation, and a performance benchmark. This is too
+large for a single bounded execute-bead attempt per the size-check guidance.
+
+Decomposed into six child beads (parent=ddx-5d49b14e), one per AC:
+
+  ddx-3b06699f  TD: axon backend integration design for bead tracker     (AC1)
+  ddx-c9ef6c4f  Implement axon backend behind selectable backend flag    (AC2)
+  ddx-57c4cd99  Migration tool: beads.jsonl + archive → axon backend     (AC3)
+  ddx-dfb1c6d7  chaos_test.go suite passes against axon backend          (AC4)
+  ddx-0c8c9670  Document bd/doltdb fallback wiring for bead backend      (AC5)
+  ddx-781a15cf  Benchmark: axon backend vs JSONL on 1100-bead archive    (AC6)
+
+Dependency edges recorded:
+  ddx-c9ef6c4f depends on ddx-3b06699f   (impl after design)
+  ddx-57c4cd99 depends on ddx-c9ef6c4f   (migration after impl)
+  ddx-dfb1c6d7 depends on ddx-c9ef6c4f   (chaos tests after impl)
+  ddx-781a15cf depends on ddx-c9ef6c4f   (benchmark after impl)
+  ddx-0c8c9670 has no deps               (fallback docs are independent)
+
+Workaround note: `ddx bead create` from inside an execute-bead worktree
+mis-derived the bead ID prefix from the worktree directory basename
+(e.g. ".execute-bead-wt-ddx-5d49b14e-...-<hex>") because
+`git rev-parse --show-toplevel` from a linked worktree returns the worktree
+path, not the project root. Setting DDX_BEAD_PREFIX=ddx as an env override
+produced correct ddx-* IDs. Four malformed-ID beads created during the
+diagnosis pass were closed. detectPrefix() in cli/internal/bead/store.go
+already has the intent of running git from the project root, but the
+caller-provided workingDir in this invocation path resolves to the worktree;
+worth a follow-up bead, but out of scope for this decomposition attempt.
+
+No source changes in this commit; only the per-attempt evidence file.
