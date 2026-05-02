@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T121936-19fefc7f",
+  "bead_id": "ddx-43d67aa5",
+  "base_rev": "5c8a91c07c084935b847a9b30dd2dfd39ddebd99",
+  "created_at": "2026-05-02T12:19:37.757249248Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-43d67aa5",
+    "title": "Story 17: artifact-type template/example/prompt panel",
+    "description": "Sub-epic for Story 17. Full plan at /tmp/story-17-final.md. Children listed under this epic carry the testable ACs.",
+    "acceptance": "All child beads closed. Locked decisions from the planning round honored.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "story:17"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:19:36Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T12:19:36.553094549Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T121936-19fefc7f",
+    "prompt": ".ddx/executions/20260502T121936-19fefc7f/prompt.md",
+    "manifest": ".ddx/executions/20260502T121936-19fefc7f/manifest.json",
+    "result": ".ddx/executions/20260502T121936-19fefc7f/result.json",
+    "checks": ".ddx/executions/20260502T121936-19fefc7f/checks.json",
+    "usage": ".ddx/executions/20260502T121936-19fefc7f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-43d67aa5-20260502T121936-19fefc7f"
+  }
+}
