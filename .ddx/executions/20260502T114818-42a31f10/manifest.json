@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T114818-42a31f10",
+  "bead_id": "ddx-db5e0227",
+  "base_rev": "1940c2c5daa0f0e846fcb7e7ba93e4d5f6bac851",
+  "created_at": "2026-05-02T11:48:20.115049038Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-db5e0227",
+    "title": "Story 1: doc graph visible edges",
+    "description": "Sub-epic for Story 1. Full plan at /tmp/story-1-final.md. Children listed under this epic carry the testable ACs.",
+    "acceptance": "All child beads closed. Locked decisions from the planning round honored.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "story:1"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:48:18Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T11:48:18.913818807Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T114818-42a31f10",
+    "prompt": ".ddx/executions/20260502T114818-42a31f10/prompt.md",
+    "manifest": ".ddx/executions/20260502T114818-42a31f10/manifest.json",
+    "result": ".ddx/executions/20260502T114818-42a31f10/result.json",
+    "checks": ".ddx/executions/20260502T114818-42a31f10/checks.json",
+    "usage": ".ddx/executions/20260502T114818-42a31f10/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-db5e0227-20260502T114818-42a31f10"
+  }
+}
