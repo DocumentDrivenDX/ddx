@@ -455,6 +455,13 @@ func (s *Store) Create(b *Bead) error {
 	if err := s.validateBead(b); err != nil {
 		return err
 	}
+	// Story 15: an operator-prompt bead's execution may not create another
+	// operator-prompt bead. The execute-bead harness exports the actor's
+	// issue_type via DDX_ACTOR_ISSUE_TYPE; absent the env, the guard is a
+	// no-op (e.g. direct CLI use by a human operator).
+	if err := OperatorPromptMutationGuard(os.Getenv("DDX_ACTOR_ISSUE_TYPE"), b.IssueType); err != nil {
+		return err
+	}
 	// Run create hook
 	if err := s.runHook("validate-bead-create", b); err != nil {
 		return err

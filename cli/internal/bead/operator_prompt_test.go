@@ -116,6 +116,29 @@ func TestOperatorPromptMutationGuardMatrix(t *testing.T) {
 	}
 }
 
+// TestStoreCreateRejectsOperatorPromptSelfMutation verifies the no-self-mutation
+// rule is enforced at bead-create time when the actor's issue_type is exposed
+// via DDX_ACTOR_ISSUE_TYPE (set by the execute-bead harness). A task actor must
+// be allowed to create operator-prompt beads; only operator-prompt → operator-prompt
+// is denied.
+func TestStoreCreateRejectsOperatorPromptSelfMutation(t *testing.T) {
+	store := newTestStore(t)
+
+	t.Setenv("DDX_ACTOR_ISSUE_TYPE", IssueTypeOperatorPrompt)
+	denied := NewOperatorPromptBead("nested prompt", 2)
+	err := store.Create(denied)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "operator-prompt")
+
+	t.Setenv("DDX_ACTOR_ISSUE_TYPE", "task")
+	allowed := NewOperatorPromptBead("first prompt", 2)
+	require.NoError(t, store.Create(allowed))
+
+	t.Setenv("DDX_ACTOR_ISSUE_TYPE", "")
+	human := NewOperatorPromptBead("human-submitted prompt", 2)
+	require.NoError(t, store.Create(human))
+}
+
 // TestStoreRejectsInvalidStatus protects the validateBead enum boundary:
 // arbitrary status strings must still be rejected even though the enum
 // grew to include `proposed` and `cancelled`.
