@@ -1,3 +1,7 @@
+---
+ddx:
+  id: plan-2026-04-29-artifact-and-run-architecture
+---
 # Artifact Generalization & Three-Layer Run Architecture
 
 Date: 2026-04-29

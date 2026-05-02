@@ -454,12 +454,12 @@ func findMarkdownFiles(root string, roots []string) ([]string, error) {
 			}
 			if info.IsDir() {
 				name := filepath.Base(path)
-				// Skip tool-managed directories. .claude is the Claude Code
-				// workspace (including throwaway copies under .claude/worktrees/);
-				// a worktrees/ directory at any depth is agent-scratch and must
-				// not be surfaced as canonical documents.
+				// Skip tool-managed directories. .claude and .agents are
+				// agent-skill workspaces that often contain stale copies of
+				// canonical docs; a worktrees/ directory at any depth is
+				// agent-scratch and must not be surfaced as canonical documents.
 				switch name {
-				case ".git", ".ddx", ".claude", "worktrees":
+				case ".git", ".ddx", ".claude", ".agents", "worktrees":
 					return filepath.SkipDir
 				}
 				return nil
