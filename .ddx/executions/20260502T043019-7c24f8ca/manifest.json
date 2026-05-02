@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T043019-7c24f8ca",
+  "bead_id": "ddx-2433c5fc",
+  "base_rev": "2610d6706ed684bd9fddf4536ad81f5753906273",
+  "created_at": "2026-05-02T04:30:21.102163963Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2433c5fc",
+    "title": "Verify bd/br interchange tests still pass with new collection + attachment model",
+    "description": "ADR-004's compatibility guard #3 says schema_compat_test.go must keep locking the field names and round-trip behavior against real bd export examples. After C2/C3/C4 changes, ensure exports from beads-archive collection AND attachment-linked events still produce valid bd-format JSONL when streamed via ddx bead export.",
+    "acceptance": "1. cli/internal/bead/schema_compat_test.go passes. 2. ddx bead export streams events for archived beads inline (interchange format). 3. Round-trip test: ddx bead export | \u003cbd consumer simulation\u003e succeeds. 4. New test added covering archive+attachment export path.",
+    "parent": "ddx-0c0565f3",
+    "labels": [
+      "area:beads",
+      "area:tests",
+      "kind:test"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T04:30:19Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1329405",
+      "execute-loop-heartbeat-at": "2026-05-02T04:30:19.684011589Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T043019-7c24f8ca",
+    "prompt": ".ddx/executions/20260502T043019-7c24f8ca/prompt.md",
+    "manifest": ".ddx/executions/20260502T043019-7c24f8ca/manifest.json",
+    "result": ".ddx/executions/20260502T043019-7c24f8ca/result.json",
+    "checks": ".ddx/executions/20260502T043019-7c24f8ca/checks.json",
+    "usage": ".ddx/executions/20260502T043019-7c24f8ca/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2433c5fc-20260502T043019-7c24f8ca"
+  }
+}
