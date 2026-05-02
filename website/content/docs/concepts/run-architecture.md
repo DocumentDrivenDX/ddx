@@ -114,7 +114,7 @@ The three layers are cost-tiered by design:
 - **Layer 3** sits above both, watching the loop drain and stopping when the
   queue, the budget, or progress runs out.
 
-Deterministic checks (Dun, project test suites, lints) sit above review,
+Deterministic checks (project test suites, lints, external check runners) sit above review,
 catching what slipped through. The cheap model implements; the strong model
 reviews; deterministic checks have the final word.
 

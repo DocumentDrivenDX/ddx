@@ -10,7 +10,7 @@ weren't, it wouldn't be on the page.
 
 ## Platform, Not Methodology
 
-DDx provides primitives. Workflow tools (HELIX) and quality tools (Dun)
+DDx provides primitives. Workflow tools (HELIX) and other consumers
 provide opinions. The CLI owns the document library, bead tracker, agent
 dispatch, personas, templates, and git sync. Phases, gates, supervisory loops,
 and methodology validation belong in plugins.
@@ -58,8 +58,8 @@ acceptance criteria, not the developer's memory of the conversation.
 ## Cost-Tiered Throughput
 
 Optimize closed beads per dollar, not raw capability. Cheap models do; strong
-models review; deterministic checks (Dun) sit at the top of the ladder
-catching what review missed. Routing is by capability and endpoint, not by
+models review; deterministic checks sit at the top of the ladder catching
+what review missed. Routing is by capability and endpoint, not by
 hardcoded provider name.
 
 **In practice:** `ddx try` runs implementation on a cheap model in an

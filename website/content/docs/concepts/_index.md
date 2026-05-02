@@ -40,19 +40,17 @@ flowchart LR
     class Docs product;
 ```
 
-## The Three-Layer Stack
+## Platform and Workflow
 
-DDx is one layer in a three-project stack with explicit boundaries. Each layer
-is independently useful and replaceable.
+DDx is the platform layer; workflow tools sit on top with explicit boundaries.
+Each layer is independently useful and replaceable.
 
 | Layer | Project | Owns |
 |-------|---------|------|
 | **Platform** | [DDx](https://github.com/DocumentDrivenDX/ddx) | Document library, bead tracker, agent dispatch, personas, templates, git sync |
 | **Workflow** | [HELIX](https://github.com/DocumentDrivenDX/helix) | Phases, gates, supervisory dispatch, methodology |
-| **Quality** | [Dun](https://github.com/DocumentDrivenDX/dun) | Check discovery, execution, agent-friendly output |
 
-DDx provides primitives. HELIX and others provide opinions. Dun verifies the
-result.
+DDx provides primitives. HELIX and other consumers provide opinions.
 
 ```mermaid
 flowchart TB
@@ -63,28 +61,21 @@ flowchart TB
     subgraph Platform["Platform layer — primitives"]
         DDx["DDx<br/>document library · bead tracker ·<br/>agent dispatch · personas · git sync"]
     end
-    subgraph Quality["Quality layer — verification"]
-        Dun["Dun<br/>check discovery · execution ·<br/>agent-friendly output"]
-    end
 
     HELIX -->|consumes primitives| DDx
     Other -->|consumes primitives| DDx
-    DDx -->|invokes checks| Dun
-    Dun -->|results| DDx
 
     classDef platform fill:#dbeafe,stroke:#1d4ed8,color:#1e293b;
     classDef workflow fill:#dcfce7,stroke:#15803d,color:#1e293b;
-    classDef quality fill:#fae8ff,stroke:#a21caf,color:#1e293b;
     class DDx platform;
     class HELIX,Other workflow;
-    class Dun quality;
 ```
 
 {{< callout type="info" >}}
-**Why three layers?** Mixing methodology into platform code locks teams into
-one way of working. Keeping the platform opinion-free lets HELIX evolve, lets
-alternative workflows exist, and lets DDx serve both fully-autonomous and
-human-driven teams from the same primitives.
+**Why split platform from workflow?** Mixing methodology into platform code
+locks teams into one way of working. Keeping the platform opinion-free lets
+HELIX evolve, lets alternative workflows exist, and lets DDx serve both
+fully-autonomous and human-driven teams from the same primitives.
 {{< /callout >}}
 
 ## Documents Are the Product

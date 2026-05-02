@@ -55,12 +55,6 @@ The workflow methodology project that sits on top of DDx. Owns phases,
 gates, supervisory dispatch, and bounded actions. HELIX is one valid
 workflow on top of DDx; alternatives can exist.
 
-## Dun
-
-The quality check runner project that sits at the top of the cost-tiered
-ladder. Owns check discovery, execution, and agent-friendly output of
-deterministic verification.
-
 ## Persona
 
 A reusable document that shapes how an agent behaves — for example
@@ -109,12 +103,11 @@ An agent-facing capability surface installed under `<projectRoot>/.claude/skills
 or `<projectRoot>/.agents/skills/`. DDx ships a single consolidated `ddx`
 skill rather than a fleet of small ones.
 
-## Three-Layer Stack
+## Platform and Workflow
 
-The architectural separation DDx is one layer of: **DDx** (platform
-primitives), **HELIX** (workflow methodology), **Dun** (deterministic
-quality checks). Each layer is independently useful and replaceable. See
-[the overview](../).
+The architectural separation between **DDx** (platform primitives) and
+**HELIX** (workflow methodology). Each layer is independently useful and
+replaceable. See [the overview](../).
 
 ## Worktree (Isolated)
 

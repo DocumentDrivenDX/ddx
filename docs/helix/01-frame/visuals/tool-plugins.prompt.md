@@ -1,7 +1,7 @@
 ---
 title: "Tool — Plugins"
 tool: "Plugins"
-component: "Modular composition; HELIX/Dun snapping into shared core"
+component: "Modular composition; HELIX and other plugins snapping into shared core"
 generator: nano-banana-pro-openrouter
 model: gemini-3-pro-image-preview
 aspect_ratio: "16:9"
@@ -18,11 +18,11 @@ A precise technical diagram of a modular plugin system rendered as an engineerin
 Around the core, four plugin modules are arranged at the cardinal positions, each drawn as a smaller rounded rectangle with a matching trapezoidal **tab** that visually snaps into the corresponding core socket (the geometry must read as plug-and-socket, not as floating rectangles). Each plugin is labeled in **Inter 0.875rem weight 600 #111827** with a one-line subtitle in **Inter 0.75rem #6B7280**:
 
 - **HELIX** (top, snapping into `library`/`beads`). Subtitle: "phased workflow". Fill **#FFFFFF**, 1.5px stroke **#4878C6**.
-- **Dun** (right, snapping into `agents`). Subtitle: "quality check runner". Fill **#FFFFFF**, 1.5px stroke **#4878C6**.
+- **Checks** (right, snapping into `agents`). Subtitle: "quality check runner". Fill **#FFFFFF**, 1.5px stroke **#4878C6**.
 - **Plugin C** (bottom). Generic third-party plugin; label simply `your-plugin` in **JetBrains Mono 0.75rem #6B7280**, with a thin dashed 1.5px **#6B7280** stroke (indicating "extension point — bring your own"). Fill **#FFFFFF**.
 - **Plugin D** (left). Same generic treatment as Plugin C, label `another-plugin`.
 
-Two of the four plugins (HELIX, Dun) are fully snapped into their sockets with crisp solid strokes; the other two are drawn slightly **detached** from the core with a small gap between tab and socket and dashed strokes, visually communicating "optional / pluggable" without text.
+Two of the four plugins (HELIX, Checks) are fully snapped into their sockets with crisp solid strokes; the other two are drawn slightly **detached** from the core with a small gap between tab and socket and dashed strokes, visually communicating "optional / pluggable" without text.
 
 Background: flat **#FFFFFF** with subtle 4%-opacity grid registration marks in **#E5E7EB**. A thin **#E5E7EB** legend strip along the bottom shows two short examples — a solid trapezoid labeled "installed plugin" and a dashed trapezoid labeled "available extension point" — in **Inter 0.75rem #6B7280**. Tone: technical reference manual, mechanical-assembly diagram drawn as a patent figure, sober and utilitarian.
 

@@ -19,7 +19,7 @@ isn't cited in a spec or review note, it should be cut.
 
 ### Platform, Not Methodology
 
-DDx provides primitives. Workflow tools (HELIX) and quality tools (Dun) provide
+DDx provides primitives. Workflow tools (HELIX) and other consumers provide
 opinions. The CLI owns: document library, bead tracker, agent dispatch,
 personas, templates, git sync. Phases, gates, supervisory loops, and
 methodology validation belong in workflow plugins.

@@ -80,7 +80,7 @@ the composite reads well alone.
 | Bead tracker | DAG with priority queue + ready/blocked states |
 | Document graph (artifacts) | Multi-node graph with `depends_on` and `generated_by` edges |
 | Agentic execution (run/try/work) | Three-layer wrapping; worktree isolation visible |
-| Plugins | Modular composition; HELIX/Dun snapping into shared core |
+| Plugins | Modular composition; HELIX and other plugins snapping into shared core |
 
 ### Lens 3 — User workflow (capstone)
 

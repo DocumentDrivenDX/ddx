@@ -43,18 +43,17 @@ Each pain point below maps to a specific DDx capability — the list is bounded 
 
 6. **Human-AI collaboration is the fulcrum.** Abstraction levers intent across the artifact stack, but only collaboration converts leverage into shipped software. Humans supply intent and accountability; AI supplies volume and execution. DDx is the toolkit at the seam — handoffs in both directions, at every level.
 
-## The Three-Layer Stack
+## Platform and Workflow
 
-DDx is one layer in a three-project stack with explicit boundaries:
+DDx pairs with workflow tools across explicit boundaries:
 
 | Layer | Project | Owns |
 |-------|---------|------|
 | Platform | **DDx** (this repo) | Document library, bead tracker, agent dispatch, personas, templates, git sync |
 | Workflow | **HELIX** | Phases, gates, supervisory dispatch, bounded actions, methodology |
-| Quality | **Dun** | Check discovery, execution, agent-friendly output |
 
-DDx provides primitives. HELIX and others provide opinions. Dun verifies the
-result. Each layer is independently useful and replaceable.
+DDx provides primitives. HELIX and others provide opinions. Each layer is
+independently useful and replaceable.
 
 ## Mission
 
@@ -142,8 +141,8 @@ support all three directions equally.
 ### Cost-Tiered Execution
 
 Closed-bead throughput per dollar is the optimization target. Cheap models do
-the work; stronger models review; deterministic checks (Dun) sit at the top of
-the ladder catching what review missed. The agent service routes by capability,
+the work; stronger models review; deterministic checks sit at the top of the
+ladder catching what review missed. The agent service routes by capability,
 not by name — endpoints with live model discovery, not hardcoded providers.
 
 ### Three-Layer Run Architecture

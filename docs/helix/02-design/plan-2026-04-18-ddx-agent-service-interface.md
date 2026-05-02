@@ -256,7 +256,7 @@ Only **10 non-test files** import `github.com/DocumentDrivenDX/agent`. The 113 s
 1. **Where do the stall + compaction-stuck circuit breakers live?** Today `agent_runner.go:200-318` inspects private JSON fields on compaction-end events to enforce DDx-defined limits (no read-only-tool-only iterations, no consecutive no-op compactions). Two options:
    - **Move enforcement upstream.** `ExecuteRequest.StallPolicy{ReadOnlyTools int, NoopCompactions int}` and the agent enforces, ending execution with `Status: stalled`. DDx no longer needs the event-inspection code.
    - **Keep enforcement in DDx.** Then `Event` payloads must carry the structured `compaction-end{success bool, no_compaction bool}` shape, which slightly leaks compaction internals.
-   - Recommendation: **upstream**. Stall is an execution concern, not a DDx concern; HELIX/Dun would want the same limits.
+   - Recommendation: **upstream**. Stall is an execution concern, not a DDx concern; HELIX and other consumers would want the same limits.
 
 2. **`findTool` rename:** rename upstream `glob` → `find`. Same handler. No back-compat alias (pre-release). DDx-side `findTool` wrapper deletes.
 
@@ -335,7 +335,7 @@ Two roles, one module:
 
 2. **A wrapper around other agents.** Subprocess harness layer for claude, codex, opencode, pi, gemini — used when their interactive features, vendor billing, or specific capabilities matter, OR when comparison/fallback routing wants them in the candidate pool.
 
-**The product:** ddx-agent is the one stop shop for optimally routed one-shot noninteractive agentic prompts. DDx is one consumer (the bead-driven workflow); HELIX, Dun, and standalone CLI users are others.
+**The product:** ddx-agent is the one stop shop for optimally routed one-shot noninteractive agentic prompts. DDx is one consumer (the bead-driven workflow); HELIX and standalone CLI users are others.
 
 ### Why C is right (overriding the existing spec landscape)
 
@@ -392,7 +392,7 @@ After deletes/trims, grep both repos for references to the deleted IDs and fix o
 grep -rn "SD-015\|SD-023\|CONTRACT-002\|plan-2026-04-08-agent-routing" --include="*.md" --include="*.go"
 ```
 
-Any remaining reference is a re-entanglement risk. Remove with prejudice. Code-side imports of `cli/internal/agent` types from outside DDx (if any — see HELIX/Dun audit below) get the same treatment.
+Any remaining reference is a re-entanglement risk. Remove with prejudice. Code-side imports of `cli/internal/agent` types from outside DDx (if any — see HELIX and other consumers audit below) get the same treatment.
 
 #### How DDx asks for changes
 
@@ -510,7 +510,7 @@ Three architectural options on the table:
 - **Event schema.** `ExecuteStream` event types form a closed union: `text_delta`, `tool_call`, `tool_result`, `compaction`, `routing_decision`, `final`. Each has a documented JSON shape that both subprocess and in-process backends emit identically. Defined in CONTRACT-001.
 - **OS-level cancellation.** `Service` guarantees that `ctx.Done()` triggers cleanup of any subprocess (PTY teardown, orphan reap). Tests prove it.
 - **Stall enforcement.** `ExecuteRequest.StallPolicy{ReadOnlyTools int, NoopCompactions int}` — the agent enforces, ends execution with `Status: stalled`. DDx's circuit-breaker code at `agent_runner.go:200-318` deletes.
-- **HELIX/Dun audit.** Before lock-in, grep both repos for `cli/internal/agent` imports. Any non-DDx consumer is added as a named migration target with their own bead.
+- **HELIX and other consumers audit.** Before lock-in, grep both repos for `cli/internal/agent` imports. Any non-DDx consumer is added as a named migration target with their own bead.
 
 ## Concrete contract draft (CONTRACT-001-ddx-agent-service.md)
 
@@ -1077,7 +1077,7 @@ Concrete deliverable: ddx-agent ships an integration suite that, given credentia
 |---|---|
 | Mid-migration production fix needed | Adapter layer (`legacy/`) lets old code paths keep working until each is migrated. Hot-fix on legacy is allowed during migration. |
 | Test suite churn | Four test seams (FakeProvider, PromptAssertionHook, CompactionAssertionHook, ToolWiringHook) spec'd before migration starts. Any test that can't migrate cleanly is a gap in the seam — fix the seam, don't add a workaround. |
-| HELIX/Dun consumer break | Phase 0.1 audit (Go imports + doc references) catches them; named migration beads filed before Phase 5. |
+| HELIX and other consumers consumer break | Phase 0.1 audit (Go imports + doc references) catches them; named migration beads filed before Phase 5. |
 | Subprocess harness PTY/orphan cleanup regressions | Contract names this guarantee; Phase 2.7 + Phase 3.13 mandate explicit cancellation tests. Don't skip. |
 | Spec drift recurrence | Reference-cleanup grep in Phase 1 + Phase 7 catches it. CI lint can be added later (post-epic). |
 | Routing behavior change goes unnoticed | Existing test suites + integration suite A/B run before/after migration; any divergence on identical inputs is a bug. |
@@ -1123,7 +1123,7 @@ The breakdown below is informed by Phases 0-7 above. **Not yet filed** — revie
 **Sub-beads (ordered):**
 
 1. **Spec cleanup** — DELETE `SD-015-agent-routing-and-catalog-resolution.md`, `SD-015-resolution-path-trace.md`, `SD-023-agent-routing-visibility.md`, `plan-2026-04-08-agent-routing-and-catalog-resolution.md`. GUT `FEAT-006-agent-service.md` to a one-page reference. Reference-cleanup grep + remove. Blocks: nothing (can run in parallel with code work).
-2. **HELIX/Dun import audit** — grep both projects for `cli/internal/agent` imports. File a migration bead per consumer. Blocks: 16.
+2. **HELIX and other consumers import audit** — grep both projects for `cli/internal/agent` imports. File a migration bead per consumer. Blocks: 16.
 3. **Bump go.mod to `agent v0.4.0-pre`** — new contract available; legacy still compiles. Blocks: 4-12.
 4. **Add `cli/internal/agent/legacy/` adapter layer** — wraps the new Service to expose the old call shapes during migration. Lets cmd/ files migrate one at a time without a flag day. Deletes in step 14.
 5. **Migrate `cmd/agent_check.go`** → `service.HealthCheck` + `service.ListProviders`.
@@ -1169,7 +1169,7 @@ Epic on DDx tracker: **migrate to ddx-agent Service interface**
 - ddx-5: sessions/observations/compaction migration (supersedes ddx-76df1a46)
 - ddx-6: virtual-provider test paths migration
 - ddx-7: bump to v0.5.0; verify import-list shrunk; cleanup
-- ddx-8: HELIX/Dun consumer docs (optional — only if those projects are ready)
+- ddx-8: HELIX and other consumers consumer docs (optional — only if those projects are ready)
 
 Subprocess CLI (`ddx-agent` binary as a polyglot front door) is **deferred** — easy to add later as a `cliService` implementation of the same interface if/when a non-Go consumer needs it.
 

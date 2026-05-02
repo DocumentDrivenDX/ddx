@@ -94,7 +94,7 @@ higher layer composes the layer beneath it.
 
 The three layers — `ddx run`, `ddx try`, `ddx work` — are **cost-tiered by
 design**: the implementer is a cheap model, the reviewer is a stronger one,
-and deterministic checks (Dun) sit above review catching what slipped
+and deterministic checks sit above review catching what slipped
 through. Failed reviews thread the findings into the next attempt's prompt
 so the escalating model knows exactly what was missed.
 
@@ -256,4 +256,4 @@ project-local install model means all of that is in the repo, not in a
 developer's home directory or a remote service.
 
 That's the whole platform. Phases, gates, and methodology live one layer up
-in HELIX; deterministic verification lives in Dun.
+in HELIX; deterministic verification lives in the check runner.

@@ -25,7 +25,7 @@ Workflow tools and check runners consume the graph to enforce document quality. 
 
 ## Problem Statement
 
-**Current situation:** Dun implements document dependency tracking internally (`doc_dag.go`, `frontmatter.go`, `hash.go`, `stamp.go`). This is document infrastructure, not check logic — it belongs in DDx alongside the document library it operates on.
+**Current situation:** An external check runner implements document dependency tracking internally (`doc_dag.go`, `frontmatter.go`, `hash.go`, `stamp.go`). This is document infrastructure, not check logic — it belongs in DDx alongside the document library it operates on.
 
 **Pain points:**
 - Document staleness detection is locked inside the check runner, inaccessible to other tools
@@ -224,11 +224,11 @@ ddx doc dependents <id>             # Show what depends on a document
 
 ## Implementation Notes
 
-### Porting from Dun
+### Porting from the prior check runner
 
-The following dun source files contain the logic to port:
+The following source files contain the logic to port:
 
-| Dun File | What It Does | DDx Destination |
+| Source File | What It Does | DDx Destination |
 |----------|-------------|----------------|
 | `internal/dun/frontmatter.go` | Parse/write `dun:` frontmatter | `internal/docgraph/frontmatter.go` |
 | `internal/dun/doc_dag.go` | Build graph, detect staleness, cascade | `internal/docgraph/graph.go` |
@@ -239,7 +239,7 @@ The following dun source files contain the logic to port:
 
 **Phase 1:** DDx ships doc graph commands (`ddx doc graph/stale/stamp`). Reads both `ddx:` and `dun:` frontmatter, writes `ddx:`.
 
-**Phase 2:** Dun adds `ddx doc stale --json` as alternative to internal graph logic, gated by `DUN_USE_DDX_DOC=1`.
+**Phase 2:** The check runner adds `ddx doc stale --json` as alternative to internal graph logic, gated by `DUN_USE_DDX_DOC=1`.
 
 **Phase 3:** Once proven, dun removes internal doc_dag/frontmatter/hash/stamp code and delegates fully to DDx.
 

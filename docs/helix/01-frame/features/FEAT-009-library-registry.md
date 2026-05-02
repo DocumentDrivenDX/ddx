@@ -29,7 +29,7 @@ This replaces the current git-subtree-based sync model with a lighter, more prac
 - `ddx-library` exists as a git repo but DDx's sync mechanism (`ddx update`) is a stub
 - Git subtree is complex, fragile, and overkill for distributing personas and templates
 - HELIX publishes skills independently (global home paths) with no DDx integration
-- Dun expects plugins at `~/.cache/ddx/library/plugins/` but nothing populates this path
+- External check runners expect plugins at `~/.cache/ddx/library/plugins/` but nothing populates this path
 - There's no way to discover what's available or install a specific resource
 
 **Desired outcome:** `ddx install helix` fetches and installs HELIX skills. `ddx install persona/strict-code-reviewer` fetches one persona. `ddx search testing` finds testing-related resources. Simple, practical, no git subtree.
@@ -82,7 +82,7 @@ ddx-library/
 │       └── package.yaml       # HELIX package descriptor
 └── plugins/
     └── helix/
-        └── plugin.yaml        # Dun plugin for HELIX checks
+        └── plugin.yaml        # Check-runner plugin for HELIX checks
 ```
 
 ### Package Descriptor
