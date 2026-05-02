@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260502T204356-13980032",
+  "bead_id": "ddx-dc157075",
+  "base_rev": "8f5f3db475d91479d90609e7ca3569f8b4429db4",
+  "created_at": "2026-05-02T20:43:57.800946033Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-dc157075",
+    "title": "ddx work / agent execute-loop: stay alive while queue has ready work and viable providers exist",
+    "description": "Workers exit prematurely even when ready beads remain in the queue. Operators have to manually relaunch, defeating the point of a long-running drain.\n\n## Root causes (from sub-agent investigation)\n\n1. **cli/internal/agent/execute_bead_loop.go:440-441**: when nextCandidate returns no eligible bead AND runtime.PollInterval \u003c= 0, the loop returns immediately. Combined with the per-Run 'attempted' map (line 388, 476), once each currently-ready bead has been *attempted once* the loop exits even though those same beads (or new arrivals) are still queue-ready.\n\n2. **cli/internal/agent/execute_bead_loop.go:483-508**: routing-preflight rejection on a single bead exits the entire loop ('return result, nil'), abandoning all other ready beads.\n\n3. **Default --poll-interval=0 everywhere**: cli/cmd/work.go:66, cli/cmd/agent_cmd.go:1568, cli/internal/server/graphql_adapters.go:115, cli/internal/server/server.go:2281. All three recent server-spawned workers in .ddx/workers/ show poll_interval: '0s', so cause #1 fires the first empty poll.\n\n## Fix shape (locked decisions baked in)\n\n- Flip default --poll-interval from 0 → **30s** everywhere (CLI + server adapter). Operator can override with --once for one-shot or explicit --poll-interval=N.\n- Reset per-Run 'attempted'/'hookFailed' maps when the loop falls through to 'no candidate', before sleeping. Prevents the 'attempted-once = exit' trap.\n- Convert preflight early-exit (483-508) to per-bead 'continue' so one bead's routing failure doesn't abandon the rest.\n- Add structured exit_reason to loop.end event; reserve 'providers_exhausted' slot for ddx-aede917d (quota-pause work).\n- Server-managed workers expose 'no_ready_work' as a **transient 'running (idle)' substate**, not terminal. Worker stays alive; UI shows running (idle).\n- Preserve --once and explicit --poll-interval=0 for back-compat (legacy 'drain-and-exit' semantics).\n\nAcceptable exit conditions remain (per existing beads):\n- SIGTERM / SIGINT (operator-driven)\n- All providers durably out (per ddx-aede917d quota pause/resume — workers pause+probe, not exit)\n- No providers configured at all (fatal config error)\n- --once explicitly requested\n- --poll-interval=0 explicitly requested",
+    "acceptance": "1. Default --poll-interval = 30s in all four call sites: cli/cmd/work.go:66, cli/cmd/agent_cmd.go:1568, cli/internal/server/graphql_adapters.go:115, cli/internal/server/server.go:2281. 2. execute_bead_loop.go:440-441 no longer returns early when poll-interval \u003e 0; sleeps + retries instead. Per-Run 'attempted'/'hookFailed' maps reset on no-candidate path. 3. execute_bead_loop.go:483-508 preflight rejection becomes per-bead continue, not loop exit. 4. loop.end event includes structured exit_reason field. Recognized values include 'sigterm', 'sigint', 'fatal_config', 'once_complete', 'explicit_poll_zero'; 'providers_exhausted' slot reserved for ddx-aede917d. 5. Server-managed workers report no_ready_work as transient (worker stays in 'running' state with 'idle' substate); existing 'exited' status reserved for true exits per AC #4. 6. Tests: TestLoop_StaysAliveWithEmptyQueue (poll-interval \u003e 0; verify loop stays alive across N empty polls); TestLoop_PreflightRejectionContinues (one bead's preflight failure doesn't abandon siblings); TestLoop_OnceFlagStillExits (back-compat); TestLoop_ExplicitPollZeroExits (back-compat). 7. Manual verification: spawn worker via 'ddx work --harness claude'; let queue drain; verify worker stays running \u003e 5 min after queue empty (vs current behavior of immediate exit). 8. Update FEAT-006 / FEAT-010 docs noting the new long-running default + the explicit opt-out flags.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "kind:fix",
+      "observed-failure"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T20:43:56Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3905826",
+      "execute-loop-heartbeat-at": "2026-05-02T20:43:56.507606806Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T204356-13980032",
+    "prompt": ".ddx/executions/20260502T204356-13980032/prompt.md",
+    "manifest": ".ddx/executions/20260502T204356-13980032/manifest.json",
+    "result": ".ddx/executions/20260502T204356-13980032/result.json",
+    "checks": ".ddx/executions/20260502T204356-13980032/checks.json",
+    "usage": ".ddx/executions/20260502T204356-13980032/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-dc157075-20260502T204356-13980032"
+  },
+  "prompt_sha": "3d6274e087e6af7c448a03e02b5b14236e922dca5d97c191f9abe231ef2e5ceb"
+}
