@@ -81,6 +81,8 @@ DDx discovers artifacts by scanning for embedded frontmatter and sidecar
 | `WIRE` | Wireframe / mockup | `docs/wireframes/` |
 | `IMG` | Image asset (hero, illustration) | `docs/images/` |
 | `PRMT` | Prompt artifact | `docs/prompts/` |
+| `RSCH` | Research note (IDs `RSCH-NNN`) | `docs/helix/00-discover/research/` |
+| `REF` | Reference, external source capture (IDs `REF-NNN`) | `docs/helix/00-discover/references/` |
 
 These prefixes are conventions — DDx treats them all the same. Workflows
 (HELIX) may enforce that certain types exist or follow specific templates.
@@ -106,6 +108,28 @@ Identity carries the same field set whether embedded under a markdown
 | `parking_lot` | bool | no | Skip in staleness checks |
 
 Unknown fields are preserved on round-trip.
+
+#### Type-specific metadata (outside `ddx:`)
+
+Type conventions may carry additional metadata fields at the top level of
+frontmatter, alongside (not inside) the `ddx:` identity block. The parser
+treats these as inert pass-through fields. For example, a `REF-NNN`
+reference artifact captures provenance about an external source:
+
+```yaml
+---
+ddx:
+  id: REF-007
+  depends_on: [RSCH-003]
+source_url: https://example.com/article
+source_author: Jane Doe
+accessed: 2026-05-01
+---
+# Reference: ...
+```
+
+Identity (`id`, `depends_on`, etc.) stays under `ddx:`; type-specific fields
+like `source_url`, `source_author`, and `accessed` live at the top level.
 
 #### `media_type`
 
