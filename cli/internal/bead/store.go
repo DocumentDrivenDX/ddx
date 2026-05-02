@@ -875,9 +875,13 @@ func beadEventFromMap(m map[string]any) BeadEvent {
 
 // Close sets a bead's status to closed.
 func (s *Store) Close(id string) error {
-	return s.Update(id, func(b *Bead) {
+	if err := s.Update(id, func(b *Bead) {
 		b.Status = StatusClosed
-	})
+	}); err != nil {
+		return err
+	}
+	s.maybeOpportunisticArchive()
+	return nil
 }
 
 // ErrClosureGateRejected indicates a close was refused because the bead does
@@ -942,6 +946,14 @@ func ClosureGate(b *Bead) error {
 // Store.Close is the manual-administration escape hatch when the gate is
 // inappropriate.
 func (s *Store) CloseWithEvidence(id string, sessionID string, commitSHA string) error {
+	if err := s.closeWithEvidence(id, sessionID, commitSHA); err != nil {
+		return err
+	}
+	s.maybeOpportunisticArchive()
+	return nil
+}
+
+func (s *Store) closeWithEvidence(id string, sessionID string, commitSHA string) error {
 	return s.Update(id, func(b *Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
