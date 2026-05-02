@@ -1,0 +1,71 @@
+{
+  "attempt_id": "20260502T024645-49aba732",
+  "bead_id": "ddx-8a530449",
+  "base_rev": "fca68a6cfbd29acbc7082768d5ca5fa6d0b6856a",
+  "created_at": "2026-05-02T02:46:46.95364936Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8a530449",
+    "title": "Curated CLI noun-verb reference; preserve auto-generated full ref",
+    "description": "Create website/content/docs/cli/_index.md (or equivalent) as a hand-curated noun-verb command reference matching CLAUDE.md's CLI Command Overview section. Keep auto-generated cli/commands/* full reference accessible via a 'Complete reference' link. Document in front matter or comment that this curated index is hand-maintained — regen process should not overwrite it.",
+    "acceptance": "1. Curated CLI reference page exists with sections for Core, Bead Tracker, Queue Work, Agent Service, Resource Commands, Embedded Utilities (matching CLAUDE.md). 2. Page links to 'Complete command reference' that points at the cli/commands/ auto-generated tree. 3. Comment or front matter explicitly notes 'hand-curated; do not auto-regenerate'. 4. Run 'grep -c \"^## \" website/content/docs/cli/_index.md' returns \u003e= 6 (one per section).",
+    "parent": "ddx-629ec5b4",
+    "labels": [
+      "site-redesign",
+      "area:website",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T02:46:45Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-02T01:36:53.711883097Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-02T01:36:53.843830236Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-05-02T01:36:53.95776177Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-05-02T01:36:54.265853163Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T02:46:45.405496119Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T024645-49aba732",
+    "prompt": ".ddx/executions/20260502T024645-49aba732/prompt.md",
+    "manifest": ".ddx/executions/20260502T024645-49aba732/manifest.json",
+    "result": ".ddx/executions/20260502T024645-49aba732/result.json",
+    "checks": ".ddx/executions/20260502T024645-49aba732/checks.json",
+    "usage": ".ddx/executions/20260502T024645-49aba732/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-8a530449-20260502T024645-49aba732"
+  }
+}
