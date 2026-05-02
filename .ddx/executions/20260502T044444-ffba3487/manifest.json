@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T044444-ffba3487",
+  "bead_id": "ddx-2f453147",
+  "base_rev": "55838f326971e543a55bb361eceb420e477cc25e",
+  "created_at": "2026-05-02T04:44:45.570926156Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2f453147",
+    "title": "Generalize bead store to named-collection abstraction (ADR-004 step 1)",
+    "description": "Refactor cli/internal/bead/store.go (1687 lines, currently hard-codes .ddx/beads.jsonl) to accept a logical collection name. Introduce a CollectionRef abstraction so the same Store type can back 'beads' (active queue) and future collections like 'beads-archive', 'exec-runs', 'agent-sessions'. JSONL backend resolves a collection to a file under .ddx/\u003cname\u003e.jsonl. External (bd/br) backend keeps current behavior for the default 'beads' collection; non-default collections may stub out for this slice. No user-facing behavior change yet — default callers (ddx bead list/show/etc.) still operate on 'beads'.\n\nReferences: ADR-004 §Decision items 1-3, store.go, backend.go, backend_external.go.",
+    "acceptance": "1. New collection abstraction (e.g. CollectionRef or equivalent) lives in cli/internal/bead and store.go uses it for the JSONL path. 2. Default 'beads' collection produces the same .ddx/beads.jsonl path it does today. 3. Opening a non-'beads' collection on the JSONL backend reads/writes .ddx/\u003cname\u003e.jsonl. 4. All existing tests under cli/internal/bead and cli/cmd pass unchanged. 5. schema_compat_test.go still green; bd/br interchange unchanged for 'beads'.",
+    "parent": "ddx-0c0565f3",
+    "labels": [
+      "area:beads",
+      "area:storage",
+      "kind:refactor",
+      "adr:004"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T04:44:44Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1329405",
+      "execute-loop-heartbeat-at": "2026-05-02T04:44:44.425172806Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T044444-ffba3487",
+    "prompt": ".ddx/executions/20260502T044444-ffba3487/prompt.md",
+    "manifest": ".ddx/executions/20260502T044444-ffba3487/manifest.json",
+    "result": ".ddx/executions/20260502T044444-ffba3487/result.json",
+    "checks": ".ddx/executions/20260502T044444-ffba3487/checks.json",
+    "usage": ".ddx/executions/20260502T044444-ffba3487/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2f453147-20260502T044444-ffba3487"
+  }
+}
