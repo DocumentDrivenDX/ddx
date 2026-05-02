@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T122805-11bad270",
+  "bead_id": "ddx-a2255401",
+  "base_rev": "af88c35eeec53c4d6219231c3477956ad5d7390c",
+  "created_at": "2026-05-02T12:28:06.960096756Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a2255401",
+    "title": "B4a: Amend FEAT-022 with static-prompt minimum-prompt rule",
+    "description": "Amend FEAT-022 per /tmp/story-12-final.md 'Spec changes' section. Add the following under Functional / Shared evidence primitives: 'Static-prompt minimum-prompt rule. Every static instruction string DDx embeds in an LLM prompt MUST declare its load-bearing guardrails inline as a Go comment list above the constant, one bullet per guardrail with a pointer to the failure mode it prevents. Edits MUST preserve every listed guardrail. New guardrails MUST be added to the list. A regression test MUST assert each listed guardrail still appears in the rendered prompt. This rule applies to STATIC prompt bodies; dynamic evidence egress is covered by the §5–§7 cap primitives and is unaffected.' Closing sentence (per codex) prevents implying static-comment guardrails replace dynamic-egress caps. Should land after B2 so the rule reflects implementation.",
+    "acceptance": "AC8 (FEAT-022 portion): FEAT-022 spec amended with the minimum-prompt rule paragraph exactly as specified, including the closing sentence about dynamic egress. Linked from the affected constants if cross-references exist.",
+    "parent": "ddx-a61bf8ee",
+    "labels": [
+      "phase:2",
+      "story:12",
+      "tier:cheap"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:28:05Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T12:28:05.693941588Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T122805-11bad270",
+    "prompt": ".ddx/executions/20260502T122805-11bad270/prompt.md",
+    "manifest": ".ddx/executions/20260502T122805-11bad270/manifest.json",
+    "result": ".ddx/executions/20260502T122805-11bad270/result.json",
+    "checks": ".ddx/executions/20260502T122805-11bad270/checks.json",
+    "usage": ".ddx/executions/20260502T122805-11bad270/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a2255401-20260502T122805-11bad270"
+  }
+}
