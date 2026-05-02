@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260502T205533-a458a02f",
+  "bead_id": "ddx-c6e3db02",
+  "base_rev": "fd79ebd080872e25434d37d0a38cebfcd0a853a1",
+  "created_at": "2026-05-02T20:55:34.687456256Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c6e3db02",
+    "title": "ddx work: per-bead rate-limit retry honoring Retry-After (provider stays in rotation)",
+    "description": "Distinct from quota exhaustion (see ddx-aede917d). Rate-limiting (HTTP 429 with Retry-After header — per-second/per-minute throttle) means 'slow down', not 'I'm out for the period'. Provider stays in rotation; current bead retries after waiting.\n\nPer-bead retry policy:\n1. On 429 / rate-limit error from Fizeau (NOT NoViableProviderForNow which is quota): wait the Retry-After interval (capped at 60s default, configurable via --rate-limit-max-wait), retry the SAME bead with the SAME provider\n2. If no Retry-After header: exponential backoff (1s, 5s, 15s, 30s, 60s) up to the cap\n3. Per-bead total rate-limit wait budget (default 5 min); past that, mark execution_failed with reason 'rate-limited beyond budget'\n4. Provider availability state unchanged (stays in rotation; this is per-request throttle, not provider-out)\n\nShould use Fizeau's existing RecordRouteAttempt feedback channel for transparency (records the rate-limit event so the routing engine has signal even though it doesn't change provider availability).",
+    "acceptance": "1. 429 errors from Fizeau trigger per-bead wait + retry per TD-NNN RateLimitRetryContract (per ddx-673833f4). 2. **Per RateLimitRetryContract: NO persisted status change before budget exhaustion; provider stays in rotation. bd/br compatibility (ADR-004) preserved.** 3. Retry-After honored when present; exponential backoff fallback when absent. 4. --rate-limit-max-wait flag bounds per-bead total wait (default 5 min). 5. Beyond budget: bead transitions per TD's outcome→state mapping for 'rate-limited beyond budget' — status stays in canonical 6, additional context conveyed via labels/events. 6. RecordRouteAttempt invoked for transparency per RateLimitRetryContract. 7. Tests cover Retry-After-respected and exponential-backoff paths. 8. Quota-exhaustion path is explicitly NOT this bead's concern (per QuotaPauseContract separation in TD). 9. **schema_compat_test.go round-trip passes after this bead lands.**",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T20:55:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3924346",
+      "execute-loop-heartbeat-at": "2026-05-02T20:55:33.467867149Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T205533-a458a02f",
+    "prompt": ".ddx/executions/20260502T205533-a458a02f/prompt.md",
+    "manifest": ".ddx/executions/20260502T205533-a458a02f/manifest.json",
+    "result": ".ddx/executions/20260502T205533-a458a02f/result.json",
+    "checks": ".ddx/executions/20260502T205533-a458a02f/checks.json",
+    "usage": ".ddx/executions/20260502T205533-a458a02f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c6e3db02-20260502T205533-a458a02f"
+  },
+  "prompt_sha": "176517dda027586b96d684045b1d363ed5a0e311f35d35f6f0b8183789cbd5be"
+}
