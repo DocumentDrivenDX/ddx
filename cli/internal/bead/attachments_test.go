@@ -279,6 +279,51 @@ func TestAttachmentClosureGateAcceptsAttachedEvents(t *testing.T) {
 	assert.NoError(t, ClosureGate(b))
 }
 
+// TestAttachmentMissingSidecarFallback covers AC5: a bead row that carries an
+// events_attachment reference but whose sidecar file has been lost (deleted,
+// or never finished writing during a crash) must not crash the read path.
+// readEventsAttachment treats missing as an empty event log so callers can
+// continue to render the bead, and Events() / eventsForBead surface that
+// empty result transparently.
+func TestAttachmentMissingSidecarFallback(t *testing.T) {
+	s := newTestStore(t)
+
+	b := &Bead{Title: "lost sidecar"}
+	require.NoError(t, s.Create(b))
+	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "routing", Summary: "first"}))
+	require.NoError(t, s.Close(b.ID))
+
+	// Sanity: the sidecar exists post-close.
+	require.FileExists(t, s.eventsAttachmentPath(b.ID))
+
+	// Simulate a lost sidecar (deleted out from under the row, or a partial
+	// write that never landed).
+	require.NoError(t, os.Remove(s.eventsAttachmentPath(b.ID)))
+
+	// Direct read: missing file -> empty slice, no error.
+	events, err := s.readEventsAttachment(b.ID)
+	require.NoError(t, err)
+	assert.Empty(t, events)
+
+	// The high-level Events() API surfaces the same empty result without
+	// crashing or falling back to inline (the row no longer carries inline
+	// events).
+	got, err := s.Events(b.ID)
+	require.NoError(t, err)
+	assert.Empty(t, got)
+
+	// LoadEventsInline must also tolerate the missing sidecar — it leaves
+	// Extra without an events array and clears the attachment ref.
+	bead, err := s.Get(b.ID)
+	require.NoError(t, err)
+	require.NotNil(t, bead)
+	require.NoError(t, s.LoadEventsInline(bead))
+	_, hasInline := bead.Extra["events"]
+	assert.False(t, hasInline, "no events to inline when sidecar is missing")
+	_, hasAttach := bead.Extra[EventsAttachmentExtraKey]
+	assert.False(t, hasAttach, "attachment ref cleared after inlining attempt")
+}
+
 // beadRowBytes returns the raw JSONL line for the given bead ID from the
 // store's primary file, so tests can compare row sizes before/after
 // externalization (AC3).
