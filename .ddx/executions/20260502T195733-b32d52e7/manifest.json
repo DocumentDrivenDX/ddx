@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260502T195733-b32d52e7",
+  "bead_id": "ddx-cfedee8e",
+  "base_rev": "1da6c7fd58ff47dca6ac64415cd6b16e7ac32ebc",
+  "created_at": "2026-05-02T19:57:34.504366978Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cfedee8e",
+    "title": "escalation: wire ladder into executor closure; drop tier→profile mutation",
+    "description": "Wire the ladder (S10_2) into singleTierAttempt / executor closure in execute_bead_loop.go. Drop the existing tier→profile mutation; ladder owns escalation. Currently each bead gets exactly one singleTierAttempt; this bead replaces that with a real loop that reads RoutingActual.Power from each attempt's response and bumps MinPower per the ladder for the next call. Also pass Role + CorrelationID on every ExecuteRequest (CorrelationID = bead_id:attempt_id; Role = 'implementer' for the implementation calls).",
+    "acceptance": "1. execute_bead_loop.go uses ladder.Next on substantive failure. 2. Existing tier→profile mutation removed. 3. Each call carries Role + CorrelationID. 4. Tests in zero_config_escalation_integration_test.go (or new) exercise actual escalation, not just primitives.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:routing",
+      "kind:refactor"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T19:57:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3518486",
+      "execute-loop-heartbeat-at": "2026-05-02T19:57:33.235388556Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T195733-b32d52e7",
+    "prompt": ".ddx/executions/20260502T195733-b32d52e7/prompt.md",
+    "manifest": ".ddx/executions/20260502T195733-b32d52e7/manifest.json",
+    "result": ".ddx/executions/20260502T195733-b32d52e7/result.json",
+    "checks": ".ddx/executions/20260502T195733-b32d52e7/checks.json",
+    "usage": ".ddx/executions/20260502T195733-b32d52e7/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-cfedee8e-20260502T195733-b32d52e7"
+  },
+  "prompt_sha": "b530a663056c4f13f4d9af16bf79a467d3941f43e765c6617e1c1fa64ed62892"
+}
