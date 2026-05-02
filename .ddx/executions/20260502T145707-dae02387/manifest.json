@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T145707-dae02387",
+  "bead_id": "ddx-e0be88f6",
+  "base_rev": "b20ac0ebeed0f60c219f25be2c8393f22c1a088a",
+  "created_at": "2026-05-02T14:57:08.577610395Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e0be88f6",
+    "title": "decomposition: Step 0 heightened hint \u003e 8000 bytes; depth-2 cap",
+    "description": "Tune the existing Step 0 decomposition prompt: heightened hint when bead description \u003e 8000 bytes. Add a depth-2 cap on auto-decomposition (a decomposed child cannot itself decompose more than once).",
+    "acceptance": "1. Step 0 prompt has size-conditional hint. 2. Depth-2 cap enforced (3rd-level decomposition rejected with explanation). 3. Tests cover the cap.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:57:07Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T14:57:07.328832906Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T145707-dae02387",
+    "prompt": ".ddx/executions/20260502T145707-dae02387/prompt.md",
+    "manifest": ".ddx/executions/20260502T145707-dae02387/manifest.json",
+    "result": ".ddx/executions/20260502T145707-dae02387/result.json",
+    "checks": ".ddx/executions/20260502T145707-dae02387/checks.json",
+    "usage": ".ddx/executions/20260502T145707-dae02387/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e0be88f6-20260502T145707-dae02387"
+  }
+}
