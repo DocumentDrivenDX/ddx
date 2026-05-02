@@ -795,3 +795,119 @@ test('workers overview respects workers.max_count cap on + Add worker', async ({
 	await expect(addBtn).toBeDisabled();
 	await expect(addBtn).toHaveAttribute('title', 'at workers.max_count limit');
 });
+
+// ddx-4caba860: workers list must scope to the currently selected project.
+// Asserts the route parameter is threaded into the WorkersByProject query
+// and that the rendered list only includes workers belonging to the
+// selected project, even when other projects have running workers.
+test('workers list is scoped to the currently-selected project', async ({ page }) => {
+	const PROJECT_A = { id: 'project-A', name: 'Project A', path: '/tmp/project-a' };
+	const PROJECT_B = { id: 'project-B', name: 'Project B', path: '/tmp/project-b' };
+
+	const WORKERS_BY_PROJECT: Record<string, Record<string, unknown>[]> = {
+		[PROJECT_A.id]: [
+			{
+				id: 'worker-aaaaaaaa',
+				kind: 'execute-bead',
+				state: 'running',
+				status: 'processing',
+				harness: 'claude',
+				model: null,
+				currentBead: 'bead-A1',
+				attempts: 1,
+				successes: 0,
+				failures: 0,
+				startedAt: '2026-05-02T10:00:00Z'
+			}
+		],
+		[PROJECT_B.id]: [
+			{
+				id: 'worker-bbbbbbbb',
+				kind: 'review',
+				state: 'idle',
+				status: null,
+				harness: 'claude',
+				model: null,
+				currentBead: null,
+				attempts: 0,
+				successes: 0,
+				failures: 0,
+				startedAt: '2026-05-02T11:00:00Z'
+			},
+			{
+				id: 'worker-cccccccc',
+				kind: 'execute-loop',
+				state: 'running',
+				status: 'running',
+				harness: 'codex',
+				model: null,
+				currentBead: 'bead-B1',
+				attempts: 3,
+				successes: 2,
+				failures: 1,
+				startedAt: '2026-05-02T11:30:00Z'
+			}
+		]
+	};
+
+	const requestedProjectIds: string[] = [];
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, unknown>;
+		};
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { projects: { edges: [PROJECT_A, PROJECT_B].map((p) => ({ node: p })) } }
+				})
+			});
+		} else if (body.query.includes('WorkersByProject')) {
+			const projectID = String(body.variables?.projectID ?? '');
+			requestedProjectIds.push(projectID);
+			const workers = WORKERS_BY_PROJECT[projectID] ?? [];
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeWorkersResponse(workers) })
+			});
+		} else if (body.query.includes('AgentSessions') || body.query.includes('agentSessions')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: makeSessionsResponse() })
+			});
+		} else {
+			await route.continue();
+		}
+	});
+
+	// Project A: only project-A's worker is visible.
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_A.id}/workers`);
+	await expect(page.getByRole('heading', { name: 'Workers' })).toBeVisible();
+	await expect(page.getByText(/1 total/)).toBeVisible();
+	await expect(page.getByText('worker-a').first()).toBeVisible();
+	await expect(page.getByText('worker-b')).toHaveCount(0);
+	await expect(page.getByText('worker-c')).toHaveCount(0);
+
+	// Project B: only project-B's workers are visible; project-A's is gone.
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_B.id}/workers`);
+	await expect(page.getByText(/2 total/)).toBeVisible();
+	await expect(page.getByText('worker-b').first()).toBeVisible();
+	await expect(page.getByText('worker-c').first()).toBeVisible();
+	await expect(page.getByText('worker-a')).toHaveCount(0);
+
+	// The route param was threaded through to the GraphQL variables for both
+	// projects — proving the loader scopes the query, not the client.
+	expect(requestedProjectIds).toContain(PROJECT_A.id);
+	expect(requestedProjectIds).toContain(PROJECT_B.id);
+});
