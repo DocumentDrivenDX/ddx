@@ -1,0 +1,54 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Implementation in merged commit 6b997f3 adds beads-archive collection, Archive() with policy/preserve_dependencies, GetWithArchive for show, ListWithArchive wired to --all, ready/blocked unchanged, and TestArchive* coverage. All 6 AC items satisfied.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Review diff shows only execution evidence files; the substantive implementation lives in merge parent 6b997f3 (cli/internal/bead/archive.go, archive_test.go, registry, store, cmd/bead.go).",
+      "location": ".ddx/executions/20260502T040017-7246ee65/"
+    },
+    {
+      "severity": "info",
+      "summary": "Default policy MinAge=30d and MinActiveCount=2000 means archive file only materialises in large/long-lived deployments; opportunistic trigger on Close is fine but the migration command for existing beads.jsonl is correctly deferred to C5.",
+      "location": "cli/internal/bead/archive.go"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 967,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T040017-7246ee65/manifest.json",
+          ".ddx/executions/20260502T040017-7246ee65/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3471,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 6244,
+    "output_bytes": 961,
+    "elapsed_ms": 33988,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
