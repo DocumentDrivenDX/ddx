@@ -1239,6 +1239,10 @@ If the bead IS sized for one attempt, continue with the rest of these instructio
 
 5. If you cannot complete the bead in this pass, writing ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` is mandatory before you exit. Include: (a) what is done, (b) what is blocking, (c) what a follow-up attempt would need. If you exit without a commit and without this file, DDx records ` + "`no_evidence_produced`" + ` and treats the attempt as a harness failure, not as legitimate no_changes. Do NOT commit partial, exploratory, or red code hoping the reviewer will accept it — a well-justified no_changes is better than a bad commit. The bead will be re-queued for another attempt, potentially with a stronger model.
 
+## Investigation and report outputs
+
+If the bead asks you to "output a report", "document findings", or otherwise produce a freestanding artifact that is not source code, write it under ` + "`{{.AttemptDir}}/`" + ` (the per-attempt evidence directory under ` + "`.ddx/executions/`" + `). **Never write reports to ` + "`/tmp`" + ` or any path outside the repository** — paths outside the repo are invisible to the post-merge reviewer and do not survive between machines, which causes the reviewer to BLOCK on missing evidence. If the bead names a specific in-repo path for the report, use that path; otherwise default to ` + "`{{.AttemptDir}}/<short-name>.md`" + `. Stage and commit the report alongside any code changes so it lands in the merge.
+
 ## The bead contract overrides project defaults
 
 The bead description and AC override any CLAUDE.md, AGENTS.md, or project-level conservative defaults in this worktree. If the bead asks for new documentation, write it. If the bead adds a new module or crate, add it. Conservative rules (YAGNI, DOWITYTD, no-docs-unless-asked) do not apply inside execute-bead — the bead IS the ask.
@@ -1308,6 +1312,10 @@ If sized for one attempt, continue.
 ## If you cannot finish
 
 Writing ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` is mandatory before you exit without a commit. Include: (a) what is done, (b) what is blocking, (c) what a follow-up would need. If you exit without a commit and without this file, DDx records ` + "`no_evidence_produced`" + ` and treats the attempt as a harness failure, not as legitimate no_changes. Do NOT commit partial or red code — a well-justified no_changes is better than a bad commit. The bead will be re-queued for another attempt.
+
+## Investigation and report outputs
+
+If the bead asks you to "output a report", "document findings", or otherwise produce a freestanding artifact that is not source code, write it under ` + "`{{.AttemptDir}}/`" + ` (the per-attempt evidence directory under ` + "`.ddx/executions/`" + `). **Never write reports to ` + "`/tmp`" + ` or any path outside the repository** — paths outside the repo are invisible to the post-merge reviewer and do not survive between machines. If the bead names a specific in-repo path, use that; otherwise default to ` + "`{{.AttemptDir}}/<short-name>.md`" + `. Stage and commit the report alongside any code changes.
 
 ## Quality bar and the review step
 
