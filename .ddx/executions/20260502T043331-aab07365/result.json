@@ -1,0 +1,49 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "ExportTo now streams archived beads with inlined events alongside active rows; new test TestExportStreamsArchiveAndAttachmentEvents covers migrate→export round-trip and bd-compatible parsing, satisfying AC1–AC4.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Archive partner read errors are silently swallowed (treated as empty); acceptable per inline comment but could mask corruption.",
+      "location": "cli/internal/bead/import.go:67"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 863,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T043019-7c24f8ca/manifest.json",
+          ".ddx/executions/20260502T043019-7c24f8ca/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3373,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 6042,
+    "output_bytes": 529,
+    "elapsed_ms": 26560,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
