@@ -62,7 +62,7 @@ The name follows the `bd` (Dolt-backed) and `br` (SQLite-backed) convention: sho
 | id | string | auto-generated | `bx-` + 8 hex chars | Prefix configurable |
 | title | string | yes | — | Non-empty |
 | type | string | no | `task` | Free-form (task, epic, bug, chore, etc.) |
-| status | string | no | `open` | Enum: open, in_progress, closed |
+| status | string | no | `open` | Enum: open, in_progress, closed, blocked, proposed, cancelled (bd/br canonical set; see TD-031 §2) |
 | priority | int | no | 2 | Range 0-4 (0 = highest) |
 | labels | []string | no | [] | Free-form, no enforcement |
 | parent | string | no | "" | ID of parent bead |

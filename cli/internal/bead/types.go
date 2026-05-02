@@ -99,25 +99,29 @@ const (
 // callers that want to seed a fresh status should set b.Status directly before
 // validateBead runs.
 //
+// The matrix below is the normative implementation of TD-031 §3 (Transition
+// Matrix). `closed` and `cancelled` are terminal — re-opening a closed bead
+// is not a transition; it is filing a follow-up bead with `replaces` set.
+//
 // Allowed transitions:
 //
-//	open        → in_progress, closed, blocked
-//	in_progress → open, closed, blocked
-//	blocked     → open, closed
 //	proposed    → open, cancelled
-//	closed      → open                (reopen)
-//	cancelled   → open                (reopen)
+//	open        → in_progress, blocked, cancelled
+//	in_progress → open, closed, blocked
+//	blocked     → open, cancelled
+//	closed      → (terminal)
+//	cancelled   → (terminal)
 func IsValidStatusTransition(from, to string) bool {
 	if from == "" || to == "" || from == to {
 		return false
 	}
 	allowed := map[string]map[string]bool{
-		StatusOpen:       {StatusInProgress: true, StatusClosed: true, StatusBlocked: true},
-		StatusInProgress: {StatusOpen: true, StatusClosed: true, StatusBlocked: true},
-		StatusBlocked:    {StatusOpen: true, StatusClosed: true},
 		StatusProposed:   {StatusOpen: true, StatusCancelled: true},
-		StatusClosed:     {StatusOpen: true},
-		StatusCancelled:  {StatusOpen: true},
+		StatusOpen:       {StatusInProgress: true, StatusBlocked: true, StatusCancelled: true},
+		StatusInProgress: {StatusOpen: true, StatusClosed: true, StatusBlocked: true},
+		StatusBlocked:    {StatusOpen: true, StatusCancelled: true},
+		StatusClosed:     {},
+		StatusCancelled:  {},
 	}
 	if next, ok := allowed[from]; ok {
 		return next[to]

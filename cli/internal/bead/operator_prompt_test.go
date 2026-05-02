@@ -74,8 +74,10 @@ func TestStatusTransitionsForProposed(t *testing.T) {
 		{StatusProposed, StatusProposed, false},
 		{StatusOpen, StatusInProgress, true},
 		{StatusInProgress, StatusClosed, true},
-		{StatusClosed, StatusOpen, true},
-		{StatusCancelled, StatusOpen, true},
+		// closed and cancelled are terminal per TD-031 §3; reopening
+		// is filing a follow-up bead, not a transition.
+		{StatusClosed, StatusOpen, false},
+		{StatusCancelled, StatusOpen, false},
 		{"", StatusOpen, false},
 		{StatusOpen, "", false},
 		{"bogus", StatusOpen, false},

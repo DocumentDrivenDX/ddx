@@ -5,6 +5,8 @@ ddx:
     - FEAT-004
     - ADR-001
     - ADR-003
+  related:
+    - TD-031
 ---
 # Solution Design: Beads Tracker
 
@@ -14,6 +16,13 @@ This design specifies the runtime behavior of `ddx bead` and the file-backed
 tracker used by HELIX and other workflows. The key design constraint is that
 the default active-work collection must remain safe under concurrent access and
 recoverable after partial corruption without requiring a separate database.
+
+The persisted bead `status` enum, the allowed status transitions, the event
+vocabulary appended to `Extra["events"]`, the claim-metadata semantics, and
+the worker-state taxonomy are normatively defined in
+[TD-031: Bead State Machine and Naming-Role Decisions](../technical-designs/TD-031-bead-state-machine.md).
+This design references TD-031 rather than restating those decisions; any
+divergence between this file and TD-031 is a bug in this file.
 
 ## Goals
 
