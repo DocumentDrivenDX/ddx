@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260502T131531-98ddf974",
+  "bead_id": "ddx-da11a34a",
+  "base_rev": "c3d890b571079967350c0b7980dac406b3b3cce9",
+  "created_at": "2026-05-02T13:15:32.454689809Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-da11a34a",
+    "title": "ddx work: lock around tracker-commit (git add/commit on primary .git) to prevent multi-worker contention",
+    "description": "Bead-store locking is intact and well-tested (cli/internal/bead/lock_unix.go + lock_windows.go, plus the TestChaos_* family in chaos_test.go covering concurrent append/close/claim/dep/event-append). Those tests confirm the JSONL writes themselves are atomic and never lose data under concurrent workers.\n\nThe failure observed in the Phase 2 drain is NOT bead-store contention. It's at cli/internal/agent/execute_bead.go:1050 in the tracker-commit step:\n\n  // Approximate flow at execute_bead.go:1047–1054:\n  msg := fmt.Sprintf(\"chore: update tracker (execute-bead %s)\", time.Now().UTC().Format(\"20060102T150405\"))\n  // git add .ddx/beads.jsonl                        ← line ~1050 (staging tracker)\n  // git commit -m msg                               ← line ~1054 (committing tracker)\n\nThese run against the project's primary .git directory (not a per-worker worktree). When two workers ('ddx work --local' running concurrently) reach this step in overlapping windows, both invoke 'git add' and one fails with:\n\n  fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nThe error surfaces to the loop as 'staging tracker: ...' and the bead is dropped from that drain pass. Observed failures in this drain (single-window): ddx-c77a809c, ddx-cd2ecf79, ddx-6f41aa55.\n\nFix: wrap the tracker-commit pair (and any other git operations on the primary .git from the agent package) in a process-shared file lock, e.g. flock on .ddx/.git-tracker.lock. Reuse the existing flock primitive pattern from cli/internal/bead/lock_unix.go (and lock_windows.go) — same shape, different lockfile.\n\nOut of scope for this bead:\n- Bead-store locking (already works; see chaos_test.go)\n- Worktree branch merging in the worktree itself (each worker has its own .ddx/worktrees/\u003cid\u003e/ that's already isolated)\n- Federation / multi-machine workers (Story 14)",
+    "acceptance": "1. Tracker-commit pair at cli/internal/agent/execute_bead.go:1050+1054 is wrapped in a process-shared file lock around the git add/commit. 2. Lockfile lives at .ddx/.git-tracker.lock (or similar; document the path). 3. Lock primitive reuses or parallels the existing pattern from cli/internal/bead/lock_unix.go + lock_windows.go (flock-based, with stale-lock-by-age fallback). 4. New test in cli/internal/agent/ exercises 2 concurrent tracker-commits in a temp git repo and asserts both succeed without 'index.lock: File exists'. 5. Test names: TestTrackerCommit_ConcurrentSafety (single-window), TestTrackerCommit_StaleLockRecovery (process-killed mid-commit). 6. After fix: re-run the Phase 2 drain with 2 workers; zero 'staging tracker' errors over 5+ minutes.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "area:git",
+      "kind:fix",
+      "observed-failure"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T13:15:31Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T13:15:31.116109128Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T131531-98ddf974",
+    "prompt": ".ddx/executions/20260502T131531-98ddf974/prompt.md",
+    "manifest": ".ddx/executions/20260502T131531-98ddf974/manifest.json",
+    "result": ".ddx/executions/20260502T131531-98ddf974/result.json",
+    "checks": ".ddx/executions/20260502T131531-98ddf974/checks.json",
+    "usage": ".ddx/executions/20260502T131531-98ddf974/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-da11a34a-20260502T131531-98ddf974"
+  }
+}
