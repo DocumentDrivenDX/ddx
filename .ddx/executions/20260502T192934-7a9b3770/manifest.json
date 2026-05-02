@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260502T192934-7a9b3770",
+  "bead_id": "ddx-aede917d",
+  "base_rev": "51b67917890873325f947a03f07759749206c334",
+  "created_at": "2026-05-02T19:29:35.77494897Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-aede917d",
+    "title": "ddx work: drain pause/resume on NoViableProviderForNow + bead-claim release",
+    "description": "Upstream Fizeau bead agent-63bf58a6 adds a NoViableProviderForNow typed error returned when all providers are quota-exhausted. DDx must consume it correctly:\n\n1. When the drain loop receives NoViableProviderForNow, do NOT mark the bead as failed\n2. Release the bead's claim so other workers (different machines, different provider config) can pick it up\n3. Sleep until error.retry_after (with bounded max — default 30 min, configurable via --quota-pause-max)\n4. On wake: probe by attempting the next ready bead. If still NoViableProviderForNow, sleep again with backoff\n5. If retry_after is far in the future (\u003e --quota-pause-max), exit the worker with a clear 'quota exhausted, expected recovery \u003ctimestamp\u003e; relaunch when ready' message — operator decides when to relaunch\n6. Per-worker emit a structured event ('drain-paused-quota') visible in ddx server workers list so operators can see paused workers\n\nThis bead is downstream of Fizeau agent-63bf58a6 — depends on its tagged release. Until that lands, DDx falls back to today's behavior (failing beads on quota errors).",
+    "acceptance": "1. Drain loop handles NoViableProviderForNow distinct from execution_failed per TD-NNN QuotaPauseContract (per ddx-673833f4). 2. **Quota pause is worker-state per QuotaPauseContract — bead status is NOT changed (claim is released; status stays 'open' or 'in_progress' per existing 6-value enum). bd/br compatibility (ADR-004) preserved.** 3. drain-paused-quota event emitted with canonical name per TD's event vocabulary. 4. Bead claim released on quota-pause (sibling worker pickup test verifies). 5. Sleep + probe loop honors retry_after; --quota-pause-max bounds total wait. 6. drain-paused-quota event visible in ddx server workers list. 7. New test: spawn 2 workers, simulate one provider quota-exhausting, assert claim released + sibling picks up. 8. Worker exits cleanly with operator-actionable message when retry_after exceeds quota-pause-max. 9. **schema_compat_test.go round-trip passes after this bead lands.**",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "kind:feature",
+      "blocked-on-upstream:agent-63bf58a6"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T19:29:34Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3446284",
+      "execute-loop-heartbeat-at": "2026-05-02T19:29:34.349703459Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T192934-7a9b3770",
+    "prompt": ".ddx/executions/20260502T192934-7a9b3770/prompt.md",
+    "manifest": ".ddx/executions/20260502T192934-7a9b3770/manifest.json",
+    "result": ".ddx/executions/20260502T192934-7a9b3770/result.json",
+    "checks": ".ddx/executions/20260502T192934-7a9b3770/checks.json",
+    "usage": ".ddx/executions/20260502T192934-7a9b3770/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-aede917d-20260502T192934-7a9b3770"
+  },
+  "prompt_sha": "9585229278c85c932ef2a0163006ffe6021f62cf218a6b750156072b58980a3f"
+}
