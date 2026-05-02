@@ -1,0 +1,44 @@
+Bead ddx-0c0565f3 ("Implement ADR-004") is an epic, not a single-attempt task.
+
+Size signals that triggered decomposition:
+- bead type=epic
+- AC item 1 is literally "All child beads closed"
+- The change spans cli/internal/bead/store.go (1687 lines), backend.go,
+  backend_external.go, schema, several CLI commands (list/show/ready/blocked,
+  work, a new archive command, a new migrate command), plus a new on-disk
+  attachment layout and a migration of the live 5.4MB beads.jsonl.
+- That mixes refactor + new feature + new CLI surface + storage migration in
+  unrelated modules — far beyond the ~500 LoC / ~5 file rule of thumb for one
+  attempt.
+
+Decomposition (filed via `ddx bead create`, parent + dep edges set):
+- ddx-2f453147 — Generalize bead store to named-collection abstraction.
+- ddx-f7f09b6e — Add beads-archive collection with transparent read-through
+  (depends on ddx-2f453147).
+- ddx-cd1f0f7e — Sidecar attachment storage for closed-bead events
+  (.ddx/attachments/<bead-id>/events.jsonl) (depends on ddx-2f453147).
+- ddx-8fcfe2a7 — `ddx bead archive` command with default >4MB file-size
+  trigger on closed beads (depends on ddx-f7f09b6e, ddx-cd1f0f7e).
+- ddx-cb2eb7e3 — Migration command `ddx bead migrate-archive` that splits
+  the existing 5.4MB beads.jsonl into active+archive+attachments; idempotent
+  with --dry-run (depends on f7f09b6e, cd1f0f7e, 8fcfe2a7).
+- ddx-9f7a04f4 — bd/br external-backend support for non-default collections
+  so the archive collection works under bd/br (depends on ddx-2f453147).
+
+Open decisions from the epic description, resolved here so children are
+implementable without re-litigation:
+- Archival trigger: file-size threshold, default >4MB, on closed beads only;
+  --max-size / --older-than / --max-count flags allow overrides.
+- Closed-bead events: move to attachment sidecars on archive (keeps archive
+  rows small, which is the dominant size driver per the epic description).
+- Migration semantics: explicit `ddx bead migrate-archive` command sharing
+  logic with `ddx bead archive`; idempotent + dry-run.
+
+The parent epic now depends on all six children; it will close cleanly once
+they do. AC item 1 ("all child beads closed") is therefore the literal
+remaining gate for the parent.
+
+No source code in this attempt — the work product is the decomposition
+itself, recorded in the bead store via `ddx bead create` / `dep add` /
+`update --parent` (those mutations live in .ddx/beads.jsonl and are
+committed alongside this rationale).
