@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T145701-0493b6ee",
+  "bead_id": "ddx-a8718bec",
+  "base_rev": "fda2014905e331e73502bdbf2d9695a4f06475b2",
+  "created_at": "2026-05-02T14:57:02.44302658Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a8718bec",
+    "title": "cost: charge reviewer cost to cap; review-cost-deferred policy",
+    "description": "Today reviewer cost is silently undercounted (the review path doesn't accumulate CostUSD into --max-cost). CostUSD is ALREADY reported by Fizeau on Final events for every call (no upstream change needed — it's been there). Fix: charge reviewer cost to --max-cost on the same accumulator the implementer uses. Policy: when implementer fits but implementer+reviewer would exceed, defer review (emit 'review-cost-deferred' event) rather than silently skip.",
+    "acceptance": "1. --max-cost includes reviewer cost in the accumulator. 2. review-cost-deferred event when budget would be exceeded by review. 3. Tests cover the deferral case + the normal fit case.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:cost",
+      "kind:fix"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:57:01Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T14:57:01.194232549Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T145701-0493b6ee",
+    "prompt": ".ddx/executions/20260502T145701-0493b6ee/prompt.md",
+    "manifest": ".ddx/executions/20260502T145701-0493b6ee/manifest.json",
+    "result": ".ddx/executions/20260502T145701-0493b6ee/result.json",
+    "checks": ".ddx/executions/20260502T145701-0493b6ee/checks.json",
+    "usage": ".ddx/executions/20260502T145701-0493b6ee/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a8718bec-20260502T145701-0493b6ee"
+  }
+}
