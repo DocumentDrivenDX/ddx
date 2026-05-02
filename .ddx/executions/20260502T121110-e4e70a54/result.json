@@ -1,0 +1,49 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "ADR-007 committed with topology, authority, ts-net policy, plain-HTTP opt-out, write-routing, naming convention, and version-handshake matrix. FEAT-026 frame added; FEAT-020/021 amended with compatibility hooks only. All AC met.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Diff in review listing only shows execution evidence; the substantive doc changes landed in commit 6e386920 referenced by result.json",
+      "location": "docs/helix/02-design/adr/ADR-007-federation-topology.md"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1113,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T120636-9e92725c/manifest.json",
+          ".ddx/executions/20260502T120636-9e92725c/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3611,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 6530,
+    "output_bytes": 804,
+    "elapsed_ms": 21227,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
