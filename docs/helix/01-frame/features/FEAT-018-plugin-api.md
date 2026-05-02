@@ -61,6 +61,7 @@ Should move to a `package.yaml` in each plugin repo.
 | `install.executable` | []string | no | Paths needing execute bit |
 | `requires` | []string | no | DDx version constraints |
 | `keywords` | []string | no | Search/discovery tags |
+| `artifact_type_roots` | []string | no | Glob roots for artifact-type definitions when the plugin does not ship a `workflows/` tree (see Surface 6) |
 
 ### 2. Plugin Directory Layout
 
@@ -124,6 +125,97 @@ Plugins may define label and field conventions that their hooks enforce:
 | Phase labels | `phase:frame`, `phase:build`, etc. | validate-bead-create hook |
 | Kind labels | `kind:implementation`, `kind:review` | Advisory (warning only) |
 
+### 6. Artifact Type Definitions
+
+Plugins declare the artifact types they govern by shipping per-type
+definition directories. DDx discovers these on install and at `ddx doc`
+time; the discovered set is the authoritative source for prefix-to-type
+resolution (see FEAT-005).
+
+**Default discovery layout (mandated for new plugins):**
+
+```
+<plugin-root>/
+  workflows/**/artifacts/<typeId>/
+    meta.yml         # required — type metadata (see frontmatter shape below)
+    template.md      # required — structural template / sidecar template
+    prompt.md        # required — generation/evolution prompt
+    example.md       # optional — worked example
+```
+
+`<typeId>` is the directory name and is the canonical type identifier
+(e.g. `feature-specification`, `adr`, `solution-design`). The `**` glob
+allows plugins to nest types under workflow phases or other organizational
+subdirectories — DDx walks `workflows/` recursively and collects every
+`artifacts/<typeId>/` folder it finds.
+
+**Opt-in for plugins without a `workflows/` tree:**
+
+Plugins that don't model a workflow tree (persona packs, template packs,
+single-purpose plugins) declare additional roots in `package.yaml`:
+
+```yaml
+artifact_type_roots:
+  - artifacts/        # scanned recursively; same <typeId>/{meta.yml,...} shape
+  - extras/types/
+```
+
+Each entry is a path (relative to plugin root) that DDx scans for
+`<typeId>/` subdirectories using the same shape. Globs (`**`) are
+permitted. If `artifact_type_roots` is unset, DDx scans `workflows/**`
+only.
+
+**`meta.yml` frontmatter shape:**
+
+```yaml
+artifact:
+  name: <Human-readable name>
+  id: <typeId>            # required; must match parent directory name
+  type: document           # required; document | sidecar
+  prefix: <PREFIX>         # required; ID prefix this type owns (e.g. FEAT, ADR, MET)
+  phase: <phase-id>        # optional; advisory grouping (e.g. frame, design)
+  optional: <bool>         # optional; whether the artifact is required by its workflow
+
+description: |
+  One- or multi-line summary of the artifact's purpose.
+
+output:
+  location: <path-or-glob> # optional; default location new instances land at
+  format: markdown | sidecar
+  naming: <pattern>        # optional; filename convention
+
+prompts:
+  generation: prompt.md     # required; relative path within the type dir
+  review: <inline-or-path>  # optional
+
+template:
+  file: template.md         # required
+
+examples:
+  - file: example.md        # optional
+    description: <summary>
+```
+
+Unknown top-level keys are preserved on round-trip; type-specific
+extensions (validation, variables, workflow hints) are pass-through and
+do not affect DDx graph semantics.
+
+**Discovery and conflict resolution:**
+
+1. DDx walks every installed plugin's discovery roots and indexes every
+   `<typeId>` it finds along with the `prefix` declared in `meta.yml`.
+2. A given `prefix` may be declared by at most one type across all
+   installed plugins. Duplicate prefixes are a `ddx doctor --plugins`
+   error.
+3. Prefix resolution at `ddx doc` time first consults the plugin index;
+   when no plugin claims a prefix, DDx falls back to the conventional
+   prefix table in FEAT-005.
+4. The legacy `.ddx/library/artifacts/<type>/{template,create,evolve,check}.md`
+   shape (pre-FEAT-018 HELIX layout) is recognized as a compat fallback:
+   types found there are indexed with `id` and `prefix` inferred from the
+   directory name, and resolution prefers the new-shape entry when both
+   exist for the same prefix.
+
 ## Requirements
 
 ### Functional
@@ -135,11 +227,17 @@ Plugins may define label and field conventions that their hooks enforce:
    validates compatibility on install.
 3. **Plugin validation** (`ddx doctor --plugins`) — check installed plugins
    for structural issues: missing SKILL.md, broken symlinks, missing
-   required fields.
+   required fields, duplicate artifact-type prefixes, malformed `meta.yml`.
 4. **Extension surface documentation** — ship a reference document with DDx
    describing all surfaces, field types, and compatibility guarantees.
 5. **Backward compatibility** — changes to documented surfaces follow semver:
    additions in minor versions, removals only in major versions.
+6. **Artifact-type discovery** — DDx discovers artifact types per the
+   contract in Surface 6. The new shape is mandated for plugins authored
+   against `api_version: 1`; the legacy
+   `.ddx/library/artifacts/<type>/{template,create,evolve,check}.md`
+   layout is supported as a compat path so the bundled HELIX library
+   continues to work without migration.
 
 ### Non-Functional
 

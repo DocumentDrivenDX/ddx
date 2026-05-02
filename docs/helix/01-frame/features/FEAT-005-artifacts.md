@@ -4,6 +4,7 @@ ddx:
   depends_on:
     - helix.prd
     - FEAT-007
+    - FEAT-018
 ---
 # Feature: Artifact Convention
 
@@ -23,7 +24,9 @@ images, prompts, audio, PDFs, binaries, etc.).
 The `id` field identifies the artifact; the ID prefix conventionally
 indicates the type (ADR-001, SD-003, MET-007, FEAT-012, etc.). DDx does
 not hardcode artifact types — it manages the document graph generically.
-Types are conventions that workflows define.
+Types are declared by plugins (see FEAT-018, Surface 6); the conventional
+prefix table below is the fallback when no installed plugin claims a
+prefix.
 
 This replaces the previous approach of dedicated `ddx adr` and `ddx sd` commands. Those are removed in favor of the generic `ddx doc` commands (FEAT-007).
 
@@ -95,6 +98,16 @@ These prefixes are conventions — DDx treats them all the same. Workflows
 Projects may introduce additional conventions such as `AC-*` for acceptance
 criteria or `TC-*` for test cases. DDx does not privilege those types; it only
 tracks their IDs and relationships.
+
+#### Prefix resolution
+
+Prefix lookup is **plugin-defined**. At `ddx doc` time DDx consults the
+artifact-type index built from installed plugins (per FEAT-018, Surface 6)
+to resolve a prefix to its governing type, template, and prompts. The
+conventional prefix table above remains valid as a fallback for prefixes
+no installed plugin claims, so projects without a workflow plugin still
+get sensible defaults. Plugin-declared types take precedence when both a
+plugin entry and a conventional default exist for the same prefix.
 
 ### Identity Schema
 
@@ -264,27 +277,51 @@ All via `ddx doc` commands (FEAT-007):
 
 ## Templates and Prompts
 
-Each artifact type has associated resources in the document library:
+Artifact types are declared by plugins. The mandated layout (FEAT-018,
+Surface 6) ships per-type definition directories under each plugin:
+
+```
+<plugin-root>/workflows/**/artifacts/<typeId>/
+├── meta.yml          # Type metadata, prefix declaration, validation rules
+├── template.md       # Structural template (frontmatter + sections), or sidecar template for binary types
+├── prompt.md         # Generation/evolution prompt
+└── example.md        # Optional worked example
+```
+
+For example, the bundled HELIX plugin ships
+`workflows/phases/02-design/artifacts/adr/` with:
+- `meta.yml` — declares `prefix: ADR`, validation rules, dependencies
+- `template.md` — ADR skeleton with Context/Decision/Alternatives sections
+- `prompt.md` — prompt instructing an agent how to write a good ADR
+- `example.md` — a worked example
+
+These are **plugin resources**, not CLI features. Agents and workflows
+read them from the plugin's artifact-type index when operating on
+artifacts. DDx ships the `ddx` plugin's defaults; other plugins (HELIX,
+project-local) layer additional or overriding types on top.
+
+The doc graph (FEAT-007) can resolve these prompts via input selectors:
+- `artifact-prompt:ADR:generation` → the generation prompt for ADR artifacts
+- `artifact-template:ADR` → the template for ADR artifacts
+
+### Compat: legacy HELIX shape
+
+The pre-FEAT-018 layout is supported as a compat path so existing
+projects continue to work without migration:
 
 ```
 .ddx/library/artifacts/<type>/
-├── template.md       # Structural template (frontmatter + sections), or sidecar template for binary types
-├── create.md         # Prompt for creating a new instance
-├── evolve.md         # Prompt for updating when dependencies change
-└── check.md          # Prompt for reviewing/validating the artifact
+├── template.md
+├── create.md          # → indexed as the generation prompt
+├── evolve.md          # → indexed as the evolution prompt
+└── check.md           # → indexed as the review prompt
 ```
 
-For example, `.ddx/library/artifacts/adr/`:
-- `template.md` — ADR skeleton with Context/Decision/Alternatives sections
-- `create.md` — prompt instructing an agent how to write a good ADR
-- `evolve.md` — prompt for updating an ADR when upstream requirements change
-- `check.md` — prompt for reviewing an ADR against its governing artifacts
-
-These are **library resources**, not CLI features. Agents and workflows read them from the library when operating on artifacts. DDx ships defaults; projects can override with project-specific versions.
-
-The doc graph (FEAT-007) can resolve these prompts via input selectors:
-- `artifact-prompt:ADR:create` → the create prompt for ADR artifacts
-- `artifact-template:ADR` → the template for ADR artifacts
+DDx auto-imports legacy entries into the artifact-type index with the
+type name inferred from the directory. When both a new-shape
+(`workflows/**/artifacts/<typeId>/`) and a legacy entry exist for the
+same prefix, the new-shape entry wins. New plugins MUST use the new
+shape; the legacy shape is frozen — no new types should be added there.
 
 ## Artifacts and Runs
 
