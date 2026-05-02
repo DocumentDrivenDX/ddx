@@ -1,0 +1,54 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Close externalizes inline events to .ddx/attachments/\u003cid\u003e/events.jsonl, Events()/show --json transparently re-inline via LoadEventsInline, ExportTo inlines for bd/br interchange, ClosureGate accepts attached events, AppendEvent/Reopen handle both shapes, and TestAttachment* coverage exists.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Close path performs an extra full-store read+write to externalize after the status update; acceptable but doubles I/O on close. Could be folded into the same Update transaction in a follow-up.",
+      "location": "cli/internal/bead/store.go:917"
+    },
+    {
+      "severity": "info",
+      "summary": "Reopen pulls events back inline and removes the sidecar file but does not remove the attachment directory if empty; harmless cosmetic leftover.",
+      "location": "cli/internal/bead/store.go:1100"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 961,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T040950-3adbe727/manifest.json",
+          ".ddx/executions/20260502T040950-3adbe727/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3480,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 6247,
+    "output_bytes": 903,
+    "elapsed_ms": 39645,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
