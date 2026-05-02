@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260502T205604-0fbdd539",
+  "bead_id": "ddx-4fc9be2e",
+  "base_rev": "fd288fb10b5193bb4cbbc190f1d6a9a16737df23",
+  "created_at": "2026-05-02T20:56:05.433547246Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4fc9be2e",
+    "title": "interim: hide niche ddx agent subcommands (benchmark, condense, capabilities, replay) until full retirement",
+    "description": "Per audit B6 (optional): if the full ddx agent retirement (sibling bead) takes long, hide the niche subcommands (ddx agent benchmark, condense, capabilities, replay) in the interim by setting Cobra Hidden:true. Reduces operator surprise.\n\nIf the full retirement bead lands soon, this bead is moot — close as superseded.",
+    "acceptance": "1. cli/cmd/agent_*.go subcommands for benchmark, condense, capabilities, replay set Hidden: true. 2. ddx agent --help no longer lists them. 3. They still work if invoked explicitly (not removed, just hidden). 4. cd cli \u0026\u0026 go build ./... green.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:cli",
+      "kind:cleanup"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T20:56:04Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3924346",
+      "execute-loop-heartbeat-at": "2026-05-02T20:56:04.46975934Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T205604-0fbdd539",
+    "prompt": ".ddx/executions/20260502T205604-0fbdd539/prompt.md",
+    "manifest": ".ddx/executions/20260502T205604-0fbdd539/manifest.json",
+    "result": ".ddx/executions/20260502T205604-0fbdd539/result.json",
+    "checks": ".ddx/executions/20260502T205604-0fbdd539/checks.json",
+    "usage": ".ddx/executions/20260502T205604-0fbdd539/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4fc9be2e-20260502T205604-0fbdd539"
+  },
+  "prompt_sha": "198436896313ad74b2f332014d7872b76bd8e9730713b887a2b0aad98e6c6542"
+}
