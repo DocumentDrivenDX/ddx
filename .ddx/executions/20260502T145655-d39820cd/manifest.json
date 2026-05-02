@@ -1,0 +1,65 @@
+{
+  "attempt_id": "20260502T145655-d39820cd",
+  "bead_id": "ddx-3b06699f",
+  "base_rev": "c51f64051ef80b939c90a5e57eb4a127bf30580f",
+  "created_at": "2026-05-02T14:56:56.788975216Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3b06699f",
+    "title": "TD: axon backend integration design for bead tracker",
+    "description": "Author a Technical Design (TD) document for replacing the JSONL+flock+git bead backend with an axon-backed implementation. Cover: (a) data model mapping — how Bead structs and the events log map onto axon collections/streams; (b) claim/lock semantics — how 'claim a ready bead' becomes an axon op, including multi-worker fairness and cross-machine concurrency (Story 14 federation); (c) archive policy — how closed-bead externalization (.ddx/attachments + .ddx/beads-archive.jsonl per ADR-004) carries over; (d) JSONL interchange — keep bd/br import/export compatibility per FEAT-004; (e) failure modes and recovery; (f) migration story (forward refs to migration-tool child). Cite ADR-004/SD-004 and ddx-da11a34a (current lock-contention patch). Output the TD under docs/ at an appropriate path. No code changes.",
+    "acceptance": "1. TD document committed under docs/. 2. Covers data model, claim/lock semantics, archive policy, JSONL interchange, failure modes, and migration story. 3. Cites ADR-004/SD-004 and ddx-da11a34a. 4. Identifies open questions and decisions needed before implementation.",
+    "parent": "ddx-5d49b14e",
+    "labels": [
+      "phase:2",
+      " area:beads",
+      " area:storage",
+      " kind:design",
+      " backend-migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:56:55Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T14:56:53.960753722Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T145457-1d14eb93\",\"harness\":\"claude\",\"input_tokens\":14,\"output_tokens\":6404,\"total_tokens\":6418,\"cost_usd\":0.5437900000000001,\"duration_ms\":114248,\"exit_code\":1}",
+          "created_at": "2026-05-02T14:56:53.975605003Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=6418 cost_usd=0.5438"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\nresult_rev=12e4733ee0d4a4900052b38a491ce257201fa41d\nbase_rev=1c2cb5a4c0e0d51e96ce534b62c42264f7925757",
+          "created_at": "2026-05-02T14:56:54.056552946Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T14:56:55.569668914Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T145655-d39820cd",
+    "prompt": ".ddx/executions/20260502T145655-d39820cd/prompt.md",
+    "manifest": ".ddx/executions/20260502T145655-d39820cd/manifest.json",
+    "result": ".ddx/executions/20260502T145655-d39820cd/result.json",
+    "checks": ".ddx/executions/20260502T145655-d39820cd/checks.json",
+    "usage": ".ddx/executions/20260502T145655-d39820cd/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3b06699f-20260502T145655-d39820cd"
+  }
+}
