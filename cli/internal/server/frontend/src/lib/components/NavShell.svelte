@@ -15,11 +15,13 @@
 		BarChart3,
 		PlayCircle,
 		Home,
-		Activity
+		Activity,
+		Network
 	} from 'lucide-svelte';
 	import { page } from '$app/stores';
 	import { toggleMode, mode } from '$lib/theme';
 	import ProjectPicker from './ProjectPicker.svelte';
+	import NodePicker from './NodePicker.svelte';
 	import DrainIndicator from './DrainIndicator.svelte';
 	import { nodeStore } from '$lib/stores/node.svelte';
 	import { projectStore } from '$lib/stores/project.svelte';
@@ -66,6 +68,9 @@
 		nodeStore.value?.id ? `/nodes/${nodeStore.value.id}/providers` : null
 	);
 
+	const federationHref = '/federation';
+	const fedActive = $derived($page.url.pathname.startsWith(federationHref));
+
 	const nodeName = $derived(nodeStore.value?.name ?? 'localhost');
 </script>
 
@@ -83,6 +88,7 @@
 		<span class="font-mono-code text-body-sm text-fg-muted dark:text-dark-fg-muted">Node: {nodeName}</span>
 		<div class="mx-1 h-4 w-px bg-border-line dark:bg-dark-border-line"></div>
 		<ProjectPicker />
+		<NodePicker />
 		<div class="ml-auto flex items-center gap-2">
 			<DrainIndicator />
 			<button
@@ -180,6 +186,17 @@
 					All Runs
 				</span>
 			{/if}
+			<a
+				href={federationHref}
+				aria-current={fedActive ? 'page' : undefined}
+				data-testid="nav-federation"
+				class="flex items-center gap-3 border-l-2 px-4 py-2.5 font-body-md text-body-sm {fedActive
+					? 'border-accent-lever bg-bg-canvas font-bold text-fg-ink dark:border-dark-accent-lever dark:bg-dark-bg-canvas dark:text-dark-fg-ink'
+					: 'border-transparent text-fg-muted hover:bg-bg-canvas hover:text-fg-ink dark:text-dark-fg-muted dark:hover:bg-dark-bg-canvas dark:hover:text-dark-fg-ink'}"
+			>
+				<Network class="h-4 w-4 shrink-0" />
+				Federation
+			</a>
 			{#if providersHref}
 				{@const active = $page.url.pathname.startsWith(providersHref)}
 				<a

@@ -5,6 +5,7 @@
 	import { createClient } from '$lib/gql/client'
 	import { RUNS_QUERY, PAGE_SIZE } from './+page'
 	import type { RunEdge, RunConnection, PageInfo } from './+page'
+	import { federationBadgeClass } from '$lib/federationStatus'
 
 	let { data }: { data: PageData } = $props()
 
@@ -12,7 +13,7 @@
 	let appendedPageInfo = $state<PageInfo | null>(null)
 	let loadingMore = $state(false)
 
-	let filterKey = $derived(`${data.activeLayer}::${data.activeStatus}`)
+	let filterKey = $derived(`${data.scope}::${data.activeLayer}::${data.activeStatus}`)
 	let prevFilterKey = $state('')
 	$effect(() => {
 		if (filterKey !== prevFilterKey) {
@@ -28,7 +29,7 @@
 	const LAYER_OPTIONS = ['work', 'try', 'run']
 	const STATUS_OPTIONS = ['pending', 'running', 'success', 'failure', 'preserved']
 
-	function setFilter(key: 'layer' | 'status', value: string | null) {
+	function setFilter(key: 'layer' | 'status' | 'scope', value: string | null) {
 		const params = new URLSearchParams($page.url.searchParams)
 		if (value === null) {
 			params.delete(key)
@@ -47,7 +48,12 @@
 		setFilter('status', data.activeStatus === status ? null : status)
 	}
 
+	function toggleScope() {
+		setFilter('scope', data.scope === 'federation' ? null : 'federation')
+	}
+
 	async function loadMore() {
+		if (data.scope === 'federation') return
 		if (!pageInfo.hasNextPage || loadingMore) return
 		loadingMore = true
 		try {
@@ -67,6 +73,13 @@
 
 	function runDetailHref(run: { id: string; projectID: string | null }): string {
 		if (!run.projectID) return '#'
+		if (data.scope === 'federation') {
+			const fed = data.federationByRunId[run.id]
+			if (fed) {
+				const base = fed.projectUrl.replace(/\/$/, '')
+				return `${base}/nodes/${fed.nodeId}/projects/${run.projectID}/runs/${run.id}`
+			}
+		}
 		return `/nodes/${data.nodeId}/projects/${run.projectID}/runs/${run.id}`
 	}
 
@@ -131,11 +144,37 @@
 
 <div class="space-y-4">
 	<div class="flex items-center justify-between">
-		<h1 class="text-xl font-semibold text-fg-ink dark:text-dark-fg-ink">All Runs</h1>
-		<span class="text-sm text-fg-muted dark:text-dark-fg-muted">
-			{edges.length} of {data.runs.totalCount}
-		</span>
+		<h1 class="text-xl font-semibold text-fg-ink dark:text-dark-fg-ink">
+			All Runs
+			{#if data.scope === 'federation'}
+				<span
+					data-testid="scope-indicator"
+					class="ml-2 inline-block border px-1.5 py-0.5 align-middle font-mono-code text-[10px] uppercase badge-status-in-progress"
+				>federation</span>
+			{/if}
+		</h1>
+		<div class="flex items-center gap-3">
+			<button
+				data-testid="scope-toggle"
+				onclick={toggleScope}
+				class={chipClass(data.scope === 'federation')}
+			>
+				{data.scope === 'federation' ? 'scope: federation' : 'scope: local'}
+			</button>
+			<span class="text-sm text-fg-muted dark:text-dark-fg-muted">
+				{edges.length} of {data.runs.totalCount}
+			</span>
+		</div>
 	</div>
+
+	{#if data.federationError}
+		<div
+			data-testid="federation-error"
+			class="border border-accent-load/40 bg-accent-load/10 px-4 py-2 font-label-caps text-label-caps text-accent-load dark:border-dark-accent-load/40 dark:bg-dark-accent-load/10 dark:text-dark-accent-load"
+		>
+			Federated query failed: {data.federationError}
+		</div>
+	{/if}
 
 	<!-- Layer filter chips -->
 	<div class="flex flex-wrap gap-2">
@@ -177,6 +216,9 @@
 		<table class="w-full text-sm">
 			<thead>
 				<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
+					{#if data.scope === 'federation'}
+						<th class="px-4 py-3 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Node</th>
+					{/if}
 					<th class="px-4 py-3 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Project</th>
 					<th class="px-4 py-3 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Layer</th>
 					<th class="px-4 py-3 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Status</th>
@@ -191,6 +233,36 @@
 						class="cursor-pointer border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface"
 						onclick={() => goto(runDetailHref(edge.node))}
 					>
+						{#if data.scope === 'federation'}
+							{@const fed = data.federationByRunId[edge.node.id]}
+							<td class="px-4 py-3" data-testid="federation-row-cell">
+								{#if fed}
+									<div class="flex items-center gap-2">
+										<span
+											data-testid="row-node-badge"
+											data-status={fed.status}
+											class="inline-block border px-1.5 py-0.5 font-mono-code text-[10px] uppercase {federationBadgeClass(
+												fed.status
+											)}"
+										>
+											{fed.nodeId}
+										</span>
+										<a
+											data-testid="row-spoke-link"
+											href={fed.projectUrl}
+											target="_blank"
+											rel="noopener noreferrer"
+											onclick={(e) => e.stopPropagation()}
+											class="font-mono-code text-[10px] text-accent-lever hover:underline dark:text-dark-accent-lever"
+										>
+											spoke ↗
+										</a>
+									</div>
+								{:else}
+									<span class="text-fg-muted dark:text-dark-fg-muted">—</span>
+								{/if}
+							</td>
+						{/if}
 						<td class="px-4 py-3">
 							<span class="inline-flex items-center border border-border-line px-2 py-0.5 text-xs font-medium text-fg-muted dark:border-dark-border-line dark:text-dark-fg-muted">
 								{projectName(edge.node.projectID)}
@@ -229,7 +301,10 @@
 				{/each}
 				{#if edges.length === 0}
 					<tr>
-						<td colspan="6" class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">
+						<td
+							colspan={data.scope === 'federation' ? 7 : 6}
+							class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted"
+						>
 							No runs found.
 						</td>
 					</tr>

@@ -237,6 +237,22 @@ function fallbackDataForQuery(query: string): object | null {
 		data.run = null;
 	}
 
+	if (query.includes('federationNodes') || query.includes('FederationNodes')) {
+		data.federationNodes = [];
+	}
+
+	if (query.includes('federatedBeads')) {
+		data.federatedBeads = [];
+	}
+
+	if (query.includes('federatedRuns')) {
+		data.federatedRuns = [];
+	}
+
+	if (query.includes('federatedProjects')) {
+		data.federatedProjects = [];
+	}
+
 	if (query.includes('beadClose')) {
 		data.beadClose = {
 			id: 'preview-bead',
