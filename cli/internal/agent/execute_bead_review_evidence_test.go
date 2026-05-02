@@ -240,7 +240,7 @@ func TestReviewContextOverflow(t *testing.T) {
 		},
 	}
 
-	res, reviewErr := reviewer.ReviewBead(context.Background(), "ddx-overflow", head, "claude", "claude-opus")
+	res, reviewErr := reviewer.ReviewBead(context.Background(), "ddx-overflow", head, ImplementerRouting{Harness: "claude", Model: "claude-opus"})
 	require.Error(t, reviewErr)
 	require.NotNil(t, res)
 	assert.Contains(t, reviewErr.Error(), "context_overflow",

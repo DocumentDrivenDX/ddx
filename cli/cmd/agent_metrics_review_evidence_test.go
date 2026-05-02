@@ -42,7 +42,7 @@ func TestReviewEvidenceApproveAttributesToTier(t *testing.T) {
 				Model:     "sonnet",
 			}, nil
 		}),
-		Reviewer: agent.BeadReviewerFunc(func(_ context.Context, _, _, _, _ string) (*agent.ReviewResult, error) {
+		Reviewer: agent.BeadReviewerFunc(func(_ context.Context, _, _ string, _ agent.ImplementerRouting) (*agent.ReviewResult, error) {
 			return &agent.ReviewResult{Verdict: agent.VerdictApprove, RawOutput: "### Verdict: APPROVE"}, nil
 		}),
 	}
@@ -112,7 +112,7 @@ func TestReviewEvidenceRequestChangesCountedAsRejection(t *testing.T) {
 				Model:     "sonnet",
 			}, nil
 		}),
-		Reviewer: agent.BeadReviewerFunc(func(_ context.Context, _, _, _, _ string) (*agent.ReviewResult, error) {
+		Reviewer: agent.BeadReviewerFunc(func(_ context.Context, _, _ string, _ agent.ImplementerRouting) (*agent.ReviewResult, error) {
 			return &agent.ReviewResult{Verdict: agent.VerdictRequestChanges, RawOutput: "### Verdict: REQUEST_CHANGES\n\n- needs tests"}, nil
 		}),
 	}

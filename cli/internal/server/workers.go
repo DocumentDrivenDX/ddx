@@ -635,6 +635,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				Harness:            res.Harness,
 				Provider:           res.Provider,
 				Model:              res.Model,
+				ActualPower:        res.ActualPower,
 				Tier:               tierStr,
 				Status:             res.Status,
 				Detail:             res.Detail,
@@ -704,6 +705,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			reviewer = &agent.DefaultBeadReviewer{
 				ProjectRoot: projectRoot,
 				BeadStore:   bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+				BeadEvents:  bead.NewStore(filepath.Join(projectRoot, ".ddx")),
 				Harness:     spec.ReviewHarness,
 				Model:       spec.ReviewModel,
 			}

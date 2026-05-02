@@ -30,7 +30,7 @@ func TestReviewErrorTaxonomy(t *testing.T) {
 			// Stage C1's pre-dispatch short-circuit returns ReviewResult.Error
 			// = OutcomeReviewContextOverflow alongside a wrapped error. The
 			// loop classifier reads the structured Error first.
-			reviewer: BeadReviewerFunc(func(_ context.Context, _, resultRev, _, _ string) (*ReviewResult, error) {
+			reviewer: BeadReviewerFunc(func(_ context.Context, _, resultRev string, _ ImplementerRouting) (*ReviewResult, error) {
 				return &ReviewResult{
 						Verdict:   VerdictBlock,
 						Error:     evidence.OutcomeReviewContextOverflow,
@@ -42,7 +42,7 @@ func TestReviewErrorTaxonomy(t *testing.T) {
 		{
 			name:      "provider_empty",
 			wantClass: evidence.OutcomeReviewProviderEmpty,
-			reviewer: BeadReviewerFunc(func(_ context.Context, _, resultRev, _, _ string) (*ReviewResult, error) {
+			reviewer: BeadReviewerFunc(func(_ context.Context, _, resultRev string, _ ImplementerRouting) (*ReviewResult, error) {
 				return &ReviewResult{
 						Verdict:   VerdictBlock,
 						Error:     evidence.OutcomeReviewProviderEmpty,
@@ -54,7 +54,7 @@ func TestReviewErrorTaxonomy(t *testing.T) {
 		{
 			name:      "unparseable",
 			wantClass: evidence.OutcomeReviewUnparseable,
-			reviewer: BeadReviewerFunc(func(_ context.Context, _, resultRev, _, _ string) (*ReviewResult, error) {
+			reviewer: BeadReviewerFunc(func(_ context.Context, _, resultRev string, _ ImplementerRouting) (*ReviewResult, error) {
 				return &ReviewResult{
 						Verdict:   VerdictBlock,
 						Error:     evidence.OutcomeReviewUnparseable,
@@ -67,7 +67,7 @@ func TestReviewErrorTaxonomy(t *testing.T) {
 		{
 			name:      "transport",
 			wantClass: evidence.OutcomeReviewTransport,
-			reviewer: BeadReviewerFunc(func(_ context.Context, _, resultRev, _, _ string) (*ReviewResult, error) {
+			reviewer: BeadReviewerFunc(func(_ context.Context, _, resultRev string, _ ImplementerRouting) (*ReviewResult, error) {
 				return &ReviewResult{
 						Verdict:   VerdictBlock,
 						Error:     evidence.OutcomeReviewTransport,

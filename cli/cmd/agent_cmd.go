@@ -1684,6 +1684,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		reviewer = &agent.DefaultBeadReviewer{
 			ProjectRoot: projectRoot,
 			BeadStore:   bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+			BeadEvents:  bead.NewStore(filepath.Join(projectRoot, ".ddx")),
 			Harness:     reviewHarness,
 			Model:       reviewModel,
 		}
@@ -1797,6 +1798,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			Harness:            res.Harness,
 			Provider:           res.Provider,
 			Model:              res.Model,
+			ActualPower:        res.ActualPower,
 			Tier:               tierStr,
 			Status:             res.Status,
 			Detail:             res.Detail,
