@@ -2,7 +2,6 @@
 ddx:
   id: helix.workflow.principles
   depends_on:
-    - helix.workflow
     - RSCH-001
     - RSCH-002
     - RSCH-003

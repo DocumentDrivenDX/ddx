@@ -1,6 +1,6 @@
 ---
 ddx:
-  id: AR-2026-04-04
+  id: architecture
   depends_on:
     - helix.prd
     - FEAT-001

@@ -1,0 +1,4 @@
+cycle (1):
+  - cycle detected: FEAT-002 -> FEAT-008 -> FEAT-013 -> FEAT-014 -> FEAT-020 -> SD-013 -> SD-019 -> FEAT-002
+
+1 integrity issue(s) found
