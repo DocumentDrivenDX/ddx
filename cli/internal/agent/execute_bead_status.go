@@ -34,6 +34,7 @@ const (
 	FailureModeHarnessNotInstalled            = "harness_not_installed"
 	FailureModeBlockedByPassthroughConstraint = "blocked_by_passthrough_constraint"
 	FailureModeAgentPowerUnsatisfied          = "agent_power_unsatisfied"
+	FailureModeLockContention                 = "lock_contention"
 	FailureModeUnknown                        = "unknown"
 )
 
@@ -63,6 +64,8 @@ func ClassifyFailureMode(outcome string, exitCode int, errMsg string) string {
 
 	lower := strings.ToLower(errMsg)
 	switch {
+	case IsLockContentionError(errMsg):
+		return FailureModeLockContention
 	case containsAny(lower,
 		"passthrough constraint unsatisfiable",
 		"passthrough constraint:",
