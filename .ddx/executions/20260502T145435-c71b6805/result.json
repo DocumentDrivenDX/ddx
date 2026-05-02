@@ -1,0 +1,49 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "TD-030-axon-bead-backend.md created with required frontmatter (depends_on: ADR-004, SD-004, FEAT-004), all four locked decisions baked in verbatim, deferred defaults adopted, source plan cited as background, and required sections (schema/operation mapping, deployment, concurrency, migration, test plan) present.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "TD content lives in commit 5740627f; review diff only shows execution evidence files. Verified TD via git show.",
+      "location": "docs/helix/02-design/technical-designs/TD-030-axon-bead-backend.md"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2369,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T145133-e2e48633/manifest.json",
+          ".ddx/executions/20260502T145133-e2e48633/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 4906,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 9081,
+    "output_bytes": 646,
+    "elapsed_ms": 20907,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
