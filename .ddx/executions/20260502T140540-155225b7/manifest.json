@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T140540-155225b7",
+  "bead_id": "ddx-ad77c46d",
+  "base_rev": "7b1ec8eda06cd65ed0e5e0264b9e1e7c81c7611a",
+  "created_at": "2026-05-02T14:05:42.215610501Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ad77c46d",
+    "title": "operator-prompts: schema/template/status-model — operator-prompt type, proposed status, no-self-mutation rule",
+    "description": "New bead.issueType: operator-prompt with new status: proposed. Operator-prompt cannot mutate other operator-prompts (hard ban). Library template for operator-prompt artifacts.",
+    "acceptance": "1. Bead schema accepts operator-prompt. 2. proposed status implemented. 3. Self-mutation rejected at bead-create time. 4. Tests cover all three.",
+    "parent": "ddx-1d85c927",
+    "labels": [
+      "phase:2",
+      "story:15",
+      "area:beads",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:05:40Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T14:05:40.559738678Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T140540-155225b7",
+    "prompt": ".ddx/executions/20260502T140540-155225b7/prompt.md",
+    "manifest": ".ddx/executions/20260502T140540-155225b7/manifest.json",
+    "result": ".ddx/executions/20260502T140540-155225b7/result.json",
+    "checks": ".ddx/executions/20260502T140540-155225b7/checks.json",
+    "usage": ".ddx/executions/20260502T140540-155225b7/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ad77c46d-20260502T140540-155225b7"
+  }
+}
