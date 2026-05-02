@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T121321-7a37ed4c",
+  "bead_id": "ddx-1d85c927",
+  "base_rev": "af72db3dff6b3a32d7f32cd5d3cd18f5e08e5451",
+  "created_at": "2026-05-02T12:13:22.330808528Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1d85c927",
+    "title": "Story 15: server-side prompt input",
+    "description": "Sub-epic for Story 15. Full plan at /tmp/story-15-final.md. Children listed under this epic carry the testable ACs.",
+    "acceptance": "All child beads closed. Locked decisions from the planning round honored.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "story:15"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:13:21Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T12:13:21.131331162Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T121321-7a37ed4c",
+    "prompt": ".ddx/executions/20260502T121321-7a37ed4c/prompt.md",
+    "manifest": ".ddx/executions/20260502T121321-7a37ed4c/manifest.json",
+    "result": ".ddx/executions/20260502T121321-7a37ed4c/result.json",
+    "checks": ".ddx/executions/20260502T121321-7a37ed4c/checks.json",
+    "usage": ".ddx/executions/20260502T121321-7a37ed4c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-1d85c927-20260502T121321-7a37ed4c"
+  }
+}
