@@ -767,37 +767,56 @@ func (s *Store) AppendEvent(id string, event BeadEvent) error {
 	// and emits a <=512-byte body; this cap catches anything else.
 	event.Body = capFieldBytes(event.Body)
 	event.Summary = capFieldBytes(event.Summary)
-	return s.Update(id, func(b *Bead) {
+	// Two storage shapes are possible here: inline Extra["events"] for active
+	// beads, and a sidecar attachment for closed/archived beads (ADR-004
+	// attachment model). When the bead has been externalized we append to the
+	// sidecar and leave the row untouched aside from updated_at.
+	var appendedToAttachment bool
+	if err := s.Update(id, func(b *Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
+		}
+		if hasEventsAttachment(b) {
+			appendedToAttachment = true
+			return
 		}
 		var events []BeadEvent
 		if raw, ok := b.Extra["events"]; ok {
 			events = decodeBeadEvents(raw)
 		}
 		events = append(events, event)
-		encoded := make([]map[string]any, 0, len(events))
-		for _, e := range events {
-			encoded = append(encoded, map[string]any{
-				"kind":       e.Kind,
-				"summary":    e.Summary,
-				"body":       e.Body,
-				"actor":      e.Actor,
-				"created_at": e.CreatedAt,
-				"source":     e.Source,
-			})
+		b.Extra["events"] = encodeEventsForExtra(events)
+	}); err != nil {
+		return err
+	}
+	if !appendedToAttachment {
+		return nil
+	}
+	// Append to the sidecar under the store lock so concurrent readers and
+	// writers see a consistent events log.
+	return s.WithLock(func() error {
+		existing, err := s.readEventsAttachment(id)
+		if err != nil {
+			return err
 		}
-		b.Extra["events"] = encoded
+		existing = append(existing, event)
+		return s.writeEventsAttachment(id, existing)
 	})
 }
 
-// Events returns the bead's evidence history in insertion order.
+// Events returns the bead's evidence history in insertion order. Reads are
+// transparent across storage shapes: inline Extra["events"] for active beads,
+// or the externalized sidecar referenced by Extra[events_attachment] once the
+// bead has been closed.
 func (s *Store) Events(id string) ([]BeadEvent, error) {
 	b, err := s.Get(id)
 	if err != nil {
 		return nil, err
 	}
-	events := decodeBeadEvents(b.Extra["events"])
+	events, err := s.eventsForBead(b)
+	if err != nil {
+		return nil, err
+	}
 	if len(events) == 0 {
 		return []BeadEvent{}, nil
 	}
@@ -873,15 +892,43 @@ func beadEventFromMap(m map[string]any) BeadEvent {
 	return e
 }
 
-// Close sets a bead's status to closed.
+// Close sets a bead's status to closed. When the close succeeds and the bead
+// carries an inline event history, those events are moved to a sidecar
+// attachment under .ddx/attachments/<id>/events.jsonl so the active row stays
+// small (per ADR-004's attachment model and TD-027 §c).
 func (s *Store) Close(id string) error {
 	if err := s.Update(id, func(b *Bead) {
 		b.Status = StatusClosed
 	}); err != nil {
 		return err
 	}
+	if err := s.externalizeEvents(id); err != nil {
+		return err
+	}
 	s.maybeOpportunisticArchive()
 	return nil
+}
+
+// externalizeEvents moves a bead's inline events into its sidecar attachment
+// under a fresh lock. Safe to call repeatedly — no-op when there are no
+// inline events (already externalized, or none recorded).
+func (s *Store) externalizeEvents(id string) error {
+	return s.WithLock(func() error {
+		beads, _, err := s.readAllLatestRaw()
+		if err != nil {
+			return err
+		}
+		for i := range beads {
+			if beads[i].ID != id {
+				continue
+			}
+			if err := s.externalizeEventsInPlace(&beads[i]); err != nil {
+				return err
+			}
+			return s.WriteAll(beads)
+		}
+		return nil
+	})
 }
 
 // ErrClosureGateRejected indicates a close was refused because the bead does
@@ -922,8 +969,13 @@ func ClosureGate(b *Bead) error {
 		hasClosingCommit = true
 	}
 	events := decodeBeadEvents(b.Extra["events"])
+	// Externalized events still count as evidence for the gate. We only need
+	// to know whether *some* event history exists, not iterate it; the
+	// gate's APPROVE-with-empty-rationale check below relies on inline events
+	// (the verdict is recorded before externalization).
+	hasAttachedEvents := hasEventsAttachment(b)
 	// Reject the axon-c5cc071a shape: no events AND no closing commit.
-	if len(events) == 0 && !hasClosingCommit {
+	if len(events) == 0 && !hasAttachedEvents && !hasClosingCommit {
 		return fmt.Errorf("%w: no execution evidence (empty events and no closing_commit_sha)", ErrClosureGateRejected)
 	}
 	// Reject the f7ae036f shape: an APPROVE verdict with empty rationale.
@@ -948,6 +1000,13 @@ func ClosureGate(b *Bead) error {
 func (s *Store) CloseWithEvidence(id string, sessionID string, commitSHA string) error {
 	if err := s.closeWithEvidence(id, sessionID, commitSHA); err != nil {
 		return err
+	}
+	// Externalize events only when the gate actually transitioned the bead
+	// to closed; rejected closes leave the bead open and inline.
+	if b, err := s.Get(id); err == nil && b != nil && b.Status == StatusClosed {
+		if err := s.externalizeEvents(id); err != nil {
+			return err
+		}
 	}
 	s.maybeOpportunisticArchive()
 	return nil
@@ -1037,7 +1096,15 @@ func (s *Store) Reopen(id string, reason string, appendNotes string) error {
 					b.Notes = appendNotes
 				}
 			}
-			// Record reopen event
+			// Record reopen event. If events were externalized at close,
+			// pull them back inline so the active row carries the full
+			// history again and the attachment ref is dropped.
+			if hasEventsAttachment(b) {
+				if err := s.inlineEventsInPlace(b); err != nil {
+					return err
+				}
+				_ = os.Remove(s.eventsAttachmentPath(b.ID))
+			}
 			var events []BeadEvent
 			if raw, ok := b.Extra["events"]; ok {
 				events = decodeBeadEvents(raw)

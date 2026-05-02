@@ -30,12 +30,23 @@ func (s *Store) Import(source, filePath string) (int, error) {
 }
 
 // ExportTo writes all beads as JSONL to the given writer.
+//
+// For interchange compatibility with bd/br, externalized event histories are
+// inlined back into the row's "events" array on the way out (the attachment
+// ref itself is also dropped so importers don't see a dangling pointer).
+// The on-disk row is unchanged — this is a transient mutation on the copied
+// Bead value before marshaling.
 func (s *Store) ExportTo(w io.Writer) error {
 	beads, err := s.ReadAll()
 	if err != nil {
 		return err
 	}
 	for _, b := range beads {
+		if hasEventsAttachment(&b) {
+			if err := s.inlineEventsInPlace(&b); err != nil {
+				return fmt.Errorf("bead: export inline events: %w", err)
+			}
+		}
 		data, err := marshalBead(b)
 		if err != nil {
 			return fmt.Errorf("bead: export marshal: %w", err)

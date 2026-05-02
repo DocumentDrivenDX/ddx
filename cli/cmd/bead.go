@@ -322,6 +322,12 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 
 			asJSON, _ := cmd.Flags().GetBool("json")
 			if asJSON {
+				// Externalized events live in a sidecar; inline them for the
+				// JSON view so consumers (and the `events` UI projection)
+				// see a single uniform shape.
+				if err := s.LoadEventsInline(b); err != nil {
+					return err
+				}
 				data, err := bead.MarshalBead(*b)
 				if err != nil {
 					return err
