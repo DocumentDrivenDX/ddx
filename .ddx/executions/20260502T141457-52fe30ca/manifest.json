@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T141457-52fe30ca",
+  "bead_id": "ddx-7e7b12f0",
+  "base_rev": "c1741ea9e0b6c76d77c83b58204fdaae294e0b08",
+  "created_at": "2026-05-02T14:14:59.719661942Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7e7b12f0",
+    "title": "test(web): e2e regression check for doc graph edge color tokens",
+    "description": "Add Playwright e2e at cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/graph/graph.e2e.ts that loads the doc graph route, asserts at least one \u003cline\u003e edge exists, and verifies its computed stroke resolves to rgb(75, 85, 99) (light fg-muted #4B5563) and the marker path fill matches. Then toggle dark class on \u003chtml\u003e and re-assert against #B8AF9C. Sibling pattern: drain.e2e.ts, personas.e2e.ts. Theme-toggle plumbing may need addInitScript to set theme pre-load. Fixture: needs a project with \u003e=1 dependency edge in the GraphQL mock; add fixture if none exists. See /tmp/story-1-final.md (bead-B).",
+    "acceptance": "AC1: graph.e2e.ts file exists at the specified route directory.\nAC2: Test asserts at least one \u003cline\u003e SVG edge is rendered.\nAC3: Light-theme assertion: edge stroke computed style equals rgb(75, 85, 99); arrow marker path fill matches.\nAC4: Dark-theme assertion (after toggling html.dark): edge stroke computed style equals the rgb form of #B8AF9C; marker fill matches.\nAC5: Test passes locally via bun run test:e2e.",
+    "parent": "ddx-db5e0227",
+    "labels": [
+      "phase:2",
+      " story:1",
+      " tier:standard"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:14:57Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T14:14:57.819550658Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T141457-52fe30ca",
+    "prompt": ".ddx/executions/20260502T141457-52fe30ca/prompt.md",
+    "manifest": ".ddx/executions/20260502T141457-52fe30ca/manifest.json",
+    "result": ".ddx/executions/20260502T141457-52fe30ca/result.json",
+    "checks": ".ddx/executions/20260502T141457-52fe30ca/checks.json",
+    "usage": ".ddx/executions/20260502T141457-52fe30ca/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-7e7b12f0-20260502T141457-52fe30ca"
+  }
+}
