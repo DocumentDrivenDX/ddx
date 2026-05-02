@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260502T205548-1ae2a050",
+  "bead_id": "ddx-a13eb42a",
+  "base_rev": "a64ec4dc2b912765803a6e2fcb37bf4bfb49b496",
+  "created_at": "2026-05-02T20:55:49.73279752Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a13eb42a",
+    "title": "cleanup: collapse agent_usage.go aggregators to monthly-shard reader (~300 LOC dead)",
+    "description": "Per /tmp/agent-surface-dead-code-audit.md: aggregateUsage, aggregateUsageAggs, readUsageSessionRecords (~300 LOC in cli/internal/agent/agent_usage.go) were superseded by monthly-shard reader (commit 99033c89) but the old aggregators were left behind. No production callers; tests exist but are testing dead code.\n\nIndependent of refactor (no overlap with try/work package split).",
+    "acceptance": "1. Dead aggregators removed from cli/internal/agent/agent_usage.go (or file deleted entirely if everything is dead). 2. Their test functions removed. 3. cd cli \u0026\u0026 go test ./internal/agent/... green. 4. cd cli \u0026\u0026 go build ./... green. 5. Audit re-run shows ~300 LOC reduction in cli/internal/agent/.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "kind:cleanup",
+      "dead-code"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T20:55:48Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3924346",
+      "execute-loop-heartbeat-at": "2026-05-02T20:55:48.791901265Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T205548-1ae2a050",
+    "prompt": ".ddx/executions/20260502T205548-1ae2a050/prompt.md",
+    "manifest": ".ddx/executions/20260502T205548-1ae2a050/manifest.json",
+    "result": ".ddx/executions/20260502T205548-1ae2a050/result.json",
+    "checks": ".ddx/executions/20260502T205548-1ae2a050/checks.json",
+    "usage": ".ddx/executions/20260502T205548-1ae2a050/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a13eb42a-20260502T205548-1ae2a050"
+  },
+  "prompt_sha": "0cc93f9c96e17c8663f4816fe2d384268812edae822187c8239be06fa7036134"
+}
