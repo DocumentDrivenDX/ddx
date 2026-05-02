@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T181621-7a485593",
+  "bead_id": "ddx-e869a89c",
+  "base_rev": "b694f13e844598a05bbb66a032fb1c86435289f4",
+  "created_at": "2026-05-02T18:16:23.212546748Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e869a89c",
+    "title": "B14.7: Frontend - /federation route + node-picker + scope toggle + status badges",
+    "description": "SvelteKit frontend additions: /federation overview route showing registered nodes with status badges (active, stale, offline, degraded). Extend node-picker to show all spokes when in federation mode. Combined views accept ?scope=federation to toggle local vs federated data via the federated* GraphQL queries from B14.6b. Per-row node badges. Version-skew, stale, and offline visual states. Direct spoke UI fallback link reachable from each node row in /federation. Houdini codegen run.",
+    "acceptance": "Route /federation renders list of registered nodes with status badges. Node-picker shows spokes. ?scope=federation toggles combined views to use federated* queries. Per-row node badges visible. Stale/offline/degraded each have distinct visual treatment. Direct spoke URL link present and clickable on each /federation row. Houdini types regenerated and committed.",
+    "parent": "ddx-a038a090",
+    "labels": [
+      "phase:2",
+      "story:14"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T18:16:21Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3037698",
+      "execute-loop-heartbeat-at": "2026-05-02T18:16:21.936068543Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T181621-7a485593",
+    "prompt": ".ddx/executions/20260502T181621-7a485593/prompt.md",
+    "manifest": ".ddx/executions/20260502T181621-7a485593/manifest.json",
+    "result": ".ddx/executions/20260502T181621-7a485593/result.json",
+    "checks": ".ddx/executions/20260502T181621-7a485593/checks.json",
+    "usage": ".ddx/executions/20260502T181621-7a485593/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e869a89c-20260502T181621-7a485593"
+  }
+}
