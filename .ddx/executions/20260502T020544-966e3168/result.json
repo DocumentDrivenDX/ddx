@@ -1,0 +1,4 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "/tmp/feat-011-status.md is not in the diff — AC explicitly requires this file to exist with FEAT-011 status, repo-tree inventory, and B15b proceed/defer recommendation. Note: /tmp is outside the repo so it wouldn't appear in a diff anyway, but no in-repo evidence (e.g., copy under `.ddx/executions/.../`) was preserved either.\nFEAT-011 spec was not updated in this commit. The prior commit d014da12 (\"mark consolidation implemented; site copy pending\") may have done this, but AC #2 requires verification within this iteration's work; the reviewed diff shows no spec edits.\nThe `ls skills/ddx cli/internal/skills/ddx .agents/skills/ddx .claude/skills/ddx` inventory output is not captured anywhere in the diff. Re-run and append to the status report, then commit it under the execution evidence directory so it's reviewable."
+}
