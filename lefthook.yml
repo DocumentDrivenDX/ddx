@@ -269,6 +269,8 @@ pre-commit:
         - "*.woff2"
         - "*.ttf"
         - "*.eot"
+        # bead store grows monotonically with queue activity; expected to exceed 5MB
+        - ".ddx/beads.jsonl"
       fail_text: "Large files detected. Use Git LFS for files over 5MB"
 
     # DDx validation - only when relevant files change

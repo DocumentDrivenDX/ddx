@@ -1,0 +1,93 @@
+## Execution summary
+
+### What was done
+
+All changes were designed, implemented, and verified to compile successfully
+before the execution worktree was deleted. The worktree at
+/tmp/ddx-exec-wt/.execute-bead-wt-ddx-1534c574-20260430T152118-b919b941
+was deleted by the Go test runner (TestIntegration_OpencodeEcho deleted the
+current working directory during cleanup), causing the shell to lose its CWD.
+No commit was made because the deletion happened before the commit step.
+
+### What was implemented (all changes compile-verified)
+
+**AC1 — go.mod already pins v0.9.25**: Confirmed that MinPower, MaxPower,
+Harness/Provider/Model passthrough are present on ServiceExecuteRequest.
+No go.mod changes needed.
+
+**AC2 — Execute results expose actual_model and actual_power**:
+- Added `ActualPower int` field to `Result` struct in
+  `cli/internal/agent/types.go` (json: "actual_power,omitempty").
+- In `executeOnService` (cli/internal/agent/service_run.go): after execute
+  completes and result.Model is known, do a best-effort svc.ListModels
+  call (2s timeout, uses cached data) to look up the model's power via
+  findModelPower helper, and store it in result.ActualPower.
+- actual_model is already exposed via Result.Model (populated from
+  RoutingActual.Model in the drain loop).
+
+**AC3 — Models catalog API exposes power numbers**:
+- Updated printModels in `cli/cmd/agent_models.go` to display
+  `(power: N)` suffix when m.Power > 0 for each model entry.
+
+**AC4 — Compile-time adapters**:
+- Added `cli/internal/agent/power_bounds.go` with:
+  - powerBoundsCompileCheck(): references req.MinPower, req.MaxPower,
+    and ModelInfo.Power directly so DDx fails to compile if upstream
+    removes any of them.
+  - findModelPower(models []agentlib.ModelInfo, modelID string) int:
+    helper for the ActualPower lookup in executeOnService.
+- Added MinPower/MaxPower to CLIOverrides and ResolvedConfig in
+  `cli/internal/config/resolved.go`.
+- Wired req.MinPower = rcfg.MinPower() and req.MaxPower = rcfg.MaxPower()
+  into the ServiceExecuteRequest construction in executeOnService.
+
+**AC5 — CHANGELOG**:
+- Added "Agent power-bounds passthrough (MinPower/MaxPower)" entry under
+  [Unreleased] / New features in CHANGELOG.md describing the contract
+  consumed from agent v0.9.25.
+
+### What is blocking
+
+The worktree at /tmp/ddx-exec-wt/.execute-bead-wt-ddx-1534c574-20260430T152118-b919b941
+no longer exists. It was deleted by the Go test runner during the integration
+test suite (TestIntegration_OpencodeEcho deleted the working directory).
+
+The changes could not be committed because the filesystem path was gone before
+the commit step.
+
+### What the follow-up attempt needs to do
+
+Re-apply all five sets of changes listed above. Every change is a clean
+wire-up of the upstream MinPower/MaxPower contract — no design decisions
+are left open. The code compiles cleanly against agent v0.9.25, and the
+only test failures observed were:
+- TestIntegration_OpencodeEcho (requires a live opencode binary — pre-existing)
+- TestAcceptance_US034_OfflineInstallation / TestInstallationPerformance
+  (require a built ddx binary at cli/build/ddx — pre-existing environment issue)
+
+All tests in internal/config and the unit tests in internal/agent/... pass.
+
+### File-by-file change summary for the next attempt
+
+cli/internal/config/resolved.go:
+  - CLIOverrides: add `MinPower int` and `MaxPower int` fields
+  - ResolvedConfig struct: add `minPower int` and `maxPower int` fields
+  - Resolve(): add `r.minPower = overrides.MinPower; r.maxPower = overrides.MaxPower`
+  - Add MinPower() and MaxPower() accessor methods after MaxTier()
+
+cli/internal/agent/types.go:
+  - Result struct: add `ActualPower int` field with json:"actual_power,omitempty"
+
+cli/internal/agent/service_run.go:
+  - executeOnService: add MinPower and MaxPower to ServiceExecuteRequest literal
+  - After result model is set, do best-effort ListModels lookup to populate ActualPower
+
+cli/internal/agent/power_bounds.go (NEW FILE):
+  - powerBoundsCompileCheck() function referencing req.MinPower, req.MaxPower, m.Power
+  - findModelPower(models []agentlib.ModelInfo, modelID string) int helper
+
+cli/cmd/agent_models.go:
+  - printModels: add `(power: N)` suffix when m.Power > 0
+
+CHANGELOG.md:
+  - Add "Agent power-bounds passthrough (MinPower/MaxPower)" entry under [Unreleased]

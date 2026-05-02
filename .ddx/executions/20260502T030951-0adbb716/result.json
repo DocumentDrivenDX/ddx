@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "All three AC items are met cleanly. Both prompt variants get the same directive, CLAUDE.md gains a parallel project-wide note, and tests assert both the literal prompt content and that the `{{.AttemptDir}}` placeholder substitutes to a real `.ddx/executions/` path. Scope stays tight to the bead."
+}
