@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T022159-bb0d096f",
+  "bead_id": "ddx-6d331bd3",
+  "base_rev": "e5921f2a4f9c56fd3b4c925f37100e8aefd6cfab",
+  "created_at": "2026-05-02T02:22:00.993962849Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6d331bd3",
+    "title": "Author 10 RSCH-NNN research-synthesis artifacts (one per domain principle)",
+    "description": "Create 10 research synthesis artifacts at docs/helix/00-discover/research/. Each 300-500 words, with frontmatter (ddx.id, ddx.depends_on listing the REF-NNN it cites). Mapping: RSCH-001 spec-first-development (cites REF-005 spec-kit, REF-006 Kiro), RSCH-002 executable-specifications (REF-018 EvalPlus, REF-019 BDD), RSCH-003 audit-trail-required (REF-014 Helland, REF-020 Kleppmann, REF-021 Fowler), RSCH-004 context-is-king (REF-008 Lost in Middle, REF-009 Chroma context rot), RSCH-005 work-is-a-dag (REF-022 CPM/PERT, REF-023 Bazel, REF-024 Dask), RSCH-006 right-size-the-model (REF-015 FrugalGPT, REF-029 multi-model routing 2026), RSCH-007 avoid-vendor-lock-in (REF-025 LSP, REF-030 POSIX/SQL/OCI lineage), RSCH-008 drift-is-debt (REF-017 Knuth, REF-028 doc-drift study), RSCH-009 least-privilege-for-agents (REF-026 Saltzer+Schroeder, REF-011 OWASP, REF-012 EchoLeak, REF-010 Sheridan+Verplank), RSCH-010 inspect-and-adapt (REF-013 MAST, REF-016 Self-Refine, REF-027 Anthropic effective agents). Each RSCH includes: principle headline, robust paragraph (~150-300 words) with claim → evidence → DDx implication, explicit DDx feature mapping. Per codex feedback strengthen #2 (anchor to specs that generate checks), #9 (cover worktree/file scope + tool permissions), #10 (anchor to evidence-review loops, not generic agile).",
+    "acceptance": "1. docs/helix/00-discover/research/RSCH-001 through RSCH-010 exist. 2. Each has ddx.depends_on listing the REF-NNN per the mapping. 3. Each is 300-500 words synthesis. 4. Run 'ls docs/helix/00-discover/research/RSCH-*.md | wc -l' returns 10. 5. ddx doc audit shows no broken depends_on edges from RSCH to REF artifacts.",
+    "parent": "ddx-629ec5b4",
+    "labels": [
+      "site-redesign",
+      "area:specs",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T02:21:59Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "execute-loop-heartbeat-at": "2026-05-02T02:21:59.500368844Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T022159-bb0d096f",
+    "prompt": ".ddx/executions/20260502T022159-bb0d096f/prompt.md",
+    "manifest": ".ddx/executions/20260502T022159-bb0d096f/manifest.json",
+    "result": ".ddx/executions/20260502T022159-bb0d096f/result.json",
+    "checks": ".ddx/executions/20260502T022159-bb0d096f/checks.json",
+    "usage": ".ddx/executions/20260502T022159-bb0d096f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6d331bd3-20260502T022159-bb0d096f"
+  }
+}
