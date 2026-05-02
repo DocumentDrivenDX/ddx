@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260502T193411-c46ce0f7",
+  "bead_id": "ddx-861ad6a9",
+  "base_rev": "496781e6843ae20f7a5433bd9583933c9542732d",
+  "created_at": "2026-05-02T19:34:12.966157928Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-861ad6a9",
+    "title": "CI guards: 4 tests for state-machine drift prevention (schema↔Go-constants, status-literal audit, TD-doc↔schema, schema_compat round-trip)",
+    "description": "Sibling of ddx-673833f4. After the TD + reconciliation bead land, this bead adds 4 CI guard tests that prevent future state-machine drift.\n\nEach test goes in cli/internal/bead/ or a dedicated cli/internal/bead/sync_test.go file:\n\n1. **Schema enum ↔ Go status constants synchronized**: parse cli/internal/bead/schema/bead-record.schema.json status enum; assert matches the exported canonical Status list in cli/internal/bead/types.go. CI fails on mismatch.\n\n2. **Status-literal audit**: scan cli/internal/ Go source files for string literals at persisted-status assignment sites (bead.Status = '...' patterns); assert every such literal is in the canonical list. Catches drift where someone writes 'needs_investigation' as a status string instead of using the typed constant or a label.\n\n3. **TD doc ↔ schema enum synchronized**: parse docs/helix/02-design/technical-designs/TD-NNN-bead-state-machine.md persisted-status section; assert it lists exactly the schema enum. Forces TD amendment when schema changes.\n\n4. **schema_compat_test.go round-trip**: take a fresh bd-export fixture (DDx-side fixture file under cli/internal/bead/testdata/ if not already present); export → import via DDx; assert the round-trip preserves all fields including new labels/events. ADR-004 compatibility regression guard.\n\nEach test must be deterministic, fast (\u003c1s each), and have a clear failure message that points the developer at the exact mismatch location.",
+    "acceptance": "1. All 4 CI guard tests exist as named test functions. 2. Each fails with a clear message when its respective drift is introduced (verified by deliberately breaking each in a throwaway commit, observing the failure, then reverting). 3. cd cli \u0026\u0026 go test ./internal/bead/... runs all 4 in \u003c5s total. 4. CI workflow includes these tests (no special opt-in flag). 5. README or test-doc comment explains the role of each guard.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:tests",
+      "area:ci",
+      "kind:guardrail"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T19:34:11Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3518486",
+      "execute-loop-heartbeat-at": "2026-05-02T19:34:11.633648254Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T193411-c46ce0f7",
+    "prompt": ".ddx/executions/20260502T193411-c46ce0f7/prompt.md",
+    "manifest": ".ddx/executions/20260502T193411-c46ce0f7/manifest.json",
+    "result": ".ddx/executions/20260502T193411-c46ce0f7/result.json",
+    "checks": ".ddx/executions/20260502T193411-c46ce0f7/checks.json",
+    "usage": ".ddx/executions/20260502T193411-c46ce0f7/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-861ad6a9-20260502T193411-c46ce0f7"
+  },
+  "prompt_sha": "35d6037cc6773af2b15b635293e735d93e36720e420854c54ec85cd9bb8b1a7a"
+}
