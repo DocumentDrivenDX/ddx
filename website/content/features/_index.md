@@ -70,18 +70,6 @@ ddx agent log
 ls .ddx/executions/
 ```
 
-## Multi-Model Review {#multi-model-review} {{< maturity "framing" >}}
-
-![Multi-model review consensus](/ui/feature-multi-model-review.png "Multi-model review — planned UI")
-
-A single model is a single point of view. DDx can dispatch the same prompt — a plan, a diff, a spec — to multiple harnesses (Claude, Codex, Gemini, local models) and aggregate their findings. Quorum modes let you require majority or unanimous agreement before a result is treated as approved.
-
-```
-ddx agent run --quorum=majority --harnesses=claude,codex,gemini --prompt review.md
-```
-
-The pattern works for plan review before implementation, diff review before merge, and spec sanity-checks before breakdown into beads.
-
 ## Skills {#skills} {{< maturity "beta" >}}
 
 ![Skill listing](/ui/feature-skills.png "Skills — planned UI")
