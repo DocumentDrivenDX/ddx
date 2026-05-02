@@ -151,3 +151,111 @@ func TestTrackerCommit_StaleLockRecovery(t *testing.T) {
 		t.Fatalf("tracker commit did not land: HEAD contents = %q", string(out))
 	}
 }
+
+// TestTrackerCommit_RetryBackoffPolicy verifies the retry/backoff curve
+// owned by this bead (ddx-da11a34a AC#4): exponential growth, capped at
+// MaxBackoff, bounded by MaxRetries, and surfacing a timeout error
+// (consumed upstream as lock_contention by triage, never a persisted
+// status change per TD-031 §8.5).
+func TestTrackerCommit_RetryBackoffPolicy(t *testing.T) {
+	t.Run("step curve grows exponentially then caps", func(t *testing.T) {
+		p := LockRetryPolicy{
+			InitialBackoff: 10 * time.Millisecond,
+			MaxBackoff:     80 * time.Millisecond,
+			Multiplier:     2.0,
+			MaxRetries:     10,
+		}
+		// n=0: 10ms, n=1: 20ms, n=2: 40ms, n=3: 80ms (cap), n=4..: 80ms.
+		want := []time.Duration{
+			10 * time.Millisecond,
+			20 * time.Millisecond,
+			40 * time.Millisecond,
+			80 * time.Millisecond,
+			80 * time.Millisecond,
+			80 * time.Millisecond,
+		}
+		for i, w := range want {
+			got := p.step(i)
+			if got != w {
+				t.Fatalf("step(%d) = %v, want %v", i, got, w)
+			}
+		}
+	})
+
+	t.Run("default policy has at least 3 backoff steps before exhaustion", func(t *testing.T) {
+		// AC#1 (sibling triage child): "at least 3 backoff steps before
+		// escalation". The lock-level policy must not exhaust before
+		// triage gets a chance to escalate.
+		p := DefaultLockRetryPolicy()
+		if p.MaxRetries < 3 {
+			t.Fatalf("DefaultLockRetryPolicy MaxRetries = %d, want >= 3", p.MaxRetries)
+		}
+		if p.InitialBackoff <= 0 || p.MaxBackoff <= 0 {
+			t.Fatalf("DefaultLockRetryPolicy backoff bounds invalid: %+v", p)
+		}
+		if p.Multiplier < 1 {
+			t.Fatalf("DefaultLockRetryPolicy multiplier < 1: %v", p.Multiplier)
+		}
+	})
+
+	t.Run("max retries exhaustion returns timeout without crashing", func(t *testing.T) {
+		root := initTrackerRepo(t)
+
+		// Pre-acquire the lock under a fake live PID (current process)
+		// so breakStaleTrackerLock cannot reclaim it.
+		lockDir := trackerLockPath(root)
+		require.NoError(t, os.MkdirAll(lockDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(lockDir, "pid"),
+			[]byte(fmt.Sprintf("%d", os.Getpid())), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(lockDir, "acquired_at"),
+			[]byte(time.Now().UTC().Format(time.RFC3339)), 0o644))
+		defer os.RemoveAll(lockDir)
+
+		policy := LockRetryPolicy{
+			InitialBackoff: 1 * time.Millisecond,
+			MaxBackoff:     2 * time.Millisecond,
+			Multiplier:     2.0,
+			MaxRetries:     3,
+			MaxElapsed:     1 * time.Second,
+		}
+
+		called := false
+		err := withTrackerLockPolicy(root, policy, func() error {
+			called = true
+			return nil
+		})
+		if err == nil {
+			t.Fatalf("expected timeout error, got nil")
+		}
+		if called {
+			t.Fatalf("fn must not run when lock acquisition exhausts retries")
+		}
+		if !strings.Contains(err.Error(), "tracker lock timeout") {
+			t.Fatalf("expected tracker lock timeout error, got: %v", err)
+		}
+	})
+
+	t.Run("retry succeeds when contender releases mid-curve", func(t *testing.T) {
+		root := initTrackerRepo(t)
+		tracker := filepath.Join(root, ".ddx", "beads.jsonl")
+		require.NoError(t, os.WriteFile(tracker, []byte(`{"id":"ddx-retry-test"}`+"\n"), 0o644))
+
+		// Hold the lock for ~50ms then release.
+		lockDir := trackerLockPath(root)
+		require.NoError(t, os.MkdirAll(lockDir, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(lockDir, "pid"),
+			[]byte(fmt.Sprintf("%d", os.Getpid())), 0o644))
+		require.NoError(t, os.WriteFile(filepath.Join(lockDir, "acquired_at"),
+			[]byte(time.Now().UTC().Format(time.RFC3339)), 0o644))
+
+		go func() {
+			time.Sleep(50 * time.Millisecond)
+			_ = os.RemoveAll(lockDir)
+		}()
+
+		// Default policy should easily ride out a 50ms hold.
+		if err := CommitTracker(root); err != nil {
+			t.Fatalf("CommitTracker did not retry through transient contention: %v", err)
+		}
+	})
+}
