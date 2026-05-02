@@ -27,30 +27,35 @@ func (s *Store) WithLock(fn func() error) error {
 }
 
 func (s *Store) acquireLock() error {
-	if err := os.MkdirAll(s.Dir, 0o755); err != nil {
+	return acquireDirLock(s.Dir, s.LockDir, s.LockWait)
+}
+
+// acquireDirLock is the file-lock primitive used by both Store and the
+// standalone JSONLBackend. dir is the directory to ensure exists before the
+// lock is taken; lockDir is the lock directory itself; wait bounds the spin.
+func acquireDirLock(dir, lockDir string, wait time.Duration) error {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("bead: lock dir: %w", err)
 	}
 
-	deadline := time.Now().Add(s.LockWait)
+	deadline := time.Now().Add(wait)
 	for {
-		err := os.Mkdir(s.LockDir, 0o755)
+		err := os.Mkdir(lockDir, 0o755)
 		if err == nil {
-			// Write PID and acquired_at
-			_ = os.WriteFile(filepath.Join(s.LockDir, "pid"),
+			_ = os.WriteFile(filepath.Join(lockDir, "pid"),
 				[]byte(fmt.Sprintf("%d", os.Getpid())), 0o644)
-			_ = os.WriteFile(filepath.Join(s.LockDir, "acquired_at"),
+			_ = os.WriteFile(filepath.Join(lockDir, "acquired_at"),
 				[]byte(time.Now().UTC().Format(time.RFC3339)), 0o644)
 			return nil
 		}
 
-		// Check for stale lock
-		if s.breakStaleLock() {
-			continue // retry immediately after breaking
+		if breakStaleLockDir(lockDir) {
+			continue
 		}
 
 		if time.Now().After(deadline) {
 			owner := "unknown"
-			pidData, _ := os.ReadFile(filepath.Join(s.LockDir, "pid"))
+			pidData, _ := os.ReadFile(filepath.Join(lockDir, "pid"))
 			if len(pidData) > 0 {
 				owner = strings.TrimSpace(string(pidData))
 			}
@@ -63,25 +68,26 @@ func (s *Store) acquireLock() error {
 // breakStaleLock checks if the existing lock is stale (owner dead or too old)
 // and breaks it if so. Returns true if lock was broken.
 func (s *Store) breakStaleLock() bool {
-	// Check if owner PID is still alive (skip if it's our own PID)
-	pidData, err := os.ReadFile(filepath.Join(s.LockDir, "pid"))
+	return breakStaleLockDir(s.LockDir)
+}
+
+func breakStaleLockDir(lockDir string) bool {
+	pidData, err := os.ReadFile(filepath.Join(lockDir, "pid"))
 	if err == nil {
 		pid, err := strconv.Atoi(strings.TrimSpace(string(pidData)))
 		if err == nil && pid > 0 && pid != os.Getpid() {
 			if !processAlive(pid) {
-				// Process is dead — break the lock
-				os.RemoveAll(s.LockDir)
+				os.RemoveAll(lockDir)
 				return true
 			}
 		}
 	}
 
-	// Check age
-	acquiredData, err := os.ReadFile(filepath.Join(s.LockDir, "acquired_at"))
+	acquiredData, err := os.ReadFile(filepath.Join(lockDir, "acquired_at"))
 	if err == nil {
 		acquired, err := time.Parse(time.RFC3339, strings.TrimSpace(string(acquiredData)))
 		if err == nil && time.Since(acquired) > StaleLockAge {
-			os.RemoveAll(s.LockDir)
+			os.RemoveAll(lockDir)
 			return true
 		}
 	}

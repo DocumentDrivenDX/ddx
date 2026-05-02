@@ -99,6 +99,71 @@ func TestExternalBackendFallsBackWhenToolMissing(t *testing.T) {
 	assert.Nil(t, s.backend)
 }
 
+// TestExternalBackendOpensBeadsArchiveWithFallback verifies that opening the
+// "beads-archive" collection through the bd external backend produces a
+// working read/write path via the JSONL fallback, without invoking bd.
+// bd/br do not yet expose per-collection scoping in their CLI surface, so
+// non-default collections must round-trip through .ddx/<collection>.jsonl
+// to avoid colliding with the tool's primary store.
+func TestExternalBackendOpensBeadsArchiveWithFallback(t *testing.T) {
+	toolDir := t.TempDir()
+	// A fake bd that always errors. If the backend ever shells out for the
+	// archive collection, ReadAll/WriteAll will fail and this test will
+	// catch the regression.
+	failScript := "#!/bin/sh\necho 'fake bd should not be called for non-default collections' 1>&2\nexit 1\n"
+	failBd := filepath.Join(toolDir, "bd")
+	require.NoError(t, os.WriteFile(failBd, []byte(failScript), 0o755))
+	t.Setenv("PATH", toolDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("DDX_BEAD_BACKEND", "bd")
+
+	dir := t.TempDir()
+	ddxDir := filepath.Join(dir, ".ddx")
+	s := NewStore(ddxDir, WithCollection(BeadsArchiveCollection))
+
+	backend, ok := s.backend.(*ExternalBackend)
+	require.True(t, ok, "expected ExternalBackend for bd + non-default collection")
+	require.Equal(t, "bd", backend.Tool)
+	require.Equal(t, BeadsArchiveCollection, backend.Collection)
+	require.NotNil(t, backend.fallback, "non-default collection must have JSONL fallback")
+
+	// Init must not panic and must create the archive file under .ddx/.
+	require.NoError(t, s.Init())
+	archivePath := filepath.Join(ddxDir, BeadsArchiveCollection+".jsonl")
+	_, err := os.Stat(archivePath)
+	require.NoError(t, err, "archive file should exist after Init")
+
+	// Empty read works.
+	got, err := s.ReadAll()
+	require.NoError(t, err)
+	assert.Empty(t, got)
+
+	// Round-trip a bead through WriteAll/ReadAll without touching bd.
+	want := Bead{ID: "ddx-arch-1", Title: "archived item", Status: StatusClosed, IssueType: "task", Priority: 2}
+	require.NoError(t, s.WriteAll([]Bead{want}))
+	got, err = s.ReadAll()
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, want.ID, got[0].ID)
+	assert.Equal(t, want.Title, got[0].Title)
+}
+
+// TestExternalBackendDefaultCollectionHasNoFallback locks in that the
+// default "beads" collection still routes directly to bd/br so the existing
+// interchange contract (schema_compat_test.go, import/export round-trip)
+// stays unchanged.
+func TestExternalBackendDefaultCollectionHasNoFallback(t *testing.T) {
+	toolDir := t.TempDir()
+	writeFakeBackendTool(t, toolDir, "bd")
+	t.Setenv("PATH", toolDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+	t.Setenv("DDX_BEAD_BACKEND", "bd")
+
+	s := NewStore(filepath.Join(t.TempDir(), ".ddx"))
+	backend, ok := s.backend.(*ExternalBackend)
+	require.True(t, ok)
+	assert.Equal(t, DefaultCollection, backend.Collection)
+	assert.Nil(t, backend.fallback, "default collection must not use fallback")
+}
+
 func writeFakeBackendTool(t *testing.T, dir, name string) {
 	t.Helper()
 	path := filepath.Join(dir, name)

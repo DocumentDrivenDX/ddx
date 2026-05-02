@@ -94,10 +94,19 @@ func NewStore(dir string, opts ...StoreOption) *Store {
 	spec := DefaultRegistry().Resolve(CollectionID(s.Collection))
 	s.File, s.LockDir = spec.PathsUnder(dir)
 
-	// Set up external backend if configured
+	// Set up external backend if configured. bd/br lack per-collection
+	// scoping in their CLI, so non-default collections (e.g. beads-archive)
+	// route through a JSONL fallback the external backend transparently
+	// delegates to. The default collection always goes straight to bd/br
+	// to preserve the existing interchange contract (schema_compat_test.go,
+	// import/export round-trip).
 	switch backendType {
 	case BackendBD, BackendBR:
-		if ext, err := NewExternalBackend(backendType, s.Collection); err == nil {
+		var fallback Backend
+		if s.Collection != DefaultCollection {
+			fallback = NewJSONLBackend(s.Dir, s.File, s.LockDir, s.LockWait)
+		}
+		if ext, err := NewExternalBackendWithFallback(backendType, s.Collection, fallback); err == nil {
 			s.backend = ext
 		}
 		// Fall through to JSONL if tool not available
