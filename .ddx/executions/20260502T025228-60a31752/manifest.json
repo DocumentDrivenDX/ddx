@@ -1,0 +1,71 @@
+{
+  "attempt_id": "20260502T025228-60a31752",
+  "bead_id": "ddx-9c9a2eed",
+  "base_rev": "ddec65272acdd4b3624c8119ecbf2c9921b6599b",
+  "created_at": "2026-05-02T02:52:30.187805364Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9c9a2eed",
+    "title": "De-emphasize quorum review: remove from features-list prominence",
+    "description": "Per locked decision, quorum review is just a skill — don't promote to primary capability. Remove from features-list prominence on website/content/features/_index.md and website/content/_index.md. May be mentioned in skills documentation only.",
+    "acceptance": "1. quorum review removed from primary features list on features/_index.md. 2. Homepage hero/features grid no longer features quorum review. 3. Run 'rg -n -i \"quorum\" website/content/_index.md website/content/features/_index.md' returns 0 matches (or only in deprecated/skills context).",
+    "parent": "ddx-629ec5b4",
+    "labels": [
+      "site-redesign",
+      "area:website",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T02:52:28Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-02T01:37:02.416978839Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-02T01:37:02.529355542Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-05-02T01:37:02.642567327Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=2 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-05-02T01:37:02.86428282Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T02:52:28.69457603Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T025228-60a31752",
+    "prompt": ".ddx/executions/20260502T025228-60a31752/prompt.md",
+    "manifest": ".ddx/executions/20260502T025228-60a31752/manifest.json",
+    "result": ".ddx/executions/20260502T025228-60a31752/result.json",
+    "checks": ".ddx/executions/20260502T025228-60a31752/checks.json",
+    "usage": ".ddx/executions/20260502T025228-60a31752/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-9c9a2eed-20260502T025228-60a31752"
+  }
+}
