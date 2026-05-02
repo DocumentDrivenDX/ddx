@@ -486,6 +486,113 @@ test('TC-041: staleness filter chips update visible node count', async ({ page }
 	await expect(page.getByText(/3 nodes/)).toBeVisible();
 });
 
+// TC-042: Edge stroke and arrowhead fill meet WCAG 3:1 non-text contrast in
+// both light and dark mode. Regression guard for the border-line→fg-muted
+// token swap on D3Graph edges. Reads the computed stroke/fill the browser
+// actually paints (proving the tailwind utilities resolve to real colors)
+// and checks them against the canonical canvas tokens declared in
+// tailwind.config.js semanticColors. If those canvas tokens move, update
+// the BG_LIGHT/BG_DARK constants here too.
+const BG_LIGHT: [number, number, number] = [0xf4, 0xef, 0xe6]; // bg-canvas
+const BG_DARK: [number, number, number] = [0x1a, 0x18, 0x15]; // dark-bg-canvas
+
+test('TC-042: doc graph edges meet >=3:1 contrast in light and dark mode', async ({ page }) => {
+	await mockGraphQL(page);
+	await page.goto(BASE_URL);
+
+	const svg = page.getByTestId('doc-graph-svg');
+	await expect(svg).toBeVisible();
+	await page.waitForFunction(
+		() => document.querySelectorAll('[data-testid="doc-graph-svg"] line').length > 0
+	);
+
+	const measure = (bg: [number, number, number]) =>
+		page.evaluate((bgRgb) => {
+			function parseRgb(s: string): [number, number, number, number] {
+				const m = s.match(/rgba?\(([^)]+)\)/i);
+				if (!m) return [0, 0, 0, 1];
+				const parts = m[1].split(',').map((p) => parseFloat(p.trim()));
+				return [parts[0], parts[1], parts[2], parts[3] === undefined ? 1 : parts[3]];
+			}
+			function blend(
+				fg: [number, number, number],
+				alpha: number,
+				bg: [number, number, number]
+			): [number, number, number] {
+				return [
+					fg[0] * alpha + bg[0] * (1 - alpha),
+					fg[1] * alpha + bg[1] * (1 - alpha),
+					fg[2] * alpha + bg[2] * (1 - alpha)
+				];
+			}
+			function chan(c: number) {
+				const v = c / 255;
+				return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+			}
+			function lum([r, g, b]: [number, number, number]) {
+				return 0.2126 * chan(r) + 0.7152 * chan(g) + 0.0722 * chan(b);
+			}
+			function contrast(a: [number, number, number], b: [number, number, number]) {
+				const la = lum(a);
+				const lb = lum(b);
+				const [hi, lo] = la > lb ? [la, lb] : [lb, la];
+				return (hi + 0.05) / (lo + 0.05);
+			}
+
+			const line = document.querySelector(
+				'[data-testid="doc-graph-svg"] line'
+			) as SVGLineElement | null;
+			const arrow = document.querySelector(
+				'[data-testid="doc-graph-svg"] marker#ddx-arrow path'
+			) as SVGPathElement | null;
+			if (!line || !arrow) throw new Error('graph edge or arrowhead not found');
+
+			const lineCs = getComputedStyle(line);
+			const arrowCs = getComputedStyle(arrow);
+			const stroke = parseRgb(lineCs.stroke);
+			const strokeOpacity = parseFloat(lineCs.strokeOpacity || '1');
+			const fill = parseRgb(arrowCs.fill);
+			const canvas = bgRgb as [number, number, number];
+
+			const blendedStroke = blend(
+				[stroke[0], stroke[1], stroke[2]],
+				strokeOpacity,
+				canvas
+			);
+			return {
+				stroke: contrast(blendedStroke, canvas),
+				arrow: contrast([fill[0], fill[1], fill[2]], canvas),
+				strokeRgb: [stroke[0], stroke[1], stroke[2]],
+				fillRgb: [fill[0], fill[1], fill[2]]
+			};
+		}, bg);
+
+	const html = page.locator('html');
+	const initialClass = (await html.getAttribute('class')) ?? '';
+	const startedDark = initialClass.includes('dark');
+	const toggle = page.getByRole('button', { name: /toggle dark mode/i });
+
+	if (startedDark) {
+		await toggle.click();
+		await expect(html).not.toHaveClass(/dark/);
+	}
+
+	const light = await measure(BG_LIGHT);
+	expect(light.stroke).toBeGreaterThanOrEqual(3);
+	expect(light.arrow).toBeGreaterThanOrEqual(3);
+
+	await toggle.click();
+	await expect(html).toHaveClass(/dark/);
+
+	const dark = await measure(BG_DARK);
+	expect(dark.stroke).toBeGreaterThanOrEqual(3);
+	expect(dark.arrow).toBeGreaterThanOrEqual(3);
+
+	// Light/dark resolve to different ink — proves the dark: variant fired.
+	expect(dark.strokeRgb).not.toEqual(light.strokeRgb);
+	expect(dark.fillRgb).not.toEqual(light.fillRgb);
+});
+
 // TC-036: Graph page re-fetches DocGraph query on navigation (interaction with query)
 test('TC-036: graph page issues DocGraph query to load graph data', async ({ page }) => {
 	let graphQueryCount = 0;

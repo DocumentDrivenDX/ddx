@@ -40,8 +40,13 @@ function contrast(a: string, b: string): number {
 
 describe('D3Graph edge ink', () => {
 	it('uses fg-muted tokens for edge stroke and arrowhead fill (not border-line)', () => {
-		expect(graphSource).toContain("'stroke-fg-muted dark:stroke-dark-fg-muted'");
-		expect(graphSource).toContain("'fill-fg-muted dark:fill-dark-fg-muted'");
+		// Tailwind v4 only generates text-* utilities for these custom tokens, so
+		// the edge/arrow drive their stroke and fill from currentColor instead of
+		// stroke-*/fill-* utilities. The text-fg-muted class still anchors the
+		// canonical color choice.
+		expect(graphSource).toContain("'text-fg-muted dark:text-dark-fg-muted'");
+		expect(graphSource).toMatch(/\.attr\(\s*'stroke'\s*,\s*'currentColor'\s*\)/);
+		expect(graphSource).toMatch(/\.attr\(\s*'fill'\s*,\s*'currentColor'\s*\)/);
 		expect(graphSource).not.toMatch(/stroke-border-line|fill-border-line/);
 	});
 
