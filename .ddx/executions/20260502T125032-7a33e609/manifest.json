@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T125032-7a33e609",
+  "bead_id": "ddx-345226c9",
+  "base_rev": "c37608177d14941e1e7115d59f4147fd2df69267",
+  "created_at": "2026-05-02T12:50:34.240629497Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-345226c9",
+    "title": "artifacts: group-by control + grouping.ts + urlState.ts shared helper",
+    "description": "Add a group-by selector to the artifacts list page (cli/internal/server/frontend/src/routes/.../artifacts/). Default groupBy=Folder. Implement grouping.ts (group derivations: Folder, Prefix, MediaType) and urlState.ts (shared URL-state helper for q, mediaType, groupBy, sort, filters; preserves unrelated keys + ?back=). Use generic 'Workflow stage' label (not 'HELIX phase'); axis hidden when axisAvailable() is false.",
+    "acceptance": "1. Group-by dropdown visible; default Folder. 2. grouping.ts exports prefixOf, folderOf, workflowStageOf with regex-based derivation. 3. urlState.ts is the single source of truth for URL state. 4. ARIA roles for group headers. 5. sessionStorage persistence with stable keys. 6. cd cli/internal/server/frontend \u0026\u0026 bun test passes.",
+    "parent": "ddx-ffb678fc",
+    "labels": [
+      "phase:2",
+      "story:5",
+      "area:web",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:50:32Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T12:50:32.983957427Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T125032-7a33e609",
+    "prompt": ".ddx/executions/20260502T125032-7a33e609/prompt.md",
+    "manifest": ".ddx/executions/20260502T125032-7a33e609/manifest.json",
+    "result": ".ddx/executions/20260502T125032-7a33e609/result.json",
+    "checks": ".ddx/executions/20260502T125032-7a33e609/checks.json",
+    "usage": ".ddx/executions/20260502T125032-7a33e609/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-345226c9-20260502T125032-7a33e609"
+  }
+}
