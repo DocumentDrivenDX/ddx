@@ -450,8 +450,18 @@ test('TC-040: Back navigation restores graph viewport from URL params', async ({
 	await expect(page.getByTestId('doc-graph-svg')).toBeVisible();
 	await page.waitForTimeout(500);
 
-	// Click a node to navigate to the document page
-	await page.locator('[data-testid="doc-graph-svg"] circle').first().click();
+	// Click a node to navigate to the document page. The bounded-convergence
+	// freeze can pin the first node outside a 2x-zoomed viewport, so dispatch
+	// the click programmatically rather than relying on visible-bounds hit
+	// testing.
+	await page.evaluate(() => {
+		const c = document.querySelector(
+			'[data-testid="doc-graph-svg"] circle'
+		) as SVGCircleElement | null;
+		if (!c) throw new Error('no circle');
+		const g = c.parentNode as SVGGElement;
+		g.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+	});
 	await expect(page).toHaveURL(/\/documents\//);
 
 	// Navigate back
@@ -591,6 +601,123 @@ test('TC-042: doc graph edges meet >=3:1 contrast in light and dark mode', async
 	// Light/dark resolve to different ink — proves the dark: variant fired.
 	expect(dark.strokeRgb).not.toEqual(light.strokeRgb);
 	expect(dark.fillRgb).not.toEqual(light.fillRgb);
+});
+
+// TC-043: 128-node fixture settles without circle/circle overlap and without
+// labels overlapping foreign circles. AC2/AC3 of the label-aware collision
+// bead — the previous forceCollide(48) circle-only force could not satisfy
+// either invariant. Settle time is measured and reported (AC4 — not gated).
+test('TC-043: doc-graph 128-node fixture settles with no circle or label overlap', async ({
+	page
+}) => {
+	const docs: typeof GRAPH_DOCS = [];
+	for (let i = 0; i < 128; i++) {
+		const parent = i === 0 ? -1 : Math.floor((i - 1) / 3);
+		const dependsOn: string[] = [];
+		if (parent >= 0) dependsOn.push(`n${parent}`);
+		// Cross-links that produce hubs on n0/n1/n7/n14/n21 (mirrors baseline fixture).
+		if (i > 0 && i % 7 === 0) dependsOn.push(`n${Math.max(0, i - 7)}`);
+		if (i > 0 && i % 13 === 0) dependsOn.push(`n${Math.max(0, i - 13)}`);
+		if (i > 0 && i % 25 === 0) dependsOn.push(`n${Math.max(0, i - 25)}`);
+		docs.push({
+			id: `n${i}`,
+			path: `docs/n${i}.md`,
+			title: `Node n${i} — feature spec for component ${i}`,
+			dependsOn,
+			dependents: []
+		});
+	}
+	for (const d of docs) {
+		for (const dep of d.dependsOn) {
+			const t = docs.find((x) => x.id === dep);
+			if (t) t.dependents.push(d.id);
+		}
+	}
+
+	await mockGraphQL(page, docs);
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await page.goto(BASE_URL);
+
+	await expect(page.getByTestId('doc-graph-svg')).toBeVisible();
+
+	// Wait until the bounded-convergence freeze stamps the SVG with settle ms.
+	await page.waitForFunction(
+		() => {
+			const el = document.querySelector(
+				'[data-testid="doc-graph-svg"]'
+			) as SVGSVGElement | null;
+			return !!el && el.dataset.settleMs !== undefined;
+		},
+		{ timeout: 10_000 }
+	);
+
+	const layout = await page.evaluate(() => {
+		const svg = document.querySelector('[data-testid="doc-graph-svg"]') as SVGSVGElement;
+		const settleMs = Number(svg.dataset.settleMs ?? '0');
+		const circles = Array.from(
+			svg.querySelectorAll<SVGCircleElement>('g g g circle')
+		);
+		const items = circles.map((c) => {
+			const g = c.parentNode as SVGGElement;
+			const t = g.transform.baseVal.consolidate();
+			const m = t ? t.matrix : ({ e: 0, f: 0 } as DOMMatrix);
+			const r = Number(c.getAttribute('r')) || 18;
+			const labelEl = g.querySelector('text') as SVGTextElement | null;
+			let labelBox: { x: number; y: number; w: number; h: number } | null = null;
+			if (labelEl) {
+				const bb = labelEl.getBBox();
+				labelBox = { x: m.e + bb.x, y: m.f + bb.y, w: bb.width, h: bb.height };
+			}
+			return { x: m.e, y: m.f, r, label: labelBox };
+		});
+		return { settleMs, items };
+	});
+
+	expect(layout.items.length).toBe(128);
+
+	// AC2: no two node circles overlap after settle.
+	const overlaps: string[] = [];
+	for (let i = 0; i < layout.items.length; i++) {
+		for (let j = i + 1; j < layout.items.length; j++) {
+			const a = layout.items[i];
+			const b = layout.items[j];
+			const dx = a.x - b.x;
+			const dy = a.y - b.y;
+			const d2 = dx * dx + dy * dy;
+			const minD = a.r + b.r;
+			if (d2 < minD * minD - 0.5) {
+				overlaps.push(`circles ${i}/${j} dist=${Math.sqrt(d2).toFixed(2)} need>=${minD}`);
+				if (overlaps.length > 5) break;
+			}
+		}
+		if (overlaps.length > 5) break;
+	}
+	expect(overlaps, overlaps.join('\n')).toHaveLength(0);
+
+	// AC3: no node's label box overlaps any other node's circle.
+	const labelHits: string[] = [];
+	for (let i = 0; i < layout.items.length; i++) {
+		const lab = layout.items[i].label;
+		if (!lab) continue;
+		for (let j = 0; j < layout.items.length; j++) {
+			if (i === j) continue;
+			const c = layout.items[j];
+			const cx = Math.max(lab.x, Math.min(c.x, lab.x + lab.w));
+			const cy = Math.max(lab.y, Math.min(c.y, lab.y + lab.h));
+			const dx = c.x - cx;
+			const dy = c.y - cy;
+			if (dx * dx + dy * dy < (c.r - 0.5) * (c.r - 0.5)) {
+				labelHits.push(`label ${i} hits circle ${j}`);
+				if (labelHits.length > 5) break;
+			}
+		}
+		if (labelHits.length > 5) break;
+	}
+	expect(labelHits, labelHits.join('\n')).toHaveLength(0);
+
+	// AC4: report (do not gate) settle time. The baseline was ~5 s; the bead
+	// targets ≤ 2 s but per codex the metric is informational only.
+	console.log(`TC-043 settle ms: ${layout.settleMs}`);
 });
 
 // TC-036: Graph page re-fetches DocGraph query on navigation (interaction with query)

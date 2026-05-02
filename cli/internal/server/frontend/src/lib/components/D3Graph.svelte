@@ -62,6 +62,112 @@
 		d3.select(svgEl).transition().duration(350).call(zoom.transform, d3.zoomIdentity)
 	}
 
+	// Visual constants that mirror the SVG: r=18 circle and a label rendered
+	// at x=24 (text-body-sm, ~13px sans-serif) truncated to 32 chars + ellipsis.
+	const NODE_RADIUS = 18
+	const LABEL_OFFSET_X = 24
+	const LABEL_HALF_HEIGHT = 8
+	const LABEL_AVG_CHAR_PX = 6.8
+
+	function labelWidthPx(title: string): number {
+		const visible = (title ?? '').length > 32 ? 33 : (title ?? '').length
+		return visible * LABEL_AVG_CHAR_PX
+	}
+
+	// Custom force that prevents both circle/circle and circle/label overlap by
+	// treating each node as an axis-aligned bounding box that bounds the circle
+	// AND the trailing label, then resolving overlaps in a quadtree pass.
+	function labelAwareCollide<N extends d3.SimulationNodeDatum & { title: string }>(
+		padding = 4
+	) {
+		let nodes: N[] = []
+		let halfW: number[] = []
+		const halfH = NODE_RADIUS + LABEL_HALF_HEIGHT / 2 + padding
+		// Anchor offset: bbox is asymmetric (label only extends to the right),
+		// so the box centre sits to the right of the node centre by `cxOffset`.
+		let cxOffset: number[] = []
+		let maxHalfW = 0
+		const ITER = 2
+
+		function force() {
+			const n = nodes.length
+			if (n === 0) return
+			for (let iter = 0; iter < ITER; iter++) {
+				const cx: number[] = new Array(n)
+				const cy: number[] = new Array(n)
+				for (let i = 0; i < n; i++) {
+					cx[i] = (nodes[i].x ?? 0) + cxOffset[i]
+					cy[i] = nodes[i].y ?? 0
+				}
+				const tree = d3
+					.quadtree<number>()
+					.x((i) => cx[i])
+					.y((i) => cy[i])
+					.addAll(d3.range(n))
+
+				for (let i = 0; i < n; i++) {
+					const node = nodes[i]
+					const hwI = halfW[i]
+					const xi = cx[i]
+					const yi = cy[i]
+					const searchX = maxHalfW + hwI
+					const searchY = halfH * 2
+					tree.visit((quad: any, x0, y0, x1, y1) => {
+						if (!quad.length) {
+							do {
+								const j: number = quad.data
+								if (j > i) {
+									const hwJ = halfW[j]
+									let dx = xi - cx[j]
+									let dy = yi - cy[j]
+									if (dx === 0) dx = 1e-3
+									if (dy === 0) dy = 1e-3
+									const ox = hwI + hwJ - Math.abs(dx)
+									const oy = halfH * 2 - Math.abs(dy)
+									if (ox > 0 && oy > 0) {
+										const other = nodes[j]
+										if (ox < oy) {
+											const shift = ox / 2
+											const sgn = dx > 0 ? 1 : -1
+											node.x = (node.x ?? 0) + shift * sgn
+											other.x = (other.x ?? 0) - shift * sgn
+											cx[i] += shift * sgn
+											cx[j] -= shift * sgn
+										} else {
+											const shift = oy / 2
+											const sgn = dy > 0 ? 1 : -1
+											node.y = (node.y ?? 0) + shift * sgn
+											other.y = (other.y ?? 0) - shift * sgn
+											cy[i] += shift * sgn
+											cy[j] -= shift * sgn
+										}
+									}
+								}
+							} while ((quad = quad.next))
+						}
+						return x0 > xi + searchX || x1 < xi - searchX || y0 > yi + searchY || y1 < yi - searchY
+					})
+				}
+			}
+		}
+		force.initialize = (nn: N[]) => {
+			nodes = nn
+			halfW = new Array(nn.length)
+			cxOffset = new Array(nn.length)
+			maxHalfW = 0
+			for (let i = 0; i < nn.length; i++) {
+				const lw = labelWidthPx(nn[i].title)
+				const left = -NODE_RADIUS
+				const right = LABEL_OFFSET_X + lw
+				const hw = (right - left) / 2 + padding
+				halfW[i] = hw
+				cxOffset[i] = (right + left) / 2
+				if (hw > maxHalfW) maxHalfW = hw
+			}
+		}
+		return force
+	}
+
 	function nodeColorClass(staleness?: string): string {
 		if (staleness === 'stale') return 'node-stale'
 		if (staleness === 'missing') return 'node-missing'
@@ -144,6 +250,15 @@
 				.filter((l) => freshNodeById.has(l.source) && freshNodeById.has(l.target))
 				.map((l) => ({ source: l.source, target: l.target }))
 
+			// Per-node degree (in + out), used to tune charge and link distance so
+			// that high-degree hubs get more breathing room than tree leaves.
+			const degree = new Map<string, number>()
+			for (const n of freshSimNodes) degree.set(n.id, 0)
+			for (const l of freshSimLinks) {
+				degree.set(l.source, (degree.get(l.source) ?? 0) + 1)
+				degree.set(l.target, (degree.get(l.target) ?? 0) + 1)
+			}
+
 			simulation = d3
 				.forceSimulation(freshSimNodes)
 				.force(
@@ -151,12 +266,26 @@
 					d3
 						.forceLink<SimNode, (typeof freshSimLinks)[0]>(freshSimLinks)
 						.id((d) => d.id)
-						.distance(160)
+						.distance((l: any) => {
+							const ds = degree.get(typeof l.source === 'object' ? l.source.id : l.source) ?? 0
+							const dt = degree.get(typeof l.target === 'object' ? l.target.id : l.target) ?? 0
+							return 140 + 18 * Math.min(ds + dt, 10)
+						})
 						.strength(0.4)
 				)
-				.force('charge', d3.forceManyBody().strength(-600))
+				.force(
+					'charge',
+					d3.forceManyBody<SimNode>().strength((d) => {
+						const k = degree.get(d.id) ?? 0
+						return -450 - 90 * Math.min(k, 10)
+					})
+				)
 				.force('center', d3.forceCenter(width / 2, height / 2))
-				.force('collide', d3.forceCollide(48))
+				.force('collide', labelAwareCollide<SimNode>(8))
+				// Bounded convergence: faster decay (~120 ticks) so settle reliably
+				// finishes within ~2 s on 128-node graphs in the browser.
+				.alphaDecay(0.05)
+				.velocityDecay(0.5)
 
 			const linkSel = g
 				.append('g')
@@ -256,10 +385,24 @@
 				nodeGroup.attr('transform', (d) => `translate(${d.x ?? 0},${d.y ?? 0})`)
 			})
 
+			// Bounded convergence: report wall-clock settle time and freeze the
+			// graph (pin every node and stop the timer) so it stops consuming
+			// rAF ticks until the user explicitly drags or the data changes.
+			const settleStart = performance.now()
+			simulation.on('end.freeze', () => {
+				const elapsedMs = performance.now() - settleStart
+				for (const n of freshSimNodes) {
+					if (n.fx == null) n.fx = n.x
+					if (n.fy == null) n.fy = n.y
+				}
+				simulation?.stop()
+				svgNode.dataset.settleMs = String(Math.round(elapsedMs))
+			})
+
 			// After simulation settles: pan to highlighted node or fit to bounds
 			if (!capturedInitialTransform || capturedHighlightId) {
 				const zoomRef = zoom
-				simulation.on('end', () => {
+				simulation.on('end.fit', () => {
 					if (!zoomRef) return
 					if (capturedHighlightId) {
 						const hn = freshSimNodes.find((n) => n.id === capturedHighlightId)
