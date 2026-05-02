@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260502T205410-5ac5b32d",
+  "bead_id": "ddx-b52fc7f2",
+  "base_rev": "d0b533e0529fa204959627e67974b57d3662433c",
+  "created_at": "2026-05-02T20:54:11.505671038Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b52fc7f2",
+    "title": "C0: pre-refactor JSONL fixture baseline for event-shape regression detection",
+    "description": "Foundation bead for the execute-bead refactor. Captures canonical JSONL streams for a handful of bead lifecycles BEFORE any refactor child lands. Subsequent children diff their output against this baseline to catch event-shape regressions (R4 from /tmp/execute-bead-refactor-proposal.md §6.1).\n\nRequired fixtures (one canonical bead per lifecycle):\n- merged success → close\n- success → review APPROVE → close\n- success → review BLOCK → reopen → triage\n- land_conflict → recover → close\n- no_changes_verified → already_satisfied close\n- no_changes_unjustified → reopen with cooldown\n- decomposition (declined_needs_decomposition)\n- push_failed\n- push_conflict\n- preserved_needs_review\n- default failure",
+    "acceptance": "1. cli/internal/agent/testdata/refactor_baseline/ exists with one .jsonl file per lifecycle scenario above. 2. Each fixture captures full bead.result + execute-bead + review + routing + triage-decision + loop-error event sequences. 3. Diff helper TestRefactorBaseline_FixturesStable in a new test file confirms each fixture is byte-identical to the recorded baseline. 4. cd cli \u0026\u0026 go test -run TestRefactorBaseline ./internal/agent/ green. 5. Documented in /tmp/execute-bead-refactor-proposal.md §6.1 R4 cross-reference.",
+    "parent": "ddx-5cb6e6cd",
+    "labels": [
+      "phase:2",
+      "refactor",
+      "kind:test",
+      "foundation"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T20:54:10Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3924346",
+      "execute-loop-heartbeat-at": "2026-05-02T20:54:10.54125505Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T205410-5ac5b32d",
+    "prompt": ".ddx/executions/20260502T205410-5ac5b32d/prompt.md",
+    "manifest": ".ddx/executions/20260502T205410-5ac5b32d/manifest.json",
+    "result": ".ddx/executions/20260502T205410-5ac5b32d/result.json",
+    "checks": ".ddx/executions/20260502T205410-5ac5b32d/checks.json",
+    "usage": ".ddx/executions/20260502T205410-5ac5b32d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b52fc7f2-20260502T205410-5ac5b32d"
+  },
+  "prompt_sha": "221ba34fe9f1846ffb0ed37fca785f00be9c32dc1a6e49330b17347b35ec2f21"
+}
