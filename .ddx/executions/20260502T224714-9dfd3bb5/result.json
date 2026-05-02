@@ -1,0 +1,54 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Snippet field added to artifacts query + TS interface; +page.svelte renders an extra row per edge with **…** converted to \u003cmark\u003e using yellow highlight; new Playwright spec covers body-match snippet rendering and back-nav URL preservation (q=fox).",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Snippet rendering uses {@html} after escapeHtml + single regex replace of **…**; XSS-safe and matches resolver contract (single match per snippet).",
+      "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/+page.svelte:194"
+    },
+    {
+      "severity": "info",
+      "summary": "Bead mentions running houdini:generate; diff doesn't show regenerated artifacts, but ARTIFACTS_QUERY and ArtifactEdge interface are updated. Assumed regen ran (test suite reportedly passing).",
+      "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/+page.ts:19"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1183,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T224307-8eb7155d/manifest.json",
+          ".ddx/executions/20260502T224307-8eb7155d/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 5162,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 8151,
+    "output_bytes": 1004,
+    "elapsed_ms": 25533,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
