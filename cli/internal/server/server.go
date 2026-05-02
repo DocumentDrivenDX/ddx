@@ -110,6 +110,15 @@ type Server struct {
 	// only when --hub-mode").
 	HubMode bool
 	hub     *federationHub
+
+	// SpokeMode is true once EnableSpokeMode has been called. Used together
+	// with HubMode to compute node.federation_role:
+	//   neither   → "standalone"
+	//   hub only  → "hub"
+	//   spoke only→ "spoke"
+	//   both      → "hub_spoke"
+	SpokeMode bool
+	spoke     *federationSpoke
 }
 
 // New creates a new DDx server bound to addr, serving data from workingDir.
@@ -215,6 +224,14 @@ func (s *Server) RegisterProject(path string) ProjectEntry {
 // hub and stops all land coordinators. Returns the first error encountered.
 // Both operations are idempotent and safe to call on an idle server.
 func (s *Server) Shutdown() error {
+	// Best-effort spoke deregister so the hub registry does not show this
+	// node as stale after a graceful shutdown. Errors are swallowed inside
+	// ShutdownSpoke (the hub may legitimately be down).
+	if s.spoke != nil {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		_ = s.ShutdownSpoke(ctx)
+		cancel()
+	}
 	s.beadHub.Close()
 	s.workers.LandCoordinators.StopAll()
 	return nil
@@ -851,11 +868,30 @@ func (s *Server) handleGetNode(w http.ResponseWriter, _ *http.Request) {
 	node := s.state.Node
 	s.state.mu.RUnlock()
 	writeJSON(w, http.StatusOK, map[string]any{
-		"name":       node.Name,
-		"id":         node.ID,
-		"started_at": node.StartedAt,
-		"last_seen":  node.LastSeen,
+		"name":            node.Name,
+		"id":              node.ID,
+		"started_at":      node.StartedAt,
+		"last_seen":       node.LastSeen,
+		"federation_role": s.federationRole(),
 	})
+}
+
+// federationRole returns the node's federation role string for /api/node.
+//   - "standalone": neither hub nor spoke mode is enabled
+//   - "hub":        hub-mode only
+//   - "spoke":      spoke-mode only
+//   - "hub_spoke":  both
+func (s *Server) federationRole() string {
+	switch {
+	case s.HubMode && s.SpokeMode:
+		return "hub_spoke"
+	case s.HubMode:
+		return "hub"
+	case s.SpokeMode:
+		return "spoke"
+	default:
+		return "standalone"
+	}
 }
 
 func (s *Server) handleListProjects(w http.ResponseWriter, r *http.Request) {

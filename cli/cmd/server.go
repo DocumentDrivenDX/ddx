@@ -47,6 +47,8 @@ func (f *CommandFactory) newServerCommand() *cobra.Command {
 	var tsnetAuthKey string
 	var hubMode bool
 	var federationAllowPlainHTTP bool
+	var hubURL string
+	var federationSelfURL string
 
 	cmd := &cobra.Command{
 		Use:   "server",
@@ -108,6 +110,17 @@ MCP (POST /mcp):
 				}
 			}
 
+			if strings.TrimSpace(hubURL) != "" {
+				selfURL := federationSelfURL
+				if selfURL == "" {
+					selfURL = "https://" + listenAddr
+				}
+				if err := srv.EnableSpokeMode(cmd.Context(), hubURL, selfURL); err != nil {
+					return fmt.Errorf("federation spoke registration failed: %w", err)
+				}
+				fmt.Fprintf(cmd.OutOrStdout(), "DDx spoke-mode enabled (registered with hub %s as %s)\n", hubURL, selfURL)
+			}
+
 			// Build tsnet config. tsnet is on by default — flags override config,
 			// and --tsnet=false disables it. Hostname defaults to ddx-<hostname>.
 			tc := &config.TsnetConfig{Enabled: true}
@@ -143,6 +156,8 @@ MCP (POST /mcp):
 	cmd.Flags().StringVar(&tsnetAuthKey, "tsnet-auth-key", "", "Tailscale auth key for headless/CI use (SECURITY: visible in ps/history; prefer TS_AUTHKEY env var)")
 	cmd.Flags().BoolVar(&hubMode, "hub-mode", false, "Run as a federation hub: mount /api/federation/* routes (FEAT-026)")
 	cmd.Flags().BoolVar(&federationAllowPlainHTTP, "federation-allow-plain-http", false, "Accept federation registrations from non-loopback non-ts-net peers (hub-mode only; logs WARN on each accepted plain-HTTP registration)")
+	cmd.Flags().StringVar(&hubURL, "hub", "", "Federation hub base URL to register with on startup (e.g. https://hub:7743). Enables spoke-mode (FEAT-026). Combine with --hub-mode for hub_spoke role.")
+	cmd.Flags().StringVar(&federationSelfURL, "federation-self-url", "", "Self-URL advertised to the hub when --hub is set; defaults to https://<listen-addr>")
 
 	// Worker management
 	cmd.AddCommand(f.newServerWorkersCommand())
