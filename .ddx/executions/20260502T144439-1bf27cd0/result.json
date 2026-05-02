@@ -1,0 +1,64 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff under review contains only execution-evidence manifest/result JSON files. No TD-NNN doc changes and no benchmark file are present in the changed-files list, so none of the acceptance criteria can be verified.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No TD-NNN search-semantics section visible in diff (field precedence, size cap, binary skip, ordering, upgrade threshold).",
+      "location": "docs/"
+    },
+    {
+      "severity": "block",
+      "summary": "No benchmark file (e.g. resolver_artifacts_bench_test.go) present in diff against 500-artifact fixture.",
+      "location": "cli/internal/server/graphql/"
+    },
+    {
+      "severity": "block",
+      "summary": "Cannot confirm documented p95 budget matches measured baseline; no TD or bench output in diff.",
+      "location": "N/A"
+    },
+    {
+      "severity": "info",
+      "summary": "Only execution evidence manifest/result.json files appear in changed-files; the actual implementation commit (bc117725) referenced in result.json is not represented in the reviewable diff.",
+      "location": ".ddx/executions/20260502T143922-9c85f0d5/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1566,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T143922-9c85f0d5/manifest.json",
+          ".ddx/executions/20260502T143922-9c85f0d5/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 4081,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 7453,
+    "output_bytes": 1132,
+    "elapsed_ms": 13545,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
