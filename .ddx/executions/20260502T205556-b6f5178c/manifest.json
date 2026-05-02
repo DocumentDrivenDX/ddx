@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260502T205556-b6f5178c",
+  "bead_id": "ddx-edcbebb2",
+  "base_rev": "6f771cf052e5ec0f31b861dbd79bbeba97186cc5",
+  "created_at": "2026-05-02T20:55:57.625333029Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-edcbebb2",
+    "title": "cleanup: drop quorum/benchmark/grading/metrics dead functions (~500 LOC)",
+    "description": "Per /tmp/agent-surface-dead-code-audit.md: format.go (entirely), grade.go:buildGradingPrompt (un-bounded variant superseded), routing_metrics.go:AppendBurnSummary + parseWindowMinutes, model_catalog_yaml.go:WriteModelCatalogYAML, cmd-side harnessHealthyViaService + loadExecutionsMirrorConfig. ~500 LOC of dead code.\n\nVerify each is genuinely unreferenced (deadcode -test ./... output at /tmp/deadcode-agent-with-tests.txt) before deleting. Some may be reflection-invoked or test-only — confirm with grep before removal.\n\nIndependent of refactor.",
+    "acceptance": "1. Each named function/file confirmed unreferenced (production + tests + reflection). 2. Removed. 3. cd cli \u0026\u0026 go test ./... green. 4. cd cli \u0026\u0026 go build ./... green. 5. ~500 LOC reduction documented.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "kind:cleanup",
+      "dead-code"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T20:55:56Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3924346",
+      "execute-loop-heartbeat-at": "2026-05-02T20:55:56.699367779Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T205556-b6f5178c",
+    "prompt": ".ddx/executions/20260502T205556-b6f5178c/prompt.md",
+    "manifest": ".ddx/executions/20260502T205556-b6f5178c/manifest.json",
+    "result": ".ddx/executions/20260502T205556-b6f5178c/result.json",
+    "checks": ".ddx/executions/20260502T205556-b6f5178c/checks.json",
+    "usage": ".ddx/executions/20260502T205556-b6f5178c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-edcbebb2-20260502T205556-b6f5178c"
+  },
+  "prompt_sha": "23ee436c67699ffab71253b021896193d5359d5cd86f9077b5487891aa4dba99"
+}
