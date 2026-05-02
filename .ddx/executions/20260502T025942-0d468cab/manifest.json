@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T025942-0d468cab",
+  "bead_id": "ddx-abd000f7",
+  "base_rev": "9316f78a92dd210c1e427d8c0617c4fc68fb3c35",
+  "created_at": "2026-05-02T02:59:43.559541433Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-abd000f7",
+    "title": "Final verification: hugo build, ddx doc audit, drift checks for Dun/execute-loop/quorum",
+    "description": "Run final verification on the redesign. Build website, audit artifact graph, grep for residual drift on items the redesign was supposed to remove or reframe.",
+    "acceptance": "1. cd website \u0026\u0026 hugo builds with no errors and no warning about broken internal links. 2. ddx doc audit passes with no missing-id or broken-edge errors. 3. rg -n '\\\\bDun\\\\b' website/content/ docs/ returns 0 matches. 4. rg -n 'execute-loop|execute-bead' website/content/_index.md website/content/why/ website/content/docs/concepts/ returns 0 matches in primary copy. 5. rg -n -i 'quorum' website/content/_index.md website/content/features/_index.md returns 0 (or only deprecation notes). 6. ls website/content/docs/principles/ shows 10 principle slugs. 7. All 22 child beads of EPIC are closed (verify via ddx bead list --parent ddx-629ec5b4 --status closed). 8. Output a verification report at /tmp/redesign-verify.txt with command outputs.",
+    "parent": "ddx-629ec5b4",
+    "labels": [
+      "site-redesign",
+      "area:website",
+      "area:specs",
+      "kind:verification"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T02:59:42Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "execute-loop-heartbeat-at": "2026-05-02T02:59:42.068454429Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T025942-0d468cab",
+    "prompt": ".ddx/executions/20260502T025942-0d468cab/prompt.md",
+    "manifest": ".ddx/executions/20260502T025942-0d468cab/manifest.json",
+    "result": ".ddx/executions/20260502T025942-0d468cab/result.json",
+    "checks": ".ddx/executions/20260502T025942-0d468cab/checks.json",
+    "usage": ".ddx/executions/20260502T025942-0d468cab/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-abd000f7-20260502T025942-0d468cab"
+  }
+}
