@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T115600-64bd7a2c",
+  "bead_id": "ddx-4d7e1d93",
+  "base_rev": "c376d16b0ee65d8aa6586590666361476f79a66b",
+  "created_at": "2026-05-02T11:56:01.829727346Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4d7e1d93",
+    "title": "B1: Extract shared execute-bead instruction blocks (byte-equivalent refactor)",
+    "description": "Pull duplicated text from executeBeadInstructionsClaudeText (execute_bead.go:1208) and executeBeadInstructionsAgentText (execute_bead.go:1274) into named constants: instrStep0SizeCheck, instrInvestigationReports, instrReviewGate, instrBeadOverride, instrCoreConstraints. Both variants compose: per-harness preamble + per-harness process body + shared blocks. Rendered prompt MUST be byte-identical (or whitespace-only-equivalent) to current output. Plan: /tmp/story-12-final.md §B1. Hard dep on Story 10 prompt edits if running concurrently.",
+    "acceptance": "AC1: Both variants share \u003e=4 named instruction-block constants; no shared block text duplicated across variants in source. AC6: All existing prompt tests pass unchanged (execute_bead_evidence_path_test.go, review_verdict_test.go, execute_bead_failure_mode_test.go). Rendered prompt is byte-identical to pre-refactor output (or only whitespace differences) — verify with golden fixture or diff.",
+    "parent": "ddx-a61bf8ee",
+    "labels": [
+      "phase:2",
+      "story:12",
+      "tier:cheap"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:56:00Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T11:56:00.536195171Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T115600-64bd7a2c",
+    "prompt": ".ddx/executions/20260502T115600-64bd7a2c/prompt.md",
+    "manifest": ".ddx/executions/20260502T115600-64bd7a2c/manifest.json",
+    "result": ".ddx/executions/20260502T115600-64bd7a2c/result.json",
+    "checks": ".ddx/executions/20260502T115600-64bd7a2c/checks.json",
+    "usage": ".ddx/executions/20260502T115600-64bd7a2c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4d7e1d93-20260502T115600-64bd7a2c"
+  }
+}
