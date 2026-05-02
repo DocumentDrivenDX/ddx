@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T145654-ed938fe4",
+  "bead_id": "ddx-b9993722",
+  "base_rev": "15b2c5f91144504a358d70f462a488b289d47c41",
+  "created_at": "2026-05-02T14:56:55.42284231Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b9993722",
+    "title": "perf: FEAT-008 + TP-002 measurement contract",
+    "description": "Author the measurement contract for artifact listing performance. FEAT-008 amendment + TP-002 update. Provisional budgets used for design; gating numbers locked after baseline measurement (B7-C1).",
+    "acceptance": "1. FEAT-008 has perf section with provisional budgets. 2. TP-002 has measurement methodology. 3. Triggers for revisit explicit (infinite scroll, auto-prefetch, \u003e500-1000 DOM rows, sticky group headers).",
+    "parent": "ddx-97335425",
+    "labels": [
+      "phase:2",
+      "story:7",
+      "area:specs",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:56:54Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T14:56:54.185895604Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T145654-ed938fe4",
+    "prompt": ".ddx/executions/20260502T145654-ed938fe4/prompt.md",
+    "manifest": ".ddx/executions/20260502T145654-ed938fe4/manifest.json",
+    "result": ".ddx/executions/20260502T145654-ed938fe4/result.json",
+    "checks": ".ddx/executions/20260502T145654-ed938fe4/checks.json",
+    "usage": ".ddx/executions/20260502T145654-ed938fe4/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b9993722-20260502T145654-ed938fe4"
+  }
+}
