@@ -553,6 +553,38 @@
       },
       "additionalProperties": false
     },
+    "triage": {
+      "type": "object",
+      "description": "Post-attempt triage decision policy used by the drain loop after each terminal event. Distinct from agent.triage (the pre-claim complexity gate).",
+      "properties": {
+        "policies": {
+          "type": "object",
+          "description": "Per-failure-mode action ladders. Each rung is the action returned the nth time the mode is seen in a bead's history.",
+          "additionalProperties": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "re_attempt_with_context",
+                "escalate_tier",
+                "retry_with_backoff",
+                "file_followup",
+                "needs_human"
+              ]
+            }
+          },
+          "propertyNames": {
+            "enum": [
+              "review_block",
+              "lock_contention",
+              "execution_failed",
+              "no_changes"
+            ]
+          }
+        }
+      },
+      "additionalProperties": false
+    },
     "review_max_retries": {
       "type": "integer",
       "minimum": 0,
