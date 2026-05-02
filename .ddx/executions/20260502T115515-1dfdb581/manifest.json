@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T115515-1dfdb581",
+  "bead_id": "ddx-921616ea",
+  "base_rev": "480240075703c10f6859bae5b741c8433a422cc9",
+  "created_at": "2026-05-02T11:55:16.414519682Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-921616ea",
+    "title": "Story 13: metric artifact type",
+    "description": "Sub-epic for Story 13. Full plan at /tmp/story-13-final.md. Children listed under this epic carry the testable ACs.",
+    "acceptance": "All child beads closed. Locked decisions from the planning round honored.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "story:13"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:55:15Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T11:55:15.248025529Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T115515-1dfdb581",
+    "prompt": ".ddx/executions/20260502T115515-1dfdb581/prompt.md",
+    "manifest": ".ddx/executions/20260502T115515-1dfdb581/manifest.json",
+    "result": ".ddx/executions/20260502T115515-1dfdb581/result.json",
+    "checks": ".ddx/executions/20260502T115515-1dfdb581/checks.json",
+    "usage": ".ddx/executions/20260502T115515-1dfdb581/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-921616ea-20260502T115515-1dfdb581"
+  }
+}
