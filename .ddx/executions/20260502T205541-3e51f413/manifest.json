@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260502T205541-3e51f413",
+  "bead_id": "ddx-e3f25fdb",
+  "base_rev": "2aa5f244aeac5abb8e51113eef0b7608e27b7982",
+  "created_at": "2026-05-02T20:55:42.281651669Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e3f25fdb",
+    "title": "TD housekeeping: hygiene-bead AC TD-NNN substitution + migration survey across active+archive+cross-repo",
+    "description": "Sibling of ddx-673833f4. After the TD lands with a real TD-NNN number, two housekeeping tasks:\n\n1. Substitute the real TD-NNN reference in the AC text of all 5 hygiene beads (currently they say 'TD-NNN NoChangesContract' etc. with placeholder). Beads to patch: ddx-b24e9630, ddx-3c154349, ddx-aede917d, ddx-c6e3db02, ddx-da11a34a.\n\n2. Migration survey: enumerate ALL persisted statuses across:\n   - Active beads.jsonl in this DDx repo (verified today: only open/in_progress/closed)\n   - Archive .ddx/beads-archive.jsonl (untested; likely many old beads with possibly non-canonical statuses)\n   - Cross-repo: ~/Projects/agent (Fizeau bead store), ~/Projects/axon (axon bead store)\n\nIf non-canonical statuses surface anywhere, file a child migration bead. Otherwise document as no-op.",
+    "acceptance": "1. All 5 hygiene beads have their AC text updated to substitute 'TD-NNN' with the concrete TD number (e.g., 'TD-026 NoChangesContract'). 2. Migration survey output captured under .ddx/executions/\u003crun-id\u003e/migration-survey.md showing distinct statuses per repo + active/archive split. 3. If non-canonical statuses exist anywhere, child migration bead filed and linked in the survey doc. 4. If no non-canonical statuses, survey doc explicitly notes 'no migration needed'.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:beads",
+      "kind:housekeeping"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T20:55:41Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3924346",
+      "execute-loop-heartbeat-at": "2026-05-02T20:55:41.351352763Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T205541-3e51f413",
+    "prompt": ".ddx/executions/20260502T205541-3e51f413/prompt.md",
+    "manifest": ".ddx/executions/20260502T205541-3e51f413/manifest.json",
+    "result": ".ddx/executions/20260502T205541-3e51f413/result.json",
+    "checks": ".ddx/executions/20260502T205541-3e51f413/checks.json",
+    "usage": ".ddx/executions/20260502T205541-3e51f413/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e3f25fdb-20260502T205541-3e51f413"
+  },
+  "prompt_sha": "5e5235576a7f8536e47a06503093dc67b236e9218e92ed3ad88f28a136ff6c1e"
+}
