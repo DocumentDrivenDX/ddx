@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T115056-74717f33",
+  "bead_id": "ddx-86ccbb75",
+  "base_rev": "4d9b0d3ce5f3689ec51b122468a8e5655276152a",
+  "created_at": "2026-05-02T11:50:57.218023361Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-86ccbb75",
+    "title": "Story 3: doc graph force-directed layout (no overlap)",
+    "description": "Sub-epic for Story 3. Full plan at /tmp/story-3-final.md. Children listed under this epic carry the testable ACs.",
+    "acceptance": "All child beads closed. Locked decisions from the planning round honored.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "story:3"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:50:56Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T11:50:56.068383971Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T115056-74717f33",
+    "prompt": ".ddx/executions/20260502T115056-74717f33/prompt.md",
+    "manifest": ".ddx/executions/20260502T115056-74717f33/manifest.json",
+    "result": ".ddx/executions/20260502T115056-74717f33/result.json",
+    "checks": ".ddx/executions/20260502T115056-74717f33/checks.json",
+    "usage": ".ddx/executions/20260502T115056-74717f33/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-86ccbb75-20260502T115056-74717f33"
+  }
+}
