@@ -1,0 +1,64 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only execution evidence (manifest.json, result.json). No ADR-007, FEAT-026, or amendments to FEAT-020/FEAT-021 are present in the changed files. Cannot verify any acceptance criteria.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "ADR-007 not authored in this diff",
+      "location": "docs/helix/"
+    },
+    {
+      "severity": "block",
+      "summary": "FEAT-026 not authored in this diff",
+      "location": "docs/helix/"
+    },
+    {
+      "severity": "block",
+      "summary": "FEAT-020 and FEAT-021 amendments not present in this diff",
+      "location": "docs/helix/"
+    },
+    {
+      "severity": "block",
+      "summary": "No evidence of ddx doc audit being run/clean",
+      "location": ".ddx/executions/20260502T140109-14791d87/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 577,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T140109-14791d87/manifest.json",
+          ".ddx/executions/20260502T140109-14791d87/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3582,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 5965,
+    "output_bytes": 775,
+    "elapsed_ms": 7870,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
