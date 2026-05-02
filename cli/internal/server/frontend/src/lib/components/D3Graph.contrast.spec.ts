@@ -5,15 +5,13 @@ import { dirname, resolve } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const graphSource = readFileSync(resolve(here, './D3Graph.svelte'), 'utf8');
+const cssSource = readFileSync(resolve(here, '../../app.css'), 'utf8');
 
-// Token values mirrored from tailwind.config.js semanticColors. If those move,
-// update both sides — this test exists to lock the WCAG contrast of edge ink
-// against the canvas backgrounds the graph paints onto.
+// Canvas backgrounds the graph paints onto. Mirrored from tailwind.config.js
+// semanticColors — if those move, update both sides.
 const tokens = {
 	'bg-canvas': '#F4EFE6',
 	'dark-bg-canvas': '#1A1815',
-	'fg-muted': '#4B5563',
-	'dark-fg-muted': '#B8AF9C',
 	'border-line': '#E4DDD0',
 	'dark-border-line': '#34302A'
 };
@@ -38,6 +36,21 @@ function contrast(a: string, b: string): number {
 	return (hi + 0.05) / (lo + 0.05);
 }
 
+function readVar(scope: 'light' | 'dark', name: string): string {
+	// CSS is split into a light block (":root, :root.light, .light") and a dark
+	// block (":root.dark, .dark"). Grab the body for the requested scope and
+	// pull the variable definition out of it.
+	const blockRe =
+		scope === 'dark'
+			? /:root\.dark,\s*\n?\s*\.dark\s*\{([\s\S]*?)\}/
+			: /:root,\s*\n?\s*:root\.light,\s*\n?\s*\.light\s*\{([\s\S]*?)\}/;
+	const block = blockRe.exec(cssSource);
+	if (!block) throw new Error(`could not locate ${scope} block in app.css`);
+	const m = new RegExp(`--${name}\\s*:\\s*(#[0-9A-Fa-f]{6})`).exec(block[1]);
+	if (!m) throw new Error(`--${name} not found in ${scope} block`);
+	return m[1];
+}
+
 describe('D3Graph edge ink', () => {
 	it('uses fg-muted tokens for edge stroke and arrowhead fill (not border-line)', () => {
 		// Tailwind v4 only generates text-* utilities for these custom tokens, so
@@ -48,13 +61,15 @@ describe('D3Graph edge ink', () => {
 		expect(graphSource).toMatch(/\.attr\(\s*'stroke'\s*,\s*'currentColor'\s*\)/);
 		expect(graphSource).toMatch(/\.attr\(\s*'fill'\s*,\s*'currentColor'\s*\)/);
 		expect(graphSource).not.toMatch(/stroke-border-line|fill-border-line/);
+		// Subtlety must be carried by color, not alpha — no stroke-opacity attr.
+		expect(graphSource).not.toMatch(/stroke-opacity/);
 	});
 
-	it('chosen edge tokens meet WCAG non-text 3:1 against canvas in light and dark mode', () => {
-		const light = contrast(tokens['fg-muted'], tokens['bg-canvas']);
-		const dark = contrast(tokens['dark-fg-muted'], tokens['dark-bg-canvas']);
-		expect(light).toBeGreaterThanOrEqual(3);
-		expect(dark).toBeGreaterThanOrEqual(3);
+	it('--graph-edge resolves to a value with WCAG non-text 3:1 against canvas in both themes', () => {
+		const lightEdge = readVar('light', 'graph-edge');
+		const darkEdge = readVar('dark', 'graph-edge');
+		expect(contrast(lightEdge, tokens['bg-canvas'])).toBeGreaterThanOrEqual(3);
+		expect(contrast(darkEdge, tokens['dark-bg-canvas'])).toBeGreaterThanOrEqual(3);
 	});
 
 	it('proves the previous border-line tokens were below the 3:1 threshold (regression guard)', () => {

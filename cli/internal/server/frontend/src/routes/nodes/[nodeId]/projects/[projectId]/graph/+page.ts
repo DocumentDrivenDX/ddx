@@ -60,6 +60,7 @@ interface RawGraphDocument {
 	title: string
 	dependsOn: string[]
 	dependents: string[]
+	staleness?: string
 }
 
 interface DocGraph {
@@ -108,7 +109,7 @@ export const load: PageLoad = async ({ fetch, url }) => {
 
 	const documents: GraphDocument[] = graph.documents.map((doc) => ({
 		...doc,
-		staleness: staleIds.has(doc.id) ? 'stale' : 'fresh',
+		staleness: doc.staleness ?? (staleIds.has(doc.id) ? 'stale' : 'fresh'),
 		mediaType: mediaTypeFromPath(doc.path)
 	}))
 

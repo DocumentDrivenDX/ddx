@@ -53,7 +53,7 @@ interface GraphIssueFixture {
 }
 
 function makeGraphResponse(
-	docs = GRAPH_DOCS,
+	docs: readonly { id: string; path: string; title: string; dependsOn: string[]; dependents: string[]; staleness?: string }[] = GRAPH_DOCS,
 	warnings: string[] = [],
 	issues: GraphIssueFixture[] = []
 ) {
@@ -75,9 +75,11 @@ function makeGraphResponse(
 /**
  * Set up GraphQL route mocking for the graph page.
  */
+type FixtureDoc = (typeof GRAPH_DOCS)[number] & { staleness?: string };
+
 async function mockGraphQL(
 	page: import('@playwright/test').Page,
-	docs = GRAPH_DOCS,
+	docs: readonly FixtureDoc[] = GRAPH_DOCS,
 	warnings: string[] = [],
 	issues: GraphIssueFixture[] = [],
 	staleDocIds: string[] = []
