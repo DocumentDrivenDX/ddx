@@ -18,7 +18,7 @@ import (
 
 // failingReviewer always returns the given class as a typed review-error.
 func failingReviewer(class string) BeadReviewerFunc {
-	return BeadReviewerFunc(func(_ context.Context, _, resultRev, _, _ string) (*ReviewResult, error) {
+	return BeadReviewerFunc(func(_ context.Context, _, resultRev string, _ ImplementerRouting) (*ReviewResult, error) {
 		return &ReviewResult{
 				Verdict:   VerdictBlock,
 				Error:     class,
@@ -183,7 +183,7 @@ func TestBoundedReviewRetry_NoResultRevDoesNotConsumeBudget(t *testing.T) {
 		store, first, _ := newExecuteLoopTestStore(t)
 
 		var reviewerCalls atomic.Int32
-		reviewer := BeadReviewerFunc(func(_ context.Context, _, _, _, _ string) (*ReviewResult, error) {
+		reviewer := BeadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
 			reviewerCalls.Add(1)
 			return nil, errors.New("reviewer should not be called for execution_failed iterations")
 		})
@@ -221,7 +221,7 @@ func TestBoundedReviewRetry_NoResultRevDoesNotConsumeBudget(t *testing.T) {
 		store, first, _ := newExecuteLoopTestStore(t)
 
 		var reviewerCalls atomic.Int32
-		reviewer := BeadReviewerFunc(func(_ context.Context, _, _, _, _ string) (*ReviewResult, error) {
+		reviewer := BeadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
 			reviewerCalls.Add(1)
 			return nil, errors.New("reviewer should not be called for --no-merge iterations")
 		})

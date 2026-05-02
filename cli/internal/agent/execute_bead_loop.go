@@ -116,12 +116,17 @@ func capLoopCooldown(d time.Duration) time.Duration {
 }
 
 type ExecuteBeadReport struct {
-	BeadID      string `json:"bead_id"`
-	AttemptID   string `json:"attempt_id,omitempty"`
-	WorkerID    string `json:"worker_id,omitempty"`
-	Harness     string `json:"harness,omitempty"`
-	Provider    string `json:"provider,omitempty"`
-	Model       string `json:"model,omitempty"`
+	BeadID    string `json:"bead_id"`
+	AttemptID string `json:"attempt_id,omitempty"`
+	WorkerID  string `json:"worker_id,omitempty"`
+	Harness   string `json:"harness,omitempty"`
+	Provider  string `json:"provider,omitempty"`
+	Model     string `json:"model,omitempty"`
+	// ActualPower is the routing-decision power of the model that actually
+	// served the implementer's call. Forwarded to the post-merge reviewer so
+	// it can request MinPower=actualPower+1 and bias routing toward a
+	// stronger reviewer (R4 pairing).
+	ActualPower int    `json:"actual_power,omitempty"`
 	Status      string `json:"status"`
 	Detail      string `json:"detail,omitempty"`
 	SessionID   string `json:"session_id,omitempty"`
@@ -626,7 +631,19 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 
 			if w.Reviewer != nil && !runtime.NoReview && !HasBeadLabel(candidate.Labels, "review:skip") {
-				reviewRes, reviewErr := w.Reviewer.ReviewBead(ctx, candidate.ID, report.ResultRev, report.Harness, report.Model)
+				implRouting := ImplementerRouting{
+					Harness:     report.Harness,
+					Provider:    report.Provider,
+					Model:       report.Model,
+					ActualPower: report.ActualPower,
+					Correlation: map[string]string{
+						"bead_id":    candidate.ID,
+						"attempt_id": report.AttemptID,
+						"session_id": report.SessionID,
+						"result_rev": report.ResultRev,
+					},
+				}
+				reviewRes, reviewErr := w.Reviewer.ReviewBead(ctx, candidate.ID, report.ResultRev, implRouting)
 				if reviewErr != nil {
 					// FEAT-022 §12+§14: classify the failure into the four-class
 					// taxonomy and count prior review-error events scoped to the

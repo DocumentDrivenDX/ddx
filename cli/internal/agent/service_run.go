@@ -167,6 +167,11 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 
 	providerTimeout := ResolveProviderRequestTimeout(workDir, pt.Provider, model, rcfg.ProviderRequestTimeout())
 
+	minPower := rcfg.MinPower()
+	if runtime.MinPowerOverride > 0 {
+		minPower = runtime.MinPowerOverride
+	}
+
 	req := agentlib.ServiceExecuteRequest{
 		Prompt:          promptText,
 		Model:           model,
@@ -182,7 +187,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		ProviderTimeout: providerTimeout,
 		SessionLogDir:   sessionLogDir,
 		Metadata:        runtime.Correlation,
-		MinPower:        rcfg.MinPower(),
+		MinPower:        minPower,
 		MaxPower:        rcfg.MaxPower(),
 	}
 

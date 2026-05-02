@@ -65,15 +65,16 @@ type ExecuteBeadResult struct {
 	// operators diagnose silent commit failures before the worktree is cleaned up.
 	NoEvidencePaths []string `json:"no_evidence_paths,omitempty"`
 
-	Harness    string  `json:"harness,omitempty"`
-	Provider   string  `json:"provider,omitempty"`
-	Model      string  `json:"model,omitempty"`
-	SessionID  string  `json:"session_id,omitempty"`
-	DurationMS int     `json:"duration_ms"`
-	Tokens     int     `json:"tokens,omitempty"`
-	CostUSD    float64 `json:"cost_usd,omitempty"`
-	ExitCode   int     `json:"exit_code"`
-	Error      string  `json:"error,omitempty"`
+	Harness     string  `json:"harness,omitempty"`
+	Provider    string  `json:"provider,omitempty"`
+	Model       string  `json:"model,omitempty"`
+	ActualPower int     `json:"actual_power,omitempty"`
+	SessionID   string  `json:"session_id,omitempty"`
+	DurationMS  int     `json:"duration_ms"`
+	Tokens      int     `json:"tokens,omitempty"`
+	CostUSD     float64 `json:"cost_usd,omitempty"`
+	ExitCode    int     `json:"exit_code"`
+	Error       string  `json:"error,omitempty"`
 
 	// FailureMode classifies why an execution did not land cleanly. Empty
 	// when the bead was merged (task_succeeded landing outcome). Populated
@@ -780,6 +781,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			Harness:      resultHarness,
 			Provider:     resultProvider,
 			Model:        resultModel,
+			ActualPower:  actualPower,
 			SessionID:    sessionID,
 			DurationMS:   int(finishedAt.Sub(startedAt).Milliseconds()),
 			Tokens:       tokens,

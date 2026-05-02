@@ -83,6 +83,11 @@ type AgentRunRuntime struct {
 	HarnessOverride     string
 	ModelOverride       string
 	PermissionsOverride string
+	// MinPowerOverride, when > 0, overrides rcfg.MinPower() for this single
+	// invocation. Used by the post-merge reviewer to pin MinPower above the
+	// implementer's actual selected power, biasing routing toward a stronger
+	// reviewer model (R4 pairing: reviewer >= impl + 1 power).
+	MinPowerOverride int
 }
 
 // Result holds the output of an agent invocation.

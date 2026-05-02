@@ -127,7 +127,7 @@ func TestReviewerJSONHappyPath(t *testing.T) {
 		}},
 	}
 
-	res, err := reviewer.ReviewBead(context.Background(), "ddx-review-happy", head, "claude", "claude-sonnet")
+	res, err := reviewer.ReviewBead(context.Background(), "ddx-review-happy", head, ImplementerRouting{Harness: "claude", Model: "claude-sonnet"})
 	require.NoError(t, err)
 	require.NotNil(t, res)
 	assert.Equal(t, VerdictApprove, res.Verdict)
@@ -158,7 +158,7 @@ func TestReviewerEmitsJSONContract(t *testing.T) {
 		}},
 	}
 
-	res, err := reviewer.ReviewBead(context.Background(), "ddx-review-happy", head, "claude", "claude-sonnet")
+	res, err := reviewer.ReviewBead(context.Background(), "ddx-review-happy", head, ImplementerRouting{Harness: "claude", Model: "claude-sonnet"})
 	require.Error(t, err, "markdown wrapped output must be rejected — the markdown extractor is gone")
 	require.NotNil(t, res)
 	assert.Equal(t, evidence.OutcomeReviewUnparseable, res.Error,

@@ -57,7 +57,7 @@ func pinCapturingExecutor(spec pinPropagationSpec, captured *[]capturedRequest, 
 // review-driven reopen on the first iteration and let the second iteration
 // close cleanly.
 func alternatingReviewer(firstVerdict Verdict, calls *atomic.Int32) BeadReviewerFunc {
-	return BeadReviewerFunc(func(_ context.Context, _, resultRev, _, _ string) (*ReviewResult, error) {
+	return BeadReviewerFunc(func(_ context.Context, _, resultRev string, _ ImplementerRouting) (*ReviewResult, error) {
 		n := calls.Add(1)
 		verdict := VerdictApprove
 		rationale := "looks good"

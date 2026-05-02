@@ -74,7 +74,7 @@ func TestEvidenceAssemblyTelemetry(t *testing.T) {
 			},
 		}
 
-		res, err := reviewer.ReviewBead(context.Background(), "ddx-evid-telem", head, "claude", "claude-sonnet")
+		res, err := reviewer.ReviewBead(context.Background(), "ddx-evid-telem", head, ImplementerRouting{Harness: "claude", Model: "claude-sonnet"})
 		require.NoError(t, err)
 		require.NotNil(t, res)
 		require.NotEmpty(t, res.ExecutionDir)

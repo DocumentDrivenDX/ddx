@@ -20,6 +20,29 @@ import (
 	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
+// ReviewPairingDegradedEventKind is the kind:review-pairing-degraded event
+// kind appended to the bead when the post-merge reviewer was routed to the
+// same provider as the implementer. R4 (different reviewer) is best-effort
+// emergent: bumping MinPower usually picks a different candidate, but the
+// guarantee is not absolute. The event surfaces the degradation so operators
+// can see when reviewer diversity collapsed.
+const ReviewPairingDegradedEventKind = "review-pairing-degraded"
+
+// ImplementerRouting captures the implementer's resolved routing details so
+// the post-merge reviewer can build a paired ExecuteRequest with Role=reviewer,
+// the same correlation, and MinPower bumped one above the implementer's
+// actual selected power (R4 pairing).
+type ImplementerRouting struct {
+	Harness     string
+	Provider    string
+	Model       string
+	ActualPower int
+	// Correlation is the implementer's correlation map. The reviewer copies
+	// its keys into its own dispatch metadata so events / session log /
+	// aggregations can join the two calls.
+	Correlation map[string]string
+}
+
 // Verdict is the outcome of a post-merge bead review.
 type Verdict string
 
@@ -34,18 +57,19 @@ const (
 
 // ReviewResult is the structured outcome of a post-merge bead review.
 type ReviewResult struct {
-	Verdict         Verdict    `json:"verdict"`
-	Rationale       string     `json:"rationale,omitempty"`
-	PerAC           []ReviewAC `json:"per_ac,omitempty"`
-	RawOutput       string     `json:"raw_output,omitempty"`
-	ReviewerHarness string     `json:"reviewer_harness,omitempty"`
-	ReviewerModel   string     `json:"reviewer_model,omitempty"`
-	SessionID       string     `json:"session_id,omitempty"`
-	BaseRev         string     `json:"base_rev,omitempty"`
-	ResultRev       string     `json:"result_rev,omitempty"`
-	ExecutionDir    string     `json:"execution_dir,omitempty"`
-	DurationMS      int        `json:"duration_ms,omitempty"`
-	Error           string     `json:"error,omitempty"`
+	Verdict          Verdict    `json:"verdict"`
+	Rationale        string     `json:"rationale,omitempty"`
+	PerAC            []ReviewAC `json:"per_ac,omitempty"`
+	RawOutput        string     `json:"raw_output,omitempty"`
+	ReviewerHarness  string     `json:"reviewer_harness,omitempty"`
+	ReviewerModel    string     `json:"reviewer_model,omitempty"`
+	ReviewerProvider string     `json:"reviewer_provider,omitempty"`
+	SessionID        string     `json:"session_id,omitempty"`
+	BaseRev          string     `json:"base_rev,omitempty"`
+	ResultRev        string     `json:"result_rev,omitempty"`
+	ExecutionDir     string     `json:"execution_dir,omitempty"`
+	DurationMS       int        `json:"duration_ms,omitempty"`
+	Error            string     `json:"error,omitempty"`
 	// InputBytes and OutputBytes are the FEAT-022 §16 byte counters used to
 	// populate the compact summary appended to review and review-error event
 	// bodies. InputBytes is the assembled prompt size; OutputBytes is the
@@ -106,14 +130,14 @@ type BeadReader interface {
 
 // BeadReviewer runs a post-merge review for a completed bead.
 type BeadReviewer interface {
-	ReviewBead(ctx context.Context, beadID, resultRev, implHarness, implModel string) (*ReviewResult, error)
+	ReviewBead(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewResult, error)
 }
 
 // BeadReviewerFunc is a functional adapter implementing BeadReviewer.
-type BeadReviewerFunc func(ctx context.Context, beadID, resultRev, implHarness, implModel string) (*ReviewResult, error)
+type BeadReviewerFunc func(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewResult, error)
 
-func (f BeadReviewerFunc) ReviewBead(ctx context.Context, beadID, resultRev, implHarness, implModel string) (*ReviewResult, error) {
-	return f(ctx, beadID, resultRev, implHarness, implModel)
+func (f BeadReviewerFunc) ReviewBead(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewResult, error) {
+	return f(ctx, beadID, resultRev, impl)
 }
 
 // beadReviewInstructions is the review contract embedded in the prompt.
@@ -433,10 +457,69 @@ type DefaultBeadReviewer struct {
 	// the review prompt (FEAT-022). When zero-valued, evidence.DefaultCaps
 	// applies.
 	Caps evidence.Caps
+	// BeadEvents, when non-nil, is used to append the
+	// kind:review-pairing-degraded event when the reviewer's resolved
+	// provider matches the implementer's. Optional: nil disables the
+	// telemetry emission while preserving the rest of the review flow.
+	BeadEvents BeadEventAppender
+}
+
+// BuildReviewExecuteRequest constructs the AgentRunRuntime used for the
+// post-merge reviewer dispatch. It pins the reviewer harness/model, attaches
+// the implementer's correlation map (with role=reviewer overlaid), and
+// derives MinPower as impl.ActualPower + 1 so routing is biased toward a
+// stronger candidate than the implementer's actual selection. The returned
+// runtime is missing per-call plumbing (Prompt/PromptFile, WorkDir,
+// SessionLogDirOverride) — the caller fills those in before dispatching.
+func BuildReviewExecuteRequest(impl ImplementerRouting, reviewerHarness, reviewerModel string) AgentRunRuntime {
+	correlation := map[string]string{}
+	for k, v := range impl.Correlation {
+		correlation[k] = v
+	}
+	correlation["role"] = "reviewer"
+	if impl.Harness != "" {
+		correlation["impl_harness"] = impl.Harness
+	}
+	if impl.Provider != "" {
+		correlation["impl_provider"] = impl.Provider
+	}
+	if impl.Model != "" {
+		correlation["impl_model"] = impl.Model
+	}
+	if impl.ActualPower > 0 {
+		correlation["impl_actual_power"] = fmt.Sprintf("%d", impl.ActualPower)
+	}
+	minPower := 0
+	if impl.ActualPower > 0 {
+		minPower = impl.ActualPower + 1
+	}
+	return AgentRunRuntime{
+		HarnessOverride:  reviewerHarness,
+		ModelOverride:    reviewerModel,
+		MinPowerOverride: minPower,
+		Correlation:      correlation,
+	}
+}
+
+// reviewPairingDegradedBody renders the kind:review-pairing-degraded event
+// body. The body carries both implementer and reviewer routing details so
+// operators can see exactly which routes converged.
+func reviewPairingDegradedBody(impl ImplementerRouting, reviewerHarness, reviewerProvider, reviewerModel string, reviewerPower int) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "impl_harness=%s\n", impl.Harness)
+	fmt.Fprintf(&b, "impl_provider=%s\n", impl.Provider)
+	fmt.Fprintf(&b, "impl_model=%s\n", impl.Model)
+	fmt.Fprintf(&b, "impl_actual_power=%d\n", impl.ActualPower)
+	fmt.Fprintf(&b, "reviewer_harness=%s\n", reviewerHarness)
+	fmt.Fprintf(&b, "reviewer_provider=%s\n", reviewerProvider)
+	fmt.Fprintf(&b, "reviewer_model=%s\n", reviewerModel)
+	fmt.Fprintf(&b, "reviewer_actual_power=%d\n", reviewerPower)
+	fmt.Fprintf(&b, "min_power_requested=%d\n", impl.ActualPower+1)
+	return b.String()
 }
 
 // ReviewBead implements BeadReviewer.
-func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev, implHarness, _ string) (*ReviewResult, error) {
+func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewResult, error) {
 	b, err := r.BeadStore.Get(beadID)
 	if err != nil {
 		return nil, fmt.Errorf("reviewer: get bead %s: %w", beadID, err)
@@ -514,14 +597,14 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 			evidence.OutcomeReviewContextOverflow, len(prompt), caps.MaxPromptBytes, artifacts.DirRel)
 	}
 
-	// Resolve reviewer harness and model.
+	// Resolve reviewer harness and model. The implementer's harness is
+	// intentionally NOT used as a fallback — defaulting to it would directly
+	// violate R4 (different reviewer). When the configured reviewer harness
+	// is empty we fall through to a fixed default ("claude") regardless of
+	// what harness ran the implementer.
 	reviewHarness := r.Harness
 	if reviewHarness == "" {
-		if implHarness != "" {
-			reviewHarness = implHarness
-		} else {
-			reviewHarness = "claude" // default reviewer harness
-		}
+		reviewHarness = "claude"
 	}
 	reviewModel := r.Model
 	if reviewModel == "" {
@@ -529,12 +612,9 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 	}
 
 	start := time.Now()
-	runRuntime := AgentRunRuntime{
-		Prompt:          prompt,
-		WorkDir:         r.ProjectRoot,
-		HarnessOverride: reviewHarness,
-		ModelOverride:   reviewModel,
-	}
+	runRuntime := BuildReviewExecuteRequest(impl, reviewHarness, reviewModel)
+	runRuntime.Prompt = prompt
+	runRuntime.WorkDir = r.ProjectRoot
 	result, runErr := r.dispatchReviewRun(ctx, runRuntime)
 
 	durationMS := int(time.Since(start).Milliseconds())
@@ -583,6 +663,8 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 
 	actualHarness := reviewHarness
 	actualModel := reviewModel
+	actualProvider := ""
+	actualPower := 0
 	if result != nil {
 		if result.Harness != "" {
 			actualHarness = result.Harness
@@ -590,6 +672,8 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 		if result.Model != "" {
 			actualModel = result.Model
 		}
+		actualProvider = result.Provider
+		actualPower = result.ActualPower
 		durationMS = result.DurationMS
 	}
 
@@ -637,18 +721,34 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev,
 		Model:       actualModel,
 	}
 	reviewRes := &ReviewResult{
-		Verdict:         strictVerdict,
-		Rationale:       rationale,
-		RawOutput:       output,
-		ReviewerHarness: actualHarness,
-		ReviewerModel:   actualModel,
-		SessionID:       sessionID,
-		BaseRev:         baseRev,
-		ResultRev:       resultRev,
-		ExecutionDir:    artifacts.DirRel,
-		DurationMS:      durationMS,
-		InputBytes:      telemetry.InputBytes,
-		OutputBytes:     telemetry.OutputBytes,
+		Verdict:          strictVerdict,
+		Rationale:        rationale,
+		RawOutput:        output,
+		ReviewerHarness:  actualHarness,
+		ReviewerModel:    actualModel,
+		ReviewerProvider: actualProvider,
+		SessionID:        sessionID,
+		BaseRev:          baseRev,
+		ResultRev:        resultRev,
+		ExecutionDir:     artifacts.DirRel,
+		DurationMS:       durationMS,
+		InputBytes:       telemetry.InputBytes,
+		OutputBytes:      telemetry.OutputBytes,
+	}
+
+	// R4 pairing-degradation telemetry: when MinPower=actualPower+1 fails
+	// to push the reviewer onto a different provider than the implementer,
+	// surface a kind:review-pairing-degraded event so operators can see the
+	// regression. Best-effort only — emission failures never affect the
+	// review outcome itself.
+	if r.BeadEvents != nil && actualProvider != "" && impl.Provider != "" && actualProvider == impl.Provider {
+		_ = r.BeadEvents.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      ReviewPairingDegradedEventKind,
+			Summary:   fmt.Sprintf("reviewer pinned to same provider as implementer (%s)", impl.Provider),
+			Body:      reviewPairingDegradedBody(impl, actualHarness, actualProvider, actualModel, actualPower),
+			Source:    "ddx agent execute-loop",
+			CreatedAt: time.Now().UTC(),
+		})
 	}
 	_ = writeReviewArtifacts(artifacts, reviewArtifactManifest{
 		Harness:          actualHarness,
