@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T115424-9505ed61",
+  "bead_id": "ddx-e34994e2",
+  "base_rev": "8fffb19eb3e03f8f69f872f033c9d2c0757b12c9",
+  "created_at": "2026-05-02T11:54:25.567937729Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e34994e2",
+    "title": "Story 10: automatic escalation + always-review",
+    "description": "Sub-epic for Story 10. Full plan at /tmp/story-10-final.md. Children listed under this epic carry the testable ACs.",
+    "acceptance": "All child beads closed. Locked decisions from the planning round honored.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "story:10"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:54:24Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T11:54:24.402341325Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T115424-9505ed61",
+    "prompt": ".ddx/executions/20260502T115424-9505ed61/prompt.md",
+    "manifest": ".ddx/executions/20260502T115424-9505ed61/manifest.json",
+    "result": ".ddx/executions/20260502T115424-9505ed61/result.json",
+    "checks": ".ddx/executions/20260502T115424-9505ed61/checks.json",
+    "usage": ".ddx/executions/20260502T115424-9505ed61/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e34994e2-20260502T115424-9505ed61"
+  }
+}
