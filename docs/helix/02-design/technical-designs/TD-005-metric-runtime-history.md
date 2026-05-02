@@ -225,3 +225,37 @@ Field names are generic scalars, not unit-specific. The `unit` field in the
   prints them in observed order.
 - Metric trend aggregates the `result.metric` series without rewriting any
   stored record.
+
+## Collection Ownership and v1 Amendments
+
+Metric history is owned by the generic `exec-runs` collection defined in
+TD-010. There is no separate `metric-runs` collection and no
+`.ddx/metrics/` runtime store. `ddx metric` is a projection over
+`exec-runs` filtered by `MET-*` artifact id; metric reads and writes flow
+through the same execution substrate as every other `ddx exec` consumer.
+
+The following v1 amendments apply to the metric projection without
+changing the collection layout:
+
+- **`schema_version`** — the `metric:` frontmatter block on a `MET-*`
+  artifact (see FEAT-005) carries `schema_version: 1`. Metric tooling
+  refuses to load a `MET-*` artifact whose `schema_version` is absent or
+  not equal to the value(s) it understands. Rows already persisted in
+  `exec-runs` remain readable regardless of the artifact's current
+  `schema_version`; the version gates artifact interpretation, not
+  history reads.
+- **Mixed-unit refusal in compare and trend** — `ddx metric compare` and
+  `ddx metric trend` refuse to operate when the selected
+  `result.metric` rows span more than one `unit`, returning an explicit
+  error. `ddx metric history` continues to surface every row but groups
+  output by `unit` so older rows under a retired unit remain visible
+  evidence rather than silently mixed into a current series.
+- **Reverse-index for `metric show`** — `ddx metric show <MET-id>`
+  resolves the set of execution definitions whose `result.metric`
+  observes the named `MET-*` artifact (the gates contributing
+  observations) by walking the docgraph plus `exec-definitions`. This is
+  a read-time projection; no new index is persisted.
+
+These amendments preserve the bead-backed `exec-definitions` /
+`exec-runs` collection ownership documented above. No rename to
+`metric-runs` is implied or planned.

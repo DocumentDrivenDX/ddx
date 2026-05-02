@@ -136,6 +136,57 @@ accessed: 2026-05-01
 Identity (`id`, `depends_on`, etc.) stays under `ddx:`; type-specific fields
 like `source_url`, `source_author`, and `accessed` live at the top level.
 
+#### Type-specific metadata example: MET
+
+Metric artifacts (`MET-*`) carry a top-level `metric:` block alongside the
+`ddx:` identity block. The block is type-specific metadata that the generic
+parser passes through inert; metric tooling (`ddx metric`, `ddx doc validate`)
+keys off it.
+
+```yaml
+---
+ddx:
+  id: MET-007
+  depends_on: [FEAT-014, SD-016]
+metric:
+  schema_version: 1            # required; v1 is the only accepted value
+  unit: ms                     # required; free-form (ms, bytes, USD, count, ...)
+  direction: lower-is-better   # required; lower-is-better | higher-is-better
+  goal: 250                    # optional; aspirational target (documentary)
+  budget: 400                  # optional; machine-checkable hard line
+  source: exec                 # required; v1 enum: exec | external
+  scope: per-attempt           # required; per-attempt | per-bead | per-feature | global
+---
+# Metric: ...
+```
+
+Field semantics:
+
+- `schema_version` — pins the metric block schema. v1 is the only accepted
+  value; future versions extend rather than replace.
+- `unit` — free-form unit string. Mixed-unit history is refused by
+  comparison and trend projections (see TD-005).
+- `direction` — must match the comparison constants used by the metric
+  runtime (`lower-is-better`, `higher-is-better`).
+- `goal` vs `budget` — `goal` is aspirational and documentary; `budget`
+  is a machine-checkable hard line. When a gate's `thresholds.ratchet`
+  observes this metric, the gate ratchet is authoritative for landing
+  decisions; `ddx doc validate` emits a warning when `budget` and the
+  observing ratchet disagree.
+- `source` — `exec` for metrics emitted by `ddx exec` runs; `external`
+  for metrics ingested from outside DDx (e.g. cost reports).
+- `scope` — declares the granularity at which the value is meaningful.
+
+`source: derived` is intentionally out of v1; it returns when a real
+derivation schema exists. `MET-*` artifacts are project-local; multi-node
+aggregation is deferred to a future MET v2.
+
+> **MET v2 backlog (informational):** derived-source metrics with a real
+> formula schema, multi-node aggregation semantics, structured acceptance-
+> criteria comparators, and per-MET dashboard wiring are deferred. None of
+> these are required by v1; they are tracked here so future work can pick
+> them up without rediscovering the shape.
+
 #### `media_type`
 
 Identifies how an artifact's bytes should be interpreted. Examples:
