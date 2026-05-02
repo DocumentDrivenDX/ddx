@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T123925-886ca4b8",
+  "bead_id": "ddx-a9edd569",
+  "base_rev": "6f7b4782ef24678cd1d5e96d2d59a6dd1ccacb64",
+  "created_at": "2026-05-02T12:39:26.473176822Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a9edd569",
+    "title": "doc-graph: label-aware collision, degree-tuned forces, bounded convergence, settle/freeze semantics",
+    "description": "Replace forceCollide(48) circle-only collision with custom quadtree force that includes label bounding boxes (labels at x=24, up to 32 chars). Tune forceManyBody and forceLink for degree distribution. Add bounded-convergence (auto-freeze after settle). Drag-end semantics: release fx/fy (codex's recommendation, not re-pin).",
+    "acceptance": "1. Custom label-aware collision force lands in D3Graph.svelte. 2. No two node circles overlap after settle on the 128-node fixture (Playwright bounding-box check). 3. Label bounding boxes do not overlap other nodes' circles after settle. 4. Settle completes within 2s (reported, not gated, per codex).",
+    "parent": "ddx-86ccbb75",
+    "labels": [
+      "phase:2",
+      "story:3",
+      "area:web",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:39:25Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T12:39:25.179129878Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T123925-886ca4b8",
+    "prompt": ".ddx/executions/20260502T123925-886ca4b8/prompt.md",
+    "manifest": ".ddx/executions/20260502T123925-886ca4b8/manifest.json",
+    "result": ".ddx/executions/20260502T123925-886ca4b8/result.json",
+    "checks": ".ddx/executions/20260502T123925-886ca4b8/checks.json",
+    "usage": ".ddx/executions/20260502T123925-886ca4b8/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a9edd569-20260502T123925-886ca4b8"
+  }
+}
