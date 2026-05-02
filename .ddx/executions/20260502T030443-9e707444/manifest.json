@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T030443-9e707444",
+  "bead_id": "ddx-d532992f",
+  "base_rev": "9a8b5b8f83dcbbe644daab24f50e2912d873831e",
+  "created_at": "2026-05-02T03:04:44.948043465Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d532992f",
+    "title": "Investigation/report beads must write evidence to .ddx/executions/, not /tmp",
+    "description": "B15a (ddx-8d51b137) wrote its investigation report to /tmp/feat-011-status.md. /tmp is outside the repo, so the post-merge review couldn't see the evidence and flagged BLOCK. Manual workaround: commit 7f943dc1 copied the report into .ddx/executions/20260502T020500-79017d32/. Pattern fix: any bead whose AC says 'output a report' or 'document findings' should write under .ddx/executions/\u003crun-id\u003e/ (or another in-repo path) so the evidence survives reboots and is reviewable. Either: (a) update the execute-bead system prompt to instruct agents to use .ddx/executions/\u003crun-id\u003e/ for investigation outputs, or (b) extend the AC template guidance in CLAUDE.md / SKILL.md to require in-repo evidence paths, or (c) both.",
+    "acceptance": "1. execute-bead system prompt (cli/internal/agent/execute_bead.go executeBeadInstructionsClaudeText/AgentText) instructs agents to write investigation/report outputs under .ddx/executions/\u003crun-id\u003e/ rather than /tmp. 2. CLAUDE.md or relevant guidance file documents the convention. 3. A test or demonstration bead with 'output a report at \u003cpath\u003e' AC writes to .ddx/executions/ when executed.",
+    "parent": "ddx-629ec5b4",
+    "labels": [
+      "process",
+      "area:agent",
+      "kind:improvement"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T03:04:43Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "execute-loop-heartbeat-at": "2026-05-02T03:04:43.355677251Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T030443-9e707444",
+    "prompt": ".ddx/executions/20260502T030443-9e707444/prompt.md",
+    "manifest": ".ddx/executions/20260502T030443-9e707444/manifest.json",
+    "result": ".ddx/executions/20260502T030443-9e707444/result.json",
+    "checks": ".ddx/executions/20260502T030443-9e707444/checks.json",
+    "usage": ".ddx/executions/20260502T030443-9e707444/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d532992f-20260502T030443-9e707444"
+  }
+}
