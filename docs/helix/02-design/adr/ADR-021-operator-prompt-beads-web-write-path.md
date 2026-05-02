@@ -189,6 +189,15 @@ trusted *peer*. The threats and mitigations:
 - **CSRF from a malicious page on the same machine.** Mitigation: strict
   `Origin`/`Host` validation and per-session CSRF token issued by the
   served HTML.
+- **DNS rebinding (attacker page resolves to 127.0.0.1 to reach the
+  loopback write surface).** Mitigation: the same strict `Host` allowlist
+  rejects requests whose `Host` header is not an exact match for the
+  configured server bind name (e.g. `localhost`, `127.0.0.1`, or the
+  ts-net hostname). Combined with the CSRF token requirement (which the
+  attacker page cannot read across origins) and the per-session
+  same-origin Origin check, a rebound DNS name cannot turn a read-only
+  visit into a write. Documented explicitly so future contributors do not
+  relax `Host` validation thinking CSRF alone is sufficient.
 - **Replay / duplicate destructive work.** Mitigation: idempotency key
   dedupe.
 
