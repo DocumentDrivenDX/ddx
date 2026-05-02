@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T132857-7e5c2228",
+  "bead_id": ".execute-bead-wt-ddx-3c154349-20260502T131050-bf2d17f5-2b64cb0a",
+  "base_rev": "3f01204dcdd4565f229c551bd384a1e67cd2eda3",
+  "created_at": "2026-05-02T13:28:59.64028369Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-3c154349-20260502T131050-bf2d17f5-2b64cb0a",
+    "title": "Triage integration: lock contention retry-with-backoff + execution_failed/no_changes paths",
+    "description": "Third child of ddx-3c154349. Depends on the triage framework child. Covers the remaining failure modes.\n\nScope:\n- Lock contention: detect 'Unable to create .git/index.lock' / staging-tracker lock errors in attempt outcomes. Triage action: retry_with_backoff (e.g. 30s, 90s, 300s) within the same drain pass before unclaiming. Sibling bead handles the underlying lock fix; this bead wires the retry decision.\n- execution_failed (substantive, not infrastructure): triage maps to escalate_tier per the existing S10 ladder; on exhaustion → needs_human. Distinguish from already-handled escalatable statuses by treating execution_failed as an explicit triage entry-point.\n- no_changes (NoChangesRationale present): triage decides whether the bead AC is genuinely satisfied (close already_satisfied — current behavior) or whether to file a clarification follow-up bead (when rationale doesn't quote AC items).\n- Tests for: lock-error → retry succeeds on second attempt; lock-error → escalate after backoff exhaustion; execution_failed → escalate_tier; no_changes with weak rationale → file follow-up.\n\nOut of scope:\n- The actual git-lock infrastructure fix (sibling bead).\n- Review BLOCK/REQUEST_CHANGES (sibling child).",
+    "acceptance": "1. Lock contention errors classified and routed to retry_with_backoff with at least 3 backoff steps before escalation. 2. execution_failed enters triage and produces escalate_tier or needs_human depending on attempt count. 3. no_changes with a rationale that does not cite AC items results in a clarification follow-up bead being filed (and the original closed). 4. Tests cover lock-error retry success, lock-error backoff exhaustion, execution_failed escalation, no_changes follow-up.",
+    "parent": "ddx-3c154349",
+    "labels": [
+      "phase:2",
+      " story:10",
+      " area:agent",
+      " kind:fix"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T13:28:57Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T13:28:57.850108426Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T132857-7e5c2228",
+    "prompt": ".ddx/executions/20260502T132857-7e5c2228/prompt.md",
+    "manifest": ".ddx/executions/20260502T132857-7e5c2228/manifest.json",
+    "result": ".ddx/executions/20260502T132857-7e5c2228/result.json",
+    "checks": ".ddx/executions/20260502T132857-7e5c2228/checks.json",
+    "usage": ".ddx/executions/20260502T132857-7e5c2228/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-3c154349-20260502T131050-bf2d17f5-2b64cb0a-20260502T132857-7e5c2228"
+  }
+}
