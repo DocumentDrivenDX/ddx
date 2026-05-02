@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "The curated noun-verb reference cleanly mirrors CLAUDE.md's CLI Command Overview, links to the auto-generated tree, and is explicitly marked hand-curated in both YAML front matter and an HTML comment. All four acceptance criteria are met."
+}
