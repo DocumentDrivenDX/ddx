@@ -1,0 +1,74 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only execution evidence (manifest.json, result.json). No implementation of ADR-004 — no collection abstraction, archive split, attachments sidecar, or migration tool. AC items 1–5 are unmet.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No code changes implementing collection abstraction; only attempt evidence files added.",
+      "location": ".ddx/executions/20260502T195413-f9c20386/"
+    },
+    {
+      "severity": "block",
+      "summary": "AC1 not demonstrated: no evidence child beads (ddx-2f453147, ddx-f7f09b6e, ddx-cd1f0f7e, ddx-8fcfe2a7, ddx-cb2eb7e3, ddx-9f7a04f4) are closed.",
+      "location": ".ddx/beads.jsonl"
+    },
+    {
+      "severity": "block",
+      "summary": "AC2 unmet: no active+archive split mechanism implemented.",
+      "location": "cli/internal/bead/"
+    },
+    {
+      "severity": "block",
+      "summary": "AC3 unmet: no read-through across active+archive in list/show/ready/blocked/work commands.",
+      "location": "cli/cmd/bead_*.go"
+    },
+    {
+      "severity": "block",
+      "summary": "AC4 unmet: no bd/br interchange test changes or evidence.",
+      "location": "cli/internal/bead/"
+    },
+    {
+      "severity": "block",
+      "summary": "AC5 unmet: no migration command (e.g. 'ddx bead migrate-archive') implemented.",
+      "location": "cli/cmd/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 3051,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T195413-f9c20386/manifest.json",
+          ".ddx/executions/20260502T195413-f9c20386/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 13001,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 17858,
+    "output_bytes": 1293,
+    "elapsed_ms": 13942,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
