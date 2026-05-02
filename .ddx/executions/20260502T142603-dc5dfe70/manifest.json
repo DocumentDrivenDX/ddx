@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T142603-dc5dfe70",
+  "bead_id": "ddx-baa1dbf2",
+  "base_rev": "bb783e6321dc07bbebfb053b224a3c58bc46ad67",
+  "created_at": "2026-05-02T14:26:05.042278601Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-baa1dbf2",
+    "title": "Story 6 B2: frontend sort dropdown + staleness chips + URL state contract for all filter params",
+    "description": "Build the artifact-listing filter UI on top of B1's GraphQL surface. See /tmp/story-6-final.md.\n\nChanges (frontend only):\n- routes/nodes/[nodeId]/projects/[projectId]/artifacts/+page.svelte: add a sort dropdown bound to the new ArtifactSort enum; add staleness chip row (e.g. all/fresh/stale).\n- +page.ts: parse and serialize URL keys q, mediaType, staleness, sort. Single source of truth: load() reads URL params; UI updates URL via goto/replaceState; load() reruns with new params.\n- Reset 'after' cursor whenever any of q/sort/mediaType/staleness changes.\n- Empty/cleared state: when all filters cleared, URL is bare /artifacts (no query string).\n\nURL contract (must match TD-NNN once published in B3): q (string), mediaType (single), staleness (single), sort (single ArtifactSort value).",
+    "acceptance": "- Sort dropdown reorders list; URL persists sort=.\n- Staleness chip filters; URL persists staleness=.\n- q/mediaType/staleness/sort compose; pasting a URL with all four reproduces the same view.\n- Clearing all filters returns URL to /artifacts.\n- Vitest URL-state round-trip test for parse/serialize of all params.\n- Playwright e2e covers: server-side q matches across pages, sort change resets pagination, staleness chip filters, URL copy/reload restores state.\n- 'cd cli/internal/server/frontend \u0026\u0026 bun run test \u0026\u0026 bun run test:e2e' passes.",
+    "parent": "ddx-4728ae0f",
+    "labels": [
+      "phase:2",
+      " story:6"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:26:03Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T14:26:03.66778662Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T142603-dc5dfe70",
+    "prompt": ".ddx/executions/20260502T142603-dc5dfe70/prompt.md",
+    "manifest": ".ddx/executions/20260502T142603-dc5dfe70/manifest.json",
+    "result": ".ddx/executions/20260502T142603-dc5dfe70/result.json",
+    "checks": ".ddx/executions/20260502T142603-dc5dfe70/checks.json",
+    "usage": ".ddx/executions/20260502T142603-dc5dfe70/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-baa1dbf2-20260502T142603-dc5dfe70"
+  }
+}

@@ -1,0 +1,73 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only an execution result.json artifact; no schema, resolver, CSRF, idempotency, audit, or test code is present to evaluate against any of the 6 acceptance criteria.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No mutation/schema changes in diff",
+      "location": "(missing)"
+    },
+    {
+      "severity": "block",
+      "summary": "No CSRF enforcement code or test visible",
+      "location": "(missing)"
+    },
+    {
+      "severity": "block",
+      "summary": "No idempotency dedupe logic or test visible",
+      "location": "(missing)"
+    },
+    {
+      "severity": "block",
+      "summary": "No audit event with identity capture visible",
+      "location": "(missing)"
+    },
+    {
+      "severity": "block",
+      "summary": "No default-status=proposed handling visible",
+      "location": "(missing)"
+    },
+    {
+      "severity": "block",
+      "summary": "No tests covering the five ACs visible",
+      "location": "(missing)"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 701,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T141636-acf8793c/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1175,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 3610,
+    "output_bytes": 930,
+    "elapsed_ms": 10480,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
