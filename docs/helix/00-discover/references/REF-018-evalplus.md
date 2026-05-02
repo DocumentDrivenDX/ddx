@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-018
+  status: published
 id: REF-018
 title: "EvalPlus: Rigorous Evaluation of LLM-Synthesized Code"
 kind: reference

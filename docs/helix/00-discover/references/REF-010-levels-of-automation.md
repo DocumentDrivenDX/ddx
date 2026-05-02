@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-010
+  status: published
 id: REF-010
 title: "Human and Computer Control of Undersea Teleoperators"
 kind: reference

@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-023
+  status: published
 id: REF-023
 title: "Bazel — A Fast, Scalable, Multi-Language Build System"
 kind: reference

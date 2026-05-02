@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-021
+  status: published
 id: REF-021
 title: "Event Sourcing"
 kind: reference

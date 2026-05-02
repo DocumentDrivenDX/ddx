@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-026
+  status: published
 id: REF-026
 title: "The Protection of Information in Computer Systems"
 kind: reference
