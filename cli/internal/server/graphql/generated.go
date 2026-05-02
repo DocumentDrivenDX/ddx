@@ -680,6 +680,7 @@ type ComplexityRoot struct {
 		BeadUpdate            func(childComplexity int, id string, input BeadUpdateInput) int
 		ComparisonDispatch    func(childComplexity int, arms []*ComparisonArmInput) int
 		DocumentWrite         func(childComplexity int, path string, content string) int
+		OperatorPromptSubmit  func(childComplexity int, input OperatorPromptSubmitInput) int
 		PersonaBind           func(childComplexity int, role string, persona string, projectID string) int
 		PersonaCreate         func(childComplexity int, name string, body string, projectID string) int
 		PersonaDelete         func(childComplexity int, name string, projectID string) int
@@ -697,6 +698,11 @@ type ComplexityRoot struct {
 		LastSeen  func(childComplexity int) int
 		Name      func(childComplexity int) int
 		StartedAt func(childComplexity int) int
+	}
+
+	OperatorPromptSubmitResult struct {
+		Bead         func(childComplexity int) int
+		Deduplicated func(childComplexity int) int
 	}
 
 	PageInfo struct {
@@ -1310,6 +1316,7 @@ type MutationResolver interface {
 	PersonaFork(ctx context.Context, libraryName string, newName *string, projectID string) (*Persona, error)
 	RefreshProviderModels(ctx context.Context, name string, kind ProviderKind) (*ProviderModelsResult, error)
 	ArtifactRegenerate(ctx context.Context, artifactID string) (*ArtifactRegenerateResult, error)
+	OperatorPromptSubmit(ctx context.Context, input OperatorPromptSubmitInput) (*OperatorPromptSubmitResult, error)
 }
 type QueryResolver interface {
 	Node(ctx context.Context, id string) (Node, error)
@@ -4104,6 +4111,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DocumentWrite(childComplexity, args["path"].(string), args["content"].(string)), true
+	case "Mutation.operatorPromptSubmit":
+		if e.ComplexityRoot.Mutation.OperatorPromptSubmit == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_operatorPromptSubmit_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.OperatorPromptSubmit(childComplexity, args["input"].(OperatorPromptSubmitInput)), true
 	case "Mutation.personaBind":
 		if e.ComplexityRoot.Mutation.PersonaBind == nil {
 			break
@@ -4239,6 +4257,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.NodeInfo.StartedAt(childComplexity), true
+
+	case "OperatorPromptSubmitResult.bead":
+		if e.ComplexityRoot.OperatorPromptSubmitResult.Bead == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorPromptSubmitResult.Bead(childComplexity), true
+	case "OperatorPromptSubmitResult.deduplicated":
+		if e.ComplexityRoot.OperatorPromptSubmitResult.Deduplicated == nil {
+			break
+		}
+
+		return e.ComplexityRoot.OperatorPromptSubmitResult.Deduplicated(childComplexity), true
 
 	case "PageInfo.endCursor":
 		if e.ComplexityRoot.PageInfo.EndCursor == nil {
@@ -7024,6 +7055,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputBeadInput,
 		ec.unmarshalInputBeadUpdateInput,
 		ec.unmarshalInputComparisonArmInput,
+		ec.unmarshalInputOperatorPromptSubmitInput,
 		ec.unmarshalInputStartWorkerInput,
 	)
 	first := true
@@ -7252,6 +7284,17 @@ func (ec *executionContext) field_Mutation_documentWrite_args(ctx context.Contex
 		return nil, err
 	}
 	args["content"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_operatorPromptSubmit_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNOperatorPromptSubmitInput2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐOperatorPromptSubmitInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -22985,6 +23028,53 @@ func (ec *executionContext) fieldContext_Mutation_artifactRegenerate(ctx context
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_operatorPromptSubmit(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_operatorPromptSubmit,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().OperatorPromptSubmit(ctx, fc.Args["input"].(OperatorPromptSubmitInput))
+		},
+		nil,
+		ec.marshalNOperatorPromptSubmitResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐOperatorPromptSubmitResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_operatorPromptSubmit(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "bead":
+				return ec.fieldContext_OperatorPromptSubmitResult_bead(ctx, field)
+			case "deduplicated":
+				return ec.fieldContext_OperatorPromptSubmitResult_deduplicated(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type OperatorPromptSubmitResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_operatorPromptSubmit_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _NodeInfo_id(ctx context.Context, field graphql.CollectedField, obj *NodeInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -23096,6 +23186,98 @@ func (ec *executionContext) fieldContext_NodeInfo_lastSeen(_ context.Context, fi
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type DateTime does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorPromptSubmitResult_bead(ctx context.Context, field graphql.CollectedField, obj *OperatorPromptSubmitResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorPromptSubmitResult_bead,
+		func(ctx context.Context) (any, error) {
+			return obj.Bead, nil
+		},
+		nil,
+		ec.marshalNBead2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐBead,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorPromptSubmitResult_bead(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorPromptSubmitResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Bead_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Bead_title(ctx, field)
+			case "status":
+				return ec.fieldContext_Bead_status(ctx, field)
+			case "priority":
+				return ec.fieldContext_Bead_priority(ctx, field)
+			case "issueType":
+				return ec.fieldContext_Bead_issueType(ctx, field)
+			case "owner":
+				return ec.fieldContext_Bead_owner(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Bead_createdAt(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Bead_createdBy(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Bead_updatedAt(ctx, field)
+			case "labels":
+				return ec.fieldContext_Bead_labels(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
+			case "parent":
+				return ec.fieldContext_Bead_parent(ctx, field)
+			case "description":
+				return ec.fieldContext_Bead_description(ctx, field)
+			case "acceptance":
+				return ec.fieldContext_Bead_acceptance(ctx, field)
+			case "notes":
+				return ec.fieldContext_Bead_notes(ctx, field)
+			case "dependencies":
+				return ec.fieldContext_Bead_dependencies(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Bead", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _OperatorPromptSubmitResult_deduplicated(ctx context.Context, field graphql.CollectedField, obj *OperatorPromptSubmitResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_OperatorPromptSubmitResult_deduplicated,
+		func(ctx context.Context) (any, error) {
+			return obj.Deduplicated, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_OperatorPromptSubmitResult_deduplicated(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "OperatorPromptSubmitResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -38994,6 +39176,50 @@ func (ec *executionContext) unmarshalInputComparisonArmInput(ctx context.Context
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputOperatorPromptSubmitInput(ctx context.Context, obj any) (OperatorPromptSubmitInput, error) {
+	var it OperatorPromptSubmitInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"prompt", "tier", "idempotencyKey"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "prompt":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("prompt"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Prompt = data
+		case "tier":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("tier"))
+			data, err := ec.unmarshalOInt2ᚖint(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Tier = data
+		case "idempotencyKey":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idempotencyKey"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.IdempotencyKey = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputStartWorkerInput(ctx context.Context, obj any) (StartWorkerInput, error) {
 	var it StartWorkerInput
 	if obj == nil {
@@ -43379,6 +43605,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "operatorPromptSubmit":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_operatorPromptSubmit(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -43430,6 +43663,50 @@ func (ec *executionContext) _NodeInfo(ctx context.Context, sel ast.SelectionSet,
 			}
 		case "lastSeen":
 			out.Values[i] = ec._NodeInfo_lastSeen(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var operatorPromptSubmitResultImplementors = []string{"OperatorPromptSubmitResult"}
+
+func (ec *executionContext) _OperatorPromptSubmitResult(ctx context.Context, sel ast.SelectionSet, obj *OperatorPromptSubmitResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, operatorPromptSubmitResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("OperatorPromptSubmitResult")
+		case "bead":
+			out.Values[i] = ec._OperatorPromptSubmitResult_bead(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deduplicated":
+			out.Values[i] = ec._OperatorPromptSubmitResult_deduplicated(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -49829,6 +50106,25 @@ func (ec *executionContext) marshalNNodeInfo2ᚖgithubᚗcomᚋDocumentDrivenDX�
 		return graphql.Null
 	}
 	return ec._NodeInfo(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNOperatorPromptSubmitInput2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐOperatorPromptSubmitInput(ctx context.Context, v any) (OperatorPromptSubmitInput, error) {
+	res, err := ec.unmarshalInputOperatorPromptSubmitInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNOperatorPromptSubmitResult2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐOperatorPromptSubmitResult(ctx context.Context, sel ast.SelectionSet, v OperatorPromptSubmitResult) graphql.Marshaler {
+	return ec._OperatorPromptSubmitResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNOperatorPromptSubmitResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐOperatorPromptSubmitResult(ctx context.Context, sel ast.SelectionSet, v *OperatorPromptSubmitResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._OperatorPromptSubmitResult(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNPageInfo2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐPageInfo(ctx context.Context, sel ast.SelectionSet, v *PageInfo) graphql.Marshaler {
