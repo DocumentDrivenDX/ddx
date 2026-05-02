@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T145716-c0f5ea4b",
+  "bead_id": "ddx-2db0bd7a",
+  "base_rev": "a90887cfd501df74a04978e512223bcae4bb6c71",
+  "created_at": "2026-05-02T14:57:17.940411461Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2db0bd7a",
+    "title": "review: spec updates (FEAT-008/006/022 + new TD + AGENTS.md)",
+    "description": "Spec updates: FEAT-008 (web UI), FEAT-006 (agent service), FEAT-022 (prompt evidence assembly). New TD for the multi-turn structured-assembly architecture. AGENTS.md updated for the no-tool reviewer mode convention. Parallel — no deps on the implementation beads.",
+    "acceptance": "1. All three FEATs updated. 2. New TD authored. 3. AGENTS.md updated. 4. ddx doc audit clean.",
+    "parent": "ddx-42b917fe",
+    "labels": [
+      "phase:2",
+      "story:18",
+      "area:specs",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:57:16Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T14:57:16.546249867Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T145716-c0f5ea4b",
+    "prompt": ".ddx/executions/20260502T145716-c0f5ea4b/prompt.md",
+    "manifest": ".ddx/executions/20260502T145716-c0f5ea4b/manifest.json",
+    "result": ".ddx/executions/20260502T145716-c0f5ea4b/result.json",
+    "checks": ".ddx/executions/20260502T145716-c0f5ea4b/checks.json",
+    "usage": ".ddx/executions/20260502T145716-c0f5ea4b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2db0bd7a-20260502T145716-c0f5ea4b"
+  }
+}
