@@ -1,0 +1,54 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only execution manifest/result metadata for the parent bead. No source changes implementing triage step, config policy, BLOCK re-attempt, lock retry, or tests. Parent was decomposed into 3 children; implementation lives there, not here.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No code changes implementing AC1-6 (triage step, config policy, default policy, lock retry, tests, pairing-degraded surfacing) in this diff.",
+      "location": ".ddx/executions/20260502T131050-bf2d17f5/"
+    },
+    {
+      "severity": "info",
+      "summary": "Bead notes indicate decomposition into 3 children; parent should not be closed until children land.",
+      "location": "bead ddx-3c154349 notes"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2466,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T131050-bf2d17f5/manifest.json",
+          ".ddx/executions/20260502T131050-bf2d17f5/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 4620,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 8892,
+    "output_bytes": 768,
+    "elapsed_ms": 9898,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
