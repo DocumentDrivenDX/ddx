@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260502T144455-ed29df8c",
+  "bead_id": "ddx-5d49b14e",
+  "base_rev": "0f9bd7ded096b060e10ffec49103ea8376849923",
+  "created_at": "2026-05-02T14:44:58.528079979Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-5d49b14e",
+    "title": "Evaluate and adopt a real backend for the bead tracker (axon primary, bd fallback)",
+    "description": "The current .ddx/beads.jsonl backend (atomic JSONL writes wrapped in flock; events accumulating per-bead; archive split per ADR-004) is showing strain:\n\n1. Multi-worker contention via the git tracker-commit step (see ddx-da11a34a — the file lock around git add/commit is a v1 patch, not the real fix)\n2. Events array per bead is unbounded and dominates archive size\n3. Cross-machine concurrency is not addressed (Story 14 federation will require it)\n4. The current model bakes one process-local store + git-as-replication; doesn't compose cleanly with a real database\n\nTwo backend paths under consideration:\n\n**Axon (PRIMARY, per user inclination)**: integrate as the first DDx-side consumer of axon. User owns the stack; tight integration possible; proves axon's value as a substrate. Requires authoring an axon backend implementing the bead schema's storage contract (per ADR-004 / SD-004 — collection abstraction, claim semantics, atomic writes, JSONL interchange compatibility for bd/br).\n\n**bd / doltdb (FALLBACK)**: delegate to bd which already speaks doltdb (git-for-data). Trivial integration; downside is tracking an external codebase as a hard dependency.\n\nThis epic frames the evaluation, designs the integration, prototypes, and migrates. Children break down the work. The lock-contention patch (ddx-da11a34a) remains relevant as stability scaffolding while this plays out — when axon ships and is adopted, the JSONL+git path may retire entirely (or stay as a portable interchange backend per FEAT-004's bd/br semantics).",
+    "acceptance": "1. TD authored for the axon-backend integration (data model mapping, claim/lock semantics, archive policy, multi-machine concurrency story). 2. Axon-backend implementation lands behind a feature flag or selectable backend in cli/internal/bead/backend.go. 3. Migration tool moves an existing .ddx/beads.jsonl + .ddx/beads-archive.jsonl into the axon backend without data loss. 4. Existing chaos_test.go suite passes against the axon backend. 5. bd fallback documented (single artifact under docs/) showing how to wire bd as the backend if axon adoption stalls. 6. Performance: queue ops (ready/blocked/show) at parity or better than JSONL on the current 1100-bead archive scale.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:storage",
+      "kind:strategy",
+      "backend-migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:44:55Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T14:44:55.123887274Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T144455-ed29df8c",
+    "prompt": ".ddx/executions/20260502T144455-ed29df8c/prompt.md",
+    "manifest": ".ddx/executions/20260502T144455-ed29df8c/manifest.json",
+    "result": ".ddx/executions/20260502T144455-ed29df8c/result.json",
+    "checks": ".ddx/executions/20260502T144455-ed29df8c/checks.json",
+    "usage": ".ddx/executions/20260502T144455-ed29df8c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-5d49b14e-20260502T144455-ed29df8c"
+  }
+}
