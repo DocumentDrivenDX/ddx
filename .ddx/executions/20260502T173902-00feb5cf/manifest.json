@@ -1,0 +1,143 @@
+{
+  "attempt_id": "20260502T173902-00feb5cf",
+  "bead_id": "ddx-1bbd1096",
+  "base_rev": "3f97b3f6421e656d03b2d48d349a427c5e48edb7",
+  "created_at": "2026-05-02T17:39:04.30899504Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1bbd1096",
+    "title": "B14.2: cli/internal/federation package - state types + persistence + schema_version",
+    "description": "Create cli/internal/federation/ package. Define federation state types (FederationRegistry, SpokeRecord with node_id, name, url, last_heartbeat, status, ddx_version, schema_version, capabilities). Implement persistence to ~/.local/share/ddx/federation-state.json with atomic write + schema_version field for forward compat. Status enum: registered, active, stale, offline, degraded. No HTTP layer yet — pure types + load/save + reconciliation helpers. Unit tests for round-trip, schema migration stub, concurrent-write safety.",
+    "acceptance": "Package cli/internal/federation/ exists with state.go, persistence.go, *_test.go. JSON file has schema_version field. Atomic write (tmpfile + rename). Status type covers registered/active/stale/offline/degraded. Unit tests pass: load/save round-trip, missing-file fresh-init, malformed-file recovery, status transitions.",
+    "parent": "ddx-a038a090",
+    "labels": [
+      "phase:2",
+      "story:14"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T17:39:02Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3037698",
+      "depends-on": "ddx-1d4bfbf3",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T12:15:02.124602129Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T121133-f1376e11\",\"harness\":\"claude\",\"input_tokens\":31,\"output_tokens\":13662,\"total_tokens\":13693,\"cost_usd\":1.28639925,\"duration_ms\":207380,\"exit_code\":0}",
+          "created_at": "2026-05-02T12:15:02.137313497Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=13693 cost_usd=1.2864"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T12:15:06.909784103Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "The diff contains only an execution result.json metadata file. No cli/internal/federation/ package, no state.go, persistence.go, or test files were created. None of the acceptance criteria are met by this diff.\nharness=claude\nmodel=opus\ninput_bytes=4019\noutput_bytes=1125\nelapsed_ms=9979",
+          "created_at": "2026-05-02T12:15:16.915223463Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T12:15:16.926530207Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nThe diff contains only an execution result.json metadata file. No cli/internal/federation/ package, no state.go, persistence.go, or test files were created. None of the acceptance criteria are met by this diff.\nresult_rev=287dde3afdc10f36d7c1973e923171239bc875ac\nbase_rev=6991fb7bc53a23939ff9df0b65d23c77c4340c3c",
+          "created_at": "2026-05-02T12:15:16.935630286Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T12:19:23.406388402Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T121738-b409115a\",\"harness\":\"claude\",\"input_tokens\":26,\"output_tokens\":4929,\"total_tokens\":4955,\"cost_usd\":0.8356880000000001,\"duration_ms\":103664,\"exit_code\":0}",
+          "created_at": "2026-05-02T12:19:23.418369021Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=4955 cost_usd=0.8357"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T12:19:27.011412875Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only execution metadata files (manifest.json, result.json). No cli/internal/federation/ package, no state.go, persistence.go, or test files. None of the acceptance criteria are met.\nharness=claude\nmodel=opus\ninput_bytes=9439\noutput_bytes=914\nelapsed_ms=9364",
+          "created_at": "2026-05-02T12:19:36.411499911Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T12:19:36.42623807Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only execution metadata files (manifest.json, result.json). No cli/internal/federation/ package, no state.go, persistence.go, or test files. None of the acceptance criteria are met.\nresult_rev=d32163cf068607cbe9e14c4fcad8c042c1f51301\nbase_rev=d0148d0b2ca5ec8a165dfd858be7b9da6346cb8c",
+          "created_at": "2026-05-02T12:19:36.440174813Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: no tiers in range (check --min-tier / --max-tier)",
+          "created_at": "2026-05-02T17:38:52.765473454Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T17:39:02.932791896Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T173902-00feb5cf",
+    "prompt": ".ddx/executions/20260502T173902-00feb5cf/prompt.md",
+    "manifest": ".ddx/executions/20260502T173902-00feb5cf/manifest.json",
+    "result": ".ddx/executions/20260502T173902-00feb5cf/result.json",
+    "checks": ".ddx/executions/20260502T173902-00feb5cf/checks.json",
+    "usage": ".ddx/executions/20260502T173902-00feb5cf/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-1bbd1096-20260502T173902-00feb5cf"
+  }
+}
