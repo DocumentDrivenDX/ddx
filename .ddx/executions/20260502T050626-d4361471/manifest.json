@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T050626-d4361471",
+  "bead_id": "ddx-9f7a04f4",
+  "base_rev": "f4164cc77fbbff07e0c9142b08f4c6baf5f471a4",
+  "created_at": "2026-05-02T05:06:28.034748401Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9f7a04f4",
+    "title": "bd/br external-backend support for non-default collections (ADR-004 step 6)",
+    "description": "Extend cli/internal/bead/backend_external.go so bd and br backends can serve non-'beads' collections (notably 'beads-archive') without breaking the existing 'beads' interchange contract. Strategy: route per-collection list/import operations through bd/br when the backend supports it; otherwise fall back to JSONL-backed file under .ddx/ for the non-default collection. Keep schema_compat_test.go locking the shared envelope.\n\nDepends on ddx-2f453147.",
+    "acceptance": "1. External backend opens 'beads-archive' collection without panicking and produces a working read/write path (real or fallback). 2. bd/br interchange for default 'beads' collection unchanged: schema_compat_test.go and existing import/export tests still pass. 3. Behavior documented in code comments where the routing decision is made. 4. New test covers opening 'beads-archive' through the external backend.",
+    "parent": "ddx-0c0565f3",
+    "labels": [
+      "area:beads",
+      "area:storage",
+      "kind:feature",
+      "adr:004"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T05:06:26Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1329405",
+      "execute-loop-heartbeat-at": "2026-05-02T05:06:26.695648043Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T050626-d4361471",
+    "prompt": ".ddx/executions/20260502T050626-d4361471/prompt.md",
+    "manifest": ".ddx/executions/20260502T050626-d4361471/manifest.json",
+    "result": ".ddx/executions/20260502T050626-d4361471/result.json",
+    "checks": ".ddx/executions/20260502T050626-d4361471/checks.json",
+    "usage": ".ddx/executions/20260502T050626-d4361471/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-9f7a04f4-20260502T050626-d4361471"
+  }
+}
