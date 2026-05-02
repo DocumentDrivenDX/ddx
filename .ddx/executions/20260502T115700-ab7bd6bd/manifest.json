@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T115700-ab7bd6bd",
+  "bead_id": "ddx-bffb23ae",
+  "base_rev": "282bac2d9e855d59cca4451af62bfbaa695ee2a4",
+  "created_at": "2026-05-02T11:57:01.486266682Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bffb23ae",
+    "title": "B3: Add prompt_sha to manifest.json + render-size CI fixture",
+    "description": "Lightweight v1 measurement per /tmp/story-12-final.md §B3. (1) Add deterministic test fixture that renders both execute-bead variants for a representative bead at each contextBudget and prints word/byte counts as a CI artifact (catches accidental bloat). (2) Add prompt_sha (sha256 of rendered prompt) to manifest.json for every attempt, so existing analytics in resolver_feat008.go can group attempts by prompt_sha for before/after comparison. Treats prompt as opaque — can run in parallel with B1/B2.",
+    "acceptance": "AC7: manifest.json contains prompt_sha for every attempt; size-report fixture emits word/byte counts per (variant, contextBudget) and is wired so CI surfaces it as an artifact.",
+    "parent": "ddx-a61bf8ee",
+    "labels": [
+      "phase:2",
+      "story:12",
+      "tier:cheap"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:57:00Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T11:57:00.24778639Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T115700-ab7bd6bd",
+    "prompt": ".ddx/executions/20260502T115700-ab7bd6bd/prompt.md",
+    "manifest": ".ddx/executions/20260502T115700-ab7bd6bd/manifest.json",
+    "result": ".ddx/executions/20260502T115700-ab7bd6bd/result.json",
+    "checks": ".ddx/executions/20260502T115700-ab7bd6bd/checks.json",
+    "usage": ".ddx/executions/20260502T115700-ab7bd6bd/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-bffb23ae-20260502T115700-ab7bd6bd"
+  }
+}
