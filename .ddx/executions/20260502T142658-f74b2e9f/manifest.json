@@ -1,0 +1,87 @@
+{
+  "attempt_id": "20260502T142658-f74b2e9f",
+  "bead_id": "ddx-7e7b12f0",
+  "base_rev": "fea4f7dbcbcc67b078e5fa0bd99046f55003abd6",
+  "created_at": "2026-05-02T14:26:59.851240343Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7e7b12f0",
+    "title": "test(web): e2e regression check for doc graph edge color tokens",
+    "description": "Add Playwright e2e at cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/graph/graph.e2e.ts that loads the doc graph route, asserts at least one \u003cline\u003e edge exists, and verifies its computed stroke resolves to rgb(75, 85, 99) (light fg-muted #4B5563) and the marker path fill matches. Then toggle dark class on \u003chtml\u003e and re-assert against #B8AF9C. Sibling pattern: drain.e2e.ts, personas.e2e.ts. Theme-toggle plumbing may need addInitScript to set theme pre-load. Fixture: needs a project with \u003e=1 dependency edge in the GraphQL mock; add fixture if none exists. See /tmp/story-1-final.md (bead-B).",
+    "acceptance": "AC1: graph.e2e.ts file exists at the specified route directory.\nAC2: Test asserts at least one \u003cline\u003e SVG edge is rendered.\nAC3: Light-theme assertion: edge stroke computed style equals rgb(75, 85, 99); arrow marker path fill matches.\nAC4: Dark-theme assertion (after toggling html.dark): edge stroke computed style equals the rgb form of #B8AF9C; marker fill matches.\nAC5: Test passes locally via bun run test:e2e.",
+    "parent": "ddx-db5e0227",
+    "labels": [
+      "phase:2",
+      " story:1",
+      " tier:standard"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:26:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T14:22:52.753995975Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T141457-52fe30ca\",\"harness\":\"claude\",\"input_tokens\":72,\"output_tokens\":26445,\"total_tokens\":26517,\"cost_usd\":4.001205250000001,\"duration_ms\":473031,\"exit_code\":0}",
+          "created_at": "2026-05-02T14:22:52.771978623Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=26517 cost_usd=4.0012"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T14:22:59.187692016Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only an execution result.json artifact; no graph.e2e.ts test file or fixture changes are present. Cannot verify any AC (1-5).\nharness=claude\nmodel=opus\ninput_bytes=4234\noutput_bytes=704\nelapsed_ms=9260",
+          "created_at": "2026-05-02T14:23:08.486171372Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T14:23:08.500715482Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json artifact; no graph.e2e.ts test file or fixture changes are present. Cannot verify any AC (1-5).\nresult_rev=af4bbcdb696bd329fb5c1841aa7f4c38fff78e88\nbase_rev=c1741ea9e0b6c76d77c83b58204fdaae294e0b08",
+          "created_at": "2026-05-02T14:23:08.513049053Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T14:26:58.521952566Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T142658-f74b2e9f",
+    "prompt": ".ddx/executions/20260502T142658-f74b2e9f/prompt.md",
+    "manifest": ".ddx/executions/20260502T142658-f74b2e9f/manifest.json",
+    "result": ".ddx/executions/20260502T142658-f74b2e9f/result.json",
+    "checks": ".ddx/executions/20260502T142658-f74b2e9f/checks.json",
+    "usage": ".ddx/executions/20260502T142658-f74b2e9f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-7e7b12f0-20260502T142658-f74b2e9f"
+  }
+}
