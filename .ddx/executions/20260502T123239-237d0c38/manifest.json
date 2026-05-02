@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260502T123239-237d0c38",
+  "bead_id": "ddx-7140a0cf",
+  "base_rev": "1b090758ace0f93ec40fc73cd31646bad86312e4",
+  "created_at": "2026-05-02T12:32:41.168526924Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7140a0cf",
+    "title": "web-ui: graph elements remain visible in dark mode",
+    "description": "Edges and arrowheads styled with border-line/dark-border-line tokens are ~1.1:1 contrast in dark mode. Introduce graph-local CSS vars (--graph-edge, --graph-edge-arrow) at #766F65 (light) / #9C9486 (dark). Drop the 0.6 stroke-opacity multiplier (use color, not alpha, for subtlety). Coordinate with Story 1 (which retunes the token) and Story 3 (layout) — preserve commit history per merge policy.",
+    "acceptance": "1. New CSS vars --graph-edge, --graph-edge-arrow defined for both themes. 2. stroke-opacity multiplier removed; stroke color carries subtlety. 3. Playwright dark-mode test: alpha-blending contrast helper (NOT token-string equality) asserts \u003e=3:1. 4. Test fixture renders all three staleness states (fresh/stale/missing) for color assertions. 5. cd cli/internal/server/frontend \u0026\u0026 bun run test:e2e -- graph passes.",
+    "parent": "ddx-bc346d44",
+    "labels": [
+      "phase:2",
+      "story:2",
+      "area:web",
+      "kind:fix",
+      "area:accessibility"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:32:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T12:32:39.948407372Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T123239-237d0c38",
+    "prompt": ".ddx/executions/20260502T123239-237d0c38/prompt.md",
+    "manifest": ".ddx/executions/20260502T123239-237d0c38/manifest.json",
+    "result": ".ddx/executions/20260502T123239-237d0c38/result.json",
+    "checks": ".ddx/executions/20260502T123239-237d0c38/checks.json",
+    "usage": ".ddx/executions/20260502T123239-237d0c38/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-7140a0cf-20260502T123239-237d0c38"
+  }
+}
