@@ -59,6 +59,30 @@ ddx bead list
 ddx bead ready
 ```
 
+## Drain the Queue (Zero-Config)
+
+Once you have at least one provider configured in your global agent config
+at `~/.config/agent/config.yaml`, draining the bead queue requires no
+per-project configuration:
+
+```bash
+ddx work --once --local
+```
+
+DDx routes each bead through the global agent config's `default_provider`
+and selects a cheap-tier model by default — no `.ddx/config.yaml` is
+required, and no `--harness`, `--profile`, `--model`, or `--provider`
+flags are needed to start. If the global config has no providers, DDx
+prints a friendly error pointing at the config path instead of demanding
+per-project flags.
+
+### Optional: Project-Level Routing Override
+
+Projects that need to pin a specific harness, model, or endpoint can author
+`.ddx/config.yaml` with an `agent:` block (see [Agent execute
+docs](../agent-execute)). This is an advanced override, not a prerequisite:
+the zero-config flow above is the default path.
+
 ## Run Agents
 
 ```bash

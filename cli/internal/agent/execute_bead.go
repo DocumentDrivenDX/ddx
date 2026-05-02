@@ -1207,6 +1207,26 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 // DDx-specific execution contract.
 const executeBeadInstructionsClaudeText = `You are executing one bead inside an isolated DDx execution worktree. The bead's <description> and <acceptance> sections above are the completion contract — every AC checkbox must be provably satisfied by a specific piece of code, test, or file you can point to after your commit.
 
+## Step 0: size check (do this first)
+
+Before writing any code, decide whether this bead is sized for a single bounded-context attempt. Coarse signals that the bead is too big:
+
+- More than ~6 acceptance criteria spanning unrelated subsystems.
+- AC mixes design, implementation, integration tests, and docs as separate top-level deliverables rather than a single coherent change.
+- Description explicitly lists multiple feature-sized pieces ("AC4 is a tier-inference engine", "AC5 introduces a new status type").
+- You estimate more than ~500 lines of meaningful code change across more than ~5 files in unrelated packages.
+
+If the bead is too big, do NOT attempt the work. Instead, in this single attempt:
+
+1. Use the ` + "`bash`" + ` tool to run ` + "`ddx bead create`" + ` to file child beads, one per coherent slice of work. Pass each child a focused title, description, and acceptance criteria; copy labels and ` + "`spec-id`" + ` from the parent.
+2. Use ` + "`ddx bead dep add <child-id> <parent-id>`" + ` to record the dependency edge.
+3. Append a short note to the parent (` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `) so future runs see why no implementation landed.
+4. Write ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` explaining the decomposition: list each child bead ID and the slice it covers, and stop.
+
+A clean decomposition that produces tractable children is a successful attempt. Do not push partial implementation alongside decomposition.
+
+If the bead IS sized for one attempt, continue with the rest of these instructions.
+
 ## How to work
 
 1. Read first. If the bead description names files, read them to see what is already there. If the bead references a spec, ADR, or API contract, read the relevant sections before writing code. Do not start editing until you understand what the bead wants changed and why.
@@ -1250,6 +1270,26 @@ After the commit succeeds and you have verified every AC item, stop. Return cont
 const executeBeadInstructionsAgentText = `You are a coding agent executing one bead inside an isolated DDx execution worktree. You have tools: read, write, edit, bash, ls, grep, find. Use them directly — do not shell out to cat/tail/rg/find; use the tools.
 
 The bead's <description> and <acceptance> sections above are the completion contract. Every AC checkbox must be satisfied by code you write in this pass.
+
+## Step 0: size check (do this first)
+
+Before writing any code, decide whether this bead fits in one bounded-context attempt. Coarse signals it does not:
+
+- More than ~6 acceptance criteria spanning unrelated subsystems.
+- AC mixes design, implementation, integration tests, and docs as separate top-level deliverables.
+- Description explicitly names multiple feature-sized sub-pieces.
+- You estimate more than ~500 lines across more than ~5 files in unrelated packages.
+
+If too big, do NOT attempt the work. Instead, in this single attempt:
+
+1. Run ` + "`ddx bead create`" + ` (via bash) to file child beads, one per coherent slice — focused title, description, AC; copy parent's labels and spec-id.
+2. Run ` + "`ddx bead dep add <child-id> <parent-id>`" + ` to wire the dependency edge.
+3. Run ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + ` so the decomposition is visible.
+4. Write ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` listing each child bead ID and the slice it covers, then stop.
+
+A clean decomposition is a successful attempt. Do not mix partial implementation with decomposition.
+
+If sized for one attempt, continue.
 
 ## Process
 

@@ -301,12 +301,16 @@ func TestComplexityGateSkipLabelBypassesClassifier(t *testing.T) {
 }
 
 // ---------------------------------------------------------------------------
-// Gate nil emits a one-time warning, loop continues normally.
+// Gate nil dispatches normally and does NOT emit a warning (ddx-b790449b AC3).
+// Decomposition responsibility shifts to the LLM-driven path inside execute-bead;
+// the pre-dispatch warning is suppressed because it no longer reflects reality.
 // ---------------------------------------------------------------------------
 
-// TestComplexityGateNilEmitsWarning asserts that when ComplexityGate is nil,
-// the loop emits a boot warning but still dispatches beads normally.
-func TestComplexityGateNilEmitsWarning(t *testing.T) {
+// TestComplexityGateNilNoWarning asserts that when ComplexityGate is nil, the
+// loop dispatches beads without emitting the legacy "triage complexity gate is
+// disabled" warning. Per ddx-b790449b AC3, that warning is gone — decomposition
+// happens inside the LLM prompt, not as a pre-dispatch gate.
+func TestComplexityGateNilNoWarning(t *testing.T) {
 	inner, _, _ := newExecuteLoopTestStore(t)
 
 	var logBuf bytes.Buffer
@@ -327,12 +331,8 @@ func TestComplexityGateNilEmitsWarning(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Successes, "nil gate must not block dispatch")
-	assert.Contains(t, logBuf.String(), "warning", "one-time warning must be emitted")
-	assert.Contains(t, logBuf.String(), "triage", "warning must mention triage")
-
-	// Warning emitted exactly once across all beads.
-	assert.Equal(t, 1, countOccurrences(logBuf.String(), "warning: triage"),
-		"warning must be emitted only once per Run()")
+	assert.NotContains(t, logBuf.String(), "warning: triage",
+		"legacy triage-disabled warning must not be emitted")
 }
 
 // ---------------------------------------------------------------------------

@@ -501,17 +501,13 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 
 		// Complexity triage gate (ddx-5bf4ee7e): pre-Claim decomposition check.
-		// When the gate is nil, emit a one-time boot warning — the gate must not
-		// be silently optional.
+		// When the gate is nil, decomposition responsibility shifts to the
+		// LLM-driven path inside execute-bead (ddx-b790449b AC5): the agent
+		// is prompted to recognize coarse beads, file children, and exit
+		// early. The pre-dispatch warning is intentionally suppressed —
+		// it is no longer accurate now that decomposition lives downstream.
 		if w.ComplexityGate == nil {
-			if !triagedWarned {
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log,
-						"warning: triage complexity gate is disabled; coarse beads may waste dispatch attempts\n")
-				}
-				emit("triage.gate_disabled", map[string]any{"bead_id": candidate.ID})
-				triagedWarned = true
-			}
+			_ = triagedWarned // retained for future re-introduction of a typed gate
 		} else {
 			shouldClaim, triageErr := w.ComplexityGate(ctx, candidate)
 			if triageErr != nil {
