@@ -8,17 +8,21 @@ describe('urlState.readState', () => {
 		expect(s.mediaType).toBeNull()
 		expect(s.groupBy).toBe(DEFAULT_GROUP_BY)
 		expect(s.sort).toBeNull()
+		expect(s.staleness).toBeNull()
 		expect(s.filters).toEqual({})
 	})
 
 	it('parses known keys and filter.* entries', () => {
 		const s = readState(
-			new URLSearchParams('q=foo&mediaType=text/markdown&groupBy=prefix&sort=title&filter.tag=v1')
+			new URLSearchParams(
+				'q=foo&mediaType=text/markdown&groupBy=prefix&sort=title&staleness=stale&filter.tag=v1'
+			)
 		)
 		expect(s.q).toBe('foo')
 		expect(s.mediaType).toBe('text/markdown')
 		expect(s.groupBy).toBe('prefix')
 		expect(s.sort).toBe('title')
+		expect(s.staleness).toBe('stale')
 		expect(s.filters).toEqual({ tag: 'v1' })
 	})
 
@@ -48,6 +52,18 @@ describe('urlState.writeState', () => {
 		})
 		expect(next.has('q')).toBe(false)
 		expect(next.has('mediaType')).toBe(false)
+	})
+
+	it('round-trips sort and staleness, and clears them on null', () => {
+		const set = writeState(new URLSearchParams(''), { sort: 'TITLE', staleness: 'stale' })
+		expect(set.get('sort')).toBe('TITLE')
+		expect(set.get('staleness')).toBe('stale')
+		expect(readState(set).sort).toBe('TITLE')
+		expect(readState(set).staleness).toBe('stale')
+
+		const cleared = writeState(set, { sort: null, staleness: null })
+		expect(cleared.has('sort')).toBe(false)
+		expect(cleared.has('staleness')).toBe(false)
 	})
 
 	it('replaces filter.* entries atomically', () => {

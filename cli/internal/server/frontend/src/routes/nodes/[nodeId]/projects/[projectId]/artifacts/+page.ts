@@ -5,8 +5,8 @@ import { readState } from '$lib/urlState'
 import type { GroupBy } from './grouping'
 
 export const ARTIFACTS_QUERY = gql`
-	query Artifacts($projectID: ID!, $first: Int, $after: String, $mediaType: String, $search: String) {
-		artifacts(projectID: $projectID, first: $first, after: $after, mediaType: $mediaType, search: $search) {
+	query Artifacts($projectID: ID!, $first: Int, $after: String, $mediaType: String, $search: String, $sort: ArtifactSort, $staleness: String) {
+		artifacts(projectID: $projectID, first: $first, after: $after, mediaType: $mediaType, search: $search, sort: $sort, staleness: $staleness) {
 			edges {
 				node {
 					id
@@ -56,18 +56,47 @@ interface ArtifactsResult {
 
 export const PAGE_SIZE = 50
 
+export const SORT_OPTIONS = [
+	{ value: 'PATH', label: 'Path' },
+	{ value: 'TITLE', label: 'Title' },
+	{ value: 'MODIFIED', label: 'Last modified' },
+	{ value: 'DEPS_COUNT', label: 'Dependency count' },
+	{ value: 'ID', label: 'ID' }
+] as const
+
+export type ArtifactSort = (typeof SORT_OPTIONS)[number]['value']
+export const DEFAULT_SORT: ArtifactSort = 'PATH'
+
+const SORT_VALUES = new Set(SORT_OPTIONS.map((o) => o.value))
+
+export function parseSort(raw: string | null): ArtifactSort {
+	return raw && SORT_VALUES.has(raw as ArtifactSort) ? (raw as ArtifactSort) : DEFAULT_SORT
+}
+
+export const STALENESS_OPTIONS = ['fresh', 'stale', 'missing'] as const
+export type Staleness = (typeof STALENESS_OPTIONS)[number]
+const STALENESS_SET = new Set<string>(STALENESS_OPTIONS)
+
+export function parseStaleness(raw: string | null): Staleness | null {
+	return raw && STALENESS_SET.has(raw) ? (raw as Staleness) : null
+}
+
 export const load: PageLoad = async ({ params, url, fetch }) => {
 	const state = readState(url.searchParams)
 	const mediaType = state.mediaType
 	const q = state.q
 	const groupBy: GroupBy = state.groupBy
+	const sort = parseSort(state.sort)
+	const staleness = parseStaleness(state.staleness)
 
 	const client = createClient(fetch as unknown as typeof globalThis.fetch)
 	const data = await client.request<ArtifactsResult>(ARTIFACTS_QUERY, {
 		projectID: params.projectId,
 		first: PAGE_SIZE,
 		mediaType: mediaType ?? undefined,
-		search: q ? q : undefined
+		search: q ? q : undefined,
+		sort,
+		staleness: staleness ?? undefined
 	})
 	return {
 		nodeId: params.nodeId,
@@ -75,6 +104,8 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 		artifacts: data.artifacts,
 		mediaType,
 		q,
-		groupBy
+		groupBy,
+		sort,
+		staleness
 	}
 }

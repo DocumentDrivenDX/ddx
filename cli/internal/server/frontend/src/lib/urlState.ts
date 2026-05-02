@@ -4,7 +4,7 @@
 
 export type GroupBy = 'folder' | 'prefix' | 'mediaType'
 
-const KNOWN_KEYS = new Set(['q', 'mediaType', 'groupBy', 'sort'])
+const KNOWN_KEYS = new Set(['q', 'mediaType', 'groupBy', 'sort', 'staleness'])
 const FILTER_PREFIX = 'filter.'
 
 export interface ListURLState {
@@ -12,6 +12,7 @@ export interface ListURLState {
 	mediaType: string | null
 	groupBy: GroupBy
 	sort: string | null
+	staleness: string | null
 	filters: Record<string, string>
 }
 
@@ -32,6 +33,7 @@ export function readState(params: URLSearchParams): ListURLState {
 		mediaType: params.get('mediaType'),
 		groupBy: parseGroupBy(params.get('groupBy')),
 		sort: params.get('sort'),
+		staleness: params.get('staleness'),
 		filters
 	}
 }
@@ -59,6 +61,10 @@ export function writeState(
 	if ('sort' in patch) {
 		if (patch.sort) next.set('sort', patch.sort)
 		else next.delete('sort')
+	}
+	if ('staleness' in patch) {
+		if (patch.staleness) next.set('staleness', patch.staleness)
+		else next.delete('staleness')
 	}
 	if ('filters' in patch && patch.filters) {
 		// Replace only the filter.* keys; leave everything else intact.

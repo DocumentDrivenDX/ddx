@@ -216,6 +216,144 @@ test('Regenerate button is not shown when generatedBy is absent', async ({ page 
 	await expect(page.getByTestId('regenerate-button')).toHaveCount(0);
 });
 
+// Sort dropdown + staleness chips + search composition (Story 6).
+// Verifies: (1) controls render, (2) URL state round-trips, (3) each param
+// change re-issues the query (cursor reset) with the merged variables.
+test('artifacts: sort + staleness chips + search compose into URL state and refetch', async ({
+	page
+}) => {
+	const calls: { variables: Record<string, unknown> | undefined; after: unknown }[] = []
+	const listArtifacts = [
+		{
+			id: 'a-1',
+			path: 'docs/alpha.md',
+			title: 'Alpha',
+			mediaType: 'text/markdown',
+			staleness: 'fresh'
+		},
+		{
+			id: 'a-2',
+			path: 'docs/beta.md',
+			title: 'Beta',
+			mediaType: 'text/markdown',
+			staleness: 'stale'
+		},
+		{
+			id: 'a-3',
+			path: 'docs/gamma.md',
+			title: 'Gamma',
+			mediaType: 'text/markdown',
+			staleness: 'missing'
+		}
+	]
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as {
+			query: string
+			variables?: Record<string, unknown>
+		}
+		const q = body.query
+		if (q.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			})
+			return
+		}
+		if (q.includes('Projects') && !q.includes('projectID')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
+				})
+			})
+			return
+		}
+		if (q.includes('query Artifacts(')) {
+			calls.push({ variables: body.variables, after: body.variables?.after ?? null })
+			const v = body.variables ?? {}
+			let filtered = listArtifacts
+			if (v.staleness) filtered = filtered.filter((a) => a.staleness === v.staleness)
+			if (v.search) {
+				const s = String(v.search).toLowerCase()
+				filtered = filtered.filter(
+					(a) => a.title.toLowerCase().includes(s) || a.path.toLowerCase().includes(s)
+				)
+			}
+			if (v.sort === 'TITLE') {
+				filtered = [...filtered].sort((a, b) => a.title.localeCompare(b.title))
+			}
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						artifacts: {
+							edges: filtered.map((a, i) => ({
+								node: a,
+								cursor: `c${i}`
+							})),
+							pageInfo: { hasNextPage: false, endCursor: null },
+							totalCount: filtered.length
+						}
+					}
+				})
+			})
+			return
+		}
+		await route.continue()
+	})
+
+	// 1. Initial load — sort dropdown + staleness chips visible.
+	await page.goto(BASE_URL)
+	await expect(page.getByTestId('sort-select')).toBeVisible()
+	await expect(page.getByTestId('staleness-chip-fresh')).toBeVisible()
+	await expect(page.getByTestId('staleness-chip-stale')).toBeVisible()
+	await expect(page.getByTestId('staleness-chip-missing')).toBeVisible()
+	await expect(page.getByRole('cell', { name: 'Alpha', exact: true })).toBeVisible()
+
+	// 2. Change sort → URL gains ?sort=TITLE and a refetch is issued.
+	const callsBefore = calls.length
+	await page.getByTestId('sort-select').selectOption('TITLE')
+	await expect(page).toHaveURL(/[?&]sort=TITLE\b/)
+	await expect.poll(() => calls.length).toBeGreaterThan(callsBefore)
+	expect(calls[calls.length - 1].variables?.sort).toBe('TITLE')
+	expect(calls[calls.length - 1].after).toBeNull()
+
+	// 3. Toggle staleness=stale chip → URL gains ?staleness=stale and refetches
+	//    (cursor reset: `after` is null on the new request).
+	const beforeStale = calls.length
+	await page.getByTestId('staleness-chip-stale').click()
+	await expect(page).toHaveURL(/[?&]staleness=stale\b/)
+	await expect.poll(() => calls.length).toBeGreaterThan(beforeStale)
+	expect(calls[calls.length - 1].variables?.staleness).toBe('stale')
+	expect(calls[calls.length - 1].variables?.sort).toBe('TITLE')
+	expect(calls[calls.length - 1].after).toBeNull()
+	await expect(page.getByRole('cell', { name: 'Beta', exact: true })).toBeVisible()
+	await expect(page.getByRole('cell', { name: 'Alpha', exact: true })).toHaveCount(0)
+
+	// 4. Add search → params compose; URL contains all three; refetch issued.
+	const beforeSearch = calls.length
+	await page.getByPlaceholder(/Search/i).first().fill('beta')
+	await expect.poll(() => calls.length).toBeGreaterThan(beforeSearch)
+	await expect(page).toHaveURL(/[?&]q=beta\b/)
+	await expect(page).toHaveURL(/[?&]sort=TITLE\b/)
+	await expect(page).toHaveURL(/[?&]staleness=stale\b/)
+	const last = calls[calls.length - 1]
+	expect(last.variables?.search).toBe('beta')
+	expect(last.variables?.sort).toBe('TITLE')
+	expect(last.variables?.staleness).toBe('stale')
+	expect(last.after).toBeNull()
+
+	// 5. Toggle staleness chip off → param removed; refetch reflects null.
+	const beforeClear = calls.length
+	await page.getByTestId('staleness-chip-stale').click()
+	await expect.poll(() => calls.length).toBeGreaterThan(beforeClear)
+	await expect(page).not.toHaveURL(/[?&]staleness=/)
+	expect(calls[calls.length - 1].variables?.staleness).toBeUndefined()
+})
+
 // Mutation error path: server returns a typed error → inline message in the
 // provenance panel, page does not crash (AC#4).
 test('Regenerate error renders inline without crashing the page', async ({ page }) => {

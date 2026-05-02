@@ -3,7 +3,15 @@
 	import { goto } from '$app/navigation'
 	import { Search } from 'lucide-svelte'
 	import { createClient } from '$lib/gql/client'
-	import { ARTIFACTS_QUERY, PAGE_SIZE } from './+page'
+	import {
+		ARTIFACTS_QUERY,
+		PAGE_SIZE,
+		SORT_OPTIONS,
+		STALENESS_OPTIONS,
+		DEFAULT_SORT,
+		type ArtifactSort,
+		type Staleness
+	} from './+page'
 	import type { ArtifactEdge, ArtifactConnection, PageInfo } from './+page'
 	import { writeState } from '$lib/urlState'
 	import {
@@ -52,20 +60,42 @@
 		)
 	)
 
+	let searchDebounce: ReturnType<typeof setTimeout> | undefined
+
+	function navigateWith(patch: Parameters<typeof writeState>[1], opts?: { replace?: boolean }) {
+		const url = new URL(window.location.href)
+		const params = writeState(url.searchParams, patch)
+		const search = params.toString()
+		// goto() re-runs load(), which resets allEdges/pageInfo (cursor) via the
+		// $effect bound to `data` — satisfying the "param change resets cursor" AC.
+		goto(url.pathname + (search ? `?${search}` : ''), {
+			replaceState: opts?.replace ?? false,
+			keepFocus: true,
+			noScroll: true
+		})
+	}
+
 	function onSearchInput(e: Event) {
 		q = (e.target as HTMLInputElement).value
-		const url = new URL(window.location.href)
-		const next = writeState(url.searchParams, { q })
-		url.search = next.toString()
-		history.replaceState(null, '', url.toString())
+		clearTimeout(searchDebounce)
+		searchDebounce = setTimeout(() => {
+			navigateWith({ q }, { replace: true })
+		}, 200)
 	}
 
 	function selectGroupBy(next: GroupBy) {
 		groupBy = next
-		const url = new URL(window.location.href)
-		const params = writeState(url.searchParams, { groupBy: next })
-		const search = params.toString()
-		goto(url.pathname + (search ? `?${search}` : ''))
+		navigateWith({ groupBy: next })
+	}
+
+	function selectSort(next: ArtifactSort) {
+		navigateWith({ sort: next === DEFAULT_SORT ? null : next })
+	}
+
+	function selectStaleness(next: Staleness | null) {
+		// Toggle off if user re-clicks the active chip.
+		const value = next && next === data.staleness ? null : next
+		navigateWith({ staleness: value })
 	}
 
 	const MEDIA_TYPES: { label: string; value: string | null }[] = [
@@ -79,10 +109,7 @@
 	]
 
 	function selectMediaType(mediaType: string | null) {
-		const url = new URL(window.location.href)
-		const params = writeState(url.searchParams, { mediaType, q })
-		const search = params.toString()
-		goto(url.pathname + (search ? `?${search}` : ''))
+		navigateWith({ mediaType, q })
 	}
 
 	function openGraph() {
@@ -117,7 +144,9 @@
 				first: PAGE_SIZE,
 				after: pageInfo.endCursor,
 				mediaType: data.mediaType ?? undefined,
-				search: q ? q : undefined
+				search: q ? q : undefined,
+				sort: data.sort,
+				staleness: data.staleness ?? undefined
 			})
 			allEdges = [...allEdges, ...result.artifacts.edges]
 			pageInfo = result.artifacts.pageInfo
@@ -166,7 +195,7 @@
 	</div>
 
 	<!-- Filter chips -->
-	<div class="flex flex-wrap gap-2">
+	<div class="flex flex-wrap gap-2" data-testid="media-type-chips">
 		{#each MEDIA_TYPES as chip}
 			{@const active = chip.value === data.mediaType}
 			<button
@@ -178,6 +207,33 @@
 				{chip.label}
 			</button>
 		{/each}
+	</div>
+
+	<!-- Staleness filter chips -->
+	<div class="flex flex-wrap gap-2" data-testid="staleness-chips">
+		<span class="self-center font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted">Staleness</span>
+		{#each STALENESS_OPTIONS as value}
+			{@const active = data.staleness === value}
+			<button
+				data-testid="staleness-chip-{value}"
+				aria-pressed={active}
+				onclick={() => selectStaleness(value)}
+				class="rounded-full px-3 py-1 font-label-caps text-label-caps uppercase transition-colors {active
+					? 'bg-accent-lever text-white dark:bg-dark-accent-lever'
+					: 'bg-bg-surface text-fg-muted hover:bg-bg-elevated hover:text-fg-ink dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink'}"
+			>
+				{value}
+			</button>
+		{/each}
+		{#if data.staleness}
+			<button
+				data-testid="staleness-chip-clear"
+				onclick={() => selectStaleness(null)}
+				class="rounded-full px-3 py-1 font-label-caps text-label-caps uppercase text-fg-muted hover:text-fg-ink dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
+			>
+				Clear
+			</button>
+		{/if}
 	</div>
 
 	<!-- Search bar + group-by selector -->
@@ -194,6 +250,20 @@
 				class="w-full rounded border border-border-line bg-bg-surface py-2 pl-9 pr-3 text-body-sm text-fg-ink placeholder:text-fg-muted focus:outline-none focus:ring-1 focus:ring-accent-lever dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink dark:placeholder:text-dark-fg-muted dark:focus:ring-dark-accent-lever"
 			/>
 		</div>
+		<label class="flex items-center gap-2 text-body-sm text-fg-muted dark:text-dark-fg-muted">
+			<span>Sort by</span>
+			<select
+				aria-label="Sort by"
+				data-testid="sort-select"
+				value={data.sort}
+				onchange={(e) => selectSort((e.target as HTMLSelectElement).value as ArtifactSort)}
+				class="rounded border border-border-line bg-bg-surface px-2 py-1.5 text-body-sm text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink"
+			>
+				{#each SORT_OPTIONS as opt}
+					<option value={opt.value}>{opt.label}</option>
+				{/each}
+			</select>
+		</label>
 		<label class="flex items-center gap-2 text-body-sm text-fg-muted dark:text-dark-fg-muted">
 			<span>Group by</span>
 			<select
