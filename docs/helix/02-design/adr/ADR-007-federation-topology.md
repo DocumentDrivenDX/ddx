@@ -4,7 +4,6 @@ ddx:
   depends_on:
     - FEAT-020
     - FEAT-021
-    - FEAT-026
     - ADR-006
 ---
 # ADR-007: Federation Topology (Star, Active-Spoke Hybrid)
