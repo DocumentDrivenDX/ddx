@@ -1,0 +1,68 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only an execution result.json artifact; no source changes for schema validator, status model, template, AC-skip, or self-mutation guard. Insufficient evidence to evaluate any AC item.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No code changes for issueType=operator-prompt validator support",
+      "location": "(missing)"
+    },
+    {
+      "severity": "block",
+      "summary": "No code changes adding 'proposed' status or transitions",
+      "location": "(missing)"
+    },
+    {
+      "severity": "block",
+      "summary": "No prompt→bead template added",
+      "location": "(missing)"
+    },
+    {
+      "severity": "block",
+      "summary": "No structural AC-skip logic for operator-prompt",
+      "location": "(missing)"
+    },
+    {
+      "severity": "block",
+      "summary": "No runtime self-mutation guard or unit tests for allow/deny matrix",
+      "location": "(missing)"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1104,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T135003-ba252f19/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1184,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 4022,
+    "output_bytes": 900,
+    "elapsed_ms": 10416,
+    "harness": "claude",
+    "model": "opus"
+  }
+}

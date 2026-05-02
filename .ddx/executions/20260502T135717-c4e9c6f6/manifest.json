@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260502T135717-c4e9c6f6",
+  "bead_id": "ddx-41481396",
+  "base_rev": "cba67be88574a6e596d913b026de13b1d5b69c83",
+  "created_at": "2026-05-02T13:57:18.861905314Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-41481396",
+    "title": "metric: FEAT-005/TD-005 amendments + library/artifacts/met/ template bundle",
+    "description": "Amend FEAT-005 (artifact convention) to register the metric: top-level frontmatter block (schema_version: 1, unit, direction, goal, budget, source: exec|external, scope) — lives outside ddx: so unknown fields stay inert. Amend TD-005 (metric runtime history) to confirm exec-runs collection ownership. Author library/artifacts/met/ template bundle for plugin authors.",
+    "acceptance": "1. FEAT-005 has metric: block schema. 2. TD-005 references exec-runs collection (no rename to metric-runs). 3. library/artifacts/met/{template,prompt,examples} bundle exists. 4. ddx doc audit clean.",
+    "parent": "ddx-921616ea",
+    "labels": [
+      "phase:2",
+      "story:13",
+      "area:specs",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T13:57:17Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128",
+          "created_at": "2026-05-02T13:01:01.888514456Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T13:57:17.610174957Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T135717-c4e9c6f6",
+    "prompt": ".ddx/executions/20260502T135717-c4e9c6f6/prompt.md",
+    "manifest": ".ddx/executions/20260502T135717-c4e9c6f6/manifest.json",
+    "result": ".ddx/executions/20260502T135717-c4e9c6f6/result.json",
+    "checks": ".ddx/executions/20260502T135717-c4e9c6f6/checks.json",
+    "usage": ".ddx/executions/20260502T135717-c4e9c6f6/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-41481396-20260502T135717-c4e9c6f6"
+  }
+}
