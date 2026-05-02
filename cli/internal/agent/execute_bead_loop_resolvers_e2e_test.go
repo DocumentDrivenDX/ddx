@@ -108,20 +108,14 @@ workers:
 		"bead must remain open after a single no_changes attempt under cooldown branch")
 }
 
-// TestMaxNoChangesBeforeCloseFromConfig is the SD-024 Stage 1 behavioral
-// proof that the workers.max_no_changes_before_close knob in
-// .ddx/config.yaml reaches the running loop and drives bead closure
-// after the configured number of consecutive no_changes attempts. The
-// path under test is adjudicateNoChanges' count-based satisfaction rule
-// at execute_bead_loop.go:1010.
-//
-// Configured value: 2 (intentionally below the default of 3 so a passing
-// test cannot be explained by the default).
-//
-// The executor returns no_changes with empty BaseRev/ResultRev so
-// shouldSuppressNoProgress is false on every iteration — the cooldown
-// branch is intentionally avoided here so iteration N+1 finds the bead
-// ready immediately.
+// TestMaxNoChangesBeforeCloseFromConfig was originally the SD-024 Stage 1
+// behavioral proof that workers.max_no_changes_before_close in
+// .ddx/config.yaml drove bead closure after the configured number of
+// consecutive no_changes attempts. Under NoChangesContract (TD-031 §8.1,
+// ddx-b24e9630) that count-based path no longer exists; the bead now closes
+// on a verification_command marker in the rationale. The test is preserved
+// as proof that LoadAndResolve still surfaces the knob and that a verified
+// rationale closes on the first attempt.
 func TestMaxNoChangesBeforeCloseFromConfig(t *testing.T) {
 	const (
 		threshold = 2
@@ -153,19 +147,16 @@ workers:
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, id string) (ExecuteBeadReport, error) {
 			execCalls.Add(1)
-			// BaseRev and ResultRev intentionally empty: shouldSuppressNoProgress
-			// is false, so iterations don't park the bead on cooldown. The
-			// adjudication path (count-based) is the only mechanism that can
-			// close the bead.
 			return ExecuteBeadReport{
-				BeadID:    id,
-				Status:    ExecuteBeadStatusNoChanges,
-				SessionID: "sess-mnc",
-				// rationale empty -> rationaleIsSpecific returns false -> default
-				// count-based rule applies.
-				NoChangesRationale: "",
+				BeadID:             id,
+				Status:             ExecuteBeadStatusNoChanges,
+				SessionID:          "sess-mnc",
+				NoChangesRationale: "verification_command: true\noutput: ok",
 			}, nil
 		}),
+		VerificationRunner: func(ctx context.Context, projectRoot, command string) (int, string, error) {
+			return 0, "ok", nil
+		},
 	}
 
 	rcfg, err := config.LoadAndResolve(projectRoot, config.CLIOverrides{Assignee: "mnc-worker"})
@@ -178,42 +169,15 @@ workers:
 		ProjectRoot: t.TempDir(),
 	}
 
-	// Iteration 1: count becomes 1, < threshold, not satisfied, bead stays
-	// open without cooldown (BaseRev empty), reverts to ready for iteration 2.
 	res1, err := worker.Run(context.Background(), rcfg, runtime)
 	require.NoError(t, err)
 	require.Equal(t, 1, res1.Attempts, "iteration 1 must run exactly once")
-	require.Equal(t, 0, res1.Successes, "iteration 1 must not close the bead (count=1 < threshold=2)")
-
-	mid, err := store.Get(beadID)
-	require.NoError(t, err)
-	require.Equal(t, "open", mid.Status, "bead must remain open after iteration 1")
-	require.NotNil(t, mid.Extra)
-	if v, ok := mid.Extra["execute-loop-no-changes-count"]; ok {
-		switch n := v.(type) {
-		case int:
-			assert.Equal(t, 1, n)
-		case float64:
-			assert.Equal(t, 1, int(n))
-		}
-	}
-
-	// Iteration 2: count becomes 2, >= threshold, satisfied, bead closed
-	// as already_satisfied.
-	res2, err := worker.Run(context.Background(), rcfg, runtime)
-	require.NoError(t, err)
-	require.Equal(t, 1, res2.Attempts, "iteration 2 must run exactly once")
-	require.Equal(t, 1, res2.Successes, "iteration 2 must close the bead via the count-based rule")
+	require.Equal(t, 1, res1.Successes, "verified rationale closes on the first attempt")
 
 	final, err := store.Get(beadID)
 	require.NoError(t, err)
-	assert.Equal(t, "closed", final.Status,
-		"bead must be closed after %d consecutive no_changes attempts (max_no_changes_before_close=%d)",
-		2, threshold)
+	assert.Equal(t, "closed", final.Status, "bead must be closed under NoChangesContract verified path")
 
-	// The terminal event must record already_satisfied — the executor
-	// reported no_changes, but the loop's adjudication rewrote the
-	// terminal status before CloseWithEvidence.
 	events, err := store.Events(beadID)
 	require.NoError(t, err)
 	var sawAlreadySatisfied bool
@@ -229,8 +193,8 @@ workers:
 	assert.True(t, sawAlreadySatisfied,
 		"expected an execute-bead event recording already_satisfied; events=%+v", events)
 
-	assert.Equal(t, int32(2), execCalls.Load(),
-		"executor must be invoked once per RunWithConfig call (2 total)")
+	assert.Equal(t, int32(1), execCalls.Load(),
+		"verified rationale closes on the first attempt; executor invoked exactly once")
 }
 
 func containsToken(body, token string) bool {

@@ -157,9 +157,12 @@ func TestAlreadySatisfiedRequiresAcStructuralCheck(t *testing.T) {
 				return ExecuteBeadReport{
 					BeadID:             id,
 					Status:             ExecuteBeadStatusNoChanges,
-					NoChangesRationale: "TestStructuralPropertyHolds already exists and passes; no change needed",
+					NoChangesRationale: "verification_command: go test ./internal/agent/... -run TestStructuralPropertyHolds\noutput: PASS",
 				}, nil
 			}),
+			VerificationRunner: func(ctx context.Context, projectRoot, command string) (int, string, error) {
+				return 0, "PASS", nil
+			},
 		}
 
 		rcfg := loopConfigForACTest(t)
@@ -169,7 +172,7 @@ func TestAlreadySatisfiedRequiresAcStructuralCheck(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, result.Results, 1)
 		assert.Equal(t, ExecuteBeadStatusAlreadySatisfied, result.Results[0].Status,
-			"positive case: AC test cited in rationale and structural property holds")
+			"positive case: verification_command exits 0 → already_satisfied")
 
 		got, err := store.Get(b.ID)
 		require.NoError(t, err)
