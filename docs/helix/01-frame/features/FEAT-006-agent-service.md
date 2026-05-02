@@ -326,6 +326,21 @@ CONTRACT-003 in the agent repo. Maintainers decide whether the surface grows.
 Do not import agent internal packages. They live under `internal/` and the
 Go compiler blocks external imports after agent v0.5.0 ships.
 
+### Operator-prompt bead type (Story 15)
+
+Free-form prompts submitted from the web UI are persisted as beads with
+`issueType: operator-prompt` and drained by the standard execute-loop. The
+title is the prompt's first line, the body is the full prompt verbatim,
+default labels are `kind:operator-prompt,source:web-ui`, and the AC section
+is auto-generated from a template. These beads run with the same
+harness/profile/tier as regular beads but skip the structural AC check
+(which assumes pre-authored AC). They cannot mutate other operator-prompt
+beads — a hard rule enforced at the bead store, not at planning time.
+
+The trust contract, audit-as-bead model, multi-node delegation policy,
+prompt-injection threat model, and allowed-mutation scope are captured in
+**ADR-021: Operator-Prompt Beads as the Web Write Path**.
+
 ## Migration status
 
 DDx is currently migrating from the legacy DDx-internal routing/harness
@@ -347,3 +362,4 @@ that have since moved upstream.
 - `docs/helix/03-test/test-plans/TP-006-agent-session-capture.md` — session capture test coverage
 - `docs/helix/03-test/test-plans/TP-014-token-awareness.md` — token-awareness coverage
 - `docs/helix/03-test/test-plans/TP-020-agent-routing-and-catalog-resolution.md` — routing and catalog resolution coverage
+- `docs/helix/02-design/adr/ADR-021-operator-prompt-beads-web-write-path.md` — operator-prompt beads as the web write path (Story 15)

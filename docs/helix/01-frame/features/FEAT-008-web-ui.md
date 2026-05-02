@@ -1162,6 +1162,10 @@ ddx/
 - FEAT-014 (Agent Usage Awareness and Routing Signals) — governs the routing
   signal model consumed by the provider dashboard
 - FEAT-021 (Dashboard UI) — defines URL scheme and navigation patterns
+- ADR-021 (Operator-Prompt Beads as the Web Write Path) — trust contract,
+  audit-as-bead, multi-node delegation, prompt-injection threat model, and
+  allowed-mutation scope for the Story 15 operator-prompt input on the
+  project home page
 - SvelteKit, Svelte 5, Bun, graphql-request, graphql-ws, bits-ui, lucide-svelte, Tailwind
 - Playwright for testing (no MSW)
 - Go embed.FS, Chi or net/http, gqlgen
