@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260502T123201-db2a595a",
+  "bead_id": "ddx-a8a18cb7",
+  "base_rev": "d4610ecdbbb830ccf58ef72cfb765d2789f81a48",
+  "created_at": "2026-05-02T12:32:02.317114067Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a8a18cb7",
+    "title": "Story 16: expose server task session logs for review",
+    "description": "Sub-epic for Story 16. Full plan at /tmp/story-16-final.md. Children listed under this epic carry the testable ACs.",
+    "acceptance": "All child beads closed. Locked decisions from the planning round honored.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "story:16"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:32:01Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T12:17:08.806962207Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T121506-6a466f9b\",\"harness\":\"claude\",\"input_tokens\":20,\"output_tokens\":6775,\"total_tokens\":6795,\"cost_usd\":0.6656139999999999,\"duration_ms\":121322,\"exit_code\":0}",
+          "created_at": "2026-05-02T12:17:08.820239992Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=6795 cost_usd=0.6656"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T12:17:13.731116039Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Epic AC requires all child beads closed; children ddx-6d132f62, ddx-f04faa86, ddx-4cd64068, ddx-70a432b5 are still open. Diff only adds an execution result.json with no work toward closing children.\nharness=claude\nmodel=opus\ninput_bytes=3636\noutput_bytes=924\nelapsed_ms=24661",
+          "created_at": "2026-05-02T12:17:38.420060417Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T12:17:38.433118578Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nEpic AC requires all child beads closed; children ddx-6d132f62, ddx-f04faa86, ddx-4cd64068, ddx-70a432b5 are still open. Diff only adds an execution result.json with no work toward closing children.\nresult_rev=b02abd345e643c3cca8ac10235649797284e104a\nbase_rev=fdd0c485491460c4e47153fd0b51276fd50fd9f6",
+          "created_at": "2026-05-02T12:17:38.44422178Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T12:32:01.011668173Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T123201-db2a595a",
+    "prompt": ".ddx/executions/20260502T123201-db2a595a/prompt.md",
+    "manifest": ".ddx/executions/20260502T123201-db2a595a/manifest.json",
+    "result": ".ddx/executions/20260502T123201-db2a595a/result.json",
+    "checks": ".ddx/executions/20260502T123201-db2a595a/checks.json",
+    "usage": ".ddx/executions/20260502T123201-db2a595a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a8a18cb7-20260502T123201-db2a595a"
+  }
+}
