@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T113725-7f3f409d",
+  "bead_id": "ddx-65543530",
+  "base_rev": "d9bae52c773dcf9014b11f02dd49f90b0568f205",
+  "created_at": "2026-05-02T11:37:26.904627036Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-65543530",
+    "title": "runs: canonicalize Run data projection (fix state_runs.go bundle layering; lossless AgentSession join)",
+    "description": "state_runs.go:164 currently synthesizes execution bundles as RunLayerRun; per the three-layer model bundles should be RunLayerTry. Fix the layer assignment. Add lossless join with AgentSession (which carries billingMode, cached tokens, prompt/response/stderr, outcome — NOT in Run today). User decision: keep AgentSession as backing store under layer=run.",
+    "acceptance": "1. state_runs.go: bundles → RunLayerTry; agent sessions → RunLayerRun. 2. Run resolver returns lossless join (Run + AgentSession fields when applicable). 3. Existing runs tests pass; add new test for layering correctness. 4. cd cli \u0026\u0026 go test ./internal/server/... passes.",
+    "parent": "ddx-723d93f2",
+    "labels": [
+      "phase:2",
+      "story:8",
+      "area:server",
+      "kind:fix"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:37:25Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T11:37:25.734764612Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T113725-7f3f409d",
+    "prompt": ".ddx/executions/20260502T113725-7f3f409d/prompt.md",
+    "manifest": ".ddx/executions/20260502T113725-7f3f409d/manifest.json",
+    "result": ".ddx/executions/20260502T113725-7f3f409d/result.json",
+    "checks": ".ddx/executions/20260502T113725-7f3f409d/checks.json",
+    "usage": ".ddx/executions/20260502T113725-7f3f409d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-65543530-20260502T113725-7f3f409d"
+  }
+}
