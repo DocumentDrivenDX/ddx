@@ -1,0 +1,49 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only execution evidence files (manifest.json, result.json). No GraphQL mutation, resolver, validation, audit, or tests are present in the changed files. Cannot evaluate any AC item against the provided diff.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No implementation files in diff — operatorPromptSubmit mutation, CSRF/Origin checks, idempotency dedupe, audit fields, and integration tests are not visible in the changed-files list.",
+      "location": ".ddx/executions/20260502T224933-b7b99343/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1179,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T224933-b7b99343/manifest.json",
+          ".ddx/executions/20260502T224933-b7b99343/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3763,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 6748,
+    "output_bytes": 603,
+    "elapsed_ms": 8707,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
