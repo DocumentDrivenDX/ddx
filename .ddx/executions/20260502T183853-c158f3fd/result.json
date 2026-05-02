@@ -1,0 +1,54 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "TestFederationChaosSuite covers all six AC scenarios end-to-end against real HTTP routes with explicit status-transition assertions; deterministic (per-node deadlines + reconcile, no sleeps gating correctness); verified -count=3 per commit message.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Hub crash modeled via connection hijack/close (in-process analogue of mid-call transport failure) — reasonable proxy; a true process-kill chaos test isn't feasible in-process.",
+      "location": "cli/internal/server/federation_chaos_test.go:154"
+    },
+    {
+      "severity": "info",
+      "summary": "Slow-spoke scenario uses a 1500ms upper bound for a 150ms per-node deadline — generous but appropriate for CI jitter; honors r.Context().Done() so handler exits cleanly.",
+      "location": "cli/internal/server/federation_chaos_test.go:435"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1083,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T182934-a951835d/manifest.json",
+          ".ddx/executions/20260502T182934-a951835d/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3665,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 6554,
+    "output_bytes": 904,
+    "elapsed_ms": 42865,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
