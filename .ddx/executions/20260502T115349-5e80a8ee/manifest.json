@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T115349-5e80a8ee",
+  "bead_id": "ddx-12e97cb9",
+  "base_rev": "fd0d9bc70bc49f1ec9af956c3f01c3f13d0afa79",
+  "created_at": "2026-05-02T11:53:50.762316528Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-12e97cb9",
+    "title": "Story 9: agent availability tab",
+    "description": "Sub-epic for Story 9. Full plan at /tmp/story-9-final.md. Children listed under this epic carry the testable ACs.",
+    "acceptance": "All child beads closed. Locked decisions from the planning round honored.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "story:9"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:53:49Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T11:53:49.613781458Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T115349-5e80a8ee",
+    "prompt": ".ddx/executions/20260502T115349-5e80a8ee/prompt.md",
+    "manifest": ".ddx/executions/20260502T115349-5e80a8ee/manifest.json",
+    "result": ".ddx/executions/20260502T115349-5e80a8ee/result.json",
+    "checks": ".ddx/executions/20260502T115349-5e80a8ee/checks.json",
+    "usage": ".ddx/executions/20260502T115349-5e80a8ee/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-12e97cb9-20260502T115349-5e80a8ee"
+  }
+}
