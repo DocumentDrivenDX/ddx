@@ -1,0 +1,88 @@
+{
+  "attempt_id": "20260502T114347-422bd0b9",
+  "bead_id": "ddx-cb2eb7e3",
+  "base_rev": "df2cea94b080854120a9413a035028e5e789037c",
+  "created_at": "2026-05-02T11:43:48.981152361Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cb2eb7e3",
+    "title": "Migration: split current beads.jsonl into active + archive + attachments (ADR-004 step 5)",
+    "description": "One-shot migration tool that splits the existing 5.4MB .ddx/beads.jsonl into the active+archive+attachments layout introduced by earlier steps. Implemented as 'ddx bead migrate-archive' (or equivalent subcommand). Idempotent: re-running on an already-migrated repo is a no-op. Dry-run flag prints what would move without writing. Uses the same archive API as ddx bead archive, so logic is shared.\n\nDepends on ddx-f7f09b6e, ddx-cd1f0f7e, and the archive command in ddx-\u003carchive-id\u003e.",
+    "acceptance": "1. Migration command exists with --dry-run flag. 2. Running it on a fresh checkout of this repo (with the 5.4MB beads.jsonl) produces a beads.jsonl under 4MB, a beads-archive.jsonl with the moved closed beads, and attachment sidecars for their events. 3. Re-running is a no-op (no changes, exit 0). 4. ddx bead show works for migrated beads (active and archived). 5. ddx bead list and ready/blocked still produce sensible output post-migration. 6. Test runs the migration on a synthetic large fixture and verifies the split.",
+    "parent": "ddx-0c0565f3",
+    "labels": [
+      "area:beads",
+      "area:storage",
+      "kind:tooling",
+      "adr:004"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:43:47Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T05:06:13.544733002Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T050110-b24c47a7\",\"harness\":\"claude\",\"input_tokens\":38,\"output_tokens\":13127,\"total_tokens\":13165,\"cost_usd\":1.64855225,\"duration_ms\":301280,\"exit_code\":0}",
+          "created_at": "2026-05-02T05:06:13.549854706Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=13165 cost_usd=1.6486"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T05:06:17.247322687Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only execution evidence files (manifest.json, result.json). No implementation code, tests, or migration command changes are visible to evaluate against any AC item.\nharness=claude\nmodel=opus\ninput_bytes=6936\noutput_bytes=496\nelapsed_ms=7303",
+          "created_at": "2026-05-02T05:06:26.577028815Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T05:06:26.58024702Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only execution evidence files (manifest.json, result.json). No implementation code, tests, or migration command changes are visible to evaluate against any AC item.\nresult_rev=a77bba973dd4992a1331d925fdf60aa500a8728d\nbase_rev=78e54b6b2eef3fed8f7aec6526cf493d7780cfd8",
+          "created_at": "2026-05-02T05:06:26.582853268Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T11:43:47.806928271Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T114347-422bd0b9",
+    "prompt": ".ddx/executions/20260502T114347-422bd0b9/prompt.md",
+    "manifest": ".ddx/executions/20260502T114347-422bd0b9/manifest.json",
+    "result": ".ddx/executions/20260502T114347-422bd0b9/result.json",
+    "checks": ".ddx/executions/20260502T114347-422bd0b9/checks.json",
+    "usage": ".ddx/executions/20260502T114347-422bd0b9/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-cb2eb7e3-20260502T114347-422bd0b9"
+  }
+}
