@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Migration is complete and correct: all four references received REF-NNN IDs with normalized frontmatter, both AC-AGENT research-synthesis docs were preserved with their existing ddx IDs, the README stub points forward, and all known cross-references (Go test, Playwright e2e, SD-022 row 11) were updated. Note: the working tree shows the original `docs/resources/*.md` files as untracked — these are environmental artifacts (likely re-emerged from a worktree/checkout side-effect) and not part of this commit; the tracked migration itself is clean."
+}
