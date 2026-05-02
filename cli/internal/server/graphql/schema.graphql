@@ -2333,7 +2333,11 @@ type Query {
     """Sort key for ordering results (defaults to PATH)"""
     sort: ArtifactSort,
     """Filter by staleness: fresh, stale, or missing"""
-    staleness: String
+    staleness: String,
+    """Filter by HELIX phase via path prefix match against docs/helix/NN-*/ (e.g. "01-frame")."""
+    phase: String,
+    """Filter by id-prefix segment(s); multi-value OR (e.g. ["ADR","FEAT"])."""
+    prefix: [String!]
   ): ArtifactConnection!
 
   """Fetch a single artifact by ID within a project (includes content for text-based types)."""

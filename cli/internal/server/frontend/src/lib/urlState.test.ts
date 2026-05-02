@@ -9,7 +9,29 @@ describe('urlState.readState', () => {
 		expect(s.groupBy).toBe(DEFAULT_GROUP_BY)
 		expect(s.sort).toBeNull()
 		expect(s.staleness).toBeNull()
+		expect(s.phase).toBeNull()
+		expect(s.prefix).toEqual([])
 		expect(s.filters).toEqual({})
+	})
+
+	it('parses all six reserved facet keys (q, mediaType, staleness, phase, prefix, sort) plus groupBy', () => {
+		const s = readState(
+			new URLSearchParams(
+				'q=foo&mediaType=text/markdown&staleness=fresh&phase=01-frame&prefix=ADR,FEAT&sort=TITLE&groupBy=prefix'
+			)
+		)
+		expect(s.q).toBe('foo')
+		expect(s.mediaType).toBe('text/markdown')
+		expect(s.staleness).toBe('fresh')
+		expect(s.phase).toBe('01-frame')
+		expect(s.prefix).toEqual(['ADR', 'FEAT'])
+		expect(s.sort).toBe('TITLE')
+		expect(s.groupBy).toBe('prefix')
+	})
+
+	it('parses prefix as a comma-separated multi-value list and trims empties', () => {
+		const s = readState(new URLSearchParams('prefix=ADR,,FEAT, US '))
+		expect(s.prefix).toEqual(['ADR', 'FEAT', 'US'])
 	})
 
 	it('parses known keys and filter.* entries', () => {
@@ -64,6 +86,38 @@ describe('urlState.writeState', () => {
 		const cleared = writeState(set, { sort: null, staleness: null })
 		expect(cleared.has('sort')).toBe(false)
 		expect(cleared.has('staleness')).toBe(false)
+	})
+
+	it('round-trips phase and prefix, clears them on null/empty', () => {
+		const set = writeState(new URLSearchParams(''), {
+			phase: '01-frame',
+			prefix: ['ADR', 'FEAT']
+		})
+		expect(set.get('phase')).toBe('01-frame')
+		expect(set.get('prefix')).toBe('ADR,FEAT')
+		expect(readState(set).phase).toBe('01-frame')
+		expect(readState(set).prefix).toEqual(['ADR', 'FEAT'])
+
+		const cleared = writeState(set, { phase: null, prefix: [] })
+		expect(cleared.has('phase')).toBe(false)
+		expect(cleared.has('prefix')).toBe(false)
+	})
+
+	it('composes phase and prefix with q/mediaType/staleness/sort without dropping any', () => {
+		const next = writeState(new URLSearchParams(''), {
+			q: 'spec',
+			mediaType: 'text/markdown',
+			staleness: 'fresh',
+			phase: '02-design',
+			prefix: ['ADR'],
+			sort: 'TITLE'
+		})
+		expect(next.get('q')).toBe('spec')
+		expect(next.get('mediaType')).toBe('text/markdown')
+		expect(next.get('staleness')).toBe('fresh')
+		expect(next.get('phase')).toBe('02-design')
+		expect(next.get('prefix')).toBe('ADR')
+		expect(next.get('sort')).toBe('TITLE')
 	})
 
 	it('replaces filter.* entries atomically', () => {

@@ -4,7 +4,16 @@
 
 export type GroupBy = 'folder' | 'prefix' | 'mediaType'
 
-const KNOWN_KEYS = new Set(['q', 'mediaType', 'groupBy', 'sort', 'staleness'])
+// Reserved facet URL keys (TD-006 facet contract):
+//   q          — full-text search query (single)
+//   mediaType  — media-type filter (single, supports X/* wildcard)
+//   staleness  — staleness filter (single)
+//   phase      — HELIX phase filter (single)
+//   prefix     — id-prefix filter (multi: comma-separated)
+//   sort       — sort key (single)
+// groupBy is a Story-5 categorization axis (not a filter) and travels in
+// the same URL but does NOT narrow results.
+const KNOWN_KEYS = new Set(['q', 'mediaType', 'groupBy', 'sort', 'staleness', 'phase', 'prefix'])
 const FILTER_PREFIX = 'filter.'
 
 export interface ListURLState {
@@ -13,6 +22,8 @@ export interface ListURLState {
 	groupBy: GroupBy
 	sort: string | null
 	staleness: string | null
+	phase: string | null
+	prefix: string[]
 	filters: Record<string, string>
 }
 
@@ -28,12 +39,21 @@ export function readState(params: URLSearchParams): ListURLState {
 	for (const [k, v] of params.entries()) {
 		if (k.startsWith(FILTER_PREFIX)) filters[k.slice(FILTER_PREFIX.length)] = v
 	}
+	const rawPrefix = params.get('prefix')
+	const prefix = rawPrefix
+		? rawPrefix
+				.split(',')
+				.map((s) => s.trim())
+				.filter((s) => s.length > 0)
+		: []
 	return {
 		q: params.get('q') ?? '',
 		mediaType: params.get('mediaType'),
 		groupBy: parseGroupBy(params.get('groupBy')),
 		sort: params.get('sort'),
 		staleness: params.get('staleness'),
+		phase: params.get('phase'),
+		prefix,
 		filters
 	}
 }
@@ -65,6 +85,15 @@ export function writeState(
 	if ('staleness' in patch) {
 		if (patch.staleness) next.set('staleness', patch.staleness)
 		else next.delete('staleness')
+	}
+	if ('phase' in patch) {
+		if (patch.phase) next.set('phase', patch.phase)
+		else next.delete('phase')
+	}
+	if ('prefix' in patch) {
+		const arr = patch.prefix ?? []
+		if (arr.length > 0) next.set('prefix', arr.join(','))
+		else next.delete('prefix')
 	}
 	if ('filters' in patch && patch.filters) {
 		// Replace only the filter.* keys; leave everything else intact.

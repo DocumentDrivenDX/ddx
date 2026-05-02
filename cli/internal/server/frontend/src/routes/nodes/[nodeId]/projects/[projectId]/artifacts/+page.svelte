@@ -103,6 +103,32 @@
 		navigateWith({ staleness: value })
 	}
 
+	// Phase axis: HELIX phases sourced from path prefix docs/helix/NN-*/.
+	// The PHASE_OPTIONS list mirrors the canonical numbered phases the project uses.
+	const PHASE_OPTIONS: { label: string; value: string }[] = [
+		{ label: '01 Frame', value: '01-frame' },
+		{ label: '02 Design', value: '02-design' },
+		{ label: '03 Test', value: '03-test' },
+		{ label: '04 Build', value: '04-build' },
+		{ label: '05 Deploy', value: '05-deploy' },
+		{ label: '06 Iterate', value: '06-iterate' }
+	]
+
+	function selectPhase(next: string | null) {
+		const value = next && next === data.phase ? null : next
+		navigateWith({ phase: value })
+	}
+
+	// Prefix axis: id-prefix segment (ADR|SD|FEAT|US|RSCH|PRD).
+	// Multi-select OR semantics — clicking toggles membership.
+	const PREFIX_OPTIONS = ['ADR', 'SD', 'FEAT', 'US', 'RSCH', 'PRD'] as const
+
+	function togglePrefix(p: string) {
+		const cur = data.prefix ?? []
+		const next = cur.includes(p) ? cur.filter((x) => x !== p) : [...cur, p]
+		navigateWith({ prefix: next })
+	}
+
 	const MEDIA_TYPES: { label: string; value: string | null }[] = [
 		{ label: 'All', value: null },
 		{ label: 'Markdown', value: 'text/markdown' },
@@ -152,7 +178,9 @@
 					mediaType: data.mediaType ?? undefined,
 					search: q ? q : undefined,
 					sort: data.sort,
-					staleness: data.staleness ?? undefined
+					staleness: data.staleness ?? undefined,
+					phase: data.phase ?? undefined,
+					prefix: data.prefix && data.prefix.length > 0 ? data.prefix : undefined
 				})
 			)
 			if (outcome.stale) return
@@ -237,6 +265,60 @@
 			<button
 				data-testid="staleness-chip-clear"
 				onclick={() => selectStaleness(null)}
+				class="rounded-full px-3 py-1 font-label-caps text-label-caps uppercase text-fg-muted hover:text-fg-ink dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
+			>
+				Clear
+			</button>
+		{/if}
+	</div>
+
+	<!-- Phase filter chips (HELIX phase, sourced from docs/helix/NN-*/ path prefix) -->
+	<div class="flex flex-wrap gap-2" data-testid="phase-chips">
+		<span class="self-center font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted">Phase</span>
+		{#each PHASE_OPTIONS as opt}
+			{@const active = data.phase === opt.value}
+			<button
+				data-testid="phase-chip-{opt.value}"
+				aria-pressed={active}
+				onclick={() => selectPhase(opt.value)}
+				class="rounded-full px-3 py-1 font-label-caps text-label-caps uppercase transition-colors {active
+					? 'bg-accent-lever text-white dark:bg-dark-accent-lever'
+					: 'bg-bg-surface text-fg-muted hover:bg-bg-elevated hover:text-fg-ink dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink'}"
+			>
+				{opt.label}
+			</button>
+		{/each}
+		{#if data.phase}
+			<button
+				data-testid="phase-chip-clear"
+				onclick={() => selectPhase(null)}
+				class="rounded-full px-3 py-1 font-label-caps text-label-caps uppercase text-fg-muted hover:text-fg-ink dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
+			>
+				Clear
+			</button>
+		{/if}
+	</div>
+
+	<!-- Prefix filter chips (id-prefix segment, multi-select OR) -->
+	<div class="flex flex-wrap gap-2" data-testid="prefix-chips">
+		<span class="self-center font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted">Prefix</span>
+		{#each PREFIX_OPTIONS as p}
+			{@const active = (data.prefix ?? []).includes(p)}
+			<button
+				data-testid="prefix-chip-{p}"
+				aria-pressed={active}
+				onclick={() => togglePrefix(p)}
+				class="rounded-full px-3 py-1 font-label-caps text-label-caps uppercase transition-colors {active
+					? 'bg-accent-lever text-white dark:bg-dark-accent-lever'
+					: 'bg-bg-surface text-fg-muted hover:bg-bg-elevated hover:text-fg-ink dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink'}"
+			>
+				{p}
+			</button>
+		{/each}
+		{#if data.prefix && data.prefix.length > 0}
+			<button
+				data-testid="prefix-chip-clear"
+				onclick={() => navigateWith({ prefix: [] })}
 				class="rounded-full px-3 py-1 font-label-caps text-label-caps uppercase text-fg-muted hover:text-fg-ink dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
 			>
 				Clear

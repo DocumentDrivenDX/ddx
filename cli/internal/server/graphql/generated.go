@@ -921,7 +921,7 @@ type ComplexityRoot struct {
 		AgentSession                func(childComplexity int, id string) int
 		AgentSessions               func(childComplexity int, first *int, after *string, last *int, before *string, startedAfter *string, startedBefore *string) int
 		Artifact                    func(childComplexity int, projectID string, id string) int
-		Artifacts                   func(childComplexity int, projectID string, first *int, after *string, last *int, before *string, mediaType *string, search *string, sort *ArtifactSort, staleness *string) int
+		Artifacts                   func(childComplexity int, projectID string, first *int, after *string, last *int, before *string, mediaType *string, search *string, sort *ArtifactSort, staleness *string, phase *string, prefix []string) int
 		Bead                        func(childComplexity int, id string) int
 		BeadDepTree                 func(childComplexity int, beadID string) int
 		Beads                       func(childComplexity int, first *int, after *string, last *int, before *string, status *string, label *string, projectID *string) int
@@ -1340,7 +1340,7 @@ type QueryResolver interface {
 	DocDiff(ctx context.Context, documentID string, ref *string) (string, error)
 	Doc(ctx context.Context, id string) (*Document, error)
 	Search(ctx context.Context, query string, first *int, after *string, last *int, before *string) (*SearchResultConnection, error)
-	Artifacts(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, mediaType *string, search *string, sort *ArtifactSort, staleness *string) (*ArtifactConnection, error)
+	Artifacts(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, mediaType *string, search *string, sort *ArtifactSort, staleness *string, phase *string, prefix []string) (*ArtifactConnection, error)
 	Artifact(ctx context.Context, projectID string, id string) (*Artifact, error)
 	Commits(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, since *string, author *string) (*CommitConnection, error)
 	Workers(ctx context.Context, first *int, after *string, last *int, before *string) (*WorkerConnection, error)
@@ -5127,7 +5127,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.Artifacts(childComplexity, args["projectID"].(string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string), args["mediaType"].(*string), args["search"].(*string), args["sort"].(*ArtifactSort), args["staleness"].(*string)), true
+		return e.ComplexityRoot.Query.Artifacts(childComplexity, args["projectID"].(string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string), args["mediaType"].(*string), args["search"].(*string), args["sort"].(*ArtifactSort), args["staleness"].(*string), args["phase"].(*string), args["prefix"].([]string)), true
 	case "Query.bead":
 		if e.ComplexityRoot.Query.Bead == nil {
 			break
@@ -7600,6 +7600,16 @@ func (ec *executionContext) field_Query_artifacts_args(ctx context.Context, rawA
 		return nil, err
 	}
 	args["staleness"] = arg8
+	arg9, err := graphql.ProcessArgField(ctx, rawArgs, "phase", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["phase"] = arg9
+	arg10, err := graphql.ProcessArgField(ctx, rawArgs, "prefix", ec.unmarshalOString2ᚕstringᚄ)
+	if err != nil {
+		return nil, err
+	}
+	args["prefix"] = arg10
 	return args, nil
 }
 
@@ -28245,7 +28255,7 @@ func (ec *executionContext) _Query_artifacts(ctx context.Context, field graphql.
 		ec.fieldContext_Query_artifacts,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().Artifacts(ctx, fc.Args["projectID"].(string), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string), fc.Args["mediaType"].(*string), fc.Args["search"].(*string), fc.Args["sort"].(*ArtifactSort), fc.Args["staleness"].(*string))
+			return ec.Resolvers.Query().Artifacts(ctx, fc.Args["projectID"].(string), fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string), fc.Args["mediaType"].(*string), fc.Args["search"].(*string), fc.Args["sort"].(*ArtifactSort), fc.Args["staleness"].(*string), fc.Args["phase"].(*string), fc.Args["prefix"].([]string))
 		},
 		nil,
 		ec.marshalNArtifactConnection2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactConnection,
