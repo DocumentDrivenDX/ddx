@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T023059-ae89c381",
+  "bead_id": "ddx-95b3ac13",
+  "base_rev": "6bf83540567258a571f6740ae2bb8e53aff4f785",
+  "created_at": "2026-05-02T02:31:00.81830438Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-95b3ac13",
+    "title": "Create 10 deep principle pages at website/content/docs/principles/\u003cslug\u003e/",
+    "description": "Create deep pages for each of 10 domain principles at website/content/docs/principles/\u003cslug\u003e/_index.md (or index.md). Slugs match RSCH: spec-first-development, executable-specifications, audit-trail-required, context-is-king, work-is-a-dag, right-size-the-model, avoid-vendor-lock-in, drift-is-debt, least-privilege-for-agents, inspect-and-adapt. Each page: principle headline, expanded paragraph (~300 words from RSCH-NNN), evidence summary with REF citations as links, DDx feature mapping section. Per codex paragraph guidance: #2 anchored to specs-that-generate-checks; #9 explicitly covers worktree/file scope + tool permissions; #10 anchored to evidence-review loops, not generic agile.",
+    "acceptance": "1. 10 directories under website/content/docs/principles/ with index.md or _index.md. 2. Each renders the principle headline + expanded content + evidence + DDx mapping. 3. Run 'ls website/content/docs/principles/*/index.md website/content/docs/principles/*/_index.md 2\u003e/dev/null | wc -l' returns 10. 4. cd website \u0026\u0026 hugo builds successfully.",
+    "parent": "ddx-629ec5b4",
+    "labels": [
+      "site-redesign",
+      "area:website",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T02:30:59Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "execute-loop-heartbeat-at": "2026-05-02T02:30:59.405460485Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T023059-ae89c381",
+    "prompt": ".ddx/executions/20260502T023059-ae89c381/prompt.md",
+    "manifest": ".ddx/executions/20260502T023059-ae89c381/manifest.json",
+    "result": ".ddx/executions/20260502T023059-ae89c381/result.json",
+    "checks": ".ddx/executions/20260502T023059-ae89c381/checks.json",
+    "usage": ".ddx/executions/20260502T023059-ae89c381/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-95b3ac13-20260502T023059-ae89c381"
+  }
+}
