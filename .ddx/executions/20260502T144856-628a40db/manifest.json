@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T144856-628a40db",
+  "bead_id": "ddx-df8b992f",
+  "base_rev": "de2d673a38e6cb4c4ba98266f88e589d842036de",
+  "created_at": "2026-05-02T14:48:57.624056669Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-df8b992f",
+    "title": "Story 6 B4b: extend GraphQL search to metadata fields + add ArtifactEdge.snippet + resolver tests",
+    "description": "Implement metadata + body search per TD-NNN. Depends on B4a.\n\nChanges:\n- resolver_artifacts.go: extend Query.artifacts 'search' to scan description and ddxFrontmatter JSON in addition to title+path (Phase 2 of plan). Then add textual-body grep with the size cap and binary skip rule from TD-NNN.\n- schema.graphql: add 'snippet: String' field on ArtifactEdge, reusing the contract from existing SearchResult.snippet (panic-free implementation; do not invent a new shape).\n- Resolver populates snippet with the matching context window (with match terms marked, e.g. via existing scoring helper in resolver_feat008.go if reusable).\n- Tests: resolver_artifacts_test.go covers title/path/description/frontmatter/body matches; snippet rendering correctness; pagination correctness across filtered+sorted+searched set; deterministic tie-breaker ordering.",
+    "acceptance": "- search arg matches title, path, description, ddxFrontmatter JSON, and body text (per TD-NNN precedence).\n- ArtifactEdge.snippet returned for matches; uses the SearchResult.snippet contract.\n- Size cap and binary skip enforced (test with oversize fixture and binary fixture).\n- Pagination remains deterministic under filter+sort+search composition.\n- 'cd cli \u0026\u0026 go test -v ./internal/server/graphql/...' passes.",
+    "parent": "ddx-4728ae0f",
+    "labels": [
+      "phase:2",
+      " story:6"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:48:56Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T14:48:56.274719957Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T144856-628a40db",
+    "prompt": ".ddx/executions/20260502T144856-628a40db/prompt.md",
+    "manifest": ".ddx/executions/20260502T144856-628a40db/manifest.json",
+    "result": ".ddx/executions/20260502T144856-628a40db/result.json",
+    "checks": ".ddx/executions/20260502T144856-628a40db/checks.json",
+    "usage": ".ddx/executions/20260502T144856-628a40db/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-df8b992f-20260502T144856-628a40db"
+  }
+}
