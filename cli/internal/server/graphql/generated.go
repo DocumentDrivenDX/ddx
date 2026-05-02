@@ -975,6 +975,8 @@ type ComplexityRoot struct {
 		QueueSummary                func(childComplexity int, projectID string) int
 		Ready                       func(childComplexity int) int
 		Run                         func(childComplexity int, id string) int
+		RunBundleFile               func(childComplexity int, id string, path string) int
+		RunToolCalls                func(childComplexity int, id string, first *int, after *string) int
 		Runs                        func(childComplexity int, projectID *string, layer *RunLayer, beadID *string, status *string, harness *string, first *int, after *string) int
 		Search                      func(childComplexity int, query string, first *int, after *string, last *int, before *string) int
 		SessionsCostSummary         func(childComplexity int, projectID string, since *string, until *string) int
@@ -1045,6 +1047,7 @@ type ComplexityRoot struct {
 		ArtifactID      func(childComplexity int) int
 		BaseRevision    func(childComplexity int) int
 		BeadID          func(childComplexity int) int
+		BundleFiles     func(childComplexity int) int
 		CheckResults    func(childComplexity int) int
 		ChildRunIds     func(childComplexity int) int
 		CompletedAt     func(childComplexity int) int
@@ -1061,17 +1064,34 @@ type ComplexityRoot struct {
 		PowerMax        func(childComplexity int) int
 		PowerMin        func(childComplexity int) int
 		ProjectID       func(childComplexity int) int
+		Prompt          func(childComplexity int) int
 		PromptSummary   func(childComplexity int) int
 		Provider        func(childComplexity int) int
 		QueueInputs     func(childComplexity int) int
+		Response        func(childComplexity int) int
 		ResultRevision  func(childComplexity int) int
 		SelectedBeadIds func(childComplexity int) int
 		StartedAt       func(childComplexity int) int
 		Status          func(childComplexity int) int
+		Stderr          func(childComplexity int) int
 		StopCondition   func(childComplexity int) int
 		TokensIn        func(childComplexity int) int
 		TokensOut       func(childComplexity int) int
 		WorktreePath    func(childComplexity int) int
+	}
+
+	RunBundleFile struct {
+		MimeType func(childComplexity int) int
+		Path     func(childComplexity int) int
+		Size     func(childComplexity int) int
+	}
+
+	RunBundleFileContent struct {
+		Content   func(childComplexity int) int
+		MimeType  func(childComplexity int) int
+		Path      func(childComplexity int) int
+		SizeBytes func(childComplexity int) int
+		Truncated func(childComplexity int) int
 	}
 
 	RunConnection struct {
@@ -1081,6 +1101,27 @@ type ComplexityRoot struct {
 	}
 
 	RunEdge struct {
+		Cursor func(childComplexity int) int
+		Node   func(childComplexity int) int
+	}
+
+	RunToolCall struct {
+		DurationMs func(childComplexity int) int
+		Error      func(childComplexity int) int
+		ID         func(childComplexity int) int
+		Input      func(childComplexity int) int
+		Output     func(childComplexity int) int
+		Seq        func(childComplexity int) int
+		Tool       func(childComplexity int) int
+	}
+
+	RunToolCallConnection struct {
+		Edges      func(childComplexity int) int
+		PageInfo   func(childComplexity int) int
+		TotalCount func(childComplexity int) int
+	}
+
+	RunToolCallEdge struct {
 		Cursor func(childComplexity int) int
 		Node   func(childComplexity int) int
 	}
@@ -1319,6 +1360,8 @@ type QueryResolver interface {
 	ExecutionToolCalls(ctx context.Context, id string, first *int, after *string) (*ExecutionToolCallConnection, error)
 	Runs(ctx context.Context, projectID *string, layer *RunLayer, beadID *string, status *string, harness *string, first *int, after *string) (*RunConnection, error)
 	Run(ctx context.Context, id string) (*Run, error)
+	RunToolCalls(ctx context.Context, id string, first *int, after *string) (*RunToolCallConnection, error)
+	RunBundleFile(ctx context.Context, id string, path string) (*RunBundleFileContent, error)
 	Health(ctx context.Context) (*HealthStatus, error)
 	Ready(ctx context.Context) (*ReadyStatus, error)
 	Coordinators(ctx context.Context) ([]*CoordinatorMetricsEntry, error)
@@ -5634,6 +5677,28 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Run(childComplexity, args["id"].(string)), true
+	case "Query.runBundleFile":
+		if e.ComplexityRoot.Query.RunBundleFile == nil {
+			break
+		}
+
+		args, err := ec.field_Query_runBundleFile_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.RunBundleFile(childComplexity, args["id"].(string), args["path"].(string)), true
+	case "Query.runToolCalls":
+		if e.ComplexityRoot.Query.RunToolCalls == nil {
+			break
+		}
+
+		args, err := ec.field_Query_runToolCalls_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.RunToolCalls(childComplexity, args["id"].(string), args["first"].(*int), args["after"].(*string)), true
 	case "Query.runs":
 		if e.ComplexityRoot.Query.Runs == nil {
 			break
@@ -5946,6 +6011,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Run.BeadID(childComplexity), true
+	case "Run.bundleFiles":
+		if e.ComplexityRoot.Run.BundleFiles == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.BundleFiles(childComplexity), true
 	case "Run.checkResults":
 		if e.ComplexityRoot.Run.CheckResults == nil {
 			break
@@ -6042,6 +6113,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Run.ProjectID(childComplexity), true
+	case "Run.prompt":
+		if e.ComplexityRoot.Run.Prompt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.Prompt(childComplexity), true
 	case "Run.promptSummary":
 		if e.ComplexityRoot.Run.PromptSummary == nil {
 			break
@@ -6060,6 +6137,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Run.QueueInputs(childComplexity), true
+	case "Run.response":
+		if e.ComplexityRoot.Run.Response == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.Response(childComplexity), true
 	case "Run.resultRevision":
 		if e.ComplexityRoot.Run.ResultRevision == nil {
 			break
@@ -6084,6 +6167,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Run.Status(childComplexity), true
+	case "Run.stderr":
+		if e.ComplexityRoot.Run.Stderr == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.Stderr(childComplexity), true
 	case "Run.stopCondition":
 		if e.ComplexityRoot.Run.StopCondition == nil {
 			break
@@ -6108,6 +6197,56 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Run.WorktreePath(childComplexity), true
+
+	case "RunBundleFile.mimeType":
+		if e.ComplexityRoot.RunBundleFile.MimeType == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunBundleFile.MimeType(childComplexity), true
+	case "RunBundleFile.path":
+		if e.ComplexityRoot.RunBundleFile.Path == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunBundleFile.Path(childComplexity), true
+	case "RunBundleFile.size":
+		if e.ComplexityRoot.RunBundleFile.Size == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunBundleFile.Size(childComplexity), true
+
+	case "RunBundleFileContent.content":
+		if e.ComplexityRoot.RunBundleFileContent.Content == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunBundleFileContent.Content(childComplexity), true
+	case "RunBundleFileContent.mimeType":
+		if e.ComplexityRoot.RunBundleFileContent.MimeType == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunBundleFileContent.MimeType(childComplexity), true
+	case "RunBundleFileContent.path":
+		if e.ComplexityRoot.RunBundleFileContent.Path == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunBundleFileContent.Path(childComplexity), true
+	case "RunBundleFileContent.sizeBytes":
+		if e.ComplexityRoot.RunBundleFileContent.SizeBytes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunBundleFileContent.SizeBytes(childComplexity), true
+	case "RunBundleFileContent.truncated":
+		if e.ComplexityRoot.RunBundleFileContent.Truncated == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunBundleFileContent.Truncated(childComplexity), true
 
 	case "RunConnection.edges":
 		if e.ComplexityRoot.RunConnection.Edges == nil {
@@ -6140,6 +6279,81 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.RunEdge.Node(childComplexity), true
+
+	case "RunToolCall.durationMs":
+		if e.ComplexityRoot.RunToolCall.DurationMs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunToolCall.DurationMs(childComplexity), true
+	case "RunToolCall.error":
+		if e.ComplexityRoot.RunToolCall.Error == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunToolCall.Error(childComplexity), true
+	case "RunToolCall.id":
+		if e.ComplexityRoot.RunToolCall.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunToolCall.ID(childComplexity), true
+	case "RunToolCall.input":
+		if e.ComplexityRoot.RunToolCall.Input == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunToolCall.Input(childComplexity), true
+	case "RunToolCall.output":
+		if e.ComplexityRoot.RunToolCall.Output == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunToolCall.Output(childComplexity), true
+	case "RunToolCall.seq":
+		if e.ComplexityRoot.RunToolCall.Seq == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunToolCall.Seq(childComplexity), true
+	case "RunToolCall.tool":
+		if e.ComplexityRoot.RunToolCall.Tool == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunToolCall.Tool(childComplexity), true
+
+	case "RunToolCallConnection.edges":
+		if e.ComplexityRoot.RunToolCallConnection.Edges == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunToolCallConnection.Edges(childComplexity), true
+	case "RunToolCallConnection.pageInfo":
+		if e.ComplexityRoot.RunToolCallConnection.PageInfo == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunToolCallConnection.PageInfo(childComplexity), true
+	case "RunToolCallConnection.totalCount":
+		if e.ComplexityRoot.RunToolCallConnection.TotalCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunToolCallConnection.TotalCount(childComplexity), true
+
+	case "RunToolCallEdge.cursor":
+		if e.ComplexityRoot.RunToolCallEdge.Cursor == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunToolCallEdge.Cursor(childComplexity), true
+	case "RunToolCallEdge.node":
+		if e.ComplexityRoot.RunToolCallEdge.Node == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunToolCallEdge.Node(childComplexity), true
 
 	case "SearchResult.name":
 		if e.ComplexityRoot.SearchResult.Name == nil {
@@ -8182,6 +8396,43 @@ func (ec *executionContext) field_Query_queueSummary_args(ctx context.Context, r
 		return nil, err
 	}
 	args["projectId"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_runBundleFile_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "path", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["path"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_runToolCalls_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
+	if err != nil {
+		return nil, err
+	}
+	args["first"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "after", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["after"] = arg2
 	return args, nil
 }
 
@@ -29495,6 +29746,14 @@ func (ec *executionContext) fieldContext_Query_run(ctx context.Context, field gr
 				return ec.fieldContext_Run_outputExcerpt(ctx, field)
 			case "evidenceLinks":
 				return ec.fieldContext_Run_evidenceLinks(ctx, field)
+			case "prompt":
+				return ec.fieldContext_Run_prompt(ctx, field)
+			case "response":
+				return ec.fieldContext_Run_response(ctx, field)
+			case "stderr":
+				return ec.fieldContext_Run_stderr(ctx, field)
+			case "bundleFiles":
+				return ec.fieldContext_Run_bundleFiles(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Run", field.Name)
 		},
@@ -29507,6 +29766,108 @@ func (ec *executionContext) fieldContext_Query_run(ctx context.Context, field gr
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_run_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_runToolCalls(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_runToolCalls,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().RunToolCalls(ctx, fc.Args["id"].(string), fc.Args["first"].(*int), fc.Args["after"].(*string))
+		},
+		nil,
+		ec.marshalNRunToolCallConnection2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunToolCallConnection,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_runToolCalls(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "edges":
+				return ec.fieldContext_RunToolCallConnection_edges(ctx, field)
+			case "pageInfo":
+				return ec.fieldContext_RunToolCallConnection_pageInfo(ctx, field)
+			case "totalCount":
+				return ec.fieldContext_RunToolCallConnection_totalCount(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RunToolCallConnection", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_runToolCalls_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_runBundleFile(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_runBundleFile,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().RunBundleFile(ctx, fc.Args["id"].(string), fc.Args["path"].(string))
+		},
+		nil,
+		ec.marshalORunBundleFileContent2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunBundleFileContent,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_runBundleFile(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "path":
+				return ec.fieldContext_RunBundleFileContent_path(ctx, field)
+			case "content":
+				return ec.fieldContext_RunBundleFileContent_content(ctx, field)
+			case "sizeBytes":
+				return ec.fieldContext_RunBundleFileContent_sizeBytes(ctx, field)
+			case "truncated":
+				return ec.fieldContext_RunBundleFileContent_truncated(ctx, field)
+			case "mimeType":
+				return ec.fieldContext_RunBundleFileContent_mimeType(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RunBundleFileContent", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_runBundleFile_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -32688,6 +33049,362 @@ func (ec *executionContext) fieldContext_Run_evidenceLinks(_ context.Context, fi
 	return fc, nil
 }
 
+func (ec *executionContext) _Run_prompt(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_prompt,
+		func(ctx context.Context) (any, error) {
+			return obj.Prompt, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_prompt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_response(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_response,
+		func(ctx context.Context) (any, error) {
+			return obj.Response, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_response(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_stderr(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_stderr,
+		func(ctx context.Context) (any, error) {
+			return obj.Stderr, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_stderr(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_bundleFiles(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_bundleFiles,
+		func(ctx context.Context) (any, error) {
+			return obj.BundleFiles, nil
+		},
+		nil,
+		ec.marshalNRunBundleFile2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunBundleFileᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_bundleFiles(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "path":
+				return ec.fieldContext_RunBundleFile_path(ctx, field)
+			case "size":
+				return ec.fieldContext_RunBundleFile_size(ctx, field)
+			case "mimeType":
+				return ec.fieldContext_RunBundleFile_mimeType(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RunBundleFile", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunBundleFile_path(ctx context.Context, field graphql.CollectedField, obj *RunBundleFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunBundleFile_path,
+		func(ctx context.Context) (any, error) {
+			return obj.Path, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunBundleFile_path(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunBundleFile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunBundleFile_size(ctx context.Context, field graphql.CollectedField, obj *RunBundleFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunBundleFile_size,
+		func(ctx context.Context) (any, error) {
+			return obj.Size, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunBundleFile_size(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunBundleFile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunBundleFile_mimeType(ctx context.Context, field graphql.CollectedField, obj *RunBundleFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunBundleFile_mimeType,
+		func(ctx context.Context) (any, error) {
+			return obj.MimeType, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunBundleFile_mimeType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunBundleFile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunBundleFileContent_path(ctx context.Context, field graphql.CollectedField, obj *RunBundleFileContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunBundleFileContent_path,
+		func(ctx context.Context) (any, error) {
+			return obj.Path, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunBundleFileContent_path(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunBundleFileContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunBundleFileContent_content(ctx context.Context, field graphql.CollectedField, obj *RunBundleFileContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunBundleFileContent_content,
+		func(ctx context.Context) (any, error) {
+			return obj.Content, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunBundleFileContent_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunBundleFileContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunBundleFileContent_sizeBytes(ctx context.Context, field graphql.CollectedField, obj *RunBundleFileContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunBundleFileContent_sizeBytes,
+		func(ctx context.Context) (any, error) {
+			return obj.SizeBytes, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunBundleFileContent_sizeBytes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunBundleFileContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunBundleFileContent_truncated(ctx context.Context, field graphql.CollectedField, obj *RunBundleFileContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunBundleFileContent_truncated,
+		func(ctx context.Context) (any, error) {
+			return obj.Truncated, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunBundleFileContent_truncated(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunBundleFileContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunBundleFileContent_mimeType(ctx context.Context, field graphql.CollectedField, obj *RunBundleFileContent) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunBundleFileContent_mimeType,
+		func(ctx context.Context) (any, error) {
+			return obj.MimeType, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunBundleFileContent_mimeType(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunBundleFileContent",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _RunConnection_edges(ctx context.Context, field graphql.CollectedField, obj *RunConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -32875,6 +33592,14 @@ func (ec *executionContext) fieldContext_RunEdge_node(_ context.Context, field g
 				return ec.fieldContext_Run_outputExcerpt(ctx, field)
 			case "evidenceLinks":
 				return ec.fieldContext_Run_evidenceLinks(ctx, field)
+			case "prompt":
+				return ec.fieldContext_Run_prompt(ctx, field)
+			case "response":
+				return ec.fieldContext_Run_response(ctx, field)
+			case "stderr":
+				return ec.fieldContext_Run_stderr(ctx, field)
+			case "bundleFiles":
+				return ec.fieldContext_Run_bundleFiles(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Run", field.Name)
 		},
@@ -32901,6 +33626,386 @@ func (ec *executionContext) _RunEdge_cursor(ctx context.Context, field graphql.C
 func (ec *executionContext) fieldContext_RunEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "RunEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunToolCall_id(ctx context.Context, field graphql.CollectedField, obj *RunToolCall) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunToolCall_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunToolCall_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunToolCall",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunToolCall_seq(ctx context.Context, field graphql.CollectedField, obj *RunToolCall) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunToolCall_seq,
+		func(ctx context.Context) (any, error) {
+			return obj.Seq, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunToolCall_seq(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunToolCall",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunToolCall_tool(ctx context.Context, field graphql.CollectedField, obj *RunToolCall) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunToolCall_tool,
+		func(ctx context.Context) (any, error) {
+			return obj.Tool, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunToolCall_tool(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunToolCall",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunToolCall_input(ctx context.Context, field graphql.CollectedField, obj *RunToolCall) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunToolCall_input,
+		func(ctx context.Context) (any, error) {
+			return obj.Input, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunToolCall_input(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunToolCall",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunToolCall_output(ctx context.Context, field graphql.CollectedField, obj *RunToolCall) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunToolCall_output,
+		func(ctx context.Context) (any, error) {
+			return obj.Output, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunToolCall_output(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunToolCall",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunToolCall_error(ctx context.Context, field graphql.CollectedField, obj *RunToolCall) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunToolCall_error,
+		func(ctx context.Context) (any, error) {
+			return obj.Error, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunToolCall_error(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunToolCall",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunToolCall_durationMs(ctx context.Context, field graphql.CollectedField, obj *RunToolCall) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunToolCall_durationMs,
+		func(ctx context.Context) (any, error) {
+			return obj.DurationMs, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunToolCall_durationMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunToolCall",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunToolCallConnection_edges(ctx context.Context, field graphql.CollectedField, obj *RunToolCallConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunToolCallConnection_edges,
+		func(ctx context.Context) (any, error) {
+			return obj.Edges, nil
+		},
+		nil,
+		ec.marshalNRunToolCallEdge2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunToolCallEdgeᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunToolCallConnection_edges(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunToolCallConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "node":
+				return ec.fieldContext_RunToolCallEdge_node(ctx, field)
+			case "cursor":
+				return ec.fieldContext_RunToolCallEdge_cursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RunToolCallEdge", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunToolCallConnection_pageInfo(ctx context.Context, field graphql.CollectedField, obj *RunToolCallConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunToolCallConnection_pageInfo,
+		func(ctx context.Context) (any, error) {
+			return obj.PageInfo, nil
+		},
+		nil,
+		ec.marshalNPageInfo2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐPageInfo,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunToolCallConnection_pageInfo(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunToolCallConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "hasNextPage":
+				return ec.fieldContext_PageInfo_hasNextPage(ctx, field)
+			case "hasPreviousPage":
+				return ec.fieldContext_PageInfo_hasPreviousPage(ctx, field)
+			case "startCursor":
+				return ec.fieldContext_PageInfo_startCursor(ctx, field)
+			case "endCursor":
+				return ec.fieldContext_PageInfo_endCursor(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type PageInfo", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunToolCallConnection_totalCount(ctx context.Context, field graphql.CollectedField, obj *RunToolCallConnection) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunToolCallConnection_totalCount,
+		func(ctx context.Context) (any, error) {
+			return obj.TotalCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunToolCallConnection_totalCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunToolCallConnection",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunToolCallEdge_node(ctx context.Context, field graphql.CollectedField, obj *RunToolCallEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunToolCallEdge_node,
+		func(ctx context.Context) (any, error) {
+			return obj.Node, nil
+		},
+		nil,
+		ec.marshalNRunToolCall2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunToolCall,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunToolCallEdge_node(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunToolCallEdge",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_RunToolCall_id(ctx, field)
+			case "seq":
+				return ec.fieldContext_RunToolCall_seq(ctx, field)
+			case "tool":
+				return ec.fieldContext_RunToolCall_tool(ctx, field)
+			case "input":
+				return ec.fieldContext_RunToolCall_input(ctx, field)
+			case "output":
+				return ec.fieldContext_RunToolCall_output(ctx, field)
+			case "error":
+				return ec.fieldContext_RunToolCall_error(ctx, field)
+			case "durationMs":
+				return ec.fieldContext_RunToolCall_durationMs(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RunToolCall", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunToolCallEdge_cursor(ctx context.Context, field graphql.CollectedField, obj *RunToolCallEdge) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunToolCallEdge_cursor,
+		func(ctx context.Context) (any, error) {
+			return obj.Cursor, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunToolCallEdge_cursor(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunToolCallEdge",
 		Field:      field,
 		IsMethod:   false,
 		IsResolver: false,
@@ -44852,6 +45957,47 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "runToolCalls":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_runToolCalls(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "runBundleFile":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_runBundleFile(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "health":
 			field := field
 
@@ -45876,6 +47022,122 @@ func (ec *executionContext) _Run(ctx context.Context, sel ast.SelectionSet, obj 
 			out.Values[i] = ec._Run_outputExcerpt(ctx, field, obj)
 		case "evidenceLinks":
 			out.Values[i] = ec._Run_evidenceLinks(ctx, field, obj)
+		case "prompt":
+			out.Values[i] = ec._Run_prompt(ctx, field, obj)
+		case "response":
+			out.Values[i] = ec._Run_response(ctx, field, obj)
+		case "stderr":
+			out.Values[i] = ec._Run_stderr(ctx, field, obj)
+		case "bundleFiles":
+			out.Values[i] = ec._Run_bundleFiles(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var runBundleFileImplementors = []string{"RunBundleFile"}
+
+func (ec *executionContext) _RunBundleFile(ctx context.Context, sel ast.SelectionSet, obj *RunBundleFile) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, runBundleFileImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RunBundleFile")
+		case "path":
+			out.Values[i] = ec._RunBundleFile_path(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "size":
+			out.Values[i] = ec._RunBundleFile_size(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mimeType":
+			out.Values[i] = ec._RunBundleFile_mimeType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var runBundleFileContentImplementors = []string{"RunBundleFileContent"}
+
+func (ec *executionContext) _RunBundleFileContent(ctx context.Context, sel ast.SelectionSet, obj *RunBundleFileContent) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, runBundleFileContentImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RunBundleFileContent")
+		case "path":
+			out.Values[i] = ec._RunBundleFileContent_path(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "content":
+			out.Values[i] = ec._RunBundleFileContent_content(ctx, field, obj)
+		case "sizeBytes":
+			out.Values[i] = ec._RunBundleFileContent_sizeBytes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "truncated":
+			out.Values[i] = ec._RunBundleFileContent_truncated(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mimeType":
+			out.Values[i] = ec._RunBundleFileContent_mimeType(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -45966,6 +47228,159 @@ func (ec *executionContext) _RunEdge(ctx context.Context, sel ast.SelectionSet, 
 			}
 		case "cursor":
 			out.Values[i] = ec._RunEdge_cursor(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var runToolCallImplementors = []string{"RunToolCall"}
+
+func (ec *executionContext) _RunToolCall(ctx context.Context, sel ast.SelectionSet, obj *RunToolCall) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, runToolCallImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RunToolCall")
+		case "id":
+			out.Values[i] = ec._RunToolCall_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "seq":
+			out.Values[i] = ec._RunToolCall_seq(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "tool":
+			out.Values[i] = ec._RunToolCall_tool(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "input":
+			out.Values[i] = ec._RunToolCall_input(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "output":
+			out.Values[i] = ec._RunToolCall_output(ctx, field, obj)
+		case "error":
+			out.Values[i] = ec._RunToolCall_error(ctx, field, obj)
+		case "durationMs":
+			out.Values[i] = ec._RunToolCall_durationMs(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var runToolCallConnectionImplementors = []string{"RunToolCallConnection"}
+
+func (ec *executionContext) _RunToolCallConnection(ctx context.Context, sel ast.SelectionSet, obj *RunToolCallConnection) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, runToolCallConnectionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RunToolCallConnection")
+		case "edges":
+			out.Values[i] = ec._RunToolCallConnection_edges(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pageInfo":
+			out.Values[i] = ec._RunToolCallConnection_pageInfo(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "totalCount":
+			out.Values[i] = ec._RunToolCallConnection_totalCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var runToolCallEdgeImplementors = []string{"RunToolCallEdge"}
+
+func (ec *executionContext) _RunToolCallEdge(ctx context.Context, sel ast.SelectionSet, obj *RunToolCallEdge) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, runToolCallEdgeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RunToolCallEdge")
+		case "node":
+			out.Values[i] = ec._RunToolCallEdge_node(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cursor":
+			out.Values[i] = ec._RunToolCallEdge_cursor(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -49010,6 +50425,32 @@ func (ec *executionContext) marshalNRun2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddx
 	return ec._Run(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalNRunBundleFile2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunBundleFileᚄ(ctx context.Context, sel ast.SelectionSet, v []*RunBundleFile) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRunBundleFile2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunBundleFile(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNRunBundleFile2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunBundleFile(ctx context.Context, sel ast.SelectionSet, v *RunBundleFile) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RunBundleFile(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNRunConnection2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunConnection(ctx context.Context, sel ast.SelectionSet, v RunConnection) graphql.Marshaler {
 	return ec._RunConnection(ctx, sel, &v)
 }
@@ -49058,6 +50499,56 @@ func (ec *executionContext) unmarshalNRunLayer2githubᚗcomᚋDocumentDrivenDX�
 
 func (ec *executionContext) marshalNRunLayer2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunLayer(ctx context.Context, sel ast.SelectionSet, v RunLayer) graphql.Marshaler {
 	return v
+}
+
+func (ec *executionContext) marshalNRunToolCall2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunToolCall(ctx context.Context, sel ast.SelectionSet, v *RunToolCall) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RunToolCall(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRunToolCallConnection2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunToolCallConnection(ctx context.Context, sel ast.SelectionSet, v RunToolCallConnection) graphql.Marshaler {
+	return ec._RunToolCallConnection(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRunToolCallConnection2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunToolCallConnection(ctx context.Context, sel ast.SelectionSet, v *RunToolCallConnection) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RunToolCallConnection(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNRunToolCallEdge2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunToolCallEdgeᚄ(ctx context.Context, sel ast.SelectionSet, v []*RunToolCallEdge) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNRunToolCallEdge2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunToolCallEdge(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNRunToolCallEdge2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunToolCallEdge(ctx context.Context, sel ast.SelectionSet, v *RunToolCallEdge) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RunToolCallEdge(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNSearchResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐSearchResult(ctx context.Context, sel ast.SelectionSet, v *SearchResult) graphql.Marshaler {
@@ -50029,6 +51520,13 @@ func (ec *executionContext) marshalORun2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddx
 		return graphql.Null
 	}
 	return ec._Run(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalORunBundleFileContent2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunBundleFileContent(ctx context.Context, sel ast.SelectionSet, v *RunBundleFileContent) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._RunBundleFileContent(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalORunLayer2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunLayer(ctx context.Context, v any) (*RunLayer, error) {

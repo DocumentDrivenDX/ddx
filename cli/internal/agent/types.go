@@ -146,6 +146,7 @@ type SessionEntry struct {
 	TotalTokens     int               `json:"total_tokens,omitempty"` // input + output; populated on every run
 	BaseRev         string            `json:"base_rev,omitempty"`     // git SHA the execution started from (execute-bead only)
 	ResultRev       string            `json:"result_rev,omitempty"`   // git SHA of landed/preserved iteration (execute-bead only)
+	ToolCalls       []ToolCallEntry   `json:"tool_calls,omitempty"`   // normalized tool-call stream captured at drain (Story 16)
 }
 
 // ProviderStatus tracks provider connectivity and credit status.

@@ -499,6 +499,7 @@ func (s *ServerState) GetRunGraphQL(id string) (*ddxgraphql.Run, bool) {
 		runs := s.loadRunsForProject(proj.ID, proj.Path)
 		for _, r := range runs {
 			if r.ID == id {
+				s.loadRunDetail(r)
 				return r, true
 			}
 		}

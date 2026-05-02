@@ -14,6 +14,14 @@ type RunsStateProvider interface {
 	GetRunGraphQL(id string) (*Run, bool)
 }
 
+// RunDetailStateProvider is the optional sub-interface for the Story 16
+// run-detail surfaces (tool calls + bundle file resolver). Kept separate from
+// RunsStateProvider so legacy stubs continue to compile.
+type RunDetailStateProvider interface {
+	GetRunToolCallsGraphQL(id string) []*RunToolCall
+	GetRunBundleFileGraphQL(id, path string) (*RunBundleFileContent, bool)
+}
+
 // RunFilter holds the optional filter args for Query.runs.
 type RunFilter struct {
 	Layer   *RunLayer
@@ -57,6 +65,63 @@ func (r *queryResolver) Run(ctx context.Context, id string) (*Run, error) {
 		return nil, nil
 	}
 	return run, nil
+}
+
+// RunToolCalls is the resolver for the runToolCalls field. Returns the
+// normalized tool-call entries persisted at drain time, paginated by
+// sequence. Returns an empty connection (not an error) for unknown ids or
+// when the backing state provider does not implement RunDetailStateProvider.
+func (r *queryResolver) RunToolCalls(ctx context.Context, id string, first *int, after *string) (*RunToolCallConnection, error) {
+	provider, ok := r.State.(RunDetailStateProvider)
+	if !ok {
+		return emptyRunToolCallConnection(), nil
+	}
+	calls := provider.GetRunToolCallsGraphQL(id)
+	return runToolCallConnectionFrom(calls, first, after), nil
+}
+
+// RunBundleFile is the resolver for the runBundleFile field. Returns nil
+// (not an error) when the path fails canonical-path / whitelist checks or
+// the file is not present — the GraphQL response treats nil as 404.
+func (r *queryResolver) RunBundleFile(ctx context.Context, id string, path string) (*RunBundleFileContent, error) {
+	provider, ok := r.State.(RunDetailStateProvider)
+	if !ok {
+		return nil, nil
+	}
+	out, ok := provider.GetRunBundleFileGraphQL(id, path)
+	if !ok {
+		return nil, nil
+	}
+	return out, nil
+}
+
+func emptyRunToolCallConnection() *RunToolCallConnection {
+	return &RunToolCallConnection{Edges: []*RunToolCallEdge{}, PageInfo: &PageInfo{}, TotalCount: 0}
+}
+
+func runToolCallConnectionFrom(calls []*RunToolCall, first *int, after *string) *RunToolCallConnection {
+	all := make([]*RunToolCallEdge, len(calls))
+	ids := make([]string, len(calls))
+	for i, c := range calls {
+		all[i] = &RunToolCallEdge{Node: c, Cursor: encodeStableCursor(c.ID)}
+		ids[i] = c.ID
+	}
+	startIdx, _ := stablePageBounds(ids, after, nil)
+	slice := all[startIdx:]
+	truncByFirst := false
+	if first != nil && *first >= 0 && *first < len(slice) {
+		slice = slice[:*first]
+		truncByFirst = true
+	}
+	pageInfo := &PageInfo{
+		HasPreviousPage: startIdx > 0,
+		HasNextPage:     truncByFirst,
+	}
+	if len(slice) > 0 {
+		pageInfo.StartCursor = &slice[0].Cursor
+		pageInfo.EndCursor = &slice[len(slice)-1].Cursor
+	}
+	return &RunToolCallConnection{Edges: slice, PageInfo: pageInfo, TotalCount: len(all)}
 }
 
 func emptyRunConnection() *RunConnection {

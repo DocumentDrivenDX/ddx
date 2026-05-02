@@ -1155,6 +1155,76 @@ type Run implements Node {
   outputExcerpt: String
   """Links to execution evidence (bundle paths, log paths, etc.) (run layer only)"""
   evidenceLinks: [String!]
+
+  # ── Run-detail fields (Story 16: lossless transcript) ──────────────────
+  """Full prompt body (run layer; loaded only for run(id:))."""
+  prompt: String
+  """Full agent response body (run layer; loaded only for run(id:))."""
+  response: String
+  """Captured stderr stream (run layer; loaded only for run(id:))."""
+  stderr: String
+  """Files in the run's bundle directory (path relative to bundle root, size, mimeType). Empty when no bundle."""
+  bundleFiles: [RunBundleFile!]!
+}
+
+"""RunToolCall is one normalized tool-call entry persisted at drain time."""
+type RunToolCall {
+  """Stable identifier within the run (used as cursor)."""
+  id: ID!
+  """Sequence number within the run, starting at 0."""
+  seq: Int!
+  """Tool name."""
+  tool: String!
+  """Tool input (JSON-encoded string)."""
+  input: String!
+  """Tool output (string). May be truncated for transport."""
+  output: String
+  """Error string if the tool call failed."""
+  error: String
+  """Tool call duration in milliseconds."""
+  durationMs: Int
+}
+
+"""RunToolCallEdge is one edge in a RunToolCallConnection."""
+type RunToolCallEdge {
+  """The tool call at this position."""
+  node: RunToolCall!
+  """Opaque cursor for pagination."""
+  cursor: String!
+}
+
+"""RunToolCallConnection is a Relay cursor connection of run tool calls."""
+type RunToolCallConnection {
+  """Ordered list of tool call edges."""
+  edges: [RunToolCallEdge!]!
+  """Pagination metadata."""
+  pageInfo: PageInfo!
+  """Total number of tool calls available."""
+  totalCount: Int!
+}
+
+"""RunBundleFile describes one file in a run's evidence bundle."""
+type RunBundleFile {
+  """Path relative to the bundle root (forward slashes)."""
+  path: String!
+  """Size in bytes."""
+  size: Int!
+  """MIME type (best-effort by extension)."""
+  mimeType: String!
+}
+
+"""RunBundleFileContent is the inline content (or download metadata) for one bundle file."""
+type RunBundleFileContent {
+  """Path relative to the bundle root."""
+  path: String!
+  """Inline content. Null when file exceeds the size cap or is not whitelisted for inline transport."""
+  content: String
+  """Size in bytes of the underlying file."""
+  sizeBytes: Int!
+  """True when content was withheld due to size or whitelist policy. Clients should fall back to a download path."""
+  truncated: Boolean!
+  """MIME type (best-effort by extension)."""
+  mimeType: String!
 }
 
 """RunEdge is one edge in a RunConnection"""
@@ -2561,6 +2631,30 @@ type Query {
     """Run identifier"""
     id: ID!
   ): Run
+
+  """List normalized tool-call entries for a run, paginated by sequence."""
+  runToolCalls(
+    """Run identifier"""
+    id: ID!,
+    """Return the first N edges after the cursor."""
+    first: Int,
+    """Cursor to start after."""
+    after: String
+  ): RunToolCallConnection!
+
+  """
+  Fetch one file from a run's evidence bundle. The path is canonicalized and
+  must resolve under the run's bundle root (rejects path traversal, absolute
+  paths, and symlink escape with null). Inline content is returned only for
+  whitelisted small text files; everything else returns truncated=true with
+  size metadata so the client can request a download.
+  """
+  runBundleFile(
+    """Run identifier"""
+    id: ID!,
+    """Path relative to the bundle root."""
+    path: String!
+  ): RunBundleFileContent
 
   # ==========================================
   # Health Queries
