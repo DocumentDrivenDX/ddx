@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T142942-97921dd9",
+  "bead_id": "ddx-d26f65b2",
+  "base_rev": "62b2785982b733f18296cf275601e53bad2ea200",
+  "created_at": "2026-05-02T14:29:44.025150961Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d26f65b2",
+    "title": "Story 6 B3: publish facet contract (TD-NNN) + add phase/prefix filter args + chips wired to Story 5 axes",
+    "description": "Publish facet contract and add Story-5 axes as filters. Depends on Story 5 final + B2.\n\nChanges:\n- docs: create TD-NNN technical-decision document (artifact full-text search \u0026 facet contract). Pin URL keys: q, mediaType (single), staleness (single), phase (single), prefix (multi), sort (single). Document deterministic (sortKey, id) ordering. Document Phase axis source: path prefix docs/helix/NN-*/. Document Prefix axis source: id prefix segment (ADR|SD|FEAT|US|RSCH|...). Note that filter narrows; Story 5 grouping organizes the remaining set.\n- schema.graphql: add 'phase: String' and 'prefix: [String!]' args on Query.artifacts.\n- resolver_artifacts.go: implement phase filter (path prefix match) and multi-value prefix filter (id-prefix segment match).\n- Frontend: phase chip + prefix multi-chip wired to URL keys. Compose with existing q/mediaType/staleness/sort.\n\nThis bead must NOT proceed until Story 5 categorization axes are finalized and B2 has landed.",
+    "acceptance": "- TD-NNN document committed with URL key reservations and source-of-truth definitions for phase/prefix.\n- GraphQL args 'phase' and 'prefix' present and filter results correctly (resolver tests).\n- Frontend phase chip and prefix multi-chip persist to URL and compose with other facets (vitest + playwright).\n- Story 5 grouping consumes the same axis definitions without renaming.\n- All Go and frontend tests pass.",
+    "parent": "ddx-4728ae0f",
+    "labels": [
+      "phase:2",
+      " story:6"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:29:42Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T14:29:42.642864825Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T142942-97921dd9",
+    "prompt": ".ddx/executions/20260502T142942-97921dd9/prompt.md",
+    "manifest": ".ddx/executions/20260502T142942-97921dd9/manifest.json",
+    "result": ".ddx/executions/20260502T142942-97921dd9/result.json",
+    "checks": ".ddx/executions/20260502T142942-97921dd9/checks.json",
+    "usage": ".ddx/executions/20260502T142942-97921dd9/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d26f65b2-20260502T142942-97921dd9"
+  }
+}
