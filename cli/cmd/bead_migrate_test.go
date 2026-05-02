@@ -80,3 +80,41 @@ func TestMigrateCommand(t *testing.T) {
 	assert.Equal(t, 0, stats2.EventsExternalized)
 	assert.Equal(t, 0, stats2.Archived)
 }
+
+func TestMigrateCommandDryRun(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ".ddx"), 0o755))
+	old := time.Now().UTC().Add(-90 * 24 * time.Hour).Format(time.RFC3339)
+	rows := strings.Join([]string{
+		`{"id":"ddx-c1","title":"closed with events","status":"closed","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","closing_commit_sha":"deadbeef","events":[{"kind":"review","summary":"APPROVE","body":"ok","created_at":"` + old + `"}]}`,
+		`{"id":"ddx-c2","title":"closed no events","status":"closed","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","closing_commit_sha":"deadbeef"}`,
+		`{"id":"ddx-open","title":"open","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `"}`,
+	}, "\n") + "\n"
+	beadsPath := filepath.Join(workingDir, ".ddx", "beads.jsonl")
+	require.NoError(t, os.WriteFile(beadsPath, []byte(rows), 0o644))
+	before, err := os.ReadFile(beadsPath)
+	require.NoError(t, err)
+
+	out, err := executeCommand(factory.NewRootCommand(), "bead", "migrate", "--dry-run", "--json")
+	require.NoError(t, err)
+	var stats struct {
+		EventsExternalized int  `json:"EventsExternalized"`
+		Archived           int  `json:"Archived"`
+		DryRun             bool `json:"DryRun"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(out), &stats))
+	assert.Equal(t, 1, stats.EventsExternalized)
+	assert.Equal(t, 2, stats.Archived)
+	assert.True(t, stats.DryRun)
+
+	// Active file must not change, and archive must not be created.
+	after, err := os.ReadFile(beadsPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after))
+	_, statErr := os.Stat(filepath.Join(workingDir, ".ddx", "beads-archive.jsonl"))
+	assert.True(t, os.IsNotExist(statErr), "dry-run must not create archive file")
+	_, statErr = os.Stat(filepath.Join(workingDir, ".ddx", "attachments", "ddx-c1", "events.jsonl"))
+	assert.True(t, os.IsNotExist(statErr), "dry-run must not create attachments")
+}

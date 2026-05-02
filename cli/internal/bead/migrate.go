@@ -2,6 +2,7 @@ package bead
 
 import (
 	"fmt"
+	"time"
 )
 
 // MigrateStats reports what Migrate did in a single pass.
@@ -29,12 +30,73 @@ func (m MigrateStats) Changed() bool {
 // so it drains the historical backlog. Routine archival (after Close)
 // continues to use DefaultArchivePolicy.
 func (s *Store) Migrate() (MigrateStats, error) {
-	return s.ArchiveWithEvents(ArchivePolicy{
+	return s.ArchiveWithEvents(migratePolicy())
+}
+
+// MigrateDryRun reports what Migrate would do without mutating disk. It uses
+// the same eligibility logic as Migrate (Statuses=[closed], no MinAge floor,
+// preserve_dependencies retention).
+func (s *Store) MigrateDryRun() (MigrateStats, error) {
+	var stats MigrateStats
+	if s.Collection != DefaultCollection {
+		return stats, fmt.Errorf("bead: migrate dry-run only runs from the active %q collection (got %q)", DefaultCollection, s.Collection)
+	}
+	policy := migratePolicy()
+
+	var beads []Bead
+	err := s.WithLock(func() error {
+		all, _, rerr := s.readAllLatestRaw()
+		if rerr != nil {
+			return rerr
+		}
+		beads = all
+		return nil
+	})
+	if err != nil {
+		return stats, err
+	}
+
+	referenced := make(map[string]bool)
+	for _, b := range beads {
+		if b.Status == StatusClosed {
+			continue
+		}
+		for _, dep := range b.DepIDs() {
+			referenced[dep] = true
+		}
+	}
+
+	for _, b := range beads {
+		if !containsString(policy.Statuses, b.Status) {
+			continue
+		}
+		if hasInlineEvents(&b) {
+			stats.EventsExternalized++
+		}
+		if referenced[b.ID] {
+			continue
+		}
+		ts := b.UpdatedAt
+		if raw, ok := b.Extra["closed_at"].(string); ok {
+			if parsed, perr := time.Parse(time.RFC3339, raw); perr == nil {
+				ts = parsed
+			}
+		}
+		if policy.MinAge > 0 && time.Now().UTC().Sub(ts) < policy.MinAge {
+			continue
+		}
+		stats.Archived++
+	}
+	return stats, nil
+}
+
+func migratePolicy() ArchivePolicy {
+	return ArchivePolicy{
 		Statuses:       []string{StatusClosed},
 		MinAge:         0,
 		MinActiveCount: 0,
-		BatchSize:      0, // unlimited
-	})
+		BatchSize:      0,
+	}
 }
 
 // ArchiveWithEvents externalizes inline events for every bead whose status

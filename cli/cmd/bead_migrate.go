@@ -24,28 +24,55 @@ and 'ddx bead status' transparently consult the archive partner.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
-			stats, err := s.Migrate()
-			if err != nil {
-				return err
-			}
-			if stats.Changed() {
-				f.beadAutoCommit(fmt.Sprintf("migrate: externalize=%d archive=%d", stats.EventsExternalized, stats.Archived))
-			}
-
+			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			asJSON, _ := cmd.Flags().GetBool("json")
+
+			var (
+				ext  int
+				arch int
+			)
+			if dryRun {
+				st, err := s.MigrateDryRun()
+				if err != nil {
+					return err
+				}
+				ext, arch = st.EventsExternalized, st.Archived
+			} else {
+				st, err := s.Migrate()
+				if err != nil {
+					return err
+				}
+				ext, arch = st.EventsExternalized, st.Archived
+				if st.Changed() {
+					f.beadAutoCommit(fmt.Sprintf("migrate: externalize=%d archive=%d", ext, arch))
+				}
+			}
+			stats := migrateStatsView{EventsExternalized: ext, Archived: arch, DryRun: dryRun}
+
 			if asJSON {
 				enc := json.NewEncoder(cmd.OutOrStdout())
 				enc.SetIndent("", "  ")
 				return enc.Encode(stats)
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "Externalized events: %d\n", stats.EventsExternalized)
-			fmt.Fprintf(cmd.OutOrStdout(), "Archived beads:      %d\n", stats.Archived)
-			if !stats.Changed() {
-				fmt.Fprintln(cmd.OutOrStdout(), "No changes — already migrated.")
+			out := cmd.OutOrStdout()
+			if dryRun {
+				fmt.Fprintln(out, "Dry run — no files were modified.")
+			}
+			fmt.Fprintf(out, "Externalized events: %d\n", ext)
+			fmt.Fprintf(out, "Archived beads:      %d\n", arch)
+			if ext == 0 && arch == 0 {
+				fmt.Fprintln(out, "No changes — already migrated.")
 			}
 			return nil
 		},
 	}
 	cmd.Flags().Bool("json", false, "Output as JSON")
+	cmd.Flags().Bool("dry-run", false, "Report what would change without writing")
 	return cmd
+}
+
+type migrateStatsView struct {
+	EventsExternalized int  `json:"EventsExternalized"`
+	Archived           int  `json:"Archived"`
+	DryRun             bool `json:"DryRun,omitempty"`
 }

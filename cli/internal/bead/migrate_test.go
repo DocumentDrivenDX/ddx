@@ -1,8 +1,10 @@
 package bead
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -152,6 +154,113 @@ func TestMigratePreservesData(t *testing.T) {
 	require.Len(t, ev, 2)
 	assert.Equal(t, "review", ev[0].Kind)
 	assert.Equal(t, "APPROVE", ev[0].Summary)
+}
+
+func TestMigrateDryRunReportsWithoutWriting(t *testing.T) {
+	s := newTestStore(t)
+	require.NoError(t, s.WriteAll([]Bead{
+		migrateSeed("ddx-c1", "closed with events", true),
+		migrateSeed("ddx-c2", "closed without events", false),
+		{
+			ID:        "ddx-open",
+			Title:     "open",
+			Status:    StatusOpen,
+			Priority:  2,
+			IssueType: DefaultType,
+			CreatedAt: time.Now().UTC().Add(-time.Hour),
+			UpdatedAt: time.Now().UTC(),
+		},
+	}))
+
+	beforeActive, err := os.ReadFile(s.File)
+	require.NoError(t, err)
+	archivePath := filepath.Join(s.Dir, BeadsArchiveCollection+".jsonl")
+	_, archiveStatErr := os.Stat(archivePath)
+	require.True(t, os.IsNotExist(archiveStatErr), "archive should not exist before migrate")
+
+	stats, err := s.MigrateDryRun()
+	require.NoError(t, err)
+	assert.Equal(t, 1, stats.EventsExternalized)
+	assert.Equal(t, 2, stats.Archived)
+
+	afterActive, err := os.ReadFile(s.File)
+	require.NoError(t, err)
+	assert.Equal(t, string(beforeActive), string(afterActive), "dry-run must not touch active file")
+	_, archiveStatErr = os.Stat(archivePath)
+	assert.True(t, os.IsNotExist(archiveStatErr), "dry-run must not create archive file")
+	_, attachStatErr := os.Stat(s.eventsAttachmentPath("ddx-c1"))
+	assert.True(t, os.IsNotExist(attachStatErr), "dry-run must not create attachments")
+}
+
+// TestMigrateLargeFixtureSplits seeds a synthetic >5MB beads.jsonl mostly
+// composed of closed beads with inline events, runs Migrate, and asserts
+// that the active file shrinks below 4MB while the archive partner picks
+// up the closed rows and per-bead attachments are written.
+func TestMigrateLargeFixtureSplits(t *testing.T) {
+	s := newTestStore(t)
+
+	// Build ~600 closed beads each carrying a chunky inline event so the
+	// raw active file lands above the 4MB archive threshold.
+	old := time.Now().UTC().Add(-90 * 24 * time.Hour)
+	body := strings.Repeat("x", 8*1024) // 8KB body per event
+	beads := make([]Bead, 0, 605)
+	for i := 0; i < 600; i++ {
+		beads = append(beads, Bead{
+			ID:        fmt.Sprintf("ddx-l%04d", i),
+			Title:     "closed with bulky event",
+			Status:    StatusClosed,
+			Priority:  2,
+			IssueType: DefaultType,
+			CreatedAt: old.Add(-time.Hour),
+			UpdatedAt: old,
+			Extra: map[string]any{
+				"events": []map[string]any{
+					{"kind": "summary", "summary": "done", "body": body, "created_at": old.Format(time.RFC3339Nano)},
+				},
+				"closing_commit_sha": "deadbeef",
+			},
+		})
+	}
+	for i := 0; i < 5; i++ {
+		beads = append(beads, Bead{
+			ID:        fmt.Sprintf("ddx-o%d", i),
+			Title:     "open",
+			Status:    StatusOpen,
+			Priority:  2,
+			IssueType: DefaultType,
+			CreatedAt: time.Now().UTC().Add(-time.Hour),
+			UpdatedAt: time.Now().UTC(),
+		})
+	}
+	require.NoError(t, s.WriteAll(beads))
+
+	info, err := os.Stat(s.File)
+	require.NoError(t, err)
+	require.Greater(t, info.Size(), int64(4*1024*1024), "fixture must exceed 4MB to be a meaningful split test")
+
+	stats, err := s.Migrate()
+	require.NoError(t, err)
+	assert.Equal(t, 600, stats.Archived)
+	assert.Equal(t, 600, stats.EventsExternalized)
+
+	// AC2: active file < 4MB after migration.
+	info, err = os.Stat(s.File)
+	require.NoError(t, err)
+	assert.Less(t, info.Size(), int64(4*1024*1024), "active beads.jsonl must drop below 4MB after migration")
+
+	// AC2: archive partner exists with the moved rows.
+	archInfo, err := os.Stat(filepath.Join(s.Dir, BeadsArchiveCollection+".jsonl"))
+	require.NoError(t, err)
+	assert.Greater(t, archInfo.Size(), int64(0))
+
+	// AC2: per-bead attachment sidecars exist for archived beads.
+	_, err = os.Stat(s.eventsAttachmentPath("ddx-l0000"))
+	require.NoError(t, err)
+
+	// AC3 / AC6: re-running is a no-op.
+	second, err := s.Migrate()
+	require.NoError(t, err)
+	assert.False(t, second.Changed())
 }
 
 func TestMigratePreservesReferencedDeps(t *testing.T) {
