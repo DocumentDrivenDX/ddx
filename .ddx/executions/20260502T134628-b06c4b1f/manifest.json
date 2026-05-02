@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T134628-b06c4b1f",
+  "bead_id": "ddx-a01255a8",
+  "base_rev": "a320d2775c999daafa9ff844df6b64d31fb98524",
+  "created_at": "2026-05-02T13:46:30.181343563Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a01255a8",
+    "title": "S15-1: ADR — Operator-Prompt Beads as the Web Write Path",
+    "description": "Author ADR-02X capturing the write-surface boundary, requireTrusted, audit-as-bead, multi-node delegation policy, prompt-injection threat model, and allowed-mutation scope for operator-prompt beads. See /tmp/story-15-final.md §Spec changes and §Additional security controls.",
+    "acceptance": "ADR file added under docs/helix/adrs/ (or project ADR dir) with status=accepted; covers: trust requirement (requireTrusted), audit-as-bead, no synchronous in-process mutation from prompts, multi-node delegation, prompt-injection threat model, allowed-mutation scope; linked from FEAT-006 and FEAT-008.",
+    "parent": "ddx-1d85c927",
+    "labels": [
+      "phase:2",
+      "story:15",
+      "kind:adr"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T13:46:28Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T13:46:28.768147332Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T134628-b06c4b1f",
+    "prompt": ".ddx/executions/20260502T134628-b06c4b1f/prompt.md",
+    "manifest": ".ddx/executions/20260502T134628-b06c4b1f/manifest.json",
+    "result": ".ddx/executions/20260502T134628-b06c4b1f/result.json",
+    "checks": ".ddx/executions/20260502T134628-b06c4b1f/checks.json",
+    "usage": ".ddx/executions/20260502T134628-b06c4b1f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a01255a8-20260502T134628-b06c4b1f"
+  }
+}
