@@ -19,6 +19,7 @@
 		GROUP_BY_LABELS,
 		type GroupBy
 	} from './grouping'
+	import { createRequestSequence, runLatest } from './searchFetcher'
 
 	let { data }: { data: PageData } = $props()
 
@@ -61,6 +62,7 @@
 	)
 
 	let searchDebounce: ReturnType<typeof setTimeout> | undefined
+	const fetchSeq = createRequestSequence()
 
 	function navigateWith(patch: Parameters<typeof writeState>[1], opts?: { replace?: boolean }) {
 		const url = new URL(window.location.href)
@@ -78,6 +80,9 @@
 	function onSearchInput(e: Event) {
 		q = (e.target as HTMLInputElement).value
 		clearTimeout(searchDebounce)
+		// Invalidate any in-flight loadMore so its (stale) results don't get
+		// appended on top of fresh search results when the goto() reload lands.
+		fetchSeq.invalidate()
 		searchDebounce = setTimeout(() => {
 			navigateWith({ q }, { replace: true })
 		}, 200)
@@ -139,17 +144,20 @@
 		loading = true
 		try {
 			const client = createClient()
-			const result = await client.request<{ artifacts: ArtifactConnection }>(ARTIFACTS_QUERY, {
-				projectID: data.projectId,
-				first: PAGE_SIZE,
-				after: pageInfo.endCursor,
-				mediaType: data.mediaType ?? undefined,
-				search: q ? q : undefined,
-				sort: data.sort,
-				staleness: data.staleness ?? undefined
-			})
-			allEdges = [...allEdges, ...result.artifacts.edges]
-			pageInfo = result.artifacts.pageInfo
+			const outcome = await runLatest(fetchSeq, () =>
+				client.request<{ artifacts: ArtifactConnection }>(ARTIFACTS_QUERY, {
+					projectID: data.projectId,
+					first: PAGE_SIZE,
+					after: pageInfo.endCursor,
+					mediaType: data.mediaType ?? undefined,
+					search: q ? q : undefined,
+					sort: data.sort,
+					staleness: data.staleness ?? undefined
+				})
+			)
+			if (outcome.stale) return
+			allEdges = [...allEdges, ...outcome.value.artifacts.edges]
+			pageInfo = outcome.value.artifacts.pageInfo
 		} finally {
 			loading = false
 		}
