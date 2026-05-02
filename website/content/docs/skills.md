@@ -1,105 +1,65 @@
 ---
-title: DDx Skills
+title: DDx Skill
 weight: 7
 ---
 
-DDx ships 6 built-in skills that agents discover as slash commands. These
-guide agents through DDx operations instead of requiring them to memorize
-flag combinations.
-
-## Available Skills
-
-| Skill | Description |
-|-------|-------------|
-| `/ddx-bead` | Create and manage beads with proper metadata |
-| `/ddx-agent` | Select harness, model, and effort for agent dispatch |
-| `/ddx-install` | Search, preview, and install packages |
-| `/ddx-status` | Project health overview |
-| `/ddx-review` | Multi-agent quorum and fresh-eyes code review |
-| `/ddx-run` | Execute a bead end-to-end: claim → build → verify → close |
-
-Skills are installed automatically by `ddx init` to the project's
+DDx ships a single built-in skill, `ddx`, that any
+[agentskills.io](https://agentskills.io)-compatible coding agent (Claude Code,
+OpenAI Codex, Gemini CLI, etc.) discovers and uses to operate the DDx surface
+correctly. The skill is installed automatically by `ddx init` to the project's
 `.agents/skills/` and `.claude/skills/` directories as real files.
 
-## `/ddx-bead` — Create Work Items
+## Structure
 
-Instead of remembering flags, invoke the skill:
-
-```
-/ddx-bead "Implement user login"
-```
-
-The skill guides the agent through:
-- Choosing type (task, epic, bug, chore)
-- Setting labels and spec-id
-- Writing acceptance criteria
-- Wiring dependencies
-
-## `/ddx-review` — Multi-Agent Review
-
-Run a structured code review across multiple harnesses:
+The skill follows the standard SKILL.md + `reference/` layout. The top-level
+`SKILL.md` is an overview and intent router; the real domain guidance lives in
+`reference/*.md` files that the agent reads on demand.
 
 ```
-/ddx-review
+ddx/
+  SKILL.md          # overview, vocabulary, intent router
+  reference/
+    beads.md        # work-item authoring
+    work.md         # draining the queue, executing beads
+    review.md       # bead review, quorum/adversarial review
+    agents.md       # agent dispatch, harness/power passthrough, personas
+    status.md       # queue health, ddx doctor, sync status
 ```
 
-The skill:
-1. Checks available harnesses via `ddx agent list`
-2. Assembles a review prompt with relevant context
-3. Dispatches via `ddx agent run --quorum majority --harnesses codex,claude`
-4. Reports where models agree and disagree
+## Reference areas
 
-### Example: Review a bead's implementation
+The skill routes the agent to one of these reference files based on the user's
+intent:
 
-```
-/ddx-review bead ddx-abc123
-```
+### beads
 
-The skill reads the bead's spec-id and acceptance criteria, then reviews
-the implementation against them.
+Authoring and managing work items: `ddx bead create`, metadata, labels,
+spec-id, acceptance criteria, dependency edges.
 
-## `/ddx-run` — Execute a Bead
+### work
 
-The full lifecycle for implementing a work item:
+Draining the queue end-to-end: `ddx work` to pick ready beads, `ddx try` to
+attempt one bead in an isolated worktree, claim → build → verify → close.
 
-```
-/ddx-run ddx-abc123
-```
+### review
 
-The skill:
-1. Reads the bead's spec-id and acceptance criteria
-2. Loads the governing artifact
-3. Claims the bead (`ddx bead update <id> --claim`)
-4. Dispatches an agent with full context
-5. Verifies tests pass after implementation
-6. Closes the bead if acceptance criteria are met
+Two concepts under one roof. *Bead review* (`ddx bead review <id>`) grades a
+completed bead against its acceptance criteria. *Comparison/adversarial
+review* composes multiple `ddx run` invocations to cross-check work.
 
-This prevents agents from skipping verification or claiming completion
-without running tests.
+### agents
 
-## `/ddx-agent` — Guided Dispatch
+Dispatching agents via `ddx run`: power bounds (`--min-power` / `--max-power`),
+harness/provider/model passthrough constraints, and persona bindings (`ddx
+persona list/show/bind`).
 
-When you need to run an agent but aren't sure which model or effort level:
+### status
 
-```
-/ddx-agent
-```
-
-Shows available harnesses, their capabilities, and helps select the right
-configuration before dispatching.
-
-## `/ddx-status` — Health Check
-
-Quick overview of project state:
-
-```
-/ddx-status
-```
-
-Runs `ddx doctor`, `ddx bead list`, and `ddx bead ready` and summarizes
-the findings.
+Queue and project health: `ddx doctor`, `ddx bead ready`, `ddx bead blocked`,
+sync status, and "how am I doing" overviews.
 
 ## Creating Custom Skills
 
-See [Creating Plugins](../plugins) for how to add your own skills to DDx
-or distribute them as a plugin.
+Plugins can ship additional skills alongside the built-in `ddx` skill. See
+[Creating Plugins](../plugins) for how to add your own skills or distribute
+them as a plugin.
