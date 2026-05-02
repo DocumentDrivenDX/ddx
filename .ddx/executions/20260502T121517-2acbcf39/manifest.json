@@ -1,0 +1,87 @@
+{
+  "attempt_id": "20260502T121517-2acbcf39",
+  "bead_id": "ddx-4d7e1d93",
+  "base_rev": "3047743f26bb6e31f2b6180ad0ac9a494669c760",
+  "created_at": "2026-05-02T12:15:18.240467393Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4d7e1d93",
+    "title": "B1: Extract shared execute-bead instruction blocks (byte-equivalent refactor)",
+    "description": "Pull duplicated text from executeBeadInstructionsClaudeText (execute_bead.go:1208) and executeBeadInstructionsAgentText (execute_bead.go:1274) into named constants: instrStep0SizeCheck, instrInvestigationReports, instrReviewGate, instrBeadOverride, instrCoreConstraints. Both variants compose: per-harness preamble + per-harness process body + shared blocks. Rendered prompt MUST be byte-identical (or whitespace-only-equivalent) to current output. Plan: /tmp/story-12-final.md §B1. Hard dep on Story 10 prompt edits if running concurrently.",
+    "acceptance": "AC1: Both variants share \u003e=4 named instruction-block constants; no shared block text duplicated across variants in source. AC6: All existing prompt tests pass unchanged (execute_bead_evidence_path_test.go, review_verdict_test.go, execute_bead_failure_mode_test.go). Rendered prompt is byte-identical to pre-refactor output (or only whitespace differences) — verify with golden fixture or diff.",
+    "parent": "ddx-a61bf8ee",
+    "labels": [
+      "phase:2",
+      "story:12",
+      "tier:cheap"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:15:17Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T12:11:36.160224054Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T115600-64bd7a2c\",\"harness\":\"claude\",\"input_tokens\":44,\"output_tokens\":42007,\"total_tokens\":42051,\"cost_usd\":3.52522475,\"duration_ms\":934327,\"exit_code\":0}",
+          "created_at": "2026-05-02T12:11:36.171258132Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=42051 cost_usd=3.5252"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T12:11:40.885027058Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only an execution result.json artifact; no source changes to execute_bead.go extracting shared instruction-block constants. AC1 and AC6 cannot be verified—no refactor is present.\nharness=claude\nmodel=opus\ninput_bytes=4117\noutput_bytes=735\nelapsed_ms=9171",
+          "created_at": "2026-05-02T12:11:52.084907243Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T12:11:52.102349526Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json artifact; no source changes to execute_bead.go extracting shared instruction-block constants. AC1 and AC6 cannot be verified—no refactor is present.\nresult_rev=516b3e95e8cdd36afca1643cd686c8bccbd3cf9b\nbase_rev=c376d16b0ee65d8aa6586590666361476f79a66b",
+          "created_at": "2026-05-02T12:11:52.112020521Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T12:15:17.061892432Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T121517-2acbcf39",
+    "prompt": ".ddx/executions/20260502T121517-2acbcf39/prompt.md",
+    "manifest": ".ddx/executions/20260502T121517-2acbcf39/manifest.json",
+    "result": ".ddx/executions/20260502T121517-2acbcf39/result.json",
+    "checks": ".ddx/executions/20260502T121517-2acbcf39/checks.json",
+    "usage": ".ddx/executions/20260502T121517-2acbcf39/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4d7e1d93-20260502T121517-2acbcf39"
+  }
+}
