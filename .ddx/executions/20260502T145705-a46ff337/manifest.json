@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T145705-a46ff337",
+  "bead_id": "ddx-86996834",
+  "base_rev": "af6be17a39e8697299c93e90635b40da8cc6b622",
+  "created_at": "2026-05-02T14:57:06.644538391Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-86996834",
+    "title": "guardrail: --no-review break-glass with required ack flag + review:skip-reason rationale",
+    "description": "Per locked decision: --no-review keeps as break-glass requiring an ack flag (e.g. --no-review-i-know-what-im-doing). review:skip label requires sibling rationale label (review:skip-reason:*) or is ignored.",
+    "acceptance": "1. --no-review without ack flag errors with explanation. 2. review:skip label ignored without sibling review:skip-reason. 3. Tests cover both guardrails. 4. CLI help documents the ack flag.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:cli",
+      "kind:guardrail"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:57:05Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T14:57:05.382324745Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T145705-a46ff337",
+    "prompt": ".ddx/executions/20260502T145705-a46ff337/prompt.md",
+    "manifest": ".ddx/executions/20260502T145705-a46ff337/manifest.json",
+    "result": ".ddx/executions/20260502T145705-a46ff337/result.json",
+    "checks": ".ddx/executions/20260502T145705-a46ff337/checks.json",
+    "usage": ".ddx/executions/20260502T145705-a46ff337/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-86996834-20260502T145705-a46ff337"
+  }
+}
