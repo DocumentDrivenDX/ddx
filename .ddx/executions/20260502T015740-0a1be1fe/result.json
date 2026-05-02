@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "The test file `cli/internal/agent/zero_config_escalation_integration_test.go` adds two integration tests that drive the real escalation primitives end-to-end through the cheap → standard → smart ladder, covering both the transient-defer and substantive-escalate branches called for in the bead description. Cost accounting, summary event emission, and the zero-config starting tier are all asserted."
+}
