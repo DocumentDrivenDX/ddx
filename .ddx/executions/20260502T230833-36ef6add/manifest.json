@@ -1,0 +1,117 @@
+{
+  "attempt_id": "20260502T230833-36ef6add",
+  "bead_id": "ddx-5d49b14e",
+  "base_rev": "cfc539be23bd815a4e33e556dd757cfe508c14ba",
+  "created_at": "2026-05-02T23:08:34.035057446Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-5d49b14e",
+    "title": "Evaluate and adopt a real backend for the bead tracker (axon primary, bd fallback)",
+    "description": "The current .ddx/beads.jsonl backend (atomic JSONL writes wrapped in flock; events accumulating per-bead; archive split per ADR-004) is showing strain:\n\n1. Multi-worker contention via the git tracker-commit step (see ddx-da11a34a — the file lock around git add/commit is a v1 patch, not the real fix)\n2. Events array per bead is unbounded and dominates archive size\n3. Cross-machine concurrency is not addressed (Story 14 federation will require it)\n4. The current model bakes one process-local store + git-as-replication; doesn't compose cleanly with a real database\n\nTwo backend paths under consideration:\n\n**Axon (PRIMARY, per user inclination)**: integrate as the first DDx-side consumer of axon. User owns the stack; tight integration possible; proves axon's value as a substrate. Requires authoring an axon backend implementing the bead schema's storage contract (per ADR-004 / SD-004 — collection abstraction, claim semantics, atomic writes, JSONL interchange compatibility for bd/br).\n\n**bd / doltdb (FALLBACK)**: delegate to bd which already speaks doltdb (git-for-data). Trivial integration; downside is tracking an external codebase as a hard dependency.\n\nThis epic frames the evaluation, designs the integration, prototypes, and migrates. Children break down the work. The lock-contention patch (ddx-da11a34a) remains relevant as stability scaffolding while this plays out — when axon ships and is adopted, the JSONL+git path may retire entirely (or stay as a portable interchange backend per FEAT-004's bd/br semantics).",
+    "acceptance": "1. TD authored for the axon-backend integration (data model mapping, claim/lock semantics, archive policy, multi-machine concurrency story). 2. Axon-backend implementation lands behind a feature flag or selectable backend in cli/internal/bead/backend.go. 3. Migration tool moves an existing .ddx/beads.jsonl + .ddx/beads-archive.jsonl into the axon backend without data loss. 4. Existing chaos_test.go suite passes against the axon backend. 5. bd fallback documented (single artifact under docs/) showing how to wire bd as the backend if axon adoption stalls. 6. Performance: queue ops (ready/blocked/show) at parity or better than JSONL on the current 1100-bead archive scale.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:storage",
+      "kind:strategy",
+      "backend-migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T23:08:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3924346",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T14:49:18.951016146Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T144455-ed29df8c\",\"harness\":\"claude\",\"input_tokens\":44,\"output_tokens\":16723,\"total_tokens\":16767,\"cost_usd\":1.6210455,\"duration_ms\":260420,\"exit_code\":0}",
+          "created_at": "2026-05-02T14:49:18.964923165Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=16767 cost_usd=1.6210"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T14:49:25.337055277Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only an execution result.json artifact. None of the six acceptance criteria (TD, axon backend implementation, migration tool, chaos_test passing, bd fallback doc, performance parity) are addressed.\nharness=claude\nmodel=opus\ninput_bytes=5435\noutput_bytes=1363\nelapsed_ms=10537",
+          "created_at": "2026-05-02T14:49:35.905439322Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T14:49:35.920896302Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json artifact. None of the six acceptance criteria (TD, axon backend implementation, migration tool, chaos_test passing, bd fallback doc, performance parity) are addressed.\nresult_rev=7f507f5e90963aaca65ea7b375731ac4f2560b46\nbase_rev=0f9bd7ded096b060e10ffec49103ea8376849923",
+          "created_at": "2026-05-02T14:49:35.93367307Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T14:56:32.131458707Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\nresult_rev=7af37928cbdc6e5d48090a36c04aaa2644f59f97\nbase_rev=7af37928cbdc6e5d48090a36c04aaa2644f59f97\nretry_after=2026-05-02T20:56:32Z",
+          "created_at": "2026-05-02T14:56:32.221119852Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T18:09:03.504542067Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "Auto-closed by drain with only execution-evidence files (no implementation). Reopening per the no_changes pattern that auto-triage (ddx-3c154349 itself) should fix. Real work pending."
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T23:08:33.063422249Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-02T20:56:32Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T230833-36ef6add",
+    "prompt": ".ddx/executions/20260502T230833-36ef6add/prompt.md",
+    "manifest": ".ddx/executions/20260502T230833-36ef6add/manifest.json",
+    "result": ".ddx/executions/20260502T230833-36ef6add/result.json",
+    "checks": ".ddx/executions/20260502T230833-36ef6add/checks.json",
+    "usage": ".ddx/executions/20260502T230833-36ef6add/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-5d49b14e-20260502T230833-36ef6add"
+  },
+  "prompt_sha": "584ec6668488560a781a54dff3d0c88ef5ad151feb6857773c9995e191648cac"
+}
