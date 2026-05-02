@@ -315,7 +315,7 @@ func (f *CommandFactory) newBeadShowCommand() *cobra.Command {
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
-			b, err := s.Get(args[0])
+			b, err := s.GetWithArchive(args[0])
 			if err != nil {
 				return err
 			}
@@ -798,7 +798,16 @@ func (f *CommandFactory) newBeadListCommand() *cobra.Command {
 				}
 			}
 
-			beads, err := s.List(status, label, where)
+			includeArchive, _ := cmd.Flags().GetBool("all")
+			var (
+				beads []bead.Bead
+				err   error
+			)
+			if includeArchive {
+				beads, err = s.ListWithArchive(status, label, where)
+			} else {
+				beads, err = s.List(status, label, where)
+			}
 			if err != nil {
 				return err
 			}
@@ -832,6 +841,7 @@ func (f *CommandFactory) newBeadListCommand() *cobra.Command {
 	cmd.Flags().String("status", "", "Filter by status")
 	cmd.Flags().String("label", "", "Filter by label")
 	cmd.Flags().Bool("json", false, "Output as JSON")
+	cmd.Flags().Bool("all", false, "Include archived beads (.ddx/beads-archive.jsonl)")
 	cmd.Flags().StringArray("where", nil, "Filter by field value (key=value); may be repeated")
 
 	return cmd

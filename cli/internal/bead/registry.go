@@ -113,15 +113,20 @@ func (r *Registry) IDs() []CollectionID {
 }
 
 // defaultRegistry is the process-wide registry. It ships with the active
-// "beads" collection only; per the bead C2 acceptance, no new collections
-// are instantiated at this stage. Additional collections (beads-archive,
-// exec-runs, agent-sessions) will be registered by their owning beads.
+// "beads" collection and its archive partner "beads-archive" (TD-027 §a).
+// Additional collections (exec-runs, agent-sessions) will be registered by
+// their owning beads.
 var defaultRegistry = func() *Registry {
 	r := NewRegistry()
 	r.Register(CollectionSpec{
 		ID:          DefaultCollection,
 		JSONLFile:   DefaultCollection + ".jsonl",
 		LockDirName: DefaultCollection + ".lock",
+	})
+	r.Register(CollectionSpec{
+		ID:          BeadsArchiveCollection,
+		JSONLFile:   BeadsArchiveCollection + ".jsonl",
+		LockDirName: BeadsArchiveCollection + ".lock",
 	})
 	return r
 }()

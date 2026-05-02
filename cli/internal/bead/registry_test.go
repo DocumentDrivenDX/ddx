@@ -8,11 +8,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestDefaultRegistryShipsBeadsOnly(t *testing.T) {
+func TestDefaultRegistryShipsBeadsAndArchive(t *testing.T) {
 	r := DefaultRegistry()
 	ids := r.IDs()
-	require.Equal(t, []CollectionID{CollectionID(DefaultCollection)}, ids,
-		"only the active beads collection ships in C2; others are deferred to C3")
+	require.Equal(t,
+		[]CollectionID{CollectionID(DefaultCollection), CollectionID(BeadsArchiveCollection)},
+		ids,
+		"C3 ships the archive partner alongside the active beads collection")
 }
 
 func TestRegistryResolveUsesRegisteredSpec(t *testing.T) {
