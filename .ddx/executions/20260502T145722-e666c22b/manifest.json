@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T145722-e666c22b",
+  "bead_id": "ddx-8d747049",
+  "base_rev": "1e317a67b9fde512d6602b7a0ed521638c650210",
+  "created_at": "2026-05-02T14:57:23.735022226Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8d747049",
+    "title": "axon backend: prototype implementation behind a selectable backend",
+    "description": "Per the TD from B_TD: implement the axon backend in cli/internal/bead/backend_axon.go (or per the existing backend.go shape). Wire as a selectable backend (config flag .ddx/config.yaml backend: axon|jsonl|bd). Default stays jsonl Day 1. Existing tests must pass against both backends.",
+    "acceptance": "1. backend_axon.go lands. 2. Selectable via .ddx/config.yaml. 3. Default unchanged (jsonl). 4. cd cli \u0026\u0026 go test ./internal/bead/... passes against both backends (parameterized test). 5. chaos_test.go suite passes against axon backend.",
+    "parent": "ddx-5d49b14e",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:storage",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:57:22Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T14:57:22.448358722Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T145722-e666c22b",
+    "prompt": ".ddx/executions/20260502T145722-e666c22b/prompt.md",
+    "manifest": ".ddx/executions/20260502T145722-e666c22b/manifest.json",
+    "result": ".ddx/executions/20260502T145722-e666c22b/result.json",
+    "checks": ".ddx/executions/20260502T145722-e666c22b/checks.json",
+    "usage": ".ddx/executions/20260502T145722-e666c22b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-8d747049-20260502T145722-e666c22b"
+  }
+}
