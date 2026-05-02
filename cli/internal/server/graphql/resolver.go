@@ -74,6 +74,11 @@ type Resolver struct {
 	// (e.g. "localhost:127.0.0.1:55812"). An empty allowlist disables both
 	// auto-approve and the manual approve mutation for this project.
 	OperatorPromptAutoApproveAllowlist []string
+	// Federation, when non-nil, supplies the spoke registry and fan-out
+	// client used by the federationNodes / federated{Beads,Runs,Projects}
+	// query resolvers. Nil → those queries return empty lists (the default
+	// for non-hub servers).
+	Federation FederationProvider
 }
 
 // Mutation returns MutationResolver implementation.

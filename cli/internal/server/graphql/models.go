@@ -1145,6 +1145,82 @@ type FeatureCostRow struct {
 	UnknownBeads *int `json:"unknownBeads,omitempty"`
 }
 
+// FederatedBead is a bead row aggregated across spokes; the routing metadata identifies which spoke the bead lives on.
+type FederatedBead struct {
+	// Spoke node_id this row originated from
+	NodeID string `json:"nodeId"`
+	// Project ID on the originating spoke (may be null when the spoke does not partition by project)
+	ProjectID *string `json:"projectId,omitempty"`
+	// Spoke base URL — the UI deep-links here for write/edit
+	ProjectURL string `json:"projectUrl"`
+	// True when the originating spoke advertises a write capability
+	WriteCapability bool `json:"writeCapability"`
+	// Liveness/health status of the originating spoke at fan-out time
+	Status string `json:"status"`
+	// The bead row itself
+	Bead *Bead `json:"bead"`
+}
+
+// FederatedProject is a project row aggregated across spokes.
+type FederatedProject struct {
+	// Spoke node_id this row originated from
+	NodeID string `json:"nodeId"`
+	// Project ID on the originating spoke
+	ProjectID string `json:"projectId"`
+	// Spoke base URL
+	ProjectURL string `json:"projectUrl"`
+	// True when the originating spoke advertises a write capability
+	WriteCapability bool `json:"writeCapability"`
+	// Liveness/health status of the originating spoke at fan-out time
+	Status string `json:"status"`
+	// The project row itself
+	Project *Project `json:"project"`
+}
+
+// FederatedRun is a run row aggregated across spokes.
+type FederatedRun struct {
+	// Spoke node_id this row originated from
+	NodeID string `json:"nodeId"`
+	// Project ID on the originating spoke (when known)
+	ProjectID *string `json:"projectId,omitempty"`
+	// Spoke base URL
+	ProjectURL string `json:"projectUrl"`
+	// True when the originating spoke advertises a write capability
+	WriteCapability bool `json:"writeCapability"`
+	// Liveness/health status of the originating spoke at fan-out time
+	Status string `json:"status"`
+	// The run row itself
+	Run *Run `json:"run"`
+}
+
+// FederationNode is one entry in the hub's federation registry, decorated with the most recent fan-out outcome so callers can render partial-result and version-skew states.
+type FederationNode struct {
+	// Globally unique identifier (uses the spoke's node_id)
+	ID string `json:"id"`
+	// Stable federation key for the spoke
+	NodeID string `json:"nodeId"`
+	// Human-readable spoke name
+	Name string `json:"name"`
+	// Spoke base URL (used as the deep-link target for federated rows)
+	URL string `json:"url"`
+	// Liveness/health status: registered, active, stale, offline, degraded
+	Status string `json:"status"`
+	// ddx_version advertised by the spoke at registration
+	DdxVersion string `json:"ddxVersion"`
+	// schema_version advertised by the spoke at registration
+	SchemaVersion string `json:"schemaVersion"`
+	// Capabilities advertised by the spoke (synthetic @identity:* entries are filtered out)
+	Capabilities []string `json:"capabilities"`
+	// When the spoke was first registered with the hub
+	RegisteredAt string `json:"registeredAt"`
+	// Last observed heartbeat timestamp (null if never seen)
+	LastHeartbeat *string `json:"lastHeartbeat,omitempty"`
+	// True when the spoke advertises a write capability. Currently always false — federated queries are read-only.
+	WriteCapability bool `json:"writeCapability"`
+	// Reason text for the last skip/failure outcome (e.g. version-skew handshake reason). Empty when the spoke contributed successfully.
+	LastError *string `json:"lastError,omitempty"`
+}
+
 // GraphIssue describes one integrity problem discovered while building the document graph.
 type GraphIssue struct {
 	// Stable identifier for this issue, used as input to graphRepairIssue. Derived deterministically from (kind, path, id, relatedPath).

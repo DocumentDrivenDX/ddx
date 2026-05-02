@@ -2823,6 +2823,124 @@ type Query {
     """Search query"""
     query: String!
   ): PaletteSearchResults!
+
+  # ==========================================
+  # Federation Queries (B14.6b)
+  # ==========================================
+  # The hub federates read-only queries across registered spokes via the
+  # B14.6a fan-out client. Local query types (beads, runs, projects) remain
+  # untouched — these federated queries ship in parallel so existing
+  # local views do not change. Each federated row carries routing metadata
+  # (node_id, project_id, project_url, write_capability/status) so the UI
+  # can deep-link back to the originating spoke and reason about whether
+  # it may issue writes (currently always read-only).
+
+  """List all spokes registered with this hub, including their routing metadata and last-known liveness status. Returns an empty list when the server is not running in hub mode."""
+  federationNodes: [FederationNode!]!
+
+  """List beads aggregated across the federation. Fan-out is read-only; each row exposes the originating spoke's routing metadata."""
+  federatedBeads(
+    """Filter by lifecycle status"""
+    status: String,
+    """Filter by label"""
+    label: String,
+    """Filter by project ID (applied per-spoke)"""
+    projectID: String
+  ): [FederatedBead!]!
+
+  """List runs aggregated across the federation."""
+  federatedRuns(
+    """Filter by run layer"""
+    layer: RunLayer,
+    """Filter by project ID (applied per-spoke)"""
+    projectID: String
+  ): [FederatedRun!]!
+
+  """List projects aggregated across the federation."""
+  federatedProjects(
+    """Include projects whose path is unreachable on the spoke"""
+    includeUnreachable: Boolean
+  ): [FederatedProject!]!
+}
+
+# ============================================
+# Federation (B14.6b)
+# ============================================
+
+"""FederationNode is one entry in the hub's federation registry, decorated with the most recent fan-out outcome so callers can render partial-result and version-skew states."""
+type FederationNode {
+  """Globally unique identifier (uses the spoke's node_id)"""
+  id: ID!
+  """Stable federation key for the spoke"""
+  nodeId: String!
+  """Human-readable spoke name"""
+  name: String!
+  """Spoke base URL (used as the deep-link target for federated rows)"""
+  url: String!
+  """Liveness/health status: registered, active, stale, offline, degraded"""
+  status: String!
+  """ddx_version advertised by the spoke at registration"""
+  ddxVersion: String!
+  """schema_version advertised by the spoke at registration"""
+  schemaVersion: String!
+  """Capabilities advertised by the spoke (synthetic @identity:* entries are filtered out)"""
+  capabilities: [String!]!
+  """When the spoke was first registered with the hub"""
+  registeredAt: DateTime!
+  """Last observed heartbeat timestamp (null if never seen)"""
+  lastHeartbeat: DateTime
+  """True when the spoke advertises a write capability. Currently always false — federated queries are read-only."""
+  writeCapability: Boolean!
+  """Reason text for the last skip/failure outcome (e.g. version-skew handshake reason). Empty when the spoke contributed successfully."""
+  lastError: String
+}
+
+"""FederatedBead is a bead row aggregated across spokes; the routing metadata identifies which spoke the bead lives on."""
+type FederatedBead {
+  """Spoke node_id this row originated from"""
+  nodeId: String!
+  """Project ID on the originating spoke (may be null when the spoke does not partition by project)"""
+  projectId: String
+  """Spoke base URL — the UI deep-links here for write/edit"""
+  projectUrl: String!
+  """True when the originating spoke advertises a write capability"""
+  writeCapability: Boolean!
+  """Liveness/health status of the originating spoke at fan-out time"""
+  status: String!
+  """The bead row itself"""
+  bead: Bead!
+}
+
+"""FederatedRun is a run row aggregated across spokes."""
+type FederatedRun {
+  """Spoke node_id this row originated from"""
+  nodeId: String!
+  """Project ID on the originating spoke (when known)"""
+  projectId: String
+  """Spoke base URL"""
+  projectUrl: String!
+  """True when the originating spoke advertises a write capability"""
+  writeCapability: Boolean!
+  """Liveness/health status of the originating spoke at fan-out time"""
+  status: String!
+  """The run row itself"""
+  run: Run!
+}
+
+"""FederatedProject is a project row aggregated across spokes."""
+type FederatedProject {
+  """Spoke node_id this row originated from"""
+  nodeId: String!
+  """Project ID on the originating spoke"""
+  projectId: String!
+  """Spoke base URL"""
+  projectUrl: String!
+  """True when the originating spoke advertises a write capability"""
+  writeCapability: Boolean!
+  """Liveness/health status of the originating spoke at fan-out time"""
+  status: String!
+  """The project row itself"""
+  project: Project!
 }
 
 # ============================================

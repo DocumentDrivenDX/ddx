@@ -616,6 +616,48 @@ type ComplexityRoot struct {
 		UnknownBeads func(childComplexity int) int
 	}
 
+	FederatedBead struct {
+		Bead            func(childComplexity int) int
+		NodeID          func(childComplexity int) int
+		ProjectID       func(childComplexity int) int
+		ProjectURL      func(childComplexity int) int
+		Status          func(childComplexity int) int
+		WriteCapability func(childComplexity int) int
+	}
+
+	FederatedProject struct {
+		NodeID          func(childComplexity int) int
+		Project         func(childComplexity int) int
+		ProjectID       func(childComplexity int) int
+		ProjectURL      func(childComplexity int) int
+		Status          func(childComplexity int) int
+		WriteCapability func(childComplexity int) int
+	}
+
+	FederatedRun struct {
+		NodeID          func(childComplexity int) int
+		ProjectID       func(childComplexity int) int
+		ProjectURL      func(childComplexity int) int
+		Run             func(childComplexity int) int
+		Status          func(childComplexity int) int
+		WriteCapability func(childComplexity int) int
+	}
+
+	FederationNode struct {
+		Capabilities    func(childComplexity int) int
+		DdxVersion      func(childComplexity int) int
+		ID              func(childComplexity int) int
+		LastError       func(childComplexity int) int
+		LastHeartbeat   func(childComplexity int) int
+		Name            func(childComplexity int) int
+		NodeID          func(childComplexity int) int
+		RegisteredAt    func(childComplexity int) int
+		SchemaVersion   func(childComplexity int) int
+		Status          func(childComplexity int) int
+		URL             func(childComplexity int) int
+		WriteCapability func(childComplexity int) int
+	}
+
 	GraphIssue struct {
 		ID          func(childComplexity int) int
 		IssueID     func(childComplexity int) int
@@ -968,6 +1010,10 @@ type ComplexityRoot struct {
 		ExecutionBySessionID        func(childComplexity int, projectID string, sessionID string) int
 		ExecutionToolCalls          func(childComplexity int, id string, first *int, after *string) int
 		Executions                  func(childComplexity int, projectID string, first *int, after *string, last *int, before *string, beadID *string, verdict *string, harness *string, since *string, until *string, search *string) int
+		FederatedBeads              func(childComplexity int, status *string, label *string, projectID *string) int
+		FederatedProjects           func(childComplexity int, includeUnreachable *bool) int
+		FederatedRuns               func(childComplexity int, layer *RunLayer, projectID *string) int
+		FederationNodes             func(childComplexity int) int
 		HarnessStatuses             func(childComplexity int) int
 		Health                      func(childComplexity int) int
 		MetricsCost                 func(childComplexity int, since *string, bead *string, feature *string) int
@@ -1407,6 +1453,10 @@ type QueryResolver interface {
 	PluginDetail(ctx context.Context, name string) (*PluginInfo, error)
 	ProjectBindings(ctx context.Context, projectID string) (string, error)
 	PaletteSearch(ctx context.Context, query string) (*PaletteSearchResults, error)
+	FederationNodes(ctx context.Context) ([]*FederationNode, error)
+	FederatedBeads(ctx context.Context, status *string, label *string, projectID *string) ([]*FederatedBead, error)
+	FederatedRuns(ctx context.Context, layer *RunLayer, projectID *string) ([]*FederatedRun, error)
+	FederatedProjects(ctx context.Context, includeUnreachable *bool) ([]*FederatedProject, error)
 }
 type SubscriptionResolver interface {
 	WorkerProgress(ctx context.Context, workerID string) (<-chan *WorkerEvent, error)
@@ -3821,6 +3871,190 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.FeatureCostRow.UnknownBeads(childComplexity), true
 
+	case "FederatedBead.bead":
+		if e.ComplexityRoot.FederatedBead.Bead == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedBead.Bead(childComplexity), true
+	case "FederatedBead.nodeId":
+		if e.ComplexityRoot.FederatedBead.NodeID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedBead.NodeID(childComplexity), true
+	case "FederatedBead.projectId":
+		if e.ComplexityRoot.FederatedBead.ProjectID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedBead.ProjectID(childComplexity), true
+	case "FederatedBead.projectUrl":
+		if e.ComplexityRoot.FederatedBead.ProjectURL == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedBead.ProjectURL(childComplexity), true
+	case "FederatedBead.status":
+		if e.ComplexityRoot.FederatedBead.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedBead.Status(childComplexity), true
+	case "FederatedBead.writeCapability":
+		if e.ComplexityRoot.FederatedBead.WriteCapability == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedBead.WriteCapability(childComplexity), true
+
+	case "FederatedProject.nodeId":
+		if e.ComplexityRoot.FederatedProject.NodeID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedProject.NodeID(childComplexity), true
+	case "FederatedProject.project":
+		if e.ComplexityRoot.FederatedProject.Project == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedProject.Project(childComplexity), true
+	case "FederatedProject.projectId":
+		if e.ComplexityRoot.FederatedProject.ProjectID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedProject.ProjectID(childComplexity), true
+	case "FederatedProject.projectUrl":
+		if e.ComplexityRoot.FederatedProject.ProjectURL == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedProject.ProjectURL(childComplexity), true
+	case "FederatedProject.status":
+		if e.ComplexityRoot.FederatedProject.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedProject.Status(childComplexity), true
+	case "FederatedProject.writeCapability":
+		if e.ComplexityRoot.FederatedProject.WriteCapability == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedProject.WriteCapability(childComplexity), true
+
+	case "FederatedRun.nodeId":
+		if e.ComplexityRoot.FederatedRun.NodeID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedRun.NodeID(childComplexity), true
+	case "FederatedRun.projectId":
+		if e.ComplexityRoot.FederatedRun.ProjectID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedRun.ProjectID(childComplexity), true
+	case "FederatedRun.projectUrl":
+		if e.ComplexityRoot.FederatedRun.ProjectURL == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedRun.ProjectURL(childComplexity), true
+	case "FederatedRun.run":
+		if e.ComplexityRoot.FederatedRun.Run == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedRun.Run(childComplexity), true
+	case "FederatedRun.status":
+		if e.ComplexityRoot.FederatedRun.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedRun.Status(childComplexity), true
+	case "FederatedRun.writeCapability":
+		if e.ComplexityRoot.FederatedRun.WriteCapability == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederatedRun.WriteCapability(childComplexity), true
+
+	case "FederationNode.capabilities":
+		if e.ComplexityRoot.FederationNode.Capabilities == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederationNode.Capabilities(childComplexity), true
+	case "FederationNode.ddxVersion":
+		if e.ComplexityRoot.FederationNode.DdxVersion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederationNode.DdxVersion(childComplexity), true
+	case "FederationNode.id":
+		if e.ComplexityRoot.FederationNode.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederationNode.ID(childComplexity), true
+	case "FederationNode.lastError":
+		if e.ComplexityRoot.FederationNode.LastError == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederationNode.LastError(childComplexity), true
+	case "FederationNode.lastHeartbeat":
+		if e.ComplexityRoot.FederationNode.LastHeartbeat == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederationNode.LastHeartbeat(childComplexity), true
+	case "FederationNode.name":
+		if e.ComplexityRoot.FederationNode.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederationNode.Name(childComplexity), true
+	case "FederationNode.nodeId":
+		if e.ComplexityRoot.FederationNode.NodeID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederationNode.NodeID(childComplexity), true
+	case "FederationNode.registeredAt":
+		if e.ComplexityRoot.FederationNode.RegisteredAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederationNode.RegisteredAt(childComplexity), true
+	case "FederationNode.schemaVersion":
+		if e.ComplexityRoot.FederationNode.SchemaVersion == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederationNode.SchemaVersion(childComplexity), true
+	case "FederationNode.status":
+		if e.ComplexityRoot.FederationNode.Status == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederationNode.Status(childComplexity), true
+	case "FederationNode.url":
+		if e.ComplexityRoot.FederationNode.URL == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederationNode.URL(childComplexity), true
+	case "FederationNode.writeCapability":
+		if e.ComplexityRoot.FederationNode.WriteCapability == nil {
+			break
+		}
+
+		return e.ComplexityRoot.FederationNode.WriteCapability(childComplexity), true
+
 	case "GraphIssue.id":
 		if e.ComplexityRoot.GraphIssue.ID == nil {
 			break
@@ -5529,6 +5763,45 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Executions(childComplexity, args["projectId"].(string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string), args["beadId"].(*string), args["verdict"].(*string), args["harness"].(*string), args["since"].(*string), args["until"].(*string), args["search"].(*string)), true
+	case "Query.federatedBeads":
+		if e.ComplexityRoot.Query.FederatedBeads == nil {
+			break
+		}
+
+		args, err := ec.field_Query_federatedBeads_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.FederatedBeads(childComplexity, args["status"].(*string), args["label"].(*string), args["projectID"].(*string)), true
+	case "Query.federatedProjects":
+		if e.ComplexityRoot.Query.FederatedProjects == nil {
+			break
+		}
+
+		args, err := ec.field_Query_federatedProjects_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.FederatedProjects(childComplexity, args["includeUnreachable"].(*bool)), true
+	case "Query.federatedRuns":
+		if e.ComplexityRoot.Query.FederatedRuns == nil {
+			break
+		}
+
+		args, err := ec.field_Query_federatedRuns_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.FederatedRuns(childComplexity, args["layer"].(*RunLayer), args["projectID"].(*string)), true
+	case "Query.federationNodes":
+		if e.ComplexityRoot.Query.FederationNodes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.FederationNodes(childComplexity), true
 	case "Query.harnessStatuses":
 		if e.ComplexityRoot.Query.HarnessStatuses == nil {
 			break
@@ -8301,6 +8574,54 @@ func (ec *executionContext) field_Query_executions_args(ctx context.Context, raw
 		return nil, err
 	}
 	args["search"] = arg10
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_federatedBeads_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "status", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["status"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "label", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["label"] = arg1
+	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "projectID", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["projectID"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_federatedProjects_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "includeUnreachable", ec.unmarshalOBoolean2ᚖbool)
+	if err != nil {
+		return nil, err
+	}
+	args["includeUnreachable"] = arg0
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_federatedRuns_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "layer", ec.unmarshalORunLayer2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunLayer)
+	if err != nil {
+		return nil, err
+	}
+	args["layer"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "projectID", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["projectID"] = arg1
 	return args, nil
 }
 
@@ -20992,6 +21313,998 @@ func (ec *executionContext) fieldContext_FeatureCostRow_unknownBeads(_ context.C
 	return fc, nil
 }
 
+func (ec *executionContext) _FederatedBead_nodeId(ctx context.Context, field graphql.CollectedField, obj *FederatedBead) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedBead_nodeId,
+		func(ctx context.Context) (any, error) {
+			return obj.NodeID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedBead_nodeId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedBead",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedBead_projectId(ctx context.Context, field graphql.CollectedField, obj *FederatedBead) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedBead_projectId,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedBead_projectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedBead",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedBead_projectUrl(ctx context.Context, field graphql.CollectedField, obj *FederatedBead) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedBead_projectUrl,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectURL, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedBead_projectUrl(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedBead",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedBead_writeCapability(ctx context.Context, field graphql.CollectedField, obj *FederatedBead) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedBead_writeCapability,
+		func(ctx context.Context) (any, error) {
+			return obj.WriteCapability, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedBead_writeCapability(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedBead",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedBead_status(ctx context.Context, field graphql.CollectedField, obj *FederatedBead) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedBead_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedBead_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedBead",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedBead_bead(ctx context.Context, field graphql.CollectedField, obj *FederatedBead) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedBead_bead,
+		func(ctx context.Context) (any, error) {
+			return obj.Bead, nil
+		},
+		nil,
+		ec.marshalNBead2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐBead,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedBead_bead(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedBead",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Bead_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Bead_title(ctx, field)
+			case "status":
+				return ec.fieldContext_Bead_status(ctx, field)
+			case "priority":
+				return ec.fieldContext_Bead_priority(ctx, field)
+			case "issueType":
+				return ec.fieldContext_Bead_issueType(ctx, field)
+			case "owner":
+				return ec.fieldContext_Bead_owner(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Bead_createdAt(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Bead_createdBy(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Bead_updatedAt(ctx, field)
+			case "labels":
+				return ec.fieldContext_Bead_labels(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
+			case "parent":
+				return ec.fieldContext_Bead_parent(ctx, field)
+			case "description":
+				return ec.fieldContext_Bead_description(ctx, field)
+			case "acceptance":
+				return ec.fieldContext_Bead_acceptance(ctx, field)
+			case "notes":
+				return ec.fieldContext_Bead_notes(ctx, field)
+			case "dependencies":
+				return ec.fieldContext_Bead_dependencies(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Bead", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedProject_nodeId(ctx context.Context, field graphql.CollectedField, obj *FederatedProject) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedProject_nodeId,
+		func(ctx context.Context) (any, error) {
+			return obj.NodeID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedProject_nodeId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedProject",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedProject_projectId(ctx context.Context, field graphql.CollectedField, obj *FederatedProject) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedProject_projectId,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedProject_projectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedProject",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedProject_projectUrl(ctx context.Context, field graphql.CollectedField, obj *FederatedProject) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedProject_projectUrl,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectURL, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedProject_projectUrl(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedProject",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedProject_writeCapability(ctx context.Context, field graphql.CollectedField, obj *FederatedProject) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedProject_writeCapability,
+		func(ctx context.Context) (any, error) {
+			return obj.WriteCapability, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedProject_writeCapability(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedProject",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedProject_status(ctx context.Context, field graphql.CollectedField, obj *FederatedProject) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedProject_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedProject_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedProject",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedProject_project(ctx context.Context, field graphql.CollectedField, obj *FederatedProject) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedProject_project,
+		func(ctx context.Context) (any, error) {
+			return obj.Project, nil
+		},
+		nil,
+		ec.marshalNProject2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProject,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedProject_project(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedProject",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Project_id(ctx, field)
+			case "name":
+				return ec.fieldContext_Project_name(ctx, field)
+			case "path":
+				return ec.fieldContext_Project_path(ctx, field)
+			case "gitRemote":
+				return ec.fieldContext_Project_gitRemote(ctx, field)
+			case "registeredAt":
+				return ec.fieldContext_Project_registeredAt(ctx, field)
+			case "lastSeen":
+				return ec.fieldContext_Project_lastSeen(ctx, field)
+			case "unreachable":
+				return ec.fieldContext_Project_unreachable(ctx, field)
+			case "tombstonedAt":
+				return ec.fieldContext_Project_tombstonedAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Project", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedRun_nodeId(ctx context.Context, field graphql.CollectedField, obj *FederatedRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedRun_nodeId,
+		func(ctx context.Context) (any, error) {
+			return obj.NodeID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedRun_nodeId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedRun_projectId(ctx context.Context, field graphql.CollectedField, obj *FederatedRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedRun_projectId,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectID, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedRun_projectId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedRun_projectUrl(ctx context.Context, field graphql.CollectedField, obj *FederatedRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedRun_projectUrl,
+		func(ctx context.Context) (any, error) {
+			return obj.ProjectURL, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedRun_projectUrl(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedRun_writeCapability(ctx context.Context, field graphql.CollectedField, obj *FederatedRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedRun_writeCapability,
+		func(ctx context.Context) (any, error) {
+			return obj.WriteCapability, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedRun_writeCapability(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedRun_status(ctx context.Context, field graphql.CollectedField, obj *FederatedRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedRun_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedRun_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederatedRun_run(ctx context.Context, field graphql.CollectedField, obj *FederatedRun) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederatedRun_run,
+		func(ctx context.Context) (any, error) {
+			return obj.Run, nil
+		},
+		nil,
+		ec.marshalNRun2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRun,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederatedRun_run(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederatedRun",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Run_id(ctx, field)
+			case "layer":
+				return ec.fieldContext_Run_layer(ctx, field)
+			case "status":
+				return ec.fieldContext_Run_status(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Run_projectID(ctx, field)
+			case "startedAt":
+				return ec.fieldContext_Run_startedAt(ctx, field)
+			case "completedAt":
+				return ec.fieldContext_Run_completedAt(ctx, field)
+			case "beadId":
+				return ec.fieldContext_Run_beadId(ctx, field)
+			case "artifactId":
+				return ec.fieldContext_Run_artifactId(ctx, field)
+			case "parentRunId":
+				return ec.fieldContext_Run_parentRunId(ctx, field)
+			case "childRunIds":
+				return ec.fieldContext_Run_childRunIds(ctx, field)
+			case "queueInputs":
+				return ec.fieldContext_Run_queueInputs(ctx, field)
+			case "stopCondition":
+				return ec.fieldContext_Run_stopCondition(ctx, field)
+			case "selectedBeadIds":
+				return ec.fieldContext_Run_selectedBeadIds(ctx, field)
+			case "baseRevision":
+				return ec.fieldContext_Run_baseRevision(ctx, field)
+			case "resultRevision":
+				return ec.fieldContext_Run_resultRevision(ctx, field)
+			case "worktreePath":
+				return ec.fieldContext_Run_worktreePath(ctx, field)
+			case "mergeOutcome":
+				return ec.fieldContext_Run_mergeOutcome(ctx, field)
+			case "checkResults":
+				return ec.fieldContext_Run_checkResults(ctx, field)
+			case "promptSummary":
+				return ec.fieldContext_Run_promptSummary(ctx, field)
+			case "powerMin":
+				return ec.fieldContext_Run_powerMin(ctx, field)
+			case "powerMax":
+				return ec.fieldContext_Run_powerMax(ctx, field)
+			case "harness":
+				return ec.fieldContext_Run_harness(ctx, field)
+			case "provider":
+				return ec.fieldContext_Run_provider(ctx, field)
+			case "model":
+				return ec.fieldContext_Run_model(ctx, field)
+			case "tokensIn":
+				return ec.fieldContext_Run_tokensIn(ctx, field)
+			case "tokensOut":
+				return ec.fieldContext_Run_tokensOut(ctx, field)
+			case "costUsd":
+				return ec.fieldContext_Run_costUsd(ctx, field)
+			case "durationMs":
+				return ec.fieldContext_Run_durationMs(ctx, field)
+			case "outputExcerpt":
+				return ec.fieldContext_Run_outputExcerpt(ctx, field)
+			case "evidenceLinks":
+				return ec.fieldContext_Run_evidenceLinks(ctx, field)
+			case "prompt":
+				return ec.fieldContext_Run_prompt(ctx, field)
+			case "response":
+				return ec.fieldContext_Run_response(ctx, field)
+			case "stderr":
+				return ec.fieldContext_Run_stderr(ctx, field)
+			case "bundleFiles":
+				return ec.fieldContext_Run_bundleFiles(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Run", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederationNode_id(ctx context.Context, field graphql.CollectedField, obj *FederationNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederationNode_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederationNode_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederationNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederationNode_nodeId(ctx context.Context, field graphql.CollectedField, obj *FederationNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederationNode_nodeId,
+		func(ctx context.Context) (any, error) {
+			return obj.NodeID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederationNode_nodeId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederationNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederationNode_name(ctx context.Context, field graphql.CollectedField, obj *FederationNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederationNode_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederationNode_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederationNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederationNode_url(ctx context.Context, field graphql.CollectedField, obj *FederationNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederationNode_url,
+		func(ctx context.Context) (any, error) {
+			return obj.URL, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederationNode_url(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederationNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederationNode_status(ctx context.Context, field graphql.CollectedField, obj *FederationNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederationNode_status,
+		func(ctx context.Context) (any, error) {
+			return obj.Status, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederationNode_status(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederationNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederationNode_ddxVersion(ctx context.Context, field graphql.CollectedField, obj *FederationNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederationNode_ddxVersion,
+		func(ctx context.Context) (any, error) {
+			return obj.DdxVersion, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederationNode_ddxVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederationNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederationNode_schemaVersion(ctx context.Context, field graphql.CollectedField, obj *FederationNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederationNode_schemaVersion,
+		func(ctx context.Context) (any, error) {
+			return obj.SchemaVersion, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederationNode_schemaVersion(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederationNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederationNode_capabilities(ctx context.Context, field graphql.CollectedField, obj *FederationNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederationNode_capabilities,
+		func(ctx context.Context) (any, error) {
+			return obj.Capabilities, nil
+		},
+		nil,
+		ec.marshalNString2ᚕstringᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederationNode_capabilities(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederationNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederationNode_registeredAt(ctx context.Context, field graphql.CollectedField, obj *FederationNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederationNode_registeredAt,
+		func(ctx context.Context) (any, error) {
+			return obj.RegisteredAt, nil
+		},
+		nil,
+		ec.marshalNDateTime2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederationNode_registeredAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederationNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type DateTime does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederationNode_lastHeartbeat(ctx context.Context, field graphql.CollectedField, obj *FederationNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederationNode_lastHeartbeat,
+		func(ctx context.Context) (any, error) {
+			return obj.LastHeartbeat, nil
+		},
+		nil,
+		ec.marshalODateTime2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederationNode_lastHeartbeat(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederationNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type DateTime does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederationNode_writeCapability(ctx context.Context, field graphql.CollectedField, obj *FederationNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederationNode_writeCapability,
+		func(ctx context.Context) (any, error) {
+			return obj.WriteCapability, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederationNode_writeCapability(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederationNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _FederationNode_lastError(ctx context.Context, field graphql.CollectedField, obj *FederationNode) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_FederationNode_lastError,
+		func(ctx context.Context) (any, error) {
+			return obj.LastError, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_FederationNode_lastError(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "FederationNode",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _GraphIssue_issueId(ctx context.Context, field graphql.CollectedField, obj *GraphIssue) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -31652,6 +32965,226 @@ func (ec *executionContext) fieldContext_Query_paletteSearch(ctx context.Context
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
 	if fc.Args, err = ec.field_Query_paletteSearch_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_federationNodes(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_federationNodes,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().FederationNodes(ctx)
+		},
+		nil,
+		ec.marshalNFederationNode2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐFederationNodeᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_federationNodes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_FederationNode_id(ctx, field)
+			case "nodeId":
+				return ec.fieldContext_FederationNode_nodeId(ctx, field)
+			case "name":
+				return ec.fieldContext_FederationNode_name(ctx, field)
+			case "url":
+				return ec.fieldContext_FederationNode_url(ctx, field)
+			case "status":
+				return ec.fieldContext_FederationNode_status(ctx, field)
+			case "ddxVersion":
+				return ec.fieldContext_FederationNode_ddxVersion(ctx, field)
+			case "schemaVersion":
+				return ec.fieldContext_FederationNode_schemaVersion(ctx, field)
+			case "capabilities":
+				return ec.fieldContext_FederationNode_capabilities(ctx, field)
+			case "registeredAt":
+				return ec.fieldContext_FederationNode_registeredAt(ctx, field)
+			case "lastHeartbeat":
+				return ec.fieldContext_FederationNode_lastHeartbeat(ctx, field)
+			case "writeCapability":
+				return ec.fieldContext_FederationNode_writeCapability(ctx, field)
+			case "lastError":
+				return ec.fieldContext_FederationNode_lastError(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FederationNode", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_federatedBeads(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_federatedBeads,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().FederatedBeads(ctx, fc.Args["status"].(*string), fc.Args["label"].(*string), fc.Args["projectID"].(*string))
+		},
+		nil,
+		ec.marshalNFederatedBead2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐFederatedBeadᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_federatedBeads(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "nodeId":
+				return ec.fieldContext_FederatedBead_nodeId(ctx, field)
+			case "projectId":
+				return ec.fieldContext_FederatedBead_projectId(ctx, field)
+			case "projectUrl":
+				return ec.fieldContext_FederatedBead_projectUrl(ctx, field)
+			case "writeCapability":
+				return ec.fieldContext_FederatedBead_writeCapability(ctx, field)
+			case "status":
+				return ec.fieldContext_FederatedBead_status(ctx, field)
+			case "bead":
+				return ec.fieldContext_FederatedBead_bead(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FederatedBead", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_federatedBeads_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_federatedRuns(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_federatedRuns,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().FederatedRuns(ctx, fc.Args["layer"].(*RunLayer), fc.Args["projectID"].(*string))
+		},
+		nil,
+		ec.marshalNFederatedRun2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐFederatedRunᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_federatedRuns(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "nodeId":
+				return ec.fieldContext_FederatedRun_nodeId(ctx, field)
+			case "projectId":
+				return ec.fieldContext_FederatedRun_projectId(ctx, field)
+			case "projectUrl":
+				return ec.fieldContext_FederatedRun_projectUrl(ctx, field)
+			case "writeCapability":
+				return ec.fieldContext_FederatedRun_writeCapability(ctx, field)
+			case "status":
+				return ec.fieldContext_FederatedRun_status(ctx, field)
+			case "run":
+				return ec.fieldContext_FederatedRun_run(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FederatedRun", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_federatedRuns_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_federatedProjects(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_federatedProjects,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().FederatedProjects(ctx, fc.Args["includeUnreachable"].(*bool))
+		},
+		nil,
+		ec.marshalNFederatedProject2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐFederatedProjectᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_federatedProjects(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "nodeId":
+				return ec.fieldContext_FederatedProject_nodeId(ctx, field)
+			case "projectId":
+				return ec.fieldContext_FederatedProject_projectId(ctx, field)
+			case "projectUrl":
+				return ec.fieldContext_FederatedProject_projectUrl(ctx, field)
+			case "writeCapability":
+				return ec.fieldContext_FederatedProject_writeCapability(ctx, field)
+			case "status":
+				return ec.fieldContext_FederatedProject_status(ctx, field)
+			case "project":
+				return ec.fieldContext_FederatedProject_project(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type FederatedProject", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_federatedProjects_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -43462,6 +44995,280 @@ func (ec *executionContext) _FeatureCostRow(ctx context.Context, sel ast.Selecti
 	return out
 }
 
+var federatedBeadImplementors = []string{"FederatedBead"}
+
+func (ec *executionContext) _FederatedBead(ctx context.Context, sel ast.SelectionSet, obj *FederatedBead) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, federatedBeadImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("FederatedBead")
+		case "nodeId":
+			out.Values[i] = ec._FederatedBead_nodeId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "projectId":
+			out.Values[i] = ec._FederatedBead_projectId(ctx, field, obj)
+		case "projectUrl":
+			out.Values[i] = ec._FederatedBead_projectUrl(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "writeCapability":
+			out.Values[i] = ec._FederatedBead_writeCapability(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._FederatedBead_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "bead":
+			out.Values[i] = ec._FederatedBead_bead(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var federatedProjectImplementors = []string{"FederatedProject"}
+
+func (ec *executionContext) _FederatedProject(ctx context.Context, sel ast.SelectionSet, obj *FederatedProject) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, federatedProjectImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("FederatedProject")
+		case "nodeId":
+			out.Values[i] = ec._FederatedProject_nodeId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "projectId":
+			out.Values[i] = ec._FederatedProject_projectId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "projectUrl":
+			out.Values[i] = ec._FederatedProject_projectUrl(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "writeCapability":
+			out.Values[i] = ec._FederatedProject_writeCapability(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._FederatedProject_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "project":
+			out.Values[i] = ec._FederatedProject_project(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var federatedRunImplementors = []string{"FederatedRun"}
+
+func (ec *executionContext) _FederatedRun(ctx context.Context, sel ast.SelectionSet, obj *FederatedRun) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, federatedRunImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("FederatedRun")
+		case "nodeId":
+			out.Values[i] = ec._FederatedRun_nodeId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "projectId":
+			out.Values[i] = ec._FederatedRun_projectId(ctx, field, obj)
+		case "projectUrl":
+			out.Values[i] = ec._FederatedRun_projectUrl(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "writeCapability":
+			out.Values[i] = ec._FederatedRun_writeCapability(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._FederatedRun_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "run":
+			out.Values[i] = ec._FederatedRun_run(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var federationNodeImplementors = []string{"FederationNode"}
+
+func (ec *executionContext) _FederationNode(ctx context.Context, sel ast.SelectionSet, obj *FederationNode) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, federationNodeImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("FederationNode")
+		case "id":
+			out.Values[i] = ec._FederationNode_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "nodeId":
+			out.Values[i] = ec._FederationNode_nodeId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._FederationNode_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "url":
+			out.Values[i] = ec._FederationNode_url(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "status":
+			out.Values[i] = ec._FederationNode_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "ddxVersion":
+			out.Values[i] = ec._FederationNode_ddxVersion(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "schemaVersion":
+			out.Values[i] = ec._FederationNode_schemaVersion(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "capabilities":
+			out.Values[i] = ec._FederationNode_capabilities(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "registeredAt":
+			out.Values[i] = ec._FederationNode_registeredAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lastHeartbeat":
+			out.Values[i] = ec._FederationNode_lastHeartbeat(ctx, field, obj)
+		case "writeCapability":
+			out.Values[i] = ec._FederationNode_writeCapability(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lastError":
+			out.Values[i] = ec._FederationNode_lastError(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var graphIssueImplementors = []string{"GraphIssue"}
 
 func (ec *executionContext) _GraphIssue(ctx context.Context, sel ast.SelectionSet, obj *GraphIssue) graphql.Marshaler {
@@ -47263,6 +49070,94 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "federationNodes":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_federationNodes(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "federatedBeads":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_federatedBeads(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "federatedRuns":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_federatedRuns(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "federatedProjects":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_federatedProjects(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -50426,6 +52321,110 @@ func (ec *executionContext) marshalNFeatureCostRow2ᚖgithubᚗcomᚋDocumentDri
 		return graphql.Null
 	}
 	return ec._FeatureCostRow(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNFederatedBead2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐFederatedBeadᚄ(ctx context.Context, sel ast.SelectionSet, v []*FederatedBead) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNFederatedBead2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐFederatedBead(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNFederatedBead2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐFederatedBead(ctx context.Context, sel ast.SelectionSet, v *FederatedBead) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._FederatedBead(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNFederatedProject2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐFederatedProjectᚄ(ctx context.Context, sel ast.SelectionSet, v []*FederatedProject) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNFederatedProject2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐFederatedProject(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNFederatedProject2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐFederatedProject(ctx context.Context, sel ast.SelectionSet, v *FederatedProject) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._FederatedProject(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNFederatedRun2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐFederatedRunᚄ(ctx context.Context, sel ast.SelectionSet, v []*FederatedRun) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNFederatedRun2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐFederatedRun(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNFederatedRun2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐFederatedRun(ctx context.Context, sel ast.SelectionSet, v *FederatedRun) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._FederatedRun(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNFederationNode2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐFederationNodeᚄ(ctx context.Context, sel ast.SelectionSet, v []*FederationNode) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNFederationNode2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐFederationNode(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNFederationNode2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐFederationNode(ctx context.Context, sel ast.SelectionSet, v *FederationNode) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._FederationNode(ctx, sel, v)
 }
 
 func (ec *executionContext) unmarshalNFloat2float64(ctx context.Context, v any) (float64, error) {
