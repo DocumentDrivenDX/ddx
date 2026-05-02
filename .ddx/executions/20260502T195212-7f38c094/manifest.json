@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260502T195212-7f38c094",
+  "bead_id": "ddx-bbac06c9",
+  "base_rev": "5fc4f20fd24a418cf3b6f8f03aad37ab22ead094",
+  "created_at": "2026-05-02T19:52:13.352580177Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bbac06c9",
+    "title": "availability: rename to 'Agent availability' + nav placement + model list inline/drilldown + refresh button",
+    "description": "Rename Providers tab to 'Agent availability'. Show per-provider model list inline (or drilldown for many models). Refresh button per provider. Coordinate nav placement with NavShell.",
+    "acceptance": "1. Tab labeled 'Agent availability'. 2. Per-provider model list visible. 3. Refresh button calls refreshProviderModels mutation. 4. Coordinated with NavShell ownership.",
+    "parent": "ddx-12e97cb9",
+    "labels": [
+      "phase:2",
+      "story:9",
+      "area:web",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T19:52:12Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3518486",
+      "execute-loop-heartbeat-at": "2026-05-02T19:52:12.103963366Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T195212-7f38c094",
+    "prompt": ".ddx/executions/20260502T195212-7f38c094/prompt.md",
+    "manifest": ".ddx/executions/20260502T195212-7f38c094/manifest.json",
+    "result": ".ddx/executions/20260502T195212-7f38c094/result.json",
+    "checks": ".ddx/executions/20260502T195212-7f38c094/checks.json",
+    "usage": ".ddx/executions/20260502T195212-7f38c094/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-bbac06c9-20260502T195212-7f38c094"
+  },
+  "prompt_sha": "51f5c0497489e070b45b12b5ff36c72b352f6a4f418b27f48745a1645432ef9b"
+}
