@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T040017-7246ee65",
+  "bead_id": "ddx-9aecc66c",
+  "base_rev": "b0d23d62c62b5868fd389d1e5468b34f4bb4ba61",
+  "created_at": "2026-05-02T04:00:18.59375396Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9aecc66c",
+    "title": "Add beads-archive collection with archival policy",
+    "description": "Per TD-NNN from C1, add the beads-archive collection backed by .ddx/beads-archive.jsonl. Implement the archival trigger chosen in the TD. Move closed beads from beads → beads-archive when the trigger fires. Keep ddx bead show/list semantics transparent across both collections.",
+    "acceptance": "1. .ddx/beads-archive.jsonl is written when archival trigger fires. 2. ddx bead show \u003cid\u003e finds beads in either collection. 3. ddx bead list (default) shows active + recently closed; --all flag includes archive. 4. ddx bead ready/blocked queries only active. 5. Tests cover the archival flow: 'cd cli \u0026\u0026 go test -run TestArchive ./internal/bead/'. 6. Migration of existing beads.jsonl is via separate command (deferred to C5).",
+    "parent": "ddx-0c0565f3",
+    "labels": [
+      "area:beads",
+      "area:storage",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T04:00:17Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1329405",
+      "execute-loop-heartbeat-at": "2026-05-02T04:00:17.031874131Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T040017-7246ee65",
+    "prompt": ".ddx/executions/20260502T040017-7246ee65/prompt.md",
+    "manifest": ".ddx/executions/20260502T040017-7246ee65/manifest.json",
+    "result": ".ddx/executions/20260502T040017-7246ee65/result.json",
+    "checks": ".ddx/executions/20260502T040017-7246ee65/checks.json",
+    "usage": ".ddx/executions/20260502T040017-7246ee65/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-9aecc66c-20260502T040017-7246ee65"
+  }
+}
