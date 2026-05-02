@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Federation surface is implemented cleanly: a FederationProvider interface decouples resolvers from the registry, fan-out reuses the B14.6a client, routing metadata is consistently attached to each row, and the synthetic `@identity:*` capability is filtered. Tests cover all four queries against two mock httptest spokes including partial-result and version-skew rendering. Local schema is untouched per parallel-ship requirement."
+}
