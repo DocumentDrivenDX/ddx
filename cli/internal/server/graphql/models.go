@@ -1257,6 +1257,18 @@ func (NodeInfo) IsNode() {}
 // Globally unique identifier
 func (this NodeInfo) GetID() string { return this.ID }
 
+// Result of operatorPromptApprove. The bead has transitioned from proposed → open and an audit event has been appended.
+type OperatorPromptApproveResult struct {
+	// The bead after approval (status=open).
+	Bead *Bead `json:"bead"`
+}
+
+// Result of operatorPromptCancel. The bead has transitioned from proposed → cancelled and an audit event has been appended.
+type OperatorPromptCancelResult struct {
+	// The bead after cancellation (status=cancelled).
+	Bead *Bead `json:"bead"`
+}
+
 // Input for operatorPromptSubmit. The prompt body is preserved verbatim in the bead description; tier is clamped to the bead priority range; idempotencyKey dedupes repeat submissions within a 24-hour window.
 type OperatorPromptSubmitInput struct {
 	// The full operator prompt body. The first non-empty line becomes the bead title; the entire body is stored as the bead description.
@@ -1265,6 +1277,8 @@ type OperatorPromptSubmitInput struct {
 	Tier *int `json:"tier,omitempty"`
 	// Idempotency key. Repeat submissions with the same key within a 24-hour window return the original bead unchanged (deduplicated=true).
 	IdempotencyKey string `json:"idempotencyKey"`
+	// When true, ask the server to immediately approve (proposed → open) the resulting bead so it enters the execute-loop without a separate operatorPromptApprove call. The server enforces the per-project auto-approve allowlist: only configured-localhost identities are eligible — ts-net identities are NEVER auto-approved (locked decision). When the caller is not eligible the bead is still created in the proposed status and autoApproved is false.
+	AutoApprove *bool `json:"autoApprove,omitempty"`
 }
 
 // Result of operatorPromptSubmit. When deduplicated=true, the request matched an idempotency key submitted within the last 24 hours and the original bead is returned unchanged.
@@ -1273,6 +1287,8 @@ type OperatorPromptSubmitResult struct {
 	Bead *Bead `json:"bead"`
 	// True if the request matched a prior idempotency-key submission within 24h.
 	Deduplicated bool `json:"deduplicated"`
+	// True when the bead was auto-approved (status=open) rather than left in the proposed status. Only set on first submission for callers on the per-project auto-approve allowlist.
+	AutoApproved bool `json:"autoApproved"`
 }
 
 // PageInfo carries cursor-based pagination state (Relay spec)

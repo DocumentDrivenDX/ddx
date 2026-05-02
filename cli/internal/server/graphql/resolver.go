@@ -63,6 +63,17 @@ type Resolver struct {
 	// idempotency key within a 24-hour window. Server callers must wire a
 	// process-wide instance (NewMemoryIdempotencyCache).
 	OperatorPromptIdempotency IdempotencyCache
+	// OperatorPromptAutoApproveAllowlist is the per-project list of localhost
+	// identity actors that may auto-approve their own operator-prompt
+	// submissions (operatorPromptSubmit input.autoApprove=true) and that may
+	// invoke operatorPromptApprove. The locked Story 15 decision restricts
+	// approval to configured-localhost identities — ts-net identities are
+	// NEVER eligible regardless of the allowlist contents. The literal
+	// sentinel "localhost" in the list matches any localhost actor; otherwise
+	// the entry must equal the actor string produced by operatorPromptIdentity
+	// (e.g. "localhost:127.0.0.1:55812"). An empty allowlist disables both
+	// auto-approve and the manual approve mutation for this project.
+	OperatorPromptAutoApproveAllowlist []string
 }
 
 // Mutation returns MutationResolver implementation.
