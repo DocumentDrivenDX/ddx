@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T120636-9e92725c",
+  "bead_id": "ddx-1d4bfbf3",
+  "base_rev": "f3d342f8b10ded33b9ae10b85ab4d5490a0015a9",
+  "created_at": "2026-05-02T12:06:37.813782362Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1d4bfbf3",
+    "title": "B14.1: ADR-007 + FEAT-026 frame + FEAT-020/021 amendments + naming convention",
+    "description": "Author ADR-007 (Federation Topology: Star, Active-Spoke Hybrid) capturing topology, authority, ts-net policy, plain-HTTP opt-out, and write-routing contract. Create FEAT-026 spec frame. Amend FEAT-020 (federation-state.json schema; --hub-mode/--hub=/--federation-allow-plain-http flags; node.federation_role exposure) and FEAT-021 (/federation overview, hub-resolved /nodes/:nodeId/..., ?scope=federation on combined views). Establish naming convention: federation/hub/spoke (avoid coordinator/primary/replica). See /tmp/story-14-final.md sections 'Spec Changes' and 'Topology, Authority, Discovery'.",
+    "acceptance": "ADR-007 committed under docs/helix/. FEAT-026 spec frame committed. FEAT-020 and FEAT-021 amendments committed (compatibility hooks only, no implementation). Naming convention documented in ADR-007. Version-handshake compatibility matrix included in ADR-007.",
+    "parent": "ddx-a038a090",
+    "labels": [
+      "phase:2",
+      "story:14"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:06:36Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "execute-loop-heartbeat-at": "2026-05-02T12:06:36.595243297Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T120636-9e92725c",
+    "prompt": ".ddx/executions/20260502T120636-9e92725c/prompt.md",
+    "manifest": ".ddx/executions/20260502T120636-9e92725c/manifest.json",
+    "result": ".ddx/executions/20260502T120636-9e92725c/result.json",
+    "checks": ".ddx/executions/20260502T120636-9e92725c/checks.json",
+    "usage": ".ddx/executions/20260502T120636-9e92725c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-1d4bfbf3-20260502T120636-9e92725c"
+  }
+}
