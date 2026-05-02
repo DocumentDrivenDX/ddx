@@ -1,0 +1,88 @@
+{
+  "attempt_id": "20260502T134441-42b0715e",
+  "bead_id": ".execute-bead-wt-ddx-3c154349-20260502T131050-bf2d17f5-2b64cb0a",
+  "base_rev": "26d80c8343def84593d5cb541f4debb51ad98365",
+  "created_at": "2026-05-02T13:44:43.016602059Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-3c154349-20260502T131050-bf2d17f5-2b64cb0a",
+    "title": "Triage integration: lock contention retry-with-backoff + execution_failed/no_changes paths",
+    "description": "Third child of ddx-3c154349. Depends on the triage framework child. Covers the remaining failure modes.\n\nScope:\n- Lock contention: detect 'Unable to create .git/index.lock' / staging-tracker lock errors in attempt outcomes. Triage action: retry_with_backoff (e.g. 30s, 90s, 300s) within the same drain pass before unclaiming. Sibling bead handles the underlying lock fix; this bead wires the retry decision.\n- execution_failed (substantive, not infrastructure): triage maps to escalate_tier per the existing S10 ladder; on exhaustion → needs_human. Distinguish from already-handled escalatable statuses by treating execution_failed as an explicit triage entry-point.\n- no_changes (NoChangesRationale present): triage decides whether the bead AC is genuinely satisfied (close already_satisfied — current behavior) or whether to file a clarification follow-up bead (when rationale doesn't quote AC items).\n- Tests for: lock-error → retry succeeds on second attempt; lock-error → escalate after backoff exhaustion; execution_failed → escalate_tier; no_changes with weak rationale → file follow-up.\n\nOut of scope:\n- The actual git-lock infrastructure fix (sibling bead).\n- Review BLOCK/REQUEST_CHANGES (sibling child).",
+    "acceptance": "1. Lock contention errors classified and routed to retry_with_backoff with at least 3 backoff steps before escalation. 2. execution_failed enters triage and produces escalate_tier or needs_human depending on attempt count. 3. no_changes with a rationale that does not cite AC items results in a clarification follow-up bead being filed (and the original closed). 4. Tests cover lock-error retry success, lock-error backoff exhaustion, execution_failed escalation, no_changes follow-up.",
+    "parent": "ddx-3c154349",
+    "labels": [
+      "phase:2",
+      " story:10",
+      " area:agent",
+      " kind:fix"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T13:44:41Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T13:40:38.605722861Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T132857-7e5c2228\",\"harness\":\"claude\",\"input_tokens\":63,\"output_tokens\":33951,\"total_tokens\":34014,\"cost_usd\":4.116576,\"duration_ms\":698962,\"exit_code\":0}",
+          "created_at": "2026-05-02T13:40:38.61608827Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=34014 cost_usd=4.1166"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T13:40:44.777235562Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only an execution result.json metadata file. No code changes implementing lock-contention retry, execution_failed escalation, or no_changes follow-up logic. No tests. AC1-4 cannot be evaluated as implemented.\nharness=claude\nmodel=opus\ninput_bytes=5014\noutput_bytes=821\nelapsed_ms=11342",
+          "created_at": "2026-05-02T13:40:58.145283103Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T13:40:58.158046227Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json metadata file. No code changes implementing lock-contention retry, execution_failed escalation, or no_changes follow-up logic. No tests. AC1-4 cannot be evaluated as implemented.\nresult_rev=9f058d99acb3f7eca64feb39cc8d69d03e607b75\nbase_rev=3f01204dcdd4565f229c551bd384a1e67cd2eda3",
+          "created_at": "2026-05-02T13:40:58.168081027Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T13:44:41.762094712Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T134441-42b0715e",
+    "prompt": ".ddx/executions/20260502T134441-42b0715e/prompt.md",
+    "manifest": ".ddx/executions/20260502T134441-42b0715e/manifest.json",
+    "result": ".ddx/executions/20260502T134441-42b0715e/result.json",
+    "checks": ".ddx/executions/20260502T134441-42b0715e/checks.json",
+    "usage": ".ddx/executions/20260502T134441-42b0715e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-3c154349-20260502T131050-bf2d17f5-2b64cb0a-20260502T134441-42b0715e"
+  }
+}
