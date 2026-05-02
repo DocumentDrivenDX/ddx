@@ -1,0 +1,42 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "FEAT-022 amended with the minimum-prompt rule paragraph as specified, including the closing sentence about dynamic egress caps. Placed adjacent to related shared-evidence guardrails (item 3) as item 3a.",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1323,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T122805-11bad270/manifest.json",
+          ".ddx/executions/20260502T122805-11bad270/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3828,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 6957,
+    "output_bytes": 298,
+    "elapsed_ms": 14118,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
