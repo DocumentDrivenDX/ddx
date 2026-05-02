@@ -64,6 +64,7 @@ Examples:
 	cmd.AddCommand(f.newBeadDoctorCommand())
 	cmd.AddCommand(f.newBeadCooldownCommand())
 	cmd.AddCommand(f.newBeadMigrateCommand())
+	cmd.AddCommand(f.newBeadArchiveCommand())
 
 	return cmd
 }

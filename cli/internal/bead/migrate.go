@@ -29,14 +29,27 @@ func (m MigrateStats) Changed() bool {
 // so it drains the historical backlog. Routine archival (after Close)
 // continues to use DefaultArchivePolicy.
 func (s *Store) Migrate() (MigrateStats, error) {
+	return s.ArchiveWithEvents(ArchivePolicy{
+		Statuses:       []string{StatusClosed},
+		MinAge:         0,
+		MinActiveCount: 0,
+		BatchSize:      0, // unlimited
+	})
+}
+
+// ArchiveWithEvents externalizes inline events for every bead whose status
+// matches policy.Statuses, then archives eligible beads under the same
+// policy. This is the operator-facing path used by `ddx bead archive` and
+// the internal path used by `ddx bead migrate`.
+func (s *Store) ArchiveWithEvents(policy ArchivePolicy) (MigrateStats, error) {
 	var stats MigrateStats
 	if s.Collection != DefaultCollection {
-		return stats, fmt.Errorf("bead: migrate only runs from the active %q collection (got %q)", DefaultCollection, s.Collection)
+		return stats, fmt.Errorf("bead: archive only runs from the active %q collection (got %q)", DefaultCollection, s.Collection)
 	}
 
-	// Step 1: externalize inline events on every closed bead under the
-	// active store's lock. This shrinks the row size before we even try
-	// to archive, so the archive partner inherits already-thin rows.
+	// Step 1: externalize inline events on every eligible-status bead under
+	// the active store's lock. This shrinks the row size before we try to
+	// archive, so the archive partner inherits already-thin rows.
 	err := s.WithLock(func() error {
 		beads, _, rerr := s.readAllLatestRaw()
 		if rerr != nil {
@@ -44,7 +57,7 @@ func (s *Store) Migrate() (MigrateStats, error) {
 		}
 		dirty := false
 		for i := range beads {
-			if beads[i].Status != StatusClosed {
+			if !containsString(policy.Statuses, beads[i].Status) {
 				continue
 			}
 			if !hasInlineEvents(&beads[i]) {
@@ -62,21 +75,12 @@ func (s *Store) Migrate() (MigrateStats, error) {
 		return s.WriteAll(beads)
 	})
 	if err != nil {
-		return stats, fmt.Errorf("bead: migrate externalize: %w", err)
+		return stats, fmt.Errorf("bead: archive externalize: %w", err)
 	}
 
-	// Step 2: drain eligible closed beads into the archive. Use a
-	// permissive policy so the historical backlog moves; preserve_dependencies
-	// inside Archive() still keeps any closed bead an open one references.
-	policy := ArchivePolicy{
-		Statuses:       []string{StatusClosed},
-		MinAge:         0,
-		MinActiveCount: 0,
-		BatchSize:      0, // unlimited
-	}
 	moved, err := s.Archive(policy)
 	if err != nil {
-		return stats, fmt.Errorf("bead: migrate archive: %w", err)
+		return stats, fmt.Errorf("bead: archive: %w", err)
 	}
 	stats.Archived = len(moved)
 	return stats, nil
