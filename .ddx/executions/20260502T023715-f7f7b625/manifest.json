@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T023715-f7f7b625",
+  "bead_id": "ddx-ea855f63",
+  "base_rev": "27fd8d538a29d2f78288a02c798ccc518f873f51",
+  "created_at": "2026-05-02T02:37:16.958217854Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ea855f63",
+    "title": "Rewrite website/content/why/_index.md with one section per domain principle",
+    "description": "Replace existing /why content with: software-factory framing intro (1 paragraph), then 10 sections (one per principle) each 50-80 words summarizing the principle and linking to the deep page at /docs/principles/\u003cslug\u003e/. Order matches the principles list. Cross-link to /docs/concepts/software-factory/ from the intro.",
+    "acceptance": "1. /why/_index.md has 10 principle sections. 2. Each section \u003c100 words and includes a link to the corresponding /docs/principles/\u003cslug\u003e/ page. 3. Software-factory framing in intro paragraph with link. 4. 'grep -c \"^## \" website/content/why/_index.md' returns 10 (or 11 with intro). 5. cd website \u0026\u0026 hugo builds.",
+    "parent": "ddx-629ec5b4",
+    "labels": [
+      "site-redesign",
+      "area:website",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T02:37:15Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "execute-loop-heartbeat-at": "2026-05-02T02:37:15.424705004Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T023715-f7f7b625",
+    "prompt": ".ddx/executions/20260502T023715-f7f7b625/prompt.md",
+    "manifest": ".ddx/executions/20260502T023715-f7f7b625/manifest.json",
+    "result": ".ddx/executions/20260502T023715-f7f7b625/result.json",
+    "checks": ".ddx/executions/20260502T023715-f7f7b625/checks.json",
+    "usage": ".ddx/executions/20260502T023715-f7f7b625/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ea855f63-20260502T023715-f7f7b625"
+  }
+}
