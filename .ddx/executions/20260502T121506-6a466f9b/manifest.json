@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T121506-6a466f9b",
+  "bead_id": "ddx-a8a18cb7",
+  "base_rev": "fdd0c485491460c4e47153fd0b51276fd50fd9f6",
+  "created_at": "2026-05-02T12:15:07.482014321Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a8a18cb7",
+    "title": "Story 16: expose server task session logs for review",
+    "description": "Sub-epic for Story 16. Full plan at /tmp/story-16-final.md. Children listed under this epic carry the testable ACs.",
+    "acceptance": "All child beads closed. Locked decisions from the planning round honored.",
+    "parent": "ddx-b18d9ce6",
+    "labels": [
+      "phase:2",
+      "story:16"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T12:15:06Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "execute-loop-heartbeat-at": "2026-05-02T12:15:06.345410798Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T121506-6a466f9b",
+    "prompt": ".ddx/executions/20260502T121506-6a466f9b/prompt.md",
+    "manifest": ".ddx/executions/20260502T121506-6a466f9b/manifest.json",
+    "result": ".ddx/executions/20260502T121506-6a466f9b/result.json",
+    "checks": ".ddx/executions/20260502T121506-6a466f9b/checks.json",
+    "usage": ".ddx/executions/20260502T121506-6a466f9b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a8a18cb7-20260502T121506-6a466f9b"
+  }
+}
