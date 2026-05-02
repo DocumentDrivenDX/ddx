@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260502T205432-6a763ee3",
+  "bead_id": "ddx-29058e2a",
+  "base_rev": "dd174d4ac0529ac46a42985281f3113fe54efa51",
+  "created_at": "2026-05-02T20:54:33.659094794Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-29058e2a",
+    "title": "ddx work: server path drops 5 CLI flags (opaque_passthrough, max-cost, request-timeout, min-power, max-power)",
+    "description": "ddx work / ddx agent execute-loop has two execution paths: --local (inline) and default (submit to running server). The server path silently drops five CLI flags between client → server request → ExecuteLoopWorkerSpec → spawned worker subprocess. Most user-visible symptom: `ddx work --harness claude` fails when going through the server but works under --local, because the server validates the harness against its provider list instead of treating it as an opaque passthrough constraint.\n\nUSER-OBSERVED SYMPTOM\n- `ddx work --harness claude --local` works.\n- `ddx work --harness claude` (server path) fails.\n- Server path is supposed to be a transparent passthrough — same flags, same behavior.\n\nROOT CAUSE: chain of omissions\n\n1. CLIENT — cli/cmd/agent_cmd.go:1608-1611 extracts maxCostUSD, requestTimeout, minPower, maxPower from the cobra command but cli/cmd/agent_cmd.go:1627 (call to executeLoopWithServer) and cli/cmd/agent_cmd.go:1941 (the function signature) do NOT include them. The four flags are dropped client-side before any HTTP call.\n\n2. CLIENT → SERVER — opaque_passthrough IS sent in the worker spec at cli/cmd/agent_cmd.go:1948-1950, BUT:\n\n3. SERVER REQUEST STRUCT — cli/internal/server/server.go:2246-2260 (handleStartExecuteLoopWorker) request struct is MISSING fields for OpaquePassthrough, MaxCostUSD, RequestTimeout, MinPower, MaxPower. Server JSON-decode silently drops the unknown fields.\n\n4. SERVER → SPEC — cli/internal/server/server.go:2289-2303 (call to StartExecuteLoop) does not set OpaquePassthrough on the spec (since it never decoded it). MaxCostUSD/RequestTimeout/MinPower/MaxPower aren't even spec fields yet.\n\n5. WORKER SPAWN — cli/internal/server/workers.go:656 hardcodes escalation.DefaultMaxCostUSD instead of spec.MaxCostUSD. RequestTimeout override never applied.\n\n6. VALIDATION DIVERGENCE — at cli/cmd/agent_cmd.go:1647-1652, --local correctly skips harness validation when treatPassthroughAsOpaque=true (the ddx work case). On the server path, the same skip never happens because OpaquePassthrough was lost in step 3 — so harness 'claude' goes through ValidateForExecuteLoopViaService which rejects it. **This is the user's observed bug.**\n\nWHY THIS IS A REAL BUG (not \"just configure the server\")\nThe server should be a transparent passthrough — every CLI flag accepted by ddx work should produce identical behavior whether routed --local or via the server. Silently dropping flags violates the contract and produces confusing failures (the local path works, the server path doesn't, with no error explaining why).\n\nFIX SHAPE\n- Add fields to server request struct (server.go:2246-2260): OpaquePassthrough bool, MaxCostUSD float64, RequestTimeout string, MinPower int, MaxPower int\n- Add parameters to executeLoopWithServer signature (agent_cmd.go:1941); pass maxCostUSD/requestTimeout/minPower/maxPower from caller (agent_cmd.go:1627)\n- Add fields to ExecuteLoopWorkerSpec where missing (workers.go:25-49) — MaxCostUSD/RequestTimeout/MinPower/MaxPower\n- Populate spec from request in handler (server.go:2289-2303)\n- Use spec values in runWorker (workers.go:656 cost cap; ~594-601 request-timeout override)\n\nNOT IN SCOPE\n- Reworking the client→server transport (HTTP/JSON stays as-is; just add fields).\n- Changing the validation logic itself — only ensuring opaque_passthrough actually gates validation as intended.",
+    "acceptance": "1. cli/cmd/agent_cmd.go: executeLoopWithServer signature extended to accept maxCostUSD, requestTimeout, minPower, maxPower; caller at line ~1627 passes them; opaque_passthrough already passed (verify present).\n2. cli/internal/server/server.go: handleStartExecuteLoopWorker request struct decodes OpaquePassthrough, MaxCostUSD, RequestTimeout, MinPower, MaxPower; StartExecuteLoop call populates the spec with all five.\n3. cli/internal/server/workers.go: ExecuteLoopWorkerSpec gains MaxCostUSD float64, RequestTimeout string, MinPower int, MaxPower int (OpaquePassthrough already exists). runWorker uses spec.MaxCostUSD (fallback to DefaultMaxCostUSD if zero) and applies spec.RequestTimeout / MinPower / MaxPower the same way the local path does.\n4. The harness-validation skip at agent_cmd.go:1647-1652 is reachable on the server path: if OpaquePassthrough is true on the spec, the server-spawned worker subprocess receives --opaque-passthrough (or equivalent state) so its own preflight validation skips the harness check. End-to-end: `ddx work --harness claude` succeeds via the server path.\n5. Table-driven test (workers_test.go or new file): for each of the 5 flags, assert the value submitted to the server appears unchanged in the persisted .ddx/workers/\u003cid\u003e/spec.json AND in the spawned worker subprocess argv. Use a fake spawner or argv-capture seam.\n6. End-to-end test: spawn a worker via the server endpoint with --harness=claude, --max-cost=99, --request-timeout=42m, --min-power=2, --max-power=7. Assert all five values land in the worker spec on disk.\n7. Manual verification: `ddx work --harness claude` (no --local) on a small queue completes at least one bead end-to-end without harness-rejection error.\n8. cd cli \u0026\u0026 go test ./cmd/... ./internal/server/... green; lefthook pre-commit passes.\n9. Regression test: confirm --local path is unchanged (existing tests still pass).",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:server",
+      "kind:fix",
+      "observed-failure"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T20:54:32Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3924346",
+      "execute-loop-heartbeat-at": "2026-05-02T20:54:32.707649565Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T205432-6a763ee3",
+    "prompt": ".ddx/executions/20260502T205432-6a763ee3/prompt.md",
+    "manifest": ".ddx/executions/20260502T205432-6a763ee3/manifest.json",
+    "result": ".ddx/executions/20260502T205432-6a763ee3/result.json",
+    "checks": ".ddx/executions/20260502T205432-6a763ee3/checks.json",
+    "usage": ".ddx/executions/20260502T205432-6a763ee3/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-29058e2a-20260502T205432-6a763ee3"
+  },
+  "prompt_sha": "dec8391c635fb6246da7c7663bce388bae8b0535d693b0cd9b1bb988aec8388a"
+}
