@@ -1,0 +1,53 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only an execution result.json evidence file; the actual implementation commit (19b3008b) introducing group-by control, grouping.ts, and urlState.ts is not present in the changed files. Cannot verify any AC item.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No frontend source changes in diff — group-by dropdown, grouping.ts, urlState.ts, ARIA roles, sessionStorage persistence, and bun test results are unverifiable from the provided diff.",
+      "location": ".ddx/executions/20260502T125032-7a33e609/result.json"
+    },
+    {
+      "severity": "info",
+      "summary": "result.json reports outcome=task_succeeded with result_rev 19b3008b, but that commit's contents are not included for review.",
+      "location": ".ddx/executions/20260502T125032-7a33e609/result.json:5"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1026,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T125032-7a33e609/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1174,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 3934,
+    "output_bytes": 855,
+    "elapsed_ms": 10425,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
