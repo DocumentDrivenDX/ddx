@@ -63,6 +63,7 @@ Examples:
 	cmd.AddCommand(f.newBeadMetricsCommand())
 	cmd.AddCommand(f.newBeadDoctorCommand())
 	cmd.AddCommand(f.newBeadCooldownCommand())
+	cmd.AddCommand(f.newBeadMigrateCommand())
 
 	return cmd
 }
@@ -804,16 +805,11 @@ func (f *CommandFactory) newBeadListCommand() *cobra.Command {
 				}
 			}
 
-			includeArchive, _ := cmd.Flags().GetBool("all")
-			var (
-				beads []bead.Bead
-				err   error
-			)
-			if includeArchive {
-				beads, err = s.ListWithArchive(status, label, where)
-			} else {
-				beads, err = s.List(status, label, where)
-			}
+			// Always consult the archive partner so `bead list` survives a
+			// `bead migrate` — the --all flag is now a no-op kept for
+			// compatibility.
+			_, _ = cmd.Flags().GetBool("all")
+			beads, err := s.ListWithArchive(status, label, where)
 			if err != nil {
 				return err
 			}

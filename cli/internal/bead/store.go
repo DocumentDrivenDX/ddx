@@ -1481,8 +1481,32 @@ func (s *Store) Status() (*StatusCounts, error) {
 		return nil, err
 	}
 
-	counts := &StatusCounts{Total: len(beads), Ready: len(ready), Blocked: len(blocked)}
+	// Pull in archive partner so totals survive `bead migrate` — the archive
+	// only carries closed beads, so Ready/Blocked aren't affected.
+	seen := make(map[string]bool, len(beads))
+	all := make([]Bead, 0, len(beads))
 	for _, b := range beads {
+		if seen[b.ID] {
+			continue
+		}
+		seen[b.ID] = true
+		all = append(all, b)
+	}
+	if s.Collection == DefaultCollection {
+		archive := s.archivePartner()
+		if archived, aerr := archive.ReadAll(); aerr == nil {
+			for _, b := range archived {
+				if seen[b.ID] {
+					continue
+				}
+				seen[b.ID] = true
+				all = append(all, b)
+			}
+		}
+	}
+
+	counts := &StatusCounts{Total: len(all), Ready: len(ready), Blocked: len(blocked)}
+	for _, b := range all {
 		switch b.Status {
 		case StatusOpen:
 			counts.Open++
@@ -1551,6 +1575,23 @@ func (s *Store) DepTree(rootID string) (string, error) {
 	beads, err := s.ReadAll()
 	if err != nil {
 		return "", err
+	}
+	// Pull in archive partner so the tree survives `bead migrate` — closed
+	// beads stored only in the archive must still appear.
+	if s.Collection == DefaultCollection {
+		archive := s.archivePartner()
+		if archived, aerr := archive.ReadAll(); aerr == nil {
+			seen := make(map[string]bool, len(beads))
+			for _, b := range beads {
+				seen[b.ID] = true
+			}
+			for _, b := range archived {
+				if seen[b.ID] {
+					continue
+				}
+				beads = append(beads, b)
+			}
+		}
 	}
 	byID := make(map[string]*Bead)
 	for i := range beads {

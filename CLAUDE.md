@@ -168,6 +168,7 @@ The CLI follows a noun-verb command structure for clarity and consistency:
 - `ddx bead list/ready/blocked/status` - Query and filter beads
 - `ddx bead dep add/remove/tree` - Dependency DAG management
 - `ddx bead import/export` - JSONL interchange with bd/br
+- `ddx bead migrate` - Externalize closed-bead events to `.ddx/attachments/` and move eligible closed beads into `.ddx/beads-archive.jsonl`. Idempotent; safe to re-run.
 
 **Queue Work:**
 - `ddx work` - Drain the bead execution queue (alias for `ddx agent execute-loop`; all flags pass through)
