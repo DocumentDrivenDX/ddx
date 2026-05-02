@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260502T144524-681d518f",
+  "bead_id": "ddx-d26f65b2",
+  "base_rev": "c0fb38c09b9507b1f8350e980857a7b4f15e8534",
+  "created_at": "2026-05-02T14:45:27.473591878Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d26f65b2",
+    "title": "Story 6 B3: publish facet contract (TD-NNN) + add phase/prefix filter args + chips wired to Story 5 axes",
+    "description": "Publish facet contract and add Story-5 axes as filters. Depends on Story 5 final + B2.\n\nChanges:\n- docs: create TD-NNN technical-decision document (artifact full-text search \u0026 facet contract). Pin URL keys: q, mediaType (single), staleness (single), phase (single), prefix (multi), sort (single). Document deterministic (sortKey, id) ordering. Document Phase axis source: path prefix docs/helix/NN-*/. Document Prefix axis source: id prefix segment (ADR|SD|FEAT|US|RSCH|...). Note that filter narrows; Story 5 grouping organizes the remaining set.\n- schema.graphql: add 'phase: String' and 'prefix: [String!]' args on Query.artifacts.\n- resolver_artifacts.go: implement phase filter (path prefix match) and multi-value prefix filter (id-prefix segment match).\n- Frontend: phase chip + prefix multi-chip wired to URL keys. Compose with existing q/mediaType/staleness/sort.\n\nThis bead must NOT proceed until Story 5 categorization axes are finalized and B2 has landed.",
+    "acceptance": "- TD-NNN document committed with URL key reservations and source-of-truth definitions for phase/prefix.\n- GraphQL args 'phase' and 'prefix' present and filter results correctly (resolver tests).\n- Frontend phase chip and prefix multi-chip persist to URL and compose with other facets (vitest + playwright).\n- Story 5 grouping consumes the same axis definitions without renaming.\n- All Go and frontend tests pass.",
+    "parent": "ddx-4728ae0f",
+    "labels": [
+      "phase:2",
+      " story:6"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T14:45:24Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1727028",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T14:39:06.943470868Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T142942-97921dd9\",\"harness\":\"claude\",\"input_tokens\":110,\"output_tokens\":31850,\"total_tokens\":31960,\"cost_usd\":5.23973725,\"duration_ms\":562915,\"exit_code\":0}",
+          "created_at": "2026-05-02T14:39:06.954539982Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=31960 cost_usd=5.2397"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T14:39:12.275663145Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only an execution result.json artifact; no TD document, no schema/resolver changes, no frontend changes. Cannot evaluate any AC item against actual implementation.\nharness=claude\nmodel=opus\ninput_bytes=4574\noutput_bytes=1233\nelapsed_ms=9731",
+          "created_at": "2026-05-02T14:39:22.032225624Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T14:39:22.054097143Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json artifact; no TD document, no schema/resolver changes, no frontend changes. Cannot evaluate any AC item against actual implementation.\nresult_rev=a6ffde44055156aa3f4f61efec10fc59ee458031\nbase_rev=62b2785982b733f18296cf275601e53bad2ea200",
+          "created_at": "2026-05-02T14:39:22.065745256Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T14:45:24.106342177Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T144524-681d518f",
+    "prompt": ".ddx/executions/20260502T144524-681d518f/prompt.md",
+    "manifest": ".ddx/executions/20260502T144524-681d518f/manifest.json",
+    "result": ".ddx/executions/20260502T144524-681d518f/result.json",
+    "checks": ".ddx/executions/20260502T144524-681d518f/checks.json",
+    "usage": ".ddx/executions/20260502T144524-681d518f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d26f65b2-20260502T144524-681d518f"
+  }
+}
