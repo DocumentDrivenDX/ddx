@@ -1,0 +1,96 @@
+{
+  "attempt_id": "20260502T230327-3e1c5d1a",
+  "bead_id": "ddx-a7e7a1a1",
+  "base_rev": "5d34551306246da9dfd16beceb852e6666f2f681",
+  "created_at": "2026-05-02T23:03:28.464633531Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a7e7a1a1",
+    "title": "S15-3: operatorPromptSubmit GraphQL mutation w/ CSRF, idempotency, audit",
+    "description": "Implement GraphQL mutation operatorPromptSubmit(projectId, prompt, tier?, harness?, idempotencyKey) → Bead. Gated by requireTrusted. Default status=proposed. Cap prompt at serverPromptCapBytes. Add strict Origin/Host validation, per-session CSRF token, idempotency-key dedupe, identity-bound first-event audit (peer identity, origin node ID, build SHA, approval-mode, request ID, prompt SHA-256). See /tmp/story-15-final.md §Implementation #2-3 and §Additional security controls.",
+    "acceptance": "Mutation creates bead with issueType=operator-prompt, status=proposed, prompt body verbatim; non-trusted origin returns 403; oversize returns 400 with cap-error envelope; cross-origin browser POST rejected; duplicate idempotencyKey returns same bead without creating new; first bead event records structured audit fields enumerated above; integration tests for each branch including multibyte oversize and GraphQL-variable oversize.",
+    "parent": "ddx-1d85c927",
+    "labels": [
+      "phase:2",
+      "story:15",
+      "kind:graphql"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T23:03:27Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4025192",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T23:01:59.103849721Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T224933-b7b99343\",\"harness\":\"claude\",\"input_tokens\":94,\"output_tokens\":34307,\"total_tokens\":34401,\"cost_usd\":5.23767575,\"duration_ms\":744349,\"exit_code\":0}",
+          "created_at": "2026-05-02T23:01:59.118210339Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=34401 cost_usd=5.2377"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T23:02:04.242857279Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "Diff contains only execution evidence files (manifest.json, result.json). No GraphQL mutation, resolver, validation, audit, or tests are present in the changed files. Cannot evaluate any AC item against the provided diff.\nharness=claude\nmodel=opus\ninput_bytes=6748\noutput_bytes=603\nelapsed_ms=8707",
+          "created_at": "2026-05-02T23:02:14.988246958Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T23:02:15.003739492Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"action\":\"re_attempt_with_context\",\"mode\":\"review_block\"}",
+          "created_at": "2026-05-02T23:02:15.016331861Z",
+          "kind": "triage-decision",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block: re_attempt_with_context"
+        },
+        {
+          "actor": "ddx",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only execution evidence files (manifest.json, result.json). No GraphQL mutation, resolver, validation, audit, or tests are present in the changed files. Cannot evaluate any AC item against the provided diff.\nresult_rev=e926516a5cb58d0a62faa0a3a7429eed6d388d88\nbase_rev=91de2e0b6edd16a3814be4a8117a112114bc2803",
+          "created_at": "2026-05-02T23:02:15.036717268Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T23:03:27.01052436Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T230327-3e1c5d1a",
+    "prompt": ".ddx/executions/20260502T230327-3e1c5d1a/prompt.md",
+    "manifest": ".ddx/executions/20260502T230327-3e1c5d1a/manifest.json",
+    "result": ".ddx/executions/20260502T230327-3e1c5d1a/result.json",
+    "checks": ".ddx/executions/20260502T230327-3e1c5d1a/checks.json",
+    "usage": ".ddx/executions/20260502T230327-3e1c5d1a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a7e7a1a1-20260502T230327-3e1c5d1a"
+  },
+  "prompt_sha": "d759aefdb035ae955ecdac3089469f94c4595b6e5129caf9d8c34b4193487322"
+}
