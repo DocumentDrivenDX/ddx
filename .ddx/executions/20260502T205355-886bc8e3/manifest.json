@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T205355-886bc8e3",
+  "bead_id": "ddx-aee651ec",
+  "base_rev": "d4ad3274f266dd2c1aa0e75829ecfc665b1e5c56",
+  "created_at": "2026-05-02T20:53:56.396993464Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-aee651ec",
+    "title": "checks protocol package: types + loader + runner + ddx ac CLI",
+    "description": "Slice 1 of parent ddx-a946c744. Build the language-agnostic check protocol package and the standalone developer CLI. NO integration with execute-bead loop yet (that is child slice 3).\n\nCONTEXT\nSee parent ddx-a946c744 for full design rationale. This slice creates the foundational package and developer-facing CLI for running checks against the current worktree.\n\nSCOPE\n- cli/internal/checks/protocol.go — Check, AppliesTo, Result, Violation types; status enum (pass/block/error); JSON schema doc as Go comments\n- cli/internal/checks/loader.go — read .ddx/checks/*.yaml; reject invalid YAML and unknown fields with file:line; return []Check\n- cli/internal/checks/runner.go — given []Check + invocation context (BEAD_ID, DIFF_BASE, DIFF_HEAD, PROJECT_ROOT, EVIDENCE_DIR, RUN_ID), run all applicable checks in parallel via os/exec; read EVIDENCE_DIR/\u003cname\u003e.json; non-zero exit -\u003e status=error; return []Result\n- cli/internal/checks/*_test.go — table-driven tests for path glob and label matching (AppliesTo); loader valid/invalid yaml; runner with shell-script fixture under testdata/ verifying env injection, parallel exec, exit-code handling, missing result file -\u003e error\n- cli/cmd/ac.go — ddx ac run \u003cbead-id\u003e [--check \u003cname\u003e] subcommand wired to runner; reads bead, computes DIFF_BASE/DIFF_HEAD from bead metadata + current HEAD; writes evidence under .ddx/executions/ac-\u003cts\u003e/; prints results; exits 1 on any block/error\n- cli/cmd/ac_test.go — invokes via cobra Execute against tmp repo with fixture check; asserts exit code and output\n\nOUT OF SCOPE\n- pre_merge hook in execute_bead_loop.go (slice 3)\n- checks_bypass annotation parsing + event recording (slice 3)\n- e2e tests via ddx try (slice 3)",
+    "acceptance": "1. cli/internal/checks/{protocol,loader,runner}.go exist with documented types matching parent design.\n2. Loader reads .ddx/checks/*.yaml; unknown fields and bad YAML produce errors with file:line.\n3. Runner injects documented env vars, executes checks in parallel, reads result JSON, treats non-zero exit and missing result file as status=error.\n4. ddx ac run \u003cbead-id\u003e subcommand exists, runs configured checks, prints summary, exits 1 on block/error.\n5. cd cli \u0026\u0026 go test ./internal/checks/... ./cmd/... -run 'Ac|Checks' green.\n6. lefthook pre-commit passes for changed files.",
+    "parent": "ddx-a946c744",
+    "labels": [
+      "phase:2",
+      "area:checks",
+      "kind:platform"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T20:53:55Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3924346",
+      "execute-loop-heartbeat-at": "2026-05-02T20:53:55.387330525Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T205355-886bc8e3",
+    "prompt": ".ddx/executions/20260502T205355-886bc8e3/prompt.md",
+    "manifest": ".ddx/executions/20260502T205355-886bc8e3/manifest.json",
+    "result": ".ddx/executions/20260502T205355-886bc8e3/result.json",
+    "checks": ".ddx/executions/20260502T205355-886bc8e3/checks.json",
+    "usage": ".ddx/executions/20260502T205355-886bc8e3/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-aee651ec-20260502T205355-886bc8e3"
+  },
+  "prompt_sha": "f2f01b24e583c7f63cf425f782cbb73c78c4643004c89fe0ef54e255b6f60773"
+}
