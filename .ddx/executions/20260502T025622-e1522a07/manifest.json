@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T025622-e1522a07",
+  "bead_id": "ddx-be505a68",
+  "base_rev": "697f93d989329d129775b17d4498f5eb966268b7",
+  "created_at": "2026-05-02T02:56:24.415701427Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-be505a68",
+    "title": "Consolidate site skill pages into single ddx skill page",
+    "description": "Per FEAT-011, consolidate the 6 separate skill pages (/ddx-bead, /ddx-agent, /ddx-install, /ddx-status, /ddx-review, /ddx-run) on the website into a single ddx skill page mirroring SKILL.md + reference structure. If B15a finds FEAT-011 still in flight (skill not yet single in repo), update with currently-shipped reference subcommands and note the consolidation status. Do not block on FEAT-011 final landing — codex confirmed skill exists in repo trees.",
+    "acceptance": "1. website/content/docs/skills.md or equivalent shows ONE ddx skill (not 6). 2. References subcommands as section headings if applicable. 3. cd website \u0026\u0026 hugo builds. 4. 'grep -c \"## /ddx-\" website/content/docs/skills.md' returns 0 (no per-skill subsection).",
+    "parent": "ddx-629ec5b4",
+    "labels": [
+      "site-redesign",
+      "area:website",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T02:56:22Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "execute-loop-heartbeat-at": "2026-05-02T02:56:22.791908341Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T025622-e1522a07",
+    "prompt": ".ddx/executions/20260502T025622-e1522a07/prompt.md",
+    "manifest": ".ddx/executions/20260502T025622-e1522a07/manifest.json",
+    "result": ".ddx/executions/20260502T025622-e1522a07/result.json",
+    "checks": ".ddx/executions/20260502T025622-e1522a07/checks.json",
+    "usage": ".ddx/executions/20260502T025622-e1522a07/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-be505a68-20260502T025622-e1522a07"
+  }
+}
