@@ -1610,30 +1610,17 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	minPower, _ := cmd.Flags().GetInt("min-power")
 	maxPower, _ := cmd.Flags().GetInt("max-power")
 
-	// Zero-config auto-route (ddx-b790449b): when the operator passes no
-	// routing flags and the project has no .ddx/config.yaml routing block,
-	// dispatch flows through the global agent config (~/.config/agent/config.yaml).
-	// Without this fallback the upstream resolveExecuteRoute short-circuits
-	// with "routing under-specified" for any project that hasn't authored
-	// per-project routing.
+	// Zero-config auto-route: when the operator passes no routing flags and
+	// the project has no .ddx/config.yaml routing block, dispatch flows
+	// through fizeau's provider resolution. Provider configuration and any
+	// "no providers configured" error reporting is fizeau's concern; ddx
+	// does not read fizeau's config files.
 	//
-	// ddx-b2c9a245: replaces the prior 'always cheap' fallback with
-	// metadata-driven tier inference (escalation.InferTier) evaluated per
-	// bead inside the executor closure below.
+	// ddx-b2c9a245: tier is inferred per bead via escalation.InferTier in
+	// the executor closure below when no routing flags are present.
 	noRoutingFlags := harness == "" && model == "" && provider == "" && modelRef == "" &&
 		!cmd.Flags().Changed("profile")
 	autoInferTier := noRoutingFlags && !projectHasRoutingConfig(projectRoot)
-
-	// Pre-flight: if neither project nor global agent config has any providers
-	// configured, fail fast with a clear pointer at the global config rather
-	// than letting fizeau emit "routing under-specified".
-	if !projectHasRoutingConfig(projectRoot) && !globalAgentConfigHasProviders() {
-		return fmt.Errorf(
-			"no providers configured: add at least one provider to %s "+
-				"(see https://documentdrivendx.github.io/ddx/docs/getting-started/)",
-			globalAgentConfigPath(),
-		)
-	}
 
 	// If --local, run inline; otherwise submit to running ddx server
 	if !local {
@@ -2208,61 +2195,6 @@ func projectHasRoutingConfig(projectRoot string) bool {
 	}
 	if len(a.Endpoints) > 0 {
 		return true
-	}
-	return false
-}
-
-// globalAgentConfigPath returns the path used by the upstream agent library
-// to load default providers when no project endpoints are present. Used by
-// the friendly error message emitted when neither project nor global config
-// has any providers configured.
-func globalAgentConfigPath() string {
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
-		return filepath.Join(xdg, "agent", "config.yaml")
-	}
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
-		return "~/.config/agent/config.yaml"
-	}
-	return filepath.Join(home, ".config", "agent", "config.yaml")
-}
-
-// globalAgentConfigHasProviders reports whether the global agent config has
-// at least one provider entry. This is a structural check (does the file have
-// a non-empty providers map?) — it does not probe any endpoint for liveness.
-// Used by the zero-config error path to distinguish "missing global config"
-// from "missing per-project flags".
-func globalAgentConfigHasProviders() bool {
-	path := globalAgentConfigPath()
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return false
-	}
-	// Minimal parse: look for a "providers:" top-level key with at least one
-	// child mapping. Avoid pulling a YAML library here — the goal is a
-	// best-effort hint for the error message, not full schema validation.
-	lines := strings.Split(string(data), "\n")
-	inProviders := false
-	for _, line := range lines {
-		trimmed := strings.TrimRight(line, " \t\r")
-		if trimmed == "" || strings.HasPrefix(strings.TrimSpace(trimmed), "#") {
-			continue
-		}
-		if !inProviders {
-			if strings.HasPrefix(trimmed, "providers:") {
-				inProviders = true
-			}
-			continue
-		}
-		// Inside providers block: a child entry is indented and ends with ":".
-		if !strings.HasPrefix(line, " ") && !strings.HasPrefix(line, "\t") {
-			// Back at top level — providers block ended without a child.
-			return false
-		}
-		t := strings.TrimSpace(line)
-		if strings.HasSuffix(t, ":") && !strings.Contains(t, " ") {
-			return true
-		}
 	}
 	return false
 }
