@@ -1,0 +1,76 @@
+Bead: ddx-07a169b9 — verify adaptive-min-tier removal stuck + delete stale .agents/.claude mirror trees
+Run:  20260502T194248-7843b153
+
+==========================================================================
+AC #1 — stale mirror trees deleted
+==========================================================================
+Pre-state: .agents/skills/cli/ and .claude/skills/cli/ each held 538
+tracked files containing the retired AdaptiveMinTier code (78 hits across
+the two trees, including the runtime printf in cmd/agent_cmd.go).
+
+Action: git rm -rf .agents/skills/cli/ .claude/skills/cli/
+
+Post-state:
+  $ git ls-files .agents/skills/cli/ .claude/skills/cli/ | wc -l
+  0
+
+(Note re bead description: the bead said `git status` showed these as
+untracked — they were in fact tracked at base ed4415eb. Per the locked
+decision they are local-scratch mirror trees that should not ship; deletion
+proceeds. The routinglint analyzer prevents the AdaptiveMinTier identifier
+from being reintroduced anywhere in cli/.)
+
+==========================================================================
+AC #2 — routinglint wired into `make lint`; CI fails on reintroduction
+==========================================================================
+Wired in cli/Makefile lint target (was already wired into lefthook.yml
+`ci:` block as `routing-lint-all`).
+
+Probe: temporarily added cli/cmd/lint_probe.go re-introducing the
+AdaptiveMinTier identifier and ran `make lint`:
+
+  Running linter...
+  0 issues.
+  Running routinglint (FEAT-006 anti-reintroduction gate)...
+  cli/cmd/lint_probe.go:4:29: routinglint: forbidden identifier AdaptiveMinTier — adaptive-min-tier promotion logic retired by ddx-3bd7396a
+  cli/cmd/lint_probe.go:5:6: routinglint: forbidden identifier AdaptiveMinTier — adaptive-min-tier promotion logic retired by ddx-3bd7396a
+  exit status 3
+  make: *** [Makefile:138: lint] Error 1
+
+Probe reverted (file removed). Clean baseline `make lint` passes:
+  Running linter...
+  0 issues.
+  Running routinglint (FEAT-006 anti-reintroduction gate)...
+  (clean)
+
+==========================================================================
+AC #3 — runtime: alpha7 binary does not print the adaptive-min-tier message
+==========================================================================
+Installed binary:
+  $ ddx version
+  DDx v0.6.2-alpha7
+  Commit: 95798306
+  Built:  2026-05-02T19:35:25Z
+
+Binary string-table check:
+  $ strings /home/erik/.local/bin/ddx | grep -i 'adaptive.min\|adaptive min'
+  (no hits — the printf literal is absent from the compiled binary)
+
+Worker spawn (timeout 8s, --local --once --harness claude):
+  ▶ ddx-dc157075: ddx work / agent execute-loop: stay alive while queue has ready work and viable providers exist
+
+  $ grep -i 'adaptive.min.tier\|adaptive min' <captured-output>
+  (no hits)
+
+==========================================================================
+AC #4 — source grep is clean in cli/
+==========================================================================
+  $ grep -rn 'adaptive.min.tier\|AdaptiveMinTier\|--no-adaptive\|--adaptive-min-tier-window' cli/
+  cli/tools/lint/routinglint/analyzer.go:23://     ResolveProfileLadder, ResolveTierModelRef, AdaptiveMinTier,
+  cli/tools/lint/routinglint/analyzer.go:77:      "AdaptiveMinTier":               "adaptive-min-tier promotion logic retired by ddx-3bd7396a",
+  cli/tools/lint/routinglint/testdata/src/violations/violations.go:15:func AdaptiveMinTier() int { return 0 } // want `routinglint: forbidden identifier AdaptiveMinTier`
+
+All three remaining hits are inside the routinglint analyzer itself
+(closed-list constants + testdata fixture). Per the analyzer self-exemption
+(selfPkgFragments at analyzer.go:101-104), those occurrences do not trip
+the lint. No live use anywhere else in cli/.

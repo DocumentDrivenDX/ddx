@@ -139,6 +139,8 @@ lint:
 		echo "golangci-lint not found, running go vet instead"; \
 		go vet ./...; \
 	fi
+	@echo "Running routinglint (FEAT-006 anti-reintroduction gate)..."
+	@go run ./tools/lint/routinglint/cmd/routinglint ./...
 
 # Install locally for development
 install: build
