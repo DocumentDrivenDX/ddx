@@ -1,4 +1,7 @@
 ---
+ddx:
+  id: REF-007
+  status: published
 id: REF-007
 title: "Software Factories: Assembling Applications with Patterns, Models, Frameworks, and Tools"
 kind: reference

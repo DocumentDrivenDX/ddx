@@ -1,12 +1,26 @@
 ---
 ddx:
   id: product-vision
+  depends_on:
+    - REF-005
+    - REF-006
+    - REF-007
+    - REF-008
+    - REF-009
 ---
 # Product Vision: DDx
 
-**Version:** 2.1.0
-**Date:** 2026-04-29
+**Version:** 2.2.0
+**Date:** 2026-05-01
 **Status:** Active
+
+## Lineage
+
+DDx synthesizes three traditions, each grounded in prior art:
+
+1. **Software factories** — model- and pattern-driven industrialization of software construction. DDx's framing of documents, templates, and tooling as the production line traces directly to Greenfield, Short, Cook, and Kent's 2004 *Software Factories* ([REF-007](references/REF-007-software-factories.md)).
+2. **Spec-driven development** — executable specifications, not code, as the durable artifact AI agents consume. DDx inherits this stance from contemporary spec-first toolchains, notably GitHub Spec Kit ([REF-005](references/REF-005-github-spec-kit.md)) and AWS Kiro ([REF-006](references/REF-006-aws-kiro.md)).
+3. **Bounded-context agent execution** — quality decays as a single context window fills, well before the hard token limit. DDx's Ralph-loop / `ddx work` design responds to the empirical findings of *Lost in the Middle* ([REF-008](references/REF-008-lost-in-the-middle.md)) and Chroma's *Context Rot* ([REF-009](references/REF-009-context-rot.md)) by running each bead in a fresh, narrowly-scoped context against an explicit contract.
 
 ## Core Thesis
 
