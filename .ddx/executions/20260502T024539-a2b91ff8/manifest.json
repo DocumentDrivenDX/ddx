@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T024539-a2b91ff8",
+  "bead_id": "ddx-c14000c5",
+  "base_rev": "14d0575ab942bfc83a2b2fde639999830b8589b9",
+  "created_at": "2026-05-02T02:45:40.772252638Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c14000c5",
+    "title": "Update homepage with software-factory sub-claim and concept-page link",
+    "description": "Update website/content/_index.md (and/or website/layouts/index.html as applicable) to add the sub-claim 'A document-driven software factory.' under the existing hero. Link to /docs/concepts/software-factory/.",
+    "acceptance": "1. Homepage hero gains 'A document-driven software factory.' sub-claim. 2. Sub-claim is a link to /docs/concepts/software-factory/. 3. cd website \u0026\u0026 hugo builds without errors. 4. 'rg -n \"document-driven software factory\" website/content/_index.md website/layouts/index.html' returns \u003e= 1 match.",
+    "parent": "ddx-629ec5b4",
+    "labels": [
+      "site-redesign",
+      "area:website",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T02:45:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "execute-loop-heartbeat-at": "2026-05-02T02:45:39.240644214Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T024539-a2b91ff8",
+    "prompt": ".ddx/executions/20260502T024539-a2b91ff8/prompt.md",
+    "manifest": ".ddx/executions/20260502T024539-a2b91ff8/manifest.json",
+    "result": ".ddx/executions/20260502T024539-a2b91ff8/result.json",
+    "checks": ".ddx/executions/20260502T024539-a2b91ff8/checks.json",
+    "usage": ".ddx/executions/20260502T024539-a2b91ff8/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c14000c5-20260502T024539-a2b91ff8"
+  }
+}
