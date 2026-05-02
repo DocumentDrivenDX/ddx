@@ -2960,6 +2960,9 @@ type Mutation {
     """Artifact ID to regenerate"""
     artifactId: ID!
   ): ArtifactRegenerateResult!
+
+  """Submit an operator prompt as a proposed bead. Requires a valid CSRF token via the X-CSRF-Token request header (HTTP transport), and an idempotency key that dedupes repeated submissions within a 24-hour window. The resulting bead is in the proposed status (not auto-queued for execution); audit captures the originating identity (localhost user OR ts-net WhoIs)."""
+  operatorPromptSubmit(input: OperatorPromptSubmitInput!): OperatorPromptSubmitResult!
 }
 
 # ============================================
@@ -3020,6 +3023,24 @@ input ComparisonArmInput {
   model: String!
   """Prompt or task text"""
   prompt: String!
+}
+
+"""Input for operatorPromptSubmit. The prompt body is preserved verbatim in the bead description; tier is clamped to the bead priority range; idempotencyKey dedupes repeat submissions within a 24-hour window."""
+input OperatorPromptSubmitInput {
+  """The full operator prompt body. The first non-empty line becomes the bead title; the entire body is stored as the bead description."""
+  prompt: String!
+  """Optional priority tier for the resulting bead (clamped to the valid bead priority range). Defaults to 2 when omitted."""
+  tier: Int
+  """Idempotency key. Repeat submissions with the same key within a 24-hour window return the original bead unchanged (deduplicated=true)."""
+  idempotencyKey: String!
+}
+
+"""Result of operatorPromptSubmit. When deduplicated=true, the request matched an idempotency key submitted within the last 24 hours and the original bead is returned unchanged."""
+type OperatorPromptSubmitResult {
+  """The proposed operator-prompt bead."""
+  bead: Bead!
+  """True if the request matched a prior idempotency-key submission within 24h."""
+  deduplicated: Boolean!
 }
 
 # ============================================

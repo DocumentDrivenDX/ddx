@@ -1257,6 +1257,24 @@ func (NodeInfo) IsNode() {}
 // Globally unique identifier
 func (this NodeInfo) GetID() string { return this.ID }
 
+// Input for operatorPromptSubmit. The prompt body is preserved verbatim in the bead description; tier is clamped to the bead priority range; idempotencyKey dedupes repeat submissions within a 24-hour window.
+type OperatorPromptSubmitInput struct {
+	// The full operator prompt body. The first non-empty line becomes the bead title; the entire body is stored as the bead description.
+	Prompt string `json:"prompt"`
+	// Optional priority tier for the resulting bead (clamped to the valid bead priority range). Defaults to 2 when omitted.
+	Tier *int `json:"tier,omitempty"`
+	// Idempotency key. Repeat submissions with the same key within a 24-hour window return the original bead unchanged (deduplicated=true).
+	IdempotencyKey string `json:"idempotencyKey"`
+}
+
+// Result of operatorPromptSubmit. When deduplicated=true, the request matched an idempotency key submitted within the last 24 hours and the original bead is returned unchanged.
+type OperatorPromptSubmitResult struct {
+	// The proposed operator-prompt bead.
+	Bead *Bead `json:"bead"`
+	// True if the request matched a prior idempotency-key submission within 24h.
+	Deduplicated bool `json:"deduplicated"`
+}
+
 // PageInfo carries cursor-based pagination state (Relay spec)
 type PageInfo struct {
 	// True when more edges exist after the last returned edge

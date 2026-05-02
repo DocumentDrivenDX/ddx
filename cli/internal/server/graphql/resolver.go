@@ -54,6 +54,15 @@ type Resolver struct {
 	// MetricsPollInterval controls how often CoordinatorMetrics polls for
 	// changes. Defaults to 1 second when zero.
 	MetricsPollInterval time.Duration
+	// CSRFTokens validates the X-CSRF-Token header on operatorPromptSubmit
+	// (and other future write mutations that require CSRF protection).
+	// Nil here causes operatorPromptSubmit to reject every call with the
+	// CSRF error rather than failing open.
+	CSRFTokens CSRFTokenStore
+	// OperatorPromptIdempotency deduplicates operatorPromptSubmit calls by
+	// idempotency key within a 24-hour window. Server callers must wire a
+	// process-wide instance (NewMemoryIdempotencyCache).
+	OperatorPromptIdempotency IdempotencyCache
 }
 
 // Mutation returns MutationResolver implementation.

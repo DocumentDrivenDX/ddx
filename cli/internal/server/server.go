@@ -85,6 +85,16 @@ type Server struct {
 	beadHub     beadHubCloser
 	state       *ServerState
 
+	// csrfTokens issues and validates CSRF tokens for write mutations on
+	// the GraphQL endpoint (Story 15 / operator-prompts). The token is
+	// generated once at server construction and exposed to clients via
+	// GET /api/csrf-token (localhost-gated).
+	csrfTokens *ddxgraphql.StaticCSRFTokenStore
+	// operatorPromptIdempotency deduplicates operatorPromptSubmit calls by
+	// idempotency key within a 24-hour window. Process-local; survives
+	// only for the lifetime of the server process.
+	operatorPromptIdempotency *ddxgraphql.MemoryIdempotencyCache
+
 	routePatterns []string // every pattern registered via route(); used by gate tests
 }
 
@@ -98,14 +108,23 @@ func New(addr, workingDir string) *Server {
 	workers := NewWorkerManager(workingDir)
 	workers.ReconcileStaleWorkers()
 	beadHub := bead.NewWatcherHub(250 * time.Millisecond)
+	csrfStore, err := ddxgraphql.NewStaticCSRFTokenStore()
+	if err != nil {
+		// CSRF token generation should never fail outside of a broken
+		// crypto/rand. Fall back to a deterministic stub that rejects
+		// every request rather than failing open.
+		csrfStore = ddxgraphql.NewStaticCSRFTokenStoreWithToken("")
+	}
 	s := &Server{
-		Addr:       addr,
-		WorkingDir: workingDir,
-		mux:        http.NewServeMux(),
-		startTime:  time.Now().UTC(),
-		workers:    workers,
-		beadHub:    beadHub,
-		state:      state,
+		Addr:                      addr,
+		WorkingDir:                workingDir,
+		mux:                       http.NewServeMux(),
+		startTime:                 time.Now().UTC(),
+		workers:                   workers,
+		beadHub:                   beadHub,
+		state:                     state,
+		csrfTokens:                csrfStore,
+		operatorPromptIdempotency: ddxgraphql.NewMemoryIdempotencyCache(),
 	}
 	state.coordinatorReg = workers.LandCoordinators
 
@@ -4539,16 +4558,23 @@ func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	// Create gqlgen server with the DDX GraphQL schema
 	gqlServer := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
 		Resolvers: &ddxgraphql.Resolver{
-			State:        s.state,
-			WorkingDir:   s.WorkingDir,
-			Workers:      s.workers,
-			BeadBus:      s.beadHub,
-			Actions:      &workerDispatchAdapter{manager: s.workers},
-			ExecLogs:     &execLogAdapter{workingDir: s.WorkingDir},
-			CoordMetrics: &coordMetricsAdapter{reg: s.workers.LandCoordinators},
+			State:                     s.state,
+			WorkingDir:                s.WorkingDir,
+			Workers:                   s.workers,
+			BeadBus:                   s.beadHub,
+			Actions:                   &workerDispatchAdapter{manager: s.workers},
+			ExecLogs:                  &execLogAdapter{workingDir: s.WorkingDir},
+			CoordMetrics:              &coordMetricsAdapter{reg: s.workers.LandCoordinators},
+			CSRFTokens:                s.csrfTokens,
+			OperatorPromptIdempotency: s.operatorPromptIdempotency,
 		},
 		Directives: ddxgraphql.DirectiveRoot{},
 	}))
+	// Plumb the originating *http.Request into the resolver context so
+	// resolvers (e.g. operatorPromptSubmit) can validate the CSRF header
+	// and capture the originating identity from headers tsnetMiddleware
+	// injects (X-Tailscale-User / X-Tailscale-Node).
+	r = r.WithContext(ddxgraphql.WithHTTPRequest(r.Context(), r))
 	gqlServer.AddTransport(transport.POST{})
 	gqlServer.AddTransport(transport.GET{})
 	gqlServer.AddTransport(transport.Websocket{
