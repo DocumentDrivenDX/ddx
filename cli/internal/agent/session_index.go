@@ -51,6 +51,10 @@ type SessionIndexEntry struct {
 	Detail          string    `json:"detail,omitempty"`
 	BaseRev         string    `json:"baseRev,omitempty"`
 	ResultRev       string    `json:"resultRev,omitempty"`
+	// ToolCalls is the normalized stream of tool_call/tool_result pairs
+	// captured at drain time (Story 16). Persisting here means resolver-time
+	// reads do not have to parse raw native logs.
+	ToolCalls []ToolCallEntry `json:"toolCalls,omitempty"`
 }
 
 type SessionIndexQuery struct {
@@ -223,6 +227,7 @@ func SessionIndexEntryFromResult(projectRoot string, inputs SessionIndexInputs, 
 		Effort:          inputs.Effort,
 		Detail:          result.Error,
 		BaseRev:         baseRev,
+		ToolCalls:       append([]ToolCallEntry(nil), result.ToolCalls...),
 	}
 }
 
@@ -293,6 +298,7 @@ func SessionIndexEntryFromLegacy(projectRoot string, e SessionEntry) SessionInde
 		Detail:          e.Error,
 		BaseRev:         baseRev,
 		ResultRev:       e.ResultRev,
+		ToolCalls:       append([]ToolCallEntry(nil), e.ToolCalls...),
 	}
 }
 
@@ -540,6 +546,7 @@ func SessionIndexEntryToLegacy(e SessionIndexEntry) SessionEntry {
 		Error:           e.Detail,
 		BaseRev:         e.BaseRev,
 		ResultRev:       e.ResultRev,
+		ToolCalls:       append([]ToolCallEntry(nil), e.ToolCalls...),
 	}
 }
 

@@ -934,6 +934,7 @@ func (r *Runner) logSession(result *Result, promptLen int, prompt, promptSource 
 		Duration:        result.DurationMS,
 		ExitCode:        result.ExitCode,
 		Error:           result.Error,
+		ToolCalls:       append([]ToolCallEntry(nil), result.ToolCalls...),
 	}
 
 	if entry.NativeSessionID == "" && correlation != nil {

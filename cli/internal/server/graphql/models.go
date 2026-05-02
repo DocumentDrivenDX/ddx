@@ -1797,12 +1797,44 @@ type Run struct {
 	OutputExcerpt *string `json:"outputExcerpt,omitempty"`
 	// Links to execution evidence (bundle paths, log paths, etc.) (run layer only)
 	EvidenceLinks []string `json:"evidenceLinks,omitempty"`
+	// Full prompt body (run layer; loaded only for run(id:)).
+	Prompt *string `json:"prompt,omitempty"`
+	// Full agent response body (run layer; loaded only for run(id:)).
+	Response *string `json:"response,omitempty"`
+	// Captured stderr stream (run layer; loaded only for run(id:)).
+	Stderr *string `json:"stderr,omitempty"`
+	// Files in the run's bundle directory (path relative to bundle root, size, mimeType). Empty when no bundle.
+	BundleFiles []*RunBundleFile `json:"bundleFiles"`
 }
 
 func (Run) IsNode() {}
 
 // Globally unique identifier
 func (this Run) GetID() string { return this.ID }
+
+// RunBundleFile describes one file in a run's evidence bundle.
+type RunBundleFile struct {
+	// Path relative to the bundle root (forward slashes).
+	Path string `json:"path"`
+	// Size in bytes.
+	Size int `json:"size"`
+	// MIME type (best-effort by extension).
+	MimeType string `json:"mimeType"`
+}
+
+// RunBundleFileContent is the inline content (or download metadata) for one bundle file.
+type RunBundleFileContent struct {
+	// Path relative to the bundle root.
+	Path string `json:"path"`
+	// Inline content. Null when file exceeds the size cap or is not whitelisted for inline transport.
+	Content *string `json:"content,omitempty"`
+	// Size in bytes of the underlying file.
+	SizeBytes int `json:"sizeBytes"`
+	// True when content was withheld due to size or whitelist policy. Clients should fall back to a download path.
+	Truncated bool `json:"truncated"`
+	// MIME type (best-effort by extension).
+	MimeType string `json:"mimeType"`
+}
 
 // RunConnection is a Relay cursor connection of runs
 type RunConnection struct {
@@ -1819,6 +1851,42 @@ type RunEdge struct {
 	// The run at this position
 	Node *Run `json:"node"`
 	// Opaque cursor for pagination
+	Cursor string `json:"cursor"`
+}
+
+// RunToolCall is one normalized tool-call entry persisted at drain time.
+type RunToolCall struct {
+	// Stable identifier within the run (used as cursor).
+	ID string `json:"id"`
+	// Sequence number within the run, starting at 0.
+	Seq int `json:"seq"`
+	// Tool name.
+	Tool string `json:"tool"`
+	// Tool input (JSON-encoded string).
+	Input string `json:"input"`
+	// Tool output (string). May be truncated for transport.
+	Output *string `json:"output,omitempty"`
+	// Error string if the tool call failed.
+	Error *string `json:"error,omitempty"`
+	// Tool call duration in milliseconds.
+	DurationMs *int `json:"durationMs,omitempty"`
+}
+
+// RunToolCallConnection is a Relay cursor connection of run tool calls.
+type RunToolCallConnection struct {
+	// Ordered list of tool call edges.
+	Edges []*RunToolCallEdge `json:"edges"`
+	// Pagination metadata.
+	PageInfo *PageInfo `json:"pageInfo"`
+	// Total number of tool calls available.
+	TotalCount int `json:"totalCount"`
+}
+
+// RunToolCallEdge is one edge in a RunToolCallConnection.
+type RunToolCallEdge struct {
+	// The tool call at this position.
+	Node *RunToolCall `json:"node"`
+	// Opaque cursor for pagination.
 	Cursor string `json:"cursor"`
 }
 
