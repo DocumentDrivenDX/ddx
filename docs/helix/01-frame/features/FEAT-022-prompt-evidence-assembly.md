@@ -124,6 +124,16 @@ byte accounting on every review and grading attempt.
    the binary are exempt; the invariant governs dynamic assembly from
    runtime inputs, not constant strings.
 
+3a. **Static-prompt minimum-prompt rule.** Every static instruction string
+    DDx embeds in an LLM prompt MUST declare its load-bearing guardrails
+    inline as a Go comment list above the constant, one bullet per
+    guardrail with a pointer to the failure mode it prevents. Edits MUST
+    preserve every listed guardrail. New guardrails MUST be added to the
+    list. A regression test MUST assert each listed guardrail still
+    appears in the rendered prompt. This rule applies to STATIC prompt
+    bodies; dynamic evidence egress is covered by the §5–§7 cap
+    primitives and is unaffected.
+
 **Bounded prompt construction**
 
 4. **Single review assembler.** Review prompts are assembled by exactly one
