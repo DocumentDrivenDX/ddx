@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "The page was converted to a thin umbrella that points to each of the 10 dedicated principle pages, with a Hugo `aliases` entry preserving the old URL. Every linked slug resolves to an existing directory under `website/content/docs/principles/`, so internal links should not 404."
+}
