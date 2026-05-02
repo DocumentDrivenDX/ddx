@@ -198,6 +198,10 @@
 			const svgSel = d3.select(svgNode)
 			svgSel.selectAll('*').remove()
 
+			// Tailwind v4 doesn't generate fill-/stroke- utilities for legacy
+			// config color tokens (only text-/bg-/border- variants), so route the
+			// edge tint through `currentColor` and let the existing text-fg-muted
+			// utility on the host group resolve it for both themes.
 			svgSel
 				.append('defs')
 				.append('marker')
@@ -208,9 +212,10 @@
 				.attr('markerWidth', 6)
 				.attr('markerHeight', 6)
 				.attr('orient', 'auto')
+				.attr('class', 'text-fg-muted dark:text-dark-fg-muted')
 				.append('path')
 				.attr('d', 'M0,-5L10,0L0,5')
-				.attr('class', 'fill-fg-muted dark:fill-dark-fg-muted')
+				.attr('fill', 'currentColor')
 
 			const g = svgSel.append('g')
 
@@ -288,10 +293,11 @@
 
 			const linkSel = g
 				.append('g')
+				.attr('class', 'text-fg-muted dark:text-dark-fg-muted')
 				.selectAll<SVGLineElement, (typeof freshSimLinks)[0]>('line')
 				.data(freshSimLinks)
 				.join('line')
-				.attr('class', 'stroke-fg-muted dark:stroke-dark-fg-muted')
+				.attr('stroke', 'currentColor')
 				.attr('stroke-width', 1.75)
 				.attr('stroke-opacity', 0.9)
 				.attr('stroke-linecap', 'round')
