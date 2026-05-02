@@ -1,0 +1,64 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only execution metadata files (manifest.json, result.json) under .ddx/executions/. No source changes implement approve/cancel mutations, per-project allowlist, or auto-approve flag. None of the four AC items can be evaluated.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "AC1: No operatorPromptApprove/operatorPromptCancel mutation implementation present in diff.",
+      "location": ".ddx/executions/20260502T144936-eaf73d34/result.json"
+    },
+    {
+      "severity": "block",
+      "summary": "AC2: No per-project allowlist enforcement code present.",
+      "location": ".ddx/executions/20260502T144936-eaf73d34/result.json"
+    },
+    {
+      "severity": "block",
+      "summary": "AC3: No auto-approve flag restricted to configured-localhost identity present.",
+      "location": ".ddx/executions/20260502T144936-eaf73d34/result.json"
+    },
+    {
+      "severity": "block",
+      "summary": "AC4: No tests covering happy or denied paths present.",
+      "location": ".ddx/executions/20260502T144936-eaf73d34/result.json"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 946,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T144936-eaf73d34/manifest.json",
+          ".ddx/executions/20260502T144936-eaf73d34/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 5813,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 8565,
+    "output_bytes": 1060,
+    "elapsed_ms": 9171,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
