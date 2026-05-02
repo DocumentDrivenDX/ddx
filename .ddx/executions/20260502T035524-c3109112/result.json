@@ -1,0 +1,54 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "TD-027 exists with all six required sections (a-f), declares depends_on [ADR-004, SD-004, FEAT-004], picks concrete defaults for archival trigger (30d/2000/500/closed) and attachment layout (.ddx/attachments/\u003ccollection\u003e/\u003cid\u003e/), and includes migration plan with rollback. TD-027 ID is free.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Diff under review only contains execution evidence; the actual TD file was added in commit 243b7a7b (388 lines).",
+      "location": "docs/helix/02-design/technical-designs/TD-027-bead-collection-abstraction.md"
+    },
+    {
+      "severity": "info",
+      "summary": "AC #5 (ddx doc audit shows no broken edges) not verified in this review — rely on post-merge audit.",
+      "location": "docs/helix/02-design/technical-designs/TD-027-bead-collection-abstraction.md"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1186,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T035312-575c488b/manifest.json",
+          ".ddx/executions/20260502T035312-575c488b/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3691,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 6683,
+    "output_bytes": 827,
+    "elapsed_ms": 38616,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
