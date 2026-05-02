@@ -1,0 +1,36 @@
+{
+  "attempt_id": "20260502T034139-ff5dccc5",
+  "bead_id": "ddx-3d2ed549",
+  "base_rev": "d83526a6c2eba6e120863b6e131a6fa34f4ae82e",
+  "created_at": "2026-05-02T03:41:40.607139063Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3d2ed549",
+    "title": "Verify execute-bead /tmp evidence pattern fix end-to-end",
+    "description": "Commit 6473f3fa updated cli/internal/agent/execute_bead.go to instruct agents to write investigation reports under .ddx/executions/\u003crun-id\u003e/ instead of /tmp. The fix landed too late to help B15a/B21 in the redesign drain. Now that v0.6.2-alpha4 is installed with the fix, verify the system prompt actually steers agents correctly. Strategy: file a tiny test bead with an 'output a report' AC, observe whether the agent writes to .ddx/executions/ or /tmp.",
+    "acceptance": "1. A test bead is filed with AC 'write a one-line report named hello.md describing the current Go version'. 2. ddx work --once executes the bead with claude harness. 3. The resulting commit includes a hello.md file under .ddx/executions/\u003crun-id\u003e/, NOT in /tmp. 4. If verification fails, the fix is reopened as a follow-up bead with a stricter prompt.",
+    "labels": [
+      "area:agent",
+      "kind:test",
+      "validation"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T03:41:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1329405",
+      "execute-loop-heartbeat-at": "2026-05-02T03:41:39.281019543Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T034139-ff5dccc5",
+    "prompt": ".ddx/executions/20260502T034139-ff5dccc5/prompt.md",
+    "manifest": ".ddx/executions/20260502T034139-ff5dccc5/manifest.json",
+    "result": ".ddx/executions/20260502T034139-ff5dccc5/result.json",
+    "checks": ".ddx/executions/20260502T034139-ff5dccc5/checks.json",
+    "usage": ".ddx/executions/20260502T034139-ff5dccc5/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3d2ed549-20260502T034139-ff5dccc5"
+  }
+}
