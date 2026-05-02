@@ -2082,6 +2082,13 @@ type ArtifactEdge {
   node: Artifact!
   """Relay opaque cursor"""
   cursor: String!
+  """
+  Excerpt showing the match context for the current search query, or null
+  when the result was admitted by a non-body match (title, path,
+  description, frontmatter) or no search was supplied. Mirrors the
+  SearchResult.snippet contract.
+  """
+  snippet: String
 }
 
 """ArtifactConnection is a Relay cursor connection for Artifact."""
