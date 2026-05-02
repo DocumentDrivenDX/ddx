@@ -189,6 +189,12 @@ type workerHandle struct {
 	// no-op and runWorker can preserve the "stopped" state across its final
 	// record write.
 	stopped bool
+	// wakeCh, when non-nil, signals an execute-loop worker's idle-poll
+	// sleep to return early so the loop re-scans the ready queue. The
+	// channel is buffered (cap 1) so a non-blocking send coalesces multiple
+	// wake calls into at most one extra tick. Set on execute-loop workers;
+	// nil on plugin-action workers.
+	wakeCh chan struct{}
 }
 
 // WorkerManager manages in-process execute-loop workers as goroutines.
@@ -230,6 +236,37 @@ const (
 	defaultWatchdogCheckInterval = 1 * time.Minute
 	defaultWatchdogKillGrace     = 30 * time.Second
 )
+
+// WakeProject signals every running execute-loop worker bound to projectRoot
+// to skip its current idle-poll sleep and re-scan the ready queue. Used by
+// the operator-prompt approve / auto-approve mutations (Story 15) so a
+// freshly-approved bead is claimed immediately rather than after a full
+// PollInterval. The send is non-blocking and the per-worker wake channel is
+// buffered (cap 1), so multiple wakes within one tick coalesce. Returns the
+// number of workers signalled (0 when no execute-loop is running for the
+// project — submit/approve still succeeds, the next tick on a future worker
+// will pick the bead up).
+func (m *WorkerManager) WakeProject(projectRoot string) int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	signalled := 0
+	for _, h := range m.workers {
+		if h == nil || h.wakeCh == nil {
+			continue
+		}
+		if h.record.ProjectRoot != projectRoot {
+			continue
+		}
+		select {
+		case h.wakeCh <- struct{}{}:
+			signalled++
+		default:
+			// Wake already pending — coalesce.
+			signalled++
+		}
+	}
+	return signalled
+}
 
 func NewWorkerManager(projectRoot string) *WorkerManager {
 	m := &WorkerManager{
@@ -376,6 +413,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	multiLog := io.MultiWriter(logBuf, logFile)
 
 	progressCh := make(chan agent.ProgressEvent, 64)
+	wakeCh := make(chan struct{}, 1)
 	handle := &workerHandle{
 		record:       record,
 		cancel:       cancel,
@@ -384,6 +422,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 		progressCh:   progressCh,
 		progressDone: make(chan struct{}),
 		lastPhaseTS:  time.Now().UTC(),
+		wakeCh:       wakeCh,
 	}
 
 	m.mu.Lock()
@@ -784,6 +823,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		PreClaimHook:   buildPreClaimHook(projectRoot, landingOps),
 		NoReview:       spec.NoReview,
 		RoutePreflight: routePreflight,
+		WakeCh:         handle.wakeCh,
 	})
 	// Signal end of progress events so drainProgress can finish
 	close(progressCh)

@@ -30,6 +30,17 @@ type BeadLifecycleSubscriber interface {
 	SubscribeLifecycle(projectID string) (<-chan bead.LifecycleEvent, func())
 }
 
+// ExecuteLoopWaker signals running execute-loop workers bound to a project
+// to skip their idle-poll sleep and re-scan the ready queue. The
+// operatorPromptApprove and operatorPromptSubmit (auto-approve) resolvers
+// call WakeProject after a successful proposed → open transition so the
+// bead is claimed without waiting for the next poll tick. The server's
+// WorkerManager satisfies this interface; tests inject a stub to assert
+// the wake call without spinning a real worker.
+type ExecuteLoopWaker interface {
+	WakeProject(projectRoot string) int
+}
+
 // ActionDispatcher starts backend workers for GraphQL action mutations.
 // The server package supplies the production implementation so this package
 // does not import the outer server package.
@@ -88,6 +99,13 @@ type Resolver struct {
 	// X-Tailscale-Node header (which identifies the *peer*'s node) so the
 	// audit trail records both ends of the trust attestation.
 	NodeID string
+	// ExecuteLoopWaker, when non-nil, is signalled by the operator-prompt
+	// approve / auto-approve resolvers immediately after a successful
+	// proposed → open transition so a running execute-loop worker bound to
+	// the project drops its idle-poll sleep and claims the bead in the
+	// current tick. Nil → resolver simply skips the wake (the next tick
+	// will pick the bead up after PollInterval).
+	ExecuteLoopWaker ExecuteLoopWaker
 	// Federation, when non-nil, supplies the spoke registry and fan-out
 	// client used by the federationNodes / federated{Beads,Runs,Projects}
 	// query resolvers. Nil → those queries return empty lists (the default

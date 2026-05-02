@@ -4710,6 +4710,7 @@ func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 			PromptCapBytes:                     serverPromptCapBytes,
 			BuildSHA:                           serverBuildSHA(),
 			NodeID:                             s.state.Node.ID,
+			ExecuteLoopWaker:                   s.workers,
 			Federation:                         fedProvider,
 		},
 		Directives: ddxgraphql.DirectiveRoot{},

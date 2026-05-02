@@ -375,6 +375,7 @@ func (r *mutationResolver) OperatorPromptSubmit(ctx context.Context, input Opera
 				return nil, fmt.Errorf("operator-prompts: append auto-approve event: %w", err)
 			}
 			autoApproved = true
+			r.signalExecuteLoopWake()
 		}
 	}
 
@@ -433,7 +434,21 @@ func (r *mutationResolver) OperatorPromptApprove(ctx context.Context, id string)
 	if err != nil {
 		return nil, err
 	}
+	r.signalExecuteLoopWake()
 	return &OperatorPromptApproveResult{Bead: beadModelFromBead(persisted)}, nil
+}
+
+// signalExecuteLoopWake asks any running execute-loop worker bound to this
+// project to skip the current idle-poll sleep and re-scan the ready queue.
+// Called immediately after a successful proposed → open transition (manual
+// approve or auto-approve on submit) so a freshly-eligible operator-prompt
+// bead is claimed without waiting a full PollInterval. No-op when the
+// waker is unset (e.g. test fixture without a WorkerManager).
+func (r *Resolver) signalExecuteLoopWake() {
+	if r.ExecuteLoopWaker == nil || r.WorkingDir == "" {
+		return
+	}
+	r.ExecuteLoopWaker.WakeProject(r.WorkingDir)
 }
 
 // OperatorPromptCancel implements the operatorPromptCancel mutation:
