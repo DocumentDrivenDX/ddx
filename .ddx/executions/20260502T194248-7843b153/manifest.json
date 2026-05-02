@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260502T194248-7843b153",
+  "bead_id": "ddx-07a169b9",
+  "base_rev": "ed4415eb15df570ecb82ec03baa41b438481025c",
+  "created_at": "2026-05-02T19:42:49.41696241Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-07a169b9",
+    "title": "verify adaptive-min-tier removal stuck + delete stale .agents/.claude mirror trees",
+    "description": "Sub-agent investigation confirms adaptive-min-tier was already removed in commit 9d988853 (2026-04-29, bead ddx-3bd7396a). Function, both flags (--no-adaptive-min-tier, --adaptive-min-tier-window), printf, call site, config schema fields, tests — all gone. routinglint analyzer at cli/tools/lint/routinglint/analyzer.go:77 forbids reintroduction of the AdaptiveMinTier identifier.\n\nUser was seeing the printf message because they were running a stale binary (alpha6 or earlier predating the removal). After alpha7 install (this session), the message no longer prints.\n\nThis bead is residual hygiene:\n\n1. Delete the stale .agents/skills/cli/ and .claude/skills/cli/ mirror trees that still contain the old adaptive-min-tier code + printf. Per locked decision: they appear in 'git status' as untracked (??), they're local scratch from prior dev work, NOT shippable. Delete them. routinglint analyzer prevents reintroduction.\n\n2. Verify the routinglint analyzer is wired into the default 'make lint' / pre-commit path so any future reintroduction is caught at PR time, not after-the-fact at runtime.\n\n3. Capture before/after evidence under .ddx/executions/\u003crun-id\u003e/ showing the message no longer prints from a fresh worker spawn.",
+    "acceptance": "1. rm -rf .agents/skills/cli/ .claude/skills/cli/ (or whatever specific subpaths the sub-agent identified; verify with git status that they're untracked before deleting). 2. routinglint analyzer confirmed wired into 'make lint' (and lefthook pre-commit if applicable); CI fails on AdaptiveMinTier reintroduction in any cli/ source file. Test: temporarily reintroduce 'AdaptiveMinTier' as an identifier in a throwaway commit, run 'make lint', confirm failure with clear message; revert. 3. Manual verification: 'ddx work --harness claude --once' spawns a worker; output does NOT contain 'adaptive min-tier' string. Save the output to .ddx/executions/\u003crun-id\u003e/verification.txt. 4. grep -rn 'adaptive.min.tier\\|AdaptiveMinTier\\|--no-adaptive\\|--adaptive-min-tier-window' cli/ (excluding .agents/.claude paths) returns 0 hits beyond the lint-guard reference itself. 5. ddx doc audit clean.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "area:lint",
+      "kind:cleanup"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T19:42:48Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3518486",
+      "execute-loop-heartbeat-at": "2026-05-02T19:42:48.135567557Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T194248-7843b153",
+    "prompt": ".ddx/executions/20260502T194248-7843b153/prompt.md",
+    "manifest": ".ddx/executions/20260502T194248-7843b153/manifest.json",
+    "result": ".ddx/executions/20260502T194248-7843b153/result.json",
+    "checks": ".ddx/executions/20260502T194248-7843b153/checks.json",
+    "usage": ".ddx/executions/20260502T194248-7843b153/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-07a169b9-20260502T194248-7843b153"
+  },
+  "prompt_sha": "7589a0cb37ad094a8138520b4cc64233cba4829dbc3ef43a78954959f3dfc251"
+}
