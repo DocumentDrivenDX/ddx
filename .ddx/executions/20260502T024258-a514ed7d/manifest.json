@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260502T024258-a514ed7d",
+  "bead_id": "ddx-4dab2bfd",
+  "base_rev": "c8b838a872d9d2e6e26ac53369d2fb3d4ad6ecde",
+  "created_at": "2026-05-02T02:43:00.206019859Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4dab2bfd",
+    "title": "Create website/content/docs/concepts/software-factory.md explaining the metaphor",
+    "description": "Create website/content/docs/concepts/software-factory.md explaining: what 'software factory' means, what DDx inherits from the 2000s Microsoft tradition (Greenfield/Short), what the 2026 spec-driven movement adds (spec-kit, Kiro), what DDx specifically adds (bounded contexts, evidence on disk, project-local install), what DDx intentionally does not do (methodology lock-in). Cross-link to REF-007, REF-005, REF-006.",
+    "acceptance": "1. concepts/software-factory.md exists. 2. Contains sections: definition, lineage, what DDx inherits, what DDx adds, what DDx avoids. 3. Cross-links to relevant REF artifacts. 4. cd website \u0026\u0026 hugo builds successfully.",
+    "parent": "ddx-629ec5b4",
+    "labels": [
+      "site-redesign",
+      "area:website",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T02:42:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "execute-loop-heartbeat-at": "2026-05-02T02:42:58.826441909Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T024258-a514ed7d",
+    "prompt": ".ddx/executions/20260502T024258-a514ed7d/prompt.md",
+    "manifest": ".ddx/executions/20260502T024258-a514ed7d/manifest.json",
+    "result": ".ddx/executions/20260502T024258-a514ed7d/result.json",
+    "checks": ".ddx/executions/20260502T024258-a514ed7d/checks.json",
+    "usage": ".ddx/executions/20260502T024258-a514ed7d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4dab2bfd-20260502T024258-a514ed7d"
+  }
+}
