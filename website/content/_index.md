@@ -26,6 +26,10 @@ HERO_GRAPHIC_PLACEHOLDER -->
 {{< /hextra/hero-headline >}}
 </div>
 
+<div class="hx-mt-2 hx-mb-6 hx-text-center">
+  <a href="docs/concepts/software-factory/" class="hx-text-lg hx-text-gray-600 dark:hx-text-gray-400 hover:hx-text-primary-600">A document-driven software factory.</a>
+</div>
+
 <div class="hx-mb-12">
 {{< hextra/hero-subtitle >}}
   The local-first platform for AI-assisted development.&nbsp;<br class="sm:hx-block hx-hidden" />Track work, dispatch agents, manage specs, and install workflow plugins — all from one CLI.
