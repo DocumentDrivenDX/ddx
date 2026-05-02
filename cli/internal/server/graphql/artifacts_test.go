@@ -158,6 +158,118 @@ func TestArtifacts_SearchFilter(t *testing.T) {
 	}
 }
 
+func TestArtifacts_MediaTypeWildcard(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workDir, store := setupIntegrationDir(t)
+	workDir = setupArtifactFixtureInDir(t, workDir)
+
+	srv := httptest.NewServer(newArtifactGQLHandler(workDir, store))
+	defer srv.Close()
+
+	projID := "proj-integration-" + filepath.Base(workDir)
+	body := bytes.NewBufferString(`{"query":"{ artifacts(projectID: \"` + projID + `\", mediaType: \"image/*\") { totalCount edges { node { mediaType } } } }"}`)
+	resp, err := http.Post(srv.URL+"/graphql", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if errs, ok := result["errors"]; ok {
+		t.Fatalf("GraphQL errors: %v", errs)
+	}
+	data := result["data"].(map[string]interface{})
+	artifacts := data["artifacts"].(map[string]interface{})
+	total := int(artifacts["totalCount"].(float64))
+	if total < 1 {
+		t.Errorf("expected wildcard image/* to match at least 1 artifact, got %d", total)
+	}
+	for _, e := range artifacts["edges"].([]interface{}) {
+		mt := e.(map[string]interface{})["node"].(map[string]interface{})["mediaType"].(string)
+		if !bytes.HasPrefix([]byte(mt), []byte("image/")) {
+			t.Errorf("wildcard image/* matched unrelated mediaType: %s", mt)
+		}
+	}
+}
+
+func TestArtifacts_StalenessFilter(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workDir, store := setupIntegrationDir(t)
+	workDir = setupArtifactFixtureInDir(t, workDir)
+
+	srv := httptest.NewServer(newArtifactGQLHandler(workDir, store))
+	defer srv.Close()
+
+	projID := "proj-integration-" + filepath.Base(workDir)
+	body := bytes.NewBufferString(`{"query":"{ artifacts(projectID: \"` + projID + `\", staleness: \"fresh\") { totalCount edges { node { staleness } } } }"}`)
+	resp, err := http.Post(srv.URL+"/graphql", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if errs, ok := result["errors"]; ok {
+		t.Fatalf("GraphQL errors: %v", errs)
+	}
+	data := result["data"].(map[string]interface{})
+	artifacts := data["artifacts"].(map[string]interface{})
+	for _, e := range artifacts["edges"].([]interface{}) {
+		st := e.(map[string]interface{})["node"].(map[string]interface{})["staleness"].(string)
+		if st != "fresh" {
+			t.Errorf("staleness filter returned non-fresh artifact: %s", st)
+		}
+	}
+}
+
+func TestArtifacts_SortByTitleStable(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	workDir, store := setupIntegrationDir(t)
+	workDir = setupArtifactFixtureInDir(t, workDir)
+
+	srv := httptest.NewServer(newArtifactGQLHandler(workDir, store))
+	defer srv.Close()
+
+	projID := "proj-integration-" + filepath.Base(workDir)
+	body := bytes.NewBufferString(`{"query":"{ artifacts(projectID: \"` + projID + `\", sort: TITLE) { edges { node { id title } } } }"}`)
+	resp, err := http.Post(srv.URL+"/graphql", "application/json", body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer resp.Body.Close()
+
+	var result map[string]interface{}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		t.Fatal(err)
+	}
+	if errs, ok := result["errors"]; ok {
+		t.Fatalf("GraphQL errors: %v", errs)
+	}
+	data := result["data"].(map[string]interface{})
+	edges := data["artifacts"].(map[string]interface{})["edges"].([]interface{})
+	var prevTitle, prevID string
+	for i, e := range edges {
+		node := e.(map[string]interface{})["node"].(map[string]interface{})
+		title := node["title"].(string)
+		id := node["id"].(string)
+		if i > 0 {
+			if title < prevTitle {
+				t.Errorf("titles not sorted ascending at index %d: %q before %q", i, prevTitle, title)
+			}
+			if title == prevTitle && id < prevID {
+				t.Errorf("tie-breaker by id violated at index %d", i)
+			}
+		}
+		prevTitle, prevID = title, id
+	}
+}
+
 func TestArtifacts_MissingSidecarGraceful(t *testing.T) {
 	// Verifies the resolver does not crash when the sidecar directory is absent.
 	t.Setenv("HOME", t.TempDir())

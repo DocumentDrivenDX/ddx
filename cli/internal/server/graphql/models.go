@@ -250,6 +250,67 @@ type ArtifactGeneratedBy struct {
 	SourceHashMatch bool `json:"sourceHashMatch"`
 }
 
+// ArtifactSort selects the field used to order Artifact results.
+type ArtifactSort string
+
+const (
+	ArtifactSortID        ArtifactSort = "ID"
+	ArtifactSortPath      ArtifactSort = "PATH"
+	ArtifactSortModified  ArtifactSort = "MODIFIED"
+	ArtifactSortTitle     ArtifactSort = "TITLE"
+	ArtifactSortDepsCount ArtifactSort = "DEPS_COUNT"
+)
+
+var AllArtifactSort = []ArtifactSort{
+	ArtifactSortID,
+	ArtifactSortPath,
+	ArtifactSortModified,
+	ArtifactSortTitle,
+	ArtifactSortDepsCount,
+}
+
+func (e ArtifactSort) IsValid() bool {
+	switch e {
+	case ArtifactSortID, ArtifactSortPath, ArtifactSortModified, ArtifactSortTitle, ArtifactSortDepsCount:
+		return true
+	}
+	return false
+}
+
+func (e ArtifactSort) String() string {
+	return string(e)
+}
+
+func (e *ArtifactSort) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+	*e = ArtifactSort(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid ArtifactSort", str)
+	}
+	return nil
+}
+
+func (e ArtifactSort) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *ArtifactSort) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e ArtifactSort) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
 // ArtifactRegenerateResult is the response from the artifactRegenerate mutation.
 type ArtifactRegenerateResult struct {
 	// Run ID of the dispatched regeneration worker

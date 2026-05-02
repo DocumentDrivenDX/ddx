@@ -3,8 +3,8 @@ import { createClient } from '$lib/gql/client'
 import { gql } from 'graphql-request'
 
 export const ARTIFACTS_QUERY = gql`
-	query Artifacts($projectID: ID!, $first: Int, $after: String, $mediaType: String) {
-		artifacts(projectID: $projectID, first: $first, after: $after, mediaType: $mediaType) {
+	query Artifacts($projectID: ID!, $first: Int, $after: String, $mediaType: String, $search: String) {
+		artifacts(projectID: $projectID, first: $first, after: $after, mediaType: $mediaType, search: $search) {
 			edges {
 				node {
 					id
@@ -62,7 +62,8 @@ export const load: PageLoad = async ({ params, url, fetch }) => {
 	const data = await client.request<ArtifactsResult>(ARTIFACTS_QUERY, {
 		projectID: params.projectId,
 		first: PAGE_SIZE,
-		mediaType: mediaType ?? undefined
+		mediaType: mediaType ?? undefined,
+		search: q ? q : undefined
 	})
 	return {
 		nodeId: params.nodeId,

@@ -18,23 +18,22 @@
 	})
 
 	let q = $state(data.q)
+	let searchTimer: ReturnType<typeof setTimeout> | null = null
 
-	const filtered = $derived(
-		q.trim()
-			? allEdges.filter(
-					(e) =>
-						e.node.title.toLowerCase().includes(q.toLowerCase()) ||
-						e.node.path.toLowerCase().includes(q.toLowerCase())
-				)
-			: allEdges
-	)
+	// Server-side search: q is sent to the backend so results are correct
+	// across all pages, not just the loaded edges.
+	const filtered = $derived(allEdges)
 
 	function onSearchInput(e: Event) {
 		q = (e.target as HTMLInputElement).value
-		const url = new URL(window.location.href)
-		if (q) url.searchParams.set('q', q)
-		else url.searchParams.delete('q')
-		history.replaceState(null, '', url.toString())
+		if (searchTimer) clearTimeout(searchTimer)
+		searchTimer = setTimeout(() => {
+			const base = `/nodes/${data.nodeId}/projects/${data.projectId}/artifacts`
+			const url = new URL(base, window.location.origin)
+			if (data.mediaType) url.searchParams.set('mediaType', data.mediaType)
+			if (q) url.searchParams.set('q', q)
+			goto(url.pathname + url.search, { keepFocus: true, noScroll: true })
+		}, 200)
 	}
 
 	const MEDIA_TYPES: { label: string; value: string | null }[] = [
@@ -86,7 +85,8 @@
 				projectID: data.projectId,
 				first: PAGE_SIZE,
 				after: pageInfo.endCursor,
-				mediaType: data.mediaType ?? undefined
+				mediaType: data.mediaType ?? undefined,
+				search: q ? q : undefined
 			})
 			allEdges = [...allEdges, ...result.artifacts.edges]
 			pageInfo = result.artifacts.pageInfo
