@@ -126,6 +126,81 @@ func TestAttachmentExportInlinesEvents(t *testing.T) {
 	assert.False(t, refStillThere, "export must drop the attachment ref")
 }
 
+// TestExportStreamsArchiveAndAttachmentEvents asserts that after `ddx bead
+// migrate` moves closed beads into the beads-archive collection (with their
+// events externalized to the attachment store), `ddx bead export` still
+// streams a single JSONL document covering both the active and archived
+// rows, with archived beads' events inlined back into the row so bd/br
+// importers see no dangling attachment refs (ADR-004 compatibility guard #3
+// for AC2/AC3/AC4).
+func TestExportStreamsArchiveAndAttachmentEvents(t *testing.T) {
+	s := newTestStore(t)
+
+	// Active open bead with no events — it must survive export.
+	open := &Bead{Title: "still open"}
+	require.NoError(t, s.Create(open))
+
+	// A closed bead with inline events. Migrate will externalize then archive it.
+	closed := &Bead{Title: "to archive"}
+	require.NoError(t, s.Create(closed))
+	require.NoError(t, s.AppendEvent(closed.ID, BeadEvent{Kind: "routing", Summary: "model=opus"}))
+	require.NoError(t, s.AppendEvent(closed.ID, BeadEvent{Kind: "review", Summary: "APPROVE", Body: "ship"}))
+	require.NoError(t, s.Close(closed.ID))
+
+	stats, err := s.Migrate()
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, stats.Archived, 1, "migrate should archive the closed bead")
+
+	// Sanity: the closed bead is gone from the active collection.
+	activeBeads, err := s.ReadAll()
+	require.NoError(t, err)
+	for _, b := range activeBeads {
+		assert.NotEqual(t, closed.ID, b.ID, "archived bead must not remain in active store")
+	}
+
+	var buf bytes.Buffer
+	require.NoError(t, s.ExportTo(&buf))
+
+	out := strings.TrimSpace(buf.String())
+	lines := strings.Split(out, "\n")
+	require.Len(t, lines, 2, "export must include both the active and archived bead")
+
+	rowsByID := make(map[string]map[string]any, 2)
+	for _, line := range lines {
+		var row map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &row))
+		id, _ := row["id"].(string)
+		rowsByID[id] = row
+	}
+
+	openRow, ok := rowsByID[open.ID]
+	require.True(t, ok, "active open bead must be in export")
+	assert.Equal(t, "open", openRow["status"])
+
+	archivedRow, ok := rowsByID[closed.ID]
+	require.True(t, ok, "archived bead must be streamed inline alongside active rows")
+	assert.Equal(t, "closed", archivedRow["status"])
+
+	// Events must be inlined back into the row — bd/br round-trip relies
+	// on this. The attachment ref must NOT survive the export.
+	events, ok := archivedRow["events"].([]any)
+	require.True(t, ok, "archived row must carry inline events; got %v", archivedRow["events"])
+	require.Len(t, events, 2)
+	assert.Equal(t, "routing", events[0].(map[string]any)["kind"])
+	assert.Equal(t, "review", events[1].(map[string]any)["kind"])
+	_, refStillThere := archivedRow[EventsAttachmentExtraKey]
+	assert.False(t, refStillThere, "export must drop the attachment ref")
+
+	// Round-trip: the export stream is consumable as bd-format JSONL —
+	// every line parses as a bead record carrying bd-compatible fields.
+	for _, line := range lines {
+		b, uerr := unmarshalBead([]byte(line))
+		require.NoError(t, uerr, "exported line must parse as a bd-compatible bead")
+		assert.NotEmpty(t, b.ID)
+		assert.NotEmpty(t, b.Status)
+	}
+}
+
 // TestAttachmentAppendEventAfterCloseAppendsToSidecar covers a subtle case:
 // once a bead is closed the inline path is gone, so a follow-up AppendEvent
 // must extend the sidecar rather than re-introducing inline storage.

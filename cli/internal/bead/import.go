@@ -36,13 +36,53 @@ func (s *Store) Import(source, filePath string) (int, error) {
 // ref itself is also dropped so importers don't see a dangling pointer).
 // The on-disk row is unchanged — this is a transient mutation on the copied
 // Bead value before marshaling.
+//
+// When called on the active collection, archived beads from the
+// beads-archive partner are also streamed inline so a single export carries
+// the full corpus. Each archived bead's externalized events are loaded from
+// the active store's attachment dir (where Migrate writes them) before
+// emission.
 func (s *Store) ExportTo(w io.Writer) error {
 	beads, err := s.ReadAll()
 	if err != nil {
 		return err
 	}
+	seen := make(map[string]bool, len(beads))
 	for _, b := range beads {
+		seen[b.ID] = true
 		if hasEventsAttachment(&b) {
+			if err := s.inlineEventsInPlace(&b); err != nil {
+				return fmt.Errorf("bead: export inline events: %w", err)
+			}
+		}
+		data, err := marshalBead(b)
+		if err != nil {
+			return fmt.Errorf("bead: export marshal: %w", err)
+		}
+		if _, err := fmt.Fprintf(w, "%s\n", data); err != nil {
+			return fmt.Errorf("bead: export write: %w", err)
+		}
+	}
+
+	if s.Collection != DefaultCollection {
+		return nil
+	}
+	archive := s.archivePartner()
+	archived, aerr := archive.ReadAll()
+	if aerr != nil {
+		// Treat a missing/unreadable archive partner as empty — the
+		// active collection is still a valid export.
+		return nil
+	}
+	for _, b := range archived {
+		if seen[b.ID] {
+			continue
+		}
+		if hasEventsAttachment(&b) {
+			// Attachments live under the active store's .ddx/attachments
+			// dir even after the bead moves to the archive (Migrate
+			// writes them there before archival). Use s, not archive,
+			// to resolve the sidecar path.
 			if err := s.inlineEventsInPlace(&b); err != nil {
 				return fmt.Errorf("bead: export inline events: %w", err)
 			}
