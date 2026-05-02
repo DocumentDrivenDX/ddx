@@ -1,0 +1,8 @@
+{
+  "attempt_id": "20260502T192946-f3e84c05",
+  "harness": "claude",
+  "tokens": 65535,
+  "input_tokens": 111,
+  "output_tokens": 65424,
+  "cost_usd": 10.580965749999995
+}
