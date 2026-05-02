@@ -1,0 +1,54 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "result_rev ca1240ae adds TestAttachmentMissingSidecarFallback covering AC5's missing-sidecar fallback case (direct read, Events(), and LoadEventsInline). Underlying helper API, EventsAttachmentExtraKey, and round-trip preservation already exist in cli/internal/bead/attachments.go satisfying AC1-4.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Reviewed diff is execution evidence only; actual change is the test added in commit ca1240ae referenced as result_rev.",
+      "location": "cli/internal/bead/attachments_test.go:282"
+    },
+    {
+      "severity": "info",
+      "summary": "Test asserts that LoadEventsInline clears the attachment ref when the sidecar is missing — matches behavior at attachments.go:222.",
+      "location": "cli/internal/bead/attachments.go:193"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1407,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T045058-fd9e7a8c/manifest.json",
+          ".ddx/executions/20260502T045058-fd9e7a8c/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3932,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 7145,
+    "output_bytes": 841,
+    "elapsed_ms": 41356,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
