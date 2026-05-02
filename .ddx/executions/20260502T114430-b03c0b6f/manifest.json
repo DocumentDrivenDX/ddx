@@ -1,0 +1,88 @@
+{
+  "attempt_id": "20260502T114430-b03c0b6f",
+  "bead_id": "ddx-65543530",
+  "base_rev": "506d66b2791b2701c0c7719a62d1bccca8f0ec92",
+  "created_at": "2026-05-02T11:44:32.147666667Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-65543530",
+    "title": "runs: canonicalize Run data projection (fix state_runs.go bundle layering; lossless AgentSession join)",
+    "description": "state_runs.go:164 currently synthesizes execution bundles as RunLayerRun; per the three-layer model bundles should be RunLayerTry. Fix the layer assignment. Add lossless join with AgentSession (which carries billingMode, cached tokens, prompt/response/stderr, outcome — NOT in Run today). User decision: keep AgentSession as backing store under layer=run.",
+    "acceptance": "1. state_runs.go: bundles → RunLayerTry; agent sessions → RunLayerRun. 2. Run resolver returns lossless join (Run + AgentSession fields when applicable). 3. Existing runs tests pass; add new test for layering correctness. 4. cd cli \u0026\u0026 go test ./internal/server/... passes.",
+    "parent": "ddx-723d93f2",
+    "labels": [
+      "phase:2",
+      "story:8",
+      "area:server",
+      "kind:fix"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T11:44:30Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1724970",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T11:43:33.8319674Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T113725-7f3f409d\",\"harness\":\"claude\",\"input_tokens\":50,\"output_tokens\":20233,\"total_tokens\":20283,\"cost_usd\":2.7755557499999997,\"duration_ms\":366924,\"exit_code\":0}",
+          "created_at": "2026-05-02T11:43:33.843849938Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=20283 cost_usd=2.7756"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T11:43:39.131245448Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only an execution result.json artifact; no changes to state_runs.go, no resolver join with AgentSession, no new layering test. Cannot verify any AC item from this diff.\nharness=claude\nmodel=opus\ninput_bytes=3861\noutput_bytes=766\nelapsed_ms=8500",
+          "created_at": "2026-05-02T11:43:47.66040565Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T11:43:47.671654563Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json artifact; no changes to state_runs.go, no resolver join with AgentSession, no new layering test. Cannot verify any AC item from this diff.\nresult_rev=e80a1b950e0869e3ada49f86224054f3c5614c26\nbase_rev=d9bae52c773dcf9014b11f02dd49f90b0568f205",
+          "created_at": "2026-05-02T11:43:47.680727936Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-02T11:44:30.988151114Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T114430-b03c0b6f",
+    "prompt": ".ddx/executions/20260502T114430-b03c0b6f/prompt.md",
+    "manifest": ".ddx/executions/20260502T114430-b03c0b6f/manifest.json",
+    "result": ".ddx/executions/20260502T114430-b03c0b6f/result.json",
+    "checks": ".ddx/executions/20260502T114430-b03c0b6f/checks.json",
+    "usage": ".ddx/executions/20260502T114430-b03c0b6f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-65543530-20260502T114430-b03c0b6f"
+  }
+}
