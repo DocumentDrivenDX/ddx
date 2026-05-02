@@ -1,0 +1,59 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only execution evidence files (manifest.json, result.json) for an attempt. No actual implementation of ADR-004 (collection abstraction, archive, attachments, migration tool) is present. AC items 2-5 are unimplemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No code changes implementing collection abstraction, archive read-through, attachment sidecar, archive command, or migration tool. Only execution metadata files were committed.",
+      "location": ".ddx/executions/20260502T034935-c7f9d929/"
+    },
+    {
+      "severity": "block",
+      "summary": "AC1 (all child beads closed) cannot be verified from diff; child beads ddx-2f453147, ddx-f7f09b6e, ddx-cd1f0f7e, ddx-8fcfe2a7, ddx-cb2eb7e3, ddx-9f7a04f4 show no implementation here.",
+      "location": ".ddx/beads.jsonl"
+    },
+    {
+      "severity": "block",
+      "summary": "AC5 (migration tool runs cleanly on 5.4MB beads.jsonl) — no migrate-archive command added to CLI.",
+      "location": "cli/cmd/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2294,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260502T034935-c7f9d929/manifest.json",
+          ".ddx/executions/20260502T034935-c7f9d929/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 4129,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 8229,
+    "output_bytes": 1029,
+    "elapsed_ms": 12380,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
