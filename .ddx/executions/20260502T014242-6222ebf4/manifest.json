@@ -1,0 +1,35 @@
+{
+  "attempt_id": "20260502T014242-6222ebf4",
+  "bead_id": "ddx-b2c9a245",
+  "base_rev": "ba6f7f6f2e6708fe60bf82099584054eda008402",
+  "created_at": "2026-05-02T01:42:43.839689208Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b2c9a245",
+    "title": "Tier inference engine: pick cheap/standard/smart from bead metadata",
+    "description": "Follow-up to ddx-b790449b AC4. Hot-fix landed 'default to cheap tier always' for zero-config drains. This bead implements metadata-driven tier inference: read bead labels, kind, and estimated scope and return a recommended ModelTier. Aligns with endpoint-first routing redesign (project_endpoint_routing_design, 2026-04-21). Replace 'always cheap' default in cmd/agent_cmd.go runAgentExecuteLoopImpl with a call to this engine.",
+    "labels": [
+      "area:routing",
+      "kind:enhancement",
+      "priority:medium"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T01:42:42Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1170049",
+      "execute-loop-heartbeat-at": "2026-05-02T01:42:42.395101133Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T014242-6222ebf4",
+    "prompt": ".ddx/executions/20260502T014242-6222ebf4/prompt.md",
+    "manifest": ".ddx/executions/20260502T014242-6222ebf4/manifest.json",
+    "result": ".ddx/executions/20260502T014242-6222ebf4/result.json",
+    "checks": ".ddx/executions/20260502T014242-6222ebf4/checks.json",
+    "usage": ".ddx/executions/20260502T014242-6222ebf4/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b2c9a245-20260502T014242-6222ebf4"
+  }
+}
