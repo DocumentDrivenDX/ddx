@@ -75,6 +75,33 @@ const (
 	StatusCancelled = "cancelled"
 )
 
+// CanonicalStatuses is the single source of truth for the persisted bead
+// status enumeration. It mirrors the bd/br canonical set documented in
+// TD-031 §2 and the JSON Schema enum at
+// cli/internal/bead/schema/bead-record.schema.json. The CI guard tests in
+// sync_test.go assert that schema, TD doc, and Go source agree with this
+// list; adding or removing a value here without updating the schema and TD
+// will fail CI.
+var CanonicalStatuses = []string{
+	StatusOpen,
+	StatusInProgress,
+	StatusClosed,
+	StatusBlocked,
+	StatusProposed,
+	StatusCancelled,
+}
+
+// IsCanonicalStatus reports whether s is one of the persisted bead statuses
+// in CanonicalStatuses.
+func IsCanonicalStatus(s string) bool {
+	for _, c := range CanonicalStatuses {
+		if c == s {
+			return true
+		}
+	}
+	return false
+}
+
 // IssueType constants
 const (
 	// IssueTypeOperatorPrompt is the bead type used for operator-submitted
