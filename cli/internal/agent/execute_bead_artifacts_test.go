@@ -227,6 +227,7 @@ func TestExecuteBead_ManifestShape(t *testing.T) {
 			Usage    string `json:"usage"`
 			Worktree string `json:"worktree"`
 		} `json:"paths"`
+		PromptSHA string `json:"prompt_sha"`
 	}
 	if err := json.Unmarshal(raw, &m); err != nil {
 		t.Fatalf("parsing manifest.json: %v", err)
@@ -281,6 +282,20 @@ func TestExecuteBead_ManifestShape(t *testing.T) {
 	}
 	if m.Paths.Usage == "" {
 		t.Error("manifest.paths.usage must not be empty")
+	}
+	if len(m.PromptSHA) != 64 {
+		t.Errorf("manifest.prompt_sha = %q, want a 64-char sha256 hex digest", m.PromptSHA)
+	}
+	// The recorded prompt_sha must match the on-disk prompt.md so analytics
+	// grouping by prompt_sha addresses the exact bytes the agent saw.
+	promptPath := filepath.Join(projectRoot, ".ddx", "executions", res.AttemptID, "prompt.md")
+	// evidence:allow-unbounded reason="test reads our own freshly-written prompt artifact to verify manifest.prompt_sha matches the bytes on disk; size is bounded by buildPrompt"
+	promptBytes, err := os.ReadFile(promptPath)
+	if err != nil {
+		t.Fatalf("reading prompt.md: %v", err)
+	}
+	if got := promptSHA(promptBytes); got != m.PromptSHA {
+		t.Errorf("manifest.prompt_sha = %q, want sha256(prompt.md) = %q", m.PromptSHA, got)
 	}
 }
 

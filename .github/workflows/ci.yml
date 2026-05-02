@@ -198,6 +198,22 @@ jobs:
         path: e2e-test-output.txt
         retention-days: 7
 
+    - name: Render execute-bead prompt-size report
+      env:
+        DDX_PROMPT_SIZE_REPORT: ${{ github.workspace }}/prompt-size-report.txt
+      run: go test -v ./internal/agent -run '^TestPromptSizeReport$' -count=1 2>&1 | tee ../prompt-size-report.log
+
+    - name: Upload prompt-size report
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: prompt-size-report
+        path: |
+          prompt-size-report.txt
+          prompt-size-report.json
+          prompt-size-report.log
+        retention-days: 14
+
   frontend-e2e:
     name: Frontend Playwright E2E
     needs: ci

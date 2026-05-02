@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/rand"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"encoding/xml"
@@ -173,6 +174,11 @@ type executeBeadManifest struct {
 	Bead      executeBeadManifestBead   `json:"bead"`
 	Governing []executeBeadGoverningRef `json:"governing,omitempty"`
 	Paths     executeBeadArtifactPaths  `json:"paths"`
+	// PromptSHA is the sha256 (hex) of the rendered prompt bytes written to
+	// prompt.md. Stable across attempts that render the same prompt, so
+	// analytics can group attempts by prompt_sha to compare outcomes across
+	// prompt rewrites (Story 12 / FEAT-022 measurement).
+	PromptSHA string `json:"prompt_sha,omitempty"`
 }
 
 type executeBeadRequested struct {
@@ -1118,6 +1124,7 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 			Usage:    artifacts.UsageRel,
 			Worktree: filepath.ToSlash(strings.TrimPrefix(strings.TrimPrefix(wtPath, projectRoot), string(filepath.Separator))),
 		},
+		PromptSHA: promptSHA(promptContent),
 	}
 	if err := writeArtifactJSON(artifacts.ManifestAbs, manifest); err != nil {
 		return nil, fmt.Errorf("writing execute-bead manifest artifact: %w", err)
@@ -1463,6 +1470,14 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 	sb.WriteString("</execute-bead>\n")
 
 	return []byte(sb.String()), "synthesized", nil
+}
+
+// promptSHA returns the hex-encoded sha256 of the rendered prompt bytes.
+// Used as manifest.prompt_sha so analytics can group attempts by the exact
+// prompt that produced them.
+func promptSHA(promptContent []byte) string {
+	sum := sha256.Sum256(promptContent)
+	return hex.EncodeToString(sum[:])
 }
 
 func beadMetadata(b *bead.Bead) map[string]any {
