@@ -722,6 +722,121 @@ test('TC-043: doc-graph 128-node fixture settles with no circle or label overlap
 	console.log(`TC-043 settle ms: ${layout.settleMs}`);
 });
 
+// TC-044: Deterministic bounding-box layout invariants for the doc graph.
+// AC1 of the test bead: assert no node-bbox vs node-bbox overlap, and no
+// label-bbox vs foreign-circle overlap, after the bounded-convergence freeze.
+// Uses a moderate 48-node fixture so the test runs fast while still
+// exercising hubs and cross-links produced by the same generator pattern as
+// TC-043. The node bbox is the axis-aligned square inscribed around the
+// circle ([cx-r, cy-r, cx+r, cy+r]); two such bboxes overlap iff their x and
+// y intervals both overlap.
+test('TC-044: doc-graph layout has no node-bbox overlap and no label-vs-circle overlap', async ({
+	page
+}) => {
+	const docs: typeof GRAPH_DOCS = [];
+	for (let i = 0; i < 48; i++) {
+		const parent = i === 0 ? -1 : Math.floor((i - 1) / 3);
+		const dependsOn: string[] = [];
+		if (parent >= 0) dependsOn.push(`m${parent}`);
+		if (i > 0 && i % 7 === 0) dependsOn.push(`m${Math.max(0, i - 7)}`);
+		if (i > 0 && i % 11 === 0) dependsOn.push(`m${Math.max(0, i - 11)}`);
+		docs.push({
+			id: `m${i}`,
+			path: `docs/m${i}.md`,
+			title: `Doc m${i} bbox layout fixture`,
+			dependsOn,
+			dependents: []
+		});
+	}
+	for (const d of docs) {
+		for (const dep of d.dependsOn) {
+			const t = docs.find((x) => x.id === dep);
+			if (t) t.dependents.push(d.id);
+		}
+	}
+
+	await mockGraphQL(page, docs);
+	await page.setViewportSize({ width: 1280, height: 800 });
+	await page.goto(BASE_URL);
+
+	await expect(page.getByTestId('doc-graph-svg')).toBeVisible();
+
+	await page.waitForFunction(
+		() => {
+			const el = document.querySelector(
+				'[data-testid="doc-graph-svg"]'
+			) as SVGSVGElement | null;
+			return !!el && el.dataset.settleMs !== undefined;
+		},
+		{ timeout: 10_000 }
+	);
+
+	const layout = await page.evaluate(() => {
+		const svg = document.querySelector('[data-testid="doc-graph-svg"]') as SVGSVGElement;
+		const circles = Array.from(svg.querySelectorAll<SVGCircleElement>('g g g circle'));
+		return circles.map((c) => {
+			const g = c.parentNode as SVGGElement;
+			const t = g.transform.baseVal.consolidate();
+			const m = t ? t.matrix : ({ e: 0, f: 0 } as DOMMatrix);
+			const r = Number(c.getAttribute('r')) || 18;
+			const labelEl = g.querySelector('text') as SVGTextElement | null;
+			let labelBox: { x: number; y: number; w: number; h: number } | null = null;
+			if (labelEl) {
+				const bb = labelEl.getBBox();
+				labelBox = { x: m.e + bb.x, y: m.f + bb.y, w: bb.width, h: bb.height };
+			}
+			return {
+				cx: m.e,
+				cy: m.f,
+				r,
+				bbox: { x: m.e - r, y: m.f - r, w: 2 * r, h: 2 * r },
+				label: labelBox
+			};
+		});
+	});
+
+	expect(layout.length).toBe(48);
+
+	const bboxOverlaps: string[] = [];
+	for (let i = 0; i < layout.length; i++) {
+		for (let j = i + 1; j < layout.length; j++) {
+			const a = layout[i].bbox;
+			const b = layout[j].bbox;
+			const xOverlap = a.x < b.x + b.w - 0.5 && b.x < a.x + a.w - 0.5;
+			const yOverlap = a.y < b.y + b.h - 0.5 && b.y < a.y + a.h - 0.5;
+			if (xOverlap && yOverlap) {
+				bboxOverlaps.push(
+					`bbox ${i}/${j} a=(${a.x.toFixed(1)},${a.y.toFixed(1)},${a.w}x${a.h}) ` +
+						`b=(${b.x.toFixed(1)},${b.y.toFixed(1)},${b.w}x${b.h})`
+				);
+				if (bboxOverlaps.length > 5) break;
+			}
+		}
+		if (bboxOverlaps.length > 5) break;
+	}
+	expect(bboxOverlaps, bboxOverlaps.join('\n')).toHaveLength(0);
+
+	const labelHits: string[] = [];
+	for (let i = 0; i < layout.length; i++) {
+		const lab = layout[i].label;
+		if (!lab) continue;
+		for (let j = 0; j < layout.length; j++) {
+			if (i === j) continue;
+			const c = layout[j];
+			const cx = Math.max(lab.x, Math.min(c.cx, lab.x + lab.w));
+			const cy = Math.max(lab.y, Math.min(c.cy, lab.y + lab.h));
+			const dx = c.cx - cx;
+			const dy = c.cy - cy;
+			if (dx * dx + dy * dy < (c.r - 0.5) * (c.r - 0.5)) {
+				labelHits.push(`label ${i} hits circle ${j}`);
+				if (labelHits.length > 5) break;
+			}
+		}
+		if (labelHits.length > 5) break;
+	}
+	expect(labelHits, labelHits.join('\n')).toHaveLength(0);
+});
+
 // TC-036: Graph page re-fetches DocGraph query on navigation (interaction with query)
 test('TC-036: graph page issues DocGraph query to load graph data', async ({ page }) => {
 	let graphQueryCount = 0;
