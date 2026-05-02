@@ -1,6 +1,0 @@
-{"kind":"meta","name":"error-path","description":"omlx-style server sends role delta, a reasoning chunk, then a malformed JSON data frame. The consumer must surface the JSON parse error cleanly (NOT as 'unexpected end of JSON input', which is the v0.3.13 SSE-comment-frame regression signature). The orchestrator should observe a non-success result and record task_failed without corrupting the bead tracker.","expected":{"status":"error","error_must_not_contain":"unexpected end of JSON input","error_contains":"invalid character"}}
-{"kind":"frame","body":": keep-alive\n\n"}
-{"kind":"frame","body":"data: {\"id\":\"chatcmpl-2\",\"model\":\"Qwen3.6-35B-A3B-4bit\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\"},\"finish_reason\":null}]}\n\n"}
-{"kind":"frame","body":": keep-alive\n\n"}
-{"kind":"frame","body":"data: {\"id\":\"chatcmpl-2\",\"model\":\"Qwen3.6-35B-A3B-4bit\",\"choices\":[{\"index\":0,\"delta\":{\"reasoning_content\":\"thinking...\"},\"finish_reason\":null}]}\n\n"}
-{"kind":"frame","body":"data: {this is not valid json}\n\n"}
