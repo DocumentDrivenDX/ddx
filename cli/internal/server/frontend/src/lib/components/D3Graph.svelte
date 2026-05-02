@@ -104,7 +104,7 @@
 				.attr('orient', 'auto')
 				.append('path')
 				.attr('d', 'M0,-5L10,0L0,5')
-				.attr('class', 'fill-border-line dark:fill-dark-border-line')
+				.attr('class', 'fill-fg-muted dark:fill-dark-fg-muted')
 
 			const g = svgSel.append('g')
 
@@ -162,7 +162,7 @@
 				.selectAll<SVGLineElement, (typeof freshSimLinks)[0]>('line')
 				.data(freshSimLinks)
 				.join('line')
-				.attr('class', 'stroke-border-line dark:stroke-dark-border-line')
+				.attr('class', 'stroke-fg-muted dark:stroke-dark-fg-muted')
 				.attr('stroke-width', 1.5)
 				.attr('stroke-opacity', 0.6)
 				.attr('marker-end', 'url(#ddx-arrow)')
