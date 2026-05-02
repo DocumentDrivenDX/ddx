@@ -671,25 +671,25 @@ type ComplexityRoot struct {
 	}
 
 	Mutation struct {
-		ArtifactRegenerate func(childComplexity int, artifactID string) int
-		BeadClaim          func(childComplexity int, id string, assignee string) int
-		BeadClose          func(childComplexity int, id string, reason *string) int
-		BeadCreate         func(childComplexity int, input BeadInput) int
-		BeadReopen         func(childComplexity int, id string) int
-		BeadUnclaim        func(childComplexity int, id string) int
-		BeadUpdate         func(childComplexity int, id string, input BeadUpdateInput) int
-		ComparisonDispatch func(childComplexity int, arms []*ComparisonArmInput) int
-		DocumentWrite      func(childComplexity int, path string, content string) int
-		GraphRepairIssue   func(childComplexity int, issueID string, strategy RepairStrategy) int
-		PersonaBind        func(childComplexity int, role string, persona string, projectID string) int
-		PersonaCreate      func(childComplexity int, name string, body string, projectID string) int
-		PersonaDelete      func(childComplexity int, name string, projectID string) int
-		PersonaFork        func(childComplexity int, libraryName string, newName *string, projectID string) int
-		PersonaUpdate      func(childComplexity int, name string, body string, projectID string) int
-		PluginDispatch     func(childComplexity int, name string, action string, scope string) int
-		StartWorker        func(childComplexity int, input StartWorkerInput) int
-		StopWorker         func(childComplexity int, id string) int
-		WorkerDispatch     func(childComplexity int, kind string, projectID string, args *string) int
+		ArtifactRegenerate    func(childComplexity int, artifactID string) int
+		BeadClaim             func(childComplexity int, id string, assignee string) int
+		BeadClose             func(childComplexity int, id string, reason *string) int
+		BeadCreate            func(childComplexity int, input BeadInput) int
+		BeadReopen            func(childComplexity int, id string) int
+		BeadUnclaim           func(childComplexity int, id string) int
+		BeadUpdate            func(childComplexity int, id string, input BeadUpdateInput) int
+		ComparisonDispatch    func(childComplexity int, arms []*ComparisonArmInput) int
+		DocumentWrite         func(childComplexity int, path string, content string) int
+		PersonaBind           func(childComplexity int, role string, persona string, projectID string) int
+		PersonaCreate         func(childComplexity int, name string, body string, projectID string) int
+		PersonaDelete         func(childComplexity int, name string, projectID string) int
+		PersonaFork           func(childComplexity int, libraryName string, newName *string, projectID string) int
+		PersonaUpdate         func(childComplexity int, name string, body string, projectID string) int
+		PluginDispatch        func(childComplexity int, name string, action string, scope string) int
+		RefreshProviderModels func(childComplexity int, name string, kind ProviderKind) int
+		StartWorker           func(childComplexity int, input StartWorkerInput) int
+		StopWorker            func(childComplexity int, id string) int
+		WorkerDispatch        func(childComplexity int, kind string, projectID string, args *string) int
 	}
 
 	NodeInfo struct {
@@ -848,6 +848,21 @@ type ComplexityRoot struct {
 		TimeoutMs     func(childComplexity int) int
 	}
 
+	ProviderModelEntry struct {
+		Available     func(childComplexity int) int
+		ContextLength func(childComplexity int) int
+		ID            func(childComplexity int) int
+	}
+
+	ProviderModelsResult struct {
+		BaseURL   func(childComplexity int) int
+		FetchedAt func(childComplexity int) int
+		FromCache func(childComplexity int) int
+		Kind      func(childComplexity int) int
+		Models    func(childComplexity int) int
+		Name      func(childComplexity int) int
+	}
+
 	ProviderQuota struct {
 		CeilingTokens        func(childComplexity int) int
 		CeilingWindowSeconds func(childComplexity int) int
@@ -952,6 +967,7 @@ type ComplexityRoot struct {
 		ProjectBindings             func(childComplexity int, projectID string) int
 		Projects                    func(childComplexity int, first *int, after *string, last *int, before *string, includeUnreachable *bool) int
 		Provider                    func(childComplexity int, name string) int
+		ProviderModels              func(childComplexity int, name string, kind ProviderKind) int
 		ProviderStatuses            func(childComplexity int) int
 		ProviderTrend               func(childComplexity int, name string, windowDays int) int
 		Providers                   func(childComplexity int) int
@@ -1251,6 +1267,7 @@ type MutationResolver interface {
 	PersonaUpdate(ctx context.Context, name string, body string, projectID string) (*Persona, error)
 	PersonaDelete(ctx context.Context, name string, projectID string) (*PersonaDeleteResult, error)
 	PersonaFork(ctx context.Context, libraryName string, newName *string, projectID string) (*Persona, error)
+	RefreshProviderModels(ctx context.Context, name string, kind ProviderKind) (*ProviderModelsResult, error)
 	ArtifactRegenerate(ctx context.Context, artifactID string) (*ArtifactRegenerateResult, error)
 }
 type QueryResolver interface {
@@ -1315,6 +1332,7 @@ type QueryResolver interface {
 	ProviderStatuses(ctx context.Context) ([]*ProviderStatus, error)
 	HarnessStatuses(ctx context.Context) ([]*ProviderStatus, error)
 	DefaultRouteStatus(ctx context.Context) (*DefaultRouteStatus, error)
+	ProviderModels(ctx context.Context, name string, kind ProviderKind) (*ProviderModelsResult, error)
 	ProviderTrend(ctx context.Context, name string, windowDays int) (*ProviderTrend, error)
 	QueueSummary(ctx context.Context, projectID string) (*QueueSummary, error)
 	QueueAndWorkersSummary(ctx context.Context, projectID string) (*QueueAndWorkersSummary, error)
@@ -4043,17 +4061,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.DocumentWrite(childComplexity, args["path"].(string), args["content"].(string)), true
-	case "Mutation.graphRepairIssue":
-		if e.ComplexityRoot.Mutation.GraphRepairIssue == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_graphRepairIssue_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Mutation.GraphRepairIssue(childComplexity, args["issueId"].(string), args["strategy"].(RepairStrategy)), true
 	case "Mutation.personaBind":
 		if e.ComplexityRoot.Mutation.PersonaBind == nil {
 			break
@@ -4120,6 +4127,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.PluginDispatch(childComplexity, args["name"].(string), args["action"].(string), args["scope"].(string)), true
+	case "Mutation.refreshProviderModels":
+		if e.ComplexityRoot.Mutation.RefreshProviderModels == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_refreshProviderModels_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RefreshProviderModels(childComplexity, args["name"].(string), args["kind"].(ProviderKind)), true
 	case "Mutation.startWorker":
 		if e.ComplexityRoot.Mutation.StartWorker == nil {
 			break
@@ -4732,6 +4750,62 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Provider.TimeoutMs(childComplexity), true
+
+	case "ProviderModelEntry.available":
+		if e.ComplexityRoot.ProviderModelEntry.Available == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderModelEntry.Available(childComplexity), true
+	case "ProviderModelEntry.contextLength":
+		if e.ComplexityRoot.ProviderModelEntry.ContextLength == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderModelEntry.ContextLength(childComplexity), true
+	case "ProviderModelEntry.id":
+		if e.ComplexityRoot.ProviderModelEntry.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderModelEntry.ID(childComplexity), true
+
+	case "ProviderModelsResult.baseURL":
+		if e.ComplexityRoot.ProviderModelsResult.BaseURL == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderModelsResult.BaseURL(childComplexity), true
+	case "ProviderModelsResult.fetchedAt":
+		if e.ComplexityRoot.ProviderModelsResult.FetchedAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderModelsResult.FetchedAt(childComplexity), true
+	case "ProviderModelsResult.fromCache":
+		if e.ComplexityRoot.ProviderModelsResult.FromCache == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderModelsResult.FromCache(childComplexity), true
+	case "ProviderModelsResult.kind":
+		if e.ComplexityRoot.ProviderModelsResult.Kind == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderModelsResult.Kind(childComplexity), true
+	case "ProviderModelsResult.models":
+		if e.ComplexityRoot.ProviderModelsResult.Models == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderModelsResult.Models(childComplexity), true
+	case "ProviderModelsResult.name":
+		if e.ComplexityRoot.ProviderModelsResult.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderModelsResult.Name(childComplexity), true
 
 	case "ProviderQuota.ceilingTokens":
 		if e.ComplexityRoot.ProviderQuota.CeilingTokens == nil {
@@ -5487,6 +5561,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Provider(childComplexity, args["name"].(string)), true
+	case "Query.providerModels":
+		if e.ComplexityRoot.Query.ProviderModels == nil {
+			break
+		}
+
+		args, err := ec.field_Query_providerModels_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.ProviderModels(childComplexity, args["name"].(string), args["kind"].(ProviderKind)), true
 	case "Query.providerStatuses":
 		if e.ComplexityRoot.Query.ProviderStatuses == nil {
 			break
@@ -6956,22 +7041,6 @@ func (ec *executionContext) field_Mutation_documentWrite_args(ctx context.Contex
 	return args, nil
 }
 
-func (ec *executionContext) field_Mutation_graphRepairIssue_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "issueId", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["issueId"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "strategy", ec.unmarshalNRepairStrategy2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRepairStrategy)
-	if err != nil {
-		return nil, err
-	}
-	args["strategy"] = arg1
-	return args, nil
-}
-
 func (ec *executionContext) field_Mutation_personaBind_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -7090,6 +7159,22 @@ func (ec *executionContext) field_Mutation_pluginDispatch_args(ctx context.Conte
 		return nil, err
 	}
 	args["scope"] = arg2
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_refreshProviderModels_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "name", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["name"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "kind", ec.unmarshalNProviderKind2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderKind)
+	if err != nil {
+		return nil, err
+	}
+	args["kind"] = arg1
 	return args, nil
 }
 
@@ -8032,6 +8117,22 @@ func (ec *executionContext) field_Query_projects_args(ctx context.Context, rawAr
 		return nil, err
 	}
 	args["includeUnreachable"] = arg4
+	return args, nil
+}
+
+func (ec *executionContext) field_Query_providerModels_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "name", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["name"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "kind", ec.unmarshalNProviderKind2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderKind)
+	if err != nil {
+		return nil, err
+	}
+	args["kind"] = arg1
 	return args, nil
 }
 
@@ -22531,6 +22632,61 @@ func (ec *executionContext) fieldContext_Mutation_personaFork(ctx context.Contex
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_refreshProviderModels(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_refreshProviderModels,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RefreshProviderModels(ctx, fc.Args["name"].(string), fc.Args["kind"].(ProviderKind))
+		},
+		nil,
+		ec.marshalNProviderModelsResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderModelsResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_refreshProviderModels(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "name":
+				return ec.fieldContext_ProviderModelsResult_name(ctx, field)
+			case "kind":
+				return ec.fieldContext_ProviderModelsResult_kind(ctx, field)
+			case "models":
+				return ec.fieldContext_ProviderModelsResult_models(ctx, field)
+			case "baseURL":
+				return ec.fieldContext_ProviderModelsResult_baseURL(ctx, field)
+			case "fetchedAt":
+				return ec.fieldContext_ProviderModelsResult_fetchedAt(ctx, field)
+			case "fromCache":
+				return ec.fieldContext_ProviderModelsResult_fromCache(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ProviderModelsResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_refreshProviderModels_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Mutation_artifactRegenerate(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -25384,6 +25540,275 @@ func (ec *executionContext) fieldContext_Provider_permissions(_ context.Context,
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderModelEntry_id(ctx context.Context, field graphql.CollectedField, obj *ProviderModelEntry) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderModelEntry_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderModelEntry_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderModelEntry",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderModelEntry_contextLength(ctx context.Context, field graphql.CollectedField, obj *ProviderModelEntry) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderModelEntry_contextLength,
+		func(ctx context.Context) (any, error) {
+			return obj.ContextLength, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderModelEntry_contextLength(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderModelEntry",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderModelEntry_available(ctx context.Context, field graphql.CollectedField, obj *ProviderModelEntry) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderModelEntry_available,
+		func(ctx context.Context) (any, error) {
+			return obj.Available, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderModelEntry_available(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderModelEntry",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderModelsResult_name(ctx context.Context, field graphql.CollectedField, obj *ProviderModelsResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderModelsResult_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderModelsResult_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderModelsResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderModelsResult_kind(ctx context.Context, field graphql.CollectedField, obj *ProviderModelsResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderModelsResult_kind,
+		func(ctx context.Context) (any, error) {
+			return obj.Kind, nil
+		},
+		nil,
+		ec.marshalNProviderKind2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderKind,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderModelsResult_kind(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderModelsResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ProviderKind does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderModelsResult_models(ctx context.Context, field graphql.CollectedField, obj *ProviderModelsResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderModelsResult_models,
+		func(ctx context.Context) (any, error) {
+			return obj.Models, nil
+		},
+		nil,
+		ec.marshalNProviderModelEntry2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderModelEntryᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderModelsResult_models(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderModelsResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_ProviderModelEntry_id(ctx, field)
+			case "contextLength":
+				return ec.fieldContext_ProviderModelEntry_contextLength(ctx, field)
+			case "available":
+				return ec.fieldContext_ProviderModelEntry_available(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ProviderModelEntry", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderModelsResult_baseURL(ctx context.Context, field graphql.CollectedField, obj *ProviderModelsResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderModelsResult_baseURL,
+		func(ctx context.Context) (any, error) {
+			return obj.BaseURL, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderModelsResult_baseURL(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderModelsResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderModelsResult_fetchedAt(ctx context.Context, field graphql.CollectedField, obj *ProviderModelsResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderModelsResult_fetchedAt,
+		func(ctx context.Context) (any, error) {
+			return obj.FetchedAt, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderModelsResult_fetchedAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderModelsResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ProviderModelsResult_fromCache(ctx context.Context, field graphql.CollectedField, obj *ProviderModelsResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderModelsResult_fromCache,
+		func(ctx context.Context) (any, error) {
+			return obj.FromCache, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderModelsResult_fromCache(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderModelsResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
 		},
 	}
 	return fc, nil
@@ -29735,6 +30160,61 @@ func (ec *executionContext) fieldContext_Query_defaultRouteStatus(_ context.Cont
 			}
 			return nil, fmt.Errorf("no field named %q was found under type DefaultRouteStatus", field.Name)
 		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Query_providerModels(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_providerModels,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().ProviderModels(ctx, fc.Args["name"].(string), fc.Args["kind"].(ProviderKind))
+		},
+		nil,
+		ec.marshalOProviderModelsResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderModelsResult,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_providerModels(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "name":
+				return ec.fieldContext_ProviderModelsResult_name(ctx, field)
+			case "kind":
+				return ec.fieldContext_ProviderModelsResult_kind(ctx, field)
+			case "models":
+				return ec.fieldContext_ProviderModelsResult_models(ctx, field)
+			case "baseURL":
+				return ec.fieldContext_ProviderModelsResult_baseURL(ctx, field)
+			case "fetchedAt":
+				return ec.fieldContext_ProviderModelsResult_fetchedAt(ctx, field)
+			case "fromCache":
+				return ec.fieldContext_ProviderModelsResult_fromCache(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ProviderModelsResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_providerModels_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
 	}
 	return fc, nil
 }
@@ -41780,6 +42260,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "refreshProviderModels":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_refreshProviderModels(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "artifactRegenerate":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Mutation_artifactRegenerate(ctx, field)
@@ -42909,6 +43396,116 @@ func (ec *executionContext) _Provider(ctx context.Context, sel ast.SelectionSet,
 			out.Values[i] = ec._Provider_timeoutMs(ctx, field, obj)
 		case "permissions":
 			out.Values[i] = ec._Provider_permissions(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var providerModelEntryImplementors = []string{"ProviderModelEntry"}
+
+func (ec *executionContext) _ProviderModelEntry(ctx context.Context, sel ast.SelectionSet, obj *ProviderModelEntry) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, providerModelEntryImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ProviderModelEntry")
+		case "id":
+			out.Values[i] = ec._ProviderModelEntry_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "contextLength":
+			out.Values[i] = ec._ProviderModelEntry_contextLength(ctx, field, obj)
+		case "available":
+			out.Values[i] = ec._ProviderModelEntry_available(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var providerModelsResultImplementors = []string{"ProviderModelsResult"}
+
+func (ec *executionContext) _ProviderModelsResult(ctx context.Context, sel ast.SelectionSet, obj *ProviderModelsResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, providerModelsResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ProviderModelsResult")
+		case "name":
+			out.Values[i] = ec._ProviderModelsResult_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "kind":
+			out.Values[i] = ec._ProviderModelsResult_kind(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "models":
+			out.Values[i] = ec._ProviderModelsResult_models(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "baseURL":
+			out.Values[i] = ec._ProviderModelsResult_baseURL(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fetchedAt":
+			out.Values[i] = ec._ProviderModelsResult_fetchedAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "fromCache":
+			out.Values[i] = ec._ProviderModelsResult_fromCache(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -44523,6 +45120,25 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 					}
 				}()
 				res = ec._Query_defaultRouteStatus(ctx, field)
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "providerModels":
+			field := field
+
+			innerFunc := func(ctx context.Context, _ *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_providerModels(ctx, field)
 				return res
 			}
 
@@ -47684,20 +48300,6 @@ func (ec *executionContext) marshalNGraphIssue2ᚖgithubᚗcomᚋDocumentDrivenD
 	return ec._GraphIssue(ctx, sel, v)
 }
 
-func (ec *executionContext) marshalNGraphRepairResult2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐGraphRepairResult(ctx context.Context, sel ast.SelectionSet, v GraphRepairResult) graphql.Marshaler {
-	return ec._GraphRepairResult(ctx, sel, &v)
-}
-
-func (ec *executionContext) marshalNGraphRepairResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐGraphRepairResult(ctx context.Context, sel ast.SelectionSet, v *GraphRepairResult) graphql.Marshaler {
-	if v == nil {
-		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
-			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
-		}
-		return graphql.Null
-	}
-	return ec._GraphRepairResult(ctx, sel, v)
-}
-
 func (ec *executionContext) marshalNHealthStatus2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐHealthStatus(ctx context.Context, sel ast.SelectionSet, v HealthStatus) graphql.Marshaler {
 	return ec._HealthStatus(ctx, sel, &v)
 }
@@ -48204,6 +48806,46 @@ func (ec *executionContext) marshalNProviderKind2githubᚗcomᚋDocumentDrivenDX
 	return v
 }
 
+func (ec *executionContext) marshalNProviderModelEntry2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderModelEntryᚄ(ctx context.Context, sel ast.SelectionSet, v []*ProviderModelEntry) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNProviderModelEntry2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderModelEntry(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNProviderModelEntry2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderModelEntry(ctx context.Context, sel ast.SelectionSet, v *ProviderModelEntry) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ProviderModelEntry(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNProviderModelsResult2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderModelsResult(ctx context.Context, sel ast.SelectionSet, v ProviderModelsResult) graphql.Marshaler {
+	return ec._ProviderModelsResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNProviderModelsResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderModelsResult(ctx context.Context, sel ast.SelectionSet, v *ProviderModelsResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ProviderModelsResult(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalNProviderStatus2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderStatusᚄ(ctx context.Context, sel ast.SelectionSet, v []*ProviderStatus) graphql.Marshaler {
 	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
 		fc := graphql.GetFieldContext(ctx)
@@ -48322,16 +48964,6 @@ func (ec *executionContext) marshalNReadyStatus2ᚖgithubᚗcomᚋDocumentDriven
 		return graphql.Null
 	}
 	return ec._ReadyStatus(ctx, sel, v)
-}
-
-func (ec *executionContext) unmarshalNRepairStrategy2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRepairStrategy(ctx context.Context, v any) (RepairStrategy, error) {
-	var res RepairStrategy
-	err := res.UnmarshalGQL(v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalNRepairStrategy2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRepairStrategy(ctx context.Context, sel ast.SelectionSet, v RepairStrategy) graphql.Marshaler {
-	return v
 }
 
 func (ec *executionContext) marshalNReworkReport2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReworkReport(ctx context.Context, sel ast.SelectionSet, v ReworkReport) graphql.Marshaler {
@@ -48899,6 +49531,22 @@ func (ec *executionContext) marshalOArtifactGeneratedBy2ᚖgithubᚗcomᚋDocume
 	return ec._ArtifactGeneratedBy(ctx, sel, v)
 }
 
+func (ec *executionContext) unmarshalOArtifactSort2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactSort(ctx context.Context, v any) (*ArtifactSort, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var res = new(ArtifactSort)
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalOArtifactSort2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactSort(ctx context.Context, sel ast.SelectionSet, v *ArtifactSort) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return v
+}
+
 func (ec *executionContext) marshalOBead2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐBead(ctx context.Context, sel ast.SelectionSet, v *Bead) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
@@ -49322,6 +49970,13 @@ func (ec *executionContext) marshalOProvider2ᚖgithubᚗcomᚋDocumentDrivenDX�
 	return ec._Provider(ctx, sel, v)
 }
 
+func (ec *executionContext) marshalOProviderModelsResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderModelsResult(ctx context.Context, sel ast.SelectionSet, v *ProviderModelsResult) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	return ec._ProviderModelsResult(ctx, sel, v)
+}
+
 func (ec *executionContext) marshalOProviderQuota2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐProviderQuota(ctx context.Context, sel ast.SelectionSet, v *ProviderQuota) graphql.Marshaler {
 	if v == nil {
 		return graphql.Null
@@ -49374,22 +50029,6 @@ func (ec *executionContext) marshalORun2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddx
 		return graphql.Null
 	}
 	return ec._Run(ctx, sel, v)
-}
-
-func (ec *executionContext) unmarshalOArtifactSort2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactSort(ctx context.Context, v any) (*ArtifactSort, error) {
-	if v == nil {
-		return nil, nil
-	}
-	var res = new(ArtifactSort)
-	err := res.UnmarshalGQL(v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) marshalOArtifactSort2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactSort(ctx context.Context, sel ast.SelectionSet, v *ArtifactSort) graphql.Marshaler {
-	if v == nil {
-		return graphql.Null
-	}
-	return v
 }
 
 func (ec *executionContext) unmarshalORunLayer2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunLayer(ctx context.Context, v any) (*RunLayer, error) {

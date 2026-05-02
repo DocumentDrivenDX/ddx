@@ -1698,6 +1698,32 @@ type ProviderTrend {
   projectedRunOutHours: Float
 }
 
+"""ProviderModelEntry is one model identifier published by a provider's discovery endpoint."""
+type ProviderModelEntry {
+  """Model identifier (e.g. "gpt-4o", "claude-opus-4-7")."""
+  id: String!
+  """Optional context-window length, when known."""
+  contextLength: Int
+  """Whether the model is currently routable (configured and reachable)."""
+  available: Boolean!
+}
+
+"""ProviderModelsResult bundles a cached discovery snapshot for one provider or harness."""
+type ProviderModelsResult {
+  """Provider or harness name."""
+  name: String!
+  """Provider kind."""
+  kind: ProviderKind!
+  """Discovered models."""
+  models: [ProviderModelEntry!]!
+  """Sanitized base URL (scheme + host[:port][/path], no credentials/query/fragment). Empty for HARNESS."""
+  baseURL: String!
+  """When this snapshot was last refreshed (ISO-8601 UTC)."""
+  fetchedAt: String!
+  """True when the result was served from cache without a live fetch."""
+  fromCache: Boolean!
+}
+
 """DefaultRouteStatus shows which provider/model the default model-ref resolves to."""
 type DefaultRouteStatus {
   """The model-ref key (e.g. "code-medium") or empty if no default configured"""
@@ -2617,6 +2643,14 @@ type Query {
   """Show which provider/model the default model-ref resolves to (mirrors `ddx agent route-status`)"""
   defaultRouteStatus: DefaultRouteStatus
 
+  """Return cached model discovery for one provider or harness. Cached for 60s with a single in-flight fetch per (name, kind). Use refreshProviderModels to force a refresh."""
+  providerModels(
+    """Provider or harness name."""
+    name: String!
+    """Provider kind (ENDPOINT or HARNESS)."""
+    kind: ProviderKind!
+  ): ProviderModelsResult
+
   """Return a time-bucketed trend of tokens and requests for a provider or harness."""
   providerTrend(
     """Provider or harness name."""
@@ -2818,6 +2852,14 @@ type Mutation {
     """Project identifier to fork into"""
     projectId: String!
   ): Persona!
+
+  """Force-refresh the cached model discovery snapshot for one provider or harness. Auth-gated (requireTrusted via the /graphql route). Concurrent calls for the same (name, kind) are coalesced via an in-flight guard. Returns the refreshed snapshot."""
+  refreshProviderModels(
+    """Provider or harness name."""
+    name: String!
+    """Provider kind (ENDPOINT or HARNESS)."""
+    kind: ProviderKind!
+  ): ProviderModelsResult!
 
   """Regenerate an artifact by dispatching a server-side worker using the artifact's recorded generator metadata. Returns a typed error if the artifact has no generator metadata."""
   artifactRegenerate(
