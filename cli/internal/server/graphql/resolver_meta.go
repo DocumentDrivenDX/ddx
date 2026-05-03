@@ -9,7 +9,7 @@ import (
 
 // Personas is the resolver for the personas field.
 func (r *queryResolver) Personas(ctx context.Context, projectID *string) ([]*Persona, error) {
-	loader := persona.NewPersonaLoader(r.personaProjectRoot(projectID))
+	loader := persona.NewPersonaLoader(r.personaProjectRoot(ctx, projectID))
 	ps, err := loader.ListPersonas()
 	if err != nil {
 		return nil, fmt.Errorf("loading personas: %w", err)
@@ -23,7 +23,7 @@ func (r *queryResolver) Personas(ctx context.Context, projectID *string) ([]*Per
 
 // Persona is the resolver for the persona field.
 func (r *queryResolver) Persona(ctx context.Context, name string, projectID *string) (*Persona, error) {
-	loader := persona.NewPersonaLoader(r.personaProjectRoot(projectID))
+	loader := persona.NewPersonaLoader(r.personaProjectRoot(ctx, projectID))
 	p, err := loader.LoadPersona(name)
 	if err != nil {
 		return nil, nil //nolint:nilerr // not-found is represented as null
@@ -34,16 +34,16 @@ func (r *queryResolver) Persona(ctx context.Context, name string, projectID *str
 // personaProjectRoot resolves the working directory for persona loading.
 // When a project ID is provided, it resolves via projectRoot; otherwise
 // falls back to the server's working directory.
-func (r *queryResolver) personaProjectRoot(projectID *string) string {
+func (r *queryResolver) personaProjectRoot(ctx context.Context, projectID *string) string {
 	if projectID != nil && *projectID != "" {
-		return r.projectRoot(*projectID)
+		return r.projectRoot(ctx, *projectID)
 	}
-	return r.WorkingDir
+	return r.workingDir(ctx)
 }
 
 // PersonaByRole is the resolver for the personaByRole field.
 func (r *queryResolver) PersonaByRole(ctx context.Context, role string) (*Persona, error) {
-	loader := persona.NewPersonaLoader(r.WorkingDir)
+	loader := persona.NewPersonaLoader(r.workingDir(ctx))
 	ps, err := loader.FindByRole(role)
 	if err != nil || len(ps) == 0 {
 		return nil, nil

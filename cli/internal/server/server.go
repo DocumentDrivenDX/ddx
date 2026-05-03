@@ -23,6 +23,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 
@@ -138,6 +139,15 @@ type Server struct {
 	//   both      → "hub_spoke"
 	SpokeMode bool
 	spoke     *federationSpoke
+
+	// gqlHandler is the singleton gqlgen HTTP handler. LAYER 2 of the
+	// GraphQL multi-project fix (ddx-055e8d32) builds this once at first
+	// request and reuses it across both /graphql and the scoped
+	// /api/projects/{project}/graphql route — per-request reconstruction
+	// (LAYER 1) is no longer needed because the resolver reads WorkingDir
+	// from the request context.
+	gqlOnce    sync.Once
+	gqlHandler http.Handler
 }
 
 // New creates a new DDx server bound to addr, serving data from workingDir.
@@ -4712,49 +4722,70 @@ func (s *Server) handleGraphQLQueryScoped(w http.ResponseWriter, r *http.Request
 	s.serveGraphQL(w, r, dir)
 }
 
-// serveGraphQL builds a fresh gqlgen handler whose Resolver is rooted at
-// workingDir and serves the request through it. Constructed per request so
-// LAYER 1's scoped route can isolate each project's WorkingDir without the
-// deeper context-threading refactor (deferred to LAYER 2 / ddx-055e8d32).
+// serveGraphQL serves an HTTP GraphQL request, injecting the per-request
+// workingDir into context so the singleton resolver can read it via
+// ddxgraphql.WorkingDirFromContext. LAYER 2 of the GraphQL multi-project
+// fix (ddx-055e8d32): the gqlgen handler and resolver are built ONCE
+// (lazily on first request) and reused across both /graphql and the scoped
+// /api/projects/{project}/graphql route. Per-request reconstruction
+// (LAYER 1) is no longer needed because resolver methods read WorkingDir
+// from the request context rather than a struct field.
 func (s *Server) serveGraphQL(w http.ResponseWriter, r *http.Request, workingDir string) {
-	var fedProvider ddxgraphql.FederationProvider
-	if s.hub != nil {
-		fedProvider = newHubFederationProvider(s)
-	}
-	gqlServer := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
-		Resolvers: &ddxgraphql.Resolver{
-			State:                              s.state,
-			WorkingDir:                         workingDir,
-			Workers:                            s.workers,
-			BeadBus:                            s.beadHub,
-			Actions:                            &workerDispatchAdapter{manager: s.workers},
-			ExecLogs:                           &execLogAdapter{workingDir: workingDir},
-			CoordMetrics:                       &coordMetricsAdapter{reg: s.workers.LandCoordinators},
-			CSRFTokens:                         s.csrfTokens,
-			OperatorPromptIdempotency:          s.operatorPromptIdempotency,
-			OperatorPromptAutoApproveAllowlist: s.operatorPromptAutoApproveAllowlist,
-			PromptCapBytes:                     serverPromptCapBytes,
-			BuildSHA:                           serverBuildSHA(),
-			NodeID:                             s.state.Node.ID,
-			Federation:                         fedProvider,
-		},
-		Directives: ddxgraphql.DirectiveRoot{},
-	}))
+	gqlServer := s.graphqlHandler()
 	// Plumb the originating *http.Request into the resolver context so
 	// resolvers (e.g. operatorPromptSubmit) can validate the CSRF header
 	// and capture the originating identity from headers tsnetMiddleware
-	// injects (X-Tailscale-User / X-Tailscale-Node).
-	r = r.WithContext(ddxgraphql.WithHTTPRequest(r.Context(), r))
-	gqlServer.AddTransport(transport.POST{})
-	gqlServer.AddTransport(transport.GET{})
-	gqlServer.AddTransport(transport.Websocket{
-		Upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool { return true },
-		},
-		KeepAlivePingInterval: 30 * time.Second,
-	})
+	// injects (X-Tailscale-User / X-Tailscale-Node). Also inject the
+	// per-request workingDir so resolvers reading WorkingDir do so under
+	// the scoped project (LAYER 2 / ddx-055e8d32) rather than the
+	// resolver's startup default.
+	ctx := r.Context()
+	ctx = ddxgraphql.WithHTTPRequest(ctx, r)
+	ctx = ddxgraphql.WithWorkingDir(ctx, workingDir)
+	gqlServer.ServeHTTP(w, r.WithContext(ctx))
+}
 
-	gqlServer.ServeHTTP(w, r)
+// graphqlHandler lazily builds and caches the gqlgen handler used by both
+// /graphql and the scoped /api/projects/{project}/graphql route. The
+// resolver's WorkingDir field is set to s.WorkingDir as the FALLBACK
+// default; per-request scoping flows through context via WithWorkingDir
+// (see serveGraphQL).
+func (s *Server) graphqlHandler() http.Handler {
+	s.gqlOnce.Do(func() {
+		var fedProvider ddxgraphql.FederationProvider
+		if s.hub != nil {
+			fedProvider = newHubFederationProvider(s)
+		}
+		gqlServer := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
+			Resolvers: &ddxgraphql.Resolver{
+				State:                              s.state,
+				WorkingDir:                         s.WorkingDir,
+				Workers:                            s.workers,
+				BeadBus:                            s.beadHub,
+				Actions:                            &workerDispatchAdapter{manager: s.workers},
+				ExecLogs:                           &execLogAdapter{},
+				CoordMetrics:                       &coordMetricsAdapter{reg: s.workers.LandCoordinators},
+				CSRFTokens:                         s.csrfTokens,
+				OperatorPromptIdempotency:          s.operatorPromptIdempotency,
+				OperatorPromptAutoApproveAllowlist: s.operatorPromptAutoApproveAllowlist,
+				PromptCapBytes:                     serverPromptCapBytes,
+				BuildSHA:                           serverBuildSHA(),
+				NodeID:                             s.state.Node.ID,
+				Federation:                         fedProvider,
+			},
+			Directives: ddxgraphql.DirectiveRoot{},
+		}))
+		gqlServer.AddTransport(transport.POST{})
+		gqlServer.AddTransport(transport.GET{})
+		gqlServer.AddTransport(transport.Websocket{
+			Upgrader: websocket.Upgrader{
+				CheckOrigin: func(r *http.Request) bool { return true },
+			},
+			KeepAlivePingInterval: 30 * time.Second,
+		})
+		s.gqlHandler = gqlServer
+	})
+	return s.gqlHandler
 }
 
 func (s *Server) handleGraphiQL(w http.ResponseWriter, r *http.Request) {

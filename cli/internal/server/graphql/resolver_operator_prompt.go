@@ -238,7 +238,7 @@ var errSubmitDenied = errors.New("operator-prompts: ts-net identity not on per-p
 // operator-prompt bead in the proposed status with an audit event capturing
 // the originating identity (localhost user OR ts-net WhoIs).
 func (r *mutationResolver) OperatorPromptSubmit(ctx context.Context, input OperatorPromptSubmitInput) (*OperatorPromptSubmitResult, error) {
-	if r.WorkingDir == "" {
+	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
 	if strings.TrimSpace(input.Prompt) == "" {
@@ -280,7 +280,7 @@ func (r *mutationResolver) OperatorPromptSubmit(ctx context.Context, input Opera
 		return nil, fmt.Errorf("operator-prompts: idempotency cache not configured")
 	}
 
-	store := r.beadStore()
+	store := r.beadStore(ctx)
 	if id, ok := cache.Lookup(input.IdempotencyKey); ok {
 		existing, err := store.Get(id)
 		if err == nil {
@@ -404,7 +404,7 @@ func (r *mutationResolver) OperatorPromptApprove(ctx context.Context, id string)
 		return nil, errAutoApproveDenied
 	}
 
-	store := r.beadStore()
+	store := r.beadStore(ctx)
 	existing, err := store.Get(id)
 	if err != nil {
 		return nil, err
@@ -449,7 +449,7 @@ func (r *mutationResolver) OperatorPromptCancel(ctx context.Context, id string) 
 		return nil, err
 	}
 
-	store := r.beadStore()
+	store := r.beadStore(ctx)
 	existing, err := store.Get(id)
 	if err != nil {
 		return nil, err
@@ -487,7 +487,7 @@ func (r *mutationResolver) OperatorPromptCancel(ctx context.Context, id string) 
 // the CSRF token check against the configured store, and returns the
 // classified identity.
 func (r *mutationResolver) requireOperatorPromptCSRF(ctx context.Context) (*http.Request, operatorPromptIdentityInfo, error) {
-	if r.WorkingDir == "" {
+	if r.workingDir(ctx) == "" {
 		return nil, operatorPromptIdentityInfo{}, fmt.Errorf("working directory not configured")
 	}
 	httpReq := httpRequestFromContext(ctx)

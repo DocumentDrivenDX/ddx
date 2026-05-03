@@ -9,9 +9,10 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
 
-// beadStore returns a bead.Store rooted at the resolver's working directory.
-func (r *mutationResolver) beadStore() *bead.Store {
-	return bead.NewStore(filepath.Join(r.WorkingDir, ".ddx"))
+// beadStore returns a bead.Store rooted at the per-request working directory
+// (from ctx via WithWorkingDir, falling back to r.WorkingDir).
+func (r *mutationResolver) beadStore(ctx context.Context) *bead.Store {
+	return bead.NewStore(filepath.Join(r.workingDir(ctx), ".ddx"))
 }
 
 // beadModelFromBead converts a bead.Bead to the GraphQL Bead model.
@@ -66,7 +67,7 @@ func beadModelFromBead(b *bead.Bead) *Bead {
 
 // BeadCreate is the resolver for the beadCreate mutation.
 func (r *mutationResolver) BeadCreate(ctx context.Context, input BeadInput) (*Bead, error) {
-	if r.WorkingDir == "" {
+	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
 	if input.Title == "" {
@@ -101,7 +102,7 @@ func (r *mutationResolver) BeadCreate(ctx context.Context, input BeadInput) (*Be
 		b.Notes = *input.Notes
 	}
 
-	store := r.beadStore()
+	store := r.beadStore(ctx)
 	if err := store.Create(b); err != nil {
 		return nil, err
 	}
@@ -110,11 +111,11 @@ func (r *mutationResolver) BeadCreate(ctx context.Context, input BeadInput) (*Be
 
 // BeadUpdate is the resolver for the beadUpdate mutation.
 func (r *mutationResolver) BeadUpdate(ctx context.Context, id string, input BeadUpdateInput) (*Bead, error) {
-	if r.WorkingDir == "" {
+	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
 
-	store := r.beadStore()
+	store := r.beadStore(ctx)
 	err := store.Update(id, func(b *bead.Bead) {
 		if input.Title != nil {
 			b.Title = *input.Title
@@ -157,11 +158,11 @@ func (r *mutationResolver) BeadUpdate(ctx context.Context, id string, input Bead
 
 // BeadClaim is the resolver for the beadClaim mutation.
 func (r *mutationResolver) BeadClaim(ctx context.Context, id string, assignee string) (*Bead, error) {
-	if r.WorkingDir == "" {
+	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
 
-	store := r.beadStore()
+	store := r.beadStore(ctx)
 	if err := store.Claim(id, assignee); err != nil {
 		return nil, err
 	}
@@ -175,11 +176,11 @@ func (r *mutationResolver) BeadClaim(ctx context.Context, id string, assignee st
 
 // BeadUnclaim is the resolver for the beadUnclaim mutation.
 func (r *mutationResolver) BeadUnclaim(ctx context.Context, id string) (*Bead, error) {
-	if r.WorkingDir == "" {
+	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
 
-	store := r.beadStore()
+	store := r.beadStore(ctx)
 	if err := store.Unclaim(id); err != nil {
 		return nil, err
 	}
@@ -193,11 +194,11 @@ func (r *mutationResolver) BeadUnclaim(ctx context.Context, id string) (*Bead, e
 
 // BeadReopen is the resolver for the beadReopen mutation.
 func (r *mutationResolver) BeadReopen(ctx context.Context, id string) (*Bead, error) {
-	if r.WorkingDir == "" {
+	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
 
-	store := r.beadStore()
+	store := r.beadStore(ctx)
 	err := store.Update(id, func(b *bead.Bead) {
 		b.Status = bead.StatusOpen
 		b.Owner = ""

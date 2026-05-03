@@ -65,17 +65,17 @@ func resetHarnessRateLimitCache() {
 // exposes token-level quota headers; null otherwise (FEAT-014 no-fabrication).
 func (r *queryResolver) ProviderStatuses(ctx context.Context) ([]*ProviderStatus, error) {
 	now := time.Now().UTC()
-	entries := r.sessionIndexEntries()
+	entries := r.sessionIndexEntries(ctx)
 
-	if rows := cachedProviderRows(r.WorkingDir); len(rows) > 0 {
-		refreshProviderStatuses(r.WorkingDir)
+	if rows := cachedProviderRows(r.workingDir(ctx)); len(rows) > 0 {
+		refreshProviderStatuses(r.workingDir(ctx))
 		return providerRowsWithUsage(rows, entries, now), nil
 	}
 
-	if snapshots, ok, err := agent.ConfiguredProviderSnapshots(r.WorkingDir); err == nil && ok {
+	if snapshots, ok, err := agent.ConfiguredProviderSnapshots(r.workingDir(ctx)); err == nil && ok {
 		rows := providerStatusesFromInfos(snapshots, entries, now)
-		storeProviderRows(r.WorkingDir, rows)
-		refreshProviderStatuses(r.WorkingDir)
+		storeProviderRows(r.workingDir(ctx), rows)
+		refreshProviderStatuses(r.workingDir(ctx))
 		return rows, nil
 	} else if err != nil {
 		return nil, fmt.Errorf("loading provider snapshots: %w", err)
@@ -85,13 +85,13 @@ func (r *queryResolver) ProviderStatuses(ctx context.Context) ([]*ProviderStatus
 	// UI can still first-paint harness rows even if provider probing is slow.
 	probeCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
 	defer cancel()
-	providers, err := liveProviderInfos(probeCtx, r.WorkingDir)
+	providers, err := liveProviderInfos(probeCtx, r.workingDir(ctx))
 	if err != nil {
-		refreshProviderStatuses(r.WorkingDir)
+		refreshProviderStatuses(r.workingDir(ctx))
 		return []*ProviderStatus{}, nil
 	}
 	rows := providerStatusesFromInfos(providers, entries, now)
-	storeProviderRows(r.WorkingDir, rows)
+	storeProviderRows(r.workingDir(ctx), rows)
 	return rows, nil
 }
 
@@ -110,7 +110,7 @@ func (r *queryResolver) HarnessStatuses(ctx context.Context) ([]*ProviderStatus,
 	}
 
 	now := time.Now().UTC()
-	entries := r.sessionIndexEntries()
+	entries := r.sessionIndexEntries(ctx)
 	lastChecked := now.Format(time.RFC3339)
 
 	results := make([]*ProviderStatus, 0, len(infos))
@@ -140,7 +140,7 @@ func (r *queryResolver) HarnessStatuses(ctx context.Context) ([]*ProviderStatus,
 
 // DefaultRouteStatus is the resolver for the defaultRouteStatus field.
 func (r *queryResolver) DefaultRouteStatus(ctx context.Context) (*DefaultRouteStatus, error) {
-	svc, err := agent.NewServiceFromWorkDir(r.WorkingDir)
+	svc, err := agent.NewServiceFromWorkDir(r.workingDir(ctx))
 	if err != nil {
 		return nil, nil //nolint:nilerr
 	}
@@ -172,7 +172,7 @@ func (r *queryResolver) ProviderTrend(ctx context.Context, name string, windowDa
 		return nil, fmt.Errorf("windowDays must be 7 or 30")
 	}
 	now := time.Now().UTC()
-	entries := r.sessionIndexEntries()
+	entries := r.sessionIndexEntries(ctx)
 
 	kind, detected := detectProviderOrHarness(ctx, r, name)
 	bucketKind := agent.MatchProvider
@@ -237,7 +237,7 @@ func detectProviderOrHarness(ctx context.Context, r *queryResolver, name string)
 			}
 		}
 	}
-	if snapshots, ok, _ := agent.ConfiguredProviderSnapshots(r.WorkingDir); ok {
+	if snapshots, ok, _ := agent.ConfiguredProviderSnapshots(r.workingDir(ctx)); ok {
 		for _, p := range snapshots {
 			if strings.EqualFold(p.Name, name) {
 				q := quotaFromProviderInfo(p)
@@ -245,7 +245,7 @@ func detectProviderOrHarness(ctx context.Context, r *queryResolver, name string)
 			}
 		}
 	}
-	if providers, err := liveProviderInfos(ctx, r.WorkingDir); err == nil {
+	if providers, err := liveProviderInfos(ctx, r.workingDir(ctx)); err == nil {
 		for _, p := range providers {
 			if strings.EqualFold(p.Name, name) {
 				q := quotaFromProviderInfo(p)
@@ -465,8 +465,8 @@ func cloneProviderRows(rows []*ProviderStatus) []*ProviderStatus {
 
 // sessionIndexEntries reads the project's session index for all available
 // shards. Errors are swallowed — a missing index is a normal "no data" state.
-func (r *queryResolver) sessionIndexEntries() []agent.SessionIndexEntry {
-	logDir := agent.SessionLogDirForWorkDir(r.WorkingDir)
+func (r *queryResolver) sessionIndexEntries(ctx context.Context) []agent.SessionIndexEntry {
+	logDir := agent.SessionLogDirForWorkDir(r.workingDir(ctx))
 	if logDir == "" {
 		return nil
 	}

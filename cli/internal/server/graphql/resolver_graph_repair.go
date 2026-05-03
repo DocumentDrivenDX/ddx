@@ -22,45 +22,45 @@ var repairRaceHook func()
 // The mutation refuses repairs whose target file changed during the call
 // (concurrent repair) or whose target path escapes the project root.
 func (r *mutationResolver) GraphRepairIssue(ctx context.Context, issueID string, strategy RepairStrategy) (*GraphRepairResult, error) {
-	if r.WorkingDir == "" {
+	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
 	if !strategy.IsValid() {
-		return graphRepairFail(r.WorkingDir, fmt.Sprintf("unsupported repair strategy %q", strategy)), nil
+		return graphRepairFail(r.workingDir(ctx), fmt.Sprintf("unsupported repair strategy %q", strategy)), nil
 	}
 
-	graph, err := docgraph.BuildGraphWithConfig(r.WorkingDir)
+	graph, err := docgraph.BuildGraphWithConfig(r.workingDir(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("building document graph: %w", err)
 	}
 
 	issue, ok := findIssueByStableID(graph.Issues, issueID)
 	if !ok {
-		return graphRepairFail(r.WorkingDir, "issue not found; the graph may have changed"), nil
+		return graphRepairFail(r.workingDir(ctx), "issue not found; the graph may have changed"), nil
 	}
 
 	if !strategySupportsKind(strategy, issue.Kind) {
-		return graphRepairFail(r.WorkingDir, fmt.Sprintf("strategy %s cannot repair issue kind %q", strategy, issue.Kind)), nil
+		return graphRepairFail(r.workingDir(ctx), fmt.Sprintf("strategy %s cannot repair issue kind %q", strategy, issue.Kind)), nil
 	}
 
 	switch strategy {
 	case RepairStrategyRemoveMissingDep:
 		if err := repairRemoveMissingDep(graph, issue); err != nil {
-			return graphRepairFail(r.WorkingDir, err.Error()), nil
+			return graphRepairFail(r.workingDir(ctx), err.Error()), nil
 		}
 	case RepairStrategyApplySuggestedID:
 		if err := repairApplySuggestedID(graph, issue); err != nil {
-			return graphRepairFail(r.WorkingDir, err.Error()), nil
+			return graphRepairFail(r.workingDir(ctx), err.Error()), nil
 		}
 	case RepairStrategyCleanPathMap:
-		if err := repairCleanPathMap(r.WorkingDir, issue); err != nil {
-			return graphRepairFail(r.WorkingDir, err.Error()), nil
+		if err := repairCleanPathMap(r.workingDir(ctx), issue); err != nil {
+			return graphRepairFail(r.workingDir(ctx), err.Error()), nil
 		}
 	default:
-		return graphRepairFail(r.WorkingDir, fmt.Sprintf("unsupported repair strategy %q", strategy)), nil
+		return graphRepairFail(r.workingDir(ctx), fmt.Sprintf("unsupported repair strategy %q", strategy)), nil
 	}
 
-	rebuilt, err := docgraph.BuildGraphWithConfig(r.WorkingDir)
+	rebuilt, err := docgraph.BuildGraphWithConfig(r.workingDir(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("rebuilding graph after repair: %w", err)
 	}

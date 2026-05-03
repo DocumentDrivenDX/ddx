@@ -11,6 +11,12 @@ import (
 // NewResolver constructs a Resolver with mandatory fields validated.
 // Returns an error if state is nil or workingDir is empty, ensuring callers
 // cannot construct a resolver that would panic on first use.
+//
+// The workingDir argument acts as the FALLBACK default for resolver methods
+// that do not receive a per-request WorkingDir via context. LAYER 2 of the
+// GraphQL multi-project fix (ddx-055e8d32) routes requests with their own
+// WorkingDir via WithWorkingDir/WorkingDirFromContext; the field stays as a
+// safety net so legacy call sites and helpers without ctx do not panic.
 func NewResolver(state StateProvider, workingDir string) (*Resolver, error) {
 	if state == nil {
 		return nil, fmt.Errorf("resolver: state provider is required")
@@ -22,6 +28,49 @@ func NewResolver(state StateProvider, workingDir string) (*Resolver, error) {
 		State:      state,
 		WorkingDir: workingDir,
 	}, nil
+}
+
+// workingDirKey is the context key used to thread a per-request WorkingDir
+// through GraphQL resolvers. LAYER 2 of the GraphQL multi-project fix
+// (ddx-055e8d32) lets the scoped /api/projects/{project}/graphql route inject
+// the resolved project's WorkingDir into the request context so the
+// singleton resolver constructed at server start can serve any project
+// without per-request reconstruction.
+type workingDirKey struct{}
+
+// WithWorkingDir returns ctx with workingDir attached for downstream resolver
+// access. The server's GraphQL HTTP handler MUST call this before delegating
+// to the gqlgen handler so resolvers read the request-scoped project root
+// rather than the resolver struct's fallback default.
+func WithWorkingDir(ctx context.Context, workingDir string) context.Context {
+	if workingDir == "" {
+		return ctx
+	}
+	return context.WithValue(ctx, workingDirKey{}, workingDir)
+}
+
+// WorkingDirFromContext returns the WorkingDir previously attached via
+// WithWorkingDir, or the empty string if none was set. Callers should prefer
+// (*Resolver).workingDir(ctx) which falls back to the resolver's default.
+func WorkingDirFromContext(ctx context.Context) string {
+	if ctx == nil {
+		return ""
+	}
+	if v, ok := ctx.Value(workingDirKey{}).(string); ok {
+		return v
+	}
+	return ""
+}
+
+// workingDir returns the request-scoped WorkingDir (via WithWorkingDir) when
+// present, falling back to r.WorkingDir. All resolver methods with access to
+// ctx should call this rather than reading r.WorkingDir directly so the same
+// resolver instance can serve multiple projects safely.
+func (r *Resolver) workingDir(ctx context.Context) string {
+	if dir := WorkingDirFromContext(ctx); dir != "" {
+		return dir
+	}
+	return r.WorkingDir
 }
 
 // BeadLifecycleSubscriber can subscribe to live lifecycle events from a bead store.

@@ -35,7 +35,7 @@ func newStubExecLogProvider(stdout, stderr string) *stubExecLogProvider {
 	return s
 }
 
-func (s *stubExecLogProvider) GetExecLog(_ string) (string, string, error) {
+func (s *stubExecLogProvider) GetExecLog(_, _ string) (string, string, error) {
 	select {
 	case <-s.readyCh:
 		return s.stdout, s.stderr, nil

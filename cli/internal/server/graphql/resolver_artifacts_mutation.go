@@ -15,7 +15,7 @@ import (
 // typed GraphQL error (extension code NO_GENERATOR_METADATA) so the UI can
 // keep its Regenerate button disabled with an explanatory tooltip.
 func (r *mutationResolver) ArtifactRegenerate(ctx context.Context, artifactID string) (*ArtifactRegenerateResult, error) {
-	if r.WorkingDir == "" {
+	if r.workingDir(ctx) == "" {
 		return nil, &gqlerror.Error{
 			Message:    "working directory not configured",
 			Extensions: map[string]any{"code": "NOT_CONFIGURED"},
@@ -54,7 +54,7 @@ func (r *mutationResolver) ArtifactRegenerate(ctx context.Context, artifactID st
 		Status:        queuedPlaceholderState,
 		CreatedAt:     time.Now().UTC(),
 	}
-	if err := writeJSONRecord(r.WorkingDir, "artifact-regenerations", runID, record); err != nil {
+	if err := writeJSONRecord(r.workingDir(ctx), "artifact-regenerations", runID, record); err != nil {
 		return nil, err
 	}
 
@@ -86,6 +86,10 @@ func findArtifactByID(r *Resolver, id string) (*Artifact, error) {
 			}
 		}
 	}
+	// findArtifactByID has no ctx; fall back to the resolver's startup
+	// WorkingDir for the unscoped no-State case. The State-based path above
+	// remains the primary lookup, so this only matters when no projects
+	// are registered.
 	if len(roots) == 0 && r.WorkingDir != "" {
 		roots = append(roots, r.WorkingDir)
 	}

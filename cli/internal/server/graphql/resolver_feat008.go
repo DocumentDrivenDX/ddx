@@ -34,10 +34,10 @@ var pluginActionMu sync.Mutex
 
 // BeadClose is the resolver for the beadClose field.
 func (r *mutationResolver) BeadClose(ctx context.Context, id string, reason *string) (*Bead, error) {
-	if r.WorkingDir == "" {
+	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
-	store := r.beadStore()
+	store := r.beadStore(ctx)
 	if err := store.Close(id); err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func (r *mutationResolver) WorkerDispatch(ctx context.Context, kind string, proj
 		if r.Actions == nil {
 			return nil, fmt.Errorf("execute-loop worker dispatcher is not configured")
 		}
-		return r.Actions.DispatchWorker(ctx, kind, r.projectRoot(projectID), args)
+		return r.Actions.DispatchWorker(ctx, kind, r.projectRoot(ctx, projectID), args)
 	case "realign-specs", "run-checks":
 		return &WorkerDispatchResult{
 			ID:    "queued-worker-" + slug(kind),
@@ -88,7 +88,7 @@ func (r *mutationResolver) StartWorker(ctx context.Context, input StartWorkerInp
 	if r.Actions == nil {
 		return nil, fmt.Errorf("execute-loop worker dispatcher is not configured")
 	}
-	projectRoot := r.projectRoot(input.ProjectID)
+	projectRoot := r.projectRoot(ctx, input.ProjectID)
 
 	overrides := config.CLIOverrides{}
 	if input.Harness != nil {
@@ -150,11 +150,12 @@ func (r *mutationResolver) PluginDispatch(ctx context.Context, name string, acti
 	if r.Actions == nil {
 		return nil, fmt.Errorf("plugin dispatcher is not configured")
 	}
-	result, err := r.Actions.DispatchPlugin(ctx, r.WorkingDir, name, action, scope)
+	wd := r.workingDir(ctx)
+	result, err := r.Actions.DispatchPlugin(ctx, wd, name, action, scope)
 	if err != nil {
 		return nil, err
 	}
-	if err := writeJSONRecord(r.WorkingDir, "plugin-dispatches", result.ID, pluginDispatchRecord{
+	if err := writeJSONRecord(wd, "plugin-dispatches", result.ID, pluginDispatchRecord{
 		ID:        result.ID,
 		Name:      name,
 		Action:    action,
@@ -202,7 +203,7 @@ func (r *mutationResolver) ComparisonDispatch(ctx context.Context, arms []*Compa
 		Arms:      arms,
 		CreatedAt: time.Now().UTC(),
 	}
-	if err := writeJSONRecord(r.WorkingDir, "comparisons", id, record); err != nil {
+	if err := writeJSONRecord(r.workingDir(ctx), "comparisons", id, record); err != nil {
 		return nil, err
 	}
 	return &ComparisonDispatchResult{
@@ -214,7 +215,7 @@ func (r *mutationResolver) ComparisonDispatch(ctx context.Context, arms []*Compa
 
 // PersonaBind is the resolver for the personaBind field.
 func (r *mutationResolver) PersonaBind(ctx context.Context, role string, personaName string, projectID string) (*PersonaBindResult, error) {
-	root := r.projectRoot(projectID)
+	root := r.projectRoot(ctx, projectID)
 	configPath := filepath.Join(root, ".ddx", "config.yaml")
 	if err := os.MkdirAll(filepath.Dir(configPath), 0o755); err != nil {
 		return nil, err
@@ -228,7 +229,7 @@ func (r *mutationResolver) PersonaBind(ctx context.Context, role string, persona
 
 // PersonaCreate is the resolver for the personaCreate field.
 func (r *mutationResolver) PersonaCreate(ctx context.Context, name string, body string, projectID string) (*Persona, error) {
-	writer := persona.NewProjectPersonaWriter(r.projectRoot(projectID))
+	writer := persona.NewProjectPersonaWriter(r.projectRoot(ctx, projectID))
 	p, err := writer.Create(name, body)
 	if err != nil {
 		return nil, personaGraphQLError(err)
@@ -238,7 +239,7 @@ func (r *mutationResolver) PersonaCreate(ctx context.Context, name string, body 
 
 // PersonaUpdate is the resolver for the personaUpdate field.
 func (r *mutationResolver) PersonaUpdate(ctx context.Context, name string, body string, projectID string) (*Persona, error) {
-	writer := persona.NewProjectPersonaWriter(r.projectRoot(projectID))
+	writer := persona.NewProjectPersonaWriter(r.projectRoot(ctx, projectID))
 	p, err := writer.Update(name, body)
 	if err != nil {
 		return nil, personaGraphQLError(err)
@@ -248,7 +249,7 @@ func (r *mutationResolver) PersonaUpdate(ctx context.Context, name string, body 
 
 // PersonaDelete is the resolver for the personaDelete field.
 func (r *mutationResolver) PersonaDelete(ctx context.Context, name string, projectID string) (*PersonaDeleteResult, error) {
-	writer := persona.NewProjectPersonaWriter(r.projectRoot(projectID))
+	writer := persona.NewProjectPersonaWriter(r.projectRoot(ctx, projectID))
 	if err := writer.Delete(name); err != nil {
 		return nil, personaGraphQLError(err)
 	}
@@ -257,7 +258,7 @@ func (r *mutationResolver) PersonaDelete(ctx context.Context, name string, proje
 
 // PersonaFork is the resolver for the personaFork field.
 func (r *mutationResolver) PersonaFork(ctx context.Context, libraryName string, newName *string, projectID string) (*Persona, error) {
-	writer := persona.NewProjectPersonaWriter(r.projectRoot(projectID))
+	writer := persona.NewProjectPersonaWriter(r.projectRoot(ctx, projectID))
 	target := ""
 	if newName != nil {
 		target = *newName
@@ -285,7 +286,7 @@ func personaGraphQLError(err error) error {
 
 // QueueSummary is the resolver for the queueSummary field.
 func (r *queryResolver) QueueSummary(ctx context.Context, projectID string) (*QueueSummary, error) {
-	store := bead.NewStore(filepath.Join(r.projectRoot(projectID), ".ddx"))
+	store := bead.NewStore(filepath.Join(r.projectRoot(ctx, projectID), ".ddx"))
 	ready, err := store.Ready()
 	if err != nil {
 		return nil, err
@@ -337,7 +338,7 @@ func (r *queryResolver) QueueAndWorkersSummary(ctx context.Context, projectID st
 	// Surface the optional workers.max_count cap so the UI can pre-emptively
 	// disable the `+ Add worker` affordance rather than relying on a server
 	// error from workerDispatch (ddx-b6cf025c review finding).
-	if cfg, err := config.LoadWithWorkingDir(r.projectRoot(projectID)); err == nil && cfg != nil && cfg.Workers != nil && cfg.Workers.MaxCount != nil {
+	if cfg, err := config.LoadWithWorkingDir(r.projectRoot(ctx, projectID)); err == nil && cfg != nil && cfg.Workers != nil && cfg.Workers.MaxCount != nil {
 		v := *cfg.Workers.MaxCount
 		out.MaxCount = &v
 	}
@@ -346,7 +347,7 @@ func (r *queryResolver) QueueAndWorkersSummary(ctx context.Context, projectID st
 
 // EfficacyRows is the resolver for the efficacyRows field.
 func (r *queryResolver) EfficacyRows(ctx context.Context, since *string, until *string, projectID *string) ([]*EfficacyRow, error) {
-	snap, err := r.efficacySnapshot(since, until, projectID)
+	snap, err := r.efficacySnapshot(ctx, since, until, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -355,7 +356,7 @@ func (r *queryResolver) EfficacyRows(ctx context.Context, since *string, until *
 
 // EfficacyAttempts is the resolver for the efficacyAttempts field.
 func (r *queryResolver) EfficacyAttempts(ctx context.Context, rowKey string, since *string, until *string, projectID *string) (*EfficacyAttempts, error) {
-	snap, err := r.efficacySnapshot(since, until, projectID)
+	snap, err := r.efficacySnapshot(ctx, since, until, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -365,7 +366,7 @@ func (r *queryResolver) EfficacyAttempts(ctx context.Context, rowKey string, sin
 
 // Comparisons is the resolver for the comparisons field.
 func (r *queryResolver) Comparisons(ctx context.Context) ([]*ComparisonRecord, error) {
-	records, err := readComparisonRecords(r.WorkingDir)
+	records, err := readComparisonRecords(r.workingDir(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -382,12 +383,12 @@ func (r *queryResolver) Comparisons(ctx context.Context) ([]*ComparisonRecord, e
 
 // PluginsList is the resolver for the pluginsList field.
 func (r *queryResolver) PluginsList(ctx context.Context) ([]*PluginInfo, error) {
-	return pluginCatalog(r.WorkingDir)
+	return pluginCatalog(r.workingDir(ctx))
 }
 
 // PluginDetail is the resolver for the pluginDetail field.
 func (r *queryResolver) PluginDetail(ctx context.Context, name string) (*PluginInfo, error) {
-	plugins, err := pluginCatalog(r.WorkingDir)
+	plugins, err := pluginCatalog(r.workingDir(ctx))
 	if err != nil {
 		return nil, err
 	}
@@ -401,7 +402,7 @@ func (r *queryResolver) PluginDetail(ctx context.Context, name string) (*PluginI
 
 // ProjectBindings is the resolver for the projectBindings field.
 func (r *queryResolver) ProjectBindings(ctx context.Context, projectID string) (string, error) {
-	cfg, err := config.LoadWithWorkingDir(r.projectRoot(projectID))
+	cfg, err := config.LoadWithWorkingDir(r.projectRoot(ctx, projectID))
 	if err != nil {
 		return "{}", nil
 	}
@@ -425,7 +426,7 @@ func (r *queryResolver) PaletteSearch(ctx context.Context, query string) (*Palet
 		return out, nil
 	}
 
-	matches := collectPaletteMatches(q, r.WorkingDir)
+	matches := collectPaletteMatches(q, r.workingDir(ctx))
 	sort.SliceStable(matches, func(i, j int) bool {
 		if matches[i].score != matches[j].score {
 			return matches[i].score < matches[j].score
@@ -450,13 +451,13 @@ func (r *queryResolver) PaletteSearch(ctx context.Context, query string) (*Palet
 	return out, nil
 }
 
-func (r *Resolver) projectRoot(projectID string) string {
+func (r *Resolver) projectRoot(ctx context.Context, projectID string) string {
 	if r.State != nil {
 		if proj, ok := r.State.GetProjectSnapshotByID(projectID); ok && proj.Path != "" {
 			return proj.Path
 		}
 	}
-	return r.WorkingDir
+	return r.workingDir(ctx)
 }
 
 type pluginDispatchRecord struct {
@@ -801,10 +802,10 @@ var sessionEfficacyCache struct {
 	byQuery map[string]sessionEfficacyCacheEntry
 }
 
-func (r *queryResolver) efficacySnapshot(since, until, projectID *string) (efficacySnapshot, error) {
-	projectRoot := r.WorkingDir
+func (r *queryResolver) efficacySnapshot(ctx context.Context, since, until, projectID *string) (efficacySnapshot, error) {
+	projectRoot := r.workingDir(ctx)
 	if projectID != nil && strings.TrimSpace(*projectID) != "" {
-		projectRoot = r.projectRoot(strings.TrimSpace(*projectID))
+		projectRoot = r.projectRoot(ctx, strings.TrimSpace(*projectID))
 	}
 	startedAfter, err := parseOptionalEfficacyTime("since", since)
 	if err != nil {

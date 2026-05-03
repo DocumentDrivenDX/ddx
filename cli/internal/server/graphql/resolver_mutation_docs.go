@@ -11,9 +11,11 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 )
 
-// libraryPath resolves the configured library path relative to the resolver's working dir.
-func (r *mutationResolver) libraryPath() (string, error) {
-	cfg, err := config.LoadWithWorkingDir(r.WorkingDir)
+// libraryPath resolves the configured library path relative to the per-request
+// working dir (from ctx via WithWorkingDir, falling back to r.WorkingDir).
+func (r *mutationResolver) libraryPath(ctx context.Context) (string, error) {
+	wd := r.workingDir(ctx)
+	cfg, err := config.LoadWithWorkingDir(wd)
 	if err != nil {
 		return "", fmt.Errorf("loading config: %w", err)
 	}
@@ -22,7 +24,7 @@ func (r *mutationResolver) libraryPath() (string, error) {
 	}
 	p := cfg.Library.Path
 	if !filepath.IsAbs(p) {
-		p = filepath.Join(r.WorkingDir, p)
+		p = filepath.Join(wd, p)
 	}
 	if _, err := os.Stat(p); err != nil {
 		return "", fmt.Errorf("library path not found: %w", err)
@@ -32,7 +34,7 @@ func (r *mutationResolver) libraryPath() (string, error) {
 
 // DocumentWrite is the resolver for the documentWrite mutation.
 func (r *mutationResolver) DocumentWrite(ctx context.Context, path string, content string) (*Document, error) {
-	if r.WorkingDir == "" {
+	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
 	if path == "" {
@@ -44,7 +46,7 @@ func (r *mutationResolver) DocumentWrite(ctx context.Context, path string, conte
 		return nil, fmt.Errorf("invalid path: must not contain ..")
 	}
 
-	libPath, err := r.libraryPath()
+	libPath, err := r.libraryPath(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -58,7 +60,7 @@ func (r *mutationResolver) DocumentWrite(ctx context.Context, path string, conte
 	}
 
 	// Rebuild graph to pick up the newly written file and return the document.
-	graph, err := docgraph.BuildGraphWithConfig(r.WorkingDir)
+	graph, err := docgraph.BuildGraphWithConfig(r.workingDir(ctx))
 	if err != nil {
 		// File was written; return a minimal document rather than failing.
 		return &Document{
