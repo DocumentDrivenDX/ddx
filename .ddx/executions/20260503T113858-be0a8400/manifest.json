@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260503T113858-be0a8400",
+  "bead_id": "ddx-6db5d14a",
+  "base_rev": "e57c42e82b6abfda52fba673f548e593aa542f91",
+  "created_at": "2026-05-03T11:39:00.553837649Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6db5d14a",
+    "title": "C2: try.Attempt function shell wrapping ExecuteBeadWithConfig + LandBeadResult",
+    "description": "Create cli/internal/agent/try/attempt.go that wraps current agent.ExecuteBeadWithConfig + agent.LandBeadResult + optional agent.DefaultBeadReviewer. Returns try.Outcome via the C1 adapter. Loop continues using old executor; this shell is unused at end of C2 (caller migration in C3+).",
+    "acceptance": "1. cli/internal/agent/try/attempt.go exposes try.Attempt(ctx, store, beadID, opts) (Outcome, error). 2. Internally calls existing ExecuteBeadWithConfig + LandBeadResult + DefaultBeadReviewer. 3. Returns Outcome via ToOutcome adapter (C1). 4. Unit test TestAttempt_WrapsLegacyExecutor with stubbed executor. 5. cd cli \u0026\u0026 go test ./internal/agent/try/ green. 6. No production callers yet.",
+    "parent": "ddx-5cb6e6cd",
+    "labels": [
+      "phase:2",
+      "refactor",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T11:38:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T11:38:58.896117975Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T113858-be0a8400",
+    "prompt": ".ddx/executions/20260503T113858-be0a8400/prompt.md",
+    "manifest": ".ddx/executions/20260503T113858-be0a8400/manifest.json",
+    "result": ".ddx/executions/20260503T113858-be0a8400/result.json",
+    "checks": ".ddx/executions/20260503T113858-be0a8400/checks.json",
+    "usage": ".ddx/executions/20260503T113858-be0a8400/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6db5d14a-20260503T113858-be0a8400"
+  },
+  "prompt_sha": "d15b2488394927bac1bbefb8d1c016296c7e69869d1ea04e17e4c4ca1a1baffb"
+}
