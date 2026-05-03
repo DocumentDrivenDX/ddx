@@ -829,6 +829,7 @@ func (s *Server) routes() {
 	legacy("POST /api/beads/{id}/claim", s.handleClaimBead)
 	legacy("POST /api/beads/{id}/unclaim", s.handleUnclaimBead)
 	legacy("POST /api/beads/{id}/reopen", s.handleReopenBead)
+	legacy("POST /api/beads/{id}/cancel", s.handleCancelBead)
 	legacy("POST /api/beads/{id}/deps", s.handleBeadDeps)
 
 	// Bead mutations — project-scoped (FEAT-002: canonical)
@@ -837,6 +838,7 @@ func (s *Server) routes() {
 	scoped("POST /api/projects/{project}/beads/{id}/claim", s.handleClaimBead)
 	scoped("POST /api/projects/{project}/beads/{id}/unclaim", s.handleUnclaimBead)
 	scoped("POST /api/projects/{project}/beads/{id}/reopen", s.handleReopenBead)
+	scoped("POST /api/projects/{project}/beads/{id}/cancel", s.handleCancelBead)
 	scoped("POST /api/projects/{project}/beads/{id}/deps", s.handleBeadDeps)
 
 	// Agent model/catalog/capabilities — legacy + project-scoped (FEAT-006)
@@ -1792,6 +1794,31 @@ func (s *Server) handleReopenBead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": "reopened"})
+}
+
+// handleCancelBead writes Extra[cancel-requested]=true on the bead. ADR-022
+// §Cancel SLA: workers running an attempt for this bead poll the marker every
+// CancelPollInterval (default 10s) and abort at the next safe point with
+// reason "operator_cancel". Idempotent: a second cancel after the worker has
+// honored the first is a silent no-op (the worker writes
+// cancel-honored:true alongside the marker).
+func (s *Server) handleCancelBead(w http.ResponseWriter, r *http.Request) {
+	if !isTrusted(r) {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "write endpoints are localhost-only"})
+		return
+	}
+	id := r.PathValue("id")
+	if id == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "id is required"})
+		return
+	}
+
+	store := s.beadStoreForRequest(r)
+	if _, err := store.RequestCancel(id); err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"id": id, "status": "cancel-requested"})
 }
 
 func (s *Server) handleBeadDeps(w http.ResponseWriter, r *http.Request) {

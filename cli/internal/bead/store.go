@@ -788,6 +788,71 @@ func capFieldBytes(s string) string {
 	return s[:head] + marker + s[len(s)-tail:]
 }
 
+// Cancel-marker keys on Bead.Extra. ADR-022 §Cancel SLA: an operator-initiated
+// cancel writes cancel-requested:true; the worker that honors the cancel writes
+// cancel-honored:true alongside it.
+const (
+	ExtraCancelRequested = "cancel-requested"
+	ExtraCancelHonored   = "cancel-honored"
+)
+
+// RequestCancel writes Extra[cancel-requested]=true on the bead. Idempotent:
+// if cancel-honored is already set the call is a silent no-op (the prior cancel
+// was already consumed). Returns true when the marker is now set on the bead
+// (either by this call or a prior one).
+func (s *Store) RequestCancel(id string) (bool, error) {
+	var set bool
+	err := s.Update(id, func(b *Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		if isExtraTrue(b.Extra[ExtraCancelHonored]) {
+			set = isExtraTrue(b.Extra[ExtraCancelRequested])
+			return
+		}
+		b.Extra[ExtraCancelRequested] = true
+		set = true
+	})
+	return set, err
+}
+
+// IsCancelRequested reports whether the bead carries an unconsumed cancel
+// marker (cancel-requested:true and cancel-honored not yet set).
+func (s *Store) IsCancelRequested(id string) (bool, error) {
+	b, err := s.Get(id)
+	if err != nil {
+		return false, err
+	}
+	if b == nil || b.Extra == nil {
+		return false, nil
+	}
+	if isExtraTrue(b.Extra[ExtraCancelHonored]) {
+		return false, nil
+	}
+	return isExtraTrue(b.Extra[ExtraCancelRequested]), nil
+}
+
+// MarkCancelHonored sets Extra[cancel-honored]=true. Called by the worker once
+// it has aborted at the next safe point in response to a cancel request.
+func (s *Store) MarkCancelHonored(id string) error {
+	return s.Update(id, func(b *Bead) {
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		b.Extra[ExtraCancelHonored] = true
+	})
+}
+
+func isExtraTrue(v any) bool {
+	switch x := v.(type) {
+	case bool:
+		return x
+	case string:
+		return x == "true"
+	}
+	return false
+}
+
 func (s *Store) AppendEvent(id string, event BeadEvent) error {
 	if event.CreatedAt.IsZero() {
 		event.CreatedAt = time.Now().UTC()

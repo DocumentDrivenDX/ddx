@@ -644,20 +644,26 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				Effort:            spec.Effort,
 				OpaquePassthrough: spec.OpaquePassthrough,
 			})
+			beadStore := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
 			res, err := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, agent.ExecuteBeadRuntime{
-				BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+				BeadEvents: beadStore,
+				BeadCancel: beadStore,
 			}, gitOps)
 			if err != nil && res == nil {
 				return agent.ExecuteBeadReport{}, err
 			}
-			if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
+			// Preserve operator-cancel results as-is; the worker has already
+			// classified them (preserved / operator_cancel / preserved_needs_review)
+			// and overriding here would lose the cancel signal.
+			operatorCancel := res != nil && res.Reason == agent.OperatorCancelReason
+			if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 && !operatorCancel {
 				if landErr := evaluateGatesAndSubmit(projectRoot, res, gitOps, coordinator, landSafetyConfigFromConfig(projectRoot), log); landErr != nil && err == nil {
 					err = landErr
 				}
-			} else if res != nil && res.ResultRev == res.BaseRev {
+			} else if res != nil && res.ResultRev == res.BaseRev && !operatorCancel {
 				res.Outcome = "no-changes"
 				res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
-			} else if res != nil && res.ExitCode != 0 {
+			} else if res != nil && res.ExitCode != 0 && !operatorCancel {
 				res.Outcome = "preserved"
 				res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
 			}
