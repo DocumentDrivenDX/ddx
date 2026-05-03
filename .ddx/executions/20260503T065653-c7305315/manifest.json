@@ -1,0 +1,66 @@
+{
+  "attempt_id": "20260503T065653-c7305315",
+  "bead_id": "ddx-a418a1c1",
+  "base_rev": "2a93a458e6401b9268c44d7d7d1c92a8d9b9700b",
+  "created_at": "2026-05-03T06:56:54.807637644Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a418a1c1",
+    "title": "ADR-022 step 6: ddx agent doctor reads from server runtime registry; .ddx/workers/ fallback",
+    "description": "ddx agent doctor reads worker state from server's runtime registry when available; falls back to .ddx/workers/ when not. On-disk format stays as fallback for one alpha release lag. ~150 LOC.",
+    "acceptance": "1. ddx agent doctor calls server worker query when reachable; falls back when not.\n2. Output shows freshness + mirror_failures_count when reading from server.\n3. Output consistent across both modes.\n4. Tests: TestDoctor_ReadsFromServer_WhenAvailable, TestDoctor_FallsBackToOnDisk_WhenServerDown.\n5. cd cli \u0026\u0026 go test green; lefthook pre-commit passes.\n6. WIRED-IN + TRANSITIONS: integration test (TestDoctor_HandlesServerDownUpDown) sequences: server down → run doctor (fallback path) → server up → run doctor (server path) → server down again → run doctor (fallback again). Asserts each transition produces consistent output for the operator. Not just two static modes.",
+    "parent": "ddx-d7aca866",
+    "labels": [
+      "phase:2",
+      "area:cli",
+      "area:agent",
+      "kind:feature",
+      "adr:022"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T06:56:53Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4025192",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:54:49.692760696Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:55:33.456854243Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:56:17.002568032Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T06:56:53.253750973Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T065653-c7305315",
+    "prompt": ".ddx/executions/20260503T065653-c7305315/prompt.md",
+    "manifest": ".ddx/executions/20260503T065653-c7305315/manifest.json",
+    "result": ".ddx/executions/20260503T065653-c7305315/result.json",
+    "checks": ".ddx/executions/20260503T065653-c7305315/checks.json",
+    "usage": ".ddx/executions/20260503T065653-c7305315/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a418a1c1-20260503T065653-c7305315"
+  },
+  "prompt_sha": "697213d9b25154dcbff090027054c35a3e5ac6887400457bf41c350eecce5cdd"
+}
