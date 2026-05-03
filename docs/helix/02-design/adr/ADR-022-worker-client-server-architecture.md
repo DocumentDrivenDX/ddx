@@ -440,6 +440,96 @@ the worker state machine, bead store interaction, and evidence layout
 are all unchanged. Only the new server-side ingestion endpoint and its
 two tests are net-new.
 
+## Sequencing relative to in-flight work
+
+Rev 4 dramatically simplifies sequencing. The architecture is additive:
+the worker keeps working as it does today; server-side reporting is new
+machinery that sits alongside. There is no "freeze C5/C7/C9 until X"
+rule because nothing about the worker state machine changes.
+
+- **`ddx-29058e2a` (ExecuteLoopSpec unification)** — independent. Rev 4
+  does NOT make ExecuteLoopSpec a wire format. The bead remains valuable
+  as a worker-side struct unification (cobra → in-process flow) and
+  should land independently.
+- **`ddx-5cb6e6cd` C5/C7/C9 refactor children** — NOT FROZEN. Rev 4
+  doesn't reshape the worker state machine; refactor children proceed
+  independently. They may need minor adjustments (emit events to the
+  new server endpoint when registered) but no large rework.
+- **`ddx-dc157075` (stay-alive at commit `41cb762e`)** — already shipped
+  and preserved. Worker's autonomous behavior plus 30s poll-interval
+  default carry forward unchanged.
+- **`ddx-4c51d33e` (cross-project leak at commit `33b97f25`)** — already
+  shipped. Rev 4 prevents recurrence at the worker level (one worker
+  per project bead store; no cross-store reads).
+- **`ddx-9d55601f` (picker priority bug at commit `80f51574`)** — picker
+  diagnostic events stay; rev 4 explicitly mirrors them to the server
+  endpoint when the worker is Connected.
+- **`ddx-9e4c238d` (auto-routing rejection bug, just filed)** —
+  independent. Fixing DDx's pre-flight to pass through to fizeau is
+  orthogonal to the autonomous-default architecture. Should land in
+  parallel.
+- **`ddx-1d867ec1` (rename `execute_bead_loop.go`)** — coordinate. The
+  rename should align with whatever package layout the worker uses
+  post-rev-4. Probably stays as `cli/internal/agent/execute_bead_loop.go`
+  for now since rev 4 doesn't reshape the worker package; revisit when
+  C13 lands.
+- **`ddx-076147ee` (this TD)** — closes when the rev 4 ADR is approved
+  and the implementation roadmap below is filed as beads.
+- **`ddx-50da9674` (clean fixture repo)** — supports rev 4's acceptance
+  test; independent.
+
+## Implementation roadmap
+
+Rev 4 is small. The roadmap is 5 beads, all parallel-safe with the
+refactor epic and other in-flight work.
+
+1. **server: implement `POST /api/workers/register` + `POST /api/workers/<id>/event` endpoints** — thin ingestion endpoints; in-memory derived view backed by an append-only `.ddx/server/worker-events.jsonl` for history. Trusted boundary via existing `requireTrusted`. ~200 LOC.
+
+2. **worker: add server-probe goroutine + best-effort event mirroring** — periodic `.ddx/server.addr` reachability check; transitions emit register/disconnect; events that today land in the bead's local event log also POST to the server when Connected; failures logged + ignored. ~150 LOC.
+
+3. **CLI: deprecate + remove `--local` flag** — first release: flag is a no-op with deprecation warning; following release: flag is deleted. Update CLAUDE.md, AGENTS.md, getting-started docs to remove `--local` references. ~50 LOC + doc edits.
+
+4. **server: add operator-cancel via bead-store marker** — server's `/api/beads/<id>/cancel` endpoint writes `extra.cancel-requested: true`; worker observes on next loop iteration and aborts at next safe point with `preserved_for_review` outcome. ~100 LOC.
+
+5. **acceptance + soak** — uses `ddx-50da9674` clean fixture repo. Multi-worker drain with server up; restart server mid-flight; verify worker continues + reconnects + reports. Then drain with NO server; verify identical behavior. Soak: ≥1 week of normal operator use without falling back to anything. Final bead.
+
+Total estimated effort: 1-2 weeks (vs 8-10 weeks for rev 3's design).
+
+## Consequences
+
+- **Workers don't depend on the server.** The headline operator
+  requirement (server restart preserves in-flight work) is satisfied
+  by construction: workers don't notice server restarts as anything
+  more than transient mirror failures.
+- **No `--local` flag.** Removed from the CLI surface. Behavior of
+  today's `--local` becomes the always-on default. Backward compat
+  preserved for one release via a no-op flag with deprecation warning.
+- **Server is opt-in observability.** Operators who don't run a server
+  see no behavior change from today. Operators who do see
+  centralized event aggregation, cross-worker visibility, and an
+  operator UI. Both are correct configurations.
+- **`ExecuteLoopSpec` unification still happens.** Per `ddx-29058e2a` —
+  the spec is a worker-side struct, not a wire format. The drop class
+  is closed by single-struct discipline; it just doesn't need to cross
+  a network boundary.
+- **No claim coordination races.** Bead store's atomic claim is the
+  only claim primitive. Two workers contending use the same store
+  CAS that has worked correctly for as long as DDx has had a bead
+  store.
+- **No "kill server → workers exit" tests left valid.** Any test that
+  relied on this behavior gets updated to assert "kill server →
+  workers continue working autonomously."
+- **Server restart loses derived view briefly.** The server's view of
+  who's working what comes back within one probe cycle (default 30s)
+  as workers re-register. No in-flight work is at risk.
+- **Operator UX for cancel changes slightly.** Today operators kill
+  worker subprocesses or wait. After: operators send cancel via the
+  server (or write the marker to the bead store directly); worker
+  honors at next safe point. Documented in CHANGELOG.
+- **Evidence layout unchanged.** `.ddx/executions/<run-id>/` still
+  receives all per-attempt artifacts; worker writes there exactly as
+  today.
+
 ## References
 
 - Bead `ddx-076147ee` — this TD's source.

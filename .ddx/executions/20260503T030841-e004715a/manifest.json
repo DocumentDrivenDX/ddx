@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260503T030841-e004715a",
+  "bead_id": "ddx-9e4c238d",
+  "base_rev": "1d7e70749c77e6bc5157dadc4b715d5241e1cb18",
+  "created_at": "2026-05-03T03:08:44.323743459Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9e4c238d",
+    "title": "auto-routing: bare 'ddx work' rejects with 'no viable routing candidate: 4 candidates rejected' — DDx pre-flight too strict; should pass through to fizeau",
+    "description": "OBSERVED (operator report, 2026-05-03)\nBare `ddx work` (no --harness, no --model, no --provider, no --profile pins) repeatedly rejects with:\n  \"no viable routing candidate: 4 candidates rejected\"\nNo reason logged for any of the 4 rejections. Same machine has codex working fine via direct invocation; codex has been running all day on niflheim. The rejections happen BEFORE the request reaches fizeau, so fizeau never gets a chance to pick a harness.\n\nEXPECTED\nBare `ddx work` should pass through to fizeau with NO routing pins; fizeau should pick any available harness with quota. DDx should NOT pre-reject candidates based on its own (likely stale or incomplete) view of provider availability.\n\nROOT CAUSE HYPOTHESES\n1. cli/internal/agent/runner.go ValidateForExecuteLoopViaService (or its caller at cli/cmd/agent_cmd.go around line 1647) is enforcing pre-flight provider availability checks against a stale or incorrect provider list.\n2. cli/internal/escalation/InferTier or similar is computing a tier that has no candidate matches, treating that as fatal instead of passing through to fizeau's auto-routing.\n3. cli/internal/agent/service_run.go is constructing ServiceExecuteRequest with constraints that exclude all 4 known harnesses despite operator passing no pins.\n4. The 4 candidates being rejected may be the 4 harnesses (claude/codex/agent/embedded); reasons could include: stale RouteStatus from fizeau, missing capability declaration, provider-health classification, cost-cap pre-check.\n5. Related to ddx-1e516bc9 (fizeau Execute gap with explicit harness pin) but distinct — that's about filling Profile/MinPower; this is about DDx rejecting before fizeau gets called at all.\n\nINVESTIGATION REQUIRED\n- Capture the actual rejection reasons for each of the 4 candidates (add structured logging or read existing route_attempt events from the bead's event stream).\n- Compare DDx's view of harness availability vs fizeau's `svc.ListHarnesses` / `svc.RouteStatus`.\n- Verify that bare `ddx work` (no pins, no opaque-passthrough) actually invokes fizeau's auto-routing and not DDx's local pre-filter.\n\nFIX SHAPE\n- DDx pre-flight should refuse to filter candidates that fizeau hasn't explicitly excluded. If DDx knows nothing pinned, the request goes through to fizeau as `ServiceExecuteRequest{Harness:\"\", Model:\"\", Profile:\"\u003cinferred-tier\u003e\"}` and fizeau picks.\n- \"No viable routing candidate\" error should ONLY come from fizeau, with fizeau's reasons surfaced. DDx should not synthesize its own rejection.\n- If DDx has any pre-filter today, log per-candidate reasons so operator can see why each was rejected.\n\nNOT IN SCOPE\n- Fizeau-side routing improvements (separate bead ddx-1e516bc9 if needed)\n- Reshaping the cobra flag surface\n- Changing default tier inference\n\nINTERSECTION\n- ddx-29058e2a (ExecuteLoopSpec unification): if the unification covers the per-attempt RouteRequest construction, this fix might naturally fold in.\n- ddx-1e516bc9 (fizeau Execute gap): if fizeau auto-routes within explicit harness, that fix complements this. They're distinct: this bead is about DDx not over-filtering BEFORE fizeau sees the request.\n- ddx-848069a3 C8 (routing preflight to Drain startup): if the preflight relocates as part of the refactor, the fix should land in the new location.",
+    "acceptance": "1. Investigation report at .ddx/executions/\u003crun-id\u003e/auto-routing-rejection.md identifies WHICH function in DDx's pre-flight rejects all 4 candidates and WHY. File:line citation for each rejection point.\n2. Fix: DDx pre-flight no longer rejects candidates that fizeau has not explicitly excluded. Bare `ddx work` (no pins) passes a maximally-permissive ServiceExecuteRequest to fizeau (Harness=\"\", Model=\"\", Profile inferred from bead tier OR empty for fizeau to choose).\n3. If DDx must reject any candidate, the rejection event includes structured per-candidate reason (e.g., \"candidate=claude rejected: quota_exhausted via fizeau RouteStatus\").\n4. Manual verification on this repo: bare `ddx work` against current bead queue successfully claims and starts a bead with codex (or whichever harness fizeau picks). Capture command output + first 5 events of the resulting bead.\n5. Test: TestAutoRoute_BareWork_NoPreflightRejection — fixture ServiceExecuteRequest with empty pins; assert it reaches fizeau without DDx pre-rejection.\n6. cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... green; lefthook pre-commit passes.\n7. Existing tests asserting that DDx pre-validates harnesses (if any) are reviewed: keep if they validate operator-explicit pins; delete if they validate auto-routing (which fizeau owns).",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:routing",
+      "kind:fix",
+      "observed-failure"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:08:41Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T03:08:41.816781982Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T030841-e004715a",
+    "prompt": ".ddx/executions/20260503T030841-e004715a/prompt.md",
+    "manifest": ".ddx/executions/20260503T030841-e004715a/manifest.json",
+    "result": ".ddx/executions/20260503T030841-e004715a/result.json",
+    "checks": ".ddx/executions/20260503T030841-e004715a/checks.json",
+    "usage": ".ddx/executions/20260503T030841-e004715a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-9e4c238d-20260503T030841-e004715a"
+  },
+  "prompt_sha": "c72cbe3dc3f263acf6eff4cbcc8d599680398fb474d99e3db0600a4602c0405d"
+}
