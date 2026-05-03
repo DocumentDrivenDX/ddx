@@ -1,0 +1,59 @@
+{
+  "attempt_id": "20260503T031006-44f0abd2",
+  "bead_id": "ddx-bbac06c9",
+  "base_rev": "bbbf3a4648342658945cb0e349ac592f4ec2a828",
+  "created_at": "2026-05-03T03:10:07.939233517Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bbac06c9",
+    "title": "availability: rename to 'Agent availability' + nav placement + model list inline/drilldown + refresh button",
+    "description": "Rename Providers tab to 'Agent availability'. Show per-provider model list inline (or drilldown for many models). Refresh button per provider. Coordinate nav placement with NavShell.",
+    "acceptance": "1. Tab labeled 'Agent availability'. 2. Per-provider model list visible. 3. Refresh button calls refreshProviderModels mutation. 4. Coordinated with NavShell ownership.",
+    "parent": "ddx-12e97cb9",
+    "labels": [
+      "phase:2",
+      "story:9",
+      "area:web",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:10:06Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "163374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T20:54:30.030731607Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "exit status 1\nresult_rev=078f946f45896fdd2694f4c402ddbbd62ba48cb7\nbase_rev=078f946f45896fdd2694f4c402ddbbd62ba48cb7\nretry_after=2026-05-03T02:54:30Z",
+          "created_at": "2026-05-02T20:54:30.538995683Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T03:10:06.329261016Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-03T02:54:30Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031006-44f0abd2",
+    "prompt": ".ddx/executions/20260503T031006-44f0abd2/prompt.md",
+    "manifest": ".ddx/executions/20260503T031006-44f0abd2/manifest.json",
+    "result": ".ddx/executions/20260503T031006-44f0abd2/result.json",
+    "checks": ".ddx/executions/20260503T031006-44f0abd2/checks.json",
+    "usage": ".ddx/executions/20260503T031006-44f0abd2/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-bbac06c9-20260503T031006-44f0abd2"
+  }
+}
