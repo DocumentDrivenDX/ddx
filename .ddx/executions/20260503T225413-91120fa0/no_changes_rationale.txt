@@ -1,0 +1,174 @@
+status: needs_investigation
+reason: Bead scope materially exceeds the stated "~200 LOC + test updates" estimate; safe execution requires decomposition into 3 child beads, but `ddx bead create` invoked from this execution worktree produces malformed IDs prefixed with the worktree directory name (e.g. `.execute-bead-wt-ddx-eccc6efb-...`). Decomposition must originate from the main repository (`~/Projects/ddx`) where the project prefix resolves to `ddx-`. Operator triage required.
+
+# What is done
+
+Nothing. No source files modified. One malformed-ID child bead was created during exploration and closed (id `.execute-bead-wt-ddx-eccc6efb-20260503T225413-91120fa0-5be5f460`) without affecting the bead store's open queue.
+
+# Why this attempt declined to commit
+
+The bead asks for an end-to-end migration of the server-spawn path from in-process execution to subprocess `exec ddx work`. Six tightly-coupled ACs touch the most intricate file in the server package.
+
+## Actual surface (vs stated estimate)
+
+`cli/internal/server/workers.go` is 1,973 lines. The current `runWorker` (lines 658-940, ~285 lines) is a dense in-process orchestrator that knits together:
+
+- in-process `agent.ExecuteBeadWorker` construction (lines 811-815)
+- per-project `LandCoordinator` single-flight serialization (line 676; `m.LandCoordinators.Get(projectRoot)`)
+- in-process post-merge `DefaultBeadReviewer` (lines 801-809)
+- in-process `escalation.CostCapTracker` (lines 753-781) — per-worker billed cost accumulation
+- in-process `RoutePreflight` typed-incompatibility gate via FizeauService (line 838 → `buildRoutePreflight` lines 622-649)
+- per-attempt `singleTierAttempt` closure with config resolution + gate evaluation + leftover-evidence safety net (lines 679-747)
+- progress channel piped to SSE subscribers via `drainProgress` (lines 421, 440, 1374)
+- watchdog phase-stall tracking via shared `workerHandle.lastPhaseTS`
+- terminal-state preservation (stopped / reaped) merged with loop result (lines 860-936)
+- `BeadWorkerFactory` injection point for test fakes (workers.go:213, used by 7 sibling test files)
+
+Replacing the in-process call with `exec ddx work` collapses all of those in-process couplings — they now run inside the child process — but the parent server still needs equivalent observability/control via:
+
+- `/api/workers/{id}/event` ingestion (already exists from step 1, server.go:884) for progress
+- PID + signal escalation for watchdog/Stop (PID field exists at workers.go:147; signal plumbing is partial in workers_reap_unix.go / workers_reap_windows.go)
+- worker-events.jsonl tail or HTTP-mirrored events for SSE bridging
+- Cross-process Stop / wakeCh equivalent (currently the in-process wakeCh at workers.go:203 has no subprocess analogue)
+
+## Test surface
+
+`cli/internal/server/workers_test.go` alone is 1,107 lines. It and 6 sibling files use `BeadWorkerFactory` to inject a fake in-process executor:
+
+- workers_test.go
+- workers_stop_propagation_test.go
+- workers_route_preflight_test.go
+- workers_e2e_test.go
+- workers_config_test.go
+- graphql_adapters_default_profile_test.go
+
+With subprocess execution, `BeadWorkerFactory` is meaningless — the parent has no executor to inject; the child process owns it. Those tests need to be replaced by either:
+
+- a built-in subprocess-stub binary (e.g. `go test -test.run=...&ddx-fake-work-stub` reentry pattern) that the parent execs in tests, or
+- deletion as no-longer-applicable (semantics now belong to `ddx work`'s own test surface in cli/cmd/agent_execute_loop_*_test.go).
+
+Plus 5 additional files use `ExecuteLoopWorkerSpec` directly:
+
+- workers_watchdog_test.go
+- workers_stop_test.go
+- workers_prune_test.go
+- graphql_backfill_test.go
+- graphql_adapters.go (production code — adapter for GraphQL StartWorker mutation)
+
+That's 12 files referencing structures that AC #3 demands be deleted. This is the bulk of the work, not "test updates."
+
+## AC #5 (real-harness end-to-end)
+
+> server-spawned worker (via the new exec path) registers via the new endpoints AND successfully invokes the claude harness (real claude binary, not a stub) on a fixture bead AND completes the attempt with a commit
+
+Even with the fall-back to a scripted-claude-stub, this requires:
+- a clean fixture repo with a real ready bead (uses `ddx-50da9674` clean fixture, currently in flight)
+- a stub or real claude binary on `$PATH` inside the test harness
+- a server bound to a free port
+- the new exec path wired in
+- the worker registering against the running server's `/api/workers/register`
+- an end-to-end commit landing through the `LandCoordinator` (which has moved out of the parent process into the child).
+
+That is a substantial new integration test — comparable to the existing `workers_e2e_test.go` suite — distinct from the refactor proper.
+
+## Size-check verdict
+
+Per the executor's "Step 0: size check":
+
+- More than ~6 ACs across unrelated subsystems? 6 ACs, but several (in-process-replacement refactor, struct deletion, full test sweep, real-harness integration) are independently sized engineering deliverables.
+- AC mixes implementation, integration tests, and end-to-end scenarios? Yes (AC #1-4 = refactor, AC #5 = new integration test, AC #6 = full lefthook gate).
+- More than ~500 LOC across more than ~5 files? Yes — workers.go rewrite (~400), server.go handler (~70), workers_test.go sweep (~600+), sibling test sweep (~500+), new exec/stub plumbing (~200), new e2e integration test (~300). Estimated 1,500-2,500 LOC of changes.
+
+The bead's "~200 LOC + test updates" estimate (echoing the ADR-022 step 7 roadmap line) materially understates the work. The bead label `triage:needs-investigation` is the bead author's own flag of this concern.
+
+A previous attempt by claude on 2026-05-03T06:50 reached the same verdict (recorded as a long body event under `actor: erik` on the bead) but did not commit a `no_changes_rationale.txt` so the loop re-dispatched the bead.
+
+# Proposed decomposition (orchestrator should create from main repo)
+
+Create the following children of `ddx-eccc6efb` from the **main repo** (`~/Projects/ddx`), not from an execution worktree — IDs created from a worktree pick up the worktree dirname as the project prefix and are unusable.
+
+## 7a — runWorker exec rewrite + parent-side subprocess plumbing
+
+Title: `ADR-022 step 7a: workers.go runWorker → exec ddx work subprocess (parent-side plumbing)`
+
+Scope:
+- Replace the in-process `worker.Run(...)` body in cli/internal/server/workers.go:658-940 with `exec.CommandContext` of `ddx work` (resolved via `os.Executable()` with `DDX_EXECUTABLE` env override for tests + arg-vec flags + DDX_PROJECT_ROOT env).
+- Record child PID on `WorkerRecord.PID`; ensure watchdog SIGTERM/SIGKILL via PID still works (workers.go:1279, workers_reap_unix.go).
+- Bridge child-emitted progress events into the existing parent SSE subscriber path — either by `POST /api/workers/{id}/event` being multiplexed back to the in-memory `progressCh` (preferred — endpoint already exists at server.go:884), or by tailing the child's `worker-events.jsonl`.
+- Stop()/cancel/wake plumbing: Stop signals the PID; wakeCh is replaced by sending a SIGUSR1 (or equivalent) handled by ddx work, OR documented as no-op when subprocess (mention in ADR-022 step 5 follow-up).
+- Drop in-process `LandCoordinator` coupling, in-process `DefaultBeadReviewer`, in-process `CostCapTracker`, in-process `RoutePreflight` from runWorker (they now run inside the child).
+- Keep `ExecuteLoopWorkerSpec` for now (compat with handleStartExecuteLoopWorker; deletion is 7b's scope).
+- AC #5 end-to-end is NOT in 7a; 7a's tests cover (a) parent execs the child with the right argv+env, (b) child PID lands on WorkerRecord, (c) Stop signals the PID, (d) progress events from `/api/workers/{id}/event` reach SSE subscribers via drainProgress.
+
+Estimate: 600-800 LOC including test rewrites of the 7 BeadWorkerFactory-using test files.
+
+## 7b — handleStartExecuteLoopWorker exec wiring + delete ExecuteLoopWorkerSpec
+
+Title: `ADR-022 step 7b: handleStartExecuteLoopWorker → env+exec; delete ExecuteLoopWorkerSpec`
+
+Scope:
+- Once 7a has landed and `runWorker` execs subprocess, refactor `handleStartExecuteLoopWorker` (server.go:2390-2461) to translate the HTTP request directly into env-vars + exec args without going through `ExecuteLoopWorkerSpec`.
+- Update `graphql_adapters.go:127` (StartWorker mutation adapter) to construct env+exec the same way.
+- Delete `ExecuteLoopWorkerSpec` struct (workers.go:25-49) once nothing references it.
+- Update remaining callers: workers_watchdog_test.go, workers_stop_test.go, workers_prune_test.go, graphql_backfill_test.go, graphql_adapters_default_profile_test.go.
+- Tests assert the new exec form (argv+env) and the absence of any JSON serialization of a parallel struct.
+
+Depends on: 7a (runWorker must already exec; this bead is just the surface wiring above it).
+
+Estimate: 150-300 LOC.
+
+## 7c — End-to-end real-harness integration test
+
+Title: `ADR-022 step 7c: e2e — server-spawn → exec ddx work → claude harness → bead commit`
+
+Scope:
+- Build a `cli/internal/server/workers_e2e_real_harness_test.go` that:
+  1. Stands up a clean fixture repo via `ddx-50da9674`'s helper (or `testutils.NewFixtureRepo(t, "standard")` — see CLAUDE.md "Test fixtures").
+  2. Files one ready execution-eligible bead with a trivial change (e.g. add a TODO to a comment).
+  3. Starts a real `ddx-server` bound to a free port.
+  4. POSTs to `/api/agent/workers/execute-loop` with `--once` semantics; the server execs a subprocess via the new path (7a/7b).
+  5. The subprocess registers against `/api/workers/register` (workerprobe at cli/internal/agent/workerprobe/probe.go).
+  6. The subprocess invokes the claude harness — REAL claude binary if available on `$PATH`; otherwise a `scripted-claude-stub` that exercises the SAME exec args + env-var path the real claude harness uses (see cli/internal/agent/harness/claude.go for argv shape).
+  7. The subprocess produces a commit on the bead's worktree, lands via the in-child LandCoordinator, and reports `result` event.
+  8. The test asserts: registration succeeded with worker_id, the result event landed via /api/workers/{id}/event, and the bead's status transitioned to `done` with a non-empty `closing_commit`.
+- Skip if claude binary unavailable AND scripted stub fixture not provided (mark as integration-only with build tag `e2e_real_harness`).
+
+Depends on: 7a, 7b.
+
+Estimate: 200-400 LOC for the test file + ~100 LOC for the scripted-claude-stub helper.
+
+# Files to read for the implementation
+
+- cli/internal/server/workers.go (the rewrite target)
+- cli/internal/server/server.go:2390-2461 (handleStartExecuteLoopWorker)
+- cli/internal/server/graphql_adapters.go:127 (other ExecuteLoopWorkerSpec caller)
+- cli/cmd/work.go + cli/cmd/agent_cmd.go:1603-1900 (the runAgentExecuteLoopImpl that subprocess will exec)
+- cli/internal/agent/workerprobe/probe.go (worker→server probe; already wired)
+- docs/helix/02-design/adr/ADR-022-worker-client-server-architecture.md (the contract)
+- ADR-022 roadmap step 7 (line 601) — the source of this bead
+
+# Recommendation
+
+Operator: from `~/Projects/ddx` (main repo, not a worktree), run:
+
+```
+ddx bead create "ADR-022 step 7a: workers.go runWorker → exec ddx work subprocess (parent-side plumbing)" \
+  --type task --priority 2 --parent ddx-eccc6efb \
+  --labels "phase:2,area:server,kind:refactor,adr:022" \
+  --description "..." --acceptance "..."
+ddx bead create "ADR-022 step 7b: handleStartExecuteLoopWorker → env+exec; delete ExecuteLoopWorkerSpec" \
+  --type task --priority 2 --parent ddx-eccc6efb \
+  --labels "phase:2,area:server,kind:refactor,adr:022" \
+  --description "..." --acceptance "..."
+ddx bead create "ADR-022 step 7c: e2e — server-spawn → exec ddx work → claude harness → bead commit" \
+  --type task --priority 2 --parent ddx-eccc6efb \
+  --labels "phase:2,area:server,kind:test,adr:022" \
+  --description "..." --acceptance "..."
+ddx bead dep add <7b-id> <7a-id>
+ddx bead dep add <7c-id> <7a-id>
+ddx bead dep add <7c-id> <7b-id>
+ddx bead update ddx-eccc6efb --notes "decomposed into 7a/7b/7c per .ddx/executions/20260503T225413-91120fa0/no_changes_rationale.txt"
+ddx bead close ddx-eccc6efb
+```
+
+Bodies for each child should mirror the "Scope" sections above; copy the parent's `phase:2 / area:server / adr:022` labels.
