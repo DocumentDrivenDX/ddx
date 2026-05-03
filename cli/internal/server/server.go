@@ -892,6 +892,11 @@ func (s *Server) routes() {
 	trusted("POST /graphql", s.handleGraphQLQuery)
 	trusted("GET /graphql", s.handleGraphQLQuery)
 	trusted("GET /graphiql", s.handleGraphiQL)
+	// LAYER 1 scoped GraphQL endpoint (ddx-4c51d33e). Closes the HIGH-severity
+	// DocumentByPath cross-project leak by serving each request against the
+	// resolved {project}'s WorkingDir instead of the server's startup project.
+	scoped("POST /api/projects/{project}/graphql", s.handleGraphQLQueryScoped)
+	scoped("GET /api/projects/{project}/graphql", s.handleGraphQLQueryScoped)
 
 	// SvelteKit SPA — serve embedded frontend/build; fall back to index.html for deep links.
 	sub, err := fs.Sub(frontendFiles, "frontend/build")
