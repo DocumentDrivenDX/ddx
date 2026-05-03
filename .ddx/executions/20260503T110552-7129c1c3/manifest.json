@@ -1,0 +1,589 @@
+{
+  "attempt_id": "20260503T110552-7129c1c3",
+  "bead_id": "ddx-29058e2a",
+  "base_rev": "961c8049ea9842f92d5d526429575ef605bb59c4",
+  "created_at": "2026-05-03T11:05:53.82213961Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-29058e2a",
+    "title": "agent: unify ExecuteLoopSpec as single source of truth across cobra/HTTP/server/worker layers",
+    "description": "The bug at ddx-29058e2a (5 CLI flags silently dropped on the server path) is a symptom of a deeper architectural issue: the ExecuteLoopSpec is defined as parallel structs that must be hand-maintained in lockstep. Adding any flag requires editing 5+ places, and forgetting one is silent.\n\nCURRENT STATE (the smell)\n\nEach flag traverses 6 boundaries:\n\n1. cobra extract: cmd.Flags().GetX(\"flag\") → local var (cli/cmd/agent_cmd.go:1573-1611)\n2. positional param: passed to executeLoopWithServer / runExecuteLoopLocal (cli/cmd/agent_cmd.go:1627, ~1941 signature)\n3. loose JSON map: workerSpec map[string]interface{} (cli/cmd/agent_cmd.go:~1948)\n4. server request struct: hand-maintained in handleStartExecuteLoopWorker (cli/internal/server/server.go:2246-2260)\n5. ExecuteLoopWorkerSpec literal: server.go:2289-2303 → cli/internal/server/workers.go:25-49\n6. runWorker per-field consumption: cli/internal/server/workers.go ~656\n\nALSO IN SCOPE — the GraphQL parallel path (per codex review):\n- workerDispatchAdapter at cli/internal/server/graphql_adapters.go:62-75, 123-137 has its own request struct AND its own StartExecuteLoop literal — same parallel-struct smell on a different transport. Unification must DELETE this too, otherwise the refactor fixes REST and leaves GraphQL re-broken.\n\nTwo of those (steps 4 and 5) are typed but maintained in parallel. The 5 dropped flags (opaque_passthrough, max_cost, request_timeout, min_power, max_power) fell out exactly there. PLUS FromRev is also dropped on the server path (cobra flag at agent_cmd.go:1560 + work.go:58, consumed locally at agent_cmd.go:1753 ExecuteBeadRuntime{FromRev: fromRev}, never reaches the server). The bug fix would be local — add fields in 5 places — but the ROOT CAUSE recurs the next time a flag is added.\n\nDESIGN — single canonical ExecuteLoopSpec struct\n\nDefine one struct, used at every layer:\n\n  cobra RunE → parseExecuteLoopSpec(cmd) (ExecuteLoopSpec, DispatchOptions)\n                ↓\n       (--local) runExecuteLoopInline(spec)\n                ↓\n       (default) httpSubmitExecuteLoop(spec)  ── JSON ──▶ server.handleStartExecuteLoopWorker\n                                                   ↓ (decode INTO THE SAME struct, then Validate + ApplyDefaults)\n                                                startExecuteLoop(spec)\n                                                   ↓ (persist as spec.json — SAME struct, fully-resolved)\n                                                runWorker(spec)\n\nProperties:\n- One struct definition. JSON tags drive both wire format and disk persistence.\n- Cobra binding is the only per-flag code (irreducible — cobra needs to know each flag).\n- --local and server paths consume the same struct; behavior parity is structural, not asserted by tests.\n- Adding a flag = (a) one struct field + (b) one cobra binding. Drop is impossible by construction — the JSON tag round-trips through wire and persistence.\n- DispatchOptions is a SEPARATE small struct holding control-plane flags (--local, --json) that are NOT execution-spec fields and must NOT be persisted on disk.\n\nCRITICAL CONTRACTS (per codex review)\n\n1. Wire format for time.Duration: Go's default time.Duration JSON marshaling produces nanoseconds, but current code sends poll_interval as a string (agent_cmd.go:1969-1971). The unified spec MUST commit to one format — either custom Duration type with string MarshalJSON, or canonical numeric. Pick string (operator-readable spec.json wins) and add UnmarshalJSON tolerating both.\n\n2. Validate + ApplyDefaults lifecycle:\n   - parseExecuteLoopSpec returns spec + DispatchOptions, with cobra defaults applied\n   - Spec.Validate() is called BEFORE HTTP submit (client-side guard)\n   - server.handleStartExecuteLoopWorker decodes → calls Spec.ApplyDefaults() → Spec.Validate() BEFORE StartExecuteLoop (server cannot trust the wire)\n   - GraphQL workerDispatchAdapter goes through THE SAME StartExecuteLoop entry point so Validate + ApplyDefaults are guaranteed\n   - spec.json on disk is fully-resolved (no implicit defaults at runWorker time)\n\n3. Forward-compat stance: ddx is single-repo, single-version client/server today. Add SpecVersion int field; server returns 400 with capability list if SpecVersion \u003e supported. Newer-server-older-client: existing fields unchanged, new fields ignored on both sides (the current default). Make this explicit in the AC; do not rely on json's silent unknown-field tolerance as the only contract.\n\n4. Backward-compat for old persisted specs: existing spec.json files in .ddx/workers/ have legacy fields (e.g., min_tier/max_tier in older specs at .ddx/workers/worker-20260422T083934-f77c/spec.json:5-6). UnmarshalJSON must tolerate unknown fields when LOADING from disk (json.Decoder default behavior is fine here; do NOT enable DisallowUnknownFields for disk reads).\n\nLOCATION\n\nLikely cli/internal/agent/spec.go or cli/internal/agent/executeloop/spec.go (a small focused package). Importable from both cli/cmd/ and cli/internal/server/ without import cycles. NOTE: REACH-PROTO (ddx-a946c744) needs to know about this new package as an entry-root for the production-reachability checker.\n\nNOT IN SCOPE\n\n- Other commands (ddx agent run, ddx try, ddx run, MCP agent dispatch, ddx work passthrough variants) — same smell may exist; covered by the sister audit bead ddx-fb290074.\n- Reworking client→server transport (HTTP/JSON stays as-is).\n- Changing validation logic itself — only ensuring it lives on the spec so both paths apply it.\n- Renaming flags or reshaping CLI surface.\n- Reshaping LabelFilter from string to []string — that is a picker semantics change, owned by ddx-9d55601f. Keep LabelFilter as string to keep ddx-9d55601f landing in parallel.\n\nUSER-OBSERVED SYMPTOM (originally what filed this bead)\n- ddx work --harness claude works under --local but fails when going through the server.\n- Root cause: opaque_passthrough was dropped at the server's request struct. With OpaquePassthrough lost, the server-spawned worker validates the harness against its provider list (which rejects 'claude') instead of treating it as opaque-passthrough.\n- The unification refactor solves this by construction — there's no second struct to omit OpaquePassthrough from. NOTE: OpaquePassthrough has TWO skip points to verify (cli/internal/server/workers.go:314-317 AND :752-773), not one.\n\nABSORBS THE NARROW FIX\nThe 5 originally-listed dropped flags + FromRev all become fields on the unified spec. They cannot be dropped after this refactor. The refactor IS the fix.\n\nSEQUENCING WITH IN-FLIGHT BEADS\n\n- ddx-dc157075 (worker stay-alive): touches execute_bead_loop.go's Run loop. Should land BEFORE this OR be tightly coordinated. If unification lands first, dc157075 redoes defaulting + persistence. Recommend dc157075 first.\n- ddx-9d55601f (picker priority bug): does NOT block on this. Keep LabelFilter type stable. Picker fix lands in parallel.\n- ddx-a946c744 (REACH-PROTO): needs to know about new cli/internal/agent/executeloop/ package as entry root.",
+    "acceptance": "1. Single struct ExecuteLoopSpec in cli/internal/agent/ (or sub-package) with JSON tags. Includes ALL fields currently distributed across cobra extracts, server request struct, ExecuteLoopWorkerSpec, and runWorker consumption: ProjectRoot, Harness, Model, Profile, Provider, ModelRef, Effort, LabelFilter, Once, PollInterval, NoReview, ReviewHarness, ReviewModel, OpaquePassthrough, MaxCostUSD, RequestTimeout, MinPower, MaxPower, FromRev, plus SpecVersion int. Audit current code: any field in cobra/server/spec/runWorker NOT in this list = bug, must add.\n\n2. SEPARATE DispatchOptions struct holds control-plane flags (--local, --json) that must NOT appear on ExecuteLoopSpec or be persisted to spec.json. parseExecuteLoopSpec returns (ExecuteLoopSpec, DispatchOptions, error) — single cobra→spec conversion; called only from cobra RunE; never re-implemented.\n\n3. Spec.Validate() and Spec.ApplyDefaults() exist as methods. Lifecycle:\n   (a) parseExecuteLoopSpec → cobra defaults applied via cobra binding\n   (b) client-side: Validate() before HTTP submit\n   (c) server-side: decode → ApplyDefaults() → Validate() BEFORE StartExecuteLoop\n   (d) GraphQL workerDispatchAdapter goes through the SAME StartExecuteLoop (no parallel construction)\n   (e) spec.json on disk is fully-resolved (ApplyDefaults already ran)\n\n4. JSON wire format for time.Duration uses string representation (e.g. \"30s\", \"5m\"). UnmarshalJSON tolerates both string and numeric (nanoseconds) for backward-compat. Custom Duration type or json.RawMessage→time.ParseDuration acceptable.\n\n5. cli/cmd/agent_cmd.go execute-loop / work RunE: constructs (spec, dispatch) via parseExecuteLoopSpec; dispatches: dispatch.Local → runExecuteLoopInline(spec); else httpSubmitExecuteLoop(spec). NO positional-param flag passing remains.\n\n6. httpSubmitExecuteLoop marshals the spec directly as the HTTP request body (json.Marshal(spec)). No intermediate map[string]interface{}.\n\n7. Server handleStartExecuteLoopWorker decodes directly INTO ExecuteLoopSpec (no parallel request struct). The previously hand-maintained struct in server.go:2246-2260 is DELETED. ApplyDefaults + Validate run before StartExecuteLoop.\n\n8. GraphQL workerDispatchAdapter (cli/internal/server/graphql_adapters.go:62-75, 123-137) DELETES its parallel request struct and parallel StartExecuteLoop literal. Goes through the same server-side ApplyDefaults + Validate + StartExecuteLoop path as the REST handler.\n\n9. ExecuteLoopWorkerSpec in workers.go is REPLACED by (or aliased to) ExecuteLoopSpec. spec.json on disk uses the unified struct.\n\n10. runWorker(spec) consumes spec.MaxCostUSD (with default fallback when zero), spec.RequestTimeout, spec.MinPower, spec.MaxPower, spec.OpaquePassthrough, spec.FromRev — no hardcoded escalation.DefaultMaxCostUSD anywhere except the fallback case.\n\n11. Reflection-backed round-trip test (TestExecuteLoopSpec_RoundTripsAllFields_Reflection): uses reflect over ExecuteLoopSpec's exported fields; for each, sets a non-zero/non-default value, marshals, unmarshals on the server side, asserts the value survives into spec.json AND into the runWorker-visible spec. Adding a future field = automatic test coverage (no row-by-row maintenance). Test FAILS if any exported field is missing source/sink coverage.\n\n12. Specific OpaquePassthrough assertion: server-submitted ddx work --harness claude persists opaque_passthrough:true and skips BOTH validation gates (cli/internal/server/workers.go:314-317 AND :752-773). Test names both line ranges.\n\n13. Backward compatibility: existing spec.json files in .ddx/workers/ continue to load. Specifically: legacy fields min_tier, max_tier, and any other historical fields are tolerated and ignored (json.Decoder default behavior; do NOT enable DisallowUnknownFields for disk reads). Spot-check: load .ddx/workers/worker-20260422T083934-f77c/spec.json without error.\n\n14. Forward compatibility: SpecVersion int field added. Server rejects with 400 + capability list when client SpecVersion \u003e server-supported. Same client/server version always works. Document the stance in code comment.\n\n15. Regression test: --local path is unchanged in behavior. Existing local-path tests pass.\n\n16. Manual verification: `ddx work --harness claude` (no --local) on a small queue completes at least one bead end-to-end without harness-rejection error.\n\n17. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... ./internal/server/... green; lefthook pre-commit passes.\n\nDEPENDENCIES\n- Recommend landing AFTER ddx-dc157075 (worker stay-alive). If landing in parallel, coordinate execute_bead_loop.go merges.\n- ddx-9d55601f (picker) is independent — LabelFilter stays string.\n- REACH-PROTO (ddx-a946c744): new package added as entry-root.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:server",
+      "kind:refactor",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T11:05:52Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T20:54:37.989096911Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "exit status 1\nresult_rev=dd174d4ac0529ac46a42985281f3113fe54efa51\nbase_rev=dd174d4ac0529ac46a42985281f3113fe54efa51\nretry_after=2026-05-03T02:54:38Z",
+          "created_at": "2026-05-02T20:54:38.513521822Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-03T03:09:52.257218554Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260503T025809-45a220f7\",\"harness\":\"claude\",\"input_tokens\":0,\"output_tokens\":0,\"total_tokens\":0,\"cost_usd\":2.81355875,\"duration_ms\":689043,\"exit_code\":1}",
+          "created_at": "2026-05-03T03:09:52.275641898Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=0 cost_usd=2.8136"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\nresult_rev=e24ac3d8e7fe88b3f56cd9242cb058b2e754c4d7\nbase_rev=e24ac3d8e7fe88b3f56cd9242cb058b2e754c4d7\nretry_after=2026-05-03T09:09:52Z",
+          "created_at": "2026-05-03T03:09:52.392741346Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:10:00.001785988Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:10:39.181501294Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:11:25.145435136Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:12:20.353187968Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:13:22.198426726Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:14:35.613102353Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:15:58.103090814Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:17:34.175112124Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:19:28.626375351Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:21:25.569710852Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:23:22.410018474Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:25:19.278700375Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:27:16.274674365Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:29:13.429313185Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:31:10.566697276Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:33:07.419235747Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:35:04.184061705Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:37:01.152397521Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:38:57.951942375Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:40:54.855766742Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:42:51.688792235Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:44:48.262699727Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:46:45.175561139Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:48:42.107359067Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:50:39.13371681Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:52:36.122180665Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:54:33.268209484Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:56:30.176800846Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T09:58:27.281849582Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:00:24.677836218Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:02:21.847585994Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:04:19.009708632Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:06:15.814809043Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:08:12.962504824Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:10:10.20966824Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:12:07.197964928Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:14:04.399381404Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:16:01.445188882Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:17:58.491288695Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:19:55.551324053Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:21:52.543597085Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:23:49.84760729Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:25:47.286327845Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:27:44.279556457Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:29:41.459843579Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:31:38.667246979Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:33:35.783842586Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:35:33.056449948Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:37:30.45443982Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:39:27.969343436Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:41:25.374705633Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:43:22.817351114Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:45:20.179895331Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:47:17.334717113Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:49:14.856839077Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:51:12.323604286Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:53:07.379507982Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:55:05.066540416Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:57:02.392575439Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T10:58:59.514943821Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T11:00:57.016005902Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T11:02:56.735570252Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T11:04:56.32568734Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T11:05:52.474684185Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-03T09:09:52Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T110552-7129c1c3",
+    "prompt": ".ddx/executions/20260503T110552-7129c1c3/prompt.md",
+    "manifest": ".ddx/executions/20260503T110552-7129c1c3/manifest.json",
+    "result": ".ddx/executions/20260503T110552-7129c1c3/result.json",
+    "checks": ".ddx/executions/20260503T110552-7129c1c3/checks.json",
+    "usage": ".ddx/executions/20260503T110552-7129c1c3/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-29058e2a-20260503T110552-7129c1c3"
+  },
+  "prompt_sha": "1bc0de8c9b7ee6dd34d999195b1eec0d54b4e5ab84adf72cbb59e117ff329b48"
+}
