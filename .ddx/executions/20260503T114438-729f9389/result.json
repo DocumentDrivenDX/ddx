@@ -1,0 +1,49 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "attempt.go exposes Attempt(ctx,store,beadID,opts) wrapping ExecuteBeadWithConfig+LandBeadResult+optional Reviewer; returns Outcome via ToOutcome; TestAttempt_WrapsLegacyExecutor present with executor stub; result.json shows tests passed; no production callers introduced.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "store parameter intentionally unused at C2 (reserved for C3+); flagged with _ = store and documented.",
+      "location": "cli/internal/agent/try/attempt.go:66"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 948,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T113858-be0a8400/manifest.json",
+          ".ddx/executions/20260503T113858-be0a8400/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3533,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 6287,
+    "output_bytes": 533,
+    "elapsed_ms": 93694,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
