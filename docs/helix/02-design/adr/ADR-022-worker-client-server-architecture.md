@@ -11,9 +11,23 @@ ddx:
 ---
 # ADR-022: Worker Client–Server Architecture
 
-**Status:** Proposed
-**Date:** 2026-05-02
+**Status:** Proposed (rev 2 — amended 2026-05-03 per fresh-eyes review)
+**Date:** 2026-05-02 (rev 1) / 2026-05-03 (rev 2)
 **Authors:** TD bead `ddx-076147ee`
+
+**Rev 2 amendments:** added Threat model section (limits of session-token
+project binding); added Picker section (priority sort + capability/label
+filter + atomic claim); expanded `register` payload to full ExecuteLoopSpec
+(18 fields); added claim-lease-renewal semantics + `terminate` safety
+clarification to `heartbeat`; disambiguated `preserved` outcome into
+`preserved_for_review` (worker) vs `preserved_orphaned` (server); added
+dropped-attempt commit preservation (`refs/dropped/<bead-id>/<attempt-id>`);
+added long-poll back-pressure limits (8 per project, 1s min between polls);
+added Transport error-shape parity rule (HTTP and in-process return same
+envelope); added Capabilities dispatch rules; added ts-net partition
+recovery section with `partition_grace_seconds` / `partition_abort_seconds`;
+added Test Transport bead to roadmap; clarified FEAT-008 reference does
+NOT block UI bead.
 **Layout note:** The bead description suggested `docs/helix/03-decide/`. The
 HELIX layout in this repo places ADRs at `docs/helix/02-design/adr/`. This ADR
 is filed in the actual location to keep the index discoverable; the next ADR
@@ -115,6 +129,54 @@ in-process function calls for `--local`).
   cross-project leak class (`ddx-4c51d33e`) cannot recur for any
   worker-driven mutation because the token is the project.
 
+### Threat model (limits of session-token project binding)
+
+Session tokens prevent **honest worker mixup** (a misconfigured worker for
+project A cannot accidentally claim a bead from project B). They are NOT a
+defense against a **local malicious process**: `requireTrusted` accepts any
+loopback connection without identity proof, so any process on the same host
+can register as any project. The session-token model is project-scoping for
+legitimate workers, not authentication of worker identity. Future work to
+strengthen this (e.g., per-worker keypairs, ts-net WhoIs binding for
+loopback registrations) is out of scope for v1 and tracked separately.
+
+### Picker (server-side bead → worker assignment)
+
+When multiple workers long-poll `next-bead` concurrently, the server picks
+which bead each worker receives using these rules, in order:
+
+1. **Filter by worker capabilities.** The bead's required `kind:`-label or
+   inferred capability (e.g., `review` for review beads) must intersect the
+   worker's `capabilities` set from registration. Beads with no capability
+   constraint are eligible for any worker.
+2. **Filter by worker `label_filter`.** The bead's labels must intersect
+   the worker's `label_filter` set; an empty filter accepts all beads.
+3. **Filter by execution eligibility** (existing `ReadyExecution`
+   semantics): not in retry-cooldown, not superseded, not flagged
+   `execution-eligible: false`, all deps closed.
+4. **Sort eligible beads** by priority ascending (P0 first), then by
+   `updated_at` ascending (oldest first within priority — FIFO at each
+   tier).
+5. **Assign one bead per polling worker** in arrival order on the
+   long-poll. Two workers polling for the same top bead: first arrival
+   gets the bead and a claim record; the second worker's poll either
+   returns the next eligible bead or waits.
+6. **Claim is atomic** at the moment of assignment. The picker holds a
+   server-side mutex around the eligibility scan + claim creation so two
+   concurrent picks cannot collide.
+
+This makes priority sort a **server-enforced property**, not a worker
+heuristic. The current per-Run `attempted` map disappears entirely (no
+longer needed because the server prevents re-handing-out a bead to the
+same worker that just rejected/failed it).
+
+The diagnostic events from the stay-alive fix at commit `41cb762e`
+(`picker.priority_skip`, `picker.claim_race`, `loop.idle`/`loop.active`
+substate) migrate to the server's picker as: skip events when the picker
+passes over a higher-priority bead because no worker matches its
+constraints; claim_race events on the server-side mutex contention; and
+idle/active substate from the worker's heartbeat `state` field.
+
 ### Why not Proposal B (server-as-passive-observer)
 
 - Loses centralised cancel, dynamic priority, and label-filter overrides —
@@ -145,18 +207,40 @@ project.
 
 ### POST /api/workers/register
 
-Request:
+Request — the full `ExecuteLoopSpec` plus runtime worker identity. **All
+fields currently scattered across `cli/cmd/agent_cmd.go`,
+`cli/internal/server/server.go:handleStartExecuteLoopWorker`, and
+`cli/internal/server/workers.go:ExecuteLoopWorkerSpec` collapse here:**
 
 ```json
 {
+  "spec_version": 1,
   "project_root": "/abs/path/to/project",
+
   "harness": "claude",
-  "model_pref": "opus-4.7",
+  "model": "",
+  "model_ref": "",
+  "profile": "",
+  "provider": "",
+  "effort": "",
+
   "label_filter": ["phase:2", "kind:fix"],
   "capabilities": ["bead-attempt", "review"],
+
+  "from_rev": "",
+  "once": false,
+  "no_review": false,
+  "review_harness": "",
+  "review_model": "",
+
+  "max_cost_usd": 0.0,
+  "request_timeout_ms": 0,
+  "min_power": 0,
+  "max_power": 0,
+  "opaque_passthrough": false,
+
   "executor_pid": 12345,
-  "executor_host": "host.local",
-  "spec_version": "1"
+  "executor_host": "host.local"
 }
 ```
 
@@ -168,13 +252,37 @@ Response (201):
   "session_token": "tkn-...",
   "heartbeat_interval_ms": 5000,
   "claim_lease_ms": 60000,
+  "long_poll_seconds_default": 30,
+  "long_poll_seconds_max": 60,
   "server_build_sha": "abc1234"
 }
 ```
 
-The full registration request is the unified `ExecuteLoopSpec`; adding a
-new flag means adding one field here. (Closes ddx-29058e2a's spec drift by
-construction.)
+Field semantics:
+
+- `spec_version`: integer; server returns 400 if unsupported. v1 freezes
+  the schema above. New fields go in v2 with explicit migration.
+- `harness`/`model`/`provider`/`profile`/`effort`/`model_ref`: routing
+  intent passed to fizeau on each `try.Attempt`. Empty fields trigger
+  fizeau's profile/auto-route (per `ddx-1e516bc9`).
+- `from_rev`: optional base revision pin for attempts; empty = use
+  bead's `metadata.base-rev`.
+- `opaque_passthrough`: when true, `harness`/`model`/`provider` are
+  passed to fizeau as opaque hints with no DDx-side validation
+  (preserves `ddx work --harness=<name>` semantics).
+- `max_cost_usd` / `request_timeout_ms` / `min_power` / `max_power`:
+  per-attempt budget caps; zero = use server defaults.
+- `capabilities`: declares what the worker is willing to do; the picker
+  filters eligible beads against this set.
+- `label_filter`: bead-side filter, intersected with bead labels by the
+  picker.
+- `executor_pid` / `executor_host`: for the server's runtime registry;
+  used by `ddx agent doctor` to surface worker provenance.
+
+Drop is impossible by construction: every field that today travels through
+the `agent_cmd.go → server.go → workers.go → runWorker` chain is one
+struct field here. Adding a new flag = (a) one struct field + (b) one
+cobra binding. The drop class (`ddx-29058e2a`) is closed.
 
 ### POST /api/workers/<id>/heartbeat
 
@@ -194,15 +302,36 @@ Response (200):
 ```json
 {
   "server_command": "continue",
-  "session_token_renewed": null
+  "session_token_renewed": null,
+  "claim_lease_extended_until": "2026-05-03T02:15:24Z"
 }
 ```
 
-`server_command ∈ {continue, pause, drain, terminate}`. `pause` tells the
-worker to finish the current bead and stop claiming new work. `drain` is
-"finish current, exit cleanly when idle." `terminate` is "abort current
-attempt, preserve worktree, exit." Heartbeat is the only mutual liveness
-signal.
+`server_command ∈ {continue, pause, drain, terminate}`:
+
+- `continue`: keep going.
+- `pause`: finish the current bead and stop claiming new work; keep
+  heartbeating so the server sees you're alive.
+- `drain`: finish the current bead, then exit cleanly. Worker decrements
+  to `state: draining` and reports `disconnect` when idle.
+- `terminate`: stop the current attempt at the next safe point (between
+  LLM turns, NOT mid-tool-call), preserve the worktree (so a human can
+  inspect), then exit. The worker is responsible for waiting for any
+  in-flight git or subprocess to complete before exiting; the server does
+  NOT SIGKILL — operators wanting hard kill should use OS signals
+  directly.
+
+**Claim lease renewal.** Heartbeats while `state: executing` or
+`state: claiming` implicitly extend the claim lease by `claim_lease_ms`
+(default 60s) measured from the heartbeat receipt time. The server
+returns the new expiry in `claim_lease_extended_until`. A worker that
+fails to heartbeat for `3× heartbeat_interval_ms` loses the claim
+(server reclaims the bead) and the next heartbeat receives `410
+unknown_worker`, triggering re-registration.
+
+Heartbeat is the mutual liveness signal AND the claim-renewal signal.
+Workers must heartbeat at least every `heartbeat_interval_ms` regardless
+of state.
 
 ### GET /api/workers/<id>/next-bead
 
@@ -266,8 +395,28 @@ Request:
 }
 ```
 
-`status ∈ {merged, preserved, no_changes, failed_rejected}` — the four
-disposition outcomes from `ddx-5cb6e6cd`'s `try.Outcome`. Response: 204.
+`status` enum (named distinctly to avoid the previous "preserved" overload):
+
+- `merged`: attempt produced a commit; merged into the integration branch.
+- `preserved_for_review`: worker explicitly requested human review (merge
+  conflict it can't resolve, ambiguous outcome, escalation request).
+  Worktree retained at `preserve_ref`.
+- `no_changes`: model returned cleanly with no commit; rationale at
+  `no_changes_rationale`.
+- `failed_rejected`: attempt produced a commit but the gate (review,
+  reachability check, etc.) rejected it. Worktree retained at
+  `preserve_ref` for inspection.
+
+**`preserved_orphaned`** is set by the SERVER (not the worker) when the
+worker dies mid-attempt and the heartbeat-timeout fires. Reported via the
+worker death recovery path, not via this endpoint. UI consumers must
+distinguish:
+
+- `preserved_for_review` → human action requested
+- `preserved_orphaned` → infrastructure failure; another worker may
+  retry
+
+Response: 204.
 
 ### POST /api/workers/<id>/disconnect
 
@@ -279,6 +428,52 @@ gone in the runtime registry, but does not clean up worktrees. Response:
 
 All endpoints share the existing server JSON error envelope (matching the
 `serverPromptCapBytes` cap-error shape from ADR-021's prompt-cap rule).
+
+### Long-poll back-pressure
+
+`next-bead` is a held connection. With multiple workers per project,
+connection pools fill quickly. Limits:
+
+- Per-project: maximum `8` concurrent `next-bead` long-polls. The 9th
+  worker's poll returns `503 too_many_pollers` with `Retry-After: <ms>`.
+- Per-worker: minimum `1s` between successive `next-bead` requests after
+  a bare-wait response (worker SHOULD honor; server enforces with
+  `429 too_many_polls`).
+- Long-poll wait is capped at `long_poll_seconds_max` from registration
+  (default 60); workers may request shorter via `?wait=N`.
+
+These defaults are operator-tunable in `.ddx/config.yaml` under
+`server.workers.long_poll`.
+
+### Concurrent transport error semantics (HTTP and in-process parity)
+
+The HTTP transport returns standard 4xx/5xx with the JSON error envelope;
+the in-process `--local` transport must surface the SAME envelope, not
+raw Go errors, to preserve behavior parity. The `Transport` interface is
+shaped around `(*Response, error)` where `Response` carries the envelope
+on non-2xx outcomes; `error` is reserved for transport-layer failures
+(connection refused, ts-net partition). This guarantees that a unit test
+written against the in-process transport observes the same error shape as
+production.
+
+### Capabilities dispatch
+
+`capabilities` declares what the worker is willing to do. Today's recognised
+capabilities:
+
+- `bead-attempt`: the worker can perform a `try.Attempt` for an
+  implementation bead.
+- `review`: the worker can perform post-attempt review (cf. the
+  reviewer harness/model registration).
+
+A bead's required capability is inferred from its `kind:`-label
+(`kind:review` → requires `review`; everything else → requires
+`bead-attempt`). Workers without the required capability are skipped by
+the picker for that bead. Workers MAY register multiple capabilities;
+workers MUST register at least one.
+
+Future capabilities (e.g., `compute:gpu`, `network:internet`) extend this
+without ADR change as long as the picker rule (intersection) is preserved.
 
 ## Sequence diagrams
 
@@ -343,6 +538,15 @@ original worker is recorded as a dropped attempt with
 The bead store's existing claim semantics (one in-flight attempt per
 bead) are preserved.
 
+**Dropped-attempt commit preservation.** If the original worker's late
+`result.commit_sha` is non-empty, the server MUST preserve that commit
+under a forensic ref `refs/dropped/<bead-id>/<attempt-id>` before
+recording the dropped event. The branch is local-only (not pushed) and
+operators can inspect via `git log refs/dropped/<bead-id>/<attempt-id>`
+or `ddx exec show --dropped <attempt-id>`. Retention: 30 days; pruned by
+`ddx server gc` (a future bead). This prevents silent loss of the
+original worker's work product when restart races a late commit.
+
 ### Worker death recovery
 
 ```mermaid
@@ -352,9 +556,33 @@ sequenceDiagram
   W->>S: POST /heartbeat (state: executing)
   Note over W: worker process dies
   S->>S: heartbeat_timeout (3× hb_interval) elapses
-  S->>S: Reclaim bead, mark attempt as preserved
+  S->>S: Reclaim bead, mark attempt as preserved_orphaned
   S->>S: New eligible workers see bead in next-bead poll
 ```
+
+The `preserved_orphaned` outcome is distinct from the worker-reported
+`preserved_for_review` (see `/result` endpoint). Orphaned attempts may
+be retried automatically by the next eligible worker; review-preserved
+attempts wait for human action.
+
+### ts-net partition recovery (remote workers)
+
+ADR-022 v1 explicitly limits remote workers to ts-net-bound nodes per
+ADR-006. If a remote worker partitions from the server:
+
+- Worker continues executing the current attempt; cannot heartbeat or
+  reach `/event`/`/result`.
+- After `partition_grace_seconds` (default `300s`), the worker enters
+  `state: partitioned` and stops trying API calls; logs locally.
+- After `partition_abort_seconds` (default `1800s` = 30 min), the
+  worker aborts the current attempt at the next safe point, preserves
+  the worktree under a local marker, and exits.
+- The server reclaims the bead at `heartbeat_timeout` and reassigns;
+  the abandoned worktree on the partitioned host requires manual
+  cleanup (`ddx server reconcile-orphans` — future bead).
+
+Without these limits, a partitioned worker could hold a worktree
+indefinitely. Both timeouts are operator-tunable per server.
 
 ### Graceful shutdown
 
@@ -501,7 +729,8 @@ Ordered list of follow-up beads to file (titles only — actual filing
 happens after this ADR is approved). Each bead carries
 `depends_on: ADR-022` and the parent that owns its area.
 
-1. **TD: define worker–server API contract in `cli/internal/server/api/worker.go`** — schemas, error envelope, OpenAPI annotations; no behaviour change.
+1. **TD: define worker–server API contract in `cli/internal/server/api/worker.go`** — schemas (per the registration payload's full ExecuteLoopSpec), error envelope, OpenAPI annotations; no behaviour change.
+1a. **TD: define `Transport` interface and test-mode implementation** — interface contract (HTTP/in-process/test); deterministic-timing test transport with controllable clock for migration of existing tests under `Tests that break`.
 2. **server: implement runtime worker registry (in-memory; durability deferred)** — the source of truth for "which workers exist, what they're doing, who claims what."
 3. **server: implement `POST /api/workers/register`** — requireTrusted, project-binding, session token issuance, conflict on duplicate worker_id.
 4. **server: implement `POST /api/workers/<id>/heartbeat`** — including `server_command` plumbing for pause/drain/terminate.
@@ -515,7 +744,7 @@ happens after this ADR is approved). Each bead carries
 12. **server: claim-reclaim on heartbeat timeout** — heartbeat_timeout = 3× hb_interval; preserve attempt as a recorded dropped-event.
 13. **server: restart-recovery handshake** — `410 unknown_worker` semantics; client re-registers; reconcile late results.
 14. **CLI: `ddx agent doctor` reads from server runtime registry** — `.ddx/workers/` directory becomes legacy; doctor falls back to it only if the server is absent.
-15. **operator-facing UI: workers panel reads from runtime registry** — FEAT-008 surface; covered separately by the workers/sessions epic.
+15. **operator-facing UI: workers panel reads from runtime registry** — file as a child of FEAT-008 if it exists at implementation time; otherwise this bead OWNS surfacing the workers panel and the FEAT reference here is provisional. Implementation MUST NOT block on FEAT-008 being created.
 16. **CHANGELOG + operator migration note** — call out the restart-survival behaviour change explicitly.
 
 Each bead should carry a structural AC referencing the relevant section
