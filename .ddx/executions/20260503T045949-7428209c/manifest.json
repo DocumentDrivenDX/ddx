@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260503T045949-7428209c",
+  "bead_id": "ddx-d7aca866",
+  "base_rev": "3efee33791c5ee0c49094764fc9a6a40500d487e",
+  "created_at": "2026-05-03T04:59:50.805864773Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d7aca866",
+    "title": "EPIC: ADR-022 worker client-server (rev 5) implementation",
+    "description": "Implementation of ADR-022 rev 5 (commit 484b9a08): autonomous-default workers with optional best-effort server reporting. The 9 implementation beads + 1 coordination bead are children of this epic. Spec: docs/helix/02-design/adr/ADR-022-worker-client-server-architecture.md sections Implementation roadmap.",
+    "acceptance": "All 9 implementation children closed (steps 1-9 from the roadmap). Coordination bead 10 closed (C7 conflict resolved). FEAT-006 reflects rev 5. Acceptance bead's soak passed for ≥1 week. CHANGELOG entry merged.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:server",
+      "kind:platform",
+      "adr:022"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T04:59:49Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T04:59:49.332380105Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T045949-7428209c",
+    "prompt": ".ddx/executions/20260503T045949-7428209c/prompt.md",
+    "manifest": ".ddx/executions/20260503T045949-7428209c/manifest.json",
+    "result": ".ddx/executions/20260503T045949-7428209c/result.json",
+    "checks": ".ddx/executions/20260503T045949-7428209c/checks.json",
+    "usage": ".ddx/executions/20260503T045949-7428209c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d7aca866-20260503T045949-7428209c"
+  },
+  "prompt_sha": "00cede448249f2fb92e7a72450cb07d23f87f60125ef7e5b2f2a284cb5903a4d"
+}
