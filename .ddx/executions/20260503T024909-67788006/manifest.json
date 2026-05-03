@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260503T024909-67788006",
+  "bead_id": "ddx-781a15cf",
+  "base_rev": "d2e16e071552bc92af0d8c3767b2f28118251f94",
+  "created_at": "2026-05-03T02:49:10.766134417Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-781a15cf",
+    "title": "Benchmark: axon backend vs JSONL on 1100-bead archive",
+    "description": "Add a benchmark that exercises ready/blocked/show queue ops on a 1100-bead corpus (current archive scale) for both jsonl and axon backends. Capture wall-time and allocs. Report parity-or-better as the axon adoption gate per parent AC6. Output benchmark results into the per-attempt evidence dir.",
+    "acceptance": "1. Benchmark file under cli/internal/bead/ exercises ready/blocked/show on 1100-bead corpus. 2. Runs against both jsonl and axon backends. 3. Results document parity-or-better for axon vs jsonl. 4. Benchmark is reproducible via go test -bench.",
+    "parent": "ddx-5d49b14e",
+    "labels": [
+      "phase:2",
+      " area:beads",
+      " area:storage",
+      " kind:perf",
+      " backend-migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T02:49:09Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T02:49:09.413301385Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T024909-67788006",
+    "prompt": ".ddx/executions/20260503T024909-67788006/prompt.md",
+    "manifest": ".ddx/executions/20260503T024909-67788006/manifest.json",
+    "result": ".ddx/executions/20260503T024909-67788006/result.json",
+    "checks": ".ddx/executions/20260503T024909-67788006/checks.json",
+    "usage": ".ddx/executions/20260503T024909-67788006/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-781a15cf-20260503T024909-67788006"
+  },
+  "prompt_sha": "7e5bf94e8c4363c9ba54e5c70a249a07cbaf2e1f980b8d570e16178b65a779c3"
+}
