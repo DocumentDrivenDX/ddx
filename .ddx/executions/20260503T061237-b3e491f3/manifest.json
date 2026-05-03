@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T061237-b3e491f3",
+  "bead_id": "ddx-71e77027",
+  "base_rev": "be30b69581c9a3097de4542ad5ce6a91f2400230",
+  "created_at": "2026-05-03T06:12:38.576817651Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-71e77027",
+    "title": "runs: rebuild runs/[runId] as tabbed page (Overview/Prompt/Response/Tools/Session) via promoted lib/runDetail/",
+    "description": "Frontend: rebuild runs/[runId]/+page.svelte as tabbed (Overview, Prompt, Response, Tools, Session). Subcomponents promoted from Story 8.2 to lib/runDetail/. URL-driven tab state.",
+    "acceptance": "1. Tabbed UI with all 5 tabs. 2. URL state preserves tab. 3. Subcomponents shared with Story 8 row expansion. 4. e2e covers tab navigation.",
+    "parent": "ddx-a8a18cb7",
+    "labels": [
+      "phase:2",
+      "story:16",
+      "area:web",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T06:12:37Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T06:12:37.020777144Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T061237-b3e491f3",
+    "prompt": ".ddx/executions/20260503T061237-b3e491f3/prompt.md",
+    "manifest": ".ddx/executions/20260503T061237-b3e491f3/manifest.json",
+    "result": ".ddx/executions/20260503T061237-b3e491f3/result.json",
+    "checks": ".ddx/executions/20260503T061237-b3e491f3/checks.json",
+    "usage": ".ddx/executions/20260503T061237-b3e491f3/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-71e77027-20260503T061237-b3e491f3"
+  },
+  "prompt_sha": "1c13c700225ea9565dedcf48154c824203990a9ee0939dc46aa2fd045a917c1a"
+}

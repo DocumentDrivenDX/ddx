@@ -1,0 +1,68 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only an execution result.json evidence file. No GraphQL schema, resolver, cache, or tests are present to evaluate against any of the 5 AC items.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "AC1 (agentMetrics in GraphQL schema) not evaluable — no schema changes in diff",
+      "location": "(missing)"
+    },
+    {
+      "severity": "block",
+      "summary": "AC2 (4 groupBy axes) not evaluable — no resolver code in diff",
+      "location": "(missing)"
+    },
+    {
+      "severity": "block",
+      "summary": "AC3 (3 windows) not evaluable — no resolver code in diff",
+      "location": "(missing)"
+    },
+    {
+      "severity": "block",
+      "summary": "AC4 (revision-keyed cache) not evaluable — no cache implementation in diff",
+      "location": "(missing)"
+    },
+    {
+      "severity": "block",
+      "summary": "AC5 (per-axis tests) not evaluable — no tests in diff",
+      "location": "(missing)"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 768,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T060706-03afb7f5/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1184,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 3686,
+    "output_bytes": 931,
+    "elapsed_ms": 62669,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
