@@ -602,6 +602,52 @@ func (m *WorkerManager) runPluginAction(ctx context.Context, id, dir string, spe
 	m.mu.Unlock()
 }
 
+// buildRoutePreflight constructs the route preflight gate (FEAT-006 D3, ddx-98e6e9ef).
+// Before claiming a bead, the loop consults upstream ResolveRoute against the
+// resolved (harness, model). If the upstream surfaces agent.ErrHarnessModelIncompatible
+// (or any other typed error), the loop exits with a worker-level execution_failed
+// record — no bead is claimed, no executor invocation, no tier-attempt event burn.
+// DDx does NOT duplicate the upstream allow-list; this gate only consumes the typed
+// incompatibility surface.
+//
+// Returns nil (no preflight) when:
+//   - hasBeadWorkerFactory is true (test injection path), OR
+//   - spec.OpaquePassthrough is true (ddx work path — routing belongs to the agent
+//     service), OR
+//   - the operator pinned NOTHING (no Profile, no Model). In the auto-route case
+//     the strict ResolveRoute path is too aggressive — it picks a default catalog
+//     model from the harness's first entry and rejects exact-pin-only candidates.
+//     Per ddx-9e4c238d / ddx-1e516bc9: bare auto-route must pass through to fizeau's
+//     more lenient Execute path on each attempt.
+func buildRoutePreflight(projectRoot string, spec ExecuteLoopWorkerSpec, hasBeadWorkerFactory bool) func(ctx context.Context, harness, model string) error {
+	if hasBeadWorkerFactory || spec.OpaquePassthrough {
+		return nil
+	}
+	// Auto-route case: operator pinned no Profile and no Model. Skip strict
+	// preflight; let fizeau's Execute handle routing on each attempt.
+	if spec.Profile == "" && spec.Model == "" {
+		return nil
+	}
+	preflightSvc, preflightErr := agent.NewServiceFromWorkDir(projectRoot)
+	return func(ctx context.Context, harness, model string) error {
+		svc := preflightSvc
+		if svc == nil {
+			return preflightErr
+		}
+		req := agentlib.RouteRequest{
+			Profile: agent.NormalizeRoutingProfile(spec.Profile),
+		}
+		if harness != "" {
+			req.Harness = harness
+		}
+		if model != "" {
+			req.Model = model
+		}
+		_, rErr := svc.ResolveRoute(ctx, req)
+		return rErr
+	}
+}
+
 func sendProgress(ch chan<- agent.ProgressEvent, evt agent.ProgressEvent) {
 	select {
 	case ch <- evt:
@@ -789,39 +835,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	rcfg, _ := config.LoadAndResolve(projectRoot, overrides)
 
 	landingOps := agent.RealLandingGitOps{}
-	// RoutePreflight: preflight gate (FEAT-006 D3, ddx-98e6e9ef).
-	// Before claiming a bead, the loop consults upstream ResolveRoute
-	// against the resolved (harness, model).  If the upstream surfaces
-	// agent.ErrHarnessModelIncompatible (or any other typed error), the
-	// loop exits with a worker-level execution_failed record — no bead
-	// is claimed, no executor invocation, no tier-attempt event burn.
-	// DDx does NOT duplicate the upstream allow-list; this gate only
-	// consumes the typed-incompatibility surface.
-	// Skipped when BeadWorkerFactory is set (test injection path) or when
-	// OpaquePassthrough=true (ddx work path — routing belongs to the agent service).
-	var routePreflight func(ctx context.Context, harness, model string) error
-	if m.BeadWorkerFactory == nil && !spec.OpaquePassthrough {
-		var preflightSvc agentlib.FizeauService
-		preflightSvc, preflightSvcErr := agent.NewServiceFromWorkDir(projectRoot)
-		preflightErr := preflightSvcErr
-		routePreflight = func(ctx context.Context, harness, model string) error {
-			svc := preflightSvc
-			if svc == nil {
-				return preflightErr
-			}
-			req := agentlib.RouteRequest{
-				Profile: agent.NormalizeRoutingProfile(spec.Profile),
-			}
-			if harness != "" {
-				req.Harness = harness
-			}
-			if model != "" {
-				req.Model = model
-			}
-			_, rErr := svc.ResolveRoute(ctx, req)
-			return rErr
-		}
-	}
+	routePreflight := buildRoutePreflight(projectRoot, spec, m.BeadWorkerFactory != nil)
 
 	loopResult, err := worker.Run(ctx, rcfg, agent.ExecuteBeadLoopRuntime{
 		Once:           spec.Once,
