@@ -171,6 +171,16 @@ type Resolver struct {
 	// runRequeue mutation so that concurrent calls with the same
 	// idempotencyKey collapse to a single re-queue (atomic claims).
 	runRequeueMu sync.Mutex
+	// ReportedWorkers, when non-nil, supplies the worker_ingest derived view
+	// for the reportedWorkers query. Nil → resolver returns an empty list.
+	ReportedWorkers ReportedWorkersProvider
+}
+
+// ReportedWorkersProvider returns a snapshot of the worker_ingest derived
+// view (ADR-022 rev 5 §Worker-server interface), already classified by
+// freshness state. The server package supplies the production implementation.
+type ReportedWorkersProvider interface {
+	GetReportedWorkers() []*ReportedWorker
 }
 
 // Mutation returns MutationResolver implementation.

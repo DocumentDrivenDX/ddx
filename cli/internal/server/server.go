@@ -4877,6 +4877,7 @@ func (s *Server) graphqlHandler() http.Handler {
 				NodeID:                             s.state.Node.ID,
 				ExecuteLoopWaker:                   s.workers,
 				Federation:                         fedProvider,
+				ReportedWorkers:                    newReportedWorkersAdapter(s.workerIngest),
 			},
 			Directives: ddxgraphql.DirectiveRoot{},
 		}))

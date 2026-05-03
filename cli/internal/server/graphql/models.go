@@ -1832,6 +1832,35 @@ type ReadyStatus struct {
 	Checks []*ReadyCheck `json:"checks"`
 }
 
+// ReportedWorker is one entry in the worker_ingest derived view (ADR-022 rev 5
+// §Worker-server interface). Workers POST register/event/backfill best-effort
+// and the server keeps an in-memory record per worker_id. Freshness `state`
+// classifies the worker by elapsed time since `lastEventAt`:
+//
+//   - connected:    age <= 2 * probe_interval
+//   - stale:        age <= 10 * probe_interval
+//   - disconnected: otherwise
+type ReportedWorker struct {
+	// Server-issued worker identifier (from POST /api/workers/register)
+	ID string `json:"id"`
+	// Project root from the worker's identity envelope
+	Project string `json:"project"`
+	// Harness name from the worker's identity envelope
+	Harness string `json:"harness"`
+	// Freshness state: "connected", "stale", or "disconnected".
+	State string `json:"state"`
+	// Timestamp of the most recent register/event/backfill payload.
+	LastEventAt string `json:"lastEventAt"`
+	// Number of mirror failures observed for this worker.
+	MirrorFailuresCount int `json:"mirrorFailuresCount"`
+	// True if the worker reported a backfill with dropped overflow.
+	HadDroppedBackfill bool `json:"hadDroppedBackfill"`
+	// Bead ID from the most recent event/backfill payload, if any.
+	CurrentBead *string `json:"currentBead,omitempty"`
+	// Attempt ID from the most recent event/backfill payload, if any.
+	CurrentAttempt *string `json:"currentAttempt,omitempty"`
+}
+
 // ResultSpec describes how to interpret an execution result
 type ResultSpec struct {
 	// Metric-shaped projection (null if not metric-typed)

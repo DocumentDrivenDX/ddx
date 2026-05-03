@@ -510,6 +510,37 @@ type Worker implements Node {
   lifecycleEvents: [WorkerLifecycleEvent!]!
 }
 
+"""
+ReportedWorker is one entry in the worker_ingest derived view (ADR-022 rev 5
+§Worker-server interface). Workers POST register/event/backfill best-effort
+and the server keeps an in-memory record per worker_id. Freshness `state`
+classifies the worker by elapsed time since `lastEventAt`:
+
+  - connected:    age <= 2 * probe_interval
+  - stale:        age <= 10 * probe_interval
+  - disconnected: otherwise
+"""
+type ReportedWorker {
+  """Server-issued worker identifier (from POST /api/workers/register)"""
+  id: ID!
+  """Project root from the worker's identity envelope"""
+  project: String!
+  """Harness name from the worker's identity envelope"""
+  harness: String!
+  """Freshness state: "connected", "stale", or "disconnected"."""
+  state: String!
+  """Timestamp of the most recent register/event/backfill payload."""
+  lastEventAt: DateTime!
+  """Number of mirror failures observed for this worker."""
+  mirrorFailuresCount: Int!
+  """True if the worker reported a backfill with dropped overflow."""
+  hadDroppedBackfill: Boolean!
+  """Bead ID from the most recent event/backfill payload, if any."""
+  currentBead: String
+  """Attempt ID from the most recent event/backfill payload, if any."""
+  currentAttempt: String
+}
+
 """WorkerLifecycleEvent records an operator lifecycle action."""
 type WorkerLifecycleEvent {
   """Action name, such as start or stop"""
@@ -2449,6 +2480,14 @@ type Query {
     """Worker identifier"""
     workerID: ID!
   ): String!
+
+  """
+  List workers reported via the worker_ingest derived view (ADR-022 §Worker-server interface).
+  Distinct from the `workers` query, which surfaces the in-process execute-loop registry.
+  Each entry is classified connected/stale/disconnected by elapsed time since last_event_at
+  per the rev-5 freshness state model.
+  """
+  reportedWorkers: [ReportedWorker!]!
 
   # ==========================================
   # Agent Session Queries
