@@ -1,0 +1,69 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only execution manifest/result JSON files. No investigation report, no code fix to pre-flight routing, no new test, and no evidence of any AC item being addressed.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "AC1 unmet: no investigation report at .ddx/executions/\u003crun-id\u003e/auto-routing-rejection.md in the diff",
+      "location": ".ddx/executions/20260503T110921-b062acad/"
+    },
+    {
+      "severity": "block",
+      "summary": "AC2 unmet: no code changes to DDx pre-flight; ServiceExecuteRequest construction not modified",
+      "location": "cli/internal/agent/"
+    },
+    {
+      "severity": "block",
+      "summary": "AC3 unmet: no structured per-candidate rejection reason added",
+      "location": "cli/internal/agent/runner.go"
+    },
+    {
+      "severity": "block",
+      "summary": "AC5 unmet: TestAutoRoute_BareWork_NoPreflightRejection not present",
+      "location": "cli/internal/agent/"
+    },
+    {
+      "severity": "block",
+      "summary": "Diff only includes attempt manifest/result; no source code modified despite result.json claiming task_succeeded",
+      "location": ".ddx/executions/20260503T110921-b062acad/result.json"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 4994,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T110921-b062acad/manifest.json",
+          ".ddx/executions/20260503T110921-b062acad/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 39980,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 46780,
+    "output_bytes": 1163,
+    "elapsed_ms": 67893,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
