@@ -1,0 +1,69 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff under review only contains execution evidence (manifest.json, result.json) for the attempt. None of the AC items (flag deprecation, help text, doc updates, skill updates, test sweep) are visible in the changed files, so the implementation cannot be verified.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No code changes to deprecate --local flag visible in diff",
+      "location": "cli/cmd/"
+    },
+    {
+      "severity": "block",
+      "summary": "No documentation updates (CLAUDE.md, AGENTS.md, getting-started.md) visible in diff",
+      "location": "CLAUDE.md"
+    },
+    {
+      "severity": "block",
+      "summary": "No skill updates (skills/ddx/reference/work.md and embedded copies) visible in diff",
+      "location": "skills/ddx/reference/work.md"
+    },
+    {
+      "severity": "block",
+      "summary": "No test sweep visible (work_test.go, agent_execute_loop_test.go, zero_config_work_test.go)",
+      "location": "cli/cmd/"
+    },
+    {
+      "severity": "info",
+      "summary": "Commit 507eb28c referenced as result_rev appears to contain the actual implementation but is not part of the diff under review",
+      "location": ".ddx/executions/20260503T062626-6b67bac8/result.json"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 967,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T062626-6b67bac8/manifest.json",
+          ".ddx/executions/20260503T062626-6b67bac8/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 19296,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 22069,
+    "output_bytes": 1202,
+    "elapsed_ms": 64698,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
