@@ -514,6 +514,137 @@ Operators wanting a review-only worker MUST explicitly send
 Future capabilities (e.g., `compute:gpu`, `network:internet`) extend this
 without ADR change as long as the picker rule (intersection) is preserved.
 
+### Unified timing model
+
+The previous draft had three competing timeouts (claim_lease_ms,
+heartbeat-timeout, partition_grace_seconds, partition_abort_seconds).
+This section is the single canonical source.
+
+| Event | Threshold | Result |
+|---|---|---|
+| First heartbeat after `next-bead` returns a claim | within `first_heartbeat_ms` (default 10000) | claim confirmed |
+| First heartbeat MISSES `first_heartbeat_ms` | server marks claim orphaned, returns bead to ready | next worker can claim |
+| Worker heartbeat received | normal | extends claim by `claim_lease_ms` (default 60000) measured from receipt |
+| `claim_lease_ms` elapses without heartbeat | server marks claim lost | bead reclaimed; next worker eligible; old worker gets `410 unknown_worker` on next heartbeat |
+| Worker connection error to server | worker enters `state: disconnected` (local) | continues current attempt, retries heartbeat with backoff (1s, 2s, 5s, 15s, 30s, 30s, ...) |
+| Heartbeat re-establishes within `partition_grace_seconds` (default 300) | worker resumes normal | claim may have been lost; server returns `410` if so → worker re-registers |
+| `partition_grace_seconds` exceeded | worker enters `state: partitioned` | local logs only; no heartbeat attempts |
+| `partition_abort_seconds` (default 1800) exceeded | worker aborts current attempt at next safe point | preserves worktree locally; exits |
+
+The "claim lost" event is symmetric: server reclaims at
+`claim_lease_ms` (60s); worker discovers loss on next heartbeat.
+`heartbeat_interval_ms` (5s) is just how often the worker sends; the
+threshold for claim loss is `claim_lease_ms` (60s = 12 missed
+heartbeats), NOT `3× heartbeat_interval_ms`. The earlier "3×
+heartbeat_interval" reference is REPLACED by `claim_lease_ms`.
+
+`first_heartbeat_ms` < `claim_lease_ms` < `partition_grace_seconds` <
+`partition_abort_seconds`. This invariant must hold; server returns
+`400 invalid_timing_config` if operator-tunable values violate it.
+
+### Server startup recovery (in-memory registry rehydration)
+
+The server's runtime registry is **in-memory but reconstructable**.
+Durability is provided by the bead store + worker-side state, not by
+persisting the registry itself. On server start:
+
+1. Server starts with an empty runtime registry.
+2. Server scans `.ddx/workers/` (legacy filesystem records) AND any beads
+   with status=in_progress whose claim metadata names a worker_id.
+3. For each (worker_id, bead_id, attempt_id) tuple: server marks the
+   bead as "awaiting reconnect" with a `reconcile_deadline` of
+   `now + claim_lease_ms`.
+4. If the worker reconnects (re-register with the SAME executor_pid +
+   executor_host) within the deadline, the claim is restored.
+5. If `reconcile_deadline` elapses with no reconnect, the bead is
+   reclaimed for re-attempt; the original attempt's evidence is
+   preserved in `.ddx/executions/<attempt-id>/` (already on disk) and
+   marked `preserved_orphaned`.
+
+This means the server can crash + restart without losing in-flight work
+provided workers reconnect within `claim_lease_ms`. The
+`partition_grace_seconds` rule covers longer disconnects.
+
+### Cancel-during-claim race
+
+Edge case: server returns a claim from `next-bead`, worker disconnects
+before sending the first heartbeat. The claim record exists with no
+liveness signal.
+
+Resolution: `first_heartbeat_ms` (default 10000ms) is the explicit
+threshold. If no heartbeat with `current_bead_id` matching the claim
+arrives within this window, the server orphans the claim and returns
+the bead to ready. This is shorter than the general `claim_lease_ms`
+(60s) because a worker that just received an assignment should ack it
+quickly; the bead should not sit blocked waiting for a worker that may
+have died.
+
+### Observability contract
+
+The server emits structured events for every control-plane decision.
+These appear in the `ddx server logs` output AND on the related bead's
+event stream where applicable:
+
+- `worker.registered` / `worker.disconnected` — worker lifecycle
+- `worker.partitioned` / `worker.reconnected` — partition transitions
+- `picker.bead_assigned` — body: {bead_id, attempt_id, worker_id,
+  reason: "highest_priority_first" | "fifo_within_priority" |
+  "capability_match" | "label_filter_match"} — explains "why was bead
+  X assigned to worker Y"
+- `picker.priority_skipped` — body: {bead_id, skipped_for_bead_id,
+  reason: "no_capable_worker" | "no_label_match" | "in_cooldown"}
+- `picker.claim_race` — body: {worker_a, worker_b, bead_id,
+  winner: "worker_a"}
+- `claim.orphaned` — body: {claim_id, bead_id, reason:
+  "first_heartbeat_timeout" | "claim_lease_lost" |
+  "worker_disconnected_no_grace"}
+- `attempt.dropped` — body: {attempt_id, bead_id, original_worker_id,
+  reason: "post_restart_late_result" | "partition_recovery", commit_ref:
+  "refs/dropped/..."}
+- `back_pressure.applied` — body: {worker_id, type: "too_many_pollers" |
+  "poll_too_fast", retry_after_ms}
+
+This contract makes operator debugging tractable without log diving.
+Each event is also a metric counter for dashboards.
+
+### Multi-tenant fairness
+
+With 76+ projects registered (per `.ddx/server/state.json`), per-project
+limits alone don't prevent one runaway project from starving others.
+Server-wide limits:
+
+- `max_concurrent_long_polls_total`: default 64 (8 per project × 8
+  active projects). Above this, additional `next-bead` requests get
+  `503 server_busy` regardless of per-project count.
+- `picker_round_robin_across_projects`: when multiple projects have
+  ready beads and a worker has no project preference (multi-project
+  worker — future v2), the picker round-robins across project queues.
+  v1 workers are project-bound by registration so this doesn't apply
+  yet.
+- Per-project `claim_table_max_size`: default 32 (no project can hold
+  more than 32 simultaneous claims). Above this, picker returns
+  bare-wait until claims drain.
+
+These limits are operator-tunable in `.ddx/config.yaml` under
+`server.workers.fairness`.
+
+### Data migration (existing `.ddx/workers/` records)
+
+Existing workers/spec.json files use the legacy schema. Migration:
+
+- On server startup, the rehydration scan above also reads legacy
+  spec.json files. Fields are mapped: `harness/model/profile/...` →
+  same names; legacy `min_tier`/`max_tier` (no longer in spec)
+  IGNORED; legacy `preserved` status REWRITTEN to
+  `preserved_for_review` (the safer assumption — operators have to
+  inspect anyway).
+- A one-time migration command `ddx server migrate-workers` rewrites
+  all `.ddx/workers/<id>/spec.json` to the new schema. Idempotent.
+  Operator runs this once during the upgrade window.
+- After Phase D (cleanup), `.ddx/workers/` is retired entirely; the
+  on-disk format becomes a debug artifact for `ddx agent doctor`
+  fallback when the server is absent.
+
 ## Sequence diagrams
 
 ### Registration

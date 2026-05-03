@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T024638-be3b2af4",
+  "bead_id": "ddx-57c4cd99",
+  "base_rev": "c0dca7d0221e37177b180a4853c05479adc63d64",
+  "created_at": "2026-05-03T02:46:39.744490683Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-57c4cd99",
+    "title": "Migration tool: .ddx/beads.jsonl + archive → axon backend",
+    "description": "Build a one-shot migration command (e.g., ddx bead migrate --to axon) that reads existing .ddx/beads.jsonl, .ddx/beads-archive.jsonl, and per-bead .ddx/attachments/ entries, and loads them losslessly into the axon backend. Idempotent and safe to re-run. Includes a verification pass: round-trip count, claim-state preservation, event-history preservation. Depends on the axon backend implementation child.",
+    "acceptance": "1. Migration command implemented and wired into the CLI. 2. Migrates beads.jsonl + beads-archive.jsonl + attachments without data loss. 3. Idempotent (re-running is a no-op). 4. Verification step compares pre/post counts and event totals. 5. Integration test runs migration on a fixture repo and asserts equivalence.",
+    "parent": "ddx-5d49b14e",
+    "labels": [
+      "phase:2",
+      " area:beads",
+      " area:storage",
+      " kind:migration",
+      " backend-migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T02:46:38Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "163374",
+      "execute-loop-heartbeat-at": "2026-05-03T02:46:38.353117567Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T024638-be3b2af4",
+    "prompt": ".ddx/executions/20260503T024638-be3b2af4/prompt.md",
+    "manifest": ".ddx/executions/20260503T024638-be3b2af4/manifest.json",
+    "result": ".ddx/executions/20260503T024638-be3b2af4/result.json",
+    "checks": ".ddx/executions/20260503T024638-be3b2af4/checks.json",
+    "usage": ".ddx/executions/20260503T024638-be3b2af4/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-57c4cd99-20260503T024638-be3b2af4"
+  }
+}
