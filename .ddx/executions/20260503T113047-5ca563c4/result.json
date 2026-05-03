@@ -1,0 +1,49 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "All 11 lifecycle JSONL fixtures present under cli/internal/agent/testdata/refactor_baseline/, TestRefactorBaseline_FixturesStable test file added with sorted-key json.Marshal byte-identity check, UPDATE_BASELINE escape hatch documented, evidence written under .ddx/executions/.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Acceptance refers to /tmp/execute-bead-refactor-proposal.md §6.1 R4 cross-reference; the proposal lives outside the repo so the cross-reference is recorded only in the test file's docstring. Acceptable but worth noting for traceability.",
+      "location": "cli/internal/agent/refactor_baseline_test.go:1"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1528,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T112138-a110a43c/manifest.json",
+          ".ddx/executions/20260503T112138-a110a43c/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 39138,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 42472,
+    "output_bytes": 796,
+    "elapsed_ms": 88540,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
