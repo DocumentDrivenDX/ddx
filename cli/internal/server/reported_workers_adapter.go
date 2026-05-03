@@ -1,6 +1,7 @@
 package server
 
 import (
+	"sync"
 	"time"
 
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
@@ -12,6 +13,7 @@ import (
 // mutating registry timestamps.
 type reportedWorkersAdapter struct {
 	reg *workerIngestRegistry
+	mu  sync.RWMutex
 	now func() time.Time
 }
 
@@ -19,12 +21,30 @@ func newReportedWorkersAdapter(reg *workerIngestRegistry) *reportedWorkersAdapte
 	return &reportedWorkersAdapter{reg: reg, now: func() time.Time { return time.Now().UTC() }}
 }
 
+// setNow swaps the adapter's freshness clock. Safe to call concurrently with
+// GraphQL reads. ADR-022 step 5c integration tests use this to advance
+// synthetic time past the 2×/10× probe-interval thresholds without sleeping.
+func (a *reportedWorkersAdapter) setNow(now func() time.Time) {
+	if now == nil {
+		now = func() time.Time { return time.Now().UTC() }
+	}
+	a.mu.Lock()
+	a.now = now
+	a.mu.Unlock()
+}
+
+func (a *reportedWorkersAdapter) currentNow() time.Time {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.now()
+}
+
 // GetReportedWorkers implements ddxgraphql.ReportedWorkersProvider.
 func (a *reportedWorkersAdapter) GetReportedWorkers() []*ddxgraphql.ReportedWorker {
 	if a.reg == nil {
 		return nil
 	}
-	now := a.now()
+	now := a.currentNow()
 	snap := a.reg.snapshot()
 	out := make([]*ddxgraphql.ReportedWorker, 0, len(snap))
 	for _, rec := range snap {

@@ -154,6 +154,12 @@ type Server struct {
 	// ADR-022 rev 5 §Worker-server interface. Workers POST register/event/
 	// backfill best-effort; the registry is non-authoritative.
 	workerIngest *workerIngestRegistry
+
+	// reportedWorkers adapts workerIngest into the GraphQL reportedWorkers
+	// resolver. Held on the Server (rather than constructed lazily) so the
+	// ADR-022 step 5c integration test can swap the freshness clock and so
+	// every /graphql request shares one instance.
+	reportedWorkers *reportedWorkersAdapter
 }
 
 // New creates a new DDx server bound to addr, serving data from workingDir.
@@ -186,6 +192,7 @@ func New(addr, workingDir string) *Server {
 		operatorPromptAutoApproveAllowlist: parseOperatorPromptAllowlistEnv(os.Getenv("DDX_OPERATOR_PROMPT_ALLOWLIST")),
 		workerIngest:                       newWorkerIngestRegistry(workingDir),
 	}
+	s.reportedWorkers = newReportedWorkersAdapter(s.workerIngest)
 	state.coordinatorReg = workers.LandCoordinators
 
 	// Register the server's own project immediately.
@@ -4878,7 +4885,7 @@ func (s *Server) graphqlHandler() http.Handler {
 				NodeID:                             s.state.Node.ID,
 				ExecuteLoopWaker:                   s.workers,
 				Federation:                         fedProvider,
-				ReportedWorkers:                    newReportedWorkersAdapter(s.workerIngest),
+				ReportedWorkers:                    s.reportedWorkers,
 			},
 			Directives: ddxgraphql.DirectiveRoot{},
 		}))
