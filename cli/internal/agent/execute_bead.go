@@ -129,6 +129,11 @@ type ExecuteBeadRuntime struct {
 	BeadCancel  BeadCancelStore // optional: enables operator-cancel mid-attempt poll
 	Service     agentlib.FizeauService
 	AgentRunner AgentRunner
+	// RateLimitMaxWait bounds the per-bead total wait spent on rate-limit
+	// retries (ddx-c6e3db02 RateLimitRetryContract / TD-031 §8.4). Zero uses
+	// RateLimitRetryDefaultBudget (5 min). Negative disables the wrapper —
+	// rate-limit responses fall through to the standard execution_failed path.
+	RateLimitMaxWait time.Duration
 }
 
 // GitOps abstracts the git operations required by the worker.
@@ -598,6 +603,49 @@ func appendBeadCostEvidence(appender BeadEventAppender, beadID, attemptID string
 	})
 }
 
+// appendRateLimitRetryEvent records one rate-limit retry on the bead's
+// event stream per TD-031 §4 / §8.4 RateLimitRetryContract. The event body
+// carries the retry count and wait duration so an audit can reconstruct the
+// pause without consulting routing logs.
+func appendRateLimitRetryEvent(appender BeadEventAppender, beadID string, info RateLimitRetryInfo) {
+	if appender == nil || beadID == "" {
+		return
+	}
+	body := map[string]any{
+		"attempt":     info.Attempt,
+		"wait_ms":     info.Wait.Milliseconds(),
+		"source":      info.Source,
+		"elapsed_ms":  info.Elapsed.Milliseconds(),
+		"over_budget": info.OverBudget,
+	}
+	if info.Result != nil {
+		if info.Result.Harness != "" {
+			body["harness"] = info.Result.Harness
+		}
+		if info.Result.Provider != "" {
+			body["provider"] = info.Result.Provider
+		}
+		if info.Result.Model != "" {
+			body["model"] = info.Result.Model
+		}
+	}
+	data, err := json.Marshal(body)
+	if err != nil {
+		return
+	}
+	summary := fmt.Sprintf("attempt=%d wait=%s source=%s", info.Attempt, info.Wait.Round(time.Millisecond), info.Source)
+	if info.OverBudget {
+		summary = "budget exhausted: " + RateLimitBudgetExhaustedReason
+	}
+	_ = appender.AppendEvent(beadID, bead.BeadEvent{
+		Kind:    RateLimitRetryEventKind,
+		Summary: summary,
+		Body:    string(data),
+		Actor:   "ddx",
+		Source:  "ddx agent execute-bead",
+	})
+}
+
 // ExecuteBeadWithConfig is the thin worker: it creates an isolated worktree,
 // constructs the agent prompt from bead context, runs the agent harness,
 // synthesizes a commit if the agent left uncommitted changes, then cleans up
@@ -742,7 +790,32 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	defer dispatchCancel()
 	cancelHonored := startCancelPoll(dispatchCtx, dispatchCancel, beadID, runtime.BeadCancel)
 
-	agentResult, agentErr := dispatchAgentRun(dispatchCtx, projectRoot, runtime.Service, runtime.AgentRunner, rcfg, runRuntime)
+	// Wrap dispatch with the per-bead rate-limit retry policy
+	// (ddx-c6e3db02 / TD-031 §8.4 RateLimitRetryContract). On HTTP 429 from
+	// the harness, the wrapper waits per Retry-After (or exponential
+	// backoff), invokes RecordRouteAttempt for routing-engine transparency
+	// without flipping provider availability, and retries the same bead
+	// with the same provider until either a non-rate-limit result lands or
+	// the per-bead total wait budget is exhausted.
+	rateLimitCfg := RateLimitRetryConfig{
+		Budget: runtime.RateLimitMaxWait,
+	}
+	if runtime.Service != nil {
+		rateLimitCfg.OnRetry = func(ctx context.Context, info RateLimitRetryInfo) {
+			// Best-effort; the routing engine has its own error handling.
+			_ = runtime.Service.RecordRouteAttempt(ctx, BuildRateLimitRouteAttempt(info))
+			if runtime.BeadEvents != nil {
+				appendRateLimitRetryEvent(runtime.BeadEvents, beadID, info)
+			}
+		}
+	} else if runtime.BeadEvents != nil {
+		rateLimitCfg.OnRetry = func(_ context.Context, info RateLimitRetryInfo) {
+			appendRateLimitRetryEvent(runtime.BeadEvents, beadID, info)
+		}
+	}
+	agentResult, agentErr := RunWithRateLimitRetry(dispatchCtx, rateLimitCfg, func(ctx context.Context) (*Result, error) {
+		return dispatchAgentRun(ctx, projectRoot, runtime.Service, runtime.AgentRunner, rcfg, runRuntime)
+	})
 	finishedAt := time.Now().UTC()
 
 	exitCode := 0

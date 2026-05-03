@@ -75,6 +75,9 @@ work runs inline in the current process; per ADR-022 there is no separate
 	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart tier)")
 	cmd.Flags().Float64("max-cost", escalation.DefaultMaxCostUSD, "Stop when accumulated billed cost exceeds USD; 0 = unlimited")
 	cmd.Flags().Duration("request-timeout", 0, "Per-request provider wall-clock timeout; overrides project config and model-class defaults")
+	// Per-bead rate-limit retry budget (ddx-c6e3db02 / TD-031 §8.4).
+	cmd.Flags().Duration("rate-limit-max-wait", agent.RateLimitRetryDefaultBudget,
+		"Per-bead total wait budget for HTTP 429 / rate-limit retries (default 5m). 0 keeps the default; negative disables retry.")
 	// Power bounds: ddx work owns retry-power policy — these set the envelope
 	// for operator-constrained power within which the agent selects the route.
 	cmd.Flags().Int("min-power", 0, "Minimum model power required (0 = unconstrained); passed to agent routing unchanged")
