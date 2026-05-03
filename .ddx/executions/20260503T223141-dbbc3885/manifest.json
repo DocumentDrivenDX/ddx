@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260503T223141-dbbc3885",
+  "bead_id": "ddx-743bc194",
+  "base_rev": "58e955ce146ea309a9f15fe4ca89d7aa815be562",
+  "created_at": "2026-05-03T22:31:43.429481458Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-743bc194",
+    "title": "Run chaos_test.go against axon backend",
+    "description": "Parameterize cli/internal/bead/chaos_test.go (or add a sibling) to run the existing chaos suite against the axon backend in addition to JSONL. Fix any bugs uncovered in the axon backend until the suite is green.",
+    "acceptance": "1. chaos_test.go (or chaos_axon_test.go) exercises the axon backend with the same scenarios (concurrent claims, crashes, dep-graph integrity). 2. go test -run Chaos ./cli/internal/bead/... passes for both backends. 3. Any bugs found are fixed in axon_backend.go, not papered over in tests.",
+    "parent": "ddx-5d49b14e",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:storage",
+      "kind:test",
+      "backend-migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T22:31:41Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T22:31:41.757827259Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T223141-dbbc3885",
+    "prompt": ".ddx/executions/20260503T223141-dbbc3885/prompt.md",
+    "manifest": ".ddx/executions/20260503T223141-dbbc3885/manifest.json",
+    "result": ".ddx/executions/20260503T223141-dbbc3885/result.json",
+    "checks": ".ddx/executions/20260503T223141-dbbc3885/checks.json",
+    "usage": ".ddx/executions/20260503T223141-dbbc3885/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-743bc194-20260503T223141-dbbc3885"
+  },
+  "prompt_sha": "dc0c8a5ee7950bd9f4207774759de6291e0ef2be0ea1cc828992a4c6dd58cd17"
+}
