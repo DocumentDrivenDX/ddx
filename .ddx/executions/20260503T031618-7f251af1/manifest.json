@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260503T031618-7f251af1",
+  "bead_id": "ddx-2db0bd7a",
+  "base_rev": "8635d3e70eae57bed113d74abaf35a686232ca1f",
+  "created_at": "2026-05-03T03:16:19.385551522Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2db0bd7a",
+    "title": "review: spec updates (FEAT-008/006/022 + new TD + AGENTS.md)",
+    "description": "Spec updates: FEAT-008 (web UI), FEAT-006 (agent service), FEAT-022 (prompt evidence assembly). New TD for the multi-turn structured-assembly architecture. AGENTS.md updated for the no-tool reviewer mode convention. Parallel — no deps on the implementation beads.",
+    "acceptance": "1. All three FEATs updated. 2. New TD authored. 3. AGENTS.md updated. 4. ddx doc audit clean.",
+    "parent": "ddx-42b917fe",
+    "labels": [
+      "phase:2",
+      "story:18",
+      "area:specs",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:16:17Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T14:57:22.212866097Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\nresult_rev=a90887cfd501df74a04978e512223bcae4bb6c71\nbase_rev=a90887cfd501df74a04978e512223bcae4bb6c71\nretry_after=2026-05-02T20:57:22Z",
+          "created_at": "2026-05-02T14:57:22.314158109Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T03:16:17.995344756Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-02T20:57:22Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031618-7f251af1",
+    "prompt": ".ddx/executions/20260503T031618-7f251af1/prompt.md",
+    "manifest": ".ddx/executions/20260503T031618-7f251af1/manifest.json",
+    "result": ".ddx/executions/20260503T031618-7f251af1/result.json",
+    "checks": ".ddx/executions/20260503T031618-7f251af1/checks.json",
+    "usage": ".ddx/executions/20260503T031618-7f251af1/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2db0bd7a-20260503T031618-7f251af1"
+  },
+  "prompt_sha": "89d07294e20f1e833aa071fe4b36a45a1cf8130935d86f91adf3565af8488208"
+}
