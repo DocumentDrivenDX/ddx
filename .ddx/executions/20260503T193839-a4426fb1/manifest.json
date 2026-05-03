@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T193839-a4426fb1",
+  "bead_id": "ddx-1e680a00",
+  "base_rev": "61429f5f01a91bfa793402e525ca8064186d4074",
+  "created_at": "2026-05-03T19:38:41.307211406Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1e680a00",
+    "title": "operator-prompts: execute-loop wake-on-approve + origin_operator_prompt_id backlinks",
+    "description": "Execute loop wakes when a proposed operator-prompt → ready. All affected beads/artifacts get origin_operator_prompt_id backlink so audit traces back to the originating prompt.",
+    "acceptance": "1. Execute loop picks up newly-ready operator-prompts. 2. origin_operator_prompt_id added to events / artifact frontmatter. 3. Backlinks queryable via ddx bead show.",
+    "parent": "ddx-1d85c927",
+    "labels": [
+      "phase:2",
+      "story:15",
+      "area:agent",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T19:38:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T19:38:39.595331174Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T193839-a4426fb1",
+    "prompt": ".ddx/executions/20260503T193839-a4426fb1/prompt.md",
+    "manifest": ".ddx/executions/20260503T193839-a4426fb1/manifest.json",
+    "result": ".ddx/executions/20260503T193839-a4426fb1/result.json",
+    "checks": ".ddx/executions/20260503T193839-a4426fb1/checks.json",
+    "usage": ".ddx/executions/20260503T193839-a4426fb1/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-1e680a00-20260503T193839-a4426fb1"
+  },
+  "prompt_sha": "e115993f7ada057678590aa375980a41672bc4ca03e8f6edf2499f8313296503"
+}
