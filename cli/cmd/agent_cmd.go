@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/json"
@@ -847,33 +846,6 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 	cmd.Flags().String("timeout", "", "Timeout for connectivity checks (default 15s)")
 	cmd.Flags().Bool("json", false, "Output as JSON (with --routing or --workers)")
 	return cmd
-}
-
-// harnessHealthyViaService reports whether the upstream service has an active
-// failure cooldown recorded against the given harness. The upstream service's
-// RouteStatus is the authoritative health source, so one worker's
-// RecordRouteAttempt benefits every other consumer. When RouteStatus is
-// unavailable (e.g. fresh service with no routes yet) the harness is
-// considered healthy.
-func harnessHealthyViaService(ctx context.Context, svc agentlib.FizeauService, harness string) bool {
-	if svc == nil || harness == "" {
-		return true
-	}
-	report, err := svc.RouteStatus(ctx)
-	if err != nil || report == nil {
-		return true
-	}
-	for _, route := range report.Routes {
-		for _, cand := range route.Candidates {
-			if cand.Provider != harness {
-				continue
-			}
-			if !cand.Healthy {
-				return false
-			}
-		}
-	}
-	return true
 }
 
 // harnessInfoToRoutingSignal translates an upstream HarnessInfo into the
@@ -1990,161 +1962,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			}
 		}
 	}
-	return nil
-}
-
-func formatTryResult(cmd *cobra.Command, projectRoot, beadID string, result *agent.ExecuteBeadLoopResult, asJSON bool) error {
-	if asJSON {
-		payload := struct {
-			ProjectRoot string `json:"project_root"`
-			BeadID      string `json:"bead_id"`
-			*agent.ExecuteBeadLoopResult
-		}{
-			ProjectRoot:           projectRoot,
-			BeadID:                beadID,
-			ExecuteBeadLoopResult: result,
-		}
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		if err := enc.Encode(payload); err != nil {
-			return err
-		}
-	}
-
-	if result == nil || result.NoReadyWork {
-		fmt.Fprintf(cmd.ErrOrStderr(), "bead is not execution-ready: %s\n", beadID)
-		return &ExitError{Code: tryExitFailed, Message: ""}
-	}
-	if len(result.Results) == 0 {
-		return &ExitError{Code: tryExitFailed, Message: ""}
-	}
-
-	report := result.Results[0]
-	if !asJSON {
-		fmt.Fprintf(cmd.OutOrStdout(), "\nbead: %s\nstatus: %s\n", report.BeadID, report.Status)
-		if report.Detail != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "detail: %s\n", report.Detail)
-		}
-		if report.ResultRev != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "result_rev: %s\n", report.ResultRev)
-		}
-		if report.PreserveRef != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "preserve_ref: %s\n", report.PreserveRef)
-		}
-	}
-	return tryExitCodeForStatus(report.Status)
-}
-
-// executeLoopWithServer submits an execute-loop job to the running ddx server.
-// The server starts a background worker and returns its ID.
-func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, harness, model, profile, provider, modelRef, effort string, once bool, pollInterval time.Duration, asJSON bool, noReview bool, reviewHarness, reviewModel string, opaquePassthrough bool) error {
-	serverBase := resolveServerURL(projectRoot)
-
-	workerSpec := map[string]any{
-		"once":         once,
-		"project_root": projectRoot,
-	}
-	if opaquePassthrough {
-		workerSpec["opaque_passthrough"] = true
-	}
-	if harness != "" {
-		workerSpec["harness"] = harness
-	}
-	if model != "" {
-		workerSpec["model"] = model
-	}
-	if profile != "" {
-		workerSpec["profile"] = profile
-	}
-	if provider != "" {
-		workerSpec["provider"] = provider
-	}
-	if modelRef != "" {
-		workerSpec["model_ref"] = modelRef
-	}
-	if effort != "" {
-		workerSpec["effort"] = effort
-	}
-	if pollInterval > 0 {
-		workerSpec["poll_interval"] = pollInterval.String()
-	}
-	if noReview {
-		workerSpec["no_review"] = true
-	}
-	if reviewHarness != "" {
-		workerSpec["review_harness"] = reviewHarness
-	}
-	if reviewModel != "" {
-		workerSpec["review_model"] = reviewModel
-	}
-	specData, err := json.Marshal(workerSpec)
-	if err != nil {
-		return fmt.Errorf("marshal worker spec: %w", err)
-	}
-
-	reqURL := serverBase + "/api/agent/workers/execute-loop"
-	req, err := http.NewRequestWithContext(cmd.Context(), http.MethodPost, reqURL, bytes.NewReader(specData))
-	if err != nil {
-		return err
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	client := newLocalServerClient()
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("submit to server %s: %w\n  Hint: start the server with 'ddx server'", serverBase, err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	if resp.StatusCode == http.StatusServiceUnavailable {
-		return fmt.Errorf("server is running but no project is loaded for this directory\n  Hint: start the server from the project root")
-	}
-	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("server error (%d): %s", resp.StatusCode, strings.TrimSpace(string(body)))
-	}
-
-	var workerRecord struct {
-		ID          string `json:"id"`
-		State       string `json:"state"`
-		ProjectRoot string `json:"project_root"`
-		Harness     string `json:"harness,omitempty"`
-		Model       string `json:"model,omitempty"`
-		Once        bool   `json:"once"`
-	}
-	if err := json.NewDecoder(resp.Body).Decode(&workerRecord); err != nil {
-		body, _ := io.ReadAll(resp.Body)
-		return fmt.Errorf("parse server response: %w: %s", err, string(body))
-	}
-
-	if asJSON {
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(map[string]any{
-			"worker_id":    workerRecord.ID,
-			"state":        workerRecord.State,
-			"project_root": workerRecord.ProjectRoot,
-			"harness":      workerRecord.Harness,
-			"model":        workerRecord.Model,
-			"once":         workerRecord.Once,
-		})
-	}
-
-	fmt.Fprintf(cmd.OutOrStdout(), "worker:   %s\n", workerRecord.ID)
-	fmt.Fprintf(cmd.OutOrStdout(), "state:    %s\n", workerRecord.State)
-	fmt.Fprintf(cmd.OutOrStdout(), "project:  %s\n", workerRecord.ProjectRoot)
-	if workerRecord.Harness != "" {
-		fmt.Fprintf(cmd.OutOrStdout(), "harness:  %s\n", workerRecord.Harness)
-	}
-	if workerRecord.Model != "" {
-		fmt.Fprintf(cmd.OutOrStdout(), "model:    %s\n", workerRecord.Model)
-	}
-	if workerRecord.Once {
-		fmt.Fprintln(cmd.OutOrStdout(), "once:     true")
-	}
-	fmt.Fprintln(cmd.OutOrStdout(), "")
-	fmt.Fprintf(cmd.OutOrStdout(), "Monitor progress: ddx server workers show %s\n", workerRecord.ID)
-	fmt.Fprintf(cmd.OutOrStdout(), "View logs:        ddx server workers log %s\n", workerRecord.ID)
 	return nil
 }
 

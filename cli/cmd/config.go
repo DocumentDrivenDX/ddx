@@ -2,13 +2,11 @@ package cmd
 
 import (
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
 	"github.com/fatih/color"
 	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v3"
@@ -139,13 +137,6 @@ func (f *CommandFactory) runConfig(cmd *cobra.Command, args []string) error {
 	}
 }
 
-// Legacy wrapper functions for backwards compatibility
-func runConfig(cmd *cobra.Command, args []string) error {
-	f := &CommandFactory{WorkingDir: ""}
-	return f.runConfig(cmd, args)
-}
-
-// Legacy functions - replaced by pure business logic functions above
 // Business Logic Layer - Pure Functions
 
 // configGet retrieves a configuration value
@@ -382,17 +373,6 @@ func setConfigValueInStruct(cfg *config.Config, key, value string) error {
 	return nil
 }
 
-// CLI Interface Layer Functions
-
-func getConfigValueWithWorkingDir(cmd *cobra.Command, key string, global bool, workingDir string) error {
-	value, err := configGet(workingDir, key, global)
-	if err != nil {
-		return err
-	}
-	_, _ = fmt.Fprintln(cmd.OutOrStdout(), value)
-	return nil
-}
-
 // outputConfigFiles handles outputting configuration file locations
 func (f *CommandFactory) outputConfigFiles(cmd *cobra.Command, files []ConfigFileInfo) error {
 	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "📋 DDx Configuration File Locations:")
@@ -427,35 +407,6 @@ func (f *CommandFactory) editConfigFile(cmd *cobra.Command, configPath string) e
 // handleProfileSubcommand handles profile-specific operations
 func (f *CommandFactory) handleProfileSubcommand(cmd *cobra.Command, args []string) error {
 	return handleProfileSubcommand(cmd, args)
-}
-
-// copyFile copies a file from src to dst
-func copyFile(src, dst string) error {
-	sourceFile, err := os.Open(src)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = sourceFile.Close() }()
-
-	destFile, err := os.Create(dst)
-	if err != nil {
-		return err
-	}
-	defer func() { _ = destFile.Close() }()
-
-	_, err = io.Copy(destFile, sourceFile)
-	if err != nil {
-		return err
-	}
-
-	return destFile.Sync()
-}
-
-// showConfigFiles displays all config file locations
-func showConfigFiles(cmd *cobra.Command) error {
-	f := &CommandFactory{WorkingDir: ""}
-	files := configListFiles(f.WorkingDir)
-	return f.outputConfigFiles(cmd, files)
 }
 
 // handleProfileSubcommand handles profile-specific subcommands for US-023
@@ -506,39 +457,6 @@ func handleProfileSubcommand(cmd *cobra.Command, args []string) error {
 	default:
 		return fmt.Errorf("unknown profile action: %s", action)
 	}
-}
-
-// resyncMetaPromptAfterConfigChange re-syncs meta-prompt after config change
-func resyncMetaPromptAfterConfigChange(workingDir string) error {
-	cfg, err := config.LoadWithWorkingDir(workingDir)
-	if err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
-	return syncMetaPromptWithConfig(cfg, workingDir)
-}
-
-// syncMetaPromptWithConfig syncs meta-prompt based on config
-func syncMetaPromptWithConfig(cfg *config.Config, workingDir string) error {
-	promptPath := cfg.GetMetaPrompt()
-	if promptPath == "" {
-		// Disabled - remove meta-prompt section if exists
-		injector := metaprompt.NewMetaPromptInjectorWithPaths(
-			"CLAUDE.md",
-			cfg.Library.Path,
-			workingDir,
-		)
-		return injector.RemoveMetaPrompt()
-	}
-
-	// Create injector and sync
-	injector := metaprompt.NewMetaPromptInjectorWithPaths(
-		"CLAUDE.md",
-		cfg.Library.Path,
-		workingDir,
-	)
-
-	return injector.InjectMetaPrompt(promptPath)
 }
 
 // createProfile creates a new environment profile

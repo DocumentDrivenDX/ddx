@@ -42,10 +42,6 @@ type LogOptions struct {
 // Remove init function - commands are now registered via command factory
 
 // CLI Interface Layer - handles UI concerns only
-func runLog(cmd *cobra.Command, args []string) error {
-	return runLogWithWorkingDir(cmd, args, "")
-}
-
 func (f *CommandFactory) runLog(cmd *cobra.Command, args []string) error {
 	return runLogWithWorkingDir(cmd, args, f.WorkingDir)
 }

@@ -190,7 +190,13 @@ func (env *InstallationTestEnvironment) ExecuteInstallCommand(command string) In
 	}
 
 	// Copy binary to install location
-	if err := copyFile(builtBinary, expectedBinaryPath); err != nil {
+	if err := func(src, dst string) error {
+		data, err := os.ReadFile(src)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(dst, data, 0644)
+	}(builtBinary, expectedBinaryPath); err != nil {
 		return InstallationResult{
 			Success:                   false,
 			BinaryPath:                "",

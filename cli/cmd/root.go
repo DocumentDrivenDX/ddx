@@ -1,8 +1,6 @@
 package cmd
 
 import (
-	"os"
-
 	"github.com/spf13/cobra"
 )
 
@@ -35,16 +33,4 @@ func Execute(workingDir string) error {
 		rootCmd = factory.NewRootCommand()
 	}
 	return rootCmd.Execute()
-}
-
-// Helper functions for other commands
-func isInitialized() bool {
-	_, err := os.Stat(".ddx")
-	return err == nil
-}
-
-// getLibraryPath returns the library path override from environment
-// This is now handled through the factory pattern
-func getLibraryPath() string {
-	return getLibraryPathFromEnv()
 }

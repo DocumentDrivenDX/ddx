@@ -79,11 +79,6 @@ func (f *CommandFactory) runPersona(cmd *cobra.Command, args []string) error {
 	return runPersonaWithWorkingDir(cmd, args, f.WorkingDir)
 }
 
-// runPersona implements the persona command logic
-func runPersona(cmd *cobra.Command, args []string) error {
-	return runPersonaWithWorkingDir(cmd, args, "")
-}
-
 // runPersonaWithWorkingDir implements the persona command logic with working directory support
 func runPersonaWithWorkingDir(cmd *cobra.Command, args []string, workingDir string) error {
 	// Extract flags from cobra.Command
@@ -873,27 +868,6 @@ func loadPersonaConfig(workingDir string) (*config.Config, error) {
 	return config.LoadWithWorkingDir(workingDir)
 }
 
-// savePersonaConfig saves config to working directory for persona operations
-func savePersonaConfig(workingDir string, cfg *config.Config) error {
-	// Create .ddx directory if it doesn't exist
-	ddxDir := ".ddx"
-	if workingDir != "" {
-		ddxDir = filepath.Join(workingDir, ".ddx")
-	}
-	if err := os.MkdirAll(ddxDir, 0755); err != nil {
-		return fmt.Errorf("failed to create .ddx directory: %w", err)
-	}
-
-	configPath := filepath.Join(ddxDir, "config.yaml")
-
-	data, err := yaml.Marshal(cfg)
-	if err != nil {
-		return fmt.Errorf("failed to marshal configuration: %w", err)
-	}
-
-	return os.WriteFile(configPath, data, 0644)
-}
-
 // personaNew creates a new project-local persona. If bodyFile is empty, a
 // scaffold is generated from the default template.
 func personaNew(workingDir, name, bodyFile string) (*persona.Persona, error) {
@@ -996,16 +970,6 @@ tags: []
 
 TODO: describe what this persona does for your team.
 `, name, name, name)
-}
-
-// IsLibraryReadOnly returns true if err represents a read-only library
-// persona rejection from the persona package.
-func IsLibraryReadOnly(err error) bool {
-	var pe *persona.PersonaError
-	if errors.As(err, &pe) {
-		return pe.Type == persona.ErrorReadOnlyLibrary
-	}
-	return false
 }
 
 // addPersonaBindingToNode adds or updates a persona binding in a YAML node tree

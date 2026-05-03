@@ -447,110 +447,6 @@ func registerBootstrapDDxSkills(workingDir string, force bool) {
 	}
 }
 
-// copyDir recursively copies a directory
-func copyDir(src, dst string) error {
-	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-
-		// Get the relative path
-		relPath, err := filepath.Rel(src, path)
-		if err != nil {
-			return err
-		}
-
-		// Create destination path
-		dstPath := filepath.Join(dst, relPath)
-
-		if info.IsDir() {
-			return os.MkdirAll(dstPath, info.Mode())
-		}
-
-		// Copy file
-		return copyFile(path, dstPath)
-	})
-}
-
-// copyFile is defined in config.go to avoid duplication
-
-// initializeSynchronizationPure is the pure business logic for sync setup
-func initializeSynchronizationPure(cfg *config.Config) error {
-	// Validate repository configuration
-	if cfg.Library == nil || cfg.Library.Repository == nil || cfg.Library.Repository.URL == "" {
-		return fmt.Errorf("repository URL not configured")
-	}
-
-	if cfg.Library.Repository.Branch == "" {
-		cfg.Library.Repository.Branch = "main" // Default branch
-	}
-
-	// Validate the repository URL - accepts file:// URLs for local testing
-	if !isValidRepositoryURL(cfg.Library.Repository.URL) {
-		return fmt.Errorf("invalid repository URL: %s", cfg.Library.Repository.URL)
-	}
-
-	return nil
-}
-
-// initializeSynchronization sets up the sync configuration and validates upstream connection (CLI wrapper)
-func initializeSynchronization(cfg *config.Config, cmd *cobra.Command) error {
-	_, _ = fmt.Fprint(cmd.OutOrStdout(), "Setting up synchronization...\n")
-	_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ✓ Validating upstream repository connection...\n")
-
-	err := initializeSynchronizationPure(cfg)
-	if err != nil {
-		return err
-	}
-
-	// Show sync setup messages
-	_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ✓ Upstream repository connection verified\n")
-	_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ✓ Synchronization configuration validated\n")
-	_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ✓ Change tracking initialized\n")
-
-	return nil
-}
-
-// isValidRepositoryURL performs basic URL validation for repository URLs
-func isValidRepositoryURL(url string) bool {
-	// Basic validation - check for common git repository patterns
-	if url == "" {
-		return false
-	}
-
-	// Accept file:// URLs for local testing
-	if strings.HasPrefix(url, "file://") {
-		return true
-	}
-
-	// Accept common git URL patterns
-	validPrefixes := []string{
-		"https://github.com/",
-		"https://gitlab.com/",
-		"https://bitbucket.org/",
-		"git@github.com:",
-		"git@gitlab.com:",
-		"git@bitbucket.org:",
-	}
-
-	for _, prefix := range validPrefixes {
-		if strings.HasPrefix(url, prefix) {
-			return true
-		}
-	}
-
-	// Accept any https URL
-	return strings.HasPrefix(url, "https://")
-}
-
-// fileExistsInDir checks if a file exists in a specific directory
-func fileExistsInDir(dir, filename string) bool {
-	_, err := os.Stat(filepath.Join(dir, filename))
-	return err == nil
-}
-
-// fileExists is already defined in diagnose.go
-
 // createProjectConfig creates a basic configuration with defaults
 func createProjectConfig() *config.Config {
 	cfg := &config.Config{
@@ -629,19 +525,6 @@ func validateGitRepo(workingDir string) error {
 		return fmt.Errorf("Error: ddx init must be run inside a git repository. Please run 'git init' first")
 	}
 
-	return nil
-}
-
-// validateGitRepository checks if the current directory is inside a git repository (CLI wrapper)
-func validateGitRepository(cmd *cobra.Command) error {
-	_, _ = fmt.Fprint(cmd.OutOrStdout(), "🔍 Validating git repository...\n")
-
-	err := validateGitRepo(".")
-	if err != nil {
-		return err
-	}
-
-	_, _ = fmt.Fprint(cmd.OutOrStdout(), "  ✓ Git repository detected\n")
 	return nil
 }
 

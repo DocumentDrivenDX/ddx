@@ -15,18 +15,6 @@ import (
 
 var validBeadID = regexp.MustCompile(`^[a-zA-Z0-9._-]+$`)
 
-// loadExecutionsMirrorConfig reads .ddx/config.yaml at projectRoot and returns
-// the executions.mirror block when configured. Errors return nil silently —
-// missing or invalid mirror config simply disables mirroring; it never blocks
-// execute-bead.
-func loadExecutionsMirrorConfig(projectRoot string) *config.ExecutionsMirrorConfig {
-	cfg, err := config.LoadWithWorkingDir(projectRoot)
-	if err != nil || cfg == nil || cfg.Executions == nil || cfg.Executions.Mirror == nil {
-		return nil
-	}
-	return cfg.Executions.Mirror
-}
-
 // landingGitOpsFromFactory returns the agent.LandingGitOps the CommandFactory
 // should use — either the test override or the default RealLandingGitOps.
 func landingGitOpsFromFactory(f *CommandFactory) agent.LandingGitOps {

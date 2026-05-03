@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // Test that demonstrates the functional design principles
@@ -154,19 +152,5 @@ func TestBusinessLogicIndependence(t *testing.T) {
 	err := validateGitRepo(te.Dir)
 	if err == nil {
 		t.Error("validateGitRepo should work without cobra.Command")
-	}
-
-	// Test initializeSynchronizationPure - pure function
-	cfg := &config.Config{
-		Library: &config.LibraryConfig{
-			Repository: &config.RepositoryConfig{
-				URL:    "",
-				Branch: "",
-			},
-		},
-	}
-	err = initializeSynchronizationPure(cfg)
-	if err == nil {
-		t.Error("initializeSynchronizationPure should return error for empty URL")
 	}
 }
