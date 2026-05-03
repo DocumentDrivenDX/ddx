@@ -189,4 +189,3 @@ func TestGraphQL_LegacyRoute_StillWorks(t *testing.T) {
 		t.Fatalf("legacy query: expected A's content, got %+v", resp.Data.DocumentByPath)
 	}
 }
-
