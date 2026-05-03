@@ -1,0 +1,59 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "All AC satisfied: protocol/loader/runner packages exist with documented types, loader uses KnownFields(true) with file context errors, runner injects documented env vars and runs in parallel via goroutines treating non-zero exit and missing result files as error, and `ddx ac run \u003cbead-id\u003e` with --check flag is wired and exits 1 on block/error. Result.json reports success.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Bead-review changed-files set lists only evidence JSON; full implementation lives in earlier commit 1a7da8b0 (verified via git diff b5f5b7a0..HEAD --stat showing cli/cmd/ac.go, cli/internal/checks/{protocol,loader,runner,*_test}.go and testdata/fixture_check.sh).",
+      "location": ".ddx/executions/20260503T203330-4fb9b30e/result.json"
+    },
+    {
+      "severity": "info",
+      "summary": "Runner cleans stale result file before invoking command, ensuring crashed checks correctly classify as status=error rather than reusing prior output.",
+      "location": "cli/internal/checks/runner.go:62"
+    },
+    {
+      "severity": "info",
+      "summary": "Loader rejects unknown YAML fields via dec.KnownFields(true) and wraps decode errors with the file path; yaml.v3 includes line:column in its error messages.",
+      "location": "cli/internal/checks/loader.go:65"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2860,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T203330-4fb9b30e/manifest.json",
+          ".ddx/executions/20260503T203330-4fb9b30e/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 108796,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 113462,
+    "output_bytes": 1333,
+    "elapsed_ms": 140478,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
