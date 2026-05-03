@@ -1,0 +1,58 @@
+{
+  "attempt_id": "20260503T031802-706cf44c",
+  "bead_id": "ddx-6af3ae8f",
+  "base_rev": "5d0abb7a9157e1c22364b0a592a0da49db63a7c5",
+  "created_at": "2026-05-03T03:18:03.869597308Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6af3ae8f",
+    "title": "bd fallback: document how to wire bd as the bead-tracker backend (fallback path)",
+    "description": "Single artifact under docs/ explaining how to wire bd as the backend if axon adoption stalls. Touches: install bd, point .ddx/config.yaml backend: bd, validate. No code change required if backend.go already supports it.",
+    "acceptance": "1. docs page exists with concrete steps. 2. Verified by running locally with bd installed (or noting the gap if bd isn't installable on the dev machine).",
+    "parent": "ddx-5d49b14e",
+    "labels": [
+      "phase:2",
+      "area:docs",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:18:02Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "504561",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T14:57:34.061464151Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\nresult_rev=691b41378aa0226a634d34709a34c84ea72c6522\nbase_rev=691b41378aa0226a634d34709a34c84ea72c6522\nretry_after=2026-05-02T20:57:34Z",
+          "created_at": "2026-05-02T14:57:34.150703962Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T03:18:02.472220214Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-02T20:57:34Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031802-706cf44c",
+    "prompt": ".ddx/executions/20260503T031802-706cf44c/prompt.md",
+    "manifest": ".ddx/executions/20260503T031802-706cf44c/manifest.json",
+    "result": ".ddx/executions/20260503T031802-706cf44c/result.json",
+    "checks": ".ddx/executions/20260503T031802-706cf44c/checks.json",
+    "usage": ".ddx/executions/20260503T031802-706cf44c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6af3ae8f-20260503T031802-706cf44c"
+  }
+}
