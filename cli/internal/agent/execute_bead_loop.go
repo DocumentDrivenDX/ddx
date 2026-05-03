@@ -1222,7 +1222,7 @@ type pickerSkip struct {
 // It delegates filter+sort to PreviewQueue and then additionally filters out
 // beads present in the per-Run attempted map (which is non-deterministic across
 // runs and therefore excluded from the stable PreviewQueue surface).
-func (w *ExecuteBeadWorker) nextCandidate(attempted map[string]struct{}, labelFilter string) (bead.Bead, []pickerSkip, bool, error) {
+func (w *ExecuteBeadWorker) nextCandidate(attempted map[string]struct{}, labelFilter, targetBeadID string) (bead.Bead, []pickerSkip, bool, error) {
 	// Use PreviewQueue for the stable filter+sort logic. Limit=0 returns all
 	// entries so we can scan for the first non-attempted candidate.
 	entries, err := PreviewQueue(w.Store, PickerFilters{LabelFilter: labelFilter}, 0)
@@ -1248,6 +1248,10 @@ func (w *ExecuteBeadWorker) nextCandidate(attempted map[string]struct{}, labelFi
 		candidate, ok := byID[entry.BeadID]
 		if !ok {
 			// Should not happen; skip defensively.
+			continue
+		}
+		if targetBeadID != "" && candidate.ID != targetBeadID {
+			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, Reason: "target_bead"})
 			continue
 		}
 		if _, seen := attempted[candidate.ID]; seen {

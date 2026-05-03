@@ -65,8 +65,8 @@ type Check struct {
 // Semantics:
 //   - If neither Paths nor Labels is set, the check ALWAYS applies.
 //   - If Paths is set, the check applies when any changed path matches
-//     any glob (filepath.Match semantics, evaluated against the path
-//     relative to PROJECT_ROOT).
+//     any glob, evaluated against slash-normalized paths relative to
+//     PROJECT_ROOT. The recursive "**" segment is supported.
 //   - If Labels is set, the check applies when the bead carries any of
 //     the listed labels.
 //   - If both are set, EITHER a matching path OR a matching label causes

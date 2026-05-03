@@ -17,7 +17,7 @@ func writeFile(t *testing.T, path, body string) {
 	}
 }
 
-func TestLoadDir_MissingDirReturnsNil(t *testing.T) {
+func TestChecksLoadDir_MissingDirReturnsNil(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "does-not-exist")
 	checks, err := LoadDir(dir)
 	if err != nil {
@@ -28,7 +28,7 @@ func TestLoadDir_MissingDirReturnsNil(t *testing.T) {
 	}
 }
 
-func TestLoadDir_Valid(t *testing.T) {
+func TestChecksLoadDir_Valid(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "a.yaml"), `
 name: alpha
@@ -61,7 +61,7 @@ applies_to:
 	}
 }
 
-func TestLoadFile_BadYAML(t *testing.T) {
+func TestChecksLoadFile_BadYAML(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "bad.yaml")
 	writeFile(t, p, "name: oops\n  command: : :\n")
@@ -77,7 +77,7 @@ func TestLoadFile_BadYAML(t *testing.T) {
 	}
 }
 
-func TestLoadFile_UnknownField(t *testing.T) {
+func TestChecksLoadFile_UnknownField(t *testing.T) {
 	dir := t.TempDir()
 	p := filepath.Join(dir, "unknown.yaml")
 	writeFile(t, p, `
@@ -95,7 +95,7 @@ extra_unknown: 1
 	}
 }
 
-func TestLoadFile_MissingRequired(t *testing.T) {
+func TestChecksLoadFile_MissingRequired(t *testing.T) {
 	dir := t.TempDir()
 	cases := map[string]string{
 		"no-name":    "command: x\nwhen: pre_merge\n",
@@ -114,7 +114,7 @@ func TestLoadFile_MissingRequired(t *testing.T) {
 	}
 }
 
-func TestLoadDir_DuplicateNames(t *testing.T) {
+func TestChecksLoadDir_DuplicateNames(t *testing.T) {
 	dir := t.TempDir()
 	body := "name: dup\ncommand: 'true'\nwhen: pre_merge\n"
 	writeFile(t, filepath.Join(dir, "1.yaml"), body)
@@ -125,7 +125,7 @@ func TestLoadDir_DuplicateNames(t *testing.T) {
 	}
 }
 
-func TestApplies(t *testing.T) {
+func TestChecksApplies(t *testing.T) {
 	cases := []struct {
 		name string
 		c    Check
@@ -153,6 +153,18 @@ func TestApplies(t *testing.T) {
 		{
 			name: "path glob basename match",
 			c:    Check{AppliesTo: AppliesTo{Paths: []string{"*.go"}}},
+			ctx:  InvocationContext{ChangedPaths: []string{"cli/cmd/foo.go"}},
+			want: true,
+		},
+		{
+			name: "recursive path glob match",
+			c:    Check{AppliesTo: AppliesTo{Paths: []string{"cli/**/*.go"}}},
+			ctx:  InvocationContext{ChangedPaths: []string{"cli/cmd/foo.go"}},
+			want: true,
+		},
+		{
+			name: "root recursive path glob match",
+			c:    Check{AppliesTo: AppliesTo{Paths: []string{"**/*.go"}}},
 			ctx:  InvocationContext{ChangedPaths: []string{"cli/cmd/foo.go"}},
 			want: true,
 		},

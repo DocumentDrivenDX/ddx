@@ -2,8 +2,10 @@ package checks
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -23,7 +25,7 @@ func newCtx(t *testing.T) (string, InvocationContext) {
 	}
 }
 
-func TestRun_PassWritesResult(t *testing.T) {
+func TestChecksRun_PassWritesResult(t *testing.T) {
 	_, ictx := newCtx(t)
 	c := Check{
 		Name:    "writer",
@@ -45,7 +47,7 @@ func TestRun_PassWritesResult(t *testing.T) {
 	}
 }
 
-func TestRun_BlockStatusFromFile(t *testing.T) {
+func TestChecksRun_BlockStatusFromFile(t *testing.T) {
 	_, ictx := newCtx(t)
 	c := Check{
 		Name:    "blocker",
@@ -61,7 +63,7 @@ func TestRun_BlockStatusFromFile(t *testing.T) {
 	}
 }
 
-func TestRun_NonZeroExitIsError(t *testing.T) {
+func TestChecksRun_NonZeroExitIsError(t *testing.T) {
 	_, ictx := newCtx(t)
 	c := Check{
 		Name:    "exiter",
@@ -77,7 +79,7 @@ func TestRun_NonZeroExitIsError(t *testing.T) {
 	}
 }
 
-func TestRun_MissingResultFileIsError(t *testing.T) {
+func TestChecksRun_MissingResultFileIsError(t *testing.T) {
 	_, ictx := newCtx(t)
 	c := Check{
 		Name:    "silent",
@@ -93,7 +95,7 @@ func TestRun_MissingResultFileIsError(t *testing.T) {
 	}
 }
 
-func TestRun_InvalidJSONIsError(t *testing.T) {
+func TestChecksRun_InvalidJSONIsError(t *testing.T) {
 	_, ictx := newCtx(t)
 	c := Check{
 		Name:    "garbage",
@@ -106,7 +108,7 @@ func TestRun_InvalidJSONIsError(t *testing.T) {
 	}
 }
 
-func TestRun_UnknownStatusIsError(t *testing.T) {
+func TestChecksRun_UnknownStatusIsError(t *testing.T) {
 	_, ictx := newCtx(t)
 	c := Check{
 		Name:    "weird",
@@ -119,7 +121,7 @@ func TestRun_UnknownStatusIsError(t *testing.T) {
 	}
 }
 
-func TestRun_EnvInjection(t *testing.T) {
+func TestChecksRun_EnvInjection(t *testing.T) {
 	_, ictx := newCtx(t)
 	c := Check{
 		Name:    "envcheck",
@@ -136,7 +138,7 @@ func TestRun_EnvInjection(t *testing.T) {
 	}
 }
 
-func TestRun_AppliesToFiltering(t *testing.T) {
+func TestChecksRun_AppliesToFiltering(t *testing.T) {
 	_, ictx := newCtx(t)
 	ictx.BeadLabels = []string{"area:foo"}
 	yes := Check{
@@ -158,7 +160,7 @@ func TestRun_AppliesToFiltering(t *testing.T) {
 	}
 }
 
-func TestRun_ParallelExecution(t *testing.T) {
+func TestChecksRun_ParallelExecution(t *testing.T) {
 	// Two checks that each sleep then write a unique file. Wall time
 	// should be close to one sleep, not two — verifying parallelism.
 	_, ictx := newCtx(t)
@@ -184,7 +186,7 @@ func TestRun_ParallelExecution(t *testing.T) {
 	}
 }
 
-func TestRun_StaleResultFileIsCleaned(t *testing.T) {
+func TestChecksRun_StaleResultFileIsCleaned(t *testing.T) {
 	_, ictx := newCtx(t)
 	if err := os.MkdirAll(ictx.EvidenceDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -197,5 +199,48 @@ func TestRun_StaleResultFileIsCleaned(t *testing.T) {
 	results, _ := Run(context.Background(), []Check{c}, ictx)
 	if results[0].Status != StatusError {
 		t.Fatalf("stale result file should be cleaned and run reported as error; got %s", results[0].Status)
+	}
+}
+
+func TestChecksRun_ShellScriptFixture(t *testing.T) {
+	_, ictx := newCtx(t)
+	script, err := filepath.Abs(filepath.Join("testdata", "fixture_check.sh"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixtureCommand := "sh " + strconv.Quote(script)
+	checks := []Check{
+		{Name: "envfixture", When: HookPreMerge, Command: fixtureCommand},
+		{Name: "slow-a", When: HookPreMerge, Command: fixtureCommand},
+		{Name: "slow-b", When: HookPreMerge, Command: fixtureCommand},
+		{Name: "exiter", When: HookPreMerge, Command: fixtureCommand},
+		{Name: "missing", When: HookPreMerge, Command: fixtureCommand},
+	}
+
+	start := time.Now()
+	results, err := Run(context.Background(), checks, ictx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	elapsed := time.Since(start).Milliseconds()
+	byName := make(map[string]Result, len(results))
+	for _, r := range results {
+		byName[r.Name] = r
+	}
+
+	if got := byName["envfixture"].Message; got != fmt.Sprintf("BEAD=%s BASE=%s HEAD=%s ROOT=%s RUN=%s", ictx.BeadID, ictx.DiffBase, ictx.DiffHead, ictx.ProjectRoot, ictx.RunID) {
+		t.Fatalf("env fixture message = %q", got)
+	}
+	if byName["slow-a"].Status != StatusPass || byName["slow-b"].Status != StatusPass {
+		t.Fatalf("slow fixture results = %+v %+v", byName["slow-a"], byName["slow-b"])
+	}
+	if byName["exiter"].Status != StatusError || byName["exiter"].ExitCode != 9 {
+		t.Fatalf("exiter = %+v", byName["exiter"])
+	}
+	if byName["missing"].Status != StatusError || !strings.Contains(byName["missing"].Message, "no result file") {
+		t.Fatalf("missing = %+v", byName["missing"])
+	}
+	if elapsed > 900 {
+		t.Fatalf("fixture checks appear sequential; elapsed=%dms", elapsed)
 	}
 }

@@ -1991,6 +1991,48 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	return nil
 }
 
+func formatTryResult(cmd *cobra.Command, projectRoot, beadID string, result *agent.ExecuteBeadLoopResult, asJSON bool) error {
+	if asJSON {
+		payload := struct {
+			ProjectRoot string `json:"project_root"`
+			BeadID      string `json:"bead_id"`
+			*agent.ExecuteBeadLoopResult
+		}{
+			ProjectRoot:           projectRoot,
+			BeadID:                beadID,
+			ExecuteBeadLoopResult: result,
+		}
+		enc := json.NewEncoder(cmd.OutOrStdout())
+		enc.SetIndent("", "  ")
+		if err := enc.Encode(payload); err != nil {
+			return err
+		}
+	}
+
+	if result == nil || result.NoReadyWork {
+		fmt.Fprintf(cmd.ErrOrStderr(), "bead is not execution-ready: %s\n", beadID)
+		return &ExitError{Code: tryExitFailed, Message: ""}
+	}
+	if len(result.Results) == 0 {
+		return &ExitError{Code: tryExitFailed, Message: ""}
+	}
+
+	report := result.Results[0]
+	if !asJSON {
+		fmt.Fprintf(cmd.OutOrStdout(), "\nbead: %s\nstatus: %s\n", report.BeadID, report.Status)
+		if report.Detail != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "detail: %s\n", report.Detail)
+		}
+		if report.ResultRev != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "result_rev: %s\n", report.ResultRev)
+		}
+		if report.PreserveRef != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "preserve_ref: %s\n", report.PreserveRef)
+		}
+	}
+	return tryExitCodeForStatus(report.Status)
+}
+
 // executeLoopWithServer submits an execute-loop job to the running ddx server.
 // The server starts a background worker and returns its ID.
 func (f *CommandFactory) executeLoopWithServer(cmd *cobra.Command, projectRoot, harness, model, profile, provider, modelRef, effort string, once bool, pollInterval time.Duration, asJSON bool, noReview bool, reviewHarness, reviewModel string, opaquePassthrough bool) error {

@@ -4,8 +4,10 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -105,15 +107,47 @@ func (c *Check) Applies(ctx InvocationContext) bool {
 	}
 	for _, glob := range a.Paths {
 		for _, p := range ctx.ChangedPaths {
-			if matched, _ := filepath.Match(glob, p); matched {
-				return true
-			}
-			// Also try matching against just the basename so
-			// patterns like "*.go" match deeply nested files.
-			if matched, _ := filepath.Match(glob, filepath.Base(p)); matched {
+			if matchPathGlob(glob, p) {
 				return true
 			}
 		}
 	}
 	return false
+}
+
+func matchPathGlob(pattern, name string) bool {
+	pattern = filepath.ToSlash(pattern)
+	name = filepath.ToSlash(name)
+	if matched, _ := path.Match(pattern, name); matched {
+		return true
+	}
+	if matched, _ := path.Match(pattern, path.Base(name)); matched {
+		return true
+	}
+	if !strings.Contains(pattern, "**") {
+		return false
+	}
+	return matchDoubleStar(strings.Split(pattern, "/"), strings.Split(name, "/"))
+}
+
+func matchDoubleStar(patternParts, nameParts []string) bool {
+	if len(patternParts) == 0 {
+		return len(nameParts) == 0
+	}
+	if patternParts[0] == "**" {
+		for i := 0; i <= len(nameParts); i++ {
+			if matchDoubleStar(patternParts[1:], nameParts[i:]) {
+				return true
+			}
+		}
+		return false
+	}
+	if len(nameParts) == 0 {
+		return false
+	}
+	matched, err := path.Match(patternParts[0], nameParts[0])
+	if err != nil || !matched {
+		return false
+	}
+	return matchDoubleStar(patternParts[1:], nameParts[1:])
 }

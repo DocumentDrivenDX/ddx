@@ -186,7 +186,7 @@ func TestPicker_StillWorks_AfterRefactor(t *testing.T) {
 	worker := &ExecuteBeadWorker{Store: store}
 
 	// Empty attempted map — both are eligible; high priority wins.
-	got, skips, ok, err := worker.nextCandidate(map[string]struct{}{}, "")
+	got, skips, ok, err := worker.nextCandidate(map[string]struct{}{}, "", "")
 	require.NoError(t, err)
 	require.True(t, ok)
 	assert.Equal(t, "ddx-high", got.ID)
@@ -194,7 +194,7 @@ func TestPicker_StillWorks_AfterRefactor(t *testing.T) {
 
 	// With high priority in attempted, low priority should be returned.
 	attempted := map[string]struct{}{"ddx-high": {}}
-	got2, skips2, ok2, err := worker.nextCandidate(attempted, "")
+	got2, skips2, ok2, err := worker.nextCandidate(attempted, "", "")
 	require.NoError(t, err)
 	require.True(t, ok2)
 	assert.Equal(t, "ddx-low", got2.ID)
