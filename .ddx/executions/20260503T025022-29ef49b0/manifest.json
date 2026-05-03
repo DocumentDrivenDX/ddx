@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T025022-29ef49b0",
+  "bead_id": "ddx-50da9674",
+  "base_rev": "0a688a9eebf6182a50db2ea417a4efb9986d5a09",
+  "created_at": "2026-05-03T02:50:24.048921965Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-50da9674",
+    "title": "infra: reusable clean fixture repo for tests + acceptance demos",
+    "description": "Multiple test/demo workflows need a clean ddx-initialized git repo without polluting this main project. Today each test creates its own t.TempDir() fixture; integration tests do ad-hoc setup; acceptance demos have nowhere to go.\n\nUSE CASES (current + planned)\n- ADR-022 acceptance demo (Stage 4 of design-phase plan): run 2 workers, restart server mid-execution, verify worker resilience without polluting the ddx repo\n- Integration tests that need a real .ddx/ directory + bead store + workers/ + executions/\n- bd/br interchange tests\n- Cross-project leak tests (need \u003e1 project — already partially used in ddx-4c51d33e LAYER 1 tests)\n- Manual operator walkthroughs / demos for new features\n- \"What does ddx look like in a fresh project?\" docs\n\nDESIGN OPTIONS\n\nOption 1: A SCRIPT that builds a fixture repo on demand\n- scripts/build-fixture-repo.sh \u003cdest\u003e [--profile minimal|standard|multi-project|federated]\n- Creates a tmp git repo, runs ddx init, optionally adds N seed beads, optionally registers projects\n- Tests call it via testing.T helper; demos call it from the operator's shell\n- Cleanup is operator/test responsibility (rm -rf \u003cdest\u003e)\n\nOption 2: A FIXTURE-REPO BINARY (ddx fixture create)\n- ddx fixture create \u003cdest\u003e --profile standard\n- Same outputs as Option 1 but discoverable via --help\n- Could be a hidden subcommand under ddx (Hidden: true) since it's dev infrastructure\n- Uniform with rest of CLI\n\nOption 3: GO TESTING HELPER (testing-only, not exposed to operator)\n- testutil.NewFixtureRepo(t, profile) → projectPath\n- Auto-cleanup via t.Cleanup()\n- Doesn't help acceptance demos but cleanest for unit/integration tests\n\nRECOMMEND: Hybrid. Option 1 (script) for demo + manual use; Option 3 (Go helper) wraps the script for tests so cleanup is automatic. Option 2 deferred unless operators ask for it.\n\nPROFILES TO SUPPORT (initial)\n- minimal: empty .ddx/, no beads\n- standard: .ddx/ + 5 mixed-priority sample beads + sample personas + sample skills\n- multi-project: 2 registered projects, each with their own beads (for cross-project tests)\n- federated: hub + spoke setup (for ADR-007 federation tests)\n\nNOT IN SCOPE\n- Mocking the agent service (separate concern; tests use stub fizeau already)\n- Pre-populating with real LLM execution traces (deterministic test runs use fixtures, not live LLMs)\n- Auto-cleanup beyond t.Cleanup() (operators run rm -rf)\n\nDEPS\n- Independent; can land anytime.",
+    "acceptance": "1. scripts/build-fixture-repo.sh exists; creates a clean ddx-initialized git repo at \u003cdest\u003e; exits 0 on success.\n2. Script supports --profile {minimal,standard,multi-project,federated}; each profile produces the documented seed contents.\n3. Go testing helper testutil.NewFixtureRepo(t *testing.T, profile string) (projectPath string) wraps the script; auto-cleanup via t.Cleanup(); usable from any cli/internal/*/test file.\n4. At least one existing integration test migrates to use the helper (e.g., one of the cross-project tests in graphql_scoped_route_test.go) — proves the API works in practice.\n5. Documentation: short README at scripts/build-fixture-repo.md describing the profiles + usage; one paragraph in CLAUDE.md or testing.md pointing at the helper.\n6. cd cli \u0026\u0026 go test ./internal/server/... green; lefthook pre-commit passes.\n7. Manual verification: bash scripts/build-fixture-repo.sh /tmp/ddx-fixture-test --profile standard \u0026\u0026 cd /tmp/ddx-fixture-test \u0026\u0026 ddx bead ready # shows the seeded beads.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "area:infra",
+      "kind:test-infra",
+      "reusable"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T02:50:22Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T02:50:22.707165755Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T025022-29ef49b0",
+    "prompt": ".ddx/executions/20260503T025022-29ef49b0/prompt.md",
+    "manifest": ".ddx/executions/20260503T025022-29ef49b0/manifest.json",
+    "result": ".ddx/executions/20260503T025022-29ef49b0/result.json",
+    "checks": ".ddx/executions/20260503T025022-29ef49b0/checks.json",
+    "usage": ".ddx/executions/20260503T025022-29ef49b0/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-50da9674-20260503T025022-29ef49b0"
+  },
+  "prompt_sha": "eb0d8ed51b75b26a22d75fb454698ea8586df42f6c039cac748c48f677e0a8fa"
+}
