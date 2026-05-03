@@ -12,11 +12,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// newTestBackend returns a Backend rooted at a fresh temp dir. It exists so
+// the chaos suite exercises the JSONL backend through the Backend interface
+// (per ddx-bbdd7564 AC §5) rather than through *Store directly. Future
+// backends conforming to Backend can be parameterized into the same tests by
+// swapping this constructor.
+func newTestBackend(t *testing.T) Backend {
+	t.Helper()
+	return newTestStore(t)
+}
+
 // TestChaos_ConcurrentAppendSafety spawns 10 goroutines each creating 10 beads
 // against the same store. Verifies all 100 beads exist, no duplicates, no corruption.
 func TestChaos_ConcurrentAppendSafety(t *testing.T) {
 	t.Parallel()
-	s := newTestStore(t)
+	s := newTestBackend(t)
 
 	const goroutines = 10
 	const beadsEach = 10
@@ -75,7 +85,7 @@ func TestChaos_ConcurrentAppendSafety(t *testing.T) {
 // must have a valid status and the JSONL file must be fully parseable.
 func TestChaos_AtomicStatusTransitions(t *testing.T) {
 	t.Parallel()
-	s := newTestStore(t)
+	s := newTestBackend(t)
 
 	b := &Bead{Title: "status-churn"}
 	require.NoError(t, s.Create(b))
@@ -129,7 +139,7 @@ func TestChaos_AtomicStatusTransitions(t *testing.T) {
 // Both operations must persist; neither must clobber the other.
 func TestChaos_ConcurrentCloseAndAppend(t *testing.T) {
 	t.Parallel()
-	s := newTestStore(t)
+	s := newTestBackend(t)
 
 	// Pre-create the bead that will be closed
 	existing := &Bead{Title: "to-be-closed"}
@@ -192,7 +202,7 @@ func TestChaos_ConcurrentCloseAndAppend(t *testing.T) {
 // if create finishes last, the store was read AFTER the close, so closed is preserved).
 func TestChaos_ConcurrentCloseNotLost(t *testing.T) {
 	t.Parallel()
-	s := newTestStore(t)
+	s := newTestBackend(t)
 
 	existing := &Bead{Title: "must-stay-closed"}
 	require.NoError(t, s.Create(existing))
@@ -300,7 +310,7 @@ func TestChaos_JSONLRoundTripIntegrity(t *testing.T) {
 		})
 	}
 
-	s := newTestStore(t)
+	s := newTestBackend(t)
 	created := make([]*Bead, 0, len(cases))
 
 	for _, tc := range cases {

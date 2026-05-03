@@ -24,8 +24,11 @@ type ExternalBackend struct {
 	// fallback handles all Init/Read/Write/Lock calls when set. Populated
 	// by NewExternalBackendWithFallback for non-default collections; nil
 	// for the default collection so the external tool stays authoritative.
-	fallback Backend
+	fallback RawBackend
 }
+
+// Compile-time check: ExternalBackend satisfies RawBackend.
+var _ RawBackend = (*ExternalBackend)(nil)
 
 // NewExternalBackend creates a backend that shells out to the given tool.
 func NewExternalBackend(tool, collection string) (*ExternalBackend, error) {
@@ -40,7 +43,7 @@ func NewExternalBackend(tool, collection string) (*ExternalBackend, error) {
 // ignored for the default collection so the bd/br interchange path stays
 // unchanged. fallback may be nil when the caller knows the collection is the
 // default; callers handling arbitrary collections should always supply one.
-func NewExternalBackendWithFallback(tool, collection string, fallback Backend) (*ExternalBackend, error) {
+func NewExternalBackendWithFallback(tool, collection string, fallback RawBackend) (*ExternalBackend, error) {
 	e, err := NewExternalBackend(tool, collection)
 	if err != nil {
 		return nil, err
