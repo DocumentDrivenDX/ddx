@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T053005-4c51820b",
+  "bead_id": "ddx-98257c6a",
+  "base_rev": "ae76629661e736309401ef2439e01309def646a0",
+  "created_at": "2026-05-03T05:30:06.689727547Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-98257c6a",
+    "title": "ADR-022 step 2: worker server-probe goroutine + best-effort event mirror",
+    "description": "Add server-probe goroutine to worker; periodic reachability check on ~/.local/share/ddx/server.addr with jittered 30s interval, immediate first probe, exponential backoff on consecutive failures (5min cap); state transitions emit register/disconnect; in-memory ring buffer (200 events) for backfill on Connected transition; event POSTs are best-effort. ~250 LOC.",
+    "acceptance": "1. Probe goroutine; cadence + jitter + backoff per ADR §Probe + freshness state model.\n2. Register on NotConnected→Connected; clear worker_id on Connected→NotConnected.\n3. Ring buffer for backfill (200 cap; oldest dropped silently; had_dropped_backfill flag set if overflow).\n4. Best-effort event mirror; failures logged + continue.\n5. Tests: TestWorker_ProbeImmediateFirst, TestWorker_ProbeJitter, TestWorker_BackfillOnReconnect, TestWorker_BackoffOnFailures, TestWorker_NoServer_StillWorks.\n6. cd cli \u0026\u0026 go test ./internal/agent/... green; lefthook pre-commit passes.\n7. WIRED-IN: integration test (TestWorker_RealAttemptEvents_FlowToServer) starts a server (from step 1), starts a real ddx work worker process against a fixture bead, observes that the worker's bead-attempt events appear in the server's derived view within 5s. Asserts the entire worker-server flow end-to-end, not just the probe goroutine in isolation.",
+    "parent": "ddx-d7aca866",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "kind:feature",
+      "adr:022"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T05:30:05Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4025192",
+      "execute-loop-heartbeat-at": "2026-05-03T05:30:05.23087615Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T053005-4c51820b",
+    "prompt": ".ddx/executions/20260503T053005-4c51820b/prompt.md",
+    "manifest": ".ddx/executions/20260503T053005-4c51820b/manifest.json",
+    "result": ".ddx/executions/20260503T053005-4c51820b/result.json",
+    "checks": ".ddx/executions/20260503T053005-4c51820b/checks.json",
+    "usage": ".ddx/executions/20260503T053005-4c51820b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-98257c6a-20260503T053005-4c51820b"
+  },
+  "prompt_sha": "2576778ef6179c70f75cb50abf51082bde6e803ab9787c882cf77be0d1d48d55"
+}
