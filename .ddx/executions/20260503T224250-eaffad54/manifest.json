@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260503T224250-eaffad54",
+  "bead_id": "ddx-6602559c",
+  "base_rev": "d22276ea6c337e3d855c7cde20b2a6513a081e2a",
+  "created_at": "2026-05-03T22:42:54.844781422Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6602559c",
+    "title": "Bench: queue ops parity (axon vs JSONL) on 1100-bead archive",
+    "description": "Add Go benchmarks for queue ops (ready, blocked, show) against both backends loaded with the current 1100-bead archive scale (or a synthesized fixture matching that shape). Capture baseline numbers for JSONL and axon, then verify axon is at parity or better. Commit baseline numbers as evidence under .ddx/executions/\u003crun-id\u003e/.",
+    "acceptance": "1. cli/internal/bead/bench_test.go (or similar) defines Benchmarks for ready/blocked/show against both backends. 2. Fixture loader builds a 1100-bead store. 3. Evidence file under .ddx/executions/\u003crun-id\u003e/perf-results.md records ns/op for both backends and confirms axon ≤ JSONL on each op. 4. If axon is slower, the bead is held open with reason in execute-bead notes — do not declare success.",
+    "parent": "ddx-5d49b14e",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:storage",
+      "kind:perf",
+      "backend-migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T22:42:50Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T22:42:50.51003738Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T224250-eaffad54",
+    "prompt": ".ddx/executions/20260503T224250-eaffad54/prompt.md",
+    "manifest": ".ddx/executions/20260503T224250-eaffad54/manifest.json",
+    "result": ".ddx/executions/20260503T224250-eaffad54/result.json",
+    "checks": ".ddx/executions/20260503T224250-eaffad54/checks.json",
+    "usage": ".ddx/executions/20260503T224250-eaffad54/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6602559c-20260503T224250-eaffad54"
+  },
+  "prompt_sha": "dd0600ff8c8b09b40d7afd6d0465e2c7b2ee659d73ce470b3db491c8b4c3c46a"
+}
