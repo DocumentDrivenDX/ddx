@@ -1,0 +1,59 @@
+{
+  "attempt_id": "20260503T031502-dc35508b",
+  "bead_id": "ddx-86996834",
+  "base_rev": "f5c579c42ea2d719a82b28f147a58f43fd4c1bb2",
+  "created_at": "2026-05-03T03:15:04.03213309Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-86996834",
+    "title": "guardrail: --no-review break-glass with required ack flag + review:skip-reason rationale",
+    "description": "Per locked decision: --no-review keeps as break-glass requiring an ack flag (e.g. --no-review-i-know-what-im-doing). review:skip label requires sibling rationale label (review:skip-reason:*) or is ignored.",
+    "acceptance": "1. --no-review without ack flag errors with explanation. 2. review:skip label ignored without sibling review:skip-reason. 3. Tests cover both guardrails. 4. CLI help documents the ack flag.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:cli",
+      "kind:guardrail"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:15:02Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "163374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T14:57:10.962101578Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\nresult_rev=af6be17a39e8697299c93e90635b40da8cc6b622\nbase_rev=af6be17a39e8697299c93e90635b40da8cc6b622\nretry_after=2026-05-02T20:57:11Z",
+          "created_at": "2026-05-02T14:57:11.052366098Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T03:15:02.108758057Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-02T20:57:11Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031502-dc35508b",
+    "prompt": ".ddx/executions/20260503T031502-dc35508b/prompt.md",
+    "manifest": ".ddx/executions/20260503T031502-dc35508b/manifest.json",
+    "result": ".ddx/executions/20260503T031502-dc35508b/result.json",
+    "checks": ".ddx/executions/20260503T031502-dc35508b/checks.json",
+    "usage": ".ddx/executions/20260503T031502-dc35508b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-86996834-20260503T031502-dc35508b"
+  }
+}

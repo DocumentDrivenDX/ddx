@@ -1,0 +1,21 @@
+{
+  "bead_id": "ddx-e315ad80",
+  "attempt_id": "20260503T031439-68396cde",
+  "base_rev": "4fb663d2b7fee114fd40fec17f57da1aec6c546a",
+  "result_rev": "4fb663d2b7fee114fd40fec17f57da1aec6c546a",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "exit status 1",
+  "harness": "claude",
+  "session_id": "eb-cbcf6d0d",
+  "duration_ms": 46768,
+  "exit_code": 1,
+  "error": "exit status 1",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260503T031439-68396cde",
+  "prompt_file": ".ddx/executions/20260503T031439-68396cde/prompt.md",
+  "manifest_file": ".ddx/executions/20260503T031439-68396cde/manifest.json",
+  "result_file": ".ddx/executions/20260503T031439-68396cde/result.json",
+  "started_at": "2026-05-03T03:14:40.585979285Z",
+  "finished_at": "2026-05-03T03:15:27.354304665Z"
+}
