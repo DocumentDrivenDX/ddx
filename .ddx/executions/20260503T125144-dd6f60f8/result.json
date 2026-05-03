@@ -1,0 +1,69 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only execution manifest/result metadata. None of the AC artifacts are present: no initial-violations.json, no children.json, no child-bead landings, no reach-backfill-summary.md, no code changes resolving violations, no final pass evidence.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "AC1: missing .ddx/executions/\u003crun-id\u003e/initial-violations.json capturing the violation list",
+      "location": ".ddx/executions/20260503T124553-282667f7/"
+    },
+    {
+      "severity": "block",
+      "summary": "AC2: child beads referenced in notes (children.json with 21 per-package beads) are not in the diff",
+      "location": ".ddx/executions/20260503T124553-282667f7/children.json"
+    },
+    {
+      "severity": "block",
+      "summary": "AC3/AC5: no child landings and no evidence of final ddx ac run returning zero violations",
+      "location": "cli/"
+    },
+    {
+      "severity": "block",
+      "summary": "AC7: missing reach-backfill-summary.md",
+      "location": ".ddx/executions/\u003cfinal-run-id\u003e/reach-backfill-summary.md"
+    },
+    {
+      "severity": "block",
+      "summary": "Diff has zero source changes under cli/; the systematic backfill is not performed in this attempt",
+      "location": "cli/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 4233,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T124553-282667f7/manifest.json",
+          ".ddx/executions/20260503T124553-282667f7/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 6046,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 12085,
+    "output_bytes": 1220,
+    "elapsed_ms": 68129,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
