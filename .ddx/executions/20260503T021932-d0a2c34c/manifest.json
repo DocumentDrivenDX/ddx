@@ -1,0 +1,220 @@
+{
+  "attempt_id": "20260503T021932-d0a2c34c",
+  "bead_id": "ddx-65543530",
+  "base_rev": "a0ff44349f47b1088a265153ff658797f061c683",
+  "created_at": "2026-05-03T02:19:34.009369939Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-65543530",
+    "title": "runs: canonicalize Run data projection (fix state_runs.go bundle layering; lossless AgentSession join)",
+    "description": "state_runs.go:164 currently synthesizes execution bundles as RunLayerRun; per the three-layer model bundles should be RunLayerTry. Fix the layer assignment. Add lossless join with AgentSession (which carries billingMode, cached tokens, prompt/response/stderr, outcome — NOT in Run today). User decision: keep AgentSession as backing store under layer=run.",
+    "acceptance": "1. state_runs.go: bundles → RunLayerTry; agent sessions → RunLayerRun. 2. Run resolver returns lossless join (Run + AgentSession fields when applicable). 3. Existing runs tests pass; add new test for layering correctness. 4. cd cli \u0026\u0026 go test ./internal/server/... passes.",
+    "parent": "ddx-723d93f2",
+    "labels": [
+      "phase:2",
+      "story:8",
+      "area:server",
+      "kind:fix"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T02:19:32Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4025192",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T11:43:33.8319674Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T113725-7f3f409d\",\"harness\":\"claude\",\"input_tokens\":50,\"output_tokens\":20233,\"total_tokens\":20283,\"cost_usd\":2.7755557499999997,\"duration_ms\":366924,\"exit_code\":0}",
+          "created_at": "2026-05-02T11:43:33.843849938Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=20283 cost_usd=2.7756"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T11:43:39.131245448Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only an execution result.json artifact; no changes to state_runs.go, no resolver join with AgentSession, no new layering test. Cannot verify any AC item from this diff.\nharness=claude\nmodel=opus\ninput_bytes=3861\noutput_bytes=766\nelapsed_ms=8500",
+          "created_at": "2026-05-02T11:43:47.66040565Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T11:43:47.671654563Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json artifact; no changes to state_runs.go, no resolver join with AgentSession, no new layering test. Cannot verify any AC item from this diff.\nresult_rev=e80a1b950e0869e3ada49f86224054f3c5614c26\nbase_rev=d9bae52c773dcf9014b11f02dd49f90b0568f205",
+          "created_at": "2026-05-02T11:43:47.680727936Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T11:51:38.706357042Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T114430-b03c0b6f\",\"harness\":\"claude\",\"input_tokens\":50,\"output_tokens\":19977,\"total_tokens\":20027,\"cost_usd\":2.7736852500000007,\"duration_ms\":426555,\"exit_code\":0}",
+          "created_at": "2026-05-02T11:51:38.716718747Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=20027 cost_usd=2.7737"
+        },
+        {
+          "actor": "erik",
+          "body": "fast-forwarding refs/heads/main to merge commit a5399b47ceada459ccb2caf459cab2d83e181fee: git update-ref refs/heads/main: fatal: update_ref failed for ref 'refs/heads/main': cannot lock ref 'refs/heads/main': is at 6cd6062194063bde58659ad7d87ee5f35e659b0b but expected 4d9b0d3ce5f3689ec51b122468a8e5655276152a: exit status 128",
+          "created_at": "2026-05-02T11:51:40.189496993Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: no tiers in range (check --min-tier / --max-tier)",
+          "created_at": "2026-05-02T17:38:52.917445341Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=cheap harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-02T17:39:35.273292315Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"cheap\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-05-02T17:39:35.287696763Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=1 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-05-02T17:39:35.312064786Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"omlx-vidar-1235\",\"resolved_model\":\"Qwen3-Coder-Next-MLX-4bit\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-02T17:41:19.984607668Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=omlx-vidar-1235 model=Qwen3-Coder-Next-MLX-4bit"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T174005-301f12a5\",\"harness\":\"agent\",\"provider\":\"omlx-vidar-1235\",\"model\":\"Qwen3-Coder-Next-MLX-4bit\",\"input_tokens\":58815,\"output_tokens\":255,\"total_tokens\":59070,\"cost_usd\":0,\"duration_ms\":72497,\"exit_code\":1}",
+          "created_at": "2026-05-02T17:41:19.998613658Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=59070 model=Qwen3-Coder-Next-MLX-4bit"
+        },
+        {
+          "actor": "erik",
+          "body": "agent: identical tool calls repeated, aborting loop\nresult_rev=a60b3223c6b01e25bf5ec0b6bffd59a6e200c424\nbase_rev=a60b3223c6b01e25bf5ec0b6bffd59a6e200c424\nretry_after=2026-05-02T23:41:20Z",
+          "created_at": "2026-05-02T17:41:20.089254799Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-03T02:16:04.196764061Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260503T020341-8fe56f98\",\"harness\":\"claude\",\"input_tokens\":91,\"output_tokens\":26745,\"total_tokens\":26836,\"cost_usd\":5.042985250000001,\"duration_ms\":741592,\"exit_code\":0}",
+          "created_at": "2026-05-03T02:16:04.228106487Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=26836 cost_usd=5.0430"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-03T02:16:10.407043443Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "REQUEST_CHANGES\n**`cachedTokens` is a dangling schema field.** `cli/internal/server/graphql/schema.graphql:1178` and `cli/internal/server/graphql/models.go` (Run.CachedTokens) declare the field, but `sessionEntryToRun` in `cli/internal/server/state_runs.go` never assigns it, and `agent.SessionIndexEntry` has no corresponding source field. Either add `CachedTokens` to `SessionIndexEntry` (sourced from harness usage) and project it in `…\nartifact: .ddx/executions/20260503T020341-8fe56f98/reviewer-stream.log",
+          "created_at": "2026-05-03T02:17:24.065918108Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "REQUEST_CHANGES"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-03T02:17:24.086274671Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: REQUEST_CHANGES"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: REQUEST_CHANGES\n**`cachedTokens` is a dangling schema field.** `cli/internal/server/graphql/schema.graphql:1178` and `cli/internal/server/graphql/models.go` (Run.CachedTokens) declare the field, but `sessionEntryToRun` in `cli/internal/server/state_runs.go` never assigns it, and `agent.SessionIndexEntry` has no corresponding source field. Either add `CachedTokens` to `SessionIndexEntry` (sourced from harness usage) and project it in `sessionEntryToRun`, or drop the schema field until a backing source exists — shipping a non-nullable-looking attribute that is permanently null is a regression on the lossless-join contract.\n**`prompt`/`response`/`stderr` not projected onto run-layer Runs.** The bead body lists these as AgentSession fields not present on Run today. `SessionIndexEntry` doesn't carry them, but the related `Session` struct in `cli/internal/agent/session_index.go:66-70` has `Prompt/Response/Stderr`. `sessionEntryToRun` should hydrate these (likely via the existing session lookup path used elsewhere) so a `run(id:)` query against a run-layer record is truly lossless against AgentSession.\n**Test coverage gap matches the projection gap.** `state_runs_test.go` should additionally assert `cachedTokens` (or remove it) and `prompt`/`response`/`stderr` round-trip on the orphan-session case once those projections land.\nresult_rev=ffba0262001df7021bebaa74421078032fa1597a\nbase_rev=fe3f22236cd513b1f895589e41576bb703d34921",
+          "created_at": "2026-05-03T02:17:24.104537735Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_request_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T02:19:32.566267926Z",
+      "execute-loop-last-detail": "agent: identical tool calls repeated, aborting loop",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-02T23:41:20Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T021932-d0a2c34c",
+    "prompt": ".ddx/executions/20260503T021932-d0a2c34c/prompt.md",
+    "manifest": ".ddx/executions/20260503T021932-d0a2c34c/manifest.json",
+    "result": ".ddx/executions/20260503T021932-d0a2c34c/result.json",
+    "checks": ".ddx/executions/20260503T021932-d0a2c34c/checks.json",
+    "usage": ".ddx/executions/20260503T021932-d0a2c34c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-65543530-20260503T021932-d0a2c34c"
+  },
+  "prompt_sha": "344d311462002f0036a2eef9701a16b5dbee9bbfc87154673f8782542a412107"
+}

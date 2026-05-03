@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean, targeted implementation. The Disrupted classification is added at the right two seams (preflight rejection inline; post-executor via `classifyDisruption(ctx, err)`), the cooldown branch short-circuits on Disrupted without touching genuine no-progress semantics, and the `disruption_detected` event lands on both the bead and the loop sink. Test coverage matches the AC bullet-for-bullet, the transport-marker fuzziness is acknowledged in code comments, and FEAT-006 documents the policy with a kind-table operators can read. Optional exponential backoff was correctly skipped per AC."
+}
