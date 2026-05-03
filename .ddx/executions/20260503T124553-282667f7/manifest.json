@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T124553-282667f7",
+  "bead_id": "ddx-83440482",
+  "base_rev": "c8f68608e2644d44a1114979e70823fefcee6b53",
+  "created_at": "2026-05-03T12:45:55.51847753Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-83440482",
+    "title": "checks: systematic backfill — apply production-reachability across cli/ and resolve all violations",
+    "description": "Once REACH-PROTO + REACH-GO have landed and ddx self-installs the check, run ddx ac run --check production-reachability against the current cli/ tree and resolve every violation. This is the systematic application phase the user mandated: \"go back through the codebase systematically applying it.\"\n\nABSORBS\n- ddx-09d2990c (WIRE) — the 4 specific unwired functions become a subset of this sweep. Close WIRE as superseded by this bead at file time.\n- Any clusters from /tmp/agent-surface-dead-code-audit.md not already covered.\n- Codex audit additions: jsonlFallbackForCollection (cli/internal/bead/backend_jsonl.go:90), Store.breakStaleLock (lock.go:70), NewStoreWithBackend (store.go:119), WithSpokeHTTPClient (federation_spoke.go:103), Server.execStore (server.go:2028), GraphQL NewResolver (resolver.go:14).\n\nEXPECTED WORKFLOW\n1. Run ddx ac run --check production-reachability against the current worktree. Capture violation list.\n2. For each violation, decide: WIRE (add to production code path) or DELETE (function is genuinely obsolete).\n3. File one child bead per violation cluster (group by package or by originating story for traceability).\n4. Drain the children. Each closes either via wiring PR or deletion PR.\n5. Final pass: ddx ac run returns status=pass with no violations and no // wiring:pending annotations remaining (or all annotations cite still-open future beads).\n\nDECISION RULE per violation\n- If the symbol's originating bead's AC describes desired runtime behavior → WIRE.\n- If the symbol was added speculatively or the design has moved on → DELETE; reopen the originating bead with obsolescence rationale, or close as obsolete.\n- If neither is clear within 15 min of investigation → annotate // wiring:pending \u003cfollow-up-bead\u003e and file the follow-up.\n\nDEP: REACH-PROTO (ddx-a946c744), REACH-GO (ddx-ea76e1b8)\n\nNOT IN SCOPE\n- The protocol or check implementation itself (separate beads).\n- Other languages (this project is Go-only at the check layer).\n- Auto-run as recurring sweep (could be a future /schedule offer; not built into this bead).",
+    "acceptance": "1. ddx ac run --check production-reachability run on the current cli/ tree; full violation list captured to .ddx/executions/\u003crun-id\u003e/initial-violations.json.\n2. One child bead filed per violation cluster (grouped sensibly); each child bead has explicit decision (WIRE or DELETE) with rationale.\n3. Each child bead landed via standard execute-bead flow; merge gated by REACH-PROTO check (each landing must pass production-reachability for the symbols it touches).\n4. ddx-09d2990c (WIRE) closed as superseded by this bead at filing time; its 4 functions surface as initial violations.\n5. Final ddx ac run --check production-reachability returns status=pass with zero violations across cli/.\n6. Any remaining // wiring:pending annotations cite open follow-up beads; no orphans.\n7. Sweep summary report at .ddx/executions/\u003cfinal-run-id\u003e/reach-backfill-summary.md: total violations found, wired count, deleted count, follow-ups filed, LOC delta.\n8. cd cli \u0026\u0026 go test ./... green at every child landing.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "area:checks",
+      "kind:sweep",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T12:45:53Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T12:45:53.533663Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T124553-282667f7",
+    "prompt": ".ddx/executions/20260503T124553-282667f7/prompt.md",
+    "manifest": ".ddx/executions/20260503T124553-282667f7/manifest.json",
+    "result": ".ddx/executions/20260503T124553-282667f7/result.json",
+    "checks": ".ddx/executions/20260503T124553-282667f7/checks.json",
+    "usage": ".ddx/executions/20260503T124553-282667f7/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-83440482-20260503T124553-282667f7"
+  },
+  "prompt_sha": "4657aa1110c193446937674e425b193a497d1b4789243dcea847ead782699744"
+}
