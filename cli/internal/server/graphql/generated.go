@@ -36,6 +36,28 @@ type DirectiveRoot struct {
 }
 
 type ComplexityRoot struct {
+	AgentMetricsResult struct {
+		GroupBy  func(childComplexity int) int
+		Revision func(childComplexity int) int
+		Rows     func(childComplexity int) int
+		Window   func(childComplexity int) int
+	}
+
+	AgentMetricsRow struct {
+		Attempts                   func(childComplexity int) int
+		EffectiveCostPerSuccessUsd func(childComplexity int) int
+		Key                        func(childComplexity int) int
+		LastSeenAt                 func(childComplexity int) int
+		MeanCostUsd                func(childComplexity int) int
+		MeanDurationMs             func(childComplexity int) int
+		MeanInputTokens            func(childComplexity int) int
+		MeanOutputTokens           func(childComplexity int) int
+		P50DurationMs              func(childComplexity int) int
+		P95DurationMs              func(childComplexity int) int
+		SuccessRate                func(childComplexity int) int
+		Successes                  func(childComplexity int) int
+	}
+
 	AgentSession struct {
 		BaseRev     func(childComplexity int) int
 		BeadID      func(childComplexity int) int
@@ -973,6 +995,7 @@ type ComplexityRoot struct {
 	}
 
 	Query struct {
+		AgentMetrics                func(childComplexity int, window AgentMetricsWindow, groupBy AgentMetricsAxis) int
 		AgentSession                func(childComplexity int, id string) int
 		AgentSessions               func(childComplexity int, first *int, after *string, last *int, before *string, startedAfter *string, startedBefore *string) int
 		Artifact                    func(childComplexity int, projectID string, id string) int
@@ -1468,6 +1491,7 @@ type QueryResolver interface {
 	FederatedBeads(ctx context.Context, status *string, label *string, projectID *string) ([]*FederatedBead, error)
 	FederatedRuns(ctx context.Context, layer *RunLayer, projectID *string) ([]*FederatedRun, error)
 	FederatedProjects(ctx context.Context, includeUnreachable *bool) ([]*FederatedProject, error)
+	AgentMetrics(ctx context.Context, window AgentMetricsWindow, groupBy AgentMetricsAxis) (*AgentMetricsResult, error)
 }
 type SubscriptionResolver interface {
 	WorkerProgress(ctx context.Context, workerID string) (<-chan *WorkerEvent, error)
@@ -1489,6 +1513,104 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 	ec := newExecutionContext(nil, e, nil)
 	_ = ec
 	switch typeName + "." + field {
+
+	case "AgentMetricsResult.groupBy":
+		if e.ComplexityRoot.AgentMetricsResult.GroupBy == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentMetricsResult.GroupBy(childComplexity), true
+	case "AgentMetricsResult.revision":
+		if e.ComplexityRoot.AgentMetricsResult.Revision == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentMetricsResult.Revision(childComplexity), true
+	case "AgentMetricsResult.rows":
+		if e.ComplexityRoot.AgentMetricsResult.Rows == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentMetricsResult.Rows(childComplexity), true
+	case "AgentMetricsResult.window":
+		if e.ComplexityRoot.AgentMetricsResult.Window == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentMetricsResult.Window(childComplexity), true
+
+	case "AgentMetricsRow.attempts":
+		if e.ComplexityRoot.AgentMetricsRow.Attempts == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentMetricsRow.Attempts(childComplexity), true
+	case "AgentMetricsRow.effectiveCostPerSuccessUsd":
+		if e.ComplexityRoot.AgentMetricsRow.EffectiveCostPerSuccessUsd == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentMetricsRow.EffectiveCostPerSuccessUsd(childComplexity), true
+	case "AgentMetricsRow.key":
+		if e.ComplexityRoot.AgentMetricsRow.Key == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentMetricsRow.Key(childComplexity), true
+	case "AgentMetricsRow.lastSeenAt":
+		if e.ComplexityRoot.AgentMetricsRow.LastSeenAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentMetricsRow.LastSeenAt(childComplexity), true
+	case "AgentMetricsRow.meanCostUsd":
+		if e.ComplexityRoot.AgentMetricsRow.MeanCostUsd == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentMetricsRow.MeanCostUsd(childComplexity), true
+	case "AgentMetricsRow.meanDurationMs":
+		if e.ComplexityRoot.AgentMetricsRow.MeanDurationMs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentMetricsRow.MeanDurationMs(childComplexity), true
+	case "AgentMetricsRow.meanInputTokens":
+		if e.ComplexityRoot.AgentMetricsRow.MeanInputTokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentMetricsRow.MeanInputTokens(childComplexity), true
+	case "AgentMetricsRow.meanOutputTokens":
+		if e.ComplexityRoot.AgentMetricsRow.MeanOutputTokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentMetricsRow.MeanOutputTokens(childComplexity), true
+	case "AgentMetricsRow.p50DurationMs":
+		if e.ComplexityRoot.AgentMetricsRow.P50DurationMs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentMetricsRow.P50DurationMs(childComplexity), true
+	case "AgentMetricsRow.p95DurationMs":
+		if e.ComplexityRoot.AgentMetricsRow.P95DurationMs == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentMetricsRow.P95DurationMs(childComplexity), true
+	case "AgentMetricsRow.successRate":
+		if e.ComplexityRoot.AgentMetricsRow.SuccessRate == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentMetricsRow.SuccessRate(childComplexity), true
+	case "AgentMetricsRow.successes":
+		if e.ComplexityRoot.AgentMetricsRow.Successes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentMetricsRow.Successes(childComplexity), true
 
 	case "AgentSession.baseRev":
 		if e.ComplexityRoot.AgentSession.BaseRev == nil {
@@ -5402,6 +5524,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.ProviderUsage.TokensUsedLastHour(childComplexity), true
 
+	case "Query.agentMetrics":
+		if e.ComplexityRoot.Query.AgentMetrics == nil {
+			break
+		}
+
+		args, err := ec.field_Query_agentMetrics_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.AgentMetrics(childComplexity, args["window"].(AgentMetricsWindow), args["groupBy"].(AgentMetricsAxis)), true
 	case "Query.agentSession":
 		if e.ComplexityRoot.Query.AgentSession == nil {
 			break
@@ -7917,6 +8050,22 @@ func (ec *executionContext) field_Query___type_args(ctx context.Context, rawArgs
 	return args, nil
 }
 
+func (ec *executionContext) field_Query_agentMetrics_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "window", ec.unmarshalNAgentMetricsWindow2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentMetricsWindow)
+	if err != nil {
+		return nil, err
+	}
+	args["window"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "groupBy", ec.unmarshalNAgentMetricsAxis2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentMetricsAxis)
+	if err != nil {
+		return nil, err
+	}
+	args["groupBy"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Query_agentSession_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -9265,6 +9414,496 @@ func (ec *executionContext) field___Type_fields_args(ctx context.Context, rawArg
 // endregion ************************** directives.gotpl **************************
 
 // region    **************************** field.gotpl *****************************
+
+func (ec *executionContext) _AgentMetricsResult_window(ctx context.Context, field graphql.CollectedField, obj *AgentMetricsResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentMetricsResult_window,
+		func(ctx context.Context) (any, error) {
+			return obj.Window, nil
+		},
+		nil,
+		ec.marshalNAgentMetricsWindow2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentMetricsWindow,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentMetricsResult_window(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentMetricsResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type AgentMetricsWindow does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentMetricsResult_groupBy(ctx context.Context, field graphql.CollectedField, obj *AgentMetricsResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentMetricsResult_groupBy,
+		func(ctx context.Context) (any, error) {
+			return obj.GroupBy, nil
+		},
+		nil,
+		ec.marshalNAgentMetricsAxis2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentMetricsAxis,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentMetricsResult_groupBy(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentMetricsResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type AgentMetricsAxis does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentMetricsResult_revision(ctx context.Context, field graphql.CollectedField, obj *AgentMetricsResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentMetricsResult_revision,
+		func(ctx context.Context) (any, error) {
+			return obj.Revision, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentMetricsResult_revision(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentMetricsResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentMetricsResult_rows(ctx context.Context, field graphql.CollectedField, obj *AgentMetricsResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentMetricsResult_rows,
+		func(ctx context.Context) (any, error) {
+			return obj.Rows, nil
+		},
+		nil,
+		ec.marshalNAgentMetricsRow2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentMetricsRowᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentMetricsResult_rows(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentMetricsResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "key":
+				return ec.fieldContext_AgentMetricsRow_key(ctx, field)
+			case "attempts":
+				return ec.fieldContext_AgentMetricsRow_attempts(ctx, field)
+			case "successes":
+				return ec.fieldContext_AgentMetricsRow_successes(ctx, field)
+			case "successRate":
+				return ec.fieldContext_AgentMetricsRow_successRate(ctx, field)
+			case "meanDurationMs":
+				return ec.fieldContext_AgentMetricsRow_meanDurationMs(ctx, field)
+			case "p50DurationMs":
+				return ec.fieldContext_AgentMetricsRow_p50DurationMs(ctx, field)
+			case "p95DurationMs":
+				return ec.fieldContext_AgentMetricsRow_p95DurationMs(ctx, field)
+			case "meanCostUsd":
+				return ec.fieldContext_AgentMetricsRow_meanCostUsd(ctx, field)
+			case "effectiveCostPerSuccessUsd":
+				return ec.fieldContext_AgentMetricsRow_effectiveCostPerSuccessUsd(ctx, field)
+			case "meanInputTokens":
+				return ec.fieldContext_AgentMetricsRow_meanInputTokens(ctx, field)
+			case "meanOutputTokens":
+				return ec.fieldContext_AgentMetricsRow_meanOutputTokens(ctx, field)
+			case "lastSeenAt":
+				return ec.fieldContext_AgentMetricsRow_lastSeenAt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentMetricsRow", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentMetricsRow_key(ctx context.Context, field graphql.CollectedField, obj *AgentMetricsRow) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentMetricsRow_key,
+		func(ctx context.Context) (any, error) {
+			return obj.Key, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentMetricsRow_key(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentMetricsRow",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentMetricsRow_attempts(ctx context.Context, field graphql.CollectedField, obj *AgentMetricsRow) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentMetricsRow_attempts,
+		func(ctx context.Context) (any, error) {
+			return obj.Attempts, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentMetricsRow_attempts(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentMetricsRow",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentMetricsRow_successes(ctx context.Context, field graphql.CollectedField, obj *AgentMetricsRow) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentMetricsRow_successes,
+		func(ctx context.Context) (any, error) {
+			return obj.Successes, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentMetricsRow_successes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentMetricsRow",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentMetricsRow_successRate(ctx context.Context, field graphql.CollectedField, obj *AgentMetricsRow) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentMetricsRow_successRate,
+		func(ctx context.Context) (any, error) {
+			return obj.SuccessRate, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentMetricsRow_successRate(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentMetricsRow",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentMetricsRow_meanDurationMs(ctx context.Context, field graphql.CollectedField, obj *AgentMetricsRow) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentMetricsRow_meanDurationMs,
+		func(ctx context.Context) (any, error) {
+			return obj.MeanDurationMs, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentMetricsRow_meanDurationMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentMetricsRow",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentMetricsRow_p50DurationMs(ctx context.Context, field graphql.CollectedField, obj *AgentMetricsRow) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentMetricsRow_p50DurationMs,
+		func(ctx context.Context) (any, error) {
+			return obj.P50DurationMs, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentMetricsRow_p50DurationMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentMetricsRow",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentMetricsRow_p95DurationMs(ctx context.Context, field graphql.CollectedField, obj *AgentMetricsRow) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentMetricsRow_p95DurationMs,
+		func(ctx context.Context) (any, error) {
+			return obj.P95DurationMs, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentMetricsRow_p95DurationMs(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentMetricsRow",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentMetricsRow_meanCostUsd(ctx context.Context, field graphql.CollectedField, obj *AgentMetricsRow) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentMetricsRow_meanCostUsd,
+		func(ctx context.Context) (any, error) {
+			return obj.MeanCostUsd, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentMetricsRow_meanCostUsd(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentMetricsRow",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentMetricsRow_effectiveCostPerSuccessUsd(ctx context.Context, field graphql.CollectedField, obj *AgentMetricsRow) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentMetricsRow_effectiveCostPerSuccessUsd,
+		func(ctx context.Context) (any, error) {
+			return obj.EffectiveCostPerSuccessUsd, nil
+		},
+		nil,
+		ec.marshalOFloat2ᚖfloat64,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentMetricsRow_effectiveCostPerSuccessUsd(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentMetricsRow",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentMetricsRow_meanInputTokens(ctx context.Context, field graphql.CollectedField, obj *AgentMetricsRow) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentMetricsRow_meanInputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.MeanInputTokens, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentMetricsRow_meanInputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentMetricsRow",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentMetricsRow_meanOutputTokens(ctx context.Context, field graphql.CollectedField, obj *AgentMetricsRow) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentMetricsRow_meanOutputTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.MeanOutputTokens, nil
+		},
+		nil,
+		ec.marshalNFloat2float64,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentMetricsRow_meanOutputTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentMetricsRow",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _AgentMetricsRow_lastSeenAt(ctx context.Context, field graphql.CollectedField, obj *AgentMetricsRow) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentMetricsRow_lastSeenAt,
+		func(ctx context.Context) (any, error) {
+			return obj.LastSeenAt, nil
+		},
+		nil,
+		ec.marshalODateTime2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentMetricsRow_lastSeenAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentMetricsRow",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type DateTime does not have child fields")
+		},
+	}
+	return fc, nil
+}
 
 func (ec *executionContext) _AgentSession_id(ctx context.Context, field graphql.CollectedField, obj *AgentSession) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
@@ -33325,6 +33964,57 @@ func (ec *executionContext) fieldContext_Query_federatedProjects(ctx context.Con
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_agentMetrics(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_agentMetrics,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Query().AgentMetrics(ctx, fc.Args["window"].(AgentMetricsWindow), fc.Args["groupBy"].(AgentMetricsAxis))
+		},
+		nil,
+		ec.marshalNAgentMetricsResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentMetricsResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_agentMetrics(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "window":
+				return ec.fieldContext_AgentMetricsResult_window(ctx, field)
+			case "groupBy":
+				return ec.fieldContext_AgentMetricsResult_groupBy(ctx, field)
+			case "revision":
+				return ec.fieldContext_AgentMetricsResult_revision(ctx, field)
+			case "rows":
+				return ec.fieldContext_AgentMetricsResult_rows(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type AgentMetricsResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Query_agentMetrics_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query___type(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -41696,6 +42386,148 @@ func (ec *executionContext) _Node(ctx context.Context, sel ast.SelectionSet, obj
 
 // region    **************************** object.gotpl ****************************
 
+var agentMetricsResultImplementors = []string{"AgentMetricsResult"}
+
+func (ec *executionContext) _AgentMetricsResult(ctx context.Context, sel ast.SelectionSet, obj *AgentMetricsResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, agentMetricsResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AgentMetricsResult")
+		case "window":
+			out.Values[i] = ec._AgentMetricsResult_window(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "groupBy":
+			out.Values[i] = ec._AgentMetricsResult_groupBy(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "revision":
+			out.Values[i] = ec._AgentMetricsResult_revision(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "rows":
+			out.Values[i] = ec._AgentMetricsResult_rows(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var agentMetricsRowImplementors = []string{"AgentMetricsRow"}
+
+func (ec *executionContext) _AgentMetricsRow(ctx context.Context, sel ast.SelectionSet, obj *AgentMetricsRow) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, agentMetricsRowImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("AgentMetricsRow")
+		case "key":
+			out.Values[i] = ec._AgentMetricsRow_key(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "attempts":
+			out.Values[i] = ec._AgentMetricsRow_attempts(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "successes":
+			out.Values[i] = ec._AgentMetricsRow_successes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "successRate":
+			out.Values[i] = ec._AgentMetricsRow_successRate(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "meanDurationMs":
+			out.Values[i] = ec._AgentMetricsRow_meanDurationMs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "p50DurationMs":
+			out.Values[i] = ec._AgentMetricsRow_p50DurationMs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "p95DurationMs":
+			out.Values[i] = ec._AgentMetricsRow_p95DurationMs(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "meanCostUsd":
+			out.Values[i] = ec._AgentMetricsRow_meanCostUsd(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "effectiveCostPerSuccessUsd":
+			out.Values[i] = ec._AgentMetricsRow_effectiveCostPerSuccessUsd(ctx, field, obj)
+		case "meanInputTokens":
+			out.Values[i] = ec._AgentMetricsRow_meanInputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "meanOutputTokens":
+			out.Values[i] = ec._AgentMetricsRow_meanOutputTokens(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lastSeenAt":
+			out.Values[i] = ec._AgentMetricsRow_lastSeenAt(ctx, field, obj)
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var agentSessionImplementors = []string{"AgentSession", "Node"}
 
 func (ec *executionContext) _AgentSession(ctx context.Context, sel ast.SelectionSet, obj *AgentSession) graphql.Marshaler {
@@ -49559,6 +50391,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "agentMetrics":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_agentMetrics(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "__type":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
 				return ec._Query___type(ctx, field)
@@ -51837,6 +52691,66 @@ func (ec *executionContext) ___Type(ctx context.Context, sel ast.SelectionSet, o
 // endregion **************************** object.gotpl ****************************
 
 // region    ***************************** type.gotpl *****************************
+
+func (ec *executionContext) unmarshalNAgentMetricsAxis2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentMetricsAxis(ctx context.Context, v any) (AgentMetricsAxis, error) {
+	var res AgentMetricsAxis
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNAgentMetricsAxis2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentMetricsAxis(ctx context.Context, sel ast.SelectionSet, v AgentMetricsAxis) graphql.Marshaler {
+	return v
+}
+
+func (ec *executionContext) marshalNAgentMetricsResult2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentMetricsResult(ctx context.Context, sel ast.SelectionSet, v AgentMetricsResult) graphql.Marshaler {
+	return ec._AgentMetricsResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNAgentMetricsResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentMetricsResult(ctx context.Context, sel ast.SelectionSet, v *AgentMetricsResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AgentMetricsResult(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNAgentMetricsRow2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentMetricsRowᚄ(ctx context.Context, sel ast.SelectionSet, v []*AgentMetricsRow) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNAgentMetricsRow2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentMetricsRow(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNAgentMetricsRow2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentMetricsRow(ctx context.Context, sel ast.SelectionSet, v *AgentMetricsRow) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._AgentMetricsRow(ctx, sel, v)
+}
+
+func (ec *executionContext) unmarshalNAgentMetricsWindow2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentMetricsWindow(ctx context.Context, v any) (AgentMetricsWindow, error) {
+	var res AgentMetricsWindow
+	err := res.UnmarshalGQL(v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNAgentMetricsWindow2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentMetricsWindow(ctx context.Context, sel ast.SelectionSet, v AgentMetricsWindow) graphql.Marshaler {
+	return v
+}
 
 func (ec *executionContext) marshalNAgentSession2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentSession(ctx context.Context, sel ast.SelectionSet, v *AgentSession) graphql.Marshaler {
 	if v == nil {

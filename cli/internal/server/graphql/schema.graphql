@@ -2874,6 +2874,87 @@ type Query {
     """Include projects whose path is unreachable on the spoke"""
     includeUnreachable: Boolean
   ): [FederatedProject!]!
+
+  # ==========================================
+  # Agent Metrics (Story 11)
+  # ==========================================
+
+  """Return windowed agent execution metrics grouped by the requested axis.
+  Backed by FEAT-010 run-store with .ddx/executions bundle fallback. Cache
+  is keyed by run-store revision so it survives ADR-004 archive moves —
+  callers can read revision off the response and re-issue when it changes."""
+  agentMetrics(
+    """Time window to aggregate over. Default 7d (Story 11 locked: all-time removed)."""
+    window: AgentMetricsWindow! = W7D,
+    """Grouping axis: MODEL, HARNESS, PROVIDER, or TIER (harness/model)."""
+    groupBy: AgentMetricsAxis!
+  ): AgentMetricsResult!
+}
+
+# ============================================
+# Agent Metrics (Story 11)
+# ============================================
+
+"""AgentMetricsWindow enumerates the time windows the agentMetrics resolver supports. The Story 11 locked decision removed all-time from the UI; only 24h, 7d, and 30d are exposed."""
+enum AgentMetricsWindow {
+  """Trailing 24 hours"""
+  W24H
+  """Trailing 7 days (default)"""
+  W7D
+  """Trailing 30 days"""
+  W30D
+}
+
+"""AgentMetricsAxis selects the grouping dimension for agentMetrics rows."""
+enum AgentMetricsAxis {
+  """Group by model identifier"""
+  MODEL
+  """Group by harness name"""
+  HARNESS
+  """Group by provider name"""
+  PROVIDER
+  """Group by harness/model tier (TierKey)"""
+  TIER
+}
+
+"""AgentMetricsRow is one aggregated bucket: counts, success rate, duration percentiles, and cost/token means for the attempts in `key`."""
+type AgentMetricsRow {
+  """Group key (model, harness, provider, or tier label)"""
+  key: String!
+  """Total attempts in this bucket"""
+  attempts: Int!
+  """Successful attempts (success + already_satisfied per Story 11)"""
+  successes: Int!
+  """successes / attempts"""
+  successRate: Float!
+  """Mean duration in milliseconds"""
+  meanDurationMs: Float!
+  """Median (p50) duration in milliseconds"""
+  p50DurationMs: Int!
+  """95th-percentile duration in milliseconds"""
+  p95DurationMs: Int!
+  """Mean cost in USD"""
+  meanCostUsd: Float!
+  """Effective cost per success: total cost / successes (null when no successes)"""
+  effectiveCostPerSuccessUsd: Float
+  """Mean input tokens (only run-store records carry tokens)"""
+  meanInputTokens: Float!
+  """Mean output tokens"""
+  meanOutputTokens: Float!
+  """Most recent attempt finish time in this bucket"""
+  lastSeenAt: DateTime
+}
+
+"""AgentMetricsResult wraps the row set with the window/axis echo plus a revision string. The revision is a fingerprint of the run-store + bundle + archive inputs; callers may use it as a cache key."""
+type AgentMetricsResult {
+  """Echo of the requested window"""
+  window: AgentMetricsWindow!
+  """Echo of the requested grouping axis"""
+  groupBy: AgentMetricsAxis!
+  """Revision token for the underlying data sources; opaque cache key."""
+  revision: String!
+  """Aggregated rows, sorted by attempt count descending then key ascending."""
+  rows: [AgentMetricsRow!]!
 }
 
 # ============================================
