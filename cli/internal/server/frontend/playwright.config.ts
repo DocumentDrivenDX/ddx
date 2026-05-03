@@ -27,7 +27,7 @@ const bootCommand = [
 	`cp -R "${FIXTURE_DIR}/." "$TMP/"`,
 	`(cd "${CLI_PKG_DIR}" && go build -o "$TMP/ddx" .)`,
 	`cd "$TMP"`,
-	`exec ./ddx server --tsnet=false --addr=127.0.0.1 --port=${PORT}`
+	`DDX_OPERATOR_PROMPT_ALLOWLIST=localhost exec ./ddx server --tsnet=false --addr=127.0.0.1 --port=${PORT}`
 ].join(' && ');
 
 export default defineConfig({

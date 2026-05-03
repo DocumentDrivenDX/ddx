@@ -728,6 +728,11 @@ func (s *Server) routes() {
 		trusted(pattern, s.projectScoped(handler))
 	}
 
+	// CSRF token (operator-prompt mutations) — gated to trusted callers so
+	// the served HTML can fetch a per-session token to send via the
+	// X-CSRF-Token header on operatorPromptSubmit/Approve/Cancel.
+	trusted("GET /api/csrf-token", s.handleCSRFToken)
+
 	// Node + project registry
 	trusted("GET /api/node", s.handleGetNode)
 	trusted("GET /api/projects", s.handleListProjects)
@@ -1068,6 +1073,14 @@ func (s *Server) handleProjectCommits(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, commits)
+}
+
+func (s *Server) handleCSRFToken(w http.ResponseWriter, r *http.Request) {
+	token := ""
+	if s.csrfTokens != nil {
+		token = s.csrfTokens.Token()
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"token": token})
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
