@@ -1213,18 +1213,44 @@ type pickerSkip struct {
 // reason for each skip). The returned skips slice is only meaningful when
 // ok=true: it contains every entry that came BEFORE the chosen candidate
 // in the priority-sorted ReadyExecution result.
+//
+// It delegates filter+sort to PreviewQueue and then additionally filters out
+// beads present in the per-Run attempted map (which is non-deterministic across
+// runs and therefore excluded from the stable PreviewQueue surface).
 func (w *ExecuteBeadWorker) nextCandidate(attempted map[string]struct{}, labelFilter string) (bead.Bead, []pickerSkip, bool, error) {
+	// Use PreviewQueue for the stable filter+sort logic. Limit=0 returns all
+	// entries so we can scan for the first non-attempted candidate.
+	entries, err := PreviewQueue(w.Store, PickerFilters{LabelFilter: labelFilter}, 0)
+	if err != nil {
+		return bead.Bead{}, nil, false, err
+	}
+
+	// Rebuild the ready list from the preview entries in picker order so we
+	// can apply the per-Run attempted map on top. We need the original bead
+	// values for the return; fetch them from ReadyExecution (already ordered).
 	ready, err := w.Store.ReadyExecution()
 	if err != nil {
 		return bead.Bead{}, nil, false, err
 	}
+	// Index by ID for O(1) lookup.
+	byID := make(map[string]bead.Bead, len(ready))
+	for _, b := range ready {
+		byID[b.ID] = b
+	}
+
 	var skips []pickerSkip
-	for _, candidate := range ready {
+	for _, entry := range entries {
+		candidate, ok := byID[entry.BeadID]
+		if !ok {
+			// Should not happen; skip defensively.
+			continue
+		}
 		if _, seen := attempted[candidate.ID]; seen {
 			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, Reason: "in_attempted"})
 			continue
 		}
-		if labelFilter != "" && !HasBeadLabel(candidate.Labels, labelFilter) {
+		if entry.FilterDecision == FilterDecisionSkipped {
+			// PreviewQueue already applied label_filter; record as skip.
 			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, Reason: "label_filter"})
 			continue
 		}
