@@ -1,0 +1,98 @@
+{
+  "attempt_id": "20260503T221710-b1b72c20",
+  "bead_id": "ddx-3e60fd84",
+  "base_rev": "57ca2a85de1c0c9dd204a1daceb86eb15eaf81a1",
+  "created_at": "2026-05-03T22:17:11.743550557Z",
+  "requested": {
+    "harness": "codex",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3e60fd84",
+    "title": "checks integration: pre_merge hook in execute-bead loop + checks_bypass annotation + e2e",
+    "description": "Slice 2 of parent ddx-a946c744. Wire the checks runner (built in child slice ddx-aee651ec) into the execute-bead loop as a pre_merge gate, add the checks_bypass bead annotation with event recording, and add e2e tests.\n\nDEPENDS ON\n- ddx-aee651ec (checks protocol package + ddx ac CLI)\n\nCONTEXT\nSee parent ddx-a946c744 for full design. This slice integrates the protocol package into the merge flow and adds the bypass mechanism.\n\nSCOPE\n- cli/internal/agent/execute_bead_loop.go — call cli/internal/checks runner for all applicable checks BEFORE the merge-back step; on any status=block/error, abort merge, preserve worktree per existing iteration-preservation conventions, write evidence under .ddx/executions/\u003crun-id\u003e/, record event\n- cli/internal/bead schema — checks_bypass annotation: list of {name, reason, bead}; missing reason -\u003e bypass rejected loudly; on bypass, named check is skipped and a bypass event is recorded with the reason\n- E2E test 1: fixture .ddx/checks/dummy-fail.yaml with script that always returns status=block; ddx try on a no-op bead aborts merge, preserves worktree, evidence file present, event recorded\n- E2E test 2: same fixture + checks_bypass annotation on bead -\u003e merge proceeds, bypass event recorded\n- Tests under cli/internal/agent/ and/or cli/cmd/ following existing execute_bead_*_test.go patterns\n\nOUT OF SCOPE\n- New checks for any specific language (separate REACH-* beads)",
+    "acceptance": "1. execute_bead_loop pre_merge step runs all applicable checks (filtered by AppliesTo) in parallel before merge-back.\n2. Any status=block or status=error aborts the merge and preserves the worktree per existing iteration-preservation conventions.\n3. checks_bypass annotation on the bead skips the named check and records an event with the reason; missing reason -\u003e bypass rejected.\n4. E2E test: dummy-fail fixture causes merge abort, worktree preserved, evidence written, event recorded.\n5. E2E test: dummy-fail + checks_bypass -\u003e merge proceeds, bypass event recorded.\n6. Evidence under .ddx/executions/\u003crun-id\u003e/ shows fixture wrote result.json and ddx parsed it correctly.\n7. cd cli \u0026\u0026 go test ./... green; lefthook pre-commit passes.",
+    "parent": "ddx-a946c744",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:checks",
+      "kind:platform",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T22:17:10Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2447331",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-03T21:50:18.614398791Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260503T211820-d1d78258\",\"harness\":\"claude\",\"input_tokens\":145,\"output_tokens\":57541,\"total_tokens\":57686,\"cost_usd\":13.152555,\"duration_ms\":1913170,\"exit_code\":0}",
+          "created_at": "2026-05-03T21:50:18.713701072Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=57686 cost_usd=13.1526"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-03T21:50:24.572333849Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "REQUEST_CHANGES\nPre-merge checks gate, bypass annotation, and e2e tests are correctly implemented and well-structured. AC #7 is not strictly satisfied: commit was made with lefthook --no-verify due to a pre-existing TestReviewEvidenceApproveAttributesToTier failure, which the author documented as reproducible on base 6a64e425. Implementation packages pass green; pre-existing failure should be filed as a separate bead.\nartifact: .ddx/executions/20260503T211820-d1d78258/reviewer-stream.log\nharness=claude\nmodel=opus\ninput_bytes=9435\noutput_bytes=2363\nelapsed_ms=154001",
+          "created_at": "2026-05-03T21:53:00.732802053Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "REQUEST_CHANGES"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-03T21:53:00.828574255Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: REQUEST_CHANGES"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"action\":\"re_attempt_with_context\",\"mode\":\"review_block\"}",
+          "created_at": "2026-05-03T21:53:00.91337155Z",
+          "kind": "triage-decision",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block: re_attempt_with_context"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: REQUEST_CHANGES\nPre-merge checks gate, bypass annotation, and e2e tests are correctly implemented and well-structured. AC #7 is not strictly satisfied: commit was made with lefthook --no-verify due to a pre-existing TestReviewEvidenceApproveAttributesToTier failure, which the author documented as reproducible on base 6a64e425. Implementation packages pass green; pre-existing failure should be filed as a separate bead.\nresult_rev=9ac9cda89048770d6814772a60df5c27393dca6b\nbase_rev=6a64e42544b24287ae5f6e923620e1a9cd500362",
+          "created_at": "2026-05-03T21:53:01.055600124Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_request_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T22:17:10.076455978Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T221710-b1b72c20",
+    "prompt": ".ddx/executions/20260503T221710-b1b72c20/prompt.md",
+    "manifest": ".ddx/executions/20260503T221710-b1b72c20/manifest.json",
+    "result": ".ddx/executions/20260503T221710-b1b72c20/result.json",
+    "checks": ".ddx/executions/20260503T221710-b1b72c20/checks.json",
+    "usage": ".ddx/executions/20260503T221710-b1b72c20/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3e60fd84-20260503T221710-b1b72c20"
+  },
+  "prompt_sha": "1b62affb9953c3811051bce1a4b856392bb9a1c307b1b3b364c74fbb0385007c"
+}
