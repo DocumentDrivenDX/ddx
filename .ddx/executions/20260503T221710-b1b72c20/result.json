@@ -1,0 +1,23 @@
+{
+  "bead_id": "ddx-3e60fd84",
+  "attempt_id": "20260503T221710-b1b72c20",
+  "base_rev": "57ca2a85de1c0c9dd204a1daceb86eb15eaf81a1",
+  "result_rev": "57ca2a85de1c0c9dd204a1daceb86eb15eaf81a1",
+  "outcome": "task_no_changes",
+  "status": "no_changes",
+  "detail": "no_changes",
+  "no_changes_rationale": "verification_command: cd cli \u0026\u0026 go test ./internal/bead ./internal/checks \u0026\u0026 go test ./internal/agent -run 'TestSubmitWithPreMergeChecks'\n\nNo new code changes were made in this attempt because the implementation for bead ddx-3e60fd84 is already present in this worktree history at commit 43efd67eb74320cfb45e93ae96b526d1d97812f3 (`feat(agent): pre-merge checks gate with checks_bypass annotation [ddx-3e60fd84]`), which is an ancestor of the current checkpoint.\n\nEvidence inspected:\n- cli/internal/agent/checks_premerge.go implements RunPreMergeChecks, AppendPreMergeChecksEvents, and PreserveAfterPreMergeChecks.\n- cli/internal/agent/execute_bead_loop.go defines SubmitWithPreMergeChecks, which runs pre_merge checks before submit, preserves refs/ddx/iterations/\u003cbead-id\u003e/ on block/error, and records checks-blocked/checks-bypass events.\n- cli/cmd/try.go and cli/cmd/agent_cmd.go route ddx try / execute-loop landing through SubmitWithPreMergeChecks.\n- cli/internal/server/workers.go routes server-managed execute-loop landing through evaluateGatesAndSubmit; this committed slice includes the single-bead and CLI loop integration paths, while server gate integration remains governed by its existing required-gate helper.\n- cli/internal/bead/checks_bypass.go parses checks_bypass annotations and rejects empty reasons.\n- cli/internal/agent/checks_premerge_e2e_test.go covers dummy-fail abort/preserve/evidence/event, dummy-fail bypass merge/event, and missing-reason rejection.\n- cli/internal/bead/checks_bypass_test.go covers parser success and validation failures.\n\nVerification performed in this attempt:\n- `cd cli \u0026\u0026 go test ./internal/bead ./internal/checks \u0026\u0026 go test ./internal/agent -run 'TestSubmitWithPreMergeChecks'` passed.\n- `cd cli \u0026\u0026 go test ./internal/agent ./internal/bead ./internal/checks ./cmd` failed only in github.com/DocumentDrivenDX/ddx/cmd: TestReviewEvidenceApproveAttributesToTier still reports zero review events, and installation acceptance tests expect cli/build/ddx to exist.\n- `cd cli \u0026\u0026 go test ./...` reproduced the same cmd failures; all touched internal packages passed.\n- `lefthook run pre-commit` passed with no matching staged files.\n\nThe full-suite red state is outside this bead's touched implementation and matches the pre-existing failure noted in the landed bead commit.",
+  "harness": "codex",
+  "session_id": "eb-9329873d",
+  "duration_ms": 451526,
+  "tokens": 4874643,
+  "exit_code": 0,
+  "failure_mode": "no_changes",
+  "execution_dir": ".ddx/executions/20260503T221710-b1b72c20",
+  "prompt_file": ".ddx/executions/20260503T221710-b1b72c20/prompt.md",
+  "manifest_file": ".ddx/executions/20260503T221710-b1b72c20/manifest.json",
+  "result_file": ".ddx/executions/20260503T221710-b1b72c20/result.json",
+  "usage_file": ".ddx/executions/20260503T221710-b1b72c20/usage.json",
+  "started_at": "2026-05-03T22:17:11.743961598Z",
+  "finished_at": "2026-05-03T22:24:43.270203744Z"
+}
