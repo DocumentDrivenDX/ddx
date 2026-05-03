@@ -224,11 +224,11 @@ fields currently scattered across `cli/cmd/agent_cmd.go`,
   "provider": "",
   "effort": "",
 
-  "label_filter": ["phase:2", "kind:fix"],
+  "label_filter": "",
   "capabilities": ["bead-attempt", "review"],
 
-  "from_rev": "",
   "once": false,
+  "poll_interval_ms": 30000,
   "no_review": false,
   "review_harness": "",
   "review_model": "",
@@ -261,28 +261,63 @@ Response (201):
 Field semantics:
 
 - `spec_version`: integer; server returns 400 if unsupported. v1 freezes
-  the schema above. New fields go in v2 with explicit migration.
-- `harness`/`model`/`provider`/`profile`/`effort`/`model_ref`: routing
-  intent passed to fizeau on each `try.Attempt`. Empty fields trigger
-  fizeau's profile/auto-route (per `ddx-1e516bc9`).
-- `from_rev`: optional base revision pin for attempts; empty = use
-  bead's `metadata.base-rev`.
+  the schema above. **Additive fields** (new optional fields) MAY be
+  added within v1 — clients ignore unknown fields, server tolerates
+  missing. **Breaking changes** (semantic shifts to existing fields,
+  required-new-field, etc.) require v2 + an explicit `Accept:
+  application/vnd.ddx-worker.v2+json` negotiation header. Server returns
+  `406 unsupported_version` if the worker's version is unrecognized.
+- `harness`: which agent CLI to invoke (claude/codex/gemini/...). Empty =
+  server picks per `auto-routing-eligible` set (per fizeau).
+- `model`: explicit model pin (e.g., `"sonnet-4.6"`). Empty = fizeau
+  resolves via profile/min_power/max_power (per `ddx-1e516bc9`).
+- `model_ref`: opaque downstream model reference (e.g.,
+  `"openrouter/anthropic/claude-sonnet-4.5"`); used when fizeau needs to
+  pass through a non-canonical name. Distinct from `model`: `model` is
+  fizeau's catalog name; `model_ref` is the provider-side identifier.
+  Most operators leave this empty.
+- `profile`: fizeau profile name (e.g., `"code-medium"`). Empty = derive
+  from min_power.
+- `provider`: explicit provider pin; empty = fizeau picks.
+- `effort`: provider-specific effort hint (e.g., `"medium"` for codex).
+- `label_filter`: comma-separated label set (matches current
+  `LabelFilter string` semantics in `cli/internal/agent/execute_bead_loop.go`
+  per `ddx-29058e2a`). Picker intersects with bead labels. Empty = all
+  beads eligible. Format unchanged from today; future array form deferred
+  to a separate ADR amendment.
+- `capabilities`: array; declares what the worker is willing to do.
+  Empty array OR omitted field defaults to `["bead-attempt"]` for
+  backward compat with workers that don't know about capabilities yet.
+  See Capabilities dispatch section.
+- `once`: single-drain semantics — worker exits after queue is empty
+  once. Preserves `--once` operator flag.
+- `poll_interval_ms`: client-side hint for long-poll cadence on
+  bare-wait responses. Server may override via response. Default 30000
+  preserves the stay-alive fix at commit `41cb762e` (workers stay alive
+  on empty queue). `--poll-interval=0` operator override is preserved
+  by submitting `0`; the worker treats bare-wait as "exit" instead of
+  "retry."
 - `opaque_passthrough`: when true, `harness`/`model`/`provider` are
   passed to fizeau as opaque hints with no DDx-side validation
   (preserves `ddx work --harness=<name>` semantics).
 - `max_cost_usd` / `request_timeout_ms` / `min_power` / `max_power`:
   per-attempt budget caps; zero = use server defaults.
-- `capabilities`: declares what the worker is willing to do; the picker
-  filters eligible beads against this set.
-- `label_filter`: bead-side filter, intersected with bead labels by the
-  picker.
 - `executor_pid` / `executor_host`: for the server's runtime registry;
   used by `ddx agent doctor` to surface worker provenance.
 
-Drop is impossible by construction: every field that today travels through
-the `agent_cmd.go → server.go → workers.go → runWorker` chain is one
-struct field here. Adding a new flag = (a) one struct field + (b) one
-cobra binding. The drop class (`ddx-29058e2a`) is closed.
+**Per-attempt overrides — NOT in registration.** `from_rev` (base
+revision pin for a specific attempt) was previously placed here and is
+explicitly REMOVED. Workers process many attempts; pinning all to one
+base is wrong for general drain. `from_rev` becomes a per-attempt field
+on the bead itself (existing `metadata.base-rev` on the bead) OR an
+optional field on the `next-bead` response when the operator pins via
+`ddx try --from <rev>` (one-shot CLI surface only, NOT general drain).
+
+Drop is impossible by construction: every PER-WORKER field that today
+travels through the `agent_cmd.go → server.go → workers.go → runWorker`
+chain is one struct field here. Per-attempt fields stay per-attempt.
+Adding a new flag = (a) one struct field + (b) one cobra binding. The
+drop class (`ddx-29058e2a`) is closed.
 
 ### POST /api/workers/<id>/heartbeat
 
@@ -469,8 +504,12 @@ capabilities:
 A bead's required capability is inferred from its `kind:`-label
 (`kind:review` → requires `review`; everything else → requires
 `bead-attempt`). Workers without the required capability are skipped by
-the picker for that bead. Workers MAY register multiple capabilities;
-workers MUST register at least one.
+the picker for that bead. Workers MAY register multiple capabilities.
+**Defaulting rule for backward compat:** a worker that omits
+`capabilities` or sends an empty array is treated as
+`["bead-attempt"]` so transitional/legacy workers don't break.
+Operators wanting a review-only worker MUST explicitly send
+`["review"]` (which excludes implementation work).
 
 Future capabilities (e.g., `compute:gpu`, `network:internet`) extend this
 without ADR change as long as the picker rule (intersection) is preserved.
@@ -766,9 +805,12 @@ and reviewable.
   network partition + worker death is still a recoverable-but-noisy
   scenario. ADR-007 federation does not change this — each node owns its
   registry.
-- **Project boundaries enforced by token binding.** Cross-project leaks
-  via worker paths become structurally impossible; the recurrence of
-  `ddx-4c51d33e`-class bugs in this code path is prevented.
+- **Project boundaries enforced by token binding for honest workers.**
+  Session tokens prevent the misconfigured-worker-claims-wrong-project
+  failure mode that drove `ddx-4c51d33e`. They are NOT defense against a
+  local malicious process — `requireTrusted` accepts any loopback
+  connection without identity proof. The threat model is detailed in the
+  Threat model section above.
 - **`ExecuteLoopSpec` consolidation is a side effect.** The bead-flag
   drift class (`ddx-29058e2a`) is closed by construction.
 - **Long-poll requires back-pressure care.** A misconfigured worker that

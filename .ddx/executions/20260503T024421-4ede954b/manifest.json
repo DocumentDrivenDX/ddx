@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T024421-4ede954b",
+  "bead_id": "ddx-c9ef6c4f",
+  "base_rev": "ab0a056a7bca1c7e78a444c2a452ea2b7a9a4eda",
+  "created_at": "2026-05-03T02:44:22.837317453Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c9ef6c4f",
+    "title": "Implement axon backend behind selectable backend flag in cli/internal/bead",
+    "description": "Implement an axon-backed Backend in cli/internal/bead/, selectable at runtime via DDX_BEAD_BACKEND or .ddx/config.yaml (e.g., bead.backend: jsonl|axon). Must satisfy the same Backend interface JSONL currently satisfies: create/show/update/close/list/ready/blocked/dep ops, plus claim semantics and event append. Follows the TD authored in the design child. Existing JSONL path remains the default; data migration is a separate child bead.",
+    "acceptance": "1. Axon Backend implementation lives in cli/internal/bead/ alongside the JSONL backend. 2. Selectable via DDX_BEAD_BACKEND or config; JSONL remains default. 3. All Backend interface methods implemented. 4. Unit tests cover create/claim/close/dep on the axon backend. 5. ddx bead commands work end-to-end against the axon backend on a fresh repo (no migration required).",
+    "parent": "ddx-5d49b14e",
+    "labels": [
+      "phase:2",
+      " area:beads",
+      " area:storage",
+      " kind:implementation",
+      " backend-migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T02:44:21Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "163374",
+      "execute-loop-heartbeat-at": "2026-05-03T02:44:21.53020833Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T024421-4ede954b",
+    "prompt": ".ddx/executions/20260503T024421-4ede954b/prompt.md",
+    "manifest": ".ddx/executions/20260503T024421-4ede954b/manifest.json",
+    "result": ".ddx/executions/20260503T024421-4ede954b/result.json",
+    "checks": ".ddx/executions/20260503T024421-4ede954b/checks.json",
+    "usage": ".ddx/executions/20260503T024421-4ede954b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c9ef6c4f-20260503T024421-4ede954b"
+  }
+}
