@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T161949-e7c7f3c2",
+  "bead_id": "ddx-88507ed5",
+  "base_rev": "86eff75dd6e93b03632a2d1865df10abbb3b000e",
+  "created_at": "2026-05-03T16:19:50.501624627Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-88507ed5",
+    "title": "metric: author MET-001 (exec) and MET-002 (external) artifacts",
+    "description": "Concrete examples: MET-001 (source: exec, computed from execution attempts) and MET-002 (source: external, prose-defined precedent for human-supplied metrics). Live under docs/helix/\u003cphase\u003e/metrics/ or library examples.",
+    "acceptance": "1. MET-001 + MET-002 exist with full frontmatter per the schema in B1a. 2. ddx doc audit shows them with no errors. 3. Both serve as canonical references for plugin authors.",
+    "parent": "ddx-921616ea",
+    "labels": [
+      "phase:2",
+      "story:13",
+      "area:specs",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T16:19:49Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T16:19:49.018353661Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T161949-e7c7f3c2",
+    "prompt": ".ddx/executions/20260503T161949-e7c7f3c2/prompt.md",
+    "manifest": ".ddx/executions/20260503T161949-e7c7f3c2/manifest.json",
+    "result": ".ddx/executions/20260503T161949-e7c7f3c2/result.json",
+    "checks": ".ddx/executions/20260503T161949-e7c7f3c2/checks.json",
+    "usage": ".ddx/executions/20260503T161949-e7c7f3c2/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-88507ed5-20260503T161949-e7c7f3c2"
+  },
+  "prompt_sha": "501d99d811d44459c531488b05cac55454c36f6af8411169eb5a62c82d39c869"
+}
