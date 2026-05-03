@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T030952-1063db26",
+  "bead_id": "ddx-ea76e1b8",
+  "base_rev": "db90b88709366250f00682cdd1a5fa842027ac9c",
+  "created_at": "2026-05-03T03:09:54.058596464Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ea76e1b8",
+    "title": "checks: ship Go production-reachability check (library/checks/go-production-reachability)",
+    "description": "Ship the Go-specific production-reachability check as a library resource conforming to the REACH-PROTO check protocol. NOT installed by default for arbitrary projects (Go-opinion would leak through ddx init). This project (ddx itself) opts in by adding .ddx/checks/production-reachability.yaml.\n\nDESIGN\n- Location: library/checks/go-production-reachability/ (alongside library/personas/, library/patterns/)\n- Implementation: a small Go binary or shell script invoking golang.org/x/tools/cmd/deadcode rooted at configurable entry packages.\n- Default entry roots for ddx self-use: cli/cmd/..., cli/internal/server/graphql/..., cli/internal/server/http/...\n- Logic:\n  1. Read DIFF_BASE..DIFF_HEAD from env. Compute set of new Go symbols (functions, methods, types) added by the diff via AST parse of changed files.\n  2. Run deadcode (or callgraph) rooted at the configured entry packages, EXCLUDING _test.go from roots and from reachability.\n  3. For each new symbol not reachable from any entry root → violation { file, line, symbol, kind: \"unreachable\", detail: \"no path from entry roots: \u003clist\u003e\" }\n  4. Recognize // wiring:pending \u003cbead-id\u003e annotation as escape hatch for individual symbols. The check verifies the named bead exists and is open via local beads.jsonl read; otherwise the annotation is rejected.\n  5. Write ${EVIDENCE_DIR}/production-reachability.json with the protocol-defined schema.\n- Config: library/checks/go-production-reachability/check.yaml template that operators copy to .ddx/checks/ and customize entry_roots for their project.\n\nDOGFOOD\n- This project installs it: write .ddx/checks/production-reachability.yaml referencing the library check + cli's entry roots.\n- The next ddx try on any bead touching cli/**/*.go will exercise the check.\n\nNOT IN SCOPE\n- Auto-install during ddx init (would leak Go-opinion). Operators opt in manually or via ddx install check (future, separate bead).\n- Coverage-based \"exercised via CLI\" check (entered_via flavor). Static reachability is sufficient for the immediate problem.\n- Python/TS/Rust analogues. Future contributions; protocol supports them.\n\nDEP: REACH-PROTO (above)",
+    "acceptance": "1. library/checks/go-production-reachability/ exists with: README.md (usage), check.yaml (template), implementation (binary or script).\n2. Implementation reads DIFF_BASE/DIFF_HEAD/PROJECT_ROOT/EVIDENCE_DIR from env; computes new symbols from diff; runs deadcode-rooted reachability; writes result.json conforming to REACH-PROTO schema.\n3. // wiring:pending \u003cbead-id\u003e annotation parsed; bead existence + open-status verified against .ddx/beads.jsonl; invalid annotation = violation.\n4. _test.go files excluded from both root selection and reachability calculation (so a unit-test-only reference does NOT satisfy the check).\n5. Self-test: synthetic project with one unwired exported function returns status=block with that symbol in violations.\n6. Self-test: same project with the function wired into cmd handler returns status=pass.\n7. Self-test: same project with // wiring:pending annotation citing an open bead returns status=pass; annotation citing a closed/missing bead returns status=block.\n8. This project installs it: .ddx/checks/production-reachability.yaml committed; ddx ac run on any current bead succeeds (or BLOCKs with the known unwired functions — see REACH-BACKFILL for resolution).\n9. cd cli \u0026\u0026 go test green; lefthook pre-commit passes.\n10. Evidence file at .ddx/executions/\u003crun-id\u003e/production-reachability.json shows the check ran and its findings.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "area:checks",
+      "area:library",
+      "kind:check-impl",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:09:52Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "504561",
+      "execute-loop-heartbeat-at": "2026-05-03T03:09:52.540925896Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T030952-1063db26",
+    "prompt": ".ddx/executions/20260503T030952-1063db26/prompt.md",
+    "manifest": ".ddx/executions/20260503T030952-1063db26/manifest.json",
+    "result": ".ddx/executions/20260503T030952-1063db26/result.json",
+    "checks": ".ddx/executions/20260503T030952-1063db26/checks.json",
+    "usage": ".ddx/executions/20260503T030952-1063db26/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ea76e1b8-20260503T030952-1063db26"
+  }
+}
