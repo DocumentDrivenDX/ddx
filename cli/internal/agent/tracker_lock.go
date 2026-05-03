@@ -88,7 +88,7 @@ var trackerLockPolicy = DefaultLockRetryPolicy()
 // trackerLockPath returns the tracker-commit lock directory for the given
 // project root. The lock guards git index operations on the primary .git
 // (staging and committing .ddx/beads.jsonl) so that multiple concurrent
-// workers (e.g. several `ddx work --local` processes) do not race on
+// workers (e.g. several `ddx work` processes) do not race on
 // .git/index.lock.
 func trackerLockPath(projectRoot string) string {
 	return filepath.Join(projectRoot, ".ddx", ".git-tracker.lock")

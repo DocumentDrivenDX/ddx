@@ -181,7 +181,7 @@ func TestWorkDoesNotCallResolveRoute(t *testing.T) {
 
 	root := NewCommandFactory(dir).NewRootCommand()
 	_, err := executeCommand(root, "work",
-		"--local", "--once",
+		"--once",
 		"--harness", "claude",
 		"--model", "claude-opus-4-7",
 		"--min-power", "40",
@@ -197,7 +197,7 @@ func TestWorkDoesNotCallResolveRoute(t *testing.T) {
 	// the test's only concern is that ResolveRoute was not invoked.
 }
 
-// TestWorkPassesEmptyHarnessToService verifies that ddx work --local with no
+// TestWorkPassesEmptyHarnessToService verifies that ddx work with no
 // --harness flag sends an empty Harness to the agent service, allowing the
 // service's routing engine to auto-select a provider from configured endpoints.
 func TestWorkPassesEmptyHarnessToService(t *testing.T) {
@@ -215,7 +215,7 @@ func TestWorkPassesEmptyHarnessToService(t *testing.T) {
 	}))
 
 	root := NewCommandFactory(env.Dir).NewRootCommand()
-	_, _ = executeCommand(root, "work", "--local", "--once")
+	_, _ = executeCommand(root, "work", "--once")
 
 	stub.mu.Lock()
 	executeCalled := stub.executeCalled

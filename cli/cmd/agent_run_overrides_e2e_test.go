@@ -222,7 +222,7 @@ func TestWorkSharesSamePassthroughPlumbing(t *testing.T) {
 
 	root := NewCommandFactory(dir).NewRootCommand()
 	_, _ = executeCommand(root, "work",
-		"--local", "--once",
+		"--once",
 		"--harness", "claude",
 		"--model", "gpt-5.4",
 	)
@@ -280,7 +280,7 @@ agent:
 	}))
 
 	root := NewCommandFactory(dir).NewRootCommand()
-	_, _ = executeCommand(root, "work", "--local", "--once")
+	_, _ = executeCommand(root, "work", "--once")
 
 	// ddx work must NOT inject config agent.harness / agent.model; both fields
 	// must be empty in the Execute request when no CLI flags are provided.

@@ -14,7 +14,7 @@ import (
 // and AC2: a project with .ddx/beads.jsonl but no .ddx/config.yaml must drain
 // against the global agent config defaults instead of failing with the
 // upstream "routing under-specified" error. The test sets HOME to a temp
-// directory holding a minimal agent config and runs `ddx work --once --local`
+// directory holding a minimal agent config and runs `ddx work --once`
 // programmatically. It asserts:
 //   - the command does not return "routing under-specified" (the regression
 //     this hot-fix addresses)
@@ -54,7 +54,7 @@ default_provider: testprov
 
 	factory := NewCommandFactory(projectDir)
 	root := factory.NewRootCommand()
-	out, err := executeCommand(root, "work", "--local", "--once", "--project", projectDir)
+	out, err := executeCommand(root, "work", "--once", "--project", projectDir)
 
 	combined := out
 	if err != nil {

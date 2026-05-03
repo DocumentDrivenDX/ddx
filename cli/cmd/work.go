@@ -33,14 +33,15 @@ Stop conditions (evaluated between attempts):
   no_progress — N consecutive attempts produced no commit (default N=3)
   signal      — SIGINT/SIGTERM received between attempts
 
-By default work submits to the running ddx server as a background worker and
-returns immediately. Use --local to run inline in the current process.
+work runs inline in the current process; per ADR-022 there is no separate
+"submit to server" mode. The legacy --local flag is accepted but ignored
+(deprecation warning printed) and will be removed in a future release.
 `,
 		Example: `  # Drain the current execution-ready queue once and exit
   ddx work
 
   # Pick one ready bead, execute it, and stop
-  ddx work --local --once
+  ddx work --once
 
   # Run continuously as a bounded queue worker
   ddx work --poll-interval 30s
@@ -67,7 +68,8 @@ returns immediately. Use --local to run inline in the current process.
 	cmd.Flags().Bool("once", false, "Process at most one ready bead")
 	cmd.Flags().Duration("poll-interval", 30*time.Second, "Poll interval for continuous scanning; zero drains current ready work and exits (legacy opt-out). Default 30s keeps the worker alive across empty polls.")
 	cmd.Flags().Bool("json", false, "Output loop result as JSON")
-	cmd.Flags().Bool("local", false, "Run inline in current process instead of server worker (default: submit to server)")
+	cmd.Flags().Bool("local", false, "Deprecated: no-op; ddx work always runs inline (ADR-022)")
+	_ = cmd.Flags().MarkDeprecated("local", "ddx work always runs inline; the flag is a no-op (ADR-022)")
 	cmd.Flags().Bool("no-review", false, "Skip post-merge review")
 	cmd.Flags().String("review-harness", "", "Harness for the post-merge reviewer (default: same as implementation harness)")
 	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart tier)")

@@ -1034,7 +1034,7 @@ func CommitTracker(projectRoot string) error {
 
 	msg := fmt.Sprintf("chore: update tracker (execute-bead %s)", time.Now().UTC().Format("20060102T150405"))
 	// Serialize git add/commit on the primary .git across processes so that
-	// concurrent workers (multiple `ddx work --local`) do not race on
+	// concurrent workers (multiple `ddx work`) do not race on
 	// .git/index.lock. See cli/internal/agent/tracker_lock.go.
 	return withTrackerLock(projectRoot, func() error {
 		// Re-check inside the lock: a sibling worker may have already

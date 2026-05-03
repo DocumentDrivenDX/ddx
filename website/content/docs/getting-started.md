@@ -66,7 +66,7 @@ Once you have at least one provider configured in your agent service
 queue requires no per-project configuration:
 
 ```bash
-ddx work --once --local
+ddx work --once
 ```
 
 DDx delegates provider resolution to the agent service and selects a

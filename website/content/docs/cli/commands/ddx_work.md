@@ -5,48 +5,29 @@ generated: true
 
 ## ddx work
 
-Work the bead execution queue
+Drain the bead execution queue
 
 ### Synopsis
 
-`ddx work` is the primary operator-facing surface for draining ready bead
-work. It selects ready work, owns retry/escalation decisions from DDx evidence,
-and calls `ddx try` for each bead attempt. `ddx try` wraps the simple `ddx run`
-agent invocation layer.
+work drains the execution-ready bead queue. It is the FEAT-010 layer-3
+queue drain: it iterates ddx try (layer 2) across ready beads until a stop
+condition is met and owns retry-power policy between attempts.
 
-Use `ddx try <bead-id>` when you need one specific bead attempt. Use `ddx run`
-only when you want one direct agent invocation without bead ownership.
+Unlike "ddx agent execute-loop", ddx work treats --harness, --provider, and
+--model as opaque passthrough constraints forwarded to the agent unchanged.
+DDx does not validate these values or branch on them; the agent owns routing
+within the requested power bounds.
 
-Planning and document-only beads are valid execution targets — any bead
-with unmet acceptance criteria and no blocking deps is eligible.
+Stop conditions (evaluated between attempts):
+  drained     — no ready beads remain
+  blocked     — every remaining bead has produced a terminal non-success outcome
+  deferred    — configured budget exhausted
+  no_progress — N consecutive attempts produced no commit (default N=3)
+  signal      — SIGINT/SIGTERM received between attempts
 
-Close semantics (per bead attempt result status):
-  success                      — close bead with session + commit evidence
-  already_satisfied            — close bead (after repeated no_changes)
-  no_changes                   — unclaim; may cooldown or close after retries
-  land_conflict                — unclaim; result preserved under refs/ddx/iterations/
-  post_run_check_failed        — unclaim; result preserved
-  execution_failed             — unclaim
-  structural_validation_failed — unclaim
-
-Only success (and already_satisfied) closes the bead. Every other status
-leaves the bead open and unclaimed so a later attempt can try again. Each
-attempt is appended to the bead as an execution event (status, detail,
-base_rev, result_rev, preserve_ref, retry_after), and the underlying agent
-session log is recorded with the attempt evidence.
-
-By default `ddx work` submits to the running ddx server as a background
-worker and returns immediately. Use --local to run inline in the current
-process.
-
-Project targeting (multi-project servers):
-  --project <path>    target a specific project root (absolute path or name)
-  DDX_PROJECT_ROOT    env var fallback; used when --project is not set
-  (default)           the git root of the current working directory
-
-When submitting to a multi-project server you must ensure the target project
-is registered with the server (run "ddx server" from that directory, or use
-"ddx server projects register"). The server rejects unrecognised project paths.
+work runs inline in the current process; per ADR-022 there is no separate
+"submit to server" mode. The legacy --local flag is accepted but ignored
+(deprecation warning printed) and will be removed in a future release.
 
 
 ```
@@ -65,31 +46,35 @@ ddx work [flags]
   # Run continuously as a bounded queue worker
   ddx work --poll-interval 30s
 
-  # Pass through a specific harness/model for a debugging pass
+  # Forward harness/model as passthrough constraints (ddx does not validate these)
   ddx work --once --harness agent --model minimax/minimax-m2.7
 
-  # Run inline in the current process
-  ddx work --local --once
+  # Constrain power tier (retry-power policy is owned by ddx work)
+  ddx work --once --min-power 40 --max-power 90
 ```
 
 ### Options
 
 ```
-      --effort string                  Effort level
-      --from string                    Base git revision to start from (default: HEAD)
-      --harness string                 Agent harness to use
-  -h, --help                           help for work
-      --json                           Output loop result as JSON
-      --local                          Run inline in current process instead of server worker (default: submit to server)
-      --max-cost float                 Stop the loop when accumulated billed cost exceeds USD; 0 = unlimited; subscription and local providers do not count (default 100)
-      --max-power int                  Maximum requested agent power for retry escalation
-      --min-power int                  Minimum requested agent power for this work pass
-      --model string                   Model override
-      --no-review                      Skip post-merge review (e.g. for doc-only beads or tight iteration loops)
-      --once                           Process at most one ready bead
-      --poll-interval duration         Poll interval for continuous scanning; zero drains current ready work and exits
-      --project string                 Target project root path or name (default: CWD git root). Env: DDX_PROJECT_ROOT
-      --provider string                Provider name (e.g. vidar, openrouter); selects a named provider from config
+      --effort string              Effort level
+      --from string                Base git revision to start from (default: HEAD)
+      --harness string             Agent harness constraint (passthrough; ddx work does not validate)
+  -h, --help                       help for work
+      --json                       Output loop result as JSON
+      --max-cost float             Stop when accumulated billed cost exceeds USD; 0 = unlimited (default 100)
+      --max-power int              Maximum model power allowed (0 = unconstrained); passed to agent routing unchanged
+      --min-power int              Minimum model power required (0 = unconstrained); passed to agent routing unchanged
+      --model string               Model constraint (passthrough; ddx work does not validate)
+      --model-ref string           Model catalog reference (e.g. code-medium); resolved via the model catalog
+      --no-review                  Skip post-merge review
+      --once                       Process at most one ready bead
+      --poll-interval duration     Poll interval for continuous scanning; zero drains current ready work and exits (legacy opt-out). Default 30s keeps the worker alive across empty polls. (default 30s)
+      --profile string             Routing profile: default, cheap, fast, or smart (default "default")
+      --project string             Target project root path or name (default: CWD git root). Env: DDX_PROJECT_ROOT
+      --provider string            Provider constraint (passthrough; ddx work does not validate)
+      --request-timeout duration   Per-request provider wall-clock timeout; overrides project config and model-class defaults
+      --review-harness string      Harness for the post-merge reviewer (default: same as implementation harness)
+      --review-model string        Model override for the post-merge reviewer (default: smart tier)
 ```
 
 ### Options inherited from parent commands
@@ -104,4 +89,4 @@ ddx work [flags]
 
 * [ddx](/docs/cli/commands/ddx/)	 - Document-Driven Development eXperience - AI development toolkit
 
-###### Auto generated by spf13/cobra on 21-Apr-2026
+###### Auto generated by spf13/cobra on 3-May-2026

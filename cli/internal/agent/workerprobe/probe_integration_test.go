@@ -19,7 +19,7 @@ import (
 // proof for ADR-022 step 2: it stands up the production server HTTP path
 // (httptest.Server wrapping a real serverpkg.Server), points the worker at
 // it via the production server.addr discovery (XDG_DATA_HOME), spawns a
-// real `ddx work --local --once` subprocess against a fixture project, and
+// real `ddx work --once` subprocess against a fixture project, and
 // asserts that the worker's bead-attempt loop events appear in the
 // server's derived view (the worker-events.jsonl log) within 5s.
 //
@@ -73,11 +73,11 @@ func TestWorker_RealAttemptEvents_FlowToServer(t *testing.T) {
 		t.Fatalf("write server.addr: %v", err)
 	}
 
-	// Spawn `ddx work --local --once`. We deliberately pass --no-review and
+	// Spawn `ddx work --once`. We deliberately pass --no-review and
 	// a bogus harness so the worker exits quickly after emitting loop.start
 	// + bead.claimed; the harness failure is irrelevant to this test, which
 	// asserts only that events flowed through the probe.
-	cmd := exec.Command(bin, "work", "--local", "--once", "--no-review",
+	cmd := exec.Command(bin, "work", "--once", "--no-review",
 		"--harness", "noop", "--poll-interval", "0", "--project", proj)
 	cmd.Env = append(os.Environ(),
 		"XDG_DATA_HOME="+xdg,

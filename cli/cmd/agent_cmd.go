@@ -1526,9 +1526,9 @@ attempt is appended to the bead as an execute-bead event (status, detail,
 base_rev, result_rev, preserve_ref, retry_after), and the underlying agent
 session log is recorded under the execute-bead agent-log path.
 
-By default execute-loop submits to the running ddx server as a background
-worker and returns immediately. Use --local to run inline in the current
-process.
+execute-loop runs inline in the current process; per ADR-022 there is no
+separate "submit to server" mode. The legacy --local flag is accepted but
+ignored (deprecation warning printed) and will be removed in a future release.
 
 Project targeting (multi-project servers):
   --project <path>    target a specific project root (absolute path or name)
@@ -1550,10 +1550,7 @@ is registered with the server (run "ddx server" from that directory, or use
 
   # Force a specific harness/model for a debugging pass
   ddx agent execute-loop --once --harness codex
-  ddx agent execute-loop --once --harness agent --model minimax/minimax-m2.7
-
-  # Run inline in the current process (not recommended for long runs)
-  ddx agent execute-loop --local --once`,
+  ddx agent execute-loop --once --harness agent --model minimax/minimax-m2.7`,
 		Args: cobra.NoArgs,
 		RunE: f.runAgentExecuteLoop,
 	}
@@ -1568,7 +1565,8 @@ is registered with the server (run "ddx server" from that directory, or use
 	cmd.Flags().Bool("once", false, "Process at most one ready bead")
 	cmd.Flags().Duration("poll-interval", 30*time.Second, "Poll interval for continuous scanning; zero drains current ready work and exits (legacy opt-out). Default 30s keeps the worker alive across empty polls.")
 	cmd.Flags().Bool("json", false, "Output loop result as JSON")
-	cmd.Flags().Bool("local", false, "Run inline in current process instead of server worker (default: submit to server)")
+	cmd.Flags().Bool("local", false, "Deprecated: no-op; execute-loop always runs inline (ADR-022)")
+	_ = cmd.Flags().MarkDeprecated("local", "execute-loop always runs inline; the flag is a no-op (ADR-022)")
 	cmd.Flags().Bool("no-review", false, "Skip post-merge review (e.g. for doc-only beads or tight iteration loops)")
 	cmd.Flags().String("review-harness", "", "Harness to use for the post-merge reviewer (default: same as implementation harness)")
 	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart tier)")
@@ -1613,7 +1611,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	once, _ := cmd.Flags().GetBool("once")
 	pollInterval, _ := cmd.Flags().GetDuration("poll-interval")
 	asJSON, _ := cmd.Flags().GetBool("json")
-	local, _ := cmd.Flags().GetBool("local")
 	noReview, _ := cmd.Flags().GetBool("no-review")
 	reviewHarness, _ := cmd.Flags().GetString("review-harness")
 	reviewModel, _ := cmd.Flags().GetString("review-model")
@@ -1634,10 +1631,9 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		!cmd.Flags().Changed("profile")
 	autoInferTier := noRoutingFlags && !projectHasRoutingConfig(projectRoot)
 
-	// If --local, run inline; otherwise submit to running ddx server
-	if !local {
-		return f.executeLoopWithServer(cmd, projectRoot, harness, model, profile, provider, modelRef, effort, once, pollInterval, asJSON, noReview, reviewHarness, reviewModel, treatPassthroughAsOpaque)
-	}
+	// ADR-022: execute-loop always runs inline. The legacy --local flag is
+	// a deprecated no-op and the server-submit path is removed from this CLI
+	// surface — server-spawned workers exec `ddx work` directly.
 
 	// Pre-flight: validate harness availability and model compatibility
 	// before claiming any beads. This surfaces errors like "claude binary
@@ -1700,8 +1696,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	tailCtx, tailCancel := context.WithCancel(context.Background())
 	go agent.TailSessionLogs(tailCtx, projectRoot, cmd.OutOrStdout())
 
-	// Instantiate a process-local LandCoordinator so --local uses the same
-	// single-writer land path as the server worker. Stopped on function exit.
+	// Instantiate a process-local LandCoordinator for the inline land path.
+	// Stopped on function exit.
 	localCoord := serverpkg.NewLocalLandCoordinator(projectRoot, agent.RealLandingGitOps{})
 	defer localCoord.Stop()
 
@@ -2105,7 +2101,7 @@ func resolveProjectRoot(projectFlag, workingDir string) string {
 	return gitpkg.FindProjectRoot(workingDir)
 }
 
-// buildCLIPreClaimHook returns a PreClaimHook for the --local execute-loop
+// buildCLIPreClaimHook returns a PreClaimHook for the inline execute-loop
 // that fetches origin and verifies ancestry before each bead claim. Fetch
 // failures are logged but do not block the worker (air-gap friendly).
 func buildCLIPreClaimHook(projectRoot string, gitOps agent.LandingGitOps) func(ctx context.Context) error {

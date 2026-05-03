@@ -67,7 +67,7 @@ func TestWorkPassthroughNotValidated(t *testing.T) {
 	// if called. ddx work must skip that call and proceed to the queue scan,
 	// finding no ready beads and returning successfully.
 	out, err := executeCommand(root, "work",
-		"--local", "--json", "--once",
+		"--json", "--once",
 		"--harness=bogus_harness_xyz_notreal",
 	)
 	require.NoError(t, err,

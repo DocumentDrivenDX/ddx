@@ -23,7 +23,6 @@ Flags worth knowing:
 - `--harness <name>` — force a specific harness (overrides profile).
 - `--profile default|cheap|fast|smart` — routing intent (default `default`).
 - `--model <ref>` — exact model pin (overrides profile).
-- `--local` — run inline in the current process (no subprocess).
 
 ## Primitive: `ddx agent execute-bead`
 

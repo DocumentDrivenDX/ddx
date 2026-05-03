@@ -27,7 +27,7 @@ func TestAgentExecuteLoopUsesProjectRootForNoWorkScan(t *testing.T) {
 	// (ddx-dc157075). The default flipped to 30s so the worker stays alive
 	// across empty polls; tests that want to assert the no-ready-work
 	// outcome must opt out of the long-running default.
-	out, err := executeCommand(root, "agent", "execute-loop", "--local", "--json", "--poll-interval=0")
+	out, err := executeCommand(root, "agent", "execute-loop", "--json", "--poll-interval=0")
 	require.NoError(t, err)
 
 	var res struct {

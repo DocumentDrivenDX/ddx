@@ -80,9 +80,9 @@ func (f *CommandFactory) newAgentWorkersCommand() *cobra.Command {
 		Short: "Show running agent workers and their current bead",
 		Long: `Show all running agent workers and the bead each is currently executing.
 
-Server-submitted workers (started via 'ddx agent execute-loop') are fetched from
-the running ddx server. Local workers (started with --local) are detected by
-scanning active execute-bead worktrees in the project.
+Server-spawned workers are fetched from the running ddx server. Inline
+workers (started by running 'ddx work' / 'ddx agent execute-loop' directly)
+are detected by scanning active execute-bead worktrees in the project.
 
 Examples:
   ddx agent workers

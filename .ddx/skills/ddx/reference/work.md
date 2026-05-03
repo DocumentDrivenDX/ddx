@@ -24,7 +24,6 @@ Flags worth knowing:
 - `--top-power` — choose a `MinPower` threshold from the agent catalog.
 - `--harness <name>` / `--provider <name>` / `--model <ref>` — passthrough
   constraints only. DDx sends them unchanged and does not route on them.
-- `--local` — run inline in the current process (no subprocess).
 
 ## Primitive: `ddx try`
 
