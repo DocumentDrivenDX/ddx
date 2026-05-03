@@ -1,0 +1,4 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Clean refactor: introduces a high-level `Backend` interface covering the full CRUD/claim/query/dep/events/archive/JSONL surface, renames the existing low-level storage contract to `RawBackend`, and proves conformance with compile-time `var _ Backend = (*Store)(nil)`. Config plumbing via `beads.backend` with `DDX_BEAD_BACKEND` env precedence is correctly ordered, and chaos tests now program against the interface as required by AC §5."
+}
