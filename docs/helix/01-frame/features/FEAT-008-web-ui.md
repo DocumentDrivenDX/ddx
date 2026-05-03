@@ -71,6 +71,53 @@ exposes a project picker populated from `GET /api/projects`; selecting a
 project swaps the `:projectId` segment in place. All GraphQL queries issued by the
 UI are bound to the selected project context.
 
+### Project Navigation Tabs
+
+Each `/nodes/:nodeId/projects/:projectId/...` page exposes the following
+project-scoped tabs in the global navigation, in this order:
+
+| Tab | Route segment | Purpose |
+|---|---|---|
+| Overview | (none) | Project home, recent activity, operator-prompt input (ADR-021) |
+| Beads | `beads` | Bead list / kanban / ready / detail (US-082*) |
+| Artifacts | `artifacts` | Artifact browser (US-080, US-081b, US-083) |
+| Graph | `graph` | Document dependency graph (US-081, US-081c) |
+| Runs | `runs` | Layer-aware run history with `work` / `try` / `run` chips, row expansion, and re-queue (US-086b, US-086c) |
+| Workers | `workers` | Live + recent worker processes for this project (US-085b, US-086, US-086a) |
+| Personas | `personas` | Persona browser + role bindings (US-097) |
+| Plugins | `plugins` | Plugin registry + install/uninstall (US-098) |
+| Commits | `commits` | Project git commit log (US-093, FEAT-021) |
+| Efficacy | `efficacy` | Model efficacy + comparisons (US-096) |
+
+**Sessions and Executions are retired as top-level tabs** (Story 8). The
+unified Runs tab carries layer chips and inline row expansion that
+surface what those tabs used to show:
+
+- `layer=run` rows expand to AgentSession transcript / billing / cached
+  tokens / stderr (the old Sessions detail).
+- `layer=try` rows expand to the `.ddx/executions/<attempt-id>/` bundle
+  metadata, check results, and verdict (the old Executions detail).
+- `layer=work` rows expand to queue inputs and child run links.
+
+**URL deprecation policy.** During the deprecation window, the legacy
+URLs respond with **302 redirects (NOT 301)** to the matching filtered
+Runs URL with all query params preserved, plus a `Sunset` response
+header that names the cutoff date for the redirects:
+
+| Legacy URL | Redirect target |
+|---|---|
+| `/sessions` | `/runs?layer=run` |
+| `/sessions#<id>` | `/runs?layer=run&session=<id>` |
+| `/executions[?bead=&verdict=&harness=&q=&after=]` | `/runs?layer=try` with the original query string preserved verbatim |
+| `/executions/[id]` | `/runs/[runId]?bundle=true` |
+
+302 (not 301) is intentional: bookmarks and external link aggregators
+should not cache the redirect permanently while we still own the legacy
+routes. The redirect response carries `Sunset: <RFC 9745 date>` and the
+project nav drops the Sessions/Executions entries once the redirects and
+the internal-link sweep land (`shellRoutes.ts`, `BeadDetail.svelte`,
+commits page, agent page, Workers detail).
+
 ### Build Pipeline
 
 ```
@@ -225,23 +272,54 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
    - Auto-refresh on configurable interval (or subscription in v2)
 
 5. **Layer-aware run history and detail**
-   - List DDx run records from the unified substrate with explicit layer labels:
+   - List DDx run records from the unified substrate with explicit layer chips:
      `work`, `try`, and `run`
-   - Filter by layer, bead id, artifact id, harness, provider, model, status,
+   - Filter by layer, status, harness, provider, model, bead id, artifact id,
      and time range without introducing a run-type catalog beyond the three
      layers
-   - Work detail shows queue-drain inputs, selected beads, stop condition,
-     retry/defer decisions, and child try attempts in chronological order
-   - Try detail shows bead id, base/result revisions, isolated worktree,
-     merge/preserve outcome, checks, and child layer-1 run records
-   - Run detail shows prompt/config summary, power bounds, selected harness,
-     provider, model, token/cost/duration signals, output, and evidence links
+   - Free-text search across bead id, bead title, and output excerpt; multi-
+     column sort on Started / Duration / Cost. Search/sort/filter primitives
+     are the shared Story 6 chip + sort-header + search-input components
+     (PRIMITIVE reuse — Runs has its own page model for live updates,
+     parent/child hierarchy, layer expansion, and re-queue affordances).
+     Story 7's virtualization wrapper is reused with a Runs-specific live
+     adapter when row counts exceed 1k.
+   - Inline row expansion is **layer-aware** (replaces the retired Sessions
+     and Executions top-level tabs):
+     - `layer=work` row expands to queue inputs, selected beads, stop
+       condition, retry/defer decisions, and child try-attempt links in
+       chronological order.
+     - `layer=try` row expands to bead id, base/result revisions, isolated
+       worktree path, merge/preserve outcome, checks, verdict, and child
+       layer-1 run links — sourced losslessly from the
+       `.ddx/executions/<attempt-id>/` bundle attached to the layer-2 record.
+     - `layer=run` row expands to prompt/config summary, power bounds,
+       selected harness/provider/model, token + cached-token + cost +
+       duration signals, output, stderr, and evidence links — sourced
+       losslessly from the joined `AgentSession` row (FEAT-010 §"Layer-to-
+       substrate mapping for the Runs UI").
    - Drill-down links preserve hierarchy in both directions:
      `work` -> `try` -> `run`, with breadcrumbs back to parent records
    - Artifact-producing runs show `produces_artifact`; artifact pages link back
      to the producing run and expose regeneration history
+   - **Re-queue affordances** (Story 8):
+     - `layer=try` rows show a `Re-queue` button when the originating bead is
+       open AND no try is currently active for that bead. The button opens a
+       confirmation dialog prefilled with the original config; the client
+       generates the `idempotencyKey` and sends it with the
+       `runRequeue` mutation (FEAT-010).
+     - `layer=run` rows show `Re-queue` only when prompt / harness / model are
+       replayable; re-queueing a successful run requires double-confirmation.
+     - `layer=work` rows show **`Start worker from this drain`** (different
+       label from "Re-queue"; same dispatch path) prefilled with the
+       original queue inputs, stop condition, selected beads, and harness /
+       profile from the original work run.
+     - Re-queue against a closed bead is disabled and surfaces a
+       "Reopen bead first" link.
+     - Every successful re-queue emits a `run_requeue` audit event on the
+       originating bead (schema: FEAT-010 §"Re-queue audit events").
    - Layer-aware run views consume read-only GraphQL/HTTP state except for the
-     narrow `artifactRegenerate` mutation
+     narrow `artifactRegenerate` and `runRequeue` mutations.
 
 6. **Status dashboard**
    - Summary cards: document count by type, bead counts by status, stale document count, recent agent activity
@@ -692,6 +770,36 @@ provider logs
   `work`, `try`, and `run`; no other run type labels appear
 
 **E2E Test:** `runs.spec.ts` — full workflow: navigate to project runs → filter by layer `work` → click work record → verify fields and child tries → click try → verify fields and child runs → click layer-1 run → verify all fields → follow evidence link → press Back through breadcrumbs to run list → verify filter state restored
+
+### US-086c: Operator Re-queues a Run from the Runs Tab
+**As an** operator who wants fresh evidence on an existing bead or to
+  restart a queue drain
+**I want** to re-queue a `try` or `run` row, and to start a new worker
+  from a `work` row, directly from the Runs tab
+**So that** I do not have to leave the UI to dispatch follow-up work
+
+**Acceptance Criteria:**
+- Given I am on a `layer=try` row whose originating bead is open and has
+  no active try, then a `Re-queue` button is visible. Clicking it opens a
+  confirmation dialog prefilled with the original `(bead, harness, model)`
+  config; the client generates an `idempotencyKey` and submits it with the
+  `runRequeue` mutation (FEAT-010); on success the originating bead is
+  reopened and a `run_requeue` audit event appears on the bead
+- Given I am on a `layer=run` row with replayable `(prompt, harness,
+  model)`, then `Re-queue` is visible. If the run terminated with
+  success, the dialog requires explicit double-confirmation
+- Given I am on a `layer=work` row, then a **`Start worker from this
+  drain`** action is visible (instead of `Re-queue`). Confirming it
+  dispatches a new worker prefilled with the original queue inputs, stop
+  condition, selected beads, and harness/profile
+- Given the originating bead is closed, then the `Re-queue` button is
+  disabled and a "Reopen bead first" link is shown in its place
+- Given a duplicate submission (double-click race or accidental retry)
+  arrives with the same `idempotencyKey`, then the second response
+  carries `deduplicated=true`, the bead is reopened only once, and only
+  one `run_requeue` audit event is appended
+
+**E2E Test:** `runs.spec.ts` — full workflow: open Runs tab → click try-row Re-queue → verify confirmation dialog with prefilled config → confirm → verify originating bead reopens and audit event appears → re-click Re-queue (race) → verify single audit event and `deduplicated=true` response → switch to closed-bead row → verify Re-queue disabled with "Reopen bead first" link → switch to layer=work row → verify `Start worker from this drain` action prefills queue inputs → confirm → verify new worker appears in Workers tab
 
 ### US-081c: Developer Repairs Graph Integrity Issues from the UI
 **As a** developer maintaining a healthy document graph
@@ -1199,7 +1307,7 @@ outcome, including navigation back.
 | `graph.spec.ts` | US-081, US-081c | Open graph → pan/zoom → identify stale nodes → click node → navigate back; graph cross-link from artifact detail; integrity issue expand → apply fix → verify graph reload; non-repairable issue tooltip; stale-issue error |
 | `beads.spec.ts` | US-082, US-082b, US-082c, US-082d, US-082e, US-082f, US-082g, US-085, US-085b, US-085c | Board view, search/filter, execution evidence, review vs spec, re-run, navigate to artifacts, sort/filter with URL state, create/manage, worker progress, delete |
 | `workers.spec.ts` | US-085b, US-086, US-086a | Worker list, live phase updates via subscription, streaming response text with tool calls |
-| `runs.spec.ts` | US-086b | Navigate to runs → filter by layer → drill work→try→run → verify fields at each level → breadcrumb back to list |
+| `runs.spec.ts` | US-086b, US-086c | Navigate to runs → filter by layer → drill work→try→run → verify fields at each level → breadcrumb back to list; re-queue try/run/work flows incl. idempotency dedupe and closed-bead block |
 | `providers.spec.ts` | US-087, US-088, US-088b | Provider list with fixture scenarios → detail panel → unknown semantics → Copy JSON → harness cross-link |
 | `actions.spec.ts` | US-095, US-096 | Initiate work from UI → dispatch worker → efficacy table → model comparison |
 | `personas.spec.ts` | US-097 | Browse personas → view detail → bind to role → handle conflict |
