@@ -5,7 +5,7 @@ This repository uses DDx's built-in bead tracker for durable work management.
 ## Bead Policy
 
 - Treat `.ddx/beads.jsonl` as DDx-managed data, not as a hand-edited document.
-- Create beads only with `ddx bead create`.
+- Create beads only with `ddx bead create`. Before filing, conform to `docs/helix/06-iterate/bead-authoring-template.md` — descriptions + AC must be standalone (no `/tmp/*`, no chat refs), cite root cause by file:line, name specific `Test*` symbols, and include the `cd cli && go test ./<pkg>/...` + `lefthook run pre-commit` gate. Sub-agent execution depends on this floor (principle P7).
 - Modify bead metadata only with `ddx bead update`.
 - Manage dependencies only with `ddx bead dep add` and `ddx bead dep remove`.
 - Close work only with `ddx bead close`.

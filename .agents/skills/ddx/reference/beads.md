@@ -31,6 +31,7 @@ Every bead you create should have:
    state "no deps".
 7. **`spec-id`** (when applicable) — pointer to the governing
    FEAT-\*, SD-\*, TD-\*, or ADR-\* that authorizes the work.
+7. **Parent** — `--parent <id>` on every non-root bead.
 
 Self-test before filing: re-read the bead cold. If a competent agent
 given only the bead body cannot pick a file to edit and run tests

@@ -205,6 +205,10 @@ DDX includes a persona system that provides consistent AI personalities for diff
 
 Personas enable consistent, high-quality AI interactions across team members and projects. Projects bind specific personas to roles. See `library/personas/` for available personas and `library/personas/README.md` for detailed documentation.
 
+## When filing beads
+
+Bead descriptions + AC must be sufficient context for a sub-agent to execute the work without operator hand-curation (principle P7, `docs/helix/06-iterate/reliability-principles.md`). Before invoking `ddx bead create`, walk the 8-criterion rubric in `docs/helix/06-iterate/bead-authoring-template.md`: title clarity, root cause with file:line, numbered AC with specific test names, wired-in assertion, `cd cli && go test` + lefthook gate, labels with cross-refs, parent + deps, standalone description (no `/tmp/*`, no chat references). Beads scoring < 7/8 will fail in autonomous drain.
+
 ## Execution Evidence Convention
 
 When a bead's acceptance criteria asks for an investigation report, findings document, or any other freestanding non-source artifact, the agent must write that artifact under the per-attempt evidence directory `.ddx/executions/<run-id>/` (the `{{.AttemptDir}}` slot in execute-bead prompts). **Never write reports to `/tmp` or other paths outside the repository** — out-of-repo paths are invisible to the post-merge reviewer, do not survive between machines, and cause the reviewer to BLOCK on missing evidence. If the bead names a specific in-repo path for the report, use that path; otherwise default to `.ddx/executions/<run-id>/<short-name>.md` and stage/commit the file with the rest of the change.
