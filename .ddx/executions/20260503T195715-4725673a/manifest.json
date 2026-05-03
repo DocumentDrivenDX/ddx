@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260503T195715-4725673a",
+  "bead_id": "ddx-57f0cb9e",
+  "base_rev": "729fc194bcd9b81cccb28f8188f38b1adaebdc59",
+  "created_at": "2026-05-03T19:57:17.018414233Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-57f0cb9e",
+    "title": "bead-authoring: audit ~20 representative open beads against 'sufficient sub-agent prompt' rubric; produce template",
+    "description": "Per principle P7 (RELIABILITY-PRINCIPLES bead): a bead's description + AC must be sufficient context for a competent sub-agent to execute without hand-curation. Today many beads punt the investigation, omit concrete test names, and leave non-scope implicit. Hand-curated sub-agent prompts have been compensating; this bead surfaces the gap and produces a template.\n\nROOT CAUSE\nBeads were authored expecting the executor to investigate first. Sub-agents (and ddx try / ddx work workers) need investigation done UPFRONT to execute reliably. Without it, the executor either:\n- Gives up (no_changes after limited investigation), OR\n- Produces wrong work (wrong file, wrong scope), OR\n- Asks for clarification (not possible in autonomous drain)\n\nROOT CAUSE 2\nNo formal authoring template exists. CLAUDE.md and AGENTS.md describe bead types but not bead structure or quality bar. New beads inherit whatever the operator was thinking at the moment.\n\nSCOPE\n1. Audit 20 representative open beads (mix of priorities, areas, types) against a quality rubric.\n2. Identify common gaps; quantify (how many beads miss test names, how many lack file:line cites, etc.).\n3. Produce bead-authoring-template.md at docs/helix/06-iterate/.\n4. Update CLAUDE.md, AGENTS.md, and DDx skill at .agents/skills/ddx/ to reference the template.\n5. Identify which 10-15 high-impact open beads warrant retrofit (the next round of execution work depends on them).\n\nQUALITY RUBRIC (the audit measures each bead against)\n- (a) Title: one-line scope clarity\n- (b) Description: problem + ROOT CAUSE WITH FILE:LINE + proposed fix + non-scope\n- (c) AC #1-N: numbered, verifiable, includes specific test names\n- (d) AC includes 'wired-in' assertion when introducing new code paths\n- (e) AC includes go test command + lefthook gate\n- (f) Labels: phase + area + kind + cross-refs (adr/spec/prevention)\n- (g) Parent + Deps: explicit\n- (h) Description reads as sufficient sub-agent prompt (no operator hand-curation needed)\n\nScore per bead: 8/8 = passes; less = needs retrofit.\n\nNOT IN SCOPE\n- Retrofitting beads (separate follow-up beads filed from the audit's recommendations)\n- Auto-validating bead structure on creation (future tooling bead)\n- Reorganizing existing bead labels or hierarchies\n\nINTERSECTIONS\n- RELIABILITY-PRINCIPLES bead (this audit operationalizes P7)\n- Retrofit recommendations from this audit gate the dispatch of refactor children C4-C13 (bead retrofit MUST land before sub-agent dispatch with verbatim prompts)",
+    "acceptance": "1. .ddx/executions/\u003crun-id\u003e/bead-quality-audit-2026-05-03.md exists and scores 20 representative open beads against the 8-criterion rubric.\n2. The audited 20 beads are listed by ID with per-criterion pass/fail and a 'needs retrofit' verdict.\n3. Aggregate stats: % of beads passing each criterion; top 3 most-common gaps.\n4. docs/helix/06-iterate/bead-authoring-template.md exists with: template fields (title/description/AC structure), examples (one good bead, one weak bead with annotations), authoring checklist.\n5. CLAUDE.md gains a 'When filing beads' section pointing at the template.\n6. .agents/skills/ddx/ skill (and the embedded copies under .claude/skills/ddx/) updated to require template fields when creating beads.\n7. Recommendations section in the audit report names 10-15 open beads warranting retrofit (with prioritization). These become the input for Wave 1 of the refactor execution plan.\n8. Conventional commit ending [\u003cthis-bead-id\u003e].\n9. lefthook run pre-commit passes.\n\nNO SUB-AGENT DISPATCH from this work — the audit is read-only research. The retrofit beads are filed by operator after reviewing the audit recommendations.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:tooling",
+      "kind:audit",
+      "reliability",
+      "bead-quality"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T19:57:15Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T19:57:15.531088006Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T195715-4725673a",
+    "prompt": ".ddx/executions/20260503T195715-4725673a/prompt.md",
+    "manifest": ".ddx/executions/20260503T195715-4725673a/manifest.json",
+    "result": ".ddx/executions/20260503T195715-4725673a/result.json",
+    "checks": ".ddx/executions/20260503T195715-4725673a/checks.json",
+    "usage": ".ddx/executions/20260503T195715-4725673a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-57f0cb9e-20260503T195715-4725673a"
+  },
+  "prompt_sha": "af0bdaec23d1d13b36e8116c92d7b50e99f60967fcc2848a8abaf376896ecf88"
+}
