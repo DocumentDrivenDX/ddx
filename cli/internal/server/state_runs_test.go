@@ -28,8 +28,11 @@ func TestRunsLayering_BundlesAreTryAndSessionsAreRun(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(bundleDir, "manifest.json"), manifest, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result := []byte(`{"bead_id":"ddx-001","verdict":"success","exit_code":0,"started_at":"2026-04-23T00:23:11Z","finished_at":"2026-04-23T00:24:11Z","base_rev":"abc123","result_rev":"def456"}`)
+	result := []byte(`{"bead_id":"ddx-001","verdict":"success","exit_code":0,"started_at":"2026-04-23T00:23:11Z","finished_at":"2026-04-23T00:24:11Z","base_rev":"abc123","result_rev":"def456","response":"agent reply body","stderr":"some stderr"}`)
 	if err := os.WriteFile(filepath.Join(bundleDir, "result.json"), result, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "prompt.md"), []byte("the prompt body"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -45,6 +48,7 @@ func TestRunsLayering_BundlesAreTryAndSessionsAreRun(t *testing.T) {
 		StartedAt:    now,
 		DurationMS:   5000,
 		InputTokens:  100,
+		CachedTokens: 75,
 		OutputTokens: 50,
 		CostUSD:      0.01,
 		CostPresent:  true,
@@ -128,6 +132,26 @@ func TestRunsLayering_BundlesAreTryAndSessionsAreRun(t *testing.T) {
 	}
 	if runFromBundleSession.Outcome == nil || *runFromBundleSession.Outcome != "success" {
 		t.Fatalf("session.outcome = %v, want success", runFromBundleSession.Outcome)
+	}
+	if runFromBundleSession.CachedTokens == nil || *runFromBundleSession.CachedTokens != 75 {
+		t.Fatalf("session.cachedTokens = %v, want 75", runFromBundleSession.CachedTokens)
+	}
+
+	// Round-trip prompt/response/stderr via run(id:): the run-layer Run carries
+	// the bundle pointer, and loadRunDetail must hydrate the body fields from
+	// the bundle's prompt.md and result.json.
+	detail, ok := state.GetRunGraphQL("sess-bundle-001")
+	if !ok || detail == nil {
+		t.Fatal("expected GetRunGraphQL(sess-bundle-001) to return the run-layer Run")
+	}
+	if detail.Prompt == nil || *detail.Prompt != "the prompt body" {
+		t.Fatalf("run(id:).prompt = %v, want \"the prompt body\"", detail.Prompt)
+	}
+	if detail.Response == nil || *detail.Response != "agent reply body" {
+		t.Fatalf("run(id:).response = %v, want \"agent reply body\"", detail.Response)
+	}
+	if detail.Stderr == nil || *detail.Stderr != "some stderr" {
+		t.Fatalf("run(id:).stderr = %v, want \"some stderr\"", detail.Stderr)
 	}
 
 	if orphanSession == nil {

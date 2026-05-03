@@ -311,10 +311,10 @@ func synthesizeRunsFromSessions(projectID, projectRoot string) []*ddxgraphql.Run
 
 // sessionEntryToRun projects one SessionIndexEntry onto a run-layer Run.
 // AgentSession is the canonical backing store under layer=run; this projection
-// maps the fields that exist on the Run schema today (id, harness, provider,
-// model, tokens, cost, duration, status). Session-only fields (billingMode,
-// cached tokens, prompt/response/stderr, outcome detail) remain accessible
-// through the AgentSession query keyed by the same id.
+// is lossless against AgentSession: every field carried by the session index
+// (harness, provider, model, tokens, cached tokens, cost, duration, status,
+// billingMode, outcome, detail) is mapped onto the Run record. Heavy bodies
+// (prompt/response/stderr) are still loaded only by run(id:) via loadRunDetail.
 func sessionEntryToRun(e agent.SessionIndexEntry) *ddxgraphql.Run {
 	status := strings.ToLower(e.Outcome)
 	if status == "" {
@@ -364,6 +364,10 @@ func sessionEntryToRun(e agent.SessionIndexEntry) *ddxgraphql.Run {
 	if e.OutputTokens > 0 {
 		v := e.OutputTokens
 		run.TokensOut = &v
+	}
+	if e.CachedTokens > 0 {
+		v := e.CachedTokens
+		run.CachedTokens = &v
 	}
 	if e.CostUSD != 0 {
 		c := e.CostUSD

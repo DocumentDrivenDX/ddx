@@ -107,6 +107,7 @@ type Result struct {
 	ResolvedBaseURL string          `json:"resolved_base_url,omitempty"`
 	Tokens          int             `json:"tokens,omitempty"`
 	InputTokens     int             `json:"input_tokens,omitempty"`
+	CachedTokens    int             `json:"cached_tokens,omitempty"`
 	OutputTokens    int             `json:"output_tokens,omitempty"`
 	CostUSD         float64         `json:"cost_usd,omitempty"`
 	DurationMS      int             `json:"duration_ms"`
@@ -138,6 +139,7 @@ type SessionEntry struct {
 	Stderr          string            `json:"stderr,omitempty"`
 	Tokens          int               `json:"tokens,omitempty"`
 	InputTokens     int               `json:"input_tokens,omitempty"`
+	CachedTokens    int               `json:"cached_tokens,omitempty"`
 	OutputTokens    int               `json:"output_tokens,omitempty"`
 	CostUSD         float64           `json:"cost_usd,omitempty"`
 	Duration        int               `json:"duration_ms"`

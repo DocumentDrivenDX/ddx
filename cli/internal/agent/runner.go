@@ -535,6 +535,7 @@ func (r *Runner) processResult(harnessName, model string, harness harnessConfig,
 	result.Tokens = ExtractTokens(result.Output, harness)
 	usage := ExtractUsage(harnessName, result.Output)
 	result.InputTokens = usage.InputTokens
+	result.CachedTokens = usage.CachedTokens
 	result.OutputTokens = usage.OutputTokens
 	result.CostUSD = usage.CostUSD
 	return result
@@ -543,6 +544,7 @@ func (r *Runner) processResult(harnessName, model string, harness harnessConfig,
 // UsageData holds structured token usage from a structured agent output.
 type UsageData struct {
 	InputTokens  int
+	CachedTokens int
 	OutputTokens int
 	CostUSD      float64
 }
@@ -824,8 +826,9 @@ func extractUsageClaude(output string) UsageData {
 		var envelope struct {
 			Type  string `json:"type"`
 			Usage struct {
-				InputTokens  int `json:"input_tokens"`
-				OutputTokens int `json:"output_tokens"`
+				InputTokens          int `json:"input_tokens"`
+				OutputTokens         int `json:"output_tokens"`
+				CacheReadInputTokens int `json:"cache_read_input_tokens"`
 			} `json:"usage"`
 			TotalCostUSD float64 `json:"total_cost_usd"`
 		}
@@ -837,6 +840,7 @@ func extractUsageClaude(output string) UsageData {
 		}
 		return UsageData{
 			InputTokens:  envelope.Usage.InputTokens,
+			CachedTokens: envelope.Usage.CacheReadInputTokens,
 			OutputTokens: envelope.Usage.OutputTokens,
 			CostUSD:      envelope.TotalCostUSD,
 		}, true
