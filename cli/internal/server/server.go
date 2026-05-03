@@ -876,6 +876,7 @@ func (s *Server) routes() {
 	trusted("POST /api/workers/register", s.handleWorkerRegister)
 	trusted("POST /api/workers/{id}/event", s.handleWorkerEvent)
 	trusted("POST /api/workers/{id}/backfill", s.handleWorkerBackfill)
+	trusted("GET /api/workers", s.handleWorkerIngestList)
 
 	// Project-scoped worker endpoints (FEAT-002 §22-24)
 	trusted("GET /api/projects/{project}/workers", s.handleProjectWorkerList)

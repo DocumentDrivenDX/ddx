@@ -604,8 +604,15 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			checkConnectivity, _ := cmd.Flags().GetBool("connectivity")
 			checkRouting, _ := cmd.Flags().GetBool("routing")
+			checkWorkers, _ := cmd.Flags().GetBool("workers")
 			timeoutStr, _ := cmd.Flags().GetString("timeout")
 			asJSON, _ := cmd.Flags().GetBool("json")
+
+			// ADR-022 step 6: --workers prints the runtime worker registry
+			// (server-first, .ddx/workers/ on-disk fallback).
+			if checkWorkers {
+				return f.runAgentDoctorWorkers(cmd, f.WorkingDir, asJSON)
+			}
 
 			// Parse timeout (default 15s for connectivity checks)
 			probeTimeout := 15 * time.Second
@@ -836,8 +843,9 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 	}
 	cmd.Flags().Bool("connectivity", false, "Test provider connectivity and credit status")
 	cmd.Flags().Bool("routing", false, "Probe and report full routing-relevant harness state (installed/reachable/auth/quota/degraded)")
+	cmd.Flags().Bool("workers", false, "Show runtime worker registry (server-first; .ddx/workers/ fallback)")
 	cmd.Flags().String("timeout", "", "Timeout for connectivity checks (default 15s)")
-	cmd.Flags().Bool("json", false, "Output as JSON (with --routing)")
+	cmd.Flags().Bool("json", false, "Output as JSON (with --routing or --workers)")
 	return cmd
 }
 
