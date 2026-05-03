@@ -23,7 +23,11 @@ func TestAgentExecuteLoopUsesProjectRootForNoWorkScan(t *testing.T) {
 	factory := NewCommandFactory(subdir)
 	root := factory.NewRootCommand()
 
-	out, err := executeCommand(root, "agent", "execute-loop", "--local", "--json")
+	// Explicit --poll-interval=0 selects legacy drain-and-exit semantics
+	// (ddx-dc157075). The default flipped to 30s so the worker stays alive
+	// across empty polls; tests that want to assert the no-ready-work
+	// outcome must opt out of the long-running default.
+	out, err := executeCommand(root, "agent", "execute-loop", "--local", "--json", "--poll-interval=0")
 	require.NoError(t, err)
 
 	var res struct {

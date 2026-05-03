@@ -244,6 +244,31 @@ Stop-condition evaluation runs **between** `ddx try` invocations; an
 in-flight attempt is never aborted to satisfy a stop condition (`signal`
 excepted, and only after the in-flight attempt finalizes).
 
+### Long-running default (`--poll-interval`)
+
+Per ddx-dc157075, the default `--poll-interval` for both `ddx work` and
+`ddx agent execute-loop` is **30s**. With a positive poll interval the
+worker stays alive across empty polls (`drained` becomes a transient
+"running (idle)" substate, not a terminal exit). The loop exits only on
+the conditions enumerated above plus `signal`, fatal config errors, or
+the explicit operator opt-outs:
+
+- `--once` — process at most one ready bead, then exit.
+- `--poll-interval=0` — legacy "drain-and-exit" semantics: when the
+  queue empties, return immediately without polling.
+
+Server-managed workers spawned via `POST /api/agent/workers/execute-loop`
+inherit the same 30s default when the request omits `poll_interval`. The
+worker record exposes a `substate` field set to `"idle"` while the loop
+is sleeping between empty polls; it is cleared as soon as a candidate is
+picked. Terminal worker states (`exited`, `failed`, `stopped`, `reaped`)
+always clear `substate`.
+
+The structured `loop.end` event carries an `exit_reason` field
+(`once_complete`, `explicit_poll_zero`, `sigint`, `sigterm`,
+`fatal_config`; `providers_exhausted` is reserved for the quota-pause
+work in ddx-aede917d).
+
 Power escalation is evaluated between attempts as part of retry policy. A
 higher-power retry raises `MinPower` and resets neither the evidence history nor
 the no-progress counter; it is recorded as the next `ddx try` with its own

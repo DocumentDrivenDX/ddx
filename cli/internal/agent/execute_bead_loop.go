@@ -488,6 +488,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				return result, nil
 			}
+			// --once with poll-interval > 0: an empty queue still means there
+			// is no work to pick, and --once explicitly asked for at-most-one.
+			// Returning here preserves the operator-visible "drain and stop"
+			// semantics of --once even when the long-running default applies.
+			if runtime.Once {
+				exitReason = "once_complete"
+				return result, nil
+			}
 			// Long-running drain (poll-interval > 0): emit a transient
 			// "no_ready_work" event so server-managed workers can surface this
 			// as an idle substate (ddx-dc157075 AC #5) instead of treating it
@@ -521,7 +529,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			for k := range hookFailed {
 				delete(hookFailed, k)
 			}
-			if err := sleepWithContext(ctx, runtime.PollInterval); err != nil {
+			if err := sleepOrWake(ctx, runtime.PollInterval, runtime.WakeCh); err != nil {
 				if exitReason == "" {
 					switch err {
 					case context.Canceled:
