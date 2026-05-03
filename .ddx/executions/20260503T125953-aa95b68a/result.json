@@ -1,0 +1,49 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "All four AC items satisfied: NavShell + page title/h1 renamed to 'Agent availability'; expandable inline per-provider model list with 10-item truncation and drilldown link; per-row refresh button wired to refreshProviderModels mutation.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Stray indentation change on the sparkline \u003ctd\u003e (cosmetic).",
+      "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/providers/+page.svelte:533"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 658,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T125253-e51cf6ef/manifest.json",
+          ".ddx/executions/20260503T125253-e51cf6ef/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 59636,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 62100,
+    "output_bytes": 530,
+    "elapsed_ms": 78179,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
