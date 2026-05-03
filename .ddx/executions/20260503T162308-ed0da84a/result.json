@@ -1,0 +1,54 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "MET-001 (source: exec) and MET-002 (source: external) exist under docs/helix/06-iterate/metrics/ with v1 metric frontmatter (schema_version, unit, direction, source, scope, goal/budget) and prose explicitly framing each as a canonical reference for plugin authors.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Diff under review shows only execution manifest/result; the substantive artifacts landed in commit b4ad54d8 referenced by result.result_rev — verified directly.",
+      "location": ".ddx/executions/20260503T161949-e7c7f3c2/result.json"
+    },
+    {
+      "severity": "info",
+      "summary": "`ddx doc audit` was not run in this review (command not auto-approved); spot-check of frontmatter shape matches the FEAT-005 v1 schema referenced by the artifacts.",
+      "location": "docs/helix/06-iterate/metrics/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 660,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T161949-e7c7f3c2/manifest.json",
+          ".ddx/executions/20260503T161949-e7c7f3c2/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3263,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 5729,
+    "output_bytes": 887,
+    "elapsed_ms": 94243,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
