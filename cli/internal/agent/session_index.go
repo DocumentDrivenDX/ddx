@@ -39,6 +39,7 @@ type SessionIndexEntry struct {
 	CostPresent     bool      `json:"costPresent,omitempty"`
 	Tokens          int       `json:"tokens,omitempty"`
 	InputTokens     int       `json:"inputTokens,omitempty"`
+	CachedTokens    int       `json:"cachedTokens,omitempty"`
 	OutputTokens    int       `json:"outputTokens,omitempty"`
 	Outcome         string    `json:"outcome,omitempty"`
 	ExitCode        int       `json:"exitCode"`
@@ -216,6 +217,7 @@ func SessionIndexEntryFromResult(projectRoot string, inputs SessionIndexInputs, 
 		CostPresent:     result.CostUSD != 0,
 		Tokens:          result.Tokens,
 		InputTokens:     result.InputTokens,
+		CachedTokens:    result.CachedTokens,
 		OutputTokens:    result.OutputTokens,
 		Outcome:         outcome,
 		ExitCode:        result.ExitCode,
@@ -286,6 +288,7 @@ func SessionIndexEntryFromLegacy(projectRoot string, e SessionEntry) SessionInde
 		CostPresent:     e.CostUSD != 0,
 		Tokens:          totalTokens,
 		InputTokens:     e.InputTokens,
+		CachedTokens:    e.CachedTokens,
 		OutputTokens:    e.OutputTokens,
 		Outcome:         outcome,
 		ExitCode:        e.ExitCode,
@@ -538,6 +541,7 @@ func SessionIndexEntryToLegacy(e SessionIndexEntry) SessionEntry {
 		SpanID:          e.SpanID,
 		Tokens:          e.Tokens,
 		InputTokens:     e.InputTokens,
+		CachedTokens:    e.CachedTokens,
 		OutputTokens:    e.OutputTokens,
 		TotalTokens:     e.Tokens,
 		CostUSD:         e.CostUSD,
