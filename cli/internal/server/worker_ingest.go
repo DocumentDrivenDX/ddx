@@ -70,6 +70,8 @@ type workerRecord struct {
 	LastEventAt         time.Time      `json:"last_event_at"`
 	MirrorFailuresCount int            `json:"mirror_failures_count"`
 	HadDroppedBackfill  bool           `json:"had_dropped_backfill"`
+	CurrentBead         string         `json:"current_bead,omitempty"`
+	CurrentAttempt      string         `json:"current_attempt,omitempty"`
 }
 
 // workerIngestRegistry holds the in-memory derived view + owns the
@@ -116,6 +118,12 @@ func (r *workerIngestRegistry) recordEvent(workerID string, ev workerEvent) erro
 		return errUnknownWorker
 	}
 	rec.LastEventAt = time.Now().UTC()
+	if ev.BeadID != "" {
+		rec.CurrentBead = ev.BeadID
+	}
+	if ev.AttemptID != "" {
+		rec.CurrentAttempt = ev.AttemptID
+	}
 	r.mu.Unlock()
 	return r.append(workerID, ev)
 }
@@ -134,6 +142,13 @@ func (r *workerIngestRegistry) recordBackfill(workerID string, req workerBackfil
 	}
 	if len(req.Events) > 0 {
 		rec.LastEventAt = time.Now().UTC()
+		last := req.Events[len(req.Events)-1]
+		if last.BeadID != "" {
+			rec.CurrentBead = last.BeadID
+		}
+		if last.AttemptID != "" {
+			rec.CurrentAttempt = last.AttemptID
+		}
 	}
 	r.mu.Unlock()
 	for _, ev := range req.Events {

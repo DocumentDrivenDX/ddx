@@ -1062,6 +1062,7 @@ type ComplexityRoot struct {
 		QueueAndWorkersSummary      func(childComplexity int, projectID string) int
 		QueueSummary                func(childComplexity int, projectID string) int
 		Ready                       func(childComplexity int) int
+		ReportedWorkers             func(childComplexity int) int
 		Run                         func(childComplexity int, id string) int
 		RunBundleFile               func(childComplexity int, id string, path string) int
 		RunToolCalls                func(childComplexity int, id string, first *int, after *string) int
@@ -1097,6 +1098,18 @@ type ComplexityRoot struct {
 	ReadyStatus struct {
 		Checks func(childComplexity int) int
 		Ready  func(childComplexity int) int
+	}
+
+	ReportedWorker struct {
+		CurrentAttempt      func(childComplexity int) int
+		CurrentBead         func(childComplexity int) int
+		HadDroppedBackfill  func(childComplexity int) int
+		Harness             func(childComplexity int) int
+		ID                  func(childComplexity int) int
+		LastEventAt         func(childComplexity int) int
+		MirrorFailuresCount func(childComplexity int) int
+		Project             func(childComplexity int) int
+		State               func(childComplexity int) int
 	}
 
 	ResultSpec struct {
@@ -1443,6 +1456,7 @@ type QueryResolver interface {
 	WorkerProgress(ctx context.Context, workerID string) ([]*PhaseTransition, error)
 	WorkerLog(ctx context.Context, workerID string) (*WorkerLog, error)
 	WorkerPrompt(ctx context.Context, workerID string) (string, error)
+	ReportedWorkers(ctx context.Context) ([]*ReportedWorker, error)
 	AgentSessions(ctx context.Context, first *int, after *string, last *int, before *string, startedAfter *string, startedBefore *string) (*AgentSessionConnection, error)
 	AgentSession(ctx context.Context, id string) (*AgentSession, error)
 	SessionsCostSummary(ctx context.Context, projectID string, since *string, until *string) (*SessionsCostSummary, error)
@@ -6187,6 +6201,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.Ready(childComplexity), true
+	case "Query.reportedWorkers":
+		if e.ComplexityRoot.Query.ReportedWorkers == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Query.ReportedWorkers(childComplexity), true
 	case "Query.run":
 		if e.ComplexityRoot.Query.Run == nil {
 			break
@@ -6389,6 +6409,61 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ReadyStatus.Ready(childComplexity), true
+
+	case "ReportedWorker.currentAttempt":
+		if e.ComplexityRoot.ReportedWorker.CurrentAttempt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReportedWorker.CurrentAttempt(childComplexity), true
+	case "ReportedWorker.currentBead":
+		if e.ComplexityRoot.ReportedWorker.CurrentBead == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReportedWorker.CurrentBead(childComplexity), true
+	case "ReportedWorker.hadDroppedBackfill":
+		if e.ComplexityRoot.ReportedWorker.HadDroppedBackfill == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReportedWorker.HadDroppedBackfill(childComplexity), true
+	case "ReportedWorker.harness":
+		if e.ComplexityRoot.ReportedWorker.Harness == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReportedWorker.Harness(childComplexity), true
+	case "ReportedWorker.id":
+		if e.ComplexityRoot.ReportedWorker.ID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReportedWorker.ID(childComplexity), true
+	case "ReportedWorker.lastEventAt":
+		if e.ComplexityRoot.ReportedWorker.LastEventAt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReportedWorker.LastEventAt(childComplexity), true
+	case "ReportedWorker.mirrorFailuresCount":
+		if e.ComplexityRoot.ReportedWorker.MirrorFailuresCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReportedWorker.MirrorFailuresCount(childComplexity), true
+	case "ReportedWorker.project":
+		if e.ComplexityRoot.ReportedWorker.Project == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReportedWorker.Project(childComplexity), true
+	case "ReportedWorker.state":
+		if e.ComplexityRoot.ReportedWorker.State == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ReportedWorker.State(childComplexity), true
 
 	case "ResultSpec.metric":
 		if e.ComplexityRoot.ResultSpec.Metric == nil {
@@ -31182,6 +31257,55 @@ func (ec *executionContext) fieldContext_Query_workerPrompt(ctx context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _Query_reportedWorkers(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Query_reportedWorkers,
+		func(ctx context.Context) (any, error) {
+			return ec.Resolvers.Query().ReportedWorkers(ctx)
+		},
+		nil,
+		ec.marshalNReportedWorker2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReportedWorkerᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Query_reportedWorkers(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Query",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_ReportedWorker_id(ctx, field)
+			case "project":
+				return ec.fieldContext_ReportedWorker_project(ctx, field)
+			case "harness":
+				return ec.fieldContext_ReportedWorker_harness(ctx, field)
+			case "state":
+				return ec.fieldContext_ReportedWorker_state(ctx, field)
+			case "lastEventAt":
+				return ec.fieldContext_ReportedWorker_lastEventAt(ctx, field)
+			case "mirrorFailuresCount":
+				return ec.fieldContext_ReportedWorker_mirrorFailuresCount(ctx, field)
+			case "hadDroppedBackfill":
+				return ec.fieldContext_ReportedWorker_hadDroppedBackfill(ctx, field)
+			case "currentBead":
+				return ec.fieldContext_ReportedWorker_currentBead(ctx, field)
+			case "currentAttempt":
+				return ec.fieldContext_ReportedWorker_currentAttempt(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ReportedWorker", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _Query_agentSessions(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -34443,6 +34567,267 @@ func (ec *executionContext) fieldContext_ReadyStatus_checks(_ context.Context, f
 				return ec.fieldContext_ReadyCheck_status(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ReadyCheck", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReportedWorker_id(ctx context.Context, field graphql.CollectedField, obj *ReportedWorker) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReportedWorker_id,
+		func(ctx context.Context) (any, error) {
+			return obj.ID, nil
+		},
+		nil,
+		ec.marshalNID2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReportedWorker_id(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReportedWorker",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type ID does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReportedWorker_project(ctx context.Context, field graphql.CollectedField, obj *ReportedWorker) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReportedWorker_project,
+		func(ctx context.Context) (any, error) {
+			return obj.Project, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReportedWorker_project(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReportedWorker",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReportedWorker_harness(ctx context.Context, field graphql.CollectedField, obj *ReportedWorker) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReportedWorker_harness,
+		func(ctx context.Context) (any, error) {
+			return obj.Harness, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReportedWorker_harness(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReportedWorker",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReportedWorker_state(ctx context.Context, field graphql.CollectedField, obj *ReportedWorker) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReportedWorker_state,
+		func(ctx context.Context) (any, error) {
+			return obj.State, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReportedWorker_state(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReportedWorker",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReportedWorker_lastEventAt(ctx context.Context, field graphql.CollectedField, obj *ReportedWorker) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReportedWorker_lastEventAt,
+		func(ctx context.Context) (any, error) {
+			return obj.LastEventAt, nil
+		},
+		nil,
+		ec.marshalNDateTime2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReportedWorker_lastEventAt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReportedWorker",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type DateTime does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReportedWorker_mirrorFailuresCount(ctx context.Context, field graphql.CollectedField, obj *ReportedWorker) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReportedWorker_mirrorFailuresCount,
+		func(ctx context.Context) (any, error) {
+			return obj.MirrorFailuresCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReportedWorker_mirrorFailuresCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReportedWorker",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReportedWorker_hadDroppedBackfill(ctx context.Context, field graphql.CollectedField, obj *ReportedWorker) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReportedWorker_hadDroppedBackfill,
+		func(ctx context.Context) (any, error) {
+			return obj.HadDroppedBackfill, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReportedWorker_hadDroppedBackfill(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReportedWorker",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReportedWorker_currentBead(ctx context.Context, field graphql.CollectedField, obj *ReportedWorker) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReportedWorker_currentBead,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentBead, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReportedWorker_currentBead(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReportedWorker",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ReportedWorker_currentAttempt(ctx context.Context, field graphql.CollectedField, obj *ReportedWorker) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ReportedWorker_currentAttempt,
+		func(ctx context.Context) (any, error) {
+			return obj.CurrentAttempt, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ReportedWorker_currentAttempt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ReportedWorker",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -49383,6 +49768,28 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
+		case "reportedWorkers":
+			field := field
+
+			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
+				defer func() {
+					if r := recover(); r != nil {
+						ec.Error(ctx, ec.Recover(ctx, r))
+					}
+				}()
+				res = ec._Query_reportedWorkers(ctx, field)
+				if res == graphql.Null {
+					atomic.AddUint32(&fs.Invalids, 1)
+				}
+				return res
+			}
+
+			rrm := func(ctx context.Context) graphql.Marshaler {
+				return ec.OperationContext.RootResolverMiddleware(ctx,
+					func(ctx context.Context) graphql.Marshaler { return innerFunc(ctx, out) })
+			}
+
+			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
 		case "agentSessions":
 			field := field
 
@@ -50609,6 +51016,79 @@ func (ec *executionContext) _ReadyStatus(ctx context.Context, sel ast.SelectionS
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var reportedWorkerImplementors = []string{"ReportedWorker"}
+
+func (ec *executionContext) _ReportedWorker(ctx context.Context, sel ast.SelectionSet, obj *ReportedWorker) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, reportedWorkerImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ReportedWorker")
+		case "id":
+			out.Values[i] = ec._ReportedWorker_id(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "project":
+			out.Values[i] = ec._ReportedWorker_project(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "harness":
+			out.Values[i] = ec._ReportedWorker_harness(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "state":
+			out.Values[i] = ec._ReportedWorker_state(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "lastEventAt":
+			out.Values[i] = ec._ReportedWorker_lastEventAt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "mirrorFailuresCount":
+			out.Values[i] = ec._ReportedWorker_mirrorFailuresCount(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "hadDroppedBackfill":
+			out.Values[i] = ec._ReportedWorker_hadDroppedBackfill(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "currentBead":
+			out.Values[i] = ec._ReportedWorker_currentBead(ctx, field, obj)
+		case "currentAttempt":
+			out.Values[i] = ec._ReportedWorker_currentAttempt(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -54547,6 +55027,32 @@ func (ec *executionContext) marshalNReadyStatus2ᚖgithubᚗcomᚋDocumentDriven
 		return graphql.Null
 	}
 	return ec._ReadyStatus(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNReportedWorker2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReportedWorkerᚄ(ctx context.Context, sel ast.SelectionSet, v []*ReportedWorker) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNReportedWorker2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReportedWorker(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNReportedWorker2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReportedWorker(ctx context.Context, sel ast.SelectionSet, v *ReportedWorker) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ReportedWorker(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNReworkReport2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐReworkReport(ctx context.Context, sel ast.SelectionSet, v ReworkReport) graphql.Marshaler {
