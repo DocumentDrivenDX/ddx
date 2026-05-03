@@ -142,58 +142,91 @@ agreed first.
 
 ## Decision
 
-**Workers are long-lived API clients of the server. The CLI `--local` mode
-is a degenerate case of the same client, served by an in-process server
-implementation.**
+**Workers are always autonomous. There is no "--local mode" — the
+worker has one mode (autonomous) and detects a server continuously. If
+a server is reachable, the worker emits events and results to it
+best-effort. If no server is reachable (none running, partition, never
+configured), the worker proceeds with its work and tries again later.
+The bead store is the source of truth; the server is an optional
+observability + coordination target.**
 
 Concretely:
 
-1. A worker process (whether started by `ddx work`, `ddx agent
-   execute-loop`, or spawned by the server) registers with a server
-   endpoint (loopback or in-process) and receives a `worker_id` and
-   `session_token`.
-2. The worker drives its own state machine (`idle → claiming → executing →
-   reviewing → idle`) and pulls bead assignments from the server via a
-   long-poll endpoint.
-3. The worker reports progress and final results to the server via API.
-4. The server holds the authoritative view of which workers exist, what
-   they're doing, and which beads are claimed.
-5. If the server restarts, workers detect heartbeat failure, finish the
-   current bead in their isolated worktree, and reconnect on server return.
-6. If a worker dies, the server's heartbeat-timeout reclaims the bead for
-   another worker.
+1. A worker process (`ddx work`) reads the bead store directly, picks
+   the next eligible bead per the current picker logic (priority asc,
+   FIFO within tier), claims it atomically, executes via `try.Attempt`,
+   writes evidence locally, and reports the result by writing the bead's
+   event log + closing the bead via the store.
+2. **All of #1 happens regardless of whether a server is running.**
+   This is the existing autonomous behavior; the worker has no
+   dependency on a server for correctness.
+3. **In parallel**, a small "server probe" goroutine inside the worker
+   periodically (every N seconds, default 30) checks
+   `.ddx/server.addr` for a reachable server. State transitions:
+   - **NotConnected → Connected:** server appeared; worker POSTs
+     `register` with a thin identity envelope (project root, harness,
+     executor pid/host); on success, worker stores the `worker_id` and
+     starts mirroring events to the server best-effort.
+   - **Connected → Connected:** server still reachable; continue
+     mirroring.
+   - **Connected → NotConnected:** server unreachable (crash,
+     partition, stopped); worker logs the transition, stops trying to
+     mirror events, retains its bead-store-local event log, continues
+     working.
+   - **NotConnected → NotConnected:** still no server; nothing to do.
+4. When in Connected state, the worker mirrors bead events + final
+   results to `/api/workers/<id>/event` and the bead-close result to
+   the same endpoint best-effort. Failures (server crash mid-POST,
+   partition, 5xx) are logged locally and ignored — the bead's local
+   event log is authoritative.
+5. The server's view (which workers exist, which beads are running,
+   recent events) is **derived from worker reports** — eventually
+   consistent, NOT authoritative. The server's value is centralized
+   observability, cross-worker dashboards, operator UI, and
+   server-initiated cancel (which writes a marker to the bead store
+   that workers honor on next iteration).
+6. Server restart drops the in-memory derived view; on next probe cycle
+   the worker re-registers (or notices the server is gone). No
+   in-flight work is at risk because workers don't depend on the
+   server.
 
-This is **Proposal A** from the bead description, with the **`--local`
-collapse** detail of Proposal C: there is one code path, parameterised by
-which API implementation the worker is wired to (HTTP for cross-process,
-in-process function calls for `--local`).
+**`--local` flag is removed.** Today's `--local` semantics are the
+default behavior; there's nothing to opt into. Operators who today pass
+`--local` will see a deprecation warning + the flag becomes a no-op for
+one release, then is deleted. The breaking-changes section documents
+this.
 
-### Why Proposal A (server orchestrates, workers are long-lived clients)
+This is **Proposal B-shaped** (server is passive observer) with one
+addition: the server can write back to the bead store to influence
+worker decisions (e.g., cancel a bead by setting an extra field; set
+priority overrides). Workers see those changes on next bead-store read.
 
-- **Restart-survival is the requirement, not a nice-to-have.** Operators
-  reported the current model loses in-flight work on server restart.
-  Proposal A is the only one of the three that makes the worker survive
-  restart by design — Proposal B sidesteps the question by removing the
-  server, and Proposal C makes restart survival contingent on a fallback
-  mode.
-- **Single source of truth for queue state.** Today the bead store is the
-  source of truth, and both the server and workers query it. With
-  Proposal A the server owns the *runtime* projection of queue state
-  (claims, in-flight attempts, heartbeats); the bead store remains the
-  durable substrate. This eliminates the class of bugs where two readers
-  of the store reach inconsistent conclusions.
-- **One spec, one boundary.** `ExecuteLoopSpec` becomes the registration
-  payload. `ddx-29058e2a` is solved by construction: there is exactly one
-  struct that crosses one boundary (register), instead of six layers of
-  parallel structs.
-- **Aligns with the `run/try/work/` split.** `ddx-5cb6e6cd`'s `work/`
-  package becomes the worker client; `try/` is invoked by the worker on
-  each claim; `run/` is the inner agent invocation. The state machine
-  becomes explicit, server-visible, and testable.
-- **Project boundaries are enforced once.** The session token is bound to
-  a project at registration; every subsequent API call carries it. The
-  cross-project leak class (`ddx-4c51d33e`) cannot recur for any
-  worker-driven mutation because the token is the project.
+### Why autonomous-default workers
+
+- **Workers don't depend on the server for correctness.** Any server
+  restart, partition, crash, or just "no server running" is a no-op for
+  the worker's primary job (executing beads).
+- **Same code path for every invocation.** `ddx work` and `ddx work
+  --local` differ only in whether they bother trying to reach a server.
+  No in-process API server, no Transport interface, no test-mode
+  fixture — the existing unit-test setup (no server) is the autonomous
+  case.
+- **Server is opt-in observability.** Operators who want centralized
+  dashboards run a server; operators who don't, don't. Either is
+  correct.
+- **No claim coordination races.** The bead store's atomic claim is the
+  only claim primitive. Two workers contending for the same bead use
+  the same store-level CAS that exists today; there is no parallel
+  server-side claim table to race against.
+- **Project boundaries enforced by the existing per-project bead store.**
+  Each `.ddx/beads.jsonl` is a project; workers operate against one
+  project's store; the cross-project leak class (`ddx-4c51d33e`) is
+  prevented at the worker level because workers never read another
+  project's store.
+- **`ExecuteLoopSpec` from `ddx-29058e2a` still applies** — but as a
+  worker-side struct unification (cobra → in-process flow), not a wire
+  format. The drop class is closed by the same single-struct
+  discipline; it just doesn't need to cross a network boundary.
 
 ### Threat model (limits of session-token project binding)
 
@@ -206,865 +239,206 @@ legitimate workers, not authentication of worker identity. Future work to
 strengthen this (e.g., per-worker keypairs, ts-net WhoIs binding for
 loopback registrations) is out of scope for v1 and tracked separately.
 
-### Picker (server-side bead → worker assignment)
+### Picker (worker-side, status quo with diagnostic events)
 
-When multiple workers long-poll `next-bead` concurrently, the server picks
-which bead each worker receives using these rules, in order:
+The bead picker stays where it lives today: in the worker, against the
+bead store. The fix at commit `80f51574` added `picker.priority_skip`
+and `picker.claim_race` diagnostic events; both are preserved. Picker
+rules (unchanged from current code):
 
-1. **Filter by worker capabilities.** The bead's required `kind:`-label or
-   inferred capability (e.g., `review` for review beads) must intersect the
-   worker's `capabilities` set from registration. Beads with no capability
-   constraint are eligible for any worker.
-2. **Filter by worker `label_filter`.** The bead's labels must intersect
-   the worker's `label_filter` set; an empty filter accepts all beads.
-3. **Filter by execution eligibility** (existing `ReadyExecution`
-   semantics): not in retry-cooldown, not superseded, not flagged
-   `execution-eligible: false`, all deps closed.
-4. **Sort eligible beads** by priority ascending (P0 first), then by
-   `updated_at` ascending (oldest first within priority — FIFO at each
-   tier).
-5. **Assign one bead per polling worker** in arrival order on the
-   long-poll. Two workers polling for the same top bead: first arrival
-   gets the bead and a claim record; the second worker's poll either
-   returns the next eligible bead or waits.
-6. **Claim is atomic** at the moment of assignment. The picker holds a
-   server-side mutex around the eligibility scan + claim creation so two
-   concurrent picks cannot collide.
+1. Read eligible beads via `Store.ReadyExecution()` (excludes superseded,
+   not-execution-eligible, in retry-cooldown).
+2. Sort by priority ascending (P0 first), then by `updated_at` ascending
+   (FIFO within tier).
+3. If `--label-filter` is set, intersect with bead labels.
+4. Skip beads in the per-Run `attempted` map (set after each unsuccessful
+   claim attempt; reset on falling through to "no candidate" per the
+   stay-alive fix at commit `41cb762e`).
+5. Claim atomically via `Store.Claim()`; on CAS loss, emit
+   `picker.claim_race` and continue to next eligible.
 
-This makes priority sort a **server-enforced property**, not a worker
-heuristic. The current per-Run `attempted` map disappears entirely (no
-longer needed because the server prevents re-handing-out a bead to the
-same worker that just rejected/failed it).
+Two workers contending for the same top bead use the bead store's
+existing atomic claim — the same primitive that has worked correctly
+for as long as DDx has had a bead store. There is no parallel server-side
+claim table to race against.
 
-The diagnostic events from the stay-alive fix at commit `41cb762e`
-(`picker.priority_skip`, `picker.claim_race`, `loop.idle`/`loop.active`
-substate) migrate to the server's picker as: skip events when the picker
-passes over a higher-priority bead because no worker matches its
-constraints; claim_race events on the server-side mutex contention; and
-idle/active substate from the worker's heartbeat `state` field.
+When the server is reachable, the worker mirrors the
+`picker.priority_skip` and `picker.claim_race` events to the server's
+ingestion endpoint so operators can see them in the UI. When no server,
+the events still land in the bead's local event stream.
 
-### Why not Proposal B (server-as-passive-observer)
+### Why not centralized server-side picker (the rev 1-3 design)
 
-- Loses centralised cancel, dynamic priority, and label-filter overrides —
-  all of which are on the FEAT-002 / FEAT-006 roadmap.
-- Two execution paths persist forever (autonomous local vs.
-  server-observed), which is exactly the divergence this TD is trying to
-  retire.
-- Best-effort event emission is a worse audit trail than what beads
-  already give us via `ADR-004`/`ADR-021` (audit-as-bead).
+- Workers don't need it for correctness — the bead store's atomic claim
+  is sufficient. Adding a server-side claim table creates a parallel
+  source of truth that has to be reconciled.
+- Server-side picker requires workers to depend on the server, which
+  contradicts the autonomous-default decision.
+- Diagnostic events from commit `80f51574` already make starvation
+  observable; centralization didn't add visibility we lacked.
 
-### Why not Proposal C (hybrid with autonomous fallback)
+### Why not Proposal A (server orchestrates, in-process API for --local)
 
-- Hybrid keeps two execution paths and adds a third (the fallback
-  transition itself), each with its own race conditions.
-- The "fall back to autonomous on heartbeat timeout" branch is the most
-  dangerous failure surface: a worker that decides on its own to keep
-  running can race a returning server that has already reclaimed the bead.
-- The legitimate part of Proposal C — that `--local` should not require a
-  network server — is preserved by serving the API in-process for
-  `--local`.
+(Earlier revisions chose this; rev 4 reverses.)
 
-## Worker–server API contract
+- The in-process API server for `--local` was complexity in service of a
+  uniformity that the user explicitly doesn't need. `--local` working
+  *without* a server is the natural and operator-expected behavior.
+- "Server is the source of truth for runtime state" requires server
+  restart recovery, claim reconciliation, partition handling, and a
+  long-poll back-pressure regime — none of which are needed when the
+  bead store is the source of truth.
+- Workers being long-lived clients of a server requires the server to be
+  available for the worker to function, which the user explicitly
+  rejected.
 
-All endpoints require `requireTrusted` (loopback or ts-net `WhoIs`
-identity, per ADR-006). The session token is bound to one project; the
-server rejects any call whose `worker_id` was issued for a different
-project.
+## Worker-server interface (best-effort reporting)
+
+The worker-server boundary is small. There is no HTTP API for claim
+coordination, no long-poll, no heartbeat lease, no in-process server.
+There are exactly two endpoints, both used best-effort by workers and
+both backed by `requireTrusted` (loopback or ts-net per ADR-006):
 
 ### POST /api/workers/register
 
-Request — the full `ExecuteLoopSpec` plus runtime worker identity. **All
-fields currently scattered across `cli/cmd/agent_cmd.go`,
-`cli/internal/server/server.go:handleStartExecuteLoopWorker`, and
-`cli/internal/server/workers.go:ExecuteLoopWorkerSpec` collapse here:**
+Worker-side: called once at startup AFTER a successful `.ddx/server.addr`
+discovery. Body is a small identity envelope:
 
 ```json
 {
-  "spec_version": 1,
-  "project_root": "/abs/path/to/project",
-
+  "project_root": "/abs/path",
   "harness": "claude",
   "model": "",
-  "model_ref": "",
-  "profile": "",
-  "provider": "",
-  "effort": "",
-
-  "label_filter": "",
-  "capabilities": ["bead-attempt", "review"],
-
-  "once": false,
-  "poll_interval_ms": 30000,
-  "no_review": false,
-  "review_harness": "",
-  "review_model": "",
-
-  "max_cost_usd": 0.0,
-  "request_timeout_ms": 0,
-  "min_power": 0,
-  "max_power": 0,
-  "opaque_passthrough": false,
-
   "executor_pid": 12345,
-  "executor_host": "host.local"
+  "executor_host": "host.local",
+  "started_at": "2026-05-03T03:00:00Z"
 }
 ```
 
-Response (201):
+Response:
 
 ```json
-{
-  "worker_id": "wkr-9f3a...",
-  "session_token": "tkn-...",
-  "heartbeat_interval_ms": 5000,
-  "claim_lease_ms": 60000,
-  "long_poll_seconds_default": 30,
-  "long_poll_seconds_max": 60,
-  "server_build_sha": "abc1234"
-}
+{ "worker_id": "wkr-9f3a..." }
 ```
 
-Field semantics:
-
-- `spec_version`: integer; server returns 400 if unsupported. v1 freezes
-  the schema above. **Additive fields** (new optional fields) MAY be
-  added within v1 — clients ignore unknown fields, server tolerates
-  missing. **Breaking changes** (semantic shifts to existing fields,
-  required-new-field, etc.) require v2 + an explicit `Accept:
-  application/vnd.ddx-worker.v2+json` negotiation header. Server returns
-  `406 unsupported_version` if the worker's version is unrecognized.
-- `harness`: which agent CLI to invoke (claude/codex/gemini/...). Empty =
-  server picks per `auto-routing-eligible` set (per fizeau).
-- `model`: explicit model pin (e.g., `"sonnet-4.6"`). Empty = fizeau
-  resolves via profile/min_power/max_power (per `ddx-1e516bc9`).
-- `model_ref`: opaque downstream model reference (e.g.,
-  `"openrouter/anthropic/claude-sonnet-4.5"`); used when fizeau needs to
-  pass through a non-canonical name. Distinct from `model`: `model` is
-  fizeau's catalog name; `model_ref` is the provider-side identifier.
-  Most operators leave this empty.
-- `profile`: fizeau profile name (e.g., `"code-medium"`). Empty = derive
-  from min_power.
-- `provider`: explicit provider pin; empty = fizeau picks.
-- `effort`: provider-specific effort hint (e.g., `"medium"` for codex).
-- `label_filter`: comma-separated label set (matches current
-  `LabelFilter string` semantics in `cli/internal/agent/execute_bead_loop.go`
-  per `ddx-29058e2a`). Picker intersects with bead labels. Empty = all
-  beads eligible. Format unchanged from today; future array form deferred
-  to a separate ADR amendment.
-- `capabilities`: array; declares what the worker is willing to do.
-  Empty array OR omitted field defaults to `["bead-attempt"]` for
-  backward compat with workers that don't know about capabilities yet.
-  See Capabilities dispatch section.
-- `once`: single-drain semantics — worker exits after queue is empty
-  once. Preserves `--once` operator flag.
-- `poll_interval_ms`: client-side hint for long-poll cadence on
-  bare-wait responses. Server may override via response. Default 30000
-  preserves the stay-alive fix at commit `41cb762e` (workers stay alive
-  on empty queue). `--poll-interval=0` operator override is preserved
-  by submitting `0`; the worker treats bare-wait as "exit" instead of
-  "retry."
-- `opaque_passthrough`: when true, `harness`/`model`/`provider` are
-  passed to fizeau as opaque hints with no DDx-side validation
-  (preserves `ddx work --harness=<name>` semantics).
-- `max_cost_usd` / `request_timeout_ms` / `min_power` / `max_power`:
-  per-attempt budget caps; zero = use server defaults.
-- `executor_pid` / `executor_host`: for the server's runtime registry;
-  used by `ddx agent doctor` to surface worker provenance.
-
-**Per-attempt overrides — NOT in registration.** `from_rev` (base
-revision pin for a specific attempt) was previously placed here and is
-explicitly REMOVED. Workers process many attempts; pinning all to one
-base is wrong for general drain. `from_rev` becomes a per-attempt field
-on the bead itself (existing `metadata.base-rev` on the bead) OR an
-optional field on the `next-bead` response when the operator pins via
-`ddx try --from <rev>` (one-shot CLI surface only, NOT general drain).
-
-Drop is impossible by construction: every PER-WORKER field that today
-travels through the `agent_cmd.go → server.go → workers.go → runWorker`
-chain is one struct field here. Per-attempt fields stay per-attempt.
-Adding a new flag = (a) one struct field + (b) one cobra binding. The
-drop class (`ddx-29058e2a`) is closed.
-
-### POST /api/workers/<id>/heartbeat
-
-Request:
-
-```json
-{
-  "state": "executing",
-  "current_bead_id": "ddx-076147ee",
-  "current_attempt_id": "20260503T021424-dac100b6",
-  "queue_depth_seen": 3
-}
-```
-
-Response (200):
-
-```json
-{
-  "server_command": "continue",
-  "session_token_renewed": null,
-  "claim_lease_extended_until": "2026-05-03T02:15:24Z"
-}
-```
-
-`server_command ∈ {continue, pause, drain, terminate}`:
-
-- `continue`: keep going.
-- `pause`: finish the current bead and stop claiming new work; keep
-  heartbeating so the server sees you're alive.
-- `drain`: finish the current bead, then exit cleanly. Worker decrements
-  to `state: draining` and reports `disconnect` when idle.
-- `terminate`: stop the current attempt at the next safe point (between
-  LLM turns, NOT mid-tool-call), preserve the worktree (so a human can
-  inspect), then exit. The worker is responsible for waiting for any
-  in-flight git or subprocess to complete before exiting; the server does
-  NOT SIGKILL — operators wanting hard kill should use OS signals
-  directly.
-
-**Claim lease renewal.** Heartbeats while `state: executing` or
-`state: claiming` implicitly extend the claim lease by `claim_lease_ms`
-(default 60s) measured from the heartbeat receipt time. The server
-returns the new expiry in `claim_lease_extended_until`. A worker that
-fails to heartbeat for `3× heartbeat_interval_ms` loses the claim
-(server reclaims the bead) and the next heartbeat receives `410
-unknown_worker`, triggering re-registration.
-
-Heartbeat is the mutual liveness signal AND the claim-renewal signal.
-Workers must heartbeat at least every `heartbeat_interval_ms` regardless
-of state.
-
-### GET /api/workers/<id>/next-bead
-
-Long-poll. Server holds for up to `wait_for_seconds` (default 30) before
-returning either an assignment or a bare `wait` envelope. The worker MAY
-reissue immediately on bare-wait response.
-
-Response (200):
-
-```json
-{
-  "bead": { "...": "..." },
-  "attempt_id": "20260503T021424-dac100b6",
-  "base_rev": "528bb6ee...",
-  "claim_lease_ms": 60000
-}
-```
-
-Or:
-
-```json
-{ "wait_for_seconds": 30 }
-```
-
-Claim is created server-side at the moment of return; the worker has
-`claim_lease_ms` to send the first heartbeat with `state: claiming` or
-`executing` before the claim expires.
+The worker uses `worker_id` as a correlation key in subsequent event
+reports. If registration fails (no server, network error, 5xx), the
+worker proceeds without a `worker_id` and skips event mirroring. No
+session token, no heartbeat, no claim lease — none of those concepts
+exist in the worker-server protocol because the worker doesn't depend
+on the server.
 
 ### POST /api/workers/<id>/event
 
-Request:
+Worker-side: called best-effort whenever the worker would write an event
+to a bead's local event log. Body mirrors the bead event:
 
 ```json
 {
-  "kind": "attempt.started",
   "bead_id": "ddx-076147ee",
   "attempt_id": "20260503T021424-dac100b6",
+  "kind": "attempt.started" | "picker.priority_skip" | "loop.idle" | "result" | "...",
   "body": { "...": "..." }
 }
 ```
 
-Response: 204.
-
-`kind` mirrors today's bead event log. The server appends to the bead's
-event stream; existing readers (CLI, MCP, web UI) see worker events
-without code changes.
-
-### POST /api/workers/<id>/result
-
-Request:
-
-```json
-{
-  "bead_id": "ddx-076147ee",
-  "attempt_id": "20260503T021424-dac100b6",
-  "status": "merged",
-  "evidence_dir": ".ddx/executions/20260503T021424-dac100b6",
-  "commit_sha": "deadbeef...",
-  "no_changes_rationale": null,
-  "preserve_ref": null
-}
-```
-
-`status` enum (named distinctly to avoid the previous "preserved" overload):
-
-- `merged`: attempt produced a commit; merged into the integration branch.
-- `preserved_for_review`: worker explicitly requested human review (merge
-  conflict it can't resolve, ambiguous outcome, escalation request).
-  Worktree retained at `preserve_ref`.
-- `no_changes`: model returned cleanly with no commit; rationale at
-  `no_changes_rationale`.
-- `failed_rejected`: attempt produced a commit but the gate (review,
-  reachability check, etc.) rejected it. Worktree retained at
-  `preserve_ref` for inspection.
-
-**`preserved_orphaned`** is set by the SERVER (not the worker) when the
-worker dies mid-attempt and the heartbeat-timeout fires. Reported via the
-worker death recovery path, not via this endpoint. UI consumers must
-distinguish:
-
-- `preserved_for_review` → human action requested
-- `preserved_orphaned` → infrastructure failure; another worker may
-  retry
-
-Response: 204.
-
-### POST /api/workers/<id>/disconnect
-
-Graceful shutdown. Releases any unclaimed lease, marks the worker as
-gone in the runtime registry, but does not clean up worktrees. Response:
-204.
-
-### Error envelope
-
-All endpoints share the existing server JSON error envelope (matching the
-`serverPromptCapBytes` cap-error shape from ADR-021's prompt-cap rule).
-
-### Long-poll back-pressure
-
-`next-bead` is a held connection. With multiple workers per project,
-connection pools fill quickly. Limits:
-
-- Per-project: maximum `8` concurrent `next-bead` long-polls. The 9th
-  worker's poll returns `503 too_many_pollers` with `Retry-After: <ms>`.
-- Per-worker: minimum `1s` between successive `next-bead` requests after
-  a bare-wait response (worker SHOULD honor; server enforces with
-  `429 too_many_polls`).
-- Long-poll wait is capped at `long_poll_seconds_max` from registration
-  (default 60); workers may request shorter via `?wait=N`.
-
-These defaults are operator-tunable in `.ddx/config.yaml` under
-`server.workers.long_poll`.
-
-### Concurrent transport error semantics (HTTP and in-process parity)
-
-The HTTP transport returns standard 4xx/5xx with the JSON error envelope;
-the in-process `--local` transport must surface the SAME envelope, not
-raw Go errors, to preserve behavior parity. The `Transport` interface is
-shaped around `(*Response, error)` where `Response` carries the envelope
-on non-2xx outcomes; `error` is reserved for transport-layer failures
-(connection refused, ts-net partition). This guarantees that a unit test
-written against the in-process transport observes the same error shape as
-production.
-
-### Capabilities dispatch
-
-`capabilities` declares what the worker is willing to do. Today's recognised
-capabilities:
-
-- `bead-attempt`: the worker can perform a `try.Attempt` for an
-  implementation bead.
-- `review`: the worker can perform post-attempt review (cf. the
-  reviewer harness/model registration).
-
-A bead's required capability is inferred from its `kind:`-label
-(`kind:review` → requires `review`; everything else → requires
-`bead-attempt`). Workers without the required capability are skipped by
-the picker for that bead. Workers MAY register multiple capabilities.
-**Defaulting rule for backward compat:** a worker that omits
-`capabilities` or sends an empty array is treated as
-`["bead-attempt"]` so transitional/legacy workers don't break.
-Operators wanting a review-only worker MUST explicitly send
-`["review"]` (which excludes implementation work).
-
-Future capabilities (e.g., `compute:gpu`, `network:internet`) extend this
-without ADR change as long as the picker rule (intersection) is preserved.
-
-### Unified timing model
-
-The previous draft had three competing timeouts (claim_lease_ms,
-heartbeat-timeout, partition_grace_seconds, partition_abort_seconds).
-This section is the single canonical source.
-
-| Event | Threshold | Result |
-|---|---|---|
-| First heartbeat after `next-bead` returns a claim | within `first_heartbeat_ms` (default 10000) | claim confirmed |
-| First heartbeat MISSES `first_heartbeat_ms` | server marks claim orphaned, returns bead to ready | next worker can claim |
-| Worker heartbeat received | normal | extends claim by `claim_lease_ms` (default 60000) measured from receipt |
-| `claim_lease_ms` elapses without heartbeat | server marks claim lost | bead reclaimed; next worker eligible; old worker gets `410 unknown_worker` on next heartbeat |
-| Worker connection error to server | worker enters `state: disconnected` (local) | continues current attempt, retries heartbeat with backoff (1s, 2s, 5s, 15s, 30s, 30s, ...) |
-| Heartbeat re-establishes within `partition_grace_seconds` (default 300) | worker resumes normal | claim may have been lost; server returns `410` if so → worker re-registers |
-| `partition_grace_seconds` exceeded | worker enters `state: partitioned` | local logs only; no heartbeat attempts |
-| `partition_abort_seconds` (default 1800) exceeded | worker aborts current attempt at next safe point | preserves worktree locally; exits |
-
-The "claim lost" event is symmetric: server reclaims at
-`claim_lease_ms` (60s); worker discovers loss on next heartbeat.
-`heartbeat_interval_ms` (5s) is just how often the worker sends; the
-threshold for claim loss is `claim_lease_ms` (60s = 12 missed
-heartbeats), NOT `3× heartbeat_interval_ms`. The earlier "3×
-heartbeat_interval" reference is REPLACED by `claim_lease_ms`.
-
-`first_heartbeat_ms` < `claim_lease_ms` < `partition_grace_seconds` <
-`partition_abort_seconds`. This invariant must hold; server returns
-`400 invalid_timing_config` if operator-tunable values violate it.
-
-### Server startup recovery (in-memory registry rehydration)
-
-The server's runtime registry is **in-memory but reconstructable**.
-Durability is provided by the bead store + worker-side state, not by
-persisting the registry itself. On server start:
-
-1. Server starts with an empty runtime registry.
-2. Server scans `.ddx/workers/` (legacy filesystem records) AND any beads
-   with status=in_progress whose claim metadata names a worker_id.
-3. For each (worker_id, bead_id, attempt_id) tuple: server marks the
-   bead as "awaiting reconnect" with a `reconcile_deadline` of
-   `now + claim_lease_ms`.
-4. If the worker reconnects (re-register with the SAME executor_pid +
-   executor_host) within the deadline, the claim is restored.
-5. If `reconcile_deadline` elapses with no reconnect, the bead is
-   reclaimed for re-attempt; the original attempt's evidence is
-   preserved in `.ddx/executions/<attempt-id>/` (already on disk) and
-   marked `preserved_orphaned`.
-
-This means the server can crash + restart without losing in-flight work
-provided workers reconnect within `claim_lease_ms`. The
-`partition_grace_seconds` rule covers longer disconnects.
-
-### Cancel-during-claim race
-
-Edge case: server returns a claim from `next-bead`, worker disconnects
-before sending the first heartbeat. The claim record exists with no
-liveness signal.
-
-Resolution: `first_heartbeat_ms` (default 10000ms) is the explicit
-threshold. If no heartbeat with `current_bead_id` matching the claim
-arrives within this window, the server orphans the claim and returns
-the bead to ready. This is shorter than the general `claim_lease_ms`
-(60s) because a worker that just received an assignment should ack it
-quickly; the bead should not sit blocked waiting for a worker that may
-have died.
-
-### Observability contract
-
-The server emits structured events for every control-plane decision.
-These appear in the `ddx server logs` output AND on the related bead's
-event stream where applicable:
-
-- `worker.registered` / `worker.disconnected` — worker lifecycle
-- `worker.partitioned` / `worker.reconnected` — partition transitions
-- `picker.bead_assigned` — body: {bead_id, attempt_id, worker_id,
-  reason: "highest_priority_first" | "fifo_within_priority" |
-  "capability_match" | "label_filter_match"} — explains "why was bead
-  X assigned to worker Y"
-- `picker.priority_skipped` — body: {bead_id, skipped_for_bead_id,
-  reason: "no_capable_worker" | "no_label_match" | "in_cooldown"}
-- `picker.claim_race` — body: {worker_a, worker_b, bead_id,
-  winner: "worker_a"}
-- `claim.orphaned` — body: {claim_id, bead_id, reason:
-  "first_heartbeat_timeout" | "claim_lease_lost" |
-  "worker_disconnected_no_grace"}
-- `attempt.dropped` — body: {attempt_id, bead_id, original_worker_id,
-  reason: "post_restart_late_result" | "partition_recovery", commit_ref:
-  "refs/dropped/..."}
-- `back_pressure.applied` — body: {worker_id, type: "too_many_pollers" |
-  "poll_too_fast", retry_after_ms}
-
-This contract makes operator debugging tractable without log diving.
-Each event is also a metric counter for dashboards.
-
-### Multi-tenant fairness
-
-With 76+ projects registered (per `.ddx/server/state.json`), per-project
-limits alone don't prevent one runaway project from starving others.
-Server-wide limits:
-
-- `max_concurrent_long_polls_total`: default 64 (8 per project × 8
-  active projects). Above this, additional `next-bead` requests get
-  `503 server_busy` regardless of per-project count.
-- `picker_round_robin_across_projects`: when multiple projects have
-  ready beads and a worker has no project preference (multi-project
-  worker — future v2), the picker round-robins across project queues.
-  v1 workers are project-bound by registration so this doesn't apply
-  yet.
-- Per-project `claim_table_max_size`: default 32 (no project can hold
-  more than 32 simultaneous claims). Above this, picker returns
-  bare-wait until claims drain.
-
-These limits are operator-tunable in `.ddx/config.yaml` under
-`server.workers.fairness`.
-
-### Data migration (existing `.ddx/workers/` records)
-
-Existing workers/spec.json files use the legacy schema. Migration:
-
-- On server startup, the rehydration scan above also reads legacy
-  spec.json files. Fields are mapped: `harness/model/profile/...` →
-  same names; legacy `min_tier`/`max_tier` (no longer in spec)
-  IGNORED; legacy `preserved` status REWRITTEN to
-  `preserved_for_review` (the safer assumption — operators have to
-  inspect anyway).
-- A one-time migration command `ddx server migrate-workers` rewrites
-  all `.ddx/workers/<id>/spec.json` to the new schema. Idempotent.
-  Operator runs this once during the upgrade window.
-- After Phase D (cleanup), `.ddx/workers/` is retired entirely; the
-  on-disk format becomes a debug artifact for `ddx agent doctor`
-  fallback when the server is absent.
-
-## Sequence diagrams
-
-### Registration
-
-```mermaid
-sequenceDiagram
-  participant W as Worker (ddx work)
-  participant S as Server (or in-proc API)
-  W->>S: POST /api/workers/register {spec}
-  S-->>W: 201 {worker_id, session_token, hb_interval}
-  W->>W: Spawn heartbeat goroutine
-  W->>S: GET /api/workers/<id>/next-bead (long-poll)
-```
-
-### Bead claim and execute
-
-```mermaid
-sequenceDiagram
-  participant W as Worker
-  participant S as Server
-  participant T as try.Attempt
-  W->>S: GET /next-bead (long-poll)
-  S->>S: Pick eligible bead, create claim
-  S-->>W: 200 {bead, attempt_id, base_rev}
-  W->>T: try.Attempt(bead, base_rev)
-  T-->>W: events stream
-  loop per event
-    W->>S: POST /event {kind, body}
-    S-->>W: 204
-  end
-  T-->>W: Outcome{status, commit, evidence}
-  W->>S: POST /result {status, ...}
-  S-->>W: 204
-  W->>S: GET /next-bead (next iteration)
-```
-
-### Server restart recovery
-
-```mermaid
-sequenceDiagram
-  participant W as Worker
-  participant S as Server
-  W->>S: POST /heartbeat
-  Note over S: server crashes
-  W--xS: 503 / connection refused
-  W->>W: Mark "disconnected", continue current attempt
-  Note over S: server returns
-  W->>S: POST /heartbeat
-  S-->>W: 410 unknown_worker
-  W->>S: POST /register {same spec, prior_worker_id?}
-  S-->>W: 201 {new worker_id, session_token}
-  W->>W: Finish in-flight attempt
-  W->>S: POST /result {status: merged} (using new id)
-  S->>S: Reconcile result with reclaimed claim if any
-```
-
-The reconciliation rule: if the server already reissued the bead to
-another worker after heartbeat-timeout, the late `result` from the
-original worker is recorded as a dropped attempt with
-`reason: post_restart_late_result` and the new worker's outcome wins.
-The bead store's existing claim semantics (one in-flight attempt per
-bead) are preserved.
-
-**Dropped-attempt commit preservation.** If the original worker's late
-`result.commit_sha` is non-empty, the server MUST preserve that commit
-under a forensic ref `refs/dropped/<bead-id>/<attempt-id>` before
-recording the dropped event. The branch is local-only (not pushed) and
-operators can inspect via `git log refs/dropped/<bead-id>/<attempt-id>`
-or `ddx exec show --dropped <attempt-id>`. Retention: 30 days; pruned by
-`ddx server gc` (a future bead). This prevents silent loss of the
-original worker's work product when restart races a late commit.
-
-### Worker death recovery
-
-```mermaid
-sequenceDiagram
-  participant W as Worker
-  participant S as Server
-  W->>S: POST /heartbeat (state: executing)
-  Note over W: worker process dies
-  S->>S: heartbeat_timeout (3× hb_interval) elapses
-  S->>S: Reclaim bead, mark attempt as preserved_orphaned
-  S->>S: New eligible workers see bead in next-bead poll
-```
-
-The `preserved_orphaned` outcome is distinct from the worker-reported
-`preserved_for_review` (see `/result` endpoint). Orphaned attempts may
-be retried automatically by the next eligible worker; review-preserved
-attempts wait for human action.
-
-### ts-net partition recovery (remote workers)
-
-ADR-022 v1 explicitly limits remote workers to ts-net-bound nodes per
-ADR-006. If a remote worker partitions from the server:
-
-- Worker continues executing the current attempt; cannot heartbeat or
-  reach `/event`/`/result`.
-- After `partition_grace_seconds` (default `300s`), the worker enters
-  `state: partitioned` and stops trying API calls; logs locally.
-- After `partition_abort_seconds` (default `1800s` = 30 min), the
-  worker aborts the current attempt at the next safe point, preserves
-  the worktree under a local marker, and exits.
-- The server reclaims the bead at `heartbeat_timeout` and reassigns;
-  the abandoned worktree on the partitioned host requires manual
-  cleanup (`ddx server reconcile-orphans` — future bead).
-
-Without these limits, a partitioned worker could hold a worktree
-indefinitely. Both timeouts are operator-tunable per server.
-
-### Graceful shutdown
-
-```mermaid
-sequenceDiagram
-  participant Op as Operator
-  participant W as Worker
-  participant S as Server
-  Op->>W: SIGINT
-  W->>S: POST /heartbeat {state: idle}
-  S-->>W: {server_command: drain}
-  W->>S: POST /disconnect
-  W->>W: exit 0
-```
-
-If the worker is mid-attempt when SIGINT arrives, it sets
-`state: draining`, finishes the attempt (so worktree state lands or is
-preserved coherently), reports `result`, then `disconnect`s.
-
-## --local mode collapses into the same path
-
-`ddx work --local` (and `ddx try`, which is a one-shot drain) construct an
-**in-process server** that implements the same handler surface as the HTTP
-server, backed by direct calls into the bead store and the runtime claim
-table. The worker uses the same client; the `Transport` interface
-(HTTP-or-direct) is the only difference.
-
-```text
-cli/internal/agent/work/
-  client.go        // worker-side: register, heartbeat, claim, event, result
-  transport.go     // interface: HTTP impl OR in-process impl
-  local_api.go     // in-process implementation (used by --local)
-  worker.go        // the state machine using client+try
-```
-
-This means:
-
-- **One state machine.** The `ddx-5cb6e6cd` refactor's `work/` package
-  collapses to the client + state machine; the in-process API is just a
-  different `Transport`.
-- **No "two paths" tests.** Today's `--local` vs server-spawned tests
-  collapse to one path with two transport implementations. Existing
-  integration tests can be reused with the in-process transport.
-- **Server-spawned workers are not special.** The server starts a worker
-  by exec'ing `ddx work` with the right env (server URL + bootstrap
-  token) — exactly what an operator running `ddx work` against a remote
-  ts-net node does. The "spawn-and-track-PID" hand-roll in
-  `cli/internal/server/workers.go` retires.
+Server appends to its derived view (in-memory + optionally backed by
+its own `.ddx/server/events.jsonl`). Response: 204. Worker's local
+event log is the authoritative copy; server-side is for observability.
+
+If the POST fails for any reason, the worker logs the failure locally
+and continues. Lost events are tolerable because the bead's local event
+stream has the full record; operators wanting to backfill can replay
+from the bead store.
+
+### What the server can do (the value-add)
+
+Once the server has a derived view of who's reporting:
+
+- **Centralized observability**: which workers exist, what they're doing
+  right now, recent picker decisions, recent dropped commits — all
+  surfaced via existing GraphQL and the workers panel.
+- **Cross-worker correlation**: see all workers across all projects in
+  one place; useful for multi-project hosts.
+- **Operator UI**: queue beads, cancel beads (via writing markers to the
+  bead store that workers honor on next iteration), view bead history.
+- **Server-initiated cancel**: not a direct API call to the worker;
+  instead, server writes `extra.cancel-requested: true` to the bead;
+  worker observes on next iteration of its loop and aborts the attempt
+  at the next safe point.
+
+### What the server explicitly does NOT do
+
+- It does not assign beads to workers (workers pick from the bead store
+  themselves).
+- It does not hold authoritative claim state (the bead store does).
+- It does not gate worker startup or operation (workers run without it).
+- It does not hold session tokens or enforce per-worker auth (a future
+  hardening; v1 trusts the requireTrusted boundary).
+- It does not need to survive worker death gracefully (workers are
+  independent; server's derived view is replayable from the bead
+  stores at any time).
+
+### Server crash / restart behavior
+
+Server crashes: workers' next event POST fails; workers log + continue.
+Server restarts: workers' next event POST succeeds (or 410 if the
+server didn't recover the worker_id, in which case the worker
+re-registers and resumes). No in-flight work is at risk.
 
 ## Compatibility analysis
 
-### Migrates cleanly
+### Migrates cleanly (almost everything)
 
-- **Bead event consumers.** Events posted via `/api/workers/<id>/event`
-  use the same `kind`/`body` shape as today's bead events; the server
-  appends them to the same store. CLI, MCP, and web-UI readers do not
-  change.
-- **Evidence layout.** `.ddx/executions/<run-id>/` continues to be the
-  per-attempt evidence directory; the worker writes there exactly as
-  `try.Attempt` does today.
-- **Land-coordinator and post-merge review.** The worker calls into the
-  same `try` package; merge / preserve / no-changes semantics are
-  unchanged.
-- **`requireTrusted` boundary.** All worker endpoints reuse ADR-006's
-  loopback-or-ts-net rule; no new auth plane is introduced.
-- **`.ddx/workers/` runtime files.** Replaced by the server's runtime
-  registry; the on-disk file format may be retired or kept as a debug
-  view of what the server reports for `ddx agent doctor`.
+- **Existing autonomous worker behavior.** This is the baseline rev 4
+  preserves. Today's `ddx work` and `ddx work --local` already work
+  against the bead store; rev 4 is additive (best-effort server
+  reporting on top of unchanged behavior).
+- **Bead event log shape.** Worker events go to the bead's local event
+  log (today's behavior); the server-side ingestion endpoint receives a
+  copy with the same shape. No reader changes.
+- **Evidence layout.** `.ddx/executions/<run-id>/` unchanged.
+- **`try.Attempt` semantics.** Unchanged. The worker calls into `try`
+  exactly as today.
+- **`requireTrusted` boundary.** Reused for the two new endpoints; no
+  new auth plane.
+- **Existing per-Run `attempted` map and stay-alive defaults.** Preserved
+  from commit `41cb762e`. The autonomous picker is the picker.
 
 ### Breaking changes for operators
 
-- **`--local` semantics shift slightly.** Today `--local` does not start a
-  server; tomorrow it starts an in-process API. There is no observable
-  difference for the operator (no port is opened), but a test that
-  asserted "no listener exists in `--local` mode" needs updating to
-  assert "no TCP listener," not "no API."
-- **Server-spawned worker restart behaviour.** Today a server-spawned
-  worker dies if the server dies. Tomorrow it survives, finishes the
-  bead, and reconnects. Any test that relied on "kill server → workers
-  exit" becomes wrong. Documented as a deliberate behaviour change; the
-  CHANGELOG must call it out.
-- **`ExecuteLoopWorkerSpec` consolidation.** The hand-marshalled
-  request/response struct between `cli/cmd/agent_cmd.go` and
-  `cli/internal/server/server.go` is replaced by the `register` payload.
-  Any external script that POSTed to the legacy `/api/agent/workers/...`
-  endpoints needs migration.
-- **Graceful drain command.** `ddx agent stop-loop` and the server's
-  `stopWorker` mutation become wrappers over `POST /heartbeat`'s
-  `server_command: drain` reply. Operators using these commands see the
-  same outcome; the underlying mechanism changes.
+- **None for the autonomous path.** `ddx work` and `ddx work --local`
+  behave identically to today (with the addition of best-effort server
+  reporting when a server is reachable).
+- **Some legacy server-spawn integration tests will need updating.** The
+  current server-spawn path that hand-marshals `ExecuteLoopWorkerSpec`
+  over an internal contract is replaced by the server `exec`'ing
+  `ddx work` like an operator would. Tests asserting specific spawn
+  args will need to assert the new exec form. (No operator-visible
+  behavior change here — operators don't call the legacy endpoint
+  directly.)
+- **Per-user direction**: the previous `ExecuteLoopWorkerSpec` path
+  through the server is removed; no compat shim and no data migration
+  for legacy `.ddx/workers/` records (delete history if needed).
 
-### Tests that break (and the migration)
+### Tests that need updating (smaller list than rev 1-3)
 
-- `cli/internal/server/workers_test.go` — exec-spawn tests need to
-  exercise the new register/poll flow. Most assertions about exec args
-  become assertions about the registration payload.
-- `cli/cmd/agent_execute_loop_test.go` — `--local` tests run against the
-  in-process transport; assertions about "no server" may need rewording.
-- `cli/internal/agent/execute_bead_loop_test.go` — the loop is replaced
-  by the worker state machine; tests migrate to the `work/` package.
-- Integration tests under `cli/internal/server/integration/` that asserted
-  specific `.ddx/workers/` filesystem state need rewriting to query the
-  server's runtime registry.
+- `cli/internal/server/workers_test.go` — exec-spawn tests: assert the
+  new exec form (`ddx work` invocation), not the JSON request/response
+  envelope.
+- Integration tests asserting specific `.ddx/workers/` on-disk format
+  may need adjustment if rev 4 changes that layout. Currently rev 4 does
+  NOT modify `.ddx/workers/` shape; workers continue to write spec.json
+  + status.json there for `ddx agent doctor` consumption.
+- New tests for the two endpoints: `TestWorkerRegister_HappyPath`,
+  `TestWorkerRegister_ServerDown_WorkerProceeds`,
+  `TestWorkerEvent_Mirrored_BestEffort`,
+  `TestWorkerEvent_ServerCrash_WorkerLogs_Continues`.
 
-A pre-merge checklist (recorded against the implementation epic) tracks
-each test file's migration status.
-
-## Sequencing relative to in-flight work
-
-This ADR sits **above** these beads:
-
-- `ddx-29058e2a` (ExecuteLoopSpec unification) — **subsumed.** The unified
-  spec is the registration payload; this ADR satisfies the goal and the
-  bead either closes as duplicate or becomes "implement registration
-  payload per ADR-022."
-- `ddx-5cb6e6cd` (refactor epic) — **prerequisite stays valid, ordering
-  shifts.** The `run/`/`try/`/`work/` split is independently good. After
-  this ADR lands, the `work/` package's contents are the worker state
-  machine plus the API client, not the current loop body. C5/C7/C9 of
-  the refactor are re-scoped before they execute so they don't refactor
-  against the old model.
-- `ddx-dc157075` (stay-alive fix) — **subsumed.** A long-lived API client
-  stays alive by definition; the fix degenerates to "the worker
-  long-polls `next-bead`, so empty queue is not a termination signal."
-  The default-poll-interval flip is no longer needed. The bead either
-  closes as duplicate or shrinks to "ensure long-poll defaults are
-  correct."
-- `ddx-4c51d33e` (cross-project leak) — **closed; ADR-022 prevents
-  recurrence.** Project scoping moves from "every reader checks" to
-  "session token binds project, server enforces."
-
-### Shippable gates (split sequencing)
-
-The full implementation is 8-10 weeks (per codex rev 2 review). C5/C7/C9
-do not need to wait for ALL of it. The roadmap is split into four gates;
-C5/C7/C9 unfreeze incrementally as each gate's contracts stabilise:
-
-**Gate 1 — Contract stable** (Phase A, roadmap steps 1, 1a, 2-7).
-Server API + registry + test transport. Output: API package + handlers +
-in-memory registry, no client migration yet. Estimated 2-3 weeks.
-**Unfreezes:** none. C5/C7/C9 still wait — the worker-side state machine
-contract isn't fixed.
-
-**Gate 2 — Worker state machine extracted** (Phase B, roadmap steps 8-10).
-`work.Worker` + `work.Transport` interface + `--local` migration. Output:
-the worker state machine is callable from both `--local` and (forthcoming)
-HTTP transport. Estimated 3 weeks.
-**Unfreezes:** C5 (no_changes adjudication) and C7 (Guard contract) — the
-disposition and claim contracts are now stable; refactor children can
-land against `try.Attempt` semantics inside `work.Worker`. C9
-(StopCondition) waits for Gate 3.
-
-**Gate 3 — Server-spawned migration + restart resilience** (Phase B-C,
-roadmap steps 11-13). Server-spawned worker uses register-then-poll;
-claim-reclaim on heartbeat timeout; restart-recovery handshake.
-Estimated 2-3 weeks.
-**Unfreezes:** C9 (StopCondition + cost-cap) — restart and reclaim
-semantics are now stable; StopCondition becomes worker-side state with
-server-visible projection.
-
-**Gate 4 — Cleanup + UI** (Phase D, roadmap steps 14-16).
-`ddx agent doctor` reads from runtime registry; UI workers panel; final
-cleanup of legacy paths; CHANGELOG. Estimated 1-2 weeks.
-**Unfreezes:** nothing additional; all refactor children already
-unfrozen. Gate 4 is parallel-safe with continuing refactor work.
-
-### Bead absorption table
-
-| Bead | Verdict | Notes |
-|---|---|---|
-| `ddx-29058e2a` (ExecuteLoopSpec unification) | **subsumed** | Spec becomes the registration payload at Gate 1. Bead closes when Gate 1 step 3 (register handler) lands. |
-| `ddx-dc157075` (stay-alive fix) | **subsumed but already shipped** | The 30s poll-interval default + attempted-map reset shipped at commit `41cb762e` BEFORE this ADR. Gate 2's `work.Worker` long-poll obviates the workaround; Gate 2 step 10 includes "preserve the diagnostic events from `41cb762e` — `picker.priority_skip`, `picker.claim_race`, `loop.idle/loop.active` substate — as new server-side events per Observability contract." |
-| `ddx-4c51d33e` (LAYER 1 GraphQL leak) | **already shipped + ADR prevents recurrence** | Commit `33b97f25` shipped the scoped route. Worker session-token binding prevents recurrence in worker paths. |
-| `ddx-055e8d32` LAYER 2 (resolver context refactor) | **already shipped** | Commit `07ea202d`. |
-| `ddx-5ae050dc` LAYER 3 (Node(id) resolution) | **already shipped** | Commit `5ee6b02c`. |
-| `ddx-9d55601f` (picker priority bug) | **already shipped** | Commit `80f51574`. Picker logic moves to server-side at Gate 1; ensure the `picker.priority_skip` event semantics are preserved per Observability contract. |
-| `ddx-5b3e57f4` (cooldown disrupted classification) | **parallel** | Independent of API design. Should land in parallel with Gate 1; Gate 1's API makes Disrupted naturally observable via worker disconnect events. |
-| `ddx-1e516bc9` (fizeau Execute upstream gap) | **parallel** | Independent of API design. Fizeau v0.10.4 already addresses some of this; verify post-bump. |
-| `ddx-5cb6e6cd` C5 (no_changes adjudication) | **freeze until Gate 2** | |
-| `ddx-5cb6e6cd` C7 (Guard contract) | **freeze until Gate 2** | |
-| `ddx-5cb6e6cd` C9 (StopCondition + cost-cap) | **freeze until Gate 3** | |
-| `ddx-5cb6e6cd` C8 (routing preflight relocation) | **parallel** | Routing preflight is Drain startup; doesn't conflict with worker API. |
-| `ddx-5cb6e6cd` C13 (file rename + ddx try CLI) | **parallel** | File rename should align with `cli/internal/agent/work/` package layout; coordinate naming with Gate 2. |
-| `ddx-1d867ec1` (rename execute_bead_loop file) | **parallel + coordinate** | Same as C13. |
-| `ddx-50da9674` (clean fixture repo infra) | **parallel + supports Stage 4** | Acceptance demo uses this. |
-| Other open beads (Story 6/8/14/15/16, REACH, axon backend, etc.) | **parallel** | No interaction with worker API. |
-
-## Implementation roadmap
-
-Ordered list of follow-up beads to file (titles only — actual filing
-happens after this ADR is approved). Each bead carries
-`depends_on: ADR-022` and the parent that owns its area.
-
-1. **TD: define worker–server API contract in `cli/internal/server/api/worker.go`** — schemas (per the registration payload's full ExecuteLoopSpec), error envelope, OpenAPI annotations; no behaviour change.
-1a. **TD: define `Transport` interface and test-mode implementation** — interface contract (HTTP/in-process/test); deterministic-timing test transport with controllable clock for migration of existing tests under `Tests that break`.
-2. **server: implement runtime worker registry (in-memory; durability deferred)** — the source of truth for "which workers exist, what they're doing, who claims what."
-3. **server: implement `POST /api/workers/register`** — requireTrusted, project-binding, session token issuance, conflict on duplicate worker_id.
-4. **server: implement `POST /api/workers/<id>/heartbeat`** — including `server_command` plumbing for pause/drain/terminate.
-5. **server: implement `GET /api/workers/<id>/next-bead`** — long-poll, claim creation, lease expiry.
-6. **server: implement `POST /api/workers/<id>/event` and `POST /api/workers/<id>/result`** — append to bead event log; reconcile claim on result.
-7. **server: implement `POST /api/workers/<id>/disconnect`** — graceful release; runtime registry GC.
-8. **agent/work: extract worker state machine + client** — Transport interface, HTTP transport implementation.
-9. **agent/work: implement in-process Transport for `--local`** — same handlers, no listener.
-10. **migrate `ddx work` and `ddx agent execute-loop` to use work.Worker** — retire `execute_bead_loop.go` body; delete the per-Run `attempted` map (subsumes `ddx-dc157075`).
-11. **migrate server-spawned worker path to register-then-poll** — replace inline-execution with `exec ddx work --server-url ... --bootstrap-token ...`; retire `ExecuteLoopWorkerSpec` and the `.ddx/workers/` filesystem registry (subsumes `ddx-29058e2a`).
-12. **server: claim-reclaim on heartbeat timeout** — heartbeat_timeout = 3× hb_interval; preserve attempt as a recorded dropped-event.
-13. **server: restart-recovery handshake** — `410 unknown_worker` semantics; client re-registers; reconcile late results.
-14. **CLI: `ddx agent doctor` reads from server runtime registry** — `.ddx/workers/` directory becomes legacy; doctor falls back to it only if the server is absent.
-15. **operator-facing UI: workers panel reads from runtime registry** — file as a child of FEAT-008 if it exists at implementation time; otherwise this bead OWNS surfacing the workers panel and the FEAT reference here is provisional. Implementation MUST NOT block on FEAT-008 being created.
-16. **CHANGELOG + operator migration note** — call out the restart-survival behaviour change explicitly.
-
-Each bead should carry a structural AC referencing the relevant section
-of this ADR. The roadmap is intentionally finer-grained than the C5/C7/C9
-slicing in `ddx-5cb6e6cd` because each bead is independently shippable
-and reviewable.
-
-## Consequences
-
-- **One write/execute path.** Server-spawned and `--local` collapse to one
-  state machine plus two transports. Future changes (new heartbeat
-  fields, new `server_command` values, new event kinds) land once.
-- **Server restart preserves in-flight work.** The headline operator
-  requirement.
-- **Server is now a stateful runtime authority.** Today the bead store is
-  the only stateful thing; tomorrow the server's runtime registry holds
-  ephemeral claim/heartbeat state. Loss of the server still means loss of
-  the registry; recovery is automatic on reconnect, but a server crash +
-  network partition + worker death is still a recoverable-but-noisy
-  scenario. ADR-007 federation does not change this — each node owns its
-  registry.
-- **Project boundaries enforced by token binding for honest workers.**
-  Session tokens prevent the misconfigured-worker-claims-wrong-project
-  failure mode that drove `ddx-4c51d33e`. They are NOT defense against a
-  local malicious process — `requireTrusted` accepts any loopback
-  connection without identity proof. The threat model is detailed in the
-  Threat model section above.
-- **`ExecuteLoopSpec` consolidation is a side effect.** The bead-flag
-  drift class (`ddx-29058e2a`) is closed by construction.
-- **Long-poll requires back-pressure care.** A misconfigured worker that
-  registers with no `label_filter` and a tight poll loop on bare-wait
-  responses can busy-loop the server. The `wait_for_seconds` default
-  (30s) and a server-side rate limit on `next-bead` per worker_id are
-  required (tracked in roadmap step 5).
-- **No remote workers in v1.** The trust model assumes loopback or ts-net
-  identity per ADR-006. Workers running on a remote machine without a
-  ts-net binding are out of scope and explicitly rejected at registration.
+The tests-that-break list is dramatically smaller than rev 1-3 because
+the worker state machine, bead store interaction, and evidence layout
+are all unchanged. Only the new server-side ingestion endpoint and its
+two tests are net-new.
 
 ## References
 

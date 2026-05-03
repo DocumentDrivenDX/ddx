@@ -1,0 +1,53 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Script with all 4 profiles, Go helper with auto-cleanup via t.TempDir, migrated cross-project test, README + CLAUDE.md paragraph all present and consistent with AC.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Helper package is testutils (plural) vs AC's testutil; usage is correctly documented in README and CLAUDE.md.",
+      "location": "cli/internal/testutils/fixture_repo.go"
+    },
+    {
+      "severity": "info",
+      "summary": "Cleanup uses t.TempDir's built-in removal rather than an explicit t.Cleanup call; effect is equivalent.",
+      "location": "cli/internal/testutils/fixture_repo.go:36"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 3750,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T025022-29ef49b0/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1176,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 6660,
+    "output_bytes": 671,
+    "elapsed_ms": 247973,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
