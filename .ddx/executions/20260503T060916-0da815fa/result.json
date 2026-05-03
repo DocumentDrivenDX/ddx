@@ -1,0 +1,48 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only an execution result.json evidence file; no source changes implementing re-queue buttons on try/run rows or 'Start worker' action on work rows. Insufficient to evaluate AC.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No frontend or backend source changes present in the diff; AC1 (re-queue button on try/run), AC2 (modal prefilled with original config and client-generated idempotency key), and AC3 (work-layer 'Start worker' prefilled action) cannot be verified.",
+      "location": ".ddx/executions/20260503T060104-e7053ec7/result.json"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 643,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T060104-e7053ec7/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1175,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 3552,
+    "output_bytes": 644,
+    "elapsed_ms": 64506,
+    "harness": "claude",
+    "model": "opus"
+  }
+}

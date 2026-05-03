@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T060706-03afb7f5",
+  "bead_id": "ddx-2bb01b91",
+  "base_rev": "95deccd10e6c7efd56b63fcdb9810ad08230e195",
+  "created_at": "2026-05-03T06:07:08.223494312Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2bb01b91",
+    "title": "agentmetrics: GraphQL agentMetrics(window, groupBy) resolver + revision-keyed cache",
+    "description": "GraphQL resolver agentMetrics(window: 24h|7d|30d, groupBy: MODEL|HARNESS|PROVIDER|TIER) returning attempts, success_rate, mean+p50+p95 duration_ms, mean cost, effective cost/success, in/out tokens, last_seen_at. Revision-keyed cache (survives ADR-004 archive). Default window=7d; all-time removed from UI.",
+    "acceptance": "1. agentMetrics query in GraphQL schema. 2. 4 axes supported (MODEL/HARNESS/PROVIDER/TIER). 3. 3 windows (24h/7d/30d). 4. Cache keyed by run-store revision. 5. Per-axis tests.",
+    "parent": "ddx-64b9a198",
+    "labels": [
+      "phase:2",
+      "story:11",
+      "area:server",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T06:07:06Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4025192",
+      "execute-loop-heartbeat-at": "2026-05-03T06:07:06.639614394Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T060706-03afb7f5",
+    "prompt": ".ddx/executions/20260503T060706-03afb7f5/prompt.md",
+    "manifest": ".ddx/executions/20260503T060706-03afb7f5/manifest.json",
+    "result": ".ddx/executions/20260503T060706-03afb7f5/result.json",
+    "checks": ".ddx/executions/20260503T060706-03afb7f5/checks.json",
+    "usage": ".ddx/executions/20260503T060706-03afb7f5/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2bb01b91-20260503T060706-03afb7f5"
+  },
+  "prompt_sha": "12ea68f3211787c726d9238a88035358f8139a1c2e90078c626af9f6afdb460c"
+}
