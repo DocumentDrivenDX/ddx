@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260503T031033-db2e1f2e",
+  "bead_id": "ddx-cfedee8e",
+  "base_rev": "888d46dcb75d95b81fceb11e8c1c6266ff39172a",
+  "created_at": "2026-05-03T03:10:34.870837976Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cfedee8e",
+    "title": "escalation: wire ladder into executor closure; drop tier→profile mutation",
+    "description": "Wire the ladder (S10_2) into singleTierAttempt / executor closure in execute_bead_loop.go. Drop the existing tier→profile mutation; ladder owns escalation. Currently each bead gets exactly one singleTierAttempt; this bead replaces that with a real loop that reads RoutingActual.Power from each attempt's response and bumps MinPower per the ladder for the next call. Also pass Role + CorrelationID on every ExecuteRequest (CorrelationID = bead_id:attempt_id; Role = 'implementer' for the implementation calls).",
+    "acceptance": "1. execute_bead_loop.go uses ladder.Next on substantive failure. 2. Existing tier→profile mutation removed. 3. Each call carries Role + CorrelationID. 4. Tests in zero_config_escalation_integration_test.go (or new) exercise actual escalation, not just primitives.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:routing",
+      "kind:refactor"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:10:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T20:54:45.718685656Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "exit status 1\nresult_rev=a369a19505fbb456e581e926af2bc8b02c1d0115\nbase_rev=a369a19505fbb456e581e926af2bc8b02c1d0115\nretry_after=2026-05-03T02:54:46Z",
+          "created_at": "2026-05-02T20:54:46.230703056Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T03:10:33.500082986Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-03T02:54:46Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031033-db2e1f2e",
+    "prompt": ".ddx/executions/20260503T031033-db2e1f2e/prompt.md",
+    "manifest": ".ddx/executions/20260503T031033-db2e1f2e/manifest.json",
+    "result": ".ddx/executions/20260503T031033-db2e1f2e/result.json",
+    "checks": ".ddx/executions/20260503T031033-db2e1f2e/checks.json",
+    "usage": ".ddx/executions/20260503T031033-db2e1f2e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-cfedee8e-20260503T031033-db2e1f2e"
+  },
+  "prompt_sha": "992490994b0a2facf6a8a5f3a9fefdc2d4a804bae90e146ba50d58914933d359"
+}
