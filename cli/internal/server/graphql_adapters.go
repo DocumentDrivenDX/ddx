@@ -111,7 +111,10 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 		req.Profile = "default"
 	}
 
-	var pollInterval time.Duration
+	// Default poll-interval = 30s for server-managed workers (ddx-dc157075).
+	// Operators wanting drain-and-exit semantics must pass --once or an
+	// explicit poll_interval=0 in the dispatch payload.
+	pollInterval := 30 * time.Second
 	if req.PollInterval != "" {
 		d, err := time.ParseDuration(req.PollInterval)
 		if err != nil {

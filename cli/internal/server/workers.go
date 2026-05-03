@@ -106,9 +106,15 @@ type WorkerLifecycleEvent struct {
 }
 
 type WorkerRecord struct {
-	ID             string                 `json:"id"`
-	Kind           string                 `json:"kind"`
-	State          string                 `json:"state"`
+	ID    string `json:"id"`
+	Kind  string `json:"kind"`
+	State string `json:"state"`
+	// Substate is a non-terminal annotation on a running worker. Currently
+	// the only value is "idle" — set when the long-running drain loop has
+	// no ready work and is sleeping between polls (ddx-dc157075 AC #5).
+	// Cleared as soon as the loop picks up a candidate. Always empty for
+	// terminal states (exited/failed/stopped/reaped).
+	Substate       string                 `json:"substate,omitempty"`
 	Status         string                 `json:"status,omitempty"`
 	ProjectRoot    string                 `json:"project_root"`
 	Harness        string                 `json:"harness,omitempty"`
@@ -801,6 +807,9 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		preservedState = record.State
 	}
 	record.FinishedAt = time.Now().UTC()
+	// Terminal worker: clear any "idle" substate (ddx-dc157075 AC #5; substate
+	// is only meaningful while the worker is running).
+	record.Substate = ""
 	_ = handle.logFile.Close()
 
 	if err != nil {
@@ -1307,6 +1316,23 @@ func (m *WorkerManager) drainProgress(workerID string, handle *workerHandle, ch 
 	for evt := range ch {
 		m.mu.Lock()
 		rec := handle.record
+
+		// Substate signals (ddx-dc157075 AC #5). loop.idle marks the worker as
+		// "idle" without disturbing CurrentAttempt; loop.active clears it when
+		// the loop picks up the next candidate. These are not real attempt
+		// phases, so they bypass the normal RecentPhases / CurrentAttempt path.
+		switch evt.Phase {
+		case "loop.idle":
+			rec.Substate = "idle"
+			handle.record = rec
+			m.mu.Unlock()
+			continue
+		case "loop.active":
+			rec.Substate = ""
+			handle.record = rec
+			m.mu.Unlock()
+			continue
+		}
 
 		if !evt.Heartbeat {
 			// Phase-transition: record in RecentPhases (capped at maxRecentPhases)

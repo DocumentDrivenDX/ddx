@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260502T231414-92c45184",
+  "bead_id": "ddx-23c67ca4",
+  "base_rev": "5d56ecd9da1a06295b6d117d2ed402d0c4e86c19",
+  "created_at": "2026-05-02T23:14:15.751537464Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-23c67ca4",
+    "title": "S15-5: Execute-loop wake-on-approve + origin_operator_prompt_id backlinks",
+    "description": "On operatorPromptSubmit (auto-approve) or operatorPromptApprove, signal local execute-loop coordinator to claim immediately. During execution, every bead created/changed and every artifact written by the operator-prompt bead's harness gets an origin_operator_prompt_id event/back-link recorded. See /tmp/story-15-final.md §Implementation #2 (signal) and §Additional security controls bullet 6.",
+    "acceptance": "Execute-loop wakes on approve event without waiting for next tick; e2e: submit prompt with sentinel-writing harness → bead lands change in worktree → bead-event records diff; affected beads carry origin_operator_prompt_id event referencing originator; concurrency test: two operator prompts mutating same bead exercises land-coordinator conflict path with no silent corruption.",
+    "parent": "ddx-1d85c927",
+    "labels": [
+      "phase:2",
+      "story:15",
+      "kind:execute-loop"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-02T23:14:14Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4025192",
+      "execute-loop-heartbeat-at": "2026-05-02T23:14:14.438103933Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260502T231414-92c45184",
+    "prompt": ".ddx/executions/20260502T231414-92c45184/prompt.md",
+    "manifest": ".ddx/executions/20260502T231414-92c45184/manifest.json",
+    "result": ".ddx/executions/20260502T231414-92c45184/result.json",
+    "checks": ".ddx/executions/20260502T231414-92c45184/checks.json",
+    "usage": ".ddx/executions/20260502T231414-92c45184/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-23c67ca4-20260502T231414-92c45184"
+  },
+  "prompt_sha": "71e91ea247eac2c7dc75eb3b9b52d2871bd9cf7adf96d91203574fc32801ac66"
+}

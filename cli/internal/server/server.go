@@ -2294,7 +2294,10 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		projectRoot = resolved
 	}
 
-	var pollInterval time.Duration
+	// Default poll-interval = 30s for server-managed workers (ddx-dc157075).
+	// Operators wanting drain-and-exit semantics must pass --once or an
+	// explicit poll_interval=0 in the dispatch payload.
+	pollInterval := 30 * time.Second
 	if strings.TrimSpace(req.PollInterval) != "" {
 		d, err := time.ParseDuration(req.PollInterval)
 		if err != nil {
@@ -4690,7 +4693,25 @@ func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "graphql is localhost-only"})
 		return
 	}
-	// Create gqlgen server with the DDX GraphQL schema
+	s.serveGraphQL(w, r, s.WorkingDir)
+}
+
+// handleGraphQLQueryScoped serves /api/projects/{project}/graphql. The
+// projectScoped middleware has already resolved {project} into the request
+// context (or written 404 if unknown). LAYER 1 of the GraphQL multi-project
+// fix: per-request resolver reconstruction with the resolved project's
+// WorkingDir, so DocumentByPath and friends do not leak across projects.
+// Closes ddx-4c51d33e.
+func (s *Server) handleGraphQLQueryScoped(w http.ResponseWriter, r *http.Request) {
+	dir := s.workingDirForRequest(r)
+	s.serveGraphQL(w, r, dir)
+}
+
+// serveGraphQL builds a fresh gqlgen handler whose Resolver is rooted at
+// workingDir and serves the request through it. Constructed per request so
+// LAYER 1's scoped route can isolate each project's WorkingDir without the
+// deeper context-threading refactor (deferred to LAYER 2 / ddx-055e8d32).
+func (s *Server) serveGraphQL(w http.ResponseWriter, r *http.Request, workingDir string) {
 	var fedProvider ddxgraphql.FederationProvider
 	if s.hub != nil {
 		fedProvider = newHubFederationProvider(s)
@@ -4698,11 +4719,11 @@ func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
 	gqlServer := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
 		Resolvers: &ddxgraphql.Resolver{
 			State:                              s.state,
-			WorkingDir:                         s.WorkingDir,
+			WorkingDir:                         workingDir,
 			Workers:                            s.workers,
 			BeadBus:                            s.beadHub,
 			Actions:                            &workerDispatchAdapter{manager: s.workers},
-			ExecLogs:                           &execLogAdapter{workingDir: s.WorkingDir},
+			ExecLogs:                           &execLogAdapter{workingDir: workingDir},
 			CoordMetrics:                       &coordMetricsAdapter{reg: s.workers.LandCoordinators},
 			CSRFTokens:                         s.csrfTokens,
 			OperatorPromptIdempotency:          s.operatorPromptIdempotency,

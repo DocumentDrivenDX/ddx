@@ -404,12 +404,18 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		"assignee":     assignee,
 		"once":         runtime.Once,
 	})
+	// exitReason is populated as the loop exits to surface a structured reason
+	// in the loop.end event (ddx-dc157075 AC #4). Recognized values: "sigterm",
+	// "sigint", "fatal_config", "once_complete", "explicit_poll_zero". The
+	// "providers_exhausted" slot is reserved for ddx-aede917d (quota pause).
+	exitReason := ""
 	defer func() {
 		emit("loop.end", map[string]any{
 			"attempts":            result.Attempts,
 			"successes":           result.Successes,
 			"failures":            result.Failures,
 			"last_failure_status": result.LastFailureStatus,
+			"exit_reason":         exitReason,
 		})
 	}()
 
@@ -419,11 +425,22 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		// the idle poll sleep — the loop would happily claim the next ready
 		// bead as soon as the current Execute returned, ignoring the cancel.
 		if err := ctx.Err(); err != nil {
+			if exitReason == "" {
+				switch err {
+				case context.Canceled:
+					exitReason = "sigint"
+				case context.DeadlineExceeded:
+					exitReason = "sigterm"
+				default:
+					exitReason = "context_cancelled"
+				}
+			}
 			return result, err
 		}
 
 		candidate, skips, ok, err := w.nextCandidate(attempted, runtime.LabelFilter)
 		if err != nil {
+			exitReason = "fatal_config"
 			return result, err
 		}
 		// Diagnostic: when nextCandidate selected a lower-priority bead while
@@ -452,13 +469,78 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 			}
 			if runtime.PollInterval <= 0 {
+				// Legacy "drain-and-exit" semantics: operator either passed
+				// --once (handled at end-of-iteration) or explicitly set
+				// --poll-interval=0. ddx-dc157075: with default --poll-interval
+				// flipped to 30s in CLI/server, this path now only fires for
+				// the explicit opt-out case.
+				if runtime.Once {
+					exitReason = "once_complete"
+				} else {
+					exitReason = "explicit_poll_zero"
+				}
 				return result, nil
 			}
+			// Long-running drain (poll-interval > 0): emit a transient
+			// "no_ready_work" event so server-managed workers can surface this
+			// as an idle substate (ddx-dc157075 AC #5) instead of treating it
+			// as terminal.
+			emit("loop.idle", map[string]any{
+				"reason":        "no_ready_work",
+				"poll_interval": runtime.PollInterval.String(),
+			})
+			// Surface the idle substate via the progress channel so server-side
+			// drainProgress can flip WorkerRecord.Substate to "idle" without
+			// reading the JSONL event log. Phase="loop.idle" is treated as a
+			// substate signal, not a per-bead attempt phase.
+			emitProgress(runtime.ProgressCh, ProgressEvent{
+				EventID:   "evt-" + randomProgressID(),
+				WorkerID:  runtime.WorkerID,
+				ProjectID: runtime.ProjectRoot,
+				Phase:     "loop.idle",
+				Heartbeat: true,
+				TS:        now().UTC(),
+				Message:   "no_ready_work",
+			})
+			// Reset per-Run attempted/hookFailed maps before sleeping
+			// (ddx-dc157075 AC #2). Without this reset, beads attempted earlier
+			// in this Run remain filtered out of nextCandidate forever, so the
+			// "attempted-once = exit" trap reasserts itself: a bead whose
+			// cooldown has expired since its last attempt would never be
+			// re-picked by the same long-running worker.
+			for k := range attempted {
+				delete(attempted, k)
+			}
+			for k := range hookFailed {
+				delete(hookFailed, k)
+			}
 			if err := sleepWithContext(ctx, runtime.PollInterval); err != nil {
+				if exitReason == "" {
+					switch err {
+					case context.Canceled:
+						exitReason = "sigint"
+					case context.DeadlineExceeded:
+						exitReason = "sigterm"
+					default:
+						exitReason = "context_cancelled"
+					}
+				}
 				return result, err
 			}
 			continue
 		}
+
+		// Found a candidate: clear any "idle" substate set on the previous
+		// no-candidate iteration (ddx-dc157075 AC #5).
+		emitProgress(runtime.ProgressCh, ProgressEvent{
+			EventID:   "evt-" + randomProgressID(),
+			WorkerID:  runtime.WorkerID,
+			ProjectID: runtime.ProjectRoot,
+			BeadID:    candidate.ID,
+			Phase:     "loop.active",
+			Heartbeat: true,
+			TS:        now().UTC(),
+		})
 
 		// Pre-claim hook: fetch origin + verify ancestry before claiming.
 		// On error the bead is skipped for this iteration; the loop
@@ -499,7 +581,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				detail := fmt.Sprintf("routing preflight rejected (harness=%s model=%s): %s",
 					harness, model, rerr.Error())
 				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "routing preflight: %s (skipping %s, exiting loop)\n",
+					_, _ = fmt.Fprintf(runtime.Log, "routing preflight: %s (skipping %s)\n",
 						detail, candidate.ID)
 				}
 				emit("preflight.rejected", map[string]any{
@@ -519,7 +601,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				result.Failures++
 				result.LastFailureStatus = report.Status
 				result.Results = append(result.Results, report)
-				return result, nil
+				// ddx-dc157075 AC #3: do NOT abandon the rest of the queue on
+				// a single bead's preflight rejection. Continue to the next
+				// candidate. If --once was requested we still honour it.
+				if runtime.Once {
+					exitReason = "once_complete"
+					return result, nil
+				}
+				continue
 			}
 		}
 
@@ -1158,6 +1247,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 
 		if runtime.Once {
+			exitReason = "once_complete"
 			return result, nil
 		}
 	}
