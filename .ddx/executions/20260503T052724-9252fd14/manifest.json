@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T052724-9252fd14",
+  "bead_id": "ddx-6aedf547",
+  "base_rev": "55972567fe3489d95eca6eb5600b0e539c5b6624",
+  "created_at": "2026-05-03T05:27:25.976163824Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6aedf547",
+    "title": "runs: runRequeue mutation with mandatory idempotencyKey + atomic claims",
+    "description": "GraphQL mutation runRequeue (input: runId, idempotencyKey, optional layer override). Atomic: detects duplicate keys; refuses to enqueue duplicate. Audit-logged with operator identity.",
+    "acceptance": "1. runRequeue mutation in schema. 2. idempotencyKey REQUIRED. 3. Duplicate-key returns existing requeued bead, not error. 4. Audit event on the originating bead. 5. Tests cover concurrent re-queue with same key.",
+    "parent": "ddx-723d93f2",
+    "labels": [
+      "phase:2",
+      "story:8",
+      "area:server",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T05:27:24Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T05:27:24.501854854Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T052724-9252fd14",
+    "prompt": ".ddx/executions/20260503T052724-9252fd14/prompt.md",
+    "manifest": ".ddx/executions/20260503T052724-9252fd14/manifest.json",
+    "result": ".ddx/executions/20260503T052724-9252fd14/result.json",
+    "checks": ".ddx/executions/20260503T052724-9252fd14/checks.json",
+    "usage": ".ddx/executions/20260503T052724-9252fd14/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6aedf547-20260503T052724-9252fd14"
+  },
+  "prompt_sha": "4364ada91d055cc9ffd5d62c9c6fdd5d65c8a3b129580f457dfaf258adad9969"
+}

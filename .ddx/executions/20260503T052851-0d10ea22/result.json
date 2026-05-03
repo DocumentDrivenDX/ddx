@@ -1,0 +1,48 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "AC #6 now satisfied: TestServerIngestion_RealWorkerCanRegister added in commit 23fdaefb spawns a real subprocess POSTing to /api/workers/register via httptest.Server and asserts the in-memory registry. Other ACs previously confirmed implemented.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Wired-in subprocess integration test added, exercising production HTTP path with real TCP client.",
+      "location": "cli/internal/server/worker_ingest_test.go"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1644,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T052048-9cafd33a/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1176,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 4554,
+    "output_bytes": 540,
+    "elapsed_ms": 73853,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
