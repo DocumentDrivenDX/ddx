@@ -7,7 +7,15 @@
 	import type { RunEdge, RunNode, RunConnection, PageInfo } from './+page'
 	import { RunRowDetail } from '$lib/runDetail'
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte'
+	import FilterChip from '$lib/components/FilterChip.svelte'
 	import { RUN_REQUEUE_MUTATION, WORKER_DISPATCH_MUTATION } from '$lib/gql/feat008'
+
+	// Threshold above which the runs table opts into browser-native row
+	// windowing via `content-visibility: auto`. Keeps DOM semantics, table
+	// layout, row expansion, and any future live worker phase subscriptions
+	// intact — the browser simply skips rendering off-screen rows.
+	const VIRTUALIZE_THRESHOLD = 1000
+	const VIRTUAL_ROW_HEIGHT_PX = 49
 
 	let { data }: { data: PageData } = $props()
 
@@ -144,6 +152,13 @@
 	let edges = $derived([...data.runs.edges, ...appendedEdges])
 	let pageInfo = $derived<PageInfo>(appendedPageInfo ?? data.runs.pageInfo)
 
+	let virtualized = $derived(edges.length >= VIRTUALIZE_THRESHOLD)
+	let rowStyle = $derived(
+		virtualized
+			? `content-visibility: auto; contain-intrinsic-size: 0 ${VIRTUAL_ROW_HEIGHT_PX}px;`
+			: ''
+	)
+
 	const LAYER_OPTIONS = ['work', 'try', 'run']
 	const STATUS_OPTIONS = ['pending', 'running', 'success', 'failure', 'preserved']
 
@@ -240,11 +255,6 @@
 		}
 	}
 
-	function chipClass(active: boolean): string {
-		return active
-			? 'rounded-sm border px-3 py-1 text-xs font-medium border-accent-lever bg-accent-lever/10 text-accent-lever dark:border-dark-accent-lever dark:bg-dark-accent-lever/20 dark:text-dark-accent-lever'
-			: 'rounded-sm border px-3 py-1 text-xs font-medium border-border-line bg-bg-elevated text-fg-ink hover:border-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface'
-	}
 </script>
 
 <div class="space-y-4">
@@ -256,38 +266,46 @@
 	</div>
 
 	<!-- Layer filter chips -->
-	<div class="flex flex-wrap gap-2">
-		<span class="self-center text-xs text-fg-muted dark:text-dark-fg-muted">Layer:</span>
+	<div class="flex flex-wrap gap-2" data-testid="layer-chips">
+		<span class="self-center font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted">Layer</span>
 		{#each LAYER_OPTIONS as layer}
-			<button class={chipClass(data.activeLayer === layer)} onclick={() => toggleLayer(layer)}>
-				{layer}
-			</button>
+			<FilterChip
+				label={layer}
+				testid="layer-chip-{layer}"
+				active={data.activeLayer === layer}
+				ariaPressed={data.activeLayer === layer}
+				onclick={() => toggleLayer(layer)}
+			/>
 		{/each}
 		{#if data.activeLayer}
-			<button
-				class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1 text-xs text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
-				onclick={() => setFilter('layer', null)}
-			>
+			<FilterChip
+				label="Clear"
+				testid="layer-chip-clear"
 				clear
-			</button>
+				onclick={() => setFilter('layer', null)}
+			/>
 		{/if}
 	</div>
 
 	<!-- Status filter chips -->
-	<div class="flex flex-wrap gap-2">
-		<span class="self-center text-xs text-fg-muted dark:text-dark-fg-muted">Status:</span>
+	<div class="flex flex-wrap gap-2" data-testid="status-chips">
+		<span class="self-center font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted">Status</span>
 		{#each STATUS_OPTIONS as status}
-			<button class={chipClass(data.activeStatus === status)} onclick={() => toggleStatus(status)}>
-				{status}
-			</button>
+			<FilterChip
+				label={status}
+				testid="status-chip-{status}"
+				active={data.activeStatus === status}
+				ariaPressed={data.activeStatus === status}
+				onclick={() => toggleStatus(status)}
+			/>
 		{/each}
 		{#if data.activeStatus}
-			<button
-				class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1 text-xs text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
-				onclick={() => setFilter('status', null)}
-			>
+			<FilterChip
+				label="Clear"
+				testid="status-chip-clear"
 				clear
-			</button>
+				onclick={() => setFilter('status', null)}
+			/>
 		{/if}
 	</div>
 
@@ -326,7 +344,11 @@
 		{/if}
 	</form>
 
-	<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
+	<div
+		class="overflow-hidden border border-border-line dark:border-dark-border-line"
+		data-testid="runs-table"
+		data-virtualized={virtualized ? 'true' : 'false'}
+	>
 		<table class="w-full text-sm">
 			<thead>
 				<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
@@ -348,6 +370,7 @@
 							? 'bg-accent-lever/10 dark:bg-dark-accent-lever/10'
 							: ''}"
 						data-run-row={edge.node.id}
+						style={rowStyle}
 						onclick={() => toggleExpand(edge.node.id)}
 					>
 						<td class="px-4 py-3 text-body-sm text-fg-muted dark:text-dark-fg-muted">

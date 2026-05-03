@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation'
 	import { Search } from 'lucide-svelte'
 	import { createClient } from '$lib/gql/client'
+	import FilterChip from '$lib/components/FilterChip.svelte'
 	import {
 		ARTIFACTS_QUERY,
 		PAGE_SIZE,
@@ -253,15 +254,11 @@
 	<!-- Filter chips -->
 	<div class="flex flex-wrap gap-2" data-testid="media-type-chips">
 		{#each MEDIA_TYPES as chip}
-			{@const active = chip.value === data.mediaType}
-			<button
+			<FilterChip
+				label={chip.label}
+				active={chip.value === data.mediaType}
 				onclick={() => selectMediaType(chip.value)}
-				class="rounded-full px-3 py-1 font-label-caps text-label-caps uppercase transition-colors {active
-					? 'bg-accent-lever text-white dark:bg-dark-accent-lever'
-					: 'bg-bg-surface text-fg-muted hover:bg-bg-elevated hover:text-fg-ink dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink'}"
-			>
-				{chip.label}
-			</button>
+			/>
 		{/each}
 	</div>
 
@@ -270,25 +267,21 @@
 		<span class="self-center font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted">Staleness</span>
 		{#each STALENESS_OPTIONS as value}
 			{@const active = data.staleness === value}
-			<button
-				data-testid="staleness-chip-{value}"
-				aria-pressed={active}
+			<FilterChip
+				label={value}
+				testid="staleness-chip-{value}"
+				active={active}
+				ariaPressed={active}
 				onclick={() => selectStaleness(value)}
-				class="rounded-full px-3 py-1 font-label-caps text-label-caps uppercase transition-colors {active
-					? 'bg-accent-lever text-white dark:bg-dark-accent-lever'
-					: 'bg-bg-surface text-fg-muted hover:bg-bg-elevated hover:text-fg-ink dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink'}"
-			>
-				{value}
-			</button>
+			/>
 		{/each}
 		{#if data.staleness}
-			<button
-				data-testid="staleness-chip-clear"
+			<FilterChip
+				label="Clear"
+				testid="staleness-chip-clear"
+				clear
 				onclick={() => selectStaleness(null)}
-				class="rounded-full px-3 py-1 font-label-caps text-label-caps uppercase text-fg-muted hover:text-fg-ink dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
-			>
-				Clear
-			</button>
+			/>
 		{/if}
 	</div>
 
@@ -297,25 +290,21 @@
 		<span class="self-center font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted">Phase</span>
 		{#each PHASE_OPTIONS as opt}
 			{@const active = data.phase === opt.value}
-			<button
-				data-testid="phase-chip-{opt.value}"
-				aria-pressed={active}
+			<FilterChip
+				label={opt.label}
+				testid="phase-chip-{opt.value}"
+				active={active}
+				ariaPressed={active}
 				onclick={() => selectPhase(opt.value)}
-				class="rounded-full px-3 py-1 font-label-caps text-label-caps uppercase transition-colors {active
-					? 'bg-accent-lever text-white dark:bg-dark-accent-lever'
-					: 'bg-bg-surface text-fg-muted hover:bg-bg-elevated hover:text-fg-ink dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink'}"
-			>
-				{opt.label}
-			</button>
+			/>
 		{/each}
 		{#if data.phase}
-			<button
-				data-testid="phase-chip-clear"
+			<FilterChip
+				label="Clear"
+				testid="phase-chip-clear"
+				clear
 				onclick={() => selectPhase(null)}
-				class="rounded-full px-3 py-1 font-label-caps text-label-caps uppercase text-fg-muted hover:text-fg-ink dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
-			>
-				Clear
-			</button>
+			/>
 		{/if}
 	</div>
 
@@ -324,25 +313,21 @@
 		<span class="self-center font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted">Prefix</span>
 		{#each PREFIX_OPTIONS as p}
 			{@const active = (data.prefix ?? []).includes(p)}
-			<button
-				data-testid="prefix-chip-{p}"
-				aria-pressed={active}
+			<FilterChip
+				label={p}
+				testid="prefix-chip-{p}"
+				active={active}
+				ariaPressed={active}
 				onclick={() => togglePrefix(p)}
-				class="rounded-full px-3 py-1 font-label-caps text-label-caps uppercase transition-colors {active
-					? 'bg-accent-lever text-white dark:bg-dark-accent-lever'
-					: 'bg-bg-surface text-fg-muted hover:bg-bg-elevated hover:text-fg-ink dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink'}"
-			>
-				{p}
-			</button>
+			/>
 		{/each}
 		{#if data.prefix && data.prefix.length > 0}
-			<button
-				data-testid="prefix-chip-clear"
+			<FilterChip
+				label="Clear"
+				testid="prefix-chip-clear"
+				clear
 				onclick={() => navigateWith({ prefix: [] })}
-				class="rounded-full px-3 py-1 font-label-caps text-label-caps uppercase text-fg-muted hover:text-fg-ink dark:text-dark-fg-muted dark:hover:text-dark-fg-ink"
-			>
-				Clear
-			</button>
+			/>
 		{/if}
 	</div>
 

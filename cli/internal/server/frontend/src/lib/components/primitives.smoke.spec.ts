@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import ConfirmDialog from './ConfirmDialog.svelte';
+import FilterChip from './FilterChip.svelte';
 import Tooltip from './Tooltip.svelte';
 import TypedConfirmDialog, { typedConfirmMatches } from './TypedConfirmDialog.svelte';
 
@@ -8,6 +9,7 @@ describe('shared UI primitives', () => {
 		expect(ConfirmDialog).toBeTruthy();
 		expect(TypedConfirmDialog).toBeTruthy();
 		expect(Tooltip).toBeTruthy();
+		expect(FilterChip).toBeTruthy();
 	});
 
 	it('gates typed confirmation on an exact expected text match', () => {
