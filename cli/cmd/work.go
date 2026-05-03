@@ -92,5 +92,5 @@ work runs inline in the current process; per ADR-022 there is no separate
 // branch on those values. Retry-power policy (min-power / max-power) is owned
 // by this layer.
 func (f *CommandFactory) runWork(cmd *cobra.Command, args []string) error {
-	return f.runAgentExecuteLoopImpl(cmd, true)
+	return f.runAgentExecuteLoopImpl(cmd, true, "")
 }

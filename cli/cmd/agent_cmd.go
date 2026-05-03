@@ -1586,7 +1586,7 @@ is registered with the server (run "ddx server" from that directory, or use
 }
 
 func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) error {
-	return f.runAgentExecuteLoopImpl(cmd, false)
+	return f.runAgentExecuteLoopImpl(cmd, false, "")
 }
 
 // hostnameOrEmpty returns os.Hostname() or "" on error. Used to populate
@@ -1606,7 +1606,7 @@ func hostnameOrEmpty() string {
 // ValidateForExecuteLoopViaService is not called; DDx does not inspect or
 // branch on their values. When false (ddx agent execute-loop path), the
 // pre-flight validation gate runs first.
-func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassthroughAsOpaque bool) error {
+func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassthroughAsOpaque bool, tryTargetBeadID string) error {
 	projectFlag, _ := cmd.Flags().GetString("project")
 	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
 	fromRev, _ := cmd.Flags().GetString("from")
@@ -1618,6 +1618,11 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	effort, _ := cmd.Flags().GetString("effort")
 	once, _ := cmd.Flags().GetBool("once")
 	pollInterval, _ := cmd.Flags().GetDuration("poll-interval")
+	if tryTargetBeadID != "" {
+		// `ddx try <bead-id>` is a single-bead one-shot: target one bead and
+		// exit after one attempt regardless of CLI flag state.
+		once = true
+	}
 	asJSON, _ := cmd.Flags().GetBool("json")
 	noReview, _ := cmd.Flags().GetBool("no-review")
 	reviewHarness, _ := cmd.Flags().GetString("review-harness")
@@ -1918,10 +1923,15 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		SessionID:    loopSessionID,
 		PreClaimHook: buildCLIPreClaimHook(projectRoot, cliLandingOps),
 		NoReview:     noReview,
+		TargetBeadID: tryTargetBeadID,
 	})
 	tailCancel() // stop session log tailer
 	if err != nil {
 		return err
+	}
+
+	if tryTargetBeadID != "" {
+		return formatTryResult(cmd, projectRoot, tryTargetBeadID, result, asJSON)
 	}
 
 	if asJSON {

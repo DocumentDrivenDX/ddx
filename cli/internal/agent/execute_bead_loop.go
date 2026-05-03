@@ -41,6 +41,11 @@ type ExecuteBeadLoopRuntime struct {
 	SessionID      string
 	WorkerID       string
 	ProjectRoot    string
+	// TargetBeadID, when non-empty, restricts nextCandidate to only return the
+	// named bead from the execution-ready queue. Used by `ddx try <bead-id>`
+	// to dispatch a single specific bead through the same claim → executor →
+	// land path the queue drain uses. When empty, the picker behaves normally.
+	TargetBeadID string
 	// WakeCh, when non-nil, signals the idle-poll sleep to return immediately
 	// so the loop re-scans the queue. Used by the operator-prompt approve /
 	// auto-approve mutations (Story 15) to avoid a poll-interval-sized delay
@@ -459,7 +464,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			return result, err
 		}
 
-		candidate, skips, ok, err := w.nextCandidate(attempted, runtime.LabelFilter)
+		candidate, skips, ok, err := w.nextCandidate(attempted, runtime.LabelFilter, runtime.TargetBeadID)
 		if err != nil {
 			exitReason = "fatal_config"
 			return result, err
