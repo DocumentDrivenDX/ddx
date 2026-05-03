@@ -38,7 +38,7 @@ func seedReviewErrorEvents(t *testing.T, store *bead.Store, beadID, resultRev, c
 		require.NoError(t, store.AppendEvent(beadID, bead.BeadEvent{
 			Kind:      "review-error",
 			Summary:   class,
-			Body:      reviewErrorEventBody(class, i+1, resultRev, "prior failure"),
+			Body:      ReviewErrorEventBody(class, i+1, resultRev, "prior failure"),
 			Actor:     "worker",
 			Source:    "ddx agent execute-loop",
 			CreatedAt: time.Now().UTC(),
@@ -127,7 +127,7 @@ func TestBoundedReviewRetry_FreshResultRevResetsCounter(t *testing.T) {
 	require.NoError(t, store.AppendEvent(first.ID, bead.BeadEvent{
 		Kind:    "review-manual-required",
 		Summary: evidence.OutcomeReviewTransport,
-		Body:    reviewErrorEventBody(evidence.OutcomeReviewTransport, 3, oldRev, "exhausted"),
+		Body:    ReviewErrorEventBody(evidence.OutcomeReviewTransport, 3, oldRev, "exhausted"),
 		Actor:   "worker",
 		Source:  "ddx agent execute-loop",
 	}))

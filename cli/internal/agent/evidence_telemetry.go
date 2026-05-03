@@ -49,10 +49,10 @@ func formatEventBodySummary(s EventBodySummary) string {
 	return b.String()
 }
 
-// appendEventSummary returns body with the canonical summary appended, joined
+// AppendEventSummary returns body with the canonical summary appended, joined
 // by a blank line so the head of the body (verdict, failure class) remains the
 // first line.
-func appendEventSummary(body string, s EventBodySummary) string {
+func AppendEventSummary(body string, s EventBodySummary) string {
 	summary := formatEventBodySummary(s)
 	if body == "" {
 		return summary

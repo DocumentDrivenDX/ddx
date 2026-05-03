@@ -20,7 +20,7 @@ func TestPersistReviewerStream_WritesToBundle(t *testing.T) {
 
 	stream := strings.Repeat("S", 2*1024*1024) // 2MB reviewer stream
 
-	rel, err := persistReviewerStream(projectRoot, beadID, attemptID, stream)
+	rel, err := PersistReviewerStream(projectRoot, beadID, attemptID, stream)
 	require.NoError(t, err)
 	require.NotEmpty(t, rel)
 
@@ -39,7 +39,7 @@ func TestPersistReviewerStream_WritesToBundle(t *testing.T) {
 func TestPersistReviewerStream_FallbackWhenAttemptMissing(t *testing.T) {
 	projectRoot := t.TempDir()
 
-	rel, err := persistReviewerStream(projectRoot, "ddx-test", "", "verdict text")
+	rel, err := PersistReviewerStream(projectRoot, "ddx-test", "", "verdict text")
 	require.NoError(t, err)
 	require.NotEmpty(t, rel)
 	assert.Contains(t, rel, filepath.Join(".ddx", "executions", "reviewer-streams"),
@@ -57,7 +57,7 @@ func TestReviewEventBody_CapsAtMax(t *testing.T) {
 	rationale := strings.Repeat("A very long first line of rationale that must be truncated. ", 200)
 	artifactPath := ".ddx/executions/20260420T150000-abc123/reviewer-stream.log"
 
-	body := reviewEventBody("APPROVE", rationale, artifactPath)
+	body := ReviewEventBody("APPROVE", rationale, artifactPath)
 
 	assert.LessOrEqual(t, len(body), maxReviewerEventBody,
 		"event body must never exceed the cap — downstream scanners and bd imports rely on per-field limits")
@@ -74,7 +74,7 @@ func TestReviewEventBody_CapsAtMax(t *testing.T) {
 func TestReviewEventBody_EmptyRationaleStillCarriesVerdictAndArtifact(t *testing.T) {
 	artifactPath := ".ddx/executions/20260420T150000-abc123/reviewer-stream.log"
 
-	body := reviewEventBody("BLOCK without rationale", "", artifactPath)
+	body := ReviewEventBody("BLOCK without rationale", "", artifactPath)
 
 	assert.Contains(t, body, "BLOCK without rationale")
 	assert.Contains(t, body, artifactPath,
@@ -86,7 +86,7 @@ func TestReviewEventBody_EmptyRationaleStillCarriesVerdictAndArtifact(t *testing
 // short rationale, we just skip the artifact line. Body must still be bounded.
 func TestReviewEventBody_NoArtifactPath_StillFits(t *testing.T) {
 	rationale := strings.Repeat("x", 5000)
-	body := reviewEventBody("APPROVE", rationale, "")
+	body := ReviewEventBody("APPROVE", rationale, "")
 
 	assert.LessOrEqual(t, len(body), maxReviewerEventBody)
 	assert.True(t, strings.HasPrefix(body, "APPROVE"))

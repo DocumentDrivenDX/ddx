@@ -109,10 +109,10 @@ func (w *ExecuteBeadWorker) handleOutcomeStoreError(ctx context.Context, beadID,
 	return true
 }
 
-// capLoopCooldown clamps a loop-set cooldown duration to MaxLoopCooldown.
+// CapLoopCooldown clamps a loop-set cooldown duration to MaxLoopCooldown.
 // The loop uses this for every SetExecutionCooldown call so no automatic
 // path can silently park a bead for a year.
-func capLoopCooldown(d time.Duration) time.Duration {
+func CapLoopCooldown(d time.Duration) time.Duration {
 	if d <= 0 {
 		return 0
 	}
@@ -810,201 +810,31 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					}
 				}
 			}
-			// Close the bead early when review is skipped. The closure gate
-			// (ddx-e30e60a9) accepts this path because closing_commit_sha is
-			// set and there is no malformed-APPROVE event to reject.
-			reviewApproved := true
-			reviewSkipped := w.Reviewer == nil || runtime.NoReview || HasBeadLabel(candidate.Labels, "review:skip")
-
-			if reviewSkipped {
-				if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
-					if w.handleOutcomeStoreError(ctx, candidate.ID, "CloseWithEvidence", err, assignee, result, runtime, now) {
-						continue
-					}
-					return result, ctx.Err()
+			// Post-merge review state machine (C3 ddx-a921ff01): the close /
+			// reopen / event-emission / triage logic now lives in
+			// try.RunPostMergeReview so the loop only sees a structured outcome
+			// (updated report + approved bool / Disposition). Store errors are
+			// surfaced via StoreErrOp/StoreErr so this loop continues to drive
+			// handleOutcomeStoreError unchanged.
+			reviewOut := RunPostMergeReview(ctx, PostMergeReviewInput{
+				Bead:        candidate,
+				Report:      report,
+				Reviewer:    w.Reviewer,
+				Store:       w.Store,
+				ProjectRoot: runtime.ProjectRoot,
+				Rcfg:        rcfg,
+				NoReview:    runtime.NoReview,
+				Log:         runtime.Log,
+				Assignee:    assignee,
+				Now:         now,
+			})
+			report = reviewOut.Report
+			reviewApproved := reviewOut.Approved
+			if reviewOut.StoreErr != nil {
+				if w.handleOutcomeStoreError(ctx, candidate.ID, reviewOut.StoreErrOp, reviewOut.StoreErr, assignee, result, runtime, now) {
+					continue
 				}
-			}
-
-			if w.Reviewer != nil && !runtime.NoReview && !HasBeadLabel(candidate.Labels, "review:skip") {
-				implRouting := ImplementerRouting{
-					Harness:     report.Harness,
-					Provider:    report.Provider,
-					Model:       report.Model,
-					ActualPower: report.ActualPower,
-					Correlation: map[string]string{
-						"bead_id":    candidate.ID,
-						"attempt_id": report.AttemptID,
-						"session_id": report.SessionID,
-						"result_rev": report.ResultRev,
-					},
-				}
-				reviewRes, reviewErr := w.Reviewer.ReviewBead(ctx, candidate.ID, report.ResultRev, implRouting)
-				if reviewErr != nil {
-					// FEAT-022 §12+§14: classify the failure into the four-class
-					// taxonomy and count prior review-error events scoped to the
-					// current result_rev. On the Nth failure emit a terminal
-					// review-manual-required event instead of yet another
-					// review-error, parking the bead so a subsequent loop
-					// iteration does NOT re-execute primary.
-					class := classifyReviewError(reviewErr, reviewRes)
-					prior := countPriorReviewErrors(w.Store, candidate.ID, report.ResultRev)
-					attemptCount := prior + 1
-					maxRetries := rcfg.ReviewMaxRetries()
-					if maxRetries <= 0 {
-						maxRetries = DefaultReviewMaxRetries
-					}
-					errSummary := EventBodySummary{
-						InputBytes:  0,
-						OutputBytes: 0,
-					}
-					if reviewRes != nil {
-						errSummary = EventBodySummary{
-							Harness:     reviewRes.ReviewerHarness,
-							Model:       reviewRes.ReviewerModel,
-							InputBytes:  reviewRes.InputBytes,
-							OutputBytes: reviewRes.OutputBytes,
-							ElapsedMS:   reviewRes.DurationMS,
-						}
-					}
-					if attemptCount >= maxRetries {
-						body := appendEventSummary(reviewErrorEventBody(class, attemptCount, report.ResultRev, reviewErr.Error()), errSummary)
-						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-							Kind:      "review-manual-required",
-							Summary:   class,
-							Body:      body,
-							Actor:     assignee,
-							Source:    "ddx agent execute-loop",
-							CreatedAt: now().UTC(),
-						})
-						// Park the bead with a long cooldown so subsequent
-						// loop iterations do NOT re-pick it for primary
-						// re-execution. Reviewer-failure invariant (§13) is
-						// preserved: the bead is NOT closed.
-						parkUntil := now().UTC().Add(capLoopCooldown(MaxLoopCooldown))
-						_ = w.Store.SetExecutionCooldown(candidate.ID, parkUntil, "review-manual-required", class)
-					} else {
-						body := appendEventSummary(reviewErrorEventBody(class, attemptCount, report.ResultRev, reviewErr.Error()), errSummary)
-						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-							Kind:      "review-error",
-							Summary:   class,
-							Body:      body,
-							Actor:     assignee,
-							Source:    "ddx agent execute-loop",
-							CreatedAt: now().UTC(),
-						})
-					}
-				} else {
-					report.ReviewVerdict = string(reviewRes.Verdict)
-					report.ReviewRationale = reviewRes.Rationale
-					// Persist the full reviewer stream as an artifact so the
-					// event body never carries the raw stream (ddx-f8a11202).
-					// On error the artifact path is empty and the event body
-					// still contains the short verdict summary; callers of this
-					// loop can recover the full text from the reviewer session
-					// log if the artifact write failed.
-					artifactPath, artifactErr := persistReviewerStream(runtime.ProjectRoot, candidate.ID, report.AttemptID, reviewRes.RawOutput)
-					if artifactErr != nil && runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "reviewer stream artifact: %v\n", artifactErr)
-					}
-
-					reviewSummary := EventBodySummary{
-						Harness:     reviewRes.ReviewerHarness,
-						Model:       reviewRes.ReviewerModel,
-						InputBytes:  reviewRes.InputBytes,
-						OutputBytes: reviewRes.OutputBytes,
-						ElapsedMS:   reviewRes.DurationMS,
-					}
-					switch reviewRes.Verdict {
-					case VerdictApprove:
-						// Approved: record the verdict event and then close.
-						// Closure must land AFTER the review event so the
-						// gate (ddx-e30e60a9) sees the terminal verdict.
-						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-							Kind:      "review",
-							Summary:   "APPROVE",
-							Body:      appendEventSummary(reviewEventBody("APPROVE", reviewRes.Rationale, artifactPath), reviewSummary),
-							Actor:     assignee,
-							Source:    "ddx agent execute-loop",
-							CreatedAt: now().UTC(),
-						})
-						if cerr := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); cerr != nil {
-							if w.handleOutcomeStoreError(ctx, candidate.ID, "CloseWithEvidence", cerr, assignee, result, runtime, now) {
-								continue
-							}
-							return result, ctx.Err()
-						}
-					case VerdictRequestChanges:
-						// Needs fixes: record the review verdict, then reopen
-						// with findings in notes. The review event must land
-						// even on non-approve paths so review-outcomes can
-						// attribute the rejection to the originating tier.
-						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-							Kind:      "review",
-							Summary:   "REQUEST_CHANGES",
-							Body:      appendEventSummary(reviewEventBody("REQUEST_CHANGES", reviewRes.Rationale, artifactPath), reviewSummary),
-							Actor:     assignee,
-							Source:    "ddx agent execute-loop",
-							CreatedAt: now().UTC(),
-						})
-						reopenNotes := reviewRes.Rationale
-						if reopenNotes == "" {
-							reopenNotes = reviewRes.RawOutput
-						}
-						if reopenErr := w.Store.Reopen(candidate.ID, "review: REQUEST_CHANGES", reopenNotes); reopenErr != nil {
-							if w.handleOutcomeStoreError(ctx, candidate.ID, "Reopen", reopenErr, assignee, result, runtime, now) {
-								continue
-							}
-							return result, ctx.Err()
-						}
-						report.Status = ExecuteBeadStatusReviewRequestChanges
-						report.Detail = "post-merge review: REQUEST_CHANGES"
-						reviewApproved = false
-					case VerdictBlock:
-						rationale := strings.TrimSpace(reviewRes.Rationale)
-						if rationale == "" {
-							_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-								Kind:      "review-malfunction",
-								Summary:   "BLOCK without rationale",
-								Body:      appendEventSummary(reviewEventBody("BLOCK without rationale", "", artifactPath), reviewSummary),
-								Actor:     assignee,
-								Source:    "ddx agent execute-loop",
-								CreatedAt: now().UTC(),
-							})
-							report.Status = ExecuteBeadStatusReviewMalfunction
-							report.Detail = "post-merge review: malformed BLOCK verdict (missing rationale)"
-							report.ReviewRationale = ""
-							reviewApproved = false
-							break
-						}
-						// Cannot proceed: record the verdict, then reopen and
-						// flag for human with BLOCK marker plus actionable rationale.
-						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-							Kind:      "review",
-							Summary:   "BLOCK",
-							Body:      appendEventSummary(rationale, reviewSummary),
-							Actor:     assignee,
-							Source:    "ddx agent execute-loop",
-							CreatedAt: now().UTC(),
-						})
-						blockNotes := "REVIEW:BLOCK\n\n" + rationale
-						if reopenErr := w.Store.Reopen(candidate.ID, "review: BLOCK", blockNotes); reopenErr != nil {
-							if w.handleOutcomeStoreError(ctx, candidate.ID, "Reopen", reopenErr, assignee, result, runtime, now) {
-								continue
-							}
-							return result, ctx.Err()
-						}
-						report.Status = ExecuteBeadStatusReviewBlock
-						report.Detail = "post-merge review: BLOCK (flagged for human)"
-						reviewApproved = false
-					}
-					// After the BLOCK / REQUEST_CHANGES branches have recorded
-					// their verdict event and reopened the bead, consult the
-					// triage policy for the next action (re-attempt, escalate
-					// tier, or needs_human).
-					if reviewRes.Verdict == VerdictBlock || reviewRes.Verdict == VerdictRequestChanges {
-						_ = w.applyReviewTriageDecision(candidate.ID, assignee, now().UTC(), report.Tier)
-					}
-				}
+				return result, ctx.Err()
 			}
 
 			if reviewApproved {
@@ -1131,7 +961,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					// Unresolved: suppress immediate retry so the queue can
 					// move on to other beads.
 					if shouldSuppressNoProgress(report) {
-						retryAfter := now().UTC().Add(capLoopCooldown(noProgressCooldown))
+						retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
 						if cerr := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); cerr != nil {
 							if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", cerr, assignee, result, runtime, now) {
 								continue
@@ -1176,7 +1006,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					Source:    "ddx agent execute-loop",
 					CreatedAt: now().UTC(),
 				})
-				parkUntil := now().UTC().Add(capLoopCooldown(MaxLoopCooldown))
+				parkUntil := now().UTC().Add(CapLoopCooldown(MaxLoopCooldown))
 				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
 					if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", err, assignee, result, runtime, now) {
 						continue
@@ -1192,7 +1022,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				// 24h cap so the loop re-attempts within a reasonable horizon.
 				// The push stderr in report.Detail is recorded as last_detail
 				// so it surfaces on the bead and on any direct claim attempt.
-				parkUntil := now().UTC().Add(capLoopCooldown(MaxLoopCooldown))
+				parkUntil := now().UTC().Add(CapLoopCooldown(MaxLoopCooldown))
 				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
 					if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", err, assignee, result, runtime, now) {
 						continue
@@ -1227,7 +1057,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					Source:    "ddx agent execute-loop",
 					CreatedAt: now().UTC(),
 				})
-				parkUntil := now().UTC().Add(capLoopCooldown(MaxLoopCooldown))
+				parkUntil := now().UTC().Add(CapLoopCooldown(MaxLoopCooldown))
 				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
 					if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", err, assignee, result, runtime, now) {
 						continue
@@ -1239,7 +1069,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				result.LastFailureStatus = report.Status
 			} else {
 				if shouldSuppressNoProgress(report) {
-					retryAfter := now().UTC().Add(capLoopCooldown(noProgressCooldown))
+					retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
 					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); err != nil {
 						if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", err, assignee, result, runtime, now) {
 							continue
@@ -1822,7 +1652,7 @@ func emitDisruptionDetected(emit func(string, map[string]any), store BeadEventAp
 	})
 }
 
-// classifyReviewError maps a reviewer error and partial result into one of the
+// ClassifyReviewError maps a reviewer error and partial result into one of the
 // four FEAT-022 §12 taxonomy classes. Resolution order:
 //  1. reviewRes.Error if it's already one of the canonical class identifiers
 //     (the reviewer set it explicitly — preferred path).
@@ -1832,7 +1662,7 @@ func emitDisruptionDetected(emit func(string, map[string]any), store BeadEventAp
 //     leaks through a reviewer that did not set Error.
 //  4. Default to transport (network/provider-side failure) when nothing else
 //     matches.
-func classifyReviewError(reviewErr error, reviewRes *ReviewResult) string {
+func ClassifyReviewError(reviewErr error, reviewRes *ReviewResult) string {
 	if reviewRes != nil {
 		switch reviewRes.Error {
 		case evidence.OutcomeReviewContextOverflow,
@@ -1867,11 +1697,11 @@ func classifyReviewError(reviewErr error, reviewRes *ReviewResult) string {
 // survives the AppendEvent body cap without losing the rev association.
 var reResultRevField = regexp.MustCompile(`(?m)^result_rev=([^\s]+)\s*$`)
 
-// countPriorReviewErrors returns the number of `review-error` events already
+// CountPriorReviewErrors returns the number of `review-error` events already
 // recorded against this bead whose body cites the given result_rev. This is
 // the FEAT-022 §14 retry counter — it is event-scoped (no separate counter
 // field on the bead) so a fresh result_rev naturally resets the count.
-func countPriorReviewErrors(store ExecuteBeadLoopStore, beadID, resultRev string) int {
+func CountPriorReviewErrors(store ExecuteBeadLoopStore, beadID, resultRev string) int {
 	if resultRev == "" {
 		return 0
 	}
@@ -1895,12 +1725,12 @@ func countPriorReviewErrors(store ExecuteBeadLoopStore, beadID, resultRev string
 	return n
 }
 
-// reviewErrorEventBody is the canonical body shape for review-error and
+// ReviewErrorEventBody is the canonical body shape for review-error and
 // review-manual-required events. It carries the failure class, attempt count,
 // and result_rev as discrete lines so operators can grep without parsing the
 // full reviewer error text. The trailing free-form message is the raw
 // reviewer-error string for forensics.
-func reviewErrorEventBody(class string, attemptCount int, resultRev, message string) string {
+func ReviewErrorEventBody(class string, attemptCount int, resultRev, message string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "failure_class=%s\n", class)
 	fmt.Fprintf(&b, "attempt_count=%d\n", attemptCount)

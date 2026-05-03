@@ -15,7 +15,7 @@ import (
 // or tipping us toward bd's 65,535-byte per-field cap.
 const maxReviewerEventBody = 512
 
-// persistReviewerStream writes the full reviewer raw output to an artifact
+// PersistReviewerStream writes the full reviewer raw output to an artifact
 // sidecar under the project's execution evidence tree. Returns the relative
 // path (from projectRoot) on success, empty string plus error on failure.
 //
@@ -25,7 +25,7 @@ const maxReviewerEventBody = 512
 // `.ddx/executions/reviewer-streams/` keeps streams grouped even without a
 // corresponding bundle. The caller is responsible for not losing the stream
 // when this returns a non-nil error — log but do not drop the verdict.
-func persistReviewerStream(projectRoot, beadID, attemptID, fullStream string) (string, error) {
+func PersistReviewerStream(projectRoot, beadID, attemptID, fullStream string) (string, error) {
 	if projectRoot == "" {
 		return "", fmt.Errorf("reviewer stream artifact: empty projectRoot")
 	}
@@ -63,7 +63,7 @@ func persistReviewerStream(projectRoot, beadID, attemptID, fullStream string) (s
 	return rel, nil
 }
 
-// reviewEventBody assembles a bounded event body for a reviewer verdict event
+// ReviewEventBody assembles a bounded event body for a reviewer verdict event
 // from the verdict label, the rationale (which may be a full review stream),
 // and the artifact path where the full stream was persisted. Guarantees the
 // returned string is at most maxReviewerEventBody bytes.
@@ -75,7 +75,7 @@ func persistReviewerStream(projectRoot, beadID, attemptID, fullStream string) (s
 //	artifact: <artifactPath>
 //
 // artifactPath is optional; when absent the layout omits that line.
-func reviewEventBody(verdict, rationale, artifactPath string) string {
+func ReviewEventBody(verdict, rationale, artifactPath string) string {
 	verdict = strings.TrimSpace(verdict)
 	rationale = strings.TrimSpace(rationale)
 	artifactPath = strings.TrimSpace(artifactPath)

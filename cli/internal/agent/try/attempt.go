@@ -8,8 +8,10 @@ package try
 
 import (
 	"context"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
@@ -96,13 +98,34 @@ func Attempt(ctx context.Context, store agent.ExecuteBeadLoopStore, beadID strin
 	}
 
 	if opts.Reviewer != nil && res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
-		// Best-effort review at C2; the loop's review state machine is what
-		// production callers continue to drive. C3+ moves that here.
-		_, _ = opts.Reviewer.ReviewBead(ctx, beadID, res.ResultRev, agent.ImplementerRouting{
+		// C3 (ddx-a921ff01): drive the full post-merge review state machine
+		// — verdict events, close-on-APPROVE, reopen-on-REQUEST_CHANGES /
+		// BLOCK, triage callout — via the extracted RunPostMergeReview that
+		// replaces the 180-line inline review block in execute_bead_loop.go.
+		// Store errors are swallowed at this layer because the legacy loop
+		// (which currently owns claim/heartbeat/close bookkeeping) handles
+		// them via handleOutcomeStoreError; the C3 shell predates that
+		// migration (C7) and so cannot route the same way.
+		report := agent.ExecuteBeadReport{
+			BeadID:      beadID,
+			AttemptID:   res.AttemptID,
 			Harness:     res.Harness,
 			Provider:    res.Provider,
 			Model:       res.Model,
 			ActualPower: res.ActualPower,
+			SessionID:   res.SessionID,
+			BaseRev:     res.BaseRev,
+			ResultRev:   res.ResultRev,
+		}
+		_ = agent.RunPostMergeReview(ctx, agent.PostMergeReviewInput{
+			Bead:        bead.Bead{ID: beadID},
+			Report:      report,
+			Reviewer:    opts.Reviewer,
+			Store:       store,
+			ProjectRoot: opts.ProjectRoot,
+			Rcfg:        opts.Rcfg,
+			Assignee:    opts.Rcfg.Assignee(),
+			Now:         time.Now,
 		})
 	}
 
