@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T050134-93403624",
+  "bead_id": "ddx-2892f2cf",
+  "base_rev": "8b1741efbff567a63341cc7d87f0cc76298ea584",
+  "created_at": "2026-05-03T05:01:35.682215372Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2892f2cf",
+    "title": "ADR-022 step 1: server ingestion endpoints (register + event + backfill)",
+    "description": "Implement POST /api/workers/register, POST /api/workers/\u003cid\u003e/event, POST /api/workers/\u003cid\u003e/backfill per ADR-022 rev 5 §Worker-server interface. In-memory derived view backed by append-only .ddx/server/worker-events.jsonl. Freshness state machine (connected/stale/disconnected). requireTrusted boundary. ~300 LOC.",
+    "acceptance": "1. Three POST endpoints registered + handlers implemented. 2. JSONL append on each event. 3. In-memory registry tracks worker_id, last_event_at, mirror_failures_count, had_dropped_backfill. 4. Tests: TestWorkerRegister_HappyPath, TestWorkerEvent_AppendsToJSONL, TestWorkerBackfill_PostsBufferedEvents, TestWorkerEvent_410_TriggersReregister. 5. cd cli \u0026\u0026 go test ./internal/server/... green; lefthook pre-commit passes.",
+    "parent": "ddx-d7aca866",
+    "labels": [
+      "phase:2",
+      "area:server",
+      "kind:feature",
+      "adr:022"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T05:01:34Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T05:01:34.074959776Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T050134-93403624",
+    "prompt": ".ddx/executions/20260503T050134-93403624/prompt.md",
+    "manifest": ".ddx/executions/20260503T050134-93403624/manifest.json",
+    "result": ".ddx/executions/20260503T050134-93403624/result.json",
+    "checks": ".ddx/executions/20260503T050134-93403624/checks.json",
+    "usage": ".ddx/executions/20260503T050134-93403624/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2892f2cf-20260503T050134-93403624"
+  },
+  "prompt_sha": "17ba6b6b2a502f032328c355c282b9be0793441ef37d1bb22202947dfaff843b"
+}
