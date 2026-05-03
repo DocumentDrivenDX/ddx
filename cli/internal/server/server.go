@@ -15,6 +15,7 @@ import (
 	"math/big"
 	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -703,6 +704,22 @@ func (s *Server) workerManagerForRequest(r *http.Request) *WorkerManager {
 	return NewWorkerManager(dir)
 }
 
+// runsRedirectSunset is the deprecation date advertised in the Sunset header
+// for the /sessions and /executions routes that were merged into Runs.
+// RFC 8594: Sunset is an HTTP-date.
+const runsRedirectSunset = "Wed, 31 Dec 2026 00:00:00 GMT"
+
+// runsRedirectHandler builds an http.HandlerFunc that 302-redirects to the
+// URL produced by target(r), setting the Sunset header for client tooling
+// that respects the deprecation signal.
+func runsRedirectHandler(target func(r *http.Request) string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Sunset", runsRedirectSunset)
+		w.Header().Set("Deprecation", "true")
+		http.Redirect(w, r, target(r), http.StatusFound)
+	}
+}
+
 // route registers a handler and records the pattern for test introspection.
 func (s *Server) route(pattern string, handler http.HandlerFunc) {
 	s.routePatterns = append(s.routePatterns, pattern)
@@ -926,6 +943,39 @@ func (s *Server) routes() {
 	// resolved {project}'s WorkingDir instead of the server's startup project.
 	scoped("POST /api/projects/{project}/graphql", s.handleGraphQLQueryScoped)
 	scoped("GET /api/projects/{project}/graphql", s.handleGraphQLQueryScoped)
+
+	// Story 8: Sessions and Executions tabs were merged into the layer-aware
+	// Runs row expansion. Direct/bookmarked URLs return a 302 with a Sunset
+	// header so existing tooling/links keep working through the deprecation
+	// window. Client-side navigations are handled by the corresponding
+	// SvelteKit +page.ts redirects.
+	trusted("GET /nodes/{nodeId}/projects/{projectId}/sessions",
+		runsRedirectHandler(func(r *http.Request) string {
+			q := r.URL.Query()
+			q.Set("layer", "run")
+			return fmt.Sprintf("/nodes/%s/projects/%s/runs?%s",
+				r.PathValue("nodeId"), r.PathValue("projectId"), q.Encode())
+		}))
+	trusted("GET /nodes/{nodeId}/projects/{projectId}/executions",
+		runsRedirectHandler(func(r *http.Request) string {
+			q := url.Values{}
+			if h := r.URL.Query().Get("harness"); h != "" {
+				q.Set("harness", h)
+			}
+			q.Set("layer", "try")
+			return fmt.Sprintf("/nodes/%s/projects/%s/runs?%s",
+				r.PathValue("nodeId"), r.PathValue("projectId"), q.Encode())
+		}))
+	trusted("GET /nodes/{nodeId}/projects/{projectId}/executions/{execId}",
+		runsRedirectHandler(func(r *http.Request) string {
+			execID := r.PathValue("execId")
+			runID := execID
+			if !strings.HasPrefix(runID, "exec-") {
+				runID = "exec-" + runID
+			}
+			return fmt.Sprintf("/nodes/%s/projects/%s/runs/%s",
+				r.PathValue("nodeId"), r.PathValue("projectId"), runID)
+		}))
 
 	// SvelteKit SPA — serve embedded frontend/build; fall back to index.html for deep links.
 	sub, err := fs.Sub(frontendFiles, "frontend/build")

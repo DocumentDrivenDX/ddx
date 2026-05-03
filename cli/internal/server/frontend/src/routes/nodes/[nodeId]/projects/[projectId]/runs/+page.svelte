@@ -5,6 +5,7 @@
 	import { createClient } from '$lib/gql/client'
 	import { PROJECT_RUNS_QUERY, PAGE_SIZE } from './+page'
 	import type { RunEdge, RunConnection, PageInfo } from './+page'
+	import { RunRowDetail } from '$lib/runDetail'
 
 	let { data }: { data: PageData } = $props()
 
@@ -12,6 +13,14 @@
 	let appendedPageInfo = $state<PageInfo | null>(null)
 	let loadingMore = $state(false)
 	let harnessInput = $state(data.activeHarness ?? '')
+	let expanded = $state<Set<string>>(new Set())
+
+	function toggleExpand(runId: string) {
+		const next = new Set(expanded)
+		if (next.has(runId)) next.delete(runId)
+		else next.add(runId)
+		expanded = next
+	}
 
 	let filterKey = $derived(`${data.activeLayer}::${data.activeStatus}::${data.activeHarness}`)
 	let prevFilterKey = $state('')
@@ -212,6 +221,7 @@
 		<table class="w-full text-sm">
 			<thead>
 				<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
+					<th class="w-6 px-4 py-3"></th>
 					<th class="px-4 py-3 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Layer</th>
 					<th class="px-4 py-3 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Status</th>
 					<th class="px-4 py-3 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Bead</th>
@@ -222,10 +232,17 @@
 			</thead>
 			<tbody>
 				{#each edges as edge (edge.cursor)}
+					{@const isExpanded = expanded.has(edge.node.id)}
 					<tr
-						class="cursor-pointer border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface"
-						onclick={() => goto(runDetailHref(edge.node.id))}
+						class="cursor-pointer border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface {isExpanded
+							? 'bg-accent-lever/10 dark:bg-dark-accent-lever/10'
+							: ''}"
+						data-run-row={edge.node.id}
+						onclick={() => toggleExpand(edge.node.id)}
 					>
+						<td class="px-4 py-3 text-body-sm text-fg-muted dark:text-dark-fg-muted">
+							{isExpanded ? '▾' : '▸'}
+						</td>
 						<td class="px-4 py-3">
 							<span class="inline-block rounded-full px-2 py-0.5 font-label-caps text-label-caps uppercase {layerBadgeClass(edge.node.layer)}">
 								{edge.node.layer}
@@ -256,13 +273,35 @@
 							{fmtDate(edge.node.startedAt)}
 						</td>
 						<td class="px-4 py-3 text-right font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
-							{fmtDuration(edge.node.durationMs)}
+							<div class="flex items-center justify-end gap-2">
+								<span>{fmtDuration(edge.node.durationMs)}</span>
+								<a
+									href={runDetailHref(edge.node.id)}
+									onclick={(e) => e.stopPropagation()}
+									title="Open detail page"
+									class="font-mono-code text-mono-code text-accent-lever hover:underline dark:text-dark-accent-lever"
+								>
+									↗
+								</a>
+							</div>
 						</td>
 					</tr>
+					{#if isExpanded}
+						<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
+							<td colspan="7" class="px-6 py-4">
+								<RunRowDetail
+									runId={edge.node.id}
+									layer={edge.node.layer}
+									nodeId={data.nodeId}
+									projectId={data.projectId}
+								/>
+							</td>
+						</tr>
+					{/if}
 				{/each}
 				{#if edges.length === 0}
 					<tr>
-						<td colspan="6" class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">
+						<td colspan="7" class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">
 							No runs found.
 						</td>
 					</tr>
