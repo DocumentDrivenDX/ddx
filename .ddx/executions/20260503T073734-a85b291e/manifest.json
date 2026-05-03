@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T073734-a85b291e",
+  "bead_id": ".execute-bead-wt-ddx-7b753655-20260503T064620-a387a207-86d32a20",
+  "base_rev": "6f518876d9608366c0287577117256b249bea80e",
+  "created_at": "2026-05-03T07:37:35.999932118Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-7b753655-20260503T064620-a387a207-86d32a20",
+    "title": "ADR-022 step 5b: workers panel UI migration to derived-view (frontend)",
+    "description": "Migrate the existing Svelte workers panel at cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/ to consume the new derived-view GraphQL query (added in step 5a). Surface freshness indicator (connected/stale/disconnected), duplicate-worker visibility (same project, multiple worker entries), and 'trusted-peer reported, not authoritative' labeling on reported data. Includes Houdini graphql query update + .gql file changes + +layout.svelte / +page.svelte changes. Plus a Playwright e2e test that loads the panel against fixture state. ~400 LOC frontend.",
+    "acceptance": "1. Workers panel renders new fields: lastEventAt, mirrorFailuresCount, hadDroppedBackfill, freshness state.\n2. Freshness indicator visible (e.g., colored badge connected/stale/disconnected).\n3. Duplicate-worker display: when two workers exist under same projectRoot both appear distinctly.\n4. UI labels reported data appropriately, e.g., 'reported by worker (not authoritative)' near server-derived fields per ADR-022 §auth-context UI labeling.\n5. Houdini codegen runs clean (bun run houdini:generate).\n6. Playwright e2e test (workers-panel-derived-view.spec.ts or extension to existing) renders fixture state and asserts the new fields/badges are visible.\n7. bun test + bun test:e2e green; lefthook pre-commit passes.\nDepends on step 5a backend.",
+    "parent": "ddx-7b753655",
+    "labels": [
+      "phase:2",
+      " area:web",
+      " kind:feature",
+      " adr:022"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T07:37:34Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4025192",
+      "execute-loop-heartbeat-at": "2026-05-03T07:37:34.66118534Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T073734-a85b291e",
+    "prompt": ".ddx/executions/20260503T073734-a85b291e/prompt.md",
+    "manifest": ".ddx/executions/20260503T073734-a85b291e/manifest.json",
+    "result": ".ddx/executions/20260503T073734-a85b291e/result.json",
+    "checks": ".ddx/executions/20260503T073734-a85b291e/checks.json",
+    "usage": ".ddx/executions/20260503T073734-a85b291e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-7b753655-20260503T064620-a387a207-86d32a20-20260503T073734-a85b291e"
+  },
+  "prompt_sha": "9dc365493490962a8d4dde6531c86e6a6764e33560a93d22dd3066f7581636cd"
+}
