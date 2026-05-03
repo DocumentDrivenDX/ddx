@@ -209,6 +209,21 @@ Personas enable consistent, high-quality AI interactions across team members and
 
 When a bead's acceptance criteria asks for an investigation report, findings document, or any other freestanding non-source artifact, the agent must write that artifact under the per-attempt evidence directory `.ddx/executions/<run-id>/` (the `{{.AttemptDir}}` slot in execute-bead prompts). **Never write reports to `/tmp` or other paths outside the repository** — out-of-repo paths are invisible to the post-merge reviewer, do not survive between machines, and cause the reviewer to BLOCK on missing evidence. If the bead names a specific in-repo path for the report, use that path; otherwise default to `.ddx/executions/<run-id>/<short-name>.md` and stage/commit the file with the rest of the change.
 
+## When filing beads
+
+A bead's body is the entire prompt the executing sub-agent will see — there is no chat history, no operator hand-curation, no out-of-band context. Every bead must therefore satisfy the 8-criterion rubric documented in `docs/helix/06-iterate/bead-authoring-template.md` before it is filed or dispatched.
+
+In short:
+
+- **Title**: imperative, names subsystem + change.
+- **Description**: PROBLEM + ROOT CAUSE WITH `path/file.go:LINE` + PROPOSED FIX + NON-SCOPE.
+- **AC**: numbered, each verifiable; at least one names a `Test*` function or `go test -run` filter; final two lines are `cd cli && go test ./<paths>/... green` and `lefthook run pre-commit passes`.
+- **Labels**: `phase:N`, `area:*`, `kind:*`, plus cross-refs (adr/spec/prevention) when applicable.
+- **Parent + Deps**: explicit. State "no deps" if there are none.
+- **Self-test**: re-read the bead cold. If a competent agent given only the bead body cannot pick a file to edit and run tests without asking, retrofit before dispatch.
+
+Do not cite `/tmp/...` plan files as load-bearing context — they do not survive between machines or sessions. Inline the relevant excerpt into the description instead.
+
 <!-- DDX-META-PROMPT:START -->
 <!-- Source: claude/system-prompts/focused.md -->
 # System Instructions

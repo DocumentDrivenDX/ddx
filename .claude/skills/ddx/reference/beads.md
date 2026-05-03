@@ -6,6 +6,12 @@ hardest rule: **the bead description must be readable cold**. An
 automated `ddx try` run has no chat history, no open
 tabs, no prior context — only what's in the bead.
 
+> **Authoring template (required reading before `ddx bead create`):**
+> `docs/helix/06-iterate/bead-authoring-template.md` documents the
+> 8-criterion sufficient-sub-agent-prompt rubric every new bead must
+> satisfy. The fields below are the short form; the template is the
+> normative source.
+
 ## Required structure
 
 Every bead you create should have:
@@ -13,11 +19,23 @@ Every bead you create should have:
 1. **Title** — imperative, specific. "Fix the pagination off-by-one
    in the bead list endpoint", not "Pagination bug".
 2. **Type** — `task`, `bug`, `epic`, or `chore`.
-3. **Description** — inline context (see below).
-4. **Acceptance criteria** — a command that passes.
-5. **Labels** — at minimum `area:<subsystem>` and `kind:<category>`.
-6. **`spec-id`** (when applicable) — pointer to the governing
+3. **Description** — inline context with PROBLEM + ROOT CAUSE
+   (citing `path/file.go:LINE`) + PROPOSED FIX + NON-SCOPE.
+4. **Acceptance criteria** — numbered, each verifiable; at least one
+   names a specific `Test*` function or `go test -run` filter; final
+   two lines are `cd cli && go test ./<paths>/... green` and
+   `lefthook run pre-commit passes`.
+5. **Labels** — `phase:N`, `area:<subsystem>`, `kind:<category>`,
+   plus cross-refs (`adr:*`, `spec:*`, `prevention`, `story:*`).
+6. **Parent + Deps** — set the parent bead; list deps explicitly or
+   state "no deps".
+7. **`spec-id`** (when applicable) — pointer to the governing
    FEAT-\*, SD-\*, TD-\*, or ADR-\* that authorizes the work.
+
+Self-test before filing: re-read the bead cold. If a competent agent
+given only the bead body cannot pick a file to edit and run tests
+without asking, retrofit before dispatch. Do not cite `/tmp/...` plan
+files as load-bearing context — inline the excerpt instead.
 
 ## Inline context, not links
 

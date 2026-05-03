@@ -16,6 +16,25 @@ This repository uses DDx's built-in bead tracker for durable work management.
   commit, fold the tracker change into that same commit instead of leaving
   `.ddx/beads.jsonl` dirty.
 
+## When filing beads — bead-authoring template
+
+Every bead must satisfy the 8-criterion rubric documented in
+`docs/helix/06-iterate/bead-authoring-template.md` before it is filed
+or dispatched to a sub-agent. The bead body is the entire prompt the
+sub-agent will see; if a competent agent given only the bead text
+cannot pick a file to edit and run tests without asking, the bead
+must be retrofitted before dispatch.
+
+Required template fields: title (imperative + subsystem), description
+with PROBLEM + ROOT CAUSE WITH FILE:LINE + PROPOSED FIX + NON-SCOPE,
+numbered AC including specific `Test*` names + `cd cli && go test ...`
++ `lefthook run pre-commit`, labels (phase + area + kind + cross-refs),
+and explicit parent + deps.
+
+Do not cite `/tmp/...` plan files as load-bearing context — they do
+not survive between machines or sessions. Inline the relevant excerpt
+into the description instead.
+
 ## Merge Policy
 
 Branches containing execute-bead or execute-loop commits carry a
