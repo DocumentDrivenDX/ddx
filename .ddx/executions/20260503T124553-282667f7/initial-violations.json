@@ -1,0 +1,2958 @@
+[
+	{
+		"Name": "cmd",
+		"Path": "github.com/DocumentDrivenDX/ddx/cmd",
+		"Funcs": [
+			{
+				"Name": "harnessHealthyViaService",
+				"Position": {
+					"File": "cmd/agent_cmd.go",
+					"Line": 858,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "CommandFactory.executeLoopWithServer",
+				"Position": {
+					"File": "cmd/agent_cmd.go",
+					"Line": 1986,
+					"Col": 26
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "loadExecutionsMirrorConfig",
+				"Position": {
+					"File": "cmd/agent_execute_bead.go",
+					"Line": 22,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "computeReviewOutcomes",
+				"Position": {
+					"File": "cmd/agent_metrics.go",
+					"Line": 349,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "aggregateUsage",
+				"Position": {
+					"File": "cmd/agent_usage.go",
+					"Line": 246,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "aggregateUsageAggs",
+				"Position": {
+					"File": "cmd/agent_usage.go",
+					"Line": 289,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "readUsageSessionRecords",
+				"Position": {
+					"File": "cmd/agent_usage.go",
+					"Line": 480,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewCommandFactoryWithViper",
+				"Position": {
+					"File": "cmd/command_factory.go",
+					"Line": 84,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "CommandFactory.withWorkingDir",
+				"Position": {
+					"File": "cmd/command_factory.go",
+					"Line": 96,
+					"Col": 26
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "getLibraryPathFromEnv",
+				"Position": {
+					"File": "cmd/command_factory.go",
+					"Line": 575,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "runConfig",
+				"Position": {
+					"File": "cmd/config.go",
+					"Line": 143,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "getConfigValueWithWorkingDir",
+				"Position": {
+					"File": "cmd/config.go",
+					"Line": 387,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "copyFile",
+				"Position": {
+					"File": "cmd/config.go",
+					"Line": 433,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "showConfigFiles",
+				"Position": {
+					"File": "cmd/config.go",
+					"Line": 455,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "resyncMetaPromptAfterConfigChange",
+				"Position": {
+					"File": "cmd/config.go",
+					"Line": 512,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "syncMetaPromptWithConfig",
+				"Position": {
+					"File": "cmd/config.go",
+					"Line": 522,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "HandleError",
+				"Position": {
+					"File": "cmd/errors.go",
+					"Line": 41,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "CheckPersonaNotFound",
+				"Position": {
+					"File": "cmd/errors.go",
+					"Line": 62,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "CheckNoConfig",
+				"Position": {
+					"File": "cmd/errors.go",
+					"Line": 75,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "copyDir",
+				"Position": {
+					"File": "cmd/init.go",
+					"Line": 451,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "initializeSynchronizationPure",
+				"Position": {
+					"File": "cmd/init.go",
+					"Line": 478,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "initializeSynchronization",
+				"Position": {
+					"File": "cmd/init.go",
+					"Line": 497,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "isValidRepositoryURL",
+				"Position": {
+					"File": "cmd/init.go",
+					"Line": 515,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "fileExistsInDir",
+				"Position": {
+					"File": "cmd/init.go",
+					"Line": 547,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "validateGitRepository",
+				"Position": {
+					"File": "cmd/init.go",
+					"Line": 636,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "runLog",
+				"Position": {
+					"File": "cmd/log.go",
+					"Line": 45,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "runPersona",
+				"Position": {
+					"File": "cmd/persona.go",
+					"Line": 83,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "savePersonaConfig",
+				"Position": {
+					"File": "cmd/persona.go",
+					"Line": 877,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "IsLibraryReadOnly",
+				"Position": {
+					"File": "cmd/persona.go",
+					"Line": 1003,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "isInitialized",
+				"Position": {
+					"File": "cmd/root.go",
+					"Line": 41,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "getLibraryPath",
+				"Position": {
+					"File": "cmd/root.go",
+					"Line": 48,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WithIsolatedDirectory",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 17,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "GetCommandInDirectory",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 29,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewTestHarness",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 49,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.WithTempDir",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 83,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.WithEnv",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 96,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.NewCommand",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 119,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.Execute",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 131,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.ExecuteAndCheck",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 151,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.Output",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 159,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.ErrOutput",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 164,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.CombinedOutput",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 169,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.WriteFile",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 174,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.MkdirAll",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 190,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.FileExists",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 198,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.SetupDDxProject",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 204,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.Cleanup",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 222,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.WithProjectFile",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 232,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.WithDDxConfig",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 239,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.AssertOutputContains",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 246,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.AssertOutputNotContains",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 252,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.AssertFileExists",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 258,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestHarness.AssertFileNotExists",
+				"Position": {
+					"File": "cmd/test_harness.go",
+					"Line": 264,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "isInitializedInDir",
+				"Position": {
+					"File": "cmd/update.go",
+					"Line": 203,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "loadConfigFromWorkingDirForUpdate",
+				"Position": {
+					"File": "cmd/update.go",
+					"Line": 212,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "validateUpdateStrategy",
+				"Position": {
+					"File": "cmd/update.go",
+					"Line": 225,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "checkForUpdatesInDir",
+				"Position": {
+					"File": "cmd/update.go",
+					"Line": 247,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "previewUpdateInDir",
+				"Position": {
+					"File": "cmd/update.go",
+					"Line": 258,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "synchronizeWithUpstreamInDir",
+				"Position": {
+					"File": "cmd/update.go",
+					"Line": 274,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "detectConflictsInDir",
+				"Position": {
+					"File": "cmd/update.go",
+					"Line": 284,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "handleUpdateAbortInDir",
+				"Position": {
+					"File": "cmd/update.go",
+					"Line": 345,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "handleInteractiveResolutionInDir",
+				"Position": {
+					"File": "cmd/update.go",
+					"Line": 397,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "executeUpdateInDir",
+				"Position": {
+					"File": "cmd/update.go",
+					"Line": 409,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "createBackupInDir",
+				"Position": {
+					"File": "cmd/update.go",
+					"Line": 453,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "copyDirForRestore",
+				"Position": {
+					"File": "cmd/update.go",
+					"Line": 477,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "isBinaryFileForUpdate",
+				"Position": {
+					"File": "cmd/update.go",
+					"Line": 642,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "extractConflictContentForUpdate",
+				"Position": {
+					"File": "cmd/update.go",
+					"Line": 654,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "runUpdate",
+				"Position": {
+					"File": "cmd/update.go",
+					"Line": 683,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "syncMetaPrompt",
+				"Position": {
+					"File": "cmd/update.go",
+					"Line": 701,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "agent",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/agent",
+		"Funcs": [
+			{
+				"Name": "ParseACClaims",
+				"Position": {
+					"File": "internal/agent/ac_structural_check.go",
+					"Line": 53,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "VerifyACClaims",
+				"Position": {
+					"File": "internal/agent/ac_structural_check.go",
+					"Line": 96,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "goFieldDeclared",
+				"Position": {
+					"File": "internal/agent/ac_structural_check.go",
+					"Line": 130,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Catalog.IsBlockedModelID",
+				"Position": {
+					"File": "internal/agent/catalog.go",
+					"Line": 118,
+					"Col": 19
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Catalog.Entry",
+				"Position": {
+					"File": "internal/agent/catalog.go",
+					"Line": 162,
+					"Col": 19
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Catalog.KnownOnAnySurface",
+				"Position": {
+					"File": "internal/agent/catalog.go",
+					"Line": 168,
+					"Col": 19
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Catalog.NormalizeModelRef",
+				"Position": {
+					"File": "internal/agent/catalog.go",
+					"Line": 182,
+					"Col": 19
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RunQuorumWithConfig",
+				"Position": {
+					"File": "internal/agent/compare_adapter.go",
+					"Line": 374,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "compareResultEventBody",
+				"Position": {
+					"File": "internal/agent/evidence_telemetry.go",
+					"Line": 66,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "SatisfactionCheckerFunc.CheckSatisfied",
+				"Position": {
+					"File": "internal/agent/execute_bead_loop.go",
+					"Line": 220,
+					"Col": 34
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "rationaleIsSpecific",
+				"Position": {
+					"File": "internal/agent/execute_bead_loop.go",
+					"Line": 1416,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ExecuteBeadWorker.adjudicateNoChanges",
+				"Position": {
+					"File": "internal/agent/execute_bead_loop.go",
+					"Line": 1510,
+					"Col": 29
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ApplyReviewTriageDecision",
+				"Position": {
+					"File": "internal/agent/execute_bead_post_review.go",
+					"Line": 336,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "BeadReviewerFunc.ReviewBead",
+				"Position": {
+					"File": "internal/agent/execute_bead_review.go",
+					"Line": 139,
+					"Col": 27
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReadReviewArtifactResult",
+				"Position": {
+					"File": "internal/agent/execute_bead_review.go",
+					"Line": 834,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "FormatComparisonTable",
+				"Position": {
+					"File": "internal/agent/format.go",
+					"Line": 10,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "FormatGradeTable",
+				"Position": {
+					"File": "internal/agent/format.go",
+					"Line": 58,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "writeGradeArtifacts",
+				"Position": {
+					"File": "internal/agent/grade.go",
+					"Line": 52,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "GradeFn",
+				"Position": {
+					"File": "internal/agent/grade.go",
+					"Line": 119,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "buildGradingPrompt",
+				"Position": {
+					"File": "internal/agent/grade.go",
+					"Line": 248,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "buildGradingPromptBounded",
+				"Position": {
+					"File": "internal/agent/grade.go",
+					"Line": 262,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "parseGrades",
+				"Position": {
+					"File": "internal/agent/grade.go",
+					"Line": 431,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "harnessRegistry.Names",
+				"Position": {
+					"File": "internal/agent/harness_config.go",
+					"Line": 235,
+					"Col": 27
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "harnessRegistry.Discover",
+				"Position": {
+					"File": "internal/agent/harness_config.go",
+					"Line": 260,
+					"Col": 27
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "harnessRegistry.FirstAvailable",
+				"Position": {
+					"File": "internal/agent/harness_config.go",
+					"Line": 293,
+					"Col": 27
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WriteModelCatalogYAML",
+				"Position": {
+					"File": "internal/agent/model_catalog_yaml.go",
+					"Line": 64,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "DefaultBenchmarkArms",
+				"Position": {
+					"File": "internal/agent/models.go",
+					"Line": 37,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TopNPowerThreshold",
+				"Position": {
+					"File": "internal/agent/power_threshold.go",
+					"Line": 18,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ParseRateLimitHeaders",
+				"Position": {
+					"File": "internal/agent/ratelimit_headers.go",
+					"Line": 47,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "emptyRateLimitSignal",
+				"Position": {
+					"File": "internal/agent/ratelimit_headers.go",
+					"Line": 59,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "normalizeHeaders",
+				"Position": {
+					"File": "internal/agent/ratelimit_headers.go",
+					"Line": 69,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "parseClaudeRateLimit",
+				"Position": {
+					"File": "internal/agent/ratelimit_headers.go",
+					"Line": 83,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "parseCodexRateLimit",
+				"Position": {
+					"File": "internal/agent/ratelimit_headers.go",
+					"Line": 119,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "parseIntHeader",
+				"Position": {
+					"File": "internal/agent/ratelimit_headers.go",
+					"Line": 138,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "parseResetTimestamp",
+				"Position": {
+					"File": "internal/agent/ratelimit_headers.go",
+					"Line": 152,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ClassifyRetryOutcome",
+				"Position": {
+					"File": "internal/agent/retry_policy.go",
+					"Line": 74,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "EvaluateRetryPolicy",
+				"Position": {
+					"File": "internal/agent/retry_policy.go",
+					"Line": 113,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "computeNextMinPower",
+				"Position": {
+					"File": "internal/agent/retry_policy.go",
+					"Line": 193,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RoutingMetricsStore.snapshotFile",
+				"Position": {
+					"File": "internal/agent/routing_metrics.go",
+					"Line": 34,
+					"Col": 31
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RoutingMetricsStore.AppendQuotaSnapshot",
+				"Position": {
+					"File": "internal/agent/routing_metrics.go",
+					"Line": 48,
+					"Col": 31
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RoutingMetricsStore.AppendBurnSummary",
+				"Position": {
+					"File": "internal/agent/routing_metrics.go",
+					"Line": 53,
+					"Col": 31
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RoutingMetricsStore.ReadQuotaSnapshots",
+				"Position": {
+					"File": "internal/agent/routing_metrics.go",
+					"Line": 63,
+					"Col": 31
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "BuildBurnSummaries",
+				"Position": {
+					"File": "internal/agent/routing_metrics.go",
+					"Line": 92,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "parseWindowMinutes",
+				"Position": {
+					"File": "internal/agent/routing_metrics.go",
+					"Line": 228,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Runner.RunWithConfig",
+				"Position": {
+					"File": "internal/agent/runner.go",
+					"Line": 243,
+					"Col": 18
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Runner.ValidateForExecuteLoop",
+				"Position": {
+					"File": "internal/agent/runner.go",
+					"Line": 276,
+					"Col": 18
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Runner.Capabilities",
+				"Position": {
+					"File": "internal/agent/runner.go",
+					"Line": 299,
+					"Col": 18
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Runner.TestProviderConnectivity",
+				"Position": {
+					"File": "internal/agent/runner.go",
+					"Line": 964,
+					"Col": 18
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "SetServiceRunFactory",
+				"Position": {
+					"File": "internal/agent/service_run.go",
+					"Line": 41,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewComplexityGate",
+				"Position": {
+					"File": "internal/agent/triage.go",
+					"Line": 79,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "triageDepth",
+				"Position": {
+					"File": "internal/agent/triage.go",
+					"Line": 172,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "fileChildren",
+				"Position": {
+					"File": "internal/agent/triage.go",
+					"Line": 191,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "blockParentDecomposed",
+				"Position": {
+					"File": "internal/agent/triage.go",
+					"Line": 228,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ACCoverageRate",
+				"Position": {
+					"File": "internal/agent/triage.go",
+					"Line": 263,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "tokenizeAC",
+				"Position": {
+					"File": "internal/agent/triage.go",
+					"Line": 297,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RuleBasedClassifier",
+				"Position": {
+					"File": "internal/agent/triage.go",
+					"Line": 319,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ClassifyAttemptForTriage",
+				"Position": {
+					"File": "internal/agent/triage_dispatch.go",
+					"Line": 54,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RationaleCitesAC",
+				"Position": {
+					"File": "internal/agent/triage_dispatch.go",
+					"Line": 78,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "tokenizeRationale",
+				"Position": {
+					"File": "internal/agent/triage_dispatch.go",
+					"Line": 107,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "DefaultSleep",
+				"Position": {
+					"File": "internal/agent/triage_dispatch.go",
+					"Line": 133,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RunWithLockBackoff",
+				"Position": {
+					"File": "internal/agent/triage_dispatch.go",
+					"Line": 170,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "attemptIsLockContention",
+				"Position": {
+					"File": "internal/agent/triage_dispatch.go",
+					"Line": 200,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "HistoryFromEvents",
+				"Position": {
+					"File": "internal/agent/triage_dispatch.go",
+					"Line": 224,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "extractTriageEventField",
+				"Position": {
+					"File": "internal/agent/triage_dispatch.go",
+					"Line": 239,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "DispatchPostAttempt",
+				"Position": {
+					"File": "internal/agent/triage_dispatch.go",
+					"Line": 278,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "fileNoChangesFollowup",
+				"Position": {
+					"File": "internal/agent/triage_dispatch.go",
+					"Line": 335,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "escalation",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/agent/escalation",
+		"Funcs": [
+			{
+				"Name": "NoViableProviderError.Error",
+				"Position": {
+					"File": "internal/agent/escalation/ladder.go",
+					"Line": 32,
+					"Col": 33
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewLadder",
+				"Position": {
+					"File": "internal/agent/escalation/ladder.go",
+					"Line": 48,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Ladder.Tiers",
+				"Position": {
+					"File": "internal/agent/escalation/ladder.go",
+					"Line": 70,
+					"Col": 18
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Ladder.Next",
+				"Position": {
+					"File": "internal/agent/escalation/ladder.go",
+					"Line": 93,
+					"Col": 18
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "testfixtures",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/agent/testfixtures",
+		"Funcs": [
+			{
+				"Name": "ReviewFailureRunner.resultRev",
+				"Position": {
+					"File": "internal/agent/testfixtures/review_failure_runner.go",
+					"Line": 59,
+					"Col": 31
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewFailureRunner.failureClass",
+				"Position": {
+					"File": "internal/agent/testfixtures/review_failure_runner.go",
+					"Line": 66,
+					"Col": 31
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewFailureRunner.Executor",
+				"Position": {
+					"File": "internal/agent/testfixtures/review_failure_runner.go",
+					"Line": 77,
+					"Col": 31
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewFailureRunner.Reviewer",
+				"Position": {
+					"File": "internal/agent/testfixtures/review_failure_runner.go",
+					"Line": 94,
+					"Col": 31
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewFailureRunner.ReviewCalls",
+				"Position": {
+					"File": "internal/agent/testfixtures/review_failure_runner.go",
+					"Line": 115,
+					"Col": 31
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReviewFailureRunner.ExecCalls",
+				"Position": {
+					"File": "internal/agent/testfixtures/review_failure_runner.go",
+					"Line": 120,
+					"Col": 31
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "try",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/agent/try",
+		"Funcs": [
+			{
+				"Name": "Attempt",
+				"Position": {
+					"File": "internal/agent/try/attempt.go",
+					"Line": 67,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "reportFromResult",
+				"Position": {
+					"File": "internal/agent/try/attempt.go",
+					"Line": 144,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Disposition.String",
+				"Position": {
+					"File": "internal/agent/try/outcome.go",
+					"Line": 29,
+					"Col": 22
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "AllParkReasons",
+				"Position": {
+					"File": "internal/agent/try/outcome.go",
+					"Line": 71,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ParkReasonValid",
+				"Position": {
+					"File": "internal/agent/try/outcome.go",
+					"Line": 90,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ParkReason.String",
+				"Position": {
+					"File": "internal/agent/try/outcome.go",
+					"Line": 99,
+					"Col": 21
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "dispositionToStatus",
+				"Position": {
+					"File": "internal/agent/try/outcome.go",
+					"Line": 123,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "FromOutcome",
+				"Position": {
+					"File": "internal/agent/try/outcome.go",
+					"Line": 159,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ToOutcome",
+				"Position": {
+					"File": "internal/agent/try/outcome.go",
+					"Line": 182,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "bead",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/bead",
+		"Funcs": [
+			{
+				"Name": "NewBackend",
+				"Position": {
+					"File": "internal/bead/backend.go",
+					"Line": 82,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "jsonlFallbackForCollection",
+				"Position": {
+					"File": "internal/bead/backend_jsonl.go",
+					"Line": 93,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Store.breakStaleLock",
+				"Position": {
+					"File": "internal/bead/lock.go",
+					"Line": 70,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Registry.IDs",
+				"Position": {
+					"File": "internal/bead/registry.go",
+					"Line": 104,
+					"Col": 20
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewStoreWithBackend",
+				"Position": {
+					"File": "internal/bead/store.go",
+					"Line": 133,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Store.detectCurrentCommit",
+				"Position": {
+					"File": "internal/bead/store.go",
+					"Line": 1244,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "IsCanonicalStatus",
+				"Position": {
+					"File": "internal/bead/types.go",
+					"Line": 96,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "IsValidStatusTransition",
+				"Position": {
+					"File": "internal/bead/types.go",
+					"Line": 141,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "config",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/config",
+		"Funcs": [
+			{
+				"Name": "ResolveLibraryResource",
+				"Position": {
+					"File": "internal/config/config.go",
+					"Line": 236,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewConfigLoader",
+				"Position": {
+					"File": "internal/config/loader.go",
+					"Line": 18,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ConfigLoader.DetectConfigFormat",
+				"Position": {
+					"File": "internal/config/loader.go",
+					"Line": 118,
+					"Col": 25
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewTestConfigForLoop",
+				"Position": {
+					"File": "internal/config/testconfig.go",
+					"Line": 33,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewTestConfigForRun",
+				"Position": {
+					"File": "internal/config/testconfig.go",
+					"Line": 78,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewTestConfigForBead",
+				"Position": {
+					"File": "internal/config/testconfig.go",
+					"Line": 113,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestBeadOverrides",
+				"Position": {
+					"File": "internal/config/testconfig.go",
+					"Line": 132,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestLoopOverrides",
+				"Position": {
+					"File": "internal/config/testconfig.go",
+					"Line": 145,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "escalation",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/escalation",
+		"Funcs": [
+			{
+				"Name": "ShouldEscalate",
+				"Position": {
+					"File": "internal/escalation/escalation.go",
+					"Line": 30,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "FormatTierAttemptBody",
+				"Position": {
+					"File": "internal/escalation/escalation.go",
+					"Line": 44,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "BuildEscalationSummary",
+				"Position": {
+					"File": "internal/escalation/escalation.go",
+					"Line": 89,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "AppendEscalationSummaryEvent",
+				"Position": {
+					"File": "internal/escalation/escalation.go",
+					"Line": 118,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "IsInfrastructureFailure",
+				"Position": {
+					"File": "internal/escalation/infrastructure.go",
+					"Line": 58,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "CostCapTracker.Spent",
+				"Position": {
+					"File": "internal/escalation/infrastructure.go",
+					"Line": 185,
+					"Col": 26
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "evidence",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/evidence",
+		"Funcs": [
+			{
+				"Name": "OversizeError.Error",
+				"Position": {
+					"File": "internal/evidence/read.go",
+					"Line": 24,
+					"Col": 25
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "OversizeError.Unwrap",
+				"Position": {
+					"File": "internal/evidence/read.go",
+					"Line": 29,
+					"Col": 25
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ReadFileHardFail",
+				"Position": {
+					"File": "internal/evidence/read.go",
+					"Line": 70,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "FitSections",
+				"Position": {
+					"File": "internal/evidence/sections.go",
+					"Line": 51,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "capContent",
+				"Position": {
+					"File": "internal/evidence/sections.go",
+					"Line": 139,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "trimToLineBudget",
+				"Position": {
+					"File": "internal/evidence/sections.go",
+					"Line": 153,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "AssembleRefOnly",
+				"Position": {
+					"File": "internal/evidence/strategy.go",
+					"Line": 19,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "AssembleInline",
+				"Position": {
+					"File": "internal/evidence/strategy.go",
+					"Line": 50,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "exec",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/exec",
+		"Funcs": [
+			{
+				"Name": "Store.Init",
+				"Position": {
+					"File": "internal/exec/store.go",
+					"Line": 66,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Store.SaveRunRecord",
+				"Position": {
+					"File": "internal/exec/store.go",
+					"Line": 369,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Store.writeRunBundle",
+				"Position": {
+					"File": "internal/exec/store.go",
+					"Line": 417,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "withPathLock",
+				"Position": {
+					"File": "internal/exec/store.go",
+					"Line": 477,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "atomicWriteFile",
+				"Position": {
+					"File": "internal/exec/store.go",
+					"Line": 493,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "federation",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/federation",
+		"Funcs": [
+			{
+				"Name": "LoadState",
+				"Position": {
+					"File": "internal/federation/persistence.go",
+					"Line": 41,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "SaveState",
+				"Position": {
+					"File": "internal/federation/persistence.go",
+					"Line": 50,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "git",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/git",
+		"Funcs": [
+			{
+				"Name": "HasUncommittedChanges",
+				"Position": {
+					"File": "internal/git/git.go",
+					"Line": 161,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "GetCurrentBranch",
+				"Position": {
+					"File": "internal/git/git.go",
+					"Line": 191,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "CommitChanges",
+				"Position": {
+					"File": "internal/git/git.go",
+					"Line": 226,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "validatePrefix",
+				"Position": {
+					"File": "internal/git/git.go",
+					"Line": 319,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "validateRepoURL",
+				"Position": {
+					"File": "internal/git/git.go",
+					"Line": 346,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "validateBranchName",
+				"Position": {
+					"File": "internal/git/git.go",
+					"Line": 391,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "validateCommitMessage",
+				"Position": {
+					"File": "internal/git/git.go",
+					"Line": 417,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "sanitizeInput",
+				"Position": {
+					"File": "internal/git/git.go",
+					"Line": 435,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "sanitizeCommitMessage",
+				"Position": {
+					"File": "internal/git/git.go",
+					"Line": 451,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "metaprompt",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/metaprompt",
+		"Funcs": [
+			{
+				"Name": "NewMetaPromptInjector",
+				"Position": {
+					"File": "internal/metaprompt/injector.go",
+					"Line": 44,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "metric",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/metric",
+		"Funcs": [
+			{
+				"Name": "metricDefinitionToExec",
+				"Position": {
+					"File": "internal/metric/exec_bridge.go",
+					"Line": 9,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "metricDefinitionFromExec",
+				"Position": {
+					"File": "internal/metric/exec_bridge.go",
+					"Line": 36,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "metricHistoryToRun",
+				"Position": {
+					"File": "internal/metric/exec_bridge.go",
+					"Line": 62,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "cloneStringMap",
+				"Position": {
+					"File": "internal/metric/exec_bridge.go",
+					"Line": 142,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Store.Init",
+				"Position": {
+					"File": "internal/metric/store.go",
+					"Line": 26,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Store.Validate",
+				"Position": {
+					"File": "internal/metric/store.go",
+					"Line": 33,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Store.Run",
+				"Position": {
+					"File": "internal/metric/store.go",
+					"Line": 59,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Store.Compare",
+				"Position": {
+					"File": "internal/metric/store.go",
+					"Line": 71,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Store.LoadDefinition",
+				"Position": {
+					"File": "internal/metric/store.go",
+					"Line": 117,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Store.SaveDefinition",
+				"Position": {
+					"File": "internal/metric/store.go",
+					"Line": 154,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Store.AppendHistory",
+				"Position": {
+					"File": "internal/metric/store.go",
+					"Line": 167,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Store.loadMetricArtifact",
+				"Position": {
+					"File": "internal/metric/store.go",
+					"Line": 195,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "selectComparisonTarget",
+				"Position": {
+					"File": "internal/metric/store.go",
+					"Line": 210,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "comparisonFor",
+				"Position": {
+					"File": "internal/metric/store.go",
+					"Line": 226,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "persona",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/persona",
+		"Funcs": [
+			{
+				"Name": "NewBindingManager",
+				"Position": {
+					"File": "internal/persona/binding.go",
+					"Line": 18,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewClaudeInjector",
+				"Position": {
+					"File": "internal/persona/claude.go",
+					"Line": 17,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewClaudeInjectorWithPath",
+				"Position": {
+					"File": "internal/persona/claude.go",
+					"Line": 24,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ClaudeInjectorImpl.InjectPersona",
+				"Position": {
+					"File": "internal/persona/claude.go",
+					"Line": 31,
+					"Col": 30
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ClaudeInjectorImpl.InjectMultiple",
+				"Position": {
+					"File": "internal/persona/claude.go",
+					"Line": 50,
+					"Col": 30
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ClaudeInjectorImpl.RemovePersonas",
+				"Position": {
+					"File": "internal/persona/claude.go",
+					"Line": 96,
+					"Col": 30
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ClaudeInjectorImpl.GetLoadedPersonas",
+				"Position": {
+					"File": "internal/persona/claude.go",
+					"Line": 114,
+					"Col": 30
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ClaudeInjectorImpl.removePersonasSection",
+				"Position": {
+					"File": "internal/persona/claude.go",
+					"Line": 129,
+					"Col": 30
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ClaudeInjectorImpl.buildPersonasSection",
+				"Position": {
+					"File": "internal/persona/claude.go",
+					"Line": 169,
+					"Col": 30
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ClaudeInjectorImpl.extractRolePersonaPairs",
+				"Position": {
+					"File": "internal/persona/claude.go",
+					"Line": 199,
+					"Col": 30
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "formatRoleDisplay",
+				"Position": {
+					"File": "internal/persona/claude.go",
+					"Line": 236,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ClaudeInjectorImpl.saveClaudeFile",
+				"Position": {
+					"File": "internal/persona/claude.go",
+					"Line": 261,
+					"Col": 30
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ClaudeInjectorImpl.getExistingPersonas",
+				"Position": {
+					"File": "internal/persona/claude.go",
+					"Line": 284,
+					"Col": 30
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "formatRoleFromDisplay",
+				"Position": {
+					"File": "internal/persona/claude.go",
+					"Line": 370,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewPersonaLoaderWithDir",
+				"Position": {
+					"File": "internal/persona/loader.go",
+					"Line": 44,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewPersonaLoaderWithDirs",
+				"Position": {
+					"File": "internal/persona/loader.go",
+					"Line": 52,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "registry",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/registry",
+		"Funcs": [
+			{
+				"Name": "MarshalPackage",
+				"Position": {
+					"File": "internal/registry/manifest.go",
+					"Line": 126,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "server",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/server",
+		"Funcs": [
+			{
+				"Name": "WithSpokeHeartbeatInterval",
+				"Position": {
+					"File": "internal/server/federation_spoke.go",
+					"Line": 88,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WithSpokeHeartbeatJitter",
+				"Position": {
+					"File": "internal/server/federation_spoke.go",
+					"Line": 93,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WithSpokeStatePath",
+				"Position": {
+					"File": "internal/server/federation_spoke.go",
+					"Line": 98,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WithSpokeHTTPClient",
+				"Position": {
+					"File": "internal/server/federation_spoke.go",
+					"Line": 103,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WithSpokeSelfURL",
+				"Position": {
+					"File": "internal/server/federation_spoke.go",
+					"Line": 109,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WithSpokeNodeID",
+				"Position": {
+					"File": "internal/server/federation_spoke.go",
+					"Line": 115,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "reportedWorkersAdapter.setNow",
+				"Position": {
+					"File": "internal/server/reported_workers_adapter.go",
+					"Line": 27,
+					"Col": 34
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Server.execStore",
+				"Position": {
+					"File": "internal/server/server.go",
+					"Line": 2177,
+					"Col": 18
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Server.loadSessions",
+				"Position": {
+					"File": "internal/server/server.go",
+					"Line": 2844,
+					"Col": 18
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "readAddrFilePID",
+				"Position": {
+					"File": "internal/server/singleton.go",
+					"Line": 97,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "workerIngestRegistry.close",
+				"Position": {
+					"File": "internal/server/worker_ingest.go",
+					"Line": 225,
+					"Col": 32
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "workerHarnessHealthy",
+				"Position": {
+					"File": "internal/server/workers.go",
+					"Line": 1735,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "graphql",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/server/graphql",
+		"Funcs": [
+			{
+				"Name": "NewResolver",
+				"Position": {
+					"File": "internal/server/graphql/resolver.go",
+					"Line": 21,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "personaConnectionFrom",
+				"Position": {
+					"File": "internal/server/graphql/resolver_meta.go",
+					"Line": 90,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "resetProviderModelsCacheForTest",
+				"Position": {
+					"File": "internal/server/graphql/resolver_provider_models.go",
+					"Line": 292,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RecordHarnessRateLimit",
+				"Position": {
+					"File": "internal/server/graphql/resolver_providers.go",
+					"Line": 35,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "resetHarnessRateLimitCache",
+				"Position": {
+					"File": "internal/server/graphql/resolver_providers.go",
+					"Line": 55,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "perf",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/server/perf",
+		"Funcs": [
+			{
+				"Name": "DefaultBeadFixtureSpec",
+				"Position": {
+					"File": "internal/server/perf/fixtures.go",
+					"Line": 61,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "BeadFixture.TotalBeads",
+				"Position": {
+					"File": "internal/server/perf/fixtures.go",
+					"Line": 85,
+					"Col": 23
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "BuildBeadFixture",
+				"Position": {
+					"File": "internal/server/perf/fixtures.go",
+					"Line": 92,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "seedProjectBeads",
+				"Position": {
+					"File": "internal/server/perf/fixtures.go",
+					"Line": 174,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "seedProjectDocGraph",
+				"Position": {
+					"File": "internal/server/perf/fixtures.go",
+					"Line": 213,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "seedProjectSessions",
+				"Position": {
+					"File": "internal/server/perf/fixtures.go",
+					"Line": 229,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Environment",
+				"Position": {
+					"File": "internal/server/perf/fixtures.go",
+					"Line": 257,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "Targets",
+				"Position": {
+					"File": "internal/server/perf/harness.go",
+					"Line": 67,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "RunMatrix",
+				"Position": {
+					"File": "internal/server/perf/harness.go",
+					"Line": 150,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "variablesFor",
+				"Position": {
+					"File": "internal/server/perf/harness.go",
+					"Line": 217,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "postGraphQL",
+				"Position": {
+					"File": "internal/server/perf/harness.go",
+					"Line": 238,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "PostGraphQL",
+				"Position": {
+					"File": "internal/server/perf/harness.go",
+					"Line": 264,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "percentileMillis",
+				"Position": {
+					"File": "internal/server/perf/harness.go",
+					"Line": 275,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "percentile",
+				"Position": {
+					"File": "internal/server/perf/harness.go",
+					"Line": 287,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "toMillis",
+				"Position": {
+					"File": "internal/server/perf/harness.go",
+					"Line": 301,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "WriteReports",
+				"Position": {
+					"File": "internal/server/perf/report.go",
+					"Line": 18,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "renderMarkdown",
+				"Position": {
+					"File": "internal/server/perf/report.go",
+					"Line": 41,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "testutils",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/testutils",
+		"Funcs": [
+			{
+				"Name": "NewFixtureRepo",
+				"Position": {
+					"File": "internal/testutils/fixture_repo.go",
+					"Line": 23,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "repoRoot",
+				"Position": {
+					"File": "internal/testutils/fixture_repo.go",
+					"Line": 50,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "ResolveDDxBinary",
+				"Position": {
+					"File": "internal/testutils/fixture_repo.go",
+					"Line": 79,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "resolveDDxBinary",
+				"Position": {
+					"File": "internal/testutils/fixture_repo.go",
+					"Line": 88,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "NewTestEnvironment",
+				"Position": {
+					"File": "internal/testutils/testutils.go",
+					"Line": 21,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestEnvironment.Cleanup",
+				"Position": {
+					"File": "internal/testutils/testutils.go",
+					"Line": 45,
+					"Col": 29
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestEnvironment.HomeDir",
+				"Position": {
+					"File": "internal/testutils/testutils.go",
+					"Line": 54,
+					"Col": 29
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestEnvironment.WorkDir",
+				"Position": {
+					"File": "internal/testutils/testutils.go",
+					"Line": 59,
+					"Col": 29
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestEnvironment.CreateFile",
+				"Position": {
+					"File": "internal/testutils/testutils.go",
+					"Line": 64,
+					"Col": 29
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestEnvironment.CreateHomeFile",
+				"Position": {
+					"File": "internal/testutils/testutils.go",
+					"Line": 72,
+					"Col": 29
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestEnvironment.CreateTemplate",
+				"Position": {
+					"File": "internal/testutils/testutils.go",
+					"Line": 80,
+					"Col": 29
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestEnvironment.CreateConfig",
+				"Position": {
+					"File": "internal/testutils/testutils.go",
+					"Line": 92,
+					"Col": 29
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestEnvironment.CreateGlobalConfig",
+				"Position": {
+					"File": "internal/testutils/testutils.go",
+					"Line": 97,
+					"Col": 29
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestEnvironment.AssertFileExists",
+				"Position": {
+					"File": "internal/testutils/testutils.go",
+					"Line": 102,
+					"Col": 29
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "TestEnvironment.AssertFileContent",
+				"Position": {
+					"File": "internal/testutils/testutils.go",
+					"Line": 108,
+					"Col": 29
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	},
+	{
+		"Name": "update",
+		"Path": "github.com/DocumentDrivenDX/ddx/internal/update",
+		"Funcs": [
+			{
+				"Name": "Cache.Invalidate",
+				"Position": {
+					"File": "internal/update/cache.go",
+					"Line": 87,
+					"Col": 17
+				},
+				"Generated": false,
+				"Marker": false
+			},
+			{
+				"Name": "InvalidateCache",
+				"Position": {
+					"File": "internal/update/cache.go",
+					"Line": 93,
+					"Col": 6
+				},
+				"Generated": false,
+				"Marker": false
+			}
+		]
+	}
+]

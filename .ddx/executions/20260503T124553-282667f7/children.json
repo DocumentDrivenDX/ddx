@@ -1,0 +1,107 @@
+[
+  {
+    "id": "ddx-0131ebf0",
+    "package": "cmd",
+    "count": 69
+  },
+  {
+    "id": "ddx-83b8994f",
+    "package": "internal/agent",
+    "count": 66
+  },
+  {
+    "id": "ddx-abb40ce5",
+    "package": "internal/agent/escalation",
+    "count": 4
+  },
+  {
+    "id": "ddx-cd51f35b",
+    "package": "internal/agent/testfixtures",
+    "count": 6
+  },
+  {
+    "id": "ddx-2da07e5c",
+    "package": "internal/agent/try",
+    "count": 9
+  },
+  {
+    "id": "ddx-b42dd3a0",
+    "package": "internal/bead",
+    "count": 8
+  },
+  {
+    "id": "ddx-91fe7a1a",
+    "package": "internal/config",
+    "count": 8
+  },
+  {
+    "id": "ddx-9df0636c",
+    "package": "internal/escalation",
+    "count": 6
+  },
+  {
+    "id": "ddx-ae4b7393",
+    "package": "internal/evidence",
+    "count": 8
+  },
+  {
+    "id": "ddx-9f6baafe",
+    "package": "internal/exec",
+    "count": 5
+  },
+  {
+    "id": "ddx-8c273456",
+    "package": "internal/federation",
+    "count": 2
+  },
+  {
+    "id": "ddx-503c34fa",
+    "package": "internal/git",
+    "count": 9
+  },
+  {
+    "id": "ddx-a7fac0fc",
+    "package": "internal/metaprompt",
+    "count": 1
+  },
+  {
+    "id": "ddx-2850c4dc",
+    "package": "internal/metric",
+    "count": 14
+  },
+  {
+    "id": "ddx-c96fc86c",
+    "package": "internal/persona",
+    "count": 16
+  },
+  {
+    "id": "ddx-d0d8d615",
+    "package": "internal/registry",
+    "count": 1
+  },
+  {
+    "id": "ddx-90901b22",
+    "package": "internal/server",
+    "count": 12
+  },
+  {
+    "id": "ddx-4c5beab2",
+    "package": "internal/server/graphql",
+    "count": 5
+  },
+  {
+    "id": "ddx-895fd8bb",
+    "package": "internal/server/perf",
+    "count": 17
+  },
+  {
+    "id": "ddx-a78f836f",
+    "package": "internal/testutils",
+    "count": 15
+  },
+  {
+    "id": "ddx-7f4cdb7a",
+    "package": "internal/update",
+    "count": 2
+  }
+]
