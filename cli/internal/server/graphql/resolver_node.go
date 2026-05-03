@@ -2,8 +2,12 @@ package graphql
 
 import (
 	"context"
+	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 )
 
 // NodeStateSnapshot holds node identity data for resolver consumption.
@@ -83,6 +87,12 @@ type StateProvider interface {
 }
 
 // Node is the resolver for the node(id: ID!) field (Relay lookup by global ID).
+//
+// LAYER 3 of the GraphQL multi-project leak fix (ddx-5ae050dc): Bead and
+// ExecutionRun lookups are scoped to the request's WorkingDir (via
+// WithWorkingDir/r.workingDir(ctx)) so two projects with overlapping bead IDs
+// or run IDs do not leak across one another. Unknown ID prefixes return
+// (nil, nil).
 func (r *queryResolver) Node(ctx context.Context, id string) (Node, error) {
 	if strings.HasPrefix(id, "node-") {
 		snap := r.State.GetNodeSnapshot()
@@ -98,7 +108,90 @@ func (r *queryResolver) Node(ctx context.Context, id string) (Node, error) {
 		}
 		return proj, nil
 	}
+	if strings.HasPrefix(id, "bead-") {
+		beadID := strings.TrimPrefix(id, "bead-")
+		if beadID == "" {
+			return nil, nil
+		}
+		wd := r.workingDir(ctx)
+		if wd == "" {
+			return nil, nil
+		}
+		store := bead.NewStore(filepath.Join(wd, ".ddx"))
+		b, err := store.Get(beadID)
+		if err != nil || b == nil {
+			return nil, nil
+		}
+		snap := BeadSnapshot{
+			ID:          b.ID,
+			Title:       b.Title,
+			Status:      b.Status,
+			Priority:    b.Priority,
+			IssueType:   b.IssueType,
+			Owner:       b.Owner,
+			CreatedAt:   b.CreatedAt,
+			CreatedBy:   b.CreatedBy,
+			UpdatedAt:   b.UpdatedAt,
+			Labels:      b.Labels,
+			Parent:      b.Parent,
+			Description: b.Description,
+			Acceptance:  b.Acceptance,
+			Notes:       b.Notes,
+		}
+		for _, d := range b.Dependencies {
+			snap.Dependencies = append(snap.Dependencies, BeadDependencySnapshot{
+				IssueID:     d.IssueID,
+				DependsOnID: d.DependsOnID,
+				Type:        d.Type,
+				CreatedAt:   d.CreatedAt,
+				CreatedBy:   d.CreatedBy,
+				Metadata:    d.Metadata,
+			})
+		}
+		return beadFromSnapshot(snap), nil
+	}
+	if strings.HasPrefix(id, "exec-") {
+		wd := r.workingDir(ctx)
+		if wd == "" {
+			return nil, nil
+		}
+		store := ddxexec.NewStore(wd)
+		runs, err := store.History("", "")
+		if err != nil {
+			return nil, nil
+		}
+		for _, rec := range runs {
+			if rec.RunID == id {
+				return execRunNodeFromRecord(rec), nil
+			}
+		}
+		return nil, nil
+	}
 	return nil, nil
+}
+
+// execRunNodeFromRecord builds a minimal ExecutionRun GraphQL value from a
+// ddxexec.RunRecord for Node(id) resolution. Mirrors execRunFromRecord in the
+// server package but is local to graphql to avoid an import cycle.
+func execRunNodeFromRecord(rec ddxexec.RunRecord) *ExecutionRun {
+	r := &ExecutionRun{
+		ID:           rec.RunID,
+		DefinitionID: rec.DefinitionID,
+		ArtifactIds:  rec.ArtifactIDs,
+		StartedAt:    rec.StartedAt.UTC().Format(time.RFC3339),
+		FinishedAt:   rec.FinishedAt.UTC().Format(time.RFC3339),
+		Status:       rec.Status,
+		ExitCode:     rec.ExitCode,
+	}
+	if rec.MergeBlocking {
+		b := true
+		r.MergeBlocking = &b
+	}
+	if rec.AgentSessionID != "" {
+		s := rec.AgentSessionID
+		r.AgentSessionID = &s
+	}
+	return r
 }
 
 // NodeInfo is the resolver for the nodeInfo field.
