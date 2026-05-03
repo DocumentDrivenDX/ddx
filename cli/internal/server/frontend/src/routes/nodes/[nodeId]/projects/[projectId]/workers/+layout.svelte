@@ -203,6 +203,44 @@
 				return 'text-fg-muted dark:text-dark-fg-muted';
 		}
 	}
+
+	// ADR-022 step 5b: freshness badge classes for reported (derived-view)
+	// workers. The state strings come from the server (connected | stale |
+	// disconnected) — see ReportedWorker.state in schema.graphql.
+	function freshnessBadgeClass(state: string): string {
+		switch (state) {
+			case 'connected':
+				return 'border-status-running bg-status-running/10 text-status-running';
+			case 'stale':
+				return 'border-status-open bg-status-open/10 text-status-open';
+			case 'disconnected':
+				return 'border-status-failed bg-status-failed/10 text-status-failed';
+			default:
+				return 'border-border-line bg-bg-surface text-fg-muted dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-muted';
+		}
+	}
+
+	function formatTimestamp(iso: string): string {
+		try {
+			return new Date(iso).toLocaleString();
+		} catch {
+			return iso;
+		}
+	}
+
+	// Group reported workers by project root so duplicates (same project, two
+	// worker_ids) render distinctly per ADR-022 §worker-server-interface
+	// (multiple workers per project root is expected and visible).
+	const reportedByProject = $derived.by(() => {
+		const groups = new Map<string, typeof data.reportedWorkers>();
+		for (const rw of data.reportedWorkers ?? []) {
+			const key = rw.project || '(unknown)';
+			const list = groups.get(key) ?? [];
+			list.push(rw);
+			groups.set(key, list);
+		}
+		return Array.from(groups.entries()).map(([project, workers]) => ({ project, workers }));
+	});
 </script>
 
 <div class="space-y-4">
@@ -433,6 +471,137 @@
 			</tbody>
 		</table>
 	</div>
+
+	<!--
+		ADR-022 step 5b: reported-workers panel surfaces the worker_ingest
+		derived view (trusted-peer reports). Distinct from the in-process
+		workers table above: this view is best-effort, possibly stale, and
+		labeled non-authoritative so operators don't conflate it with the
+		registry of locally-managed workers.
+	-->
+	<section
+		data-testid="reported-workers-panel"
+		class="space-y-3 border border-border-line bg-bg-surface p-4 dark:border-dark-border-line dark:bg-dark-bg-surface"
+	>
+		<header class="flex flex-col gap-1">
+			<div class="flex items-center gap-2">
+				<h2 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">
+					Reported workers
+				</h2>
+				<span
+					data-testid="reported-not-authoritative"
+					class="border border-border-line px-2 py-0.5 text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:border-dark-border-line dark:text-dark-fg-muted"
+					title="Server-derived from worker-reported events; may lag"
+				>
+					reported by worker (not authoritative)
+				</span>
+			</div>
+			<p class="max-w-2xl text-body-sm text-fg-muted dark:text-dark-fg-muted">
+				Trusted-peer worker reports for project root
+				<span class="font-mono-code text-mono-code">{data.projectPath ?? '(unknown)'}</span>.
+				Multiple entries under one project root are expected when two workers run concurrently.
+			</p>
+		</header>
+
+		{#if (data.reportedWorkers ?? []).length === 0}
+			<p
+				data-testid="reported-workers-empty"
+				class="border border-dashed border-border-line px-3 py-6 text-center text-body-sm text-fg-muted dark:border-dark-border-line dark:text-dark-fg-muted"
+			>
+				No reported workers for this project.
+			</p>
+		{:else}
+			{#each reportedByProject as group (group.project)}
+				<div
+					data-testid="reported-worker-group"
+					data-project={group.project}
+					class="space-y-2"
+				>
+					{#if group.workers.length > 1}
+						<div
+							data-testid="reported-worker-duplicate-banner"
+							class="text-body-sm text-fg-muted dark:text-dark-fg-muted"
+						>
+							{group.workers.length} workers reported under this project root.
+						</div>
+					{/if}
+					<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
+						<table class="w-full text-body-sm">
+							<thead>
+								<tr class="border-b border-border-line bg-bg-canvas dark:border-dark-border-line dark:bg-dark-bg-canvas">
+									<th class="px-4 py-2 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Worker</th>
+									<th class="px-4 py-2 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Harness</th>
+									<th class="px-4 py-2 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Freshness</th>
+									<th class="px-4 py-2 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Last event</th>
+									<th class="px-4 py-2 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Current bead</th>
+									<th class="px-4 py-2 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Mirror failures</th>
+									<th class="px-4 py-2 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Backfill</th>
+								</tr>
+							</thead>
+							<tbody>
+								{#each group.workers as rw (rw.id)}
+									<tr
+										data-testid="reported-worker-row"
+										data-worker-id={rw.id}
+										class="border-b border-border-line last:border-0 dark:border-dark-border-line"
+									>
+										<td class="px-4 py-2 font-mono-code text-mono-code text-accent-lever dark:text-dark-accent-lever">
+											{rw.id.slice(0, 12)}
+										</td>
+										<td class="px-4 py-2 text-fg-ink dark:text-dark-fg-ink">
+											{rw.harness}
+										</td>
+										<td class="px-4 py-2">
+											<span
+												data-testid="reported-worker-freshness"
+												data-state={rw.state}
+												class="inline-flex items-center border px-2 py-0.5 text-label-caps font-label-caps uppercase tracking-wide {freshnessBadgeClass(
+													rw.state
+												)}"
+											>
+												{rw.state}
+											</span>
+										</td>
+										<td
+											data-testid="reported-worker-last-event"
+											class="px-4 py-2 text-fg-muted dark:text-dark-fg-muted"
+											title={rw.lastEventAt}
+										>
+											{formatTimestamp(rw.lastEventAt)}
+										</td>
+										<td class="px-4 py-2 font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
+											{rw.currentBead ?? '—'}
+										</td>
+										<td
+											data-testid="reported-worker-mirror-failures"
+											class="px-4 py-2 text-right {rw.mirrorFailuresCount > 0
+												? 'text-status-failed'
+												: 'text-fg-muted dark:text-dark-fg-muted'}"
+										>
+											{rw.mirrorFailuresCount}
+										</td>
+										<td class="px-4 py-2">
+											{#if rw.hadDroppedBackfill}
+												<span
+													data-testid="reported-worker-dropped-backfill"
+													class="inline-flex items-center border border-status-failed bg-status-failed/10 px-2 py-0.5 text-label-caps font-label-caps uppercase tracking-wide text-status-failed"
+													title="Worker reported a backfill with dropped overflow events"
+												>
+													dropped
+												</span>
+											{:else}
+												<span class="text-fg-muted dark:text-dark-fg-muted">—</span>
+											{/if}
+										</td>
+									</tr>
+								{/each}
+							</tbody>
+						</table>
+					</div>
+				</div>
+			{/each}
+		{/if}
+	</section>
 </div>
 
 {@render children()}
