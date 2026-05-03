@@ -733,6 +733,7 @@ type ComplexityRoot struct {
 		PersonaUpdate         func(childComplexity int, name string, body string, projectID string) int
 		PluginDispatch        func(childComplexity int, name string, action string, scope string) int
 		RefreshProviderModels func(childComplexity int, name string, kind ProviderKind) int
+		RunRequeue            func(childComplexity int, input RunRequeueInput) int
 		StartWorker           func(childComplexity int, input StartWorkerInput) int
 		StopWorker            func(childComplexity int, id string) int
 		WorkerDispatch        func(childComplexity int, kind string, projectID string, args *string) int
@@ -1173,6 +1174,11 @@ type ComplexityRoot struct {
 		Node   func(childComplexity int) int
 	}
 
+	RunRequeueResult struct {
+		Bead         func(childComplexity int) int
+		Deduplicated func(childComplexity int) int
+	}
+
 	RunToolCall struct {
 		DurationMs func(childComplexity int) int
 		Error      func(childComplexity int) int
@@ -1381,6 +1387,7 @@ type MutationResolver interface {
 	OperatorPromptSubmit(ctx context.Context, input OperatorPromptSubmitInput) (*OperatorPromptSubmitResult, error)
 	OperatorPromptApprove(ctx context.Context, id string) (*OperatorPromptApproveResult, error)
 	OperatorPromptCancel(ctx context.Context, id string) (*OperatorPromptCancelResult, error)
+	RunRequeue(ctx context.Context, input RunRequeueInput) (*RunRequeueResult, error)
 }
 type QueryResolver interface {
 	Node(ctx context.Context, id string) (Node, error)
@@ -4479,6 +4486,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.RefreshProviderModels(childComplexity, args["name"].(string), args["kind"].(ProviderKind)), true
+	case "Mutation.runRequeue":
+		if e.ComplexityRoot.Mutation.RunRequeue == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_runRequeue_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.RunRequeue(childComplexity, args["input"].(RunRequeueInput)), true
 	case "Mutation.startWorker":
 		if e.ComplexityRoot.Mutation.StartWorker == nil {
 			break
@@ -6674,6 +6692,19 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.RunEdge.Node(childComplexity), true
 
+	case "RunRequeueResult.bead":
+		if e.ComplexityRoot.RunRequeueResult.Bead == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunRequeueResult.Bead(childComplexity), true
+	case "RunRequeueResult.deduplicated":
+		if e.ComplexityRoot.RunRequeueResult.Deduplicated == nil {
+			break
+		}
+
+		return e.ComplexityRoot.RunRequeueResult.Deduplicated(childComplexity), true
+
 	case "RunToolCall.durationMs":
 		if e.ComplexityRoot.RunToolCall.DurationMs == nil {
 			break
@@ -7419,6 +7450,7 @@ func (e *executableSchema) Exec(ctx context.Context) graphql.ResponseHandler {
 		ec.unmarshalInputBeadUpdateInput,
 		ec.unmarshalInputComparisonArmInput,
 		ec.unmarshalInputOperatorPromptSubmitInput,
+		ec.unmarshalInputRunRequeueInput,
 		ec.unmarshalInputStartWorkerInput,
 	)
 	first := true
@@ -7817,6 +7849,17 @@ func (ec *executionContext) field_Mutation_refreshProviderModels_args(ctx contex
 		return nil, err
 	}
 	args["kind"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_runRequeue_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "input", ec.unmarshalNRunRequeueInput2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunRequeueInput)
+	if err != nil {
+		return nil, err
+	}
+	args["input"] = arg0
 	return args, nil
 }
 
@@ -24641,6 +24684,53 @@ func (ec *executionContext) fieldContext_Mutation_operatorPromptCancel(ctx conte
 	return fc, nil
 }
 
+func (ec *executionContext) _Mutation_runRequeue(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_runRequeue,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().RunRequeue(ctx, fc.Args["input"].(RunRequeueInput))
+		},
+		nil,
+		ec.marshalNRunRequeueResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunRequeueResult,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_runRequeue(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "bead":
+				return ec.fieldContext_RunRequeueResult_bead(ctx, field)
+			case "deduplicated":
+				return ec.fieldContext_RunRequeueResult_deduplicated(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type RunRequeueResult", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_runRequeue_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _NodeInfo_id(ctx context.Context, field graphql.CollectedField, obj *NodeInfo) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -35891,6 +35981,98 @@ func (ec *executionContext) fieldContext_RunEdge_cursor(_ context.Context, field
 	return fc, nil
 }
 
+func (ec *executionContext) _RunRequeueResult_bead(ctx context.Context, field graphql.CollectedField, obj *RunRequeueResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunRequeueResult_bead,
+		func(ctx context.Context) (any, error) {
+			return obj.Bead, nil
+		},
+		nil,
+		ec.marshalNBead2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐBead,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunRequeueResult_bead(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunRequeueResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Bead_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Bead_title(ctx, field)
+			case "status":
+				return ec.fieldContext_Bead_status(ctx, field)
+			case "priority":
+				return ec.fieldContext_Bead_priority(ctx, field)
+			case "issueType":
+				return ec.fieldContext_Bead_issueType(ctx, field)
+			case "owner":
+				return ec.fieldContext_Bead_owner(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Bead_createdAt(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Bead_createdBy(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Bead_updatedAt(ctx, field)
+			case "labels":
+				return ec.fieldContext_Bead_labels(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
+			case "parent":
+				return ec.fieldContext_Bead_parent(ctx, field)
+			case "description":
+				return ec.fieldContext_Bead_description(ctx, field)
+			case "acceptance":
+				return ec.fieldContext_Bead_acceptance(ctx, field)
+			case "notes":
+				return ec.fieldContext_Bead_notes(ctx, field)
+			case "dependencies":
+				return ec.fieldContext_Bead_dependencies(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Bead", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _RunRequeueResult_deduplicated(ctx context.Context, field graphql.CollectedField, obj *RunRequeueResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_RunRequeueResult_deduplicated,
+		func(ctx context.Context) (any, error) {
+			return obj.Deduplicated, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_RunRequeueResult_deduplicated(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "RunRequeueResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _RunToolCall_id(ctx context.Context, field graphql.CollectedField, obj *RunToolCall) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -41300,6 +41482,50 @@ func (ec *executionContext) unmarshalInputOperatorPromptSubmitInput(ctx context.
 	return it, nil
 }
 
+func (ec *executionContext) unmarshalInputRunRequeueInput(ctx context.Context, obj any) (RunRequeueInput, error) {
+	var it RunRequeueInput
+	if obj == nil {
+		return it, nil
+	}
+
+	asMap := map[string]any{}
+	for k, v := range obj.(map[string]any) {
+		asMap[k] = v
+	}
+
+	fieldsInOrder := [...]string{"runId", "idempotencyKey", "layer"}
+	for _, k := range fieldsInOrder {
+		v, ok := asMap[k]
+		if !ok {
+			continue
+		}
+		switch k {
+		case "runId":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("runId"))
+			data, err := ec.unmarshalNID2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.RunID = data
+		case "idempotencyKey":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idempotencyKey"))
+			data, err := ec.unmarshalNString2string(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.IdempotencyKey = data
+		case "layer":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("layer"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Layer = data
+		}
+	}
+	return it, nil
+}
+
 func (ec *executionContext) unmarshalInputStartWorkerInput(ctx context.Context, obj any) (StartWorkerInput, error) {
 	var it StartWorkerInput
 	if obj == nil {
@@ -45982,6 +46208,13 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "runRequeue":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_runRequeue(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -50080,6 +50313,50 @@ func (ec *executionContext) _RunEdge(ctx context.Context, sel ast.SelectionSet, 
 	return out
 }
 
+var runRequeueResultImplementors = []string{"RunRequeueResult"}
+
+func (ec *executionContext) _RunRequeueResult(ctx context.Context, sel ast.SelectionSet, obj *RunRequeueResult) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, runRequeueResultImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("RunRequeueResult")
+		case "bead":
+			out.Values[i] = ec._RunRequeueResult_bead(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "deduplicated":
+			out.Values[i] = ec._RunRequeueResult_deduplicated(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
 var runToolCallImplementors = []string{"RunToolCall"}
 
 func (ec *executionContext) _RunToolCall(ctx context.Context, sel ast.SelectionSet, obj *RunToolCall) graphql.Marshaler {
@@ -53476,6 +53753,25 @@ func (ec *executionContext) unmarshalNRunLayer2githubᚗcomᚋDocumentDrivenDX�
 
 func (ec *executionContext) marshalNRunLayer2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunLayer(ctx context.Context, sel ast.SelectionSet, v RunLayer) graphql.Marshaler {
 	return v
+}
+
+func (ec *executionContext) unmarshalNRunRequeueInput2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunRequeueInput(ctx context.Context, v any) (RunRequeueInput, error) {
+	res, err := ec.unmarshalInputRunRequeueInput(ctx, v)
+	return res, graphql.ErrorOnPath(ctx, err)
+}
+
+func (ec *executionContext) marshalNRunRequeueResult2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunRequeueResult(ctx context.Context, sel ast.SelectionSet, v RunRequeueResult) graphql.Marshaler {
+	return ec._RunRequeueResult(ctx, sel, &v)
+}
+
+func (ec *executionContext) marshalNRunRequeueResult2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunRequeueResult(ctx context.Context, sel ast.SelectionSet, v *RunRequeueResult) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._RunRequeueResult(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNRunToolCall2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐRunToolCall(ctx context.Context, sel ast.SelectionSet, v *RunToolCall) graphql.Marshaler {

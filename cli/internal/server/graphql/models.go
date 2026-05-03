@@ -1977,6 +1977,24 @@ type RunEdge struct {
 	Cursor string `json:"cursor"`
 }
 
+// Input for runRequeue. idempotencyKey is mandatory: concurrent calls with the same key return the same originating bead without enqueuing twice.
+type RunRequeueInput struct {
+	// Run identifier whose work should be re-queued.
+	RunID string `json:"runId"`
+	// Idempotency key. Concurrent or repeat submissions with the same key return the originating bead unchanged (deduplicated=true).
+	IdempotencyKey string `json:"idempotencyKey"`
+	// Optional layer override (one of "work", "try", "run") recorded on the audit event for downstream handlers; ignored by the basic re-queue path.
+	Layer *string `json:"layer,omitempty"`
+}
+
+// Result of runRequeue. When deduplicated=true, an earlier call with the same idempotencyKey already requeued this bead and no second enqueue happened.
+type RunRequeueResult struct {
+	// The originating bead after the requeue (status=open).
+	Bead *Bead `json:"bead"`
+	// True when the request matched a prior idempotency key and no second enqueue occurred.
+	Deduplicated bool `json:"deduplicated"`
+}
+
 // RunToolCall is one normalized tool-call entry persisted at drain time.
 type RunToolCall struct {
 	// Stable identifier within the run (used as cursor).

@@ -3111,6 +3111,9 @@ type Mutation {
 
   """Cancel a proposed operator-prompt bead, transitioning it from proposed → cancelled so it never enters the execute-loop. Requires a valid CSRF token. Any trusted identity (localhost OR ts-net) may cancel a proposal — the allowlist gates auto-approval, not rejection. An audit event of kind operator_prompt_cancel records the canceller. Errors when the bead is missing, is not an operator-prompt, or is not in the proposed status."""
   operatorPromptCancel(id: ID!): OperatorPromptCancelResult!
+
+  """Requeue an existing run by reopening its originating bead so the execute-loop can claim it again. Atomic with respect to the mandatory idempotencyKey: concurrent calls with the same key dedupe to the originating bead and never enqueue twice. An audit event of kind run_requeue is appended to the originating bead capturing operator identity, run id, and the optional layer override."""
+  runRequeue(input: RunRequeueInput!): RunRequeueResult!
 }
 
 # ============================================
@@ -3205,6 +3208,24 @@ type OperatorPromptApproveResult {
 type OperatorPromptCancelResult {
   """The bead after cancellation (status=cancelled)."""
   bead: Bead!
+}
+
+"""Input for runRequeue. idempotencyKey is mandatory: concurrent calls with the same key return the same originating bead without enqueuing twice."""
+input RunRequeueInput {
+  """Run identifier whose work should be re-queued."""
+  runId: ID!
+  """Idempotency key. Concurrent or repeat submissions with the same key return the originating bead unchanged (deduplicated=true)."""
+  idempotencyKey: String!
+  """Optional layer override (one of "work", "try", "run") recorded on the audit event for downstream handlers; ignored by the basic re-queue path."""
+  layer: String
+}
+
+"""Result of runRequeue. When deduplicated=true, an earlier call with the same idempotencyKey already requeued this bead and no second enqueue happened."""
+type RunRequeueResult {
+  """The originating bead after the requeue (status=open)."""
+  bead: Bead!
+  """True when the request matched a prior idempotency key and no second enqueue occurred."""
+  deduplicated: Boolean!
 }
 
 # ============================================

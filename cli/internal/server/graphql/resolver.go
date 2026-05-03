@@ -3,6 +3,7 @@ package graphql
 import (
 	"context"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -160,6 +161,16 @@ type Resolver struct {
 	// query resolvers. Nil → those queries return empty lists (the default
 	// for non-hub servers).
 	Federation FederationProvider
+	// RunRequeueIdempotency deduplicates runRequeue mutation calls by
+	// idempotency key. Concurrent and repeat calls with the same key return
+	// the same originating bead and never enqueue a second time. Server
+	// callers wire a process-wide instance (NewMemoryIdempotencyCache); when
+	// nil, the resolver returns an error rather than silently failing open.
+	RunRequeueIdempotency IdempotencyCache
+	// runRequeueMu serializes the lookup+reserve+store steps of the
+	// runRequeue mutation so that concurrent calls with the same
+	// idempotencyKey collapse to a single re-queue (atomic claims).
+	runRequeueMu sync.Mutex
 }
 
 // Mutation returns MutationResolver implementation.
