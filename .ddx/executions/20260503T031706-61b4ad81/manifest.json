@@ -1,0 +1,61 @@
+{
+  "attempt_id": "20260503T031706-61b4ad81",
+  "bead_id": "ddx-a13eb42a",
+  "base_rev": "6acfa54547281b064a2d1e0d05859a17df9d3da0",
+  "created_at": "2026-05-03T03:17:07.784404179Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a13eb42a",
+    "title": "cleanup: collapse agent_usage.go aggregators to monthly-shard reader (~300 LOC dead)",
+    "description": "Per /tmp/agent-surface-dead-code-audit.md: aggregateUsage, aggregateUsageAggs, readUsageSessionRecords (~300 LOC in cli/internal/agent/agent_usage.go) were superseded by monthly-shard reader (commit 99033c89) but the old aggregators were left behind. No production callers; tests exist but are testing dead code.\n\nIndependent of refactor (no overlap with try/work package split).",
+    "acceptance": "1. Dead aggregators removed from cli/internal/agent/agent_usage.go (or file deleted entirely if everything is dead). 2. Their test functions removed. 3. cd cli \u0026\u0026 go test ./internal/agent/... green. 4. cd cli \u0026\u0026 go build ./... green. 5. Audit re-run shows ~300 LOC reduction in cli/internal/agent/.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "kind:cleanup",
+      "dead-code"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:17:06Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T20:55:54.020874824Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "exit status 1\nresult_rev=a64ec4dc2b912765803a6e2fcb37bf4bfb49b496\nbase_rev=a64ec4dc2b912765803a6e2fcb37bf4bfb49b496\nretry_after=2026-05-03T02:55:54Z",
+          "created_at": "2026-05-02T20:55:54.538177961Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T03:17:06.440763915Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-03T02:55:54Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031706-61b4ad81",
+    "prompt": ".ddx/executions/20260503T031706-61b4ad81/prompt.md",
+    "manifest": ".ddx/executions/20260503T031706-61b4ad81/manifest.json",
+    "result": ".ddx/executions/20260503T031706-61b4ad81/result.json",
+    "checks": ".ddx/executions/20260503T031706-61b4ad81/checks.json",
+    "usage": ".ddx/executions/20260503T031706-61b4ad81/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a13eb42a-20260503T031706-61b4ad81"
+  },
+  "prompt_sha": "2ad2ed442ee0ff4790723b9c7d712b5571dd91b6c114bda0ab298b731fe5828f"
+}
