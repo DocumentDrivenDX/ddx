@@ -1,0 +1,69 @@
+{
+  "verdict": "REQUEST_CHANGES",
+  "rationale": "Pre-merge checks gate, bypass annotation, and e2e tests are correctly implemented and well-structured. AC #7 is not strictly satisfied: commit was made with lefthook --no-verify due to a pre-existing TestReviewEvidenceApproveAttributesToTier failure, which the author documented as reproducible on base 6a64e425. Implementation packages pass green; pre-existing failure should be filed as a separate bead.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "AC #1 satisfied: RunPreMergeChecks delegates to checks.Run which filters by AppliesTo (cli/internal/checks/runner.go) and parallelises via sync.WaitGroup.",
+      "location": "cli/internal/agent/checks_premerge.go:108"
+    },
+    {
+      "severity": "info",
+      "summary": "AC #2 satisfied: PreserveAfterPreMergeChecks writes refs/ddx/iterations/\u003cbead-id\u003e/... via PreserveRef + UpdateRef, returns LandResult{Status:\"preserved\"}; covered by TestSubmitWithPreMergeChecks_DummyFailAbortsMerge asserting the ref resolves to resultSHA.",
+      "location": "cli/internal/agent/checks_premerge.go:215"
+    },
+    {
+      "severity": "info",
+      "summary": "AC #3 satisfied: ChecksBypasses validates non-empty trimmed name+reason; SubmitWithPreMergeChecks treats setup errors (including missing-reason rejections) as a hard preserve so a misconfigured bypass cannot silently merge.",
+      "location": "cli/internal/bead/checks_bypass.go:50"
+    },
+    {
+      "severity": "info",
+      "summary": "AC #4/#5/#6 satisfied: TestSubmitWithPreMergeChecks_{DummyFailAbortsMerge,BypassAllowsMerge,BypassMissingReasonRejected} drive a real git repo + bead store and assert preserve ref, evidence JSON file, submit-not-called/called, and event records on the bead.",
+      "location": "cli/internal/agent/checks_premerge_e2e_test.go:160"
+    },
+    {
+      "severity": "block",
+      "summary": "AC #7 not satisfied as written: commit used --no-verify because lefthook go-test fails on TestReviewEvidenceApproveAttributesToTier. Author documents reproduction on base 6a64e425 (pre-existing, unrelated to this slice). The implementation packages (internal/agent, internal/bead, internal/checks) are green per the same evidence note. File a separate bead for the review-evidence test bug rather than absorbing it here.",
+      "location": ".ddx/executions/20260503T211820-d1d78258/lefthook-pre-existing-failure.md:1"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2494,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T211820-d1d78258/manifest.json",
+          ".ddx/executions/20260503T211820-d1d78258/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 5135,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 9435,
+    "output_bytes": 2363,
+    "elapsed_ms": 154001,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
