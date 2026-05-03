@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T031755-a62beb88",
+  "bead_id": "ddx-5ae050dc",
+  "base_rev": "aa2cd8c12330721168d5f95baa706eb459f4bee3",
+  "created_at": "2026-05-03T03:17:57.147914287Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-5ae050dc",
+    "title": "graphql LAYER 3: implement Bead/Execution Node(id) Relay resolution with project-aware lookups",
+    "description": "LAYER 3 of the GraphQL cross-project leak fix. Completeness work — fixes incomplete Relay spec compliance.\n\nPROBLEM\ncli/internal/server/graphql/resolver_node.go:86-101 (Node(id) Relay lookup) returns nil for any ID that isn't \"node-\" or \"proj-\" prefixed. Beads and Executions implement the Node interface in the schema but have no resolver. This breaks Relay clients that expect Node(id) lookup to work for any object type.\n\nLAYER 3 SCOPE\nImplement Node(id) resolution for:\n- Bead IDs (e.g., \"bead-ddx-abc12345\")\n- Execution run IDs (e.g., \"exec-20260502T220000-abc1\")\n\nResolution must respect the current project context (LAYER 2 dependency — without context-based WorkingDir, Node(id) can't scope correctly across projects).\n\nNOT IN SCOPE\n- Adding new node types beyond Bead/Execution\n- Schema changes\n- Backward-compat for clients that currently rely on nil-returning Node(id)\n\nDEP: ddx-4c51d33e (LAYER 1) AND the LAYER 2 bead — Node(id) needs context-based WorkingDir to scope correctly.",
+    "acceptance": "1. Node(id) at cli/internal/server/graphql/resolver_node.go resolves Bead IDs (prefix \"bead-\") via the bead store scoped to context WorkingDir.\n2. Node(id) resolves Execution run IDs (prefix \"exec-\" or whatever the run-id format is) via the executions store scoped to context WorkingDir.\n3. Returns nil + appropriate error for IDs that don't match any known prefix.\n4. Test: TestNode_ResolvesBeadByID_ScopedToProject — register two projects with overlapping bead IDs; query Node(\"bead-X\") via project A's scoped GraphQL; assert returns project A's bead, not B's.\n5. Test: TestNode_ResolvesExecRunByID_ScopedToProject — same shape for execution runs.\n6. Test: TestNode_ReturnsNilForUnknownPrefix — assert no panic, nil returned.\n7. cd cli \u0026\u0026 go test ./internal/server/graphql/... green; lefthook pre-commit passes.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "area:server",
+      "area:graphql",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:17:55Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T03:17:55.810693852Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031755-a62beb88",
+    "prompt": ".ddx/executions/20260503T031755-a62beb88/prompt.md",
+    "manifest": ".ddx/executions/20260503T031755-a62beb88/manifest.json",
+    "result": ".ddx/executions/20260503T031755-a62beb88/result.json",
+    "checks": ".ddx/executions/20260503T031755-a62beb88/checks.json",
+    "usage": ".ddx/executions/20260503T031755-a62beb88/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-5ae050dc-20260503T031755-a62beb88"
+  },
+  "prompt_sha": "b8f4194b72ed9ab7f1fc63397d8ab7c48e33d6aeb0264521f9a969ede5d39115"
+}
