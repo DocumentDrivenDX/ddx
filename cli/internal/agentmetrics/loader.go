@@ -90,6 +90,8 @@ type runRecord struct {
 	CostUSD     float64 `json:"cost_usd"`
 	DurationMs  int     `json:"duration_ms"`
 	ExitCode    int     `json:"exit_code"`
+	TokensIn    int     `json:"tokens_in"`
+	TokensOut   int     `json:"tokens_out"`
 }
 
 func loadFromRunStore(workingDir string) ([]Attempt, error) {
@@ -123,19 +125,21 @@ func loadFromRunStore(workingDir string) ([]Attempt, error) {
 			continue
 		}
 		a := Attempt{
-			AttemptID:  rec.ID,
-			BeadID:     rec.BeadID,
-			Harness:    rec.Harness,
-			Provider:   rec.Provider,
-			Model:      rec.Model,
-			Status:     rec.Status,
-			Outcome:    rec.Outcome,
-			CostUSD:    rec.CostUSD,
-			DurationMS: rec.DurationMs,
-			ExitCode:   rec.ExitCode,
-			StartedAt:  parseTime(rec.StartedAt),
-			FinishedAt: parseTime(rec.CompletedAt),
-			Source:     SourceRunStore,
+			AttemptID:    rec.ID,
+			BeadID:       rec.BeadID,
+			Harness:      rec.Harness,
+			Provider:     rec.Provider,
+			Model:        rec.Model,
+			Status:       rec.Status,
+			Outcome:      rec.Outcome,
+			CostUSD:      rec.CostUSD,
+			DurationMS:   rec.DurationMs,
+			ExitCode:     rec.ExitCode,
+			InputTokens:  rec.TokensIn,
+			OutputTokens: rec.TokensOut,
+			StartedAt:    parseTime(rec.StartedAt),
+			FinishedAt:   parseTime(rec.CompletedAt),
+			Source:       SourceRunStore,
 		}
 		out = append(out, a)
 	}

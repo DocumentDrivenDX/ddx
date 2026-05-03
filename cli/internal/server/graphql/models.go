@@ -16,6 +16,46 @@ type Node interface {
 	GetID() string
 }
 
+// AgentMetricsResult wraps the row set with the window/axis echo plus a revision string. The revision is a fingerprint of the run-store + bundle + archive inputs; callers may use it as a cache key.
+type AgentMetricsResult struct {
+	// Echo of the requested window
+	Window AgentMetricsWindow `json:"window"`
+	// Echo of the requested grouping axis
+	GroupBy AgentMetricsAxis `json:"groupBy"`
+	// Revision token for the underlying data sources; opaque cache key.
+	Revision string `json:"revision"`
+	// Aggregated rows, sorted by attempt count descending then key ascending.
+	Rows []*AgentMetricsRow `json:"rows"`
+}
+
+// AgentMetricsRow is one aggregated bucket: counts, success rate, duration percentiles, and cost/token means for the attempts in `key`.
+type AgentMetricsRow struct {
+	// Group key (model, harness, provider, or tier label)
+	Key string `json:"key"`
+	// Total attempts in this bucket
+	Attempts int `json:"attempts"`
+	// Successful attempts (success + already_satisfied per Story 11)
+	Successes int `json:"successes"`
+	// successes / attempts
+	SuccessRate float64 `json:"successRate"`
+	// Mean duration in milliseconds
+	MeanDurationMs float64 `json:"meanDurationMs"`
+	// Median (p50) duration in milliseconds
+	P50DurationMs int `json:"p50DurationMs"`
+	// 95th-percentile duration in milliseconds
+	P95DurationMs int `json:"p95DurationMs"`
+	// Mean cost in USD
+	MeanCostUsd float64 `json:"meanCostUsd"`
+	// Effective cost per success: total cost / successes (null when no successes)
+	EffectiveCostPerSuccessUsd *float64 `json:"effectiveCostPerSuccessUsd,omitempty"`
+	// Mean input tokens (only run-store records carry tokens)
+	MeanInputTokens float64 `json:"meanInputTokens"`
+	// Mean output tokens
+	MeanOutputTokens float64 `json:"meanOutputTokens"`
+	// Most recent attempt finish time in this bucket
+	LastSeenAt *string `json:"lastSeenAt,omitempty"`
+}
+
 // AgentSession represents one agent execution session
 type AgentSession struct {
 	// Unique session identifier
@@ -2326,6 +2366,131 @@ type WorkerRecentEvent struct {
 	Inputs *string `json:"inputs,omitempty"`
 	// Tool call output text
 	Output *string `json:"output,omitempty"`
+}
+
+// AgentMetricsAxis selects the grouping dimension for agentMetrics rows.
+type AgentMetricsAxis string
+
+const (
+	// Group by model identifier
+	AgentMetricsAxisModel AgentMetricsAxis = "MODEL"
+	// Group by harness name
+	AgentMetricsAxisHarness AgentMetricsAxis = "HARNESS"
+	// Group by provider name
+	AgentMetricsAxisProvider AgentMetricsAxis = "PROVIDER"
+	// Group by harness/model tier (TierKey)
+	AgentMetricsAxisTier AgentMetricsAxis = "TIER"
+)
+
+var AllAgentMetricsAxis = []AgentMetricsAxis{
+	AgentMetricsAxisModel,
+	AgentMetricsAxisHarness,
+	AgentMetricsAxisProvider,
+	AgentMetricsAxisTier,
+}
+
+func (e AgentMetricsAxis) IsValid() bool {
+	switch e {
+	case AgentMetricsAxisModel, AgentMetricsAxisHarness, AgentMetricsAxisProvider, AgentMetricsAxisTier:
+		return true
+	}
+	return false
+}
+
+func (e AgentMetricsAxis) String() string {
+	return string(e)
+}
+
+func (e *AgentMetricsAxis) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = AgentMetricsAxis(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid AgentMetricsAxis", str)
+	}
+	return nil
+}
+
+func (e AgentMetricsAxis) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *AgentMetricsAxis) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e AgentMetricsAxis) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// AgentMetricsWindow enumerates the time windows the agentMetrics resolver supports. The Story 11 locked decision removed all-time from the UI; only 24h, 7d, and 30d are exposed.
+type AgentMetricsWindow string
+
+const (
+	// Trailing 24 hours
+	AgentMetricsWindowW24h AgentMetricsWindow = "W24H"
+	// Trailing 7 days (default)
+	AgentMetricsWindowW7d AgentMetricsWindow = "W7D"
+	// Trailing 30 days
+	AgentMetricsWindowW30d AgentMetricsWindow = "W30D"
+)
+
+var AllAgentMetricsWindow = []AgentMetricsWindow{
+	AgentMetricsWindowW24h,
+	AgentMetricsWindowW7d,
+	AgentMetricsWindowW30d,
+}
+
+func (e AgentMetricsWindow) IsValid() bool {
+	switch e {
+	case AgentMetricsWindowW24h, AgentMetricsWindowW7d, AgentMetricsWindowW30d:
+		return true
+	}
+	return false
+}
+
+func (e AgentMetricsWindow) String() string {
+	return string(e)
+}
+
+func (e *AgentMetricsWindow) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = AgentMetricsWindow(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid AgentMetricsWindow", str)
+	}
+	return nil
+}
+
+func (e AgentMetricsWindow) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *AgentMetricsWindow) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e AgentMetricsWindow) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
 }
 
 // ArtifactSort selects the field used to order Artifact results.
