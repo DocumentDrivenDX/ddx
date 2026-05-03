@@ -422,9 +422,19 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			return result, err
 		}
 
-		candidate, ok, err := w.nextCandidate(attempted, runtime.LabelFilter)
+		candidate, skips, ok, err := w.nextCandidate(attempted, runtime.LabelFilter)
 		if err != nil {
 			return result, err
+		}
+		// Diagnostic: when nextCandidate selected a lower-priority bead while
+		// at least one higher-priority bead was skipped, emit a structured
+		// picker.priority_skip event naming each skipped bead and the reason
+		// (ddx-9d55601f AC #4). Without this surface, an operator who sees a
+		// worker claim a P2 while P0s sit in `ddx bead ready` cannot tell
+		// whether the picker has a bug, the P0s are filtered upstream, or a
+		// label filter is in play.
+		if ok {
+			emitPickerPrioritySkips(emit, candidate, skips)
 		}
 		if !ok {
 			if result.Attempts == 0 {
@@ -546,6 +556,17 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 
 		if err := w.Store.Claim(candidate.ID, assignee); err != nil {
+			// Another worker won the race for this bead. Emit a structured
+			// claim_race event so concurrent-worker losses are observable
+			// (ddx-9d55601f AC #4). The bead remains in `attempted` for this
+			// run; on the next iteration it will be filtered out of
+			// ReadyExecution naturally because Claim() flipped it to
+			// in_progress, so the loser keeps moving down priority order.
+			emit("picker.claim_race", map[string]any{
+				"bead_id":  candidate.ID,
+				"priority": candidate.Priority,
+				"reason":   err.Error(),
+			})
 			continue
 		}
 
@@ -1142,21 +1163,79 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	}
 }
 
-func (w *ExecuteBeadWorker) nextCandidate(attempted map[string]struct{}, labelFilter string) (bead.Bead, bool, error) {
+// emitPickerPrioritySkips fires a picker.priority_skip event when the picker
+// chose `chosen` while at least one strictly higher-priority bead was passed
+// over (ddx-9d55601f AC #4). Skips at the same priority as `chosen` are NOT
+// reported — those are FIFO order or label-filter siblings, not starvation.
+//
+// The emit is guarded so it costs nothing when the chosen bead is the highest-
+// priority bead the picker saw (the common case).
+func emitPickerPrioritySkips(emit func(string, map[string]any), chosen bead.Bead, skips []pickerSkip) {
+	if len(skips) == 0 {
+		return
+	}
+	var higher []map[string]any
+	for _, s := range skips {
+		if s.Priority < chosen.Priority {
+			higher = append(higher, map[string]any{
+				"bead_id":  s.BeadID,
+				"priority": s.Priority,
+				"reason":   s.Reason,
+			})
+		}
+	}
+	if len(higher) == 0 {
+		return
+	}
+	emit("picker.priority_skip", map[string]any{
+		"chosen_bead_id":  chosen.ID,
+		"chosen_priority": chosen.Priority,
+		"skipped":         higher,
+	})
+}
+
+// pickerSkip records a single bead that the picker passed over while looking
+// for the next candidate. It is used to emit a structured picker.priority_skip
+// event when a worker claims a lower-priority bead while a higher-priority
+// bead was skipped, so future starvation regressions are observable.
+//
+// Reason values are bounded to the set named in ddx-9d55601f AC #4:
+//
+//	label_filter, in_attempted, claim_race, eligibility_filter, retry_cooldown
+//
+// Note: eligibility_filter and retry_cooldown are applied upstream in
+// Store.ReadyExecution (so beads filtered for those reasons never reach
+// nextCandidate at all). They are part of the reason vocabulary so future
+// picker rearrangements can re-emit them without changing the schema.
+type pickerSkip struct {
+	BeadID   string
+	Priority int
+	Reason   string
+}
+
+// nextCandidate returns the next claimable bead from the execution-ready
+// queue along with the list of higher-priority beads it skipped (and the
+// reason for each skip). The returned skips slice is only meaningful when
+// ok=true: it contains every entry that came BEFORE the chosen candidate
+// in the priority-sorted ReadyExecution result.
+func (w *ExecuteBeadWorker) nextCandidate(attempted map[string]struct{}, labelFilter string) (bead.Bead, []pickerSkip, bool, error) {
 	ready, err := w.Store.ReadyExecution()
 	if err != nil {
-		return bead.Bead{}, false, err
+		return bead.Bead{}, nil, false, err
 	}
+	var skips []pickerSkip
 	for _, candidate := range ready {
 		if _, seen := attempted[candidate.ID]; seen {
+			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, Reason: "in_attempted"})
 			continue
 		}
 		if labelFilter != "" && !HasBeadLabel(candidate.Labels, labelFilter) {
+			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, Reason: "label_filter"})
 			continue
 		}
-		return candidate, true, nil
+		return candidate, skips, true, nil
 	}
-	return bead.Bead{}, false, nil
+	return bead.Bead{}, skips, false, nil
 }
 
 // appendLoopRoutingEvidence records a kind:routing evidence event on the bead
