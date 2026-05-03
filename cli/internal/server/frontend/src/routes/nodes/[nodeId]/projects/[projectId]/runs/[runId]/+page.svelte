@@ -5,8 +5,8 @@
 	import { browser } from '$app/environment';
 	import { RunRowDetail } from '$lib/runDetail';
 
-	type Tab = 'overview' | 'prompt' | 'response' | 'tools' | 'session';
-	const VALID_TABS: Tab[] = ['overview', 'prompt', 'response', 'tools', 'session'];
+	type Tab = 'overview' | 'prompt' | 'response' | 'tools' | 'session' | 'evidence';
+	const VALID_TABS: Tab[] = ['overview', 'prompt', 'response', 'tools', 'session', 'evidence'];
 
 	let { data }: { data: PageData } = $props();
 

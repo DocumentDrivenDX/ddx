@@ -905,6 +905,11 @@ func (s *Server) routes() {
 	scoped("GET /api/projects/{project}/exec/runs/{id}", s.handleExecRunShow)
 	scoped("GET /api/projects/{project}/exec/runs", s.handleExecRuns)
 
+	// Run evidence-bundle file download (Story 16). Streams a single file from
+	// the run's bundle directory after canonicalisation + confinement checks.
+	trusted("GET /api/runs/{id}/bundle", s.handleRunBundleDownload)
+	scoped("GET /api/projects/{project}/runs/{id}/bundle", s.handleRunBundleDownload)
+
 	// Agent sessions — legacy
 	legacy("GET /api/agent/sessions/{id}", s.handleAgentSessionDetail)
 	legacy("GET /api/agent/sessions", s.handleAgentSessions)
@@ -5193,5 +5198,51 @@ func (s *Server) handleArtifactContent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "failed to stat file", http.StatusInternalServerError)
 		return
 	}
+	http.ServeContent(w, r, info.Name(), info.ModTime(), f)
+}
+
+// handleRunBundleDownload streams a single file from a run's evidence bundle
+// directory. The path query parameter is canonicalised under the bundle root
+// (rejects path traversal, absolute paths, and symlink escape). All file types
+// are downloadable; the response sets Content-Disposition: attachment with
+// the basename so browsers prompt to save instead of rendering inline.
+func (s *Server) handleRunBundleDownload(w http.ResponseWriter, r *http.Request) {
+	id := r.PathValue("id")
+	if id == "" {
+		http.Error(w, "id is required", http.StatusBadRequest)
+		return
+	}
+	rawPath := r.URL.Query().Get("path")
+	if rawPath == "" {
+		http.Error(w, "path query parameter is required", http.StatusBadRequest)
+		return
+	}
+	bundleRoot, _, ok := s.state.runBundleRoot(id)
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+	full, err := resolveRunBundlePath(bundleRoot, rawPath)
+	if err != nil {
+		http.Error(w, "invalid path", http.StatusBadRequest)
+		return
+	}
+	f, err := os.Open(full)
+	if err != nil {
+		if os.IsNotExist(err) {
+			http.NotFound(w, r)
+		} else {
+			http.Error(w, "failed to read file", http.StatusInternalServerError)
+		}
+		return
+	}
+	defer f.Close()
+	info, err := f.Stat()
+	if err != nil || info.IsDir() {
+		http.Error(w, "not a regular file", http.StatusBadRequest)
+		return
+	}
+	w.Header().Set("Content-Type", mimeTypeForPath(rawPath))
+	w.Header().Set("Content-Disposition", "attachment; filename="+strconv.Quote(filepath.Base(rawPath)))
 	http.ServeContent(w, r, info.Name(), info.ModTime(), f)
 }

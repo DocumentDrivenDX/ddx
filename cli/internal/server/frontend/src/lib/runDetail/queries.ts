@@ -36,6 +36,24 @@ export const RUN_DETAIL_QUERY = gql`
 			costUsd
 			outputExcerpt
 			evidenceLinks
+
+			bundleFiles {
+				path
+				size
+				mimeType
+			}
+		}
+	}
+`
+
+export const RUN_BUNDLE_FILE_QUERY = gql`
+	query RunBundleFileFetch($id: ID!, $path: String!) {
+		runBundleFile(id: $id, path: $path) {
+			path
+			content
+			sizeBytes
+			truncated
+			mimeType
 		}
 	}
 `

@@ -32,6 +32,22 @@ export interface RunDetail {
 	costUsd: number | null
 	outputExcerpt: string | null
 	evidenceLinks: string[] | null
+
+	bundleFiles?: BundleFile[]
+}
+
+export interface BundleFile {
+	path: string
+	size: number
+	mimeType: string
+}
+
+export interface BundleFileContent {
+	path: string
+	content: string | null
+	sizeBytes: number
+	truncated: boolean
+	mimeType: string
 }
 
 export interface ToolCall {

@@ -5,6 +5,7 @@
 	import Response from './Response.svelte';
 	import Tools from './Tools.svelte';
 	import Session from './Session.svelte';
+	import Evidence from './Evidence.svelte';
 	import {
 		RUN_DETAIL_QUERY,
 		RUN_EXECUTION_QUERY,
@@ -13,7 +14,7 @@
 	} from './queries';
 	import type { RunDetail, ToolCall, SessionDetail } from './types';
 
-	type Tab = 'overview' | 'prompt' | 'response' | 'tools' | 'session';
+	type Tab = 'overview' | 'prompt' | 'response' | 'tools' | 'session' | 'evidence';
 
 	interface Props {
 		runId: string;
@@ -191,6 +192,7 @@
 		}
 		if (layer === 'run' || layer === 'try') {
 			list.push({ id: 'tools', label: 'Tool calls', show: true });
+			list.push({ id: 'evidence', label: 'Evidence', show: true });
 		}
 		return list;
 	});
@@ -255,6 +257,8 @@
 				onLoadMore={() => fetchToolCalls(true)}
 				sourcePath={exec?.agentLogPath}
 			/>
+		{:else if activeTab === 'evidence'}
+			<Evidence runId={runId} files={run?.bundleFiles ?? []} />
 		{/if}
 	</div>
 </div>
