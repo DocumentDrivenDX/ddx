@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T051808-499156f2",
+  "bead_id": "ddx-b6ab9c0b",
+  "base_rev": "5a629b7ff8418dda4056d86d13733e9e7f228562",
+  "created_at": "2026-05-03T05:18:10.330734969Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b6ab9c0b",
+    "title": "ADR-022 step 8: FEAT-006 amendment — replace rev 3 worker-contract with rev 5 design",
+    "description": "FEAT-006 currently describes rev 3's long-lived API client with session token / heartbeat / next-bead / result / disconnect. Replace with rev 5's autonomous-default + best-effort-mirror description. ~200 lines docs.",
+    "acceptance": "1. FEAT-006-agent-service.md §'Worker contract (per ADR-022)' rewritten to match rev 5: autonomous worker, server-probe goroutine, best-effort mirror, freshness states, cancel via bead extra. 2. Stale rev 3 mentions of 'session_token', 'long-poll', 'claim_lease', 'heartbeat_interval' removed. 3. Cross-link to ADR-022 commit 484b9a08. 4. Doc validates per existing HELIX consistency check (if any).",
+    "parent": "ddx-d7aca866",
+    "labels": [
+      "phase:2",
+      "area:docs",
+      "kind:feature-update",
+      "adr:022"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T05:18:08Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T05:18:08.834877854Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T051808-499156f2",
+    "prompt": ".ddx/executions/20260503T051808-499156f2/prompt.md",
+    "manifest": ".ddx/executions/20260503T051808-499156f2/manifest.json",
+    "result": ".ddx/executions/20260503T051808-499156f2/result.json",
+    "checks": ".ddx/executions/20260503T051808-499156f2/checks.json",
+    "usage": ".ddx/executions/20260503T051808-499156f2/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b6ab9c0b-20260503T051808-499156f2"
+  },
+  "prompt_sha": "bf7dd5f149965af459f23cddcdd68db2fd66dd0cb1e744b08135287da6c0b459"
+}
