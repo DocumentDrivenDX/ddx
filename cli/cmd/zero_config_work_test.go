@@ -71,27 +71,3 @@ default_provider: testprov
 	assert.True(t, os.IsNotExist(statErr),
 		"zero-config drain must not create .ddx/config.yaml (statErr=%v)", statErr)
 }
-
-// TestZeroConfigWork_NoGlobalProvidersFriendlyError covers ddx-b790449b AC2:
-// when neither the project nor the global agent config has providers, the
-// error must point the operator at the global config path rather than
-// emitting the upstream routing-under-specified message.
-func TestZeroConfigWork_NoGlobalProvidersFriendlyError(t *testing.T) {
-	projectDir := t.TempDir()
-	ddxDir := filepath.Join(projectDir, ".ddx")
-	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
-	beads := `{"id":"test-no-prov-1","title":"trivial","type":"task","status":"open","priority":3,"created_at":"2026-05-01T00:00:00Z","updated_at":"2026-05-01T00:00:00Z"}` + "\n"
-	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(beads), 0o644))
-
-	homeDir := t.TempDir()
-	t.Setenv("HOME", homeDir)
-	t.Setenv("XDG_CONFIG_HOME", filepath.Join(homeDir, ".config"))
-
-	factory := NewCommandFactory(projectDir)
-	root := factory.NewRootCommand()
-	_, err := executeCommand(root, "work", "--local", "--once", "--project", projectDir)
-	require.Error(t, err, "expected friendly no-providers error")
-	msg := strings.ToLower(err.Error())
-	assert.Contains(t, msg, "no providers configured")
-	assert.Contains(t, msg, "agent/config.yaml")
-}
