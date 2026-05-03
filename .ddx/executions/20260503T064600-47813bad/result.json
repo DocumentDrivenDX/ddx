@@ -1,0 +1,48 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff under review contains only an execution evidence result.json file. No source code changes for the cancel endpoint, worker poll, or tests are present to evaluate against any acceptance criteria.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No implementation diff: only .ddx/executions/.../result.json is changed. Cannot verify AC1-7 (cancel endpoint, mid-attempt poll, preserved_for_review emission, idempotency, unit tests, integration test).",
+      "location": ".ddx/executions/20260503T062235-a3b53a6c/result.json"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1369,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T062235-a3b53a6c/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1184,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 4287,
+    "output_bytes": 609,
+    "elapsed_ms": 63614,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
