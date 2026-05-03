@@ -1,0 +1,130 @@
+{
+  "attempt_id": "20260503T065739-f453b7fb",
+  "bead_id": ".execute-bead-wt-ddx-7b753655-20260503T064620-a387a207-28f710ee",
+  "base_rev": "059f723d43fa5ac11d1975dc357d4dc6dbb722ce",
+  "created_at": "2026-05-03T06:57:41.016558463Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-7b753655-20260503T064620-a387a207-28f710ee",
+    "title": "ADR-022 step 5a: derived-view GraphQL workers query (backend)",
+    "description": "Add a GraphQL query that surfaces the server's worker_ingest derived view (cli/internal/server/worker_ingest.go: workerIngestRegistry). Resolver reads from server runtime registry (s.workerIngest.snapshot()) and applies freshnessState() to compute connected/stale/disconnected. Fields exposed: id, project (from Identity.ProjectRoot), harness, state (freshness), last_event_at, mirror_failures_count, had_dropped_backfill, current_bead, current_attempt. The existing 'workers' query is for the in-process execute-loop registry; this is a parallel derived-view query (suggested name: reportedWorkers / workerReports). ~150 LOC backend including schema, resolver, model wiring, and gqlgen-regenerated code.",
+    "acceptance": "1. New GraphQL query exposes id, project, harness, state, lastEventAt, mirrorFailuresCount, hadDroppedBackfill, currentBead, currentAttempt.\n2. Resolver reads from s.workerIngest registry; freshness state computed via freshnessState().\n3. TestGraphQL_Workers_FreshnessFields validates connected/stale/disconnected transitions over time using a fake clock or time-controlled record manipulation.\n4. TestGraphQL_Workers_MultipleWorkersPerProject validates that two workers under the same projectRoot both appear (duplicate-worker visibility).\n5. cd cli \u0026\u0026 go test ./... passes; gqlgen-generated.go regenerated and consistent with schema; lefthook pre-commit passes.",
+    "parent": "ddx-7b753655",
+    "labels": [
+      "phase:2",
+      " area:server",
+      " area:graphql",
+      " kind:feature",
+      " adr:022"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T06:57:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:49:45.591819176Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:50:22.383554269Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:51:06.101988144Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:51:49.872743378Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:52:33.583045865Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:53:17.393364486Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:54:01.158928835Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:54:45.027150819Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:55:35.679995689Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:56:19.277635386Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:57:00.720747091Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T06:57:39.443085854Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T065739-f453b7fb",
+    "prompt": ".ddx/executions/20260503T065739-f453b7fb/prompt.md",
+    "manifest": ".ddx/executions/20260503T065739-f453b7fb/manifest.json",
+    "result": ".ddx/executions/20260503T065739-f453b7fb/result.json",
+    "checks": ".ddx/executions/20260503T065739-f453b7fb/checks.json",
+    "usage": ".ddx/executions/20260503T065739-f453b7fb/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-7b753655-20260503T064620-a387a207-28f710ee-20260503T065739-f453b7fb"
+  },
+  "prompt_sha": "198145df283df1a356e0500e0470b49ef9a0016d810c08caccc6b40d3d8d091b"
+}
