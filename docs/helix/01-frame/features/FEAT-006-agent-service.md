@@ -226,6 +226,41 @@ Both statuses use `LandConflictCooldown` (15 min) rather than the 24h cap used
 for `push_failed`, because land conflicts typically unblock quickly as sibling
 beads advance the base branch.
 
+### Disrupted vs no-progress cooldown policy (bead ddx-5b3e57f4)
+
+The execute-loop cooldown branch must distinguish *worker disruption* from
+*model gave up*. A failed attempt where the model never had a chance to commit
+— context cancelled, executor killed by SIGTERM/SIGKILL, transport-class
+provider error, server restart, routing preflight rejection — is NOT evidence
+the model could not make progress on the bead. Parking such an attempt under
+the 6h `noProgressCooldown` silently freezes important work whenever a worker
+is disrupted by an unrelated cause.
+
+The loop classifies the failure via `classifyDisruption(ctx, executorErr)` and
+sets `ExecuteBeadReport.Disrupted = true` plus a stable `DisruptionReason`
+kind:
+
+| Reason | Trigger |
+| --- | --- |
+| `context_canceled` | `ctx.Err() == context.Canceled` (SIGINT, parent died, Stop()) |
+| `context_deadline` | `ctx.Err() == context.DeadlineExceeded` |
+| `transport_error` | Executor error matches a transport-class marker (connection refused/reset, gateway, EOF, TLS handshake, …) |
+| `preflight_rejected` | Upstream `RoutePreflight` rejected the (harness, model) pair |
+
+When `report.Disrupted` is true:
+
+1. `shouldSuppressNoProgress` returns false unconditionally — the loop
+   bypasses `SetExecutionCooldown` so the bead is immediately re-claimable.
+2. A `disruption_detected` event is appended to the bead and emitted on the
+   loop event sink (`{reason, detail, harness, model}`) so operators can see
+   disruption rates and which class is firing.
+3. Genuine no-progress (clean executor return, BaseRev == ResultRev, not
+   Disrupted) still hits the configured `noProgressCooldown` (default 6h).
+
+The classifier is intentionally fuzzy on transport markers: a false positive
+costs one quick retry; a false negative costs a 6-hour park for what was a
+transient outage.
+
 ## Bead-Attempt Worker Sub-task Discovery Policy
 
 **Design position: option (b) — surface via result.**
