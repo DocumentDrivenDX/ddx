@@ -1,0 +1,147 @@
+{
+  "attempt_id": "20260503T031131-edcd38d7",
+  "bead_id": "ddx-cd2ecf79",
+  "base_rev": "95efa2624abab93041a7930d8762b3e2aa5391d0",
+  "created_at": "2026-05-03T03:11:32.848840447Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cd2ecf79",
+    "title": "artifact-types: FEAT-018 + FEAT-005 spec amendments",
+    "description": "FEAT-018 (plugin API stability) registers the artifact-type discovery contract: plugins ship per-type definitions at \u003cplugin\u003e/workflows/**/artifacts/\u003ctypeId\u003e/{meta.yml,template.md,prompt.md,example.md}. Plugins lacking workflows/ tree opt in via package.yaml.artifact_type_roots. FEAT-005 amendment: prefix lookup is plugin-defined; conventional types remain valid fallback.",
+    "acceptance": "1. FEAT-018 documents the discovery contract + frontmatter shape. 2. FEAT-005 amended to reference plugin-declared types. 3. ddx doc audit clean. 4. New shape mandated; legacy HELIX shape supported as compat.",
+    "parent": "ddx-43d67aa5",
+    "labels": [
+      "phase:2",
+      "story:17",
+      "area:specs",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:11:31Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "504561",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128",
+          "created_at": "2026-05-02T13:01:02.356940157Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T14:12:53.511718463Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T140946-6045255a\",\"harness\":\"claude\",\"input_tokens\":29,\"output_tokens\":10464,\"total_tokens\":10493,\"cost_usd\":1.1946825,\"duration_ms\":185728,\"exit_code\":0}",
+          "created_at": "2026-05-02T14:12:53.527235698Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=10493 cost_usd=1.1947"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-02T14:12:57.212234756Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only execution evidence (manifest.json, result.json) for the attempt. No spec changes to FEAT-018 or FEAT-005 are present in the changed-files, so none of the four AC items can be verified as implemented.\nharness=claude\nmodel=opus\ninput_bytes=6500\noutput_bytes=1188\nelapsed_ms=10950",
+          "created_at": "2026-05-02T14:13:10.204147558Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-02T14:13:10.215174046Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only execution evidence (manifest.json, result.json) for the attempt. No spec changes to FEAT-018 or FEAT-005 are present in the changed-files, so none of the four AC items can be verified as implemented.\nresult_rev=53cac6fd568505d5442b276fa6d1c0b29baa0b6a\nbase_rev=238d3098dc5d72c481811b4e0b992fb88d383b15",
+          "created_at": "2026-05-02T14:13:10.225769869Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: no tiers in range (check --min-tier / --max-tier)",
+          "created_at": "2026-05-02T17:38:53.925403384Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "tier=cheap harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-02T17:39:50.623847155Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"cheap\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-05-02T17:39:50.641647058Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=1 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "erik",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-05-02T17:39:50.66815133Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T20:55:15.591116892Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "exit status 1\nresult_rev=8019bcab83245a14aa4eaec124d22bd46688739d\nbase_rev=8019bcab83245a14aa4eaec124d22bd46688739d\nretry_after=2026-05-03T02:55:16Z",
+          "created_at": "2026-05-02T20:55:16.11052819Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T03:11:31.503891727Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-03T02:55:16Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031131-edcd38d7",
+    "prompt": ".ddx/executions/20260503T031131-edcd38d7/prompt.md",
+    "manifest": ".ddx/executions/20260503T031131-edcd38d7/manifest.json",
+    "result": ".ddx/executions/20260503T031131-edcd38d7/result.json",
+    "checks": ".ddx/executions/20260503T031131-edcd38d7/checks.json",
+    "usage": ".ddx/executions/20260503T031131-edcd38d7/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-cd2ecf79-20260503T031131-edcd38d7"
+  }
+}
