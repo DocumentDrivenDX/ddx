@@ -1,0 +1,59 @@
+{
+  "attempt_id": "20260503T031447-b35fd5a3",
+  "bead_id": "ddx-a8718bec",
+  "base_rev": "3d4754b6cf501b0d8f955758865fe2c6c0475c43",
+  "created_at": "2026-05-03T03:14:48.830168296Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a8718bec",
+    "title": "cost: charge reviewer cost to cap; review-cost-deferred policy",
+    "description": "Today reviewer cost is silently undercounted (the review path doesn't accumulate CostUSD into --max-cost). CostUSD is ALREADY reported by Fizeau on Final events for every call (no upstream change needed — it's been there). Fix: charge reviewer cost to --max-cost on the same accumulator the implementer uses. Policy: when implementer fits but implementer+reviewer would exceed, defer review (emit 'review-cost-deferred' event) rather than silently skip.",
+    "acceptance": "1. --max-cost includes reviewer cost in the accumulator. 2. review-cost-deferred event when budget would be exceeded by review. 3. Tests cover the deferral case + the normal fit case.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:cost",
+      "kind:fix"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:14:47Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "504561",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T14:57:07.114923016Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\nresult_rev=fda2014905e331e73502bdbf2d9695a4f06475b2\nbase_rev=fda2014905e331e73502bdbf2d9695a4f06475b2\nretry_after=2026-05-02T20:57:07Z",
+          "created_at": "2026-05-02T14:57:07.198512165Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T03:14:47.390052654Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-02T20:57:07Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031447-b35fd5a3",
+    "prompt": ".ddx/executions/20260503T031447-b35fd5a3/prompt.md",
+    "manifest": ".ddx/executions/20260503T031447-b35fd5a3/manifest.json",
+    "result": ".ddx/executions/20260503T031447-b35fd5a3/result.json",
+    "checks": ".ddx/executions/20260503T031447-b35fd5a3/checks.json",
+    "usage": ".ddx/executions/20260503T031447-b35fd5a3/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a8718bec-20260503T031447-b35fd5a3"
+  }
+}
