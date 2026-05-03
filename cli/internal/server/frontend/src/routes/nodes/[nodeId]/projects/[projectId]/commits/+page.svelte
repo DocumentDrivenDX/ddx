@@ -33,7 +33,8 @@
 
 	function executionHref(executionId: string): string {
 		const params = $page.params as Record<string, string>;
-		return `/nodes/${params['nodeId']}/projects/${params['projectId']}/executions/${executionId}`;
+		const runId = executionId.startsWith('exec-') ? executionId : `exec-${executionId}`;
+		return `/nodes/${params['nodeId']}/projects/${params['projectId']}/runs/${runId}`;
 	}
 
 	function fmtDate(iso: string): string {

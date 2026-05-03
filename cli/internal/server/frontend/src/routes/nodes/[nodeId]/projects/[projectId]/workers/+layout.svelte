@@ -100,7 +100,7 @@
 
 	function sessionsHref(): string {
 		const p = $page.params as Record<string, string>;
-		return `/nodes/${p['nodeId']}/projects/${p['projectId']}/sessions`;
+		return `/nodes/${p['nodeId']}/projects/${p['projectId']}/runs?layer=run`;
 	}
 
 	function errorText(err: unknown): string {
