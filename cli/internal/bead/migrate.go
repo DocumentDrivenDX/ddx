@@ -148,6 +148,84 @@ func (s *Store) ArchiveWithEvents(policy ArchivePolicy) (MigrateStats, error) {
 	return stats, nil
 }
 
+// MigrateAxonStats reports what MigrateToAxon copied in a single pass.
+type MigrateAxonStats struct {
+	// BeadsMigrated is the total number of distinct bead IDs written into
+	// the axon backend (active + archive, deduped on ID).
+	BeadsMigrated int
+	// EventsMigrated is the total number of inline events written into the
+	// ddx_bead_events collection. Externalized events (referenced via
+	// Extra[events_attachment]) are not counted because they are not
+	// rewritten by the migration — the attachment file remains canonical.
+	EventsMigrated int
+}
+
+// MigrateToAxon reads beads from the JSONL active collection
+// (.ddx/beads.jsonl) and the JSONL archive partner
+// (.ddx/beads-archive.jsonl) rooted under s.Dir and writes them losslessly
+// into the axon backend (.ddx/axon/). Source files are not modified.
+//
+// Reads always go through fresh JSONL backends regardless of s.backend so
+// the migration is deterministic and not affected by the operator's
+// configured backend (e.g. an axon-misconfigured store still migrates from
+// the on-disk JSONL files). Active wins on duplicate IDs.
+//
+// Idempotent: AxonBackend.WriteAll overwrites both collection files in
+// temp+rename style, so re-running on the same source state produces an
+// identical axon snapshot with no duplicates.
+func (s *Store) MigrateToAxon() (MigrateAxonStats, error) {
+	var stats MigrateAxonStats
+
+	activeSpec := DefaultRegistry().Resolve(DefaultCollection)
+	activeFile, activeLock := activeSpec.PathsUnder(s.Dir)
+	activeBackend := NewJSONLBackend(s.Dir, activeFile, activeLock, s.LockWait)
+
+	archiveSpec := DefaultRegistry().Resolve(BeadsArchiveCollection)
+	archiveFile, archiveLock := archiveSpec.PathsUnder(s.Dir)
+	archiveBackend := NewJSONLBackend(s.Dir, archiveFile, archiveLock, s.LockWait)
+
+	activeBeads, err := activeBackend.ReadAll()
+	if err != nil {
+		return stats, fmt.Errorf("bead: migrate-to-axon read active: %w", err)
+	}
+	archiveBeads, err := archiveBackend.ReadAll()
+	if err != nil {
+		return stats, fmt.Errorf("bead: migrate-to-axon read archive: %w", err)
+	}
+
+	seen := make(map[string]bool, len(activeBeads))
+	merged := make([]Bead, 0, len(activeBeads)+len(archiveBeads))
+	for _, b := range activeBeads {
+		seen[b.ID] = true
+		merged = append(merged, b)
+	}
+	for _, b := range archiveBeads {
+		if seen[b.ID] {
+			continue
+		}
+		seen[b.ID] = true
+		merged = append(merged, b)
+	}
+
+	for i := range merged {
+		stats.BeadsMigrated++
+		if hasInlineEvents(&merged[i]) {
+			stats.EventsMigrated += len(decodeBeadEvents(merged[i].Extra["events"]))
+		}
+	}
+
+	axon := NewAxonBackend(s.Dir, s.LockWait)
+	if err := axon.Init(); err != nil {
+		return stats, fmt.Errorf("bead: migrate-to-axon init: %w", err)
+	}
+	if err := axon.WithLock(func() error {
+		return axon.WriteAll(merged)
+	}); err != nil {
+		return stats, fmt.Errorf("bead: migrate-to-axon write: %w", err)
+	}
+	return stats, nil
+}
+
 // hasInlineEvents reports whether a bead carries any inline events that
 // can still be externalized. An empty array counts as "no inline events"
 // so a second migrate pass on an already-externalized bead is a no-op.

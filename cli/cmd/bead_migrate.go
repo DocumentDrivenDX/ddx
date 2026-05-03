@@ -20,12 +20,46 @@ func (f *CommandFactory) newBeadMigrateCommand() *cobra.Command {
 
 The command is idempotent — a second run with no further changes is a
 no-op. All bead IDs remain addressable: 'ddx bead show', 'ddx bead list',
-and 'ddx bead status' transparently consult the archive partner.`,
+and 'ddx bead status' transparently consult the archive partner.
+
+With --to axon, the command instead copies the entire JSONL corpus
+(.ddx/beads.jsonl + .ddx/beads-archive.jsonl, including externalized
+events) losslessly into the axon backend under .ddx/axon/. The source
+JSONL files are not modified — the operator removes them after verifying
+the migration via 'ddx bead export | diff'.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
 			asJSON, _ := cmd.Flags().GetBool("json")
+			target, _ := cmd.Flags().GetString("to")
+
+			if target != "" {
+				if target != "axon" {
+					return fmt.Errorf("bead: unknown migration target %q (supported: axon)", target)
+				}
+				if dryRun {
+					return fmt.Errorf("bead: --dry-run is not supported with --to axon")
+				}
+				ax, err := s.MigrateToAxon()
+				if err != nil {
+					return err
+				}
+				view := migrateAxonStatsView{
+					BeadsMigrated:  ax.BeadsMigrated,
+					EventsMigrated: ax.EventsMigrated,
+					To:             "axon",
+				}
+				if asJSON {
+					enc := json.NewEncoder(cmd.OutOrStdout())
+					enc.SetIndent("", "  ")
+					return enc.Encode(view)
+				}
+				out := cmd.OutOrStdout()
+				fmt.Fprintf(out, "Migrated %d bead(s) (%d inline event(s)) to axon backend at .ddx/axon/\n", view.BeadsMigrated, view.EventsMigrated)
+				fmt.Fprintln(out, "Source files left intact — remove .ddx/beads.jsonl and .ddx/beads-archive.jsonl after verifying.")
+				return nil
+			}
 
 			var (
 				ext  int
@@ -68,6 +102,7 @@ and 'ddx bead status' transparently consult the archive partner.`,
 	}
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	cmd.Flags().Bool("dry-run", false, "Report what would change without writing")
+	cmd.Flags().String("to", "", "Migrate corpus to a different backend (supported: axon)")
 	return cmd
 }
 
@@ -75,4 +110,10 @@ type migrateStatsView struct {
 	EventsExternalized int  `json:"EventsExternalized"`
 	Archived           int  `json:"Archived"`
 	DryRun             bool `json:"DryRun,omitempty"`
+}
+
+type migrateAxonStatsView struct {
+	BeadsMigrated  int    `json:"BeadsMigrated"`
+	EventsMigrated int    `json:"EventsMigrated"`
+	To             string `json:"To"`
 }

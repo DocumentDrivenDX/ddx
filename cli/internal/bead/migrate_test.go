@@ -1,9 +1,11 @@
 package bead
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -261,6 +263,102 @@ func TestMigrateLargeFixtureSplits(t *testing.T) {
 	second, err := s.Migrate()
 	require.NoError(t, err)
 	assert.False(t, second.Changed())
+}
+
+// TestMigrateToAxonRoundTripFromFixture loads the cli/internal/bead/testdata
+// fixture pair (.ddx/beads.jsonl + .ddx/beads-archive.jsonl), migrates to
+// the axon backend, and verifies that an export from the post-migration
+// axon-backed store matches the pre-migration JSONL export bead-for-bead
+// (sorted to ignore active-then-archive ordering quirks in ExportTo).
+func TestMigrateToAxonRoundTripFromFixture(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), ".ddx")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+
+	copyFixture := func(src, dst string) {
+		t.Helper()
+		data, err := os.ReadFile(src)
+		require.NoError(t, err)
+		require.NoError(t, os.WriteFile(dst, data, 0o644))
+	}
+	copyFixture("testdata/migrate_axon_active.jsonl", filepath.Join(dir, "beads.jsonl"))
+	copyFixture("testdata/migrate_axon_archive.jsonl", filepath.Join(dir, "beads-archive.jsonl"))
+
+	jsonlStore := NewStore(dir)
+
+	var preBuf bytes.Buffer
+	require.NoError(t, jsonlStore.ExportTo(&preBuf))
+	require.NotZero(t, preBuf.Len(), "fixture must produce a non-empty pre-migration export")
+
+	stats, err := jsonlStore.MigrateToAxon()
+	require.NoError(t, err)
+	// 3 active + 2 archive (no overlap) = 5 distinct beads.
+	assert.Equal(t, 5, stats.BeadsMigrated)
+	// 2 inline events on ddx-mta-active2 + 1 on ddx-mta-active3 + 1 on
+	// ddx-mta-arch1 = 4 inline events written into ddx_bead_events.
+	assert.Equal(t, 4, stats.EventsMigrated)
+
+	// Source files left intact — operator removes them after verification.
+	for _, src := range []string{"beads.jsonl", "beads-archive.jsonl"} {
+		_, statErr := os.Stat(filepath.Join(dir, src))
+		assert.NoError(t, statErr, "source file %s must not be deleted by migration", src)
+	}
+	// Axon collection files exist.
+	for _, dst := range []string{"axon/ddx_beads.jsonl", "axon/ddx_bead_events.jsonl"} {
+		_, statErr := os.Stat(filepath.Join(dir, dst))
+		assert.NoError(t, statErr, "axon file %s must exist after migration", dst)
+	}
+
+	// Axon-backed export must match the JSONL export.
+	axStore := NewStore(dir)
+	axStore.backend = NewAxonBackend(dir, axStore.LockWait)
+	var postBuf bytes.Buffer
+	require.NoError(t, axStore.ExportTo(&postBuf))
+
+	pre := sortedNonEmptyLines(preBuf.String())
+	post := sortedNonEmptyLines(postBuf.String())
+	assert.Equal(t, pre, post, "post-migration export must round-trip the pre-migration export")
+
+	// Idempotent: a second migration produces byte-identical axon files.
+	axBeadsBefore, err := os.ReadFile(filepath.Join(dir, "axon", "ddx_beads.jsonl"))
+	require.NoError(t, err)
+	axEventsBefore, err := os.ReadFile(filepath.Join(dir, "axon", "ddx_bead_events.jsonl"))
+	require.NoError(t, err)
+
+	stats2, err := jsonlStore.MigrateToAxon()
+	require.NoError(t, err)
+	assert.Equal(t, stats, stats2, "second migration reports the same counts")
+
+	axBeadsAfter, err := os.ReadFile(filepath.Join(dir, "axon", "ddx_beads.jsonl"))
+	require.NoError(t, err)
+	axEventsAfter, err := os.ReadFile(filepath.Join(dir, "axon", "ddx_bead_events.jsonl"))
+	require.NoError(t, err)
+	assert.Equal(t, string(axBeadsBefore), string(axBeadsAfter), "second migration must not duplicate bead rows")
+	assert.Equal(t, string(axEventsBefore), string(axEventsAfter), "second migration must not duplicate event rows")
+}
+
+// TestMigrateToAxonNoSources is a defensive sanity test: an empty .ddx with
+// no source files must not error and produces an empty axon snapshot.
+func TestMigrateToAxonNoSources(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), ".ddx")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	s := NewStore(dir)
+	stats, err := s.MigrateToAxon()
+	require.NoError(t, err)
+	assert.Equal(t, 0, stats.BeadsMigrated)
+	assert.Equal(t, 0, stats.EventsMigrated)
+}
+
+func sortedNonEmptyLines(s string) []string {
+	lines := strings.Split(s, "\n")
+	out := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if strings.TrimSpace(l) == "" {
+			continue
+		}
+		out = append(out, l)
+	}
+	sort.Strings(out)
+	return out
 }
 
 func TestMigratePreservesReferencedDeps(t *testing.T) {
