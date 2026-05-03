@@ -59,6 +59,7 @@ func TestRunsLayering_BundlesAreTryAndSessionsAreRun(t *testing.T) {
 		DurationMS:  2000,
 		ExitCode:    1,
 		Outcome:     "failure",
+		Detail:      "harness exited non-zero",
 	}, now.Add(time.Minute))
 
 	runs := state.GetRunsGraphQL("proj-test", ddxgraphql.RunFilter{})
@@ -121,6 +122,13 @@ func TestRunsLayering_BundlesAreTryAndSessionsAreRun(t *testing.T) {
 	if runFromBundleSession.ParentRunID == nil || *runFromBundleSession.ParentRunID != "exec-"+bundleID {
 		t.Fatalf("session.parentRunId = %v, want exec-%s", runFromBundleSession.ParentRunID, bundleID)
 	}
+	// Lossless join: AgentSession-only fields project onto Run.
+	if runFromBundleSession.BillingMode == nil || *runFromBundleSession.BillingMode != "subscription" {
+		t.Fatalf("session.billingMode = %v, want subscription", runFromBundleSession.BillingMode)
+	}
+	if runFromBundleSession.Outcome == nil || *runFromBundleSession.Outcome != "success" {
+		t.Fatalf("session.outcome = %v, want success", runFromBundleSession.Outcome)
+	}
 
 	if orphanSession == nil {
 		t.Fatal("missing run-layer record from orphan session")
@@ -133,6 +141,12 @@ func TestRunsLayering_BundlesAreTryAndSessionsAreRun(t *testing.T) {
 	}
 	if orphanSession.Status != "failure" {
 		t.Fatalf("orphan.status = %q, want failure", orphanSession.Status)
+	}
+	if orphanSession.BillingMode == nil || *orphanSession.BillingMode != "paid" {
+		t.Fatalf("orphan.billingMode = %v, want paid", orphanSession.BillingMode)
+	}
+	if orphanSession.Detail == nil || *orphanSession.Detail != "harness exited non-zero" {
+		t.Fatalf("orphan.detail = %v, want \"harness exited non-zero\"", orphanSession.Detail)
 	}
 
 	tryLayer := ddxgraphql.RunLayerTry

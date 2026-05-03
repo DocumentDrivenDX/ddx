@@ -1111,11 +1111,14 @@ type ComplexityRoot struct {
 		ArtifactID      func(childComplexity int) int
 		BaseRevision    func(childComplexity int) int
 		BeadID          func(childComplexity int) int
+		BillingMode     func(childComplexity int) int
 		BundleFiles     func(childComplexity int) int
+		CachedTokens    func(childComplexity int) int
 		CheckResults    func(childComplexity int) int
 		ChildRunIds     func(childComplexity int) int
 		CompletedAt     func(childComplexity int) int
 		CostUsd         func(childComplexity int) int
+		Detail          func(childComplexity int) int
 		DurationMs      func(childComplexity int) int
 		EvidenceLinks   func(childComplexity int) int
 		Harness         func(childComplexity int) int
@@ -1123,6 +1126,7 @@ type ComplexityRoot struct {
 		Layer           func(childComplexity int) int
 		MergeOutcome    func(childComplexity int) int
 		Model           func(childComplexity int) int
+		Outcome         func(childComplexity int) int
 		OutputExcerpt   func(childComplexity int) int
 		ParentRunID     func(childComplexity int) int
 		PowerMax        func(childComplexity int) int
@@ -6377,12 +6381,24 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Run.BeadID(childComplexity), true
+	case "Run.billingMode":
+		if e.ComplexityRoot.Run.BillingMode == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.BillingMode(childComplexity), true
 	case "Run.bundleFiles":
 		if e.ComplexityRoot.Run.BundleFiles == nil {
 			break
 		}
 
 		return e.ComplexityRoot.Run.BundleFiles(childComplexity), true
+	case "Run.cachedTokens":
+		if e.ComplexityRoot.Run.CachedTokens == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.CachedTokens(childComplexity), true
 	case "Run.checkResults":
 		if e.ComplexityRoot.Run.CheckResults == nil {
 			break
@@ -6407,6 +6423,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Run.CostUsd(childComplexity), true
+	case "Run.detail":
+		if e.ComplexityRoot.Run.Detail == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.Detail(childComplexity), true
 	case "Run.durationMs":
 		if e.ComplexityRoot.Run.DurationMs == nil {
 			break
@@ -6449,6 +6471,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Run.Model(childComplexity), true
+	case "Run.outcome":
+		if e.ComplexityRoot.Run.Outcome == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Run.Outcome(childComplexity), true
 	case "Run.outputExcerpt":
 		if e.ComplexityRoot.Run.OutputExcerpt == nil {
 			break
@@ -21950,6 +21978,14 @@ func (ec *executionContext) fieldContext_FederatedRun_run(_ context.Context, fie
 				return ec.fieldContext_Run_stderr(ctx, field)
 			case "bundleFiles":
 				return ec.fieldContext_Run_bundleFiles(ctx, field)
+			case "billingMode":
+				return ec.fieldContext_Run_billingMode(ctx, field)
+			case "outcome":
+				return ec.fieldContext_Run_outcome(ctx, field)
+			case "detail":
+				return ec.fieldContext_Run_detail(ctx, field)
+			case "cachedTokens":
+				return ec.fieldContext_Run_cachedTokens(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Run", field.Name)
 		},
@@ -31621,6 +31657,14 @@ func (ec *executionContext) fieldContext_Query_run(ctx context.Context, field gr
 				return ec.fieldContext_Run_stderr(ctx, field)
 			case "bundleFiles":
 				return ec.fieldContext_Run_bundleFiles(ctx, field)
+			case "billingMode":
+				return ec.fieldContext_Run_billingMode(ctx, field)
+			case "outcome":
+				return ec.fieldContext_Run_outcome(ctx, field)
+			case "detail":
+				return ec.fieldContext_Run_detail(ctx, field)
+			case "cachedTokens":
+				return ec.fieldContext_Run_cachedTokens(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Run", field.Name)
 		},
@@ -35260,6 +35304,122 @@ func (ec *executionContext) fieldContext_Run_bundleFiles(_ context.Context, fiel
 	return fc, nil
 }
 
+func (ec *executionContext) _Run_billingMode(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_billingMode,
+		func(ctx context.Context) (any, error) {
+			return obj.BillingMode, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_billingMode(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_outcome(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_outcome,
+		func(ctx context.Context) (any, error) {
+			return obj.Outcome, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_outcome(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_detail(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_detail,
+		func(ctx context.Context) (any, error) {
+			return obj.Detail, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_detail(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Run_cachedTokens(ctx context.Context, field graphql.CollectedField, obj *Run) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Run_cachedTokens,
+		func(ctx context.Context) (any, error) {
+			return obj.CachedTokens, nil
+		},
+		nil,
+		ec.marshalOInt2ᚖint,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_Run_cachedTokens(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Run",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _RunBundleFile_path(ctx context.Context, field graphql.CollectedField, obj *RunBundleFile) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -35687,6 +35847,14 @@ func (ec *executionContext) fieldContext_RunEdge_node(_ context.Context, field g
 				return ec.fieldContext_Run_stderr(ctx, field)
 			case "bundleFiles":
 				return ec.fieldContext_Run_bundleFiles(ctx, field)
+			case "billingMode":
+				return ec.fieldContext_Run_billingMode(ctx, field)
+			case "outcome":
+				return ec.fieldContext_Run_outcome(ctx, field)
+			case "detail":
+				return ec.fieldContext_Run_detail(ctx, field)
+			case "cachedTokens":
+				return ec.fieldContext_Run_cachedTokens(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Run", field.Name)
 		},
@@ -49683,6 +49851,14 @@ func (ec *executionContext) _Run(ctx context.Context, sel ast.SelectionSet, obj 
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "billingMode":
+			out.Values[i] = ec._Run_billingMode(ctx, field, obj)
+		case "outcome":
+			out.Values[i] = ec._Run_outcome(ctx, field, obj)
+		case "detail":
+			out.Values[i] = ec._Run_detail(ctx, field, obj)
+		case "cachedTokens":
+			out.Values[i] = ec._Run_cachedTokens(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}

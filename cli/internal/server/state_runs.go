@@ -373,6 +373,20 @@ func sessionEntryToRun(e agent.SessionIndexEntry) *ddxgraphql.Run {
 		d := e.DurationMS
 		run.DurationMs = &d
 	}
+	// Lossless join with AgentSession: project session-only fields onto Run so
+	// run-layer queries don't lose data that lives only on AgentSession.
+	if e.BillingMode != "" {
+		bm := e.BillingMode
+		run.BillingMode = &bm
+	}
+	if e.Outcome != "" {
+		oc := e.Outcome
+		run.Outcome = &oc
+	}
+	if e.Detail != "" {
+		d := e.Detail
+		run.Detail = &d
+	}
 	var evidence []string
 	if e.BundlePath != "" {
 		evidence = append(evidence, filepath.ToSlash(e.BundlePath))

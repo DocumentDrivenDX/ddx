@@ -1920,6 +1920,14 @@ type Run struct {
 	Stderr *string `json:"stderr,omitempty"`
 	// Files in the run's bundle directory (path relative to bundle root, size, mimeType). Empty when no bundle.
 	BundleFiles []*RunBundleFile `json:"bundleFiles"`
+	// Cost-basis bucket: "paid", "subscription", or "local" (run layer only).
+	BillingMode *string `json:"billingMode,omitempty"`
+	// Outcome classification distinct from status (e.g. raw "success"/"failure"/"timeout"; run layer only).
+	Outcome *string `json:"outcome,omitempty"`
+	// Human-readable outcome detail when the harness emitted one (run layer only).
+	Detail *string `json:"detail,omitempty"`
+	// Number of cached/prompt-cache-hit tokens, when reported by the harness (run layer only).
+	CachedTokens *int `json:"cachedTokens,omitempty"`
 }
 
 func (Run) IsNode() {}
