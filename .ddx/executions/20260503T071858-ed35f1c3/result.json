@@ -1,0 +1,59 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only execution evidence (manifest.json, result.json) — no GraphQL schema, resolver, model wiring, regenerated gqlgen code, or tests are present. Cannot evaluate any AC item against the actual implementation.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No backend changes visible in diff: missing schema additions for reportedWorkers/workerReports query, resolver against s.workerIngest, and gqlgen-regenerated code (AC1, AC2, AC5).",
+      "location": "cli/internal/server/"
+    },
+    {
+      "severity": "block",
+      "summary": "Required tests TestGraphQL_Workers_FreshnessFields and TestGraphQL_Workers_MultipleWorkersPerProject are not present in the diff (AC3, AC4).",
+      "location": "cli/internal/server/"
+    },
+    {
+      "severity": "info",
+      "summary": "Only execution evidence files were added; the underlying feature commit (83ec7853) is not included in the reviewable diff.",
+      "location": ".ddx/executions/20260503T065739-f453b7fb/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1709,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T065739-f453b7fb/manifest.json",
+          ".ddx/executions/20260503T065739-f453b7fb/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 9735,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 13250,
+    "output_bytes": 1020,
+    "elapsed_ms": 65759,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
