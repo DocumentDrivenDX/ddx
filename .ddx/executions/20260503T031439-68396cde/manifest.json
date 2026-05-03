@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260503T031439-68396cde",
+  "bead_id": "ddx-e315ad80",
+  "base_rev": "4fb663d2b7fee114fd40fec17f57da1aec6c546a",
+  "created_at": "2026-05-03T03:14:40.58571741Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e315ad80",
+    "title": "perf: Story 5/6 contract note on page-local vs corpus-wide",
+    "description": "Document the contract: Story 5 grouping is page-local unless server-side groupBy is added. Story 6 search/filter MUST be server-side. Triggers for adding server-side groupBy or virtualization listed.",
+    "acceptance": "1. Contract note in TD or FEAT-008 inline section. 2. Story 5/6 owners aware of triggers.",
+    "parent": "ddx-97335425",
+    "labels": [
+      "phase:2",
+      "story:7",
+      "area:specs",
+      "kind:doc"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:14:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T14:57:05.171099311Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\nresult_rev=fb3e20cb30e2353f9e1776ecd3258104da5831b4\nbase_rev=fb3e20cb30e2353f9e1776ecd3258104da5831b4\nretry_after=2026-05-02T20:57:05Z",
+          "created_at": "2026-05-02T14:57:05.259878165Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T03:14:39.243933938Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-02T20:57:05Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031439-68396cde",
+    "prompt": ".ddx/executions/20260503T031439-68396cde/prompt.md",
+    "manifest": ".ddx/executions/20260503T031439-68396cde/manifest.json",
+    "result": ".ddx/executions/20260503T031439-68396cde/result.json",
+    "checks": ".ddx/executions/20260503T031439-68396cde/checks.json",
+    "usage": ".ddx/executions/20260503T031439-68396cde/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e315ad80-20260503T031439-68396cde"
+  },
+  "prompt_sha": "37885aecf07d3063c07146cff802a16876d02ed43c82395174196cb1fd46bd50"
+}
