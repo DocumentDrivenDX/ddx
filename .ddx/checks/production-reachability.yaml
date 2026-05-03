@@ -1,0 +1,19 @@
+# go-production-reachability — installed for the ddx project itself.
+# Source: library/checks/go-production-reachability/check.yaml
+#
+# This project opts in to the Go reachability check: every bead-merge that
+# touches *.go files runs the check across the cli/ Go module, ensuring new
+# functions/methods are wired into the production call graph reachable from
+# main(). Backfill of existing unwired symbols is tracked under REACH-BACKFILL
+# (ddx-83440482) — until that lands, this check may surface known violations.
+
+name: production-reachability
+when: pre_merge
+applies_to:
+  paths:
+    - "*.go"
+command: |
+  cd library/checks/go-production-reachability && \
+    go run . \
+      --module-dir=cli \
+      --packages=./...
