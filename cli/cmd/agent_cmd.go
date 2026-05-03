@@ -1930,10 +1930,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		return err
 	}
 
-	if tryTargetBeadID != "" {
-		return formatTryResult(cmd, projectRoot, tryTargetBeadID, result, asJSON)
-	}
-
 	if asJSON {
 		payload := struct {
 			ProjectRoot string `json:"project_root"`
