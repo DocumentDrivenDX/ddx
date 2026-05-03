@@ -1052,7 +1052,7 @@ func TestLandConflictAutoRecover_OrtResolvesCleanly(t *testing.T) {
 	r.runGit("update-ref", preserveRef, iterSHA)
 
 	// landConflictAutoRecover must resolve via ort -X ours (no error).
-	newTip, err := landConflictAutoRecover(r.dir, preserveRef, ops)
+	newTip, err := LandConflictAutoRecover(r.dir, preserveRef, ops)
 	if err != nil {
 		t.Fatalf("landConflictAutoRecover must succeed on mechanical conflict via ort -X ours: %v", err)
 	}
@@ -1099,7 +1099,7 @@ func TestLandConflictAutoRecover_NonExistentPreserveRef_ReturnsError(t *testing.
 	preserveRef := "refs/ddx/iterations/ddx-ghost/20260429T000000-000000000000"
 
 	beforeTip := r.resolveRef("refs/heads/main")
-	_, err := landConflictAutoRecover(r.dir, preserveRef, ops)
+	_, err := LandConflictAutoRecover(r.dir, preserveRef, ops)
 	if err == nil {
 		t.Error("must return error when preserve ref does not exist")
 	}

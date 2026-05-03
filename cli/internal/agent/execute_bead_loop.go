@@ -844,37 +844,35 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				result.Failures++
 				result.LastFailureStatus = report.Status
 			}
-		} else if shouldAttemptConflictRecovery(report, runtime) {
-			// Attempt to reuse the preserved iteration before discarding the
-			// agent's work. On success the bead closes as a normal merge; on
-			// failure the bead parks under LandConflictCooldown with a
-			// structured outcome (land_conflict_unresolvable or
-			// land_conflict_needs_human).
-			report = w.runConflictRecovery(ctx, candidate, report, runtime, assignee, now)
-			if report.Status == ExecuteBeadStatusSuccess {
-				if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
-					if w.handleOutcomeStoreError(ctx, candidate.ID, "CloseWithEvidence", err, assignee, result, runtime, now) {
-						continue
-					}
-					return result, ctx.Err()
+		} else if ShouldAttemptConflictRecovery(report, runtime.ProjectRoot) {
+			// C4 (ddx-358f2457): the auto-merge / focused-resolve / close-or-park
+			// state machine now lives in RunConflictRecovery so the loop only sees
+			// a structured outcome (Disposition=Merged on success;
+			// Disposition=Park / NeedsHuman on failure). Store errors are surfaced
+			// via StoreErrOp/StoreErr so this loop continues to drive
+			// handleOutcomeStoreError unchanged.
+			recOut := RunConflictRecovery(ctx, ConflictRecoveryInput{
+				Bead:             candidate,
+				Report:           report,
+				ProjectRoot:      runtime.ProjectRoot,
+				AutoRecover:      w.conflictAutoRecoverFn,
+				ConflictResolver: w.ConflictResolver,
+				Store:            w.Store,
+				Assignee:         assignee,
+				Now:              now,
+				Cooldown:         LandConflictCooldown,
+			})
+			report = recOut.Report
+			if recOut.StoreErr != nil {
+				if w.handleOutcomeStoreError(ctx, candidate.ID, recOut.StoreErrOp, recOut.StoreErr, assignee, result, runtime, now) {
+					continue
 				}
+				return result, ctx.Err()
+			}
+			if recOut.Disposition == ConflictRecoveryMerged {
 				result.Successes++
 				result.LastSuccessAt = now().UTC()
 			} else {
-				if err := w.Store.Unclaim(candidate.ID); err != nil {
-					if w.handleOutcomeStoreError(ctx, candidate.ID, "Unclaim", err, assignee, result, runtime, now) {
-						continue
-					}
-					return result, ctx.Err()
-				}
-				parkUntil := now().UTC().Add(LandConflictCooldown)
-				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
-					if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", err, assignee, result, runtime, now) {
-						continue
-					}
-					return result, ctx.Err()
-				}
-				report.RetryAfter = parkUntil.Format(time.RFC3339)
 				result.Failures++
 				result.LastFailureStatus = report.Status
 			}
@@ -1740,119 +1738,6 @@ func ReviewErrorEventBody(class string, attemptCount int, resultRev, message str
 		b.WriteString(message)
 	}
 	return b.String()
-}
-
-// shouldAttemptConflictRecovery returns true when the loop should try to reuse
-// a preserved iteration ref before discarding it. Requires a non-empty
-// ProjectRoot so recovery git commands have a working directory, and a
-// non-empty PreserveRef to actually have something to recover.
-func shouldAttemptConflictRecovery(report ExecuteBeadReport, runtime ExecuteBeadLoopRuntime) bool {
-	if report.PreserveRef == "" || runtime.ProjectRoot == "" {
-		return false
-	}
-	switch report.Status {
-	case ExecuteBeadStatusLandConflict:
-		return true
-	case ExecuteBeadStatusExecutionFailed:
-		// Attempt recovery when a commit was produced before the failure (e.g.
-		// agent timed out mid-run). Both BaseRev and ResultRev must be set and
-		// differ, because an empty BaseRev means we cannot confirm the agent
-		// made any progress beyond the starting point.
-		return report.BaseRev != "" && report.ResultRev != "" && report.ResultRev != report.BaseRev
-	}
-	return false
-}
-
-// runConflictRecovery attempts to recover a preserved iteration before the loop
-// parks the bead as failed. Step 1: 3-way ort auto-merge (-X ours). Step 2 (if
-// step 1 fails and ConflictResolver is set): focused conflict-resolve agent.
-// Returns an updated ExecuteBeadReport whose Status is success when recovery
-// landed the commit, or land_conflict_unresolvable/land_conflict_needs_human
-// when all recovery paths failed.
-func (w *ExecuteBeadWorker) runConflictRecovery(
-	ctx context.Context,
-	b bead.Bead,
-	report ExecuteBeadReport,
-	runtime ExecuteBeadLoopRuntime,
-	assignee string,
-	now func() time.Time,
-) ExecuteBeadReport {
-	var gitOps LandingGitOps = RealLandingGitOps{}
-
-	autoFn := w.conflictAutoRecoverFn
-	if autoFn == nil {
-		autoFn = landConflictAutoRecover
-	}
-	newTip, autoErr := autoFn(runtime.ProjectRoot, report.PreserveRef, gitOps)
-	if autoErr == nil && newTip != "" {
-		_ = w.Store.AppendEvent(b.ID, bead.BeadEvent{
-			Kind:      "land-conflict-auto-recovered",
-			Summary:   "preserved iteration auto-recovered onto current tip via ort",
-			Body:      fmt.Sprintf("preserve_ref=%s\nnew_tip=%s", report.PreserveRef, newTip),
-			Actor:     assignee,
-			Source:    "ddx agent execute-loop",
-			CreatedAt: now().UTC(),
-		})
-		report.Status = ExecuteBeadStatusSuccess
-		report.ResultRev = newTip
-		report.Detail = "auto-recovered: merged preserved iteration onto current tip via ort"
-		return report
-	}
-
-	if w.ConflictResolver != nil {
-		resolvedTip, isBlocking, resolveErr := w.ConflictResolver(ctx, b.ID, report.PreserveRef, runtime.ProjectRoot)
-		if resolveErr == nil && resolvedTip != "" {
-			_ = w.Store.AppendEvent(b.ID, bead.BeadEvent{
-				Kind:      "land-conflict-auto-recovered",
-				Summary:   "preserved iteration resolved by focused conflict-resolve agent",
-				Body:      fmt.Sprintf("preserve_ref=%s\nnew_tip=%s", report.PreserveRef, resolvedTip),
-				Actor:     assignee,
-				Source:    "ddx agent execute-loop",
-				CreatedAt: now().UTC(),
-			})
-			report.Status = ExecuteBeadStatusSuccess
-			report.ResultRev = resolvedTip
-			report.Detail = "auto-recovered: focused conflict-resolve agent landed preserved iteration"
-			return report
-		}
-		if isBlocking {
-			report.Status = ExecuteBeadStatusLandConflictNeedsHuman
-		} else {
-			report.Status = ExecuteBeadStatusLandConflictUnresolvable
-		}
-	} else {
-		report.Status = ExecuteBeadStatusLandConflictUnresolvable
-	}
-
-	autoErrMsg := ""
-	if autoErr != nil {
-		autoErrMsg = autoErr.Error()
-	}
-	body, mErr := json.Marshal(map[string]any{
-		"preserve_ref":     report.PreserveRef,
-		"base_rev":         report.BaseRev,
-		"result_rev":       report.ResultRev,
-		"session_id":       report.SessionID,
-		"auto_merge_error": autoErrMsg,
-	})
-	bodyStr := report.PreserveRef
-	if mErr == nil {
-		bodyStr = string(body)
-	}
-	eventKind := "land-conflict-unresolvable"
-	if report.Status == ExecuteBeadStatusLandConflictNeedsHuman {
-		eventKind = "land-conflict-needs-human"
-	}
-	_ = w.Store.AppendEvent(b.ID, bead.BeadEvent{
-		Kind:      eventKind,
-		Summary:   "preserved iteration could not be auto-recovered; parked for operator",
-		Body:      bodyStr,
-		Actor:     assignee,
-		Source:    "ddx agent execute-loop",
-		CreatedAt: now().UTC(),
-	})
-	report.Detail = report.Status + ": preserve_ref=" + report.PreserveRef
-	return report
 }
 
 func sleepWithContext(ctx context.Context, d time.Duration) error {

@@ -1130,7 +1130,7 @@ func landPushAutoRecover(wd, targetBranch, newTip string, gitOps LandingGitOps) 
 	return true, mergeSHA, nil
 }
 
-// landConflictAutoRecover attempts a 3-way merge of a preserved iteration ref
+// LandConflictAutoRecover attempts a 3-way merge of a preserved iteration ref
 // onto the current target-branch tip using the ort strategy with -X ours. The
 // strategy resolves mechanical conflicts (positional drift from parallel beads)
 // by favouring the current tip's version of any conflicting sections while still
@@ -1141,7 +1141,7 @@ func landPushAutoRecover(wd, targetBranch, newTip string, gitOps LandingGitOps) 
 // A non-nil error means the ort merge failed (unresolvable content conflict or
 // git error) — the caller should escalate to a focused conflict-resolve agent.
 // The target branch is never modified on error.
-func landConflictAutoRecover(wd, preserveRef string, gitOps LandingGitOps) (string, error) {
+func LandConflictAutoRecover(wd, preserveRef string, gitOps LandingGitOps) (string, error) {
 	targetBranch, err := gitOps.CurrentBranch(wd)
 	if err != nil {
 		return "", fmt.Errorf("resolving target branch: %w", err)
