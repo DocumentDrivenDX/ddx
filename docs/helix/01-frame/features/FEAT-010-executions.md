@@ -390,14 +390,64 @@ recorded on the run.
 | `ddx_runs_log` | `GET /api/runs/:id/log` | Raw logs / attachment bodies | read |
 | `ddx_runs_result` | `GET /api/runs/:id/result` | Structured result payload | read |
 | `ddx_artifact_regenerate` | `POST /api/artifacts/:id/regenerate` | Trigger regeneration of one artifact; returns the new run id | **write — narrow** |
+| (GraphQL) | `Mutation.runRequeue` | Re-queue the originating bead of an existing run record (manual operator re-queue from the Runs UI); requires `idempotencyKey`; emits a `run_requeue` audit event on the bead | **write — narrow** |
 
 The HTTP/MCP read surface is total over the unified run substrate.
 
-The **only** write surface added by this feature is
-`artifactRegenerate`. All other run invocation (layer-1 ad-hoc, layer-2
-bead attempts, layer-3 queue drain) remains CLI-only. Additional write
-endpoints require a separate feature update; they are not implicit in
-this read-coverage expansion.
+The write surfaces added by this feature are limited to
+`artifactRegenerate` and `runRequeue`. All other run invocation
+(layer-1 ad-hoc, layer-2 bead attempts, layer-3 queue drain) remains
+CLI-only. Additional write endpoints require a separate feature update;
+they are not implicit in this read-coverage expansion.
+
+### Re-queue audit events
+
+The `runRequeue` mutation reopens the originating bead and appends a
+`run_requeue` event to that bead's audit log. Concurrent or repeat
+submissions with the same `idempotencyKey` collapse to a single
+re-queue and a single event (`deduplicated=true` is returned to all
+subsequent callers); if the cached idempotency record points at a
+missing bead, the requeue is replayed against the run's current
+originating bead. The event uses the standard `bead.BeadEvent` envelope
+with the following fields:
+
+| Field | Value |
+|---|---|
+| `kind` | `run_requeue` (constant `RunRequeueEventKind`) |
+| `summary` | `run requeued` |
+| `actor` | Operator identity (`unknown`/`anonymous` when no identity is resolvable from the inbound HTTP request) |
+| `source` | `graphql:runRequeue` |
+| `body` | Single line: `identity=<kind> actor=<actor> run_id=<runId> idempotency_key=<key> layer_override=<layer-or-empty>` |
+
+The `body` line is structured for grep/jq parsing: each token is a
+`key=value` pair separated by single spaces. `layer_override` is the
+empty string when the caller did not pass `RunRequeueInput.layer`.
+Operator identity is captured via the same audit pathway used by
+operator-prompt beads (ADR-021); when the request carries no
+identifying header, the audit fields fall back to
+`identity=unknown actor=anonymous`.
+
+Consumers of the audit log (FEAT-008 Runs row expansion, evaluation
+skills under FEAT-019) treat `run_requeue` events as the canonical
+record that a re-queue happened: there is no separate persisted
+`requeue` record beyond (a) the new `open` status on the originating
+bead and (b) this event entry.
+
+### Layer-to-substrate mapping for the Runs UI
+
+The web Runs view (FEAT-008 §5, FEAT-021) renders three layer chips
+backed by the unified substrate plus the legacy detail backings:
+
+| Chip | Substrate row | Detail backing for row expansion |
+|---|---|---|
+| `work` | `layer: 3` Run record | Layer-3 record's queue inputs / stop-condition log / child layer-2 attempt ids |
+| `try` | `layer: 2` Run record | The `.ddx/executions/<attempt-id>/` bundle attached to the layer-2 record (manifest, prompt, result, checks, verdict) |
+| `run` | `layer: 1` Run record | The associated `AgentSession` row (prompt / response / stderr / billing / cached-token detail) joined onto the layer-1 record |
+
+`AgentSession` rows that have no parent layer-2 attempt (raw `ddx
+agent log` invocations) surface as synthesized `layer=run` Runs rows
+keyed by session id, so no agent-session row is dropped during the
+Sessions/Executions tab retirement.
 
 ## User Stories
 
@@ -511,10 +561,14 @@ records to remain inspectable during the migration window
 
 ## CONTRACT-003 Amendment
 
-This feature requires exactly one read-only-amendment-adjacent change
-to CONTRACT-003: a narrow write surface for `artifactRegenerate` on the
-HTTP/MCP layer. No other write surfaces are added; in particular,
-layer-1, layer-2, and layer-3 invocation remain CLI-only.
+This feature requires two narrow read-only-amendment-adjacent changes
+to CONTRACT-003: write surfaces for `artifactRegenerate` (HTTP/MCP) and
+`runRequeue` (GraphQL). `runRequeue` does not invoke an agent — it
+reopens the originating bead so the existing `ddx agent execute-loop`
+can claim it again — but it is still a write because it mutates bead
+state and appends an audit event (see "Re-queue audit events" above).
+No other write surfaces are added; in particular, layer-1, layer-2,
+and layer-3 invocation remain CLI-only.
 
 If FEAT-006 implementation reveals additional CONTRACT-003 gaps (e.g.,
 upstream Cobra root export details), those amendments are scoped to

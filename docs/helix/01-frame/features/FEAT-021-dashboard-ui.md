@@ -130,6 +130,15 @@ label: `work`, `try`, or `run`.
 - Time range filter
 - Click to expand: DDx metadata, native session references, token usage,
   parent/child links, and artifact producer links
+- Layer-aware row expansion replaces the retired Sessions and Executions
+  tabs: `layer=run` rows expose the AgentSession transcript / billing /
+  cached-token detail; `layer=try` rows expose the `.ddx/executions/`
+  bundle metadata, check results, and verdict; `layer=work` rows expose
+  queue inputs and child run links.
+- Re-queue affordances per FEAT-008 US-086c (try-layer + run-layer
+  re-queue button; work-layer "Start worker from this drain"); every
+  successful re-queue emits a `run_requeue` audit event on the
+  originating bead per FEAT-010 §"Re-queue audit events".
 - Same capabilities as FEAT-008 US-086 and US-086b
 
 **GraphQL Query:** `runs` from FEAT-010 with optional `projectID` omitted.
@@ -226,7 +235,17 @@ The global navigation bar shows:
 - Project picker dropdown (populated from `/api/projects`)
   - Selecting a project navigates to `/nodes/:nodeId/projects/:projectId`
   - "All projects" option navigates to combined views
-- Active page tab: Beads | Artifacts | Graph | Runs | Commits
+- Active page tab: Overview | Beads | Artifacts | Graph | Runs | Workers | Personas | Plugins | Commits | Efficacy
+
+Sessions and Executions are no longer top-level activity tabs. The unified
+Runs view (this feature + FEAT-008 §5) carries layer chips (`work`, `try`,
+`run`) and an inline row-expansion pane that surfaces what those tabs used
+to show — agent-session transcript and cost detail under `layer=run`,
+execute-bead bundle detail under `layer=try`, queue-drain detail under
+`layer=work`. Legacy URLs (`/sessions`, `/executions`, `/executions/[id]`)
+respond with 302 redirects (NOT 301) to the matching filtered Runs URL with
+all query params preserved and a `Sunset` header set for the deprecation
+window.
 
 The project picker changes the `:projectId` segment in-place while preserving
 the current page tab. So switching project while on the Graph tab navigates to
