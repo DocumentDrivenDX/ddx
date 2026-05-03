@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T162946-9399a4d7",
+  "bead_id": "ddx-90f48012",
+  "base_rev": "b30bd0309a52315889736fc0fb132b2a7f5a6fa1",
+  "created_at": "2026-05-03T16:29:47.921053503Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-90f48012",
+    "title": "federation: hub HTTP API + --hub-mode gating + ts-net policy + version handshake",
+    "description": "Hub-side HTTP API: register, heartbeat, deregister. --hub-mode flag gates the API. ts-net required by default; explicit --federation-allow-plain-http opt-out (hub-mode only, warned). Version handshake at registration: reject incompatible major; degrade compatible-but-newer.",
+    "acceptance": "1. /api/federation/register, /heartbeat, /deregister endpoints exist. 2. --hub-mode flag wired. 3. ts-net default with opt-out flag (warned). 4. Version handshake. 5. Tests cover all four behaviors.",
+    "parent": "ddx-a038a090",
+    "labels": [
+      "phase:2",
+      "story:14",
+      "area:server",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T16:29:46Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T16:29:46.445107728Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T162946-9399a4d7",
+    "prompt": ".ddx/executions/20260503T162946-9399a4d7/prompt.md",
+    "manifest": ".ddx/executions/20260503T162946-9399a4d7/manifest.json",
+    "result": ".ddx/executions/20260503T162946-9399a4d7/result.json",
+    "checks": ".ddx/executions/20260503T162946-9399a4d7/checks.json",
+    "usage": ".ddx/executions/20260503T162946-9399a4d7/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-90f48012-20260503T162946-9399a4d7"
+  },
+  "prompt_sha": "6ce4a1a0723574f9c995b8556c4cf631fd460200dd1c6c0ee79d3700f5f2c731"
+}
