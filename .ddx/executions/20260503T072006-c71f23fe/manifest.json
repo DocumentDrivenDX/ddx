@@ -1,0 +1,130 @@
+{
+  "attempt_id": "20260503T072006-c71f23fe",
+  "bead_id": "ddx-a418a1c1",
+  "base_rev": "dc8a5861c8c9381df36fa4e761de9c0d966a0e5d",
+  "created_at": "2026-05-03T07:20:07.763203241Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a418a1c1",
+    "title": "ADR-022 step 6: ddx agent doctor reads from server runtime registry; .ddx/workers/ fallback",
+    "description": "ddx agent doctor reads worker state from server's runtime registry when available; falls back to .ddx/workers/ when not. On-disk format stays as fallback for one alpha release lag. ~150 LOC.",
+    "acceptance": "1. ddx agent doctor calls server worker query when reachable; falls back when not.\n2. Output shows freshness + mirror_failures_count when reading from server.\n3. Output consistent across both modes.\n4. Tests: TestDoctor_ReadsFromServer_WhenAvailable, TestDoctor_FallsBackToOnDisk_WhenServerDown.\n5. cd cli \u0026\u0026 go test green; lefthook pre-commit passes.\n6. WIRED-IN + TRANSITIONS: integration test (TestDoctor_HandlesServerDownUpDown) sequences: server down → run doctor (fallback path) → server up → run doctor (server path) → server down again → run doctor (fallback again). Asserts each transition produces consistent output for the operator. Not just two static modes.",
+    "parent": "ddx-d7aca866",
+    "labels": [
+      "phase:2",
+      "area:cli",
+      "area:agent",
+      "kind:feature",
+      "adr:022"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T07:20:06Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:54:49.692760696Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:55:33.456854243Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:56:17.002568032Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-03T07:18:31.340176939Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260503T065653-c7305315\",\"harness\":\"claude\",\"input_tokens\":6,\"output_tokens\":71,\"total_tokens\":77,\"cost_usd\":4.81821375,\"duration_ms\":1296527,\"exit_code\":0}",
+          "created_at": "2026-05-03T07:18:31.369669206Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=77 cost_usd=4.8182"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-03T07:18:37.511501923Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only an execution result.json artifact; no implementation, no tests, no source changes. Cannot evaluate any AC item against the actual code change.\nharness=claude\nmodel=opus\ninput_bytes=4090\noutput_bytes=703\nelapsed_ms=63099",
+          "created_at": "2026-05-03T07:19:42.67539771Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-03T07:19:42.710272243Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"action\":\"re_attempt_with_context\",\"mode\":\"review_block\"}",
+          "created_at": "2026-05-03T07:19:42.740479688Z",
+          "kind": "triage-decision",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block: re_attempt_with_context"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json artifact; no implementation, no tests, no source changes. Cannot evaluate any AC item against the actual code change.\nresult_rev=ac0b00029d398ebb77e60b580b89af5bc1826e76\nbase_rev=2a93a458e6401b9268c44d7d7d1c92a8d9b9700b",
+          "created_at": "2026-05-03T07:19:42.776657098Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T07:19:52.585743213Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T07:20:06.275138667Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T072006-c71f23fe",
+    "prompt": ".ddx/executions/20260503T072006-c71f23fe/prompt.md",
+    "manifest": ".ddx/executions/20260503T072006-c71f23fe/manifest.json",
+    "result": ".ddx/executions/20260503T072006-c71f23fe/result.json",
+    "checks": ".ddx/executions/20260503T072006-c71f23fe/checks.json",
+    "usage": ".ddx/executions/20260503T072006-c71f23fe/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a418a1c1-20260503T072006-c71f23fe"
+  },
+  "prompt_sha": "93a147f3bcfe2bfdf3687d918d3fd0a0ea09f9f34d2758f4830f132d79d9bd4a"
+}
