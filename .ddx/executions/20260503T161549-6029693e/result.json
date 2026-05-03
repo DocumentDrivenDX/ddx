@@ -1,0 +1,49 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Section toggle (Availability/Performance) is URL-driven via ?section=, Performance table is populated via agentMetrics(groupBy: PROVIDER) with window chips, and provider rows drill into /nodes/[nodeId]/providers/[name]?window=\u003c24h|7d|30d\u003e matching the Story 8 chip schema.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "perfWindow derives directly from ?window= without validating against {W24H,W7D,W30D}; an invalid value would render an unrecognized active chip and pass through to the query. Minor robustness nit.",
+      "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/providers/+page.svelte"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 596,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T160746-c0cade75/manifest.json",
+          ".ddx/executions/20260503T160746-c0cade75/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 28919,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 31321,
+    "output_bytes": 702,
+    "elapsed_ms": 75130,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
