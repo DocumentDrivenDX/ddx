@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260503T031350-4bfcd926",
+  "bead_id": "ddx-2e94817e",
+  "base_rev": "125a628530d1232572717d147104b51fb0b440ff",
+  "created_at": "2026-05-03T03:13:52.229455512Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2e94817e",
+    "title": "artifacts: publish facet contract + add phase/prefix args+chips",
+    "description": "Publish the URL/key facet contract (q, mediaType, staleness, phase, prefix, sort). Add phase + prefix args server-side and chips client-side. Coordinate with Story 5 final taxonomy.",
+    "acceptance": "1. Server: phase + prefix arg in artifacts query. 2. Client: phase + prefix chips. 3. URL contract documented in code comment AND in TD if one exists. 4. Tests cover all 6 reserved keys.",
+    "parent": "ddx-4728ae0f",
+    "labels": [
+      "phase:2",
+      "story:6",
+      "area:web",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:13:50Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T14:56:49.299644654Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\nresult_rev=1dd43afc7c77abd50af35295b9432b753100a617\nbase_rev=1dd43afc7c77abd50af35295b9432b753100a617\nretry_after=2026-05-02T20:56:49Z",
+          "created_at": "2026-05-02T14:56:49.380240055Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T03:13:50.808425605Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-02T20:56:49Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031350-4bfcd926",
+    "prompt": ".ddx/executions/20260503T031350-4bfcd926/prompt.md",
+    "manifest": ".ddx/executions/20260503T031350-4bfcd926/manifest.json",
+    "result": ".ddx/executions/20260503T031350-4bfcd926/result.json",
+    "checks": ".ddx/executions/20260503T031350-4bfcd926/checks.json",
+    "usage": ".ddx/executions/20260503T031350-4bfcd926/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2e94817e-20260503T031350-4bfcd926"
+  },
+  "prompt_sha": "b76bfac56c696a1768332771fb9a66c8e4f62264e2640461910e21a893a6b186"
+}
