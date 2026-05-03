@@ -1,0 +1,59 @@
+{
+  "attempt_id": "20260503T031324-b5751cfe",
+  "bead_id": "ddx-31fba984",
+  "base_rev": "455f219c6cf711c656169bef3e9789743f0102f1",
+  "created_at": "2026-05-03T03:13:25.893630182Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-31fba984",
+    "title": "artifacts: workflow-stage axis + paginated count wording + sessionStorage persistence",
+    "description": "Add Workflow Stage as a group-by axis (derived from generic \u003cNN\u003e-\u003cslug\u003e path regex; hidden when no artifacts have a matching path). Group counts under pagination show 'of N loaded' to be honest about page-locality. sessionStorage persists groupBy across navigations.",
+    "acceptance": "1. Workflow Stage axis available when applicable; hidden otherwise. 2. Group counts label honestly: 'X of N loaded' under pagination. 3. sessionStorage round-trip works.",
+    "parent": "ddx-ffb678fc",
+    "labels": [
+      "phase:2",
+      "story:5",
+      "area:web",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:13:24Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "163374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T14:56:43.492627398Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\nresult_rev=18e5b89c93e64dac716e22d6b170bae2619c0c16\nbase_rev=18e5b89c93e64dac716e22d6b170bae2619c0c16\nretry_after=2026-05-02T20:56:43Z",
+          "created_at": "2026-05-02T14:56:43.579251795Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T03:13:24.547101005Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-02T20:56:43Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031324-b5751cfe",
+    "prompt": ".ddx/executions/20260503T031324-b5751cfe/prompt.md",
+    "manifest": ".ddx/executions/20260503T031324-b5751cfe/manifest.json",
+    "result": ".ddx/executions/20260503T031324-b5751cfe/result.json",
+    "checks": ".ddx/executions/20260503T031324-b5751cfe/checks.json",
+    "usage": ".ddx/executions/20260503T031324-b5751cfe/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-31fba984-20260503T031324-b5751cfe"
+  }
+}
