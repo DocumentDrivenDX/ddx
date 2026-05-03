@@ -192,6 +192,19 @@ export const PALETTE_SEARCH_QUERY = gql`
 	}
 `;
 
+export const RUN_REQUEUE_MUTATION = gql`
+	mutation RunRequeue($input: RunRequeueInput!) {
+		runRequeue(input: $input) {
+			bead {
+				id
+				title
+				status
+			}
+			deduplicated
+		}
+	}
+`;
+
 export const BEAD_CLOSE_MUTATION = gql`
 	mutation BeadClose($id: ID!, $reason: String) {
 		beadClose(id: $id, reason: $reason) {

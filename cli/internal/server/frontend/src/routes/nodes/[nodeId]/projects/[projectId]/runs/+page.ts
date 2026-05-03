@@ -29,6 +29,7 @@ export const PROJECT_RUNS_QUERY = gql`
 					startedAt
 					durationMs
 					harness
+					queueInputs
 				}
 				cursor
 			}
@@ -50,6 +51,7 @@ export interface RunNode {
 	startedAt: string | null
 	durationMs: number | null
 	harness: string | null
+	queueInputs: string | null
 }
 
 export interface RunEdge {

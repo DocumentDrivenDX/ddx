@@ -4,8 +4,10 @@
 	import { goto } from '$app/navigation'
 	import { createClient } from '$lib/gql/client'
 	import { PROJECT_RUNS_QUERY, PAGE_SIZE } from './+page'
-	import type { RunEdge, RunConnection, PageInfo } from './+page'
+	import type { RunEdge, RunNode, RunConnection, PageInfo } from './+page'
 	import { RunRowDetail } from '$lib/runDetail'
+	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte'
+	import { RUN_REQUEUE_MUTATION, WORKER_DISPATCH_MUTATION } from '$lib/gql/feat008'
 
 	let { data }: { data: PageData } = $props()
 
@@ -14,6 +16,113 @@
 	let loadingMore = $state(false)
 	let harnessInput = $state(data.activeHarness ?? '')
 	let expanded = $state<Set<string>>(new Set())
+
+	type ActionMode = 'requeue' | 'startWorker'
+	let actionDialogOpen = $state(false)
+	let actionMode = $state<ActionMode>('requeue')
+	let actionRun = $state<RunNode | null>(null)
+	let actionIdempotencyKey = $state('')
+	let actionLayerOverride = $state('')
+	let actionWorkerArgs = $state('')
+	let actionAlert = $state('')
+	let actionResultMessage = $state('')
+
+	function newIdempotencyKey(): string {
+		if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+			return crypto.randomUUID()
+		}
+		return `requeue-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
+	}
+
+	function openRequeueDialog(run: RunNode) {
+		actionMode = 'requeue'
+		actionRun = run
+		actionIdempotencyKey = newIdempotencyKey()
+		actionLayerOverride = run.layer
+		actionAlert = ''
+		actionResultMessage = ''
+		actionDialogOpen = true
+	}
+
+	function openStartWorkerDialog(run: RunNode) {
+		actionMode = 'startWorker'
+		actionRun = run
+		actionAlert = ''
+		actionResultMessage = ''
+		// Prefill the worker args with the original drain's queueInputs JSON.
+		// Pretty-print so the operator can review/edit before dispatching.
+		if (run.queueInputs) {
+			try {
+				actionWorkerArgs = JSON.stringify(JSON.parse(run.queueInputs), null, 2)
+			} catch {
+				actionWorkerArgs = run.queueInputs
+			}
+		} else {
+			actionWorkerArgs = JSON.stringify(
+				{ source: 'runs-start-worker', sourceRunId: run.id },
+				null,
+				2
+			)
+		}
+		actionDialogOpen = true
+	}
+
+	async function confirmAction() {
+		if (!actionRun) return
+		const client = createClient()
+		try {
+			if (actionMode === 'requeue') {
+				if (!actionIdempotencyKey.trim()) {
+					actionAlert = 'Idempotency key is required.'
+					throw new Error('missing idempotency key')
+				}
+				const layer = actionLayerOverride.trim()
+				const result = await client.request<{
+					runRequeue: { bead: { id: string }; deduplicated: boolean }
+				}>(RUN_REQUEUE_MUTATION, {
+					input: {
+						runId: actionRun.id,
+						idempotencyKey: actionIdempotencyKey,
+						layer: layer ? layer : null
+					}
+				})
+				actionResultMessage = result.runRequeue.deduplicated
+					? `Bead ${result.runRequeue.bead.id} already requeued (deduplicated).`
+					: `Bead ${result.runRequeue.bead.id} requeued.`
+			} else {
+				// startWorker: validate JSON before sending so the operator can fix it inline.
+				let argsString = actionWorkerArgs.trim()
+				if (argsString) {
+					try {
+						JSON.parse(argsString)
+					} catch (err) {
+						actionAlert = `Worker args must be valid JSON: ${errorText(err)}`
+						throw err
+					}
+				} else {
+					argsString = '{}'
+				}
+				const projectId = actionRun.projectID ?? data.projectId
+				const result = await client.request<{
+					workerDispatch: { id: string; state: string; kind: string }
+				}>(WORKER_DISPATCH_MUTATION, {
+					kind: 'execute-loop',
+					projectId,
+					args: argsString
+				})
+				actionResultMessage = `Worker ${result.workerDispatch.id} started (${result.workerDispatch.state}).`
+			}
+		} catch (err) {
+			if (!actionAlert) actionAlert = errorText(err)
+			throw err
+		}
+	}
+
+	function errorText(err: unknown): string {
+		if (err instanceof Error) return err.message
+		if (typeof err === 'string') return err
+		return 'Unknown error.'
+	}
 
 	function toggleExpand(runId: string) {
 		const next = new Set(expanded)
@@ -228,6 +337,7 @@
 					<th class="px-4 py-3 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Harness</th>
 					<th class="px-4 py-3 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Started</th>
 					<th class="px-4 py-3 text-right font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Duration</th>
+					<th class="px-4 py-3 text-right font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Actions</th>
 				</tr>
 			</thead>
 			<tbody>
@@ -285,10 +395,39 @@
 								</a>
 							</div>
 						</td>
+						<td class="px-4 py-3 text-right">
+							{#if edge.node.layer === 'work'}
+								<button
+									type="button"
+									data-run-action="start-worker"
+									data-run-id={edge.node.id}
+									onclick={(e) => {
+										e.stopPropagation()
+										openStartWorkerDialog(edge.node)
+									}}
+									class="rounded-sm border border-border-line bg-bg-elevated px-2 py-1 text-xs font-medium text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
+								>
+									Start worker
+								</button>
+							{:else}
+								<button
+									type="button"
+									data-run-action="requeue"
+									data-run-id={edge.node.id}
+									onclick={(e) => {
+										e.stopPropagation()
+										openRequeueDialog(edge.node)
+									}}
+									class="rounded-sm border border-border-line bg-bg-elevated px-2 py-1 text-xs font-medium text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
+								>
+									Re-queue
+								</button>
+							{/if}
+						</td>
 					</tr>
 					{#if isExpanded}
 						<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
-							<td colspan="7" class="px-6 py-4">
+							<td colspan="8" class="px-6 py-4">
 								<RunRowDetail
 									runId={edge.node.id}
 									layer={edge.node.layer}
@@ -301,7 +440,7 @@
 				{/each}
 				{#if edges.length === 0}
 					<tr>
-						<td colspan="7" class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">
+						<td colspan="8" class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">
 							No runs found.
 						</td>
 					</tr>
@@ -309,6 +448,16 @@
 			</tbody>
 		</table>
 	</div>
+
+	{#if actionResultMessage}
+		<div
+			role="status"
+			class="rounded-md border border-accent-fulcrum/30 bg-accent-fulcrum/10 px-4 py-2 text-sm text-fg-ink dark:border-dark-accent-fulcrum/30 dark:bg-dark-accent-fulcrum/10 dark:text-dark-fg-ink"
+			data-run-action-result
+		>
+			{actionResultMessage}
+		</div>
+	{/if}
 
 	{#if pageInfo.hasNextPage}
 		<div class="flex justify-center">
@@ -322,3 +471,110 @@
 		</div>
 	{/if}
 </div>
+
+<ConfirmDialog
+	bind:open={actionDialogOpen}
+	title={actionMode === 'requeue' ? 'Re-queue run' : 'Start worker from this drain'}
+	actionLabel={actionMode === 'requeue' ? 'Re-queue' : 'Start worker'}
+	onConfirm={confirmAction}
+>
+	{#snippet summary()}
+		<span>
+			{#if actionRun}
+				{actionMode === 'requeue'
+					? `Re-queue ${actionRun.layer} run ${actionRun.id}`
+					: `Start an execute-loop worker prefilled from work run ${actionRun.id}`}
+			{/if}
+		</span>
+	{/snippet}
+
+	{#if actionRun}
+		<div class="space-y-3">
+			{#if actionAlert}
+				<div
+					role="alert"
+					class="rounded border border-error/30 bg-error/10 px-3 py-2 text-xs text-error dark:border-dark-error/30 dark:bg-dark-error/10 dark:text-dark-error"
+					data-run-action-alert
+				>
+					{actionAlert}
+				</div>
+			{/if}
+
+			{#if actionMode === 'requeue'}
+				<div>
+					<label class="mb-1 block font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted" for="requeue-run-id">
+						Run ID
+					</label>
+					<input
+						id="requeue-run-id"
+						type="text"
+						readonly
+						value={actionRun.id}
+						class="w-full border border-border-line bg-bg-surface px-2 py-1 font-mono-code text-mono-code text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink"
+					/>
+				</div>
+				<div>
+					<label class="mb-1 block font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted" for="requeue-layer">
+						Layer override
+					</label>
+					<select
+						id="requeue-layer"
+						bind:value={actionLayerOverride}
+						class="w-full border border-border-line bg-bg-elevated px-2 py-1 font-mono-code text-mono-code text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
+					>
+						<option value="">(none)</option>
+						<option value="work">work</option>
+						<option value="try">try</option>
+						<option value="run">run</option>
+					</select>
+				</div>
+				<div>
+					<label class="mb-1 block font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted" for="requeue-key">
+						Idempotency key (client-generated)
+					</label>
+					<div class="flex gap-2">
+						<input
+							id="requeue-key"
+							type="text"
+							bind:value={actionIdempotencyKey}
+							data-idempotency-key
+							class="w-full border border-border-line bg-bg-elevated px-2 py-1 font-mono-code text-mono-code text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
+						/>
+						<button
+							type="button"
+							onclick={() => (actionIdempotencyKey = newIdempotencyKey())}
+							class="rounded-sm border border-border-line bg-bg-elevated px-2 py-1 text-xs text-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
+						>
+							Regenerate
+						</button>
+					</div>
+				</div>
+			{:else}
+				<div>
+					<label class="mb-1 block font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted" for="start-worker-source">
+						Source work run
+					</label>
+					<input
+						id="start-worker-source"
+						type="text"
+						readonly
+						value={actionRun.id}
+						class="w-full border border-border-line bg-bg-surface px-2 py-1 font-mono-code text-mono-code text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-ink"
+					/>
+				</div>
+				<div>
+					<label class="mb-1 block font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted" for="start-worker-args">
+						Worker args (JSON, prefilled from original drain)
+					</label>
+					<textarea
+						id="start-worker-args"
+						bind:value={actionWorkerArgs}
+						rows="8"
+						data-worker-args
+						class="w-full border border-border-line bg-bg-elevated px-2 py-1 font-mono-code text-mono-code text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink"
+					></textarea>
+				</div>
+			{/if}
+		</div>
+	{/if}
+</ConfirmDialog>
