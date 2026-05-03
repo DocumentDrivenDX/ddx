@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260503T113218-369b94a3",
+  "bead_id": "ddx-240f2082",
+  "base_rev": "cc1fe00dab7d966da064b25254a196101e750af7",
+  "created_at": "2026-05-03T11:32:20.415810322Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-240f2082",
+    "title": "C1: try.Outcome sealed sum type + Disposition enum + ParkReason vocabulary",
+    "description": "Introduce cli/internal/agent/try/outcome.go. No behavior change. ParkReason vocabulary enumerated alongside Disposition to prevent string drift.\n\nDisposition enum (closed set):\n  Merged | AlreadyDone | Retry | Park | NeedsHuman | LoopError\n\nParkReason (string-typed, but enumerated): needs_review, decomposition, push_failed, push_conflict, cost_cap, loop_error, no_changes_unverified, no_changes_unjustified, rate_limit_budget_exhausted, quota_paused, lock_contention.\n\nOutcome { BeadID, AttemptID, BaseRev, ResultRev, SessionID, DurationMS, CostUSD, Disposition, Cooldown time.Duration, ParkReason, RecordEvents []bead.BeadEvent }.\n\nAdapter to/from current ExecuteBeadReport (round-trip parity test).",
+    "acceptance": "1. cli/internal/agent/try/outcome.go defines Outcome + Disposition + ParkReason + ParkReasonValid(). 2. Adapter ToOutcome(report ExecuteBeadReport) + FromOutcome inverse. 3. TestOutcome_RoundTripsExecuteBeadReport. 4. ParkReason vocabulary is a closed Go type with String() + a unit test enumerating all valid values. 5. cd cli \u0026\u0026 go test ./internal/agent/try/ green. 6. No callers of try.Outcome yet (introduced in C2).",
+    "parent": "ddx-5cb6e6cd",
+    "labels": [
+      "phase:2",
+      "refactor",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T11:32:18Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T11:32:18.483424507Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T113218-369b94a3",
+    "prompt": ".ddx/executions/20260503T113218-369b94a3/prompt.md",
+    "manifest": ".ddx/executions/20260503T113218-369b94a3/manifest.json",
+    "result": ".ddx/executions/20260503T113218-369b94a3/result.json",
+    "checks": ".ddx/executions/20260503T113218-369b94a3/checks.json",
+    "usage": ".ddx/executions/20260503T113218-369b94a3/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-240f2082-20260503T113218-369b94a3"
+  },
+  "prompt_sha": "9e2d23f508d2a854c78e41b76deafb5456ae6e894b00774188a40721d82b701b"
+}
