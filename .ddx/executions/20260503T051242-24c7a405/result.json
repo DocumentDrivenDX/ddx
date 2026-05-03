@@ -1,0 +1,59 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "AC #6 not satisfied: required wired-in integration test TestServerIngestion_RealWorkerCanRegister that spawns a real subprocess POSTing to /api/workers/register is missing. Other ACs (handlers, JSONL append, registry fields, four named unit tests) are implemented.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "Missing wired-in integration test TestServerIngestion_RealWorkerCanRegister — AC #6 requires a real subprocess HTTP client exercising the production path; only httptest.NewRecorder unit tests exist.",
+      "location": "cli/internal/server/worker_ingest_test.go"
+    },
+    {
+      "severity": "info",
+      "summary": "mirror_failures_count field is tracked in the record but never incremented anywhere; acceptable for step 1 since AC only requires that the field exist on the registry.",
+      "location": "cli/internal/server/worker_ingest.go:62"
+    },
+    {
+      "severity": "info",
+      "summary": "Diff under review only lists execution-evidence JSON; the implementation lives in commit 476d10fe (worker_ingest.go, worker_ingest_test.go, server.go) — review based on that commit.",
+      "location": ".ddx/executions/20260503T050134-93403624/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1340,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T050134-93403624/manifest.json",
+          ".ddx/executions/20260503T050134-93403624/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3638,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 6784,
+    "output_bytes": 1209,
+    "elapsed_ms": 84786,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
