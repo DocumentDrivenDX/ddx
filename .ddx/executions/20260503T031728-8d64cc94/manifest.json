@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T031728-8d64cc94",
+  "bead_id": "ddx-8835a765",
+  "base_rev": "03b98e60a9f5609eb9bd2bd9e6401aaa6858bfcb",
+  "created_at": "2026-05-03T03:17:29.379011517Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8835a765",
+    "title": "Document bd/doltdb fallback backend wiring",
+    "description": "Single docs artifact (e.g. docs/bead-backends.md or under docs/helix/) describing how to wire bd as the bead-tracker backend if axon adoption stalls. Cover: the Backend interface contract, where a bd-backed implementation would live, JSONL interchange, and known tradeoffs (external dependency).",
+    "acceptance": "1. One doc file lands under docs/ describing the bd fallback path. 2. Doc references the Backend interface from ddx-bbdd7564 and the axon backend from ddx-95ec5ed5 for contrast. 3. Doc lists explicit wiring steps a future implementer would follow.",
+    "parent": "ddx-5d49b14e",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:storage",
+      "kind:docs",
+      "backend-migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:17:28Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "163374",
+      "execute-loop-heartbeat-at": "2026-05-03T03:17:28.085547712Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031728-8d64cc94",
+    "prompt": ".ddx/executions/20260503T031728-8d64cc94/prompt.md",
+    "manifest": ".ddx/executions/20260503T031728-8d64cc94/manifest.json",
+    "result": ".ddx/executions/20260503T031728-8d64cc94/result.json",
+    "checks": ".ddx/executions/20260503T031728-8d64cc94/checks.json",
+    "usage": ".ddx/executions/20260503T031728-8d64cc94/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-8835a765-20260503T031728-8d64cc94"
+  }
+}
