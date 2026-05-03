@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260503T211820-d1d78258",
+  "bead_id": "ddx-3e60fd84",
+  "base_rev": "6a64e42544b24287ae5f6e923620e1a9cd500362",
+  "created_at": "2026-05-03T21:18:25.439661428Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3e60fd84",
+    "title": "checks integration: pre_merge hook in execute-bead loop + checks_bypass annotation + e2e",
+    "description": "Slice 2 of parent ddx-a946c744. Wire the checks runner (built in child slice ddx-aee651ec) into the execute-bead loop as a pre_merge gate, add the checks_bypass bead annotation with event recording, and add e2e tests.\n\nDEPENDS ON\n- ddx-aee651ec (checks protocol package + ddx ac CLI)\n\nCONTEXT\nSee parent ddx-a946c744 for full design. This slice integrates the protocol package into the merge flow and adds the bypass mechanism.\n\nSCOPE\n- cli/internal/agent/execute_bead_loop.go — call cli/internal/checks runner for all applicable checks BEFORE the merge-back step; on any status=block/error, abort merge, preserve worktree per existing iteration-preservation conventions, write evidence under .ddx/executions/\u003crun-id\u003e/, record event\n- cli/internal/bead schema — checks_bypass annotation: list of {name, reason, bead}; missing reason -\u003e bypass rejected loudly; on bypass, named check is skipped and a bypass event is recorded with the reason\n- E2E test 1: fixture .ddx/checks/dummy-fail.yaml with script that always returns status=block; ddx try on a no-op bead aborts merge, preserves worktree, evidence file present, event recorded\n- E2E test 2: same fixture + checks_bypass annotation on bead -\u003e merge proceeds, bypass event recorded\n- Tests under cli/internal/agent/ and/or cli/cmd/ following existing execute_bead_*_test.go patterns\n\nOUT OF SCOPE\n- New checks for any specific language (separate REACH-* beads)",
+    "acceptance": "1. execute_bead_loop pre_merge step runs all applicable checks (filtered by AppliesTo) in parallel before merge-back.\n2. Any status=block or status=error aborts the merge and preserves the worktree per existing iteration-preservation conventions.\n3. checks_bypass annotation on the bead skips the named check and records an event with the reason; missing reason -\u003e bypass rejected.\n4. E2E test: dummy-fail fixture causes merge abort, worktree preserved, evidence written, event recorded.\n5. E2E test: dummy-fail + checks_bypass -\u003e merge proceeds, bypass event recorded.\n6. Evidence under .ddx/executions/\u003crun-id\u003e/ shows fixture wrote result.json and ddx parsed it correctly.\n7. cd cli \u0026\u0026 go test ./... green; lefthook pre-commit passes.",
+    "parent": "ddx-a946c744",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:checks",
+      "kind:platform",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T21:18:20Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T21:18:20.949391651Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T211820-d1d78258",
+    "prompt": ".ddx/executions/20260503T211820-d1d78258/prompt.md",
+    "manifest": ".ddx/executions/20260503T211820-d1d78258/manifest.json",
+    "result": ".ddx/executions/20260503T211820-d1d78258/result.json",
+    "checks": ".ddx/executions/20260503T211820-d1d78258/checks.json",
+    "usage": ".ddx/executions/20260503T211820-d1d78258/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3e60fd84-20260503T211820-d1d78258"
+  },
+  "prompt_sha": "8b191913071fde3355e42240b766a11fe788144de458039f3e11d859e3ef0eaf"
+}
