@@ -1,0 +1,54 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Evidence tab lists bundle files with metadata, integrates whitelisted ≤64KB inline view via existing runBundleFile GraphQL (which enforces extension+size), download endpoint added with path-traversal-safe canonicalisation, and e2e covers list/view/truncated/download.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Inline view size/whitelist enforcement is delegated to the backend runBundleFile resolver (returns truncated/null content); UI correctly surfaces the truncated state.",
+      "location": "cli/internal/server/frontend/src/lib/runDetail/Evidence.svelte"
+    },
+    {
+      "severity": "info",
+      "summary": "Download handler enforces path confinement under the bundle root and forces attachment disposition.",
+      "location": "cli/internal/server/server.go:5200"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 653,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T075117-9c3b21b3/manifest.json",
+          ".ddx/executions/20260503T075117-9c3b21b3/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 65498,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 67957,
+    "output_bytes": 842,
+    "elapsed_ms": 81582,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
