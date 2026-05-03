@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260503T031713-133bd276",
+  "bead_id": "ddx-edcbebb2",
+  "base_rev": "71704de49f55dbb66dffcd56e607665fcec1e831",
+  "created_at": "2026-05-03T03:17:14.916341777Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-edcbebb2",
+    "title": "cleanup: drop quorum/benchmark/grading/metrics dead functions (~500 LOC)",
+    "description": "Per /tmp/agent-surface-dead-code-audit.md: format.go (entirely), grade.go:buildGradingPrompt (un-bounded variant superseded), routing_metrics.go:AppendBurnSummary + parseWindowMinutes, model_catalog_yaml.go:WriteModelCatalogYAML, cmd-side harnessHealthyViaService + loadExecutionsMirrorConfig. ~500 LOC of dead code.\n\nVerify each is genuinely unreferenced (deadcode -test ./... output at /tmp/deadcode-agent-with-tests.txt) before deleting. Some may be reflection-invoked or test-only — confirm with grep before removal.\n\nIndependent of refactor.",
+    "acceptance": "1. Each named function/file confirmed unreferenced (production + tests + reflection). 2. Removed. 3. cd cli \u0026\u0026 go test ./... green. 4. cd cli \u0026\u0026 go build ./... green. 5. ~500 LOC reduction documented.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "kind:cleanup",
+      "dead-code"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:17:13Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "504561",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T20:56:01.817092363Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "exit status 1\nresult_rev=6f771cf052e5ec0f31b861dbd79bbeba97186cc5\nbase_rev=6f771cf052e5ec0f31b861dbd79bbeba97186cc5\nretry_after=2026-05-03T02:56:02Z",
+          "created_at": "2026-05-02T20:56:02.324026025Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T03:17:13.584328087Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-03T02:56:02Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031713-133bd276",
+    "prompt": ".ddx/executions/20260503T031713-133bd276/prompt.md",
+    "manifest": ".ddx/executions/20260503T031713-133bd276/manifest.json",
+    "result": ".ddx/executions/20260503T031713-133bd276/result.json",
+    "checks": ".ddx/executions/20260503T031713-133bd276/checks.json",
+    "usage": ".ddx/executions/20260503T031713-133bd276/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-edcbebb2-20260503T031713-133bd276"
+  }
+}
