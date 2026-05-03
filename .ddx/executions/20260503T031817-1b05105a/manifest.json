@@ -1,0 +1,59 @@
+{
+  "attempt_id": "20260503T031817-1b05105a",
+  "bead_id": "ddx-4fc9be2e",
+  "base_rev": "a72753dcd357ee4928488dc1d843b28631bbc33a",
+  "created_at": "2026-05-03T03:18:18.323573638Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4fc9be2e",
+    "title": "interim: hide niche ddx agent subcommands (benchmark, condense, capabilities, replay) until full retirement",
+    "description": "Per audit B6 (optional): if the full ddx agent retirement (sibling bead) takes long, hide the niche subcommands (ddx agent benchmark, condense, capabilities, replay) in the interim by setting Cobra Hidden:true. Reduces operator surprise.\n\nIf the full retirement bead lands soon, this bead is moot — close as superseded.",
+    "acceptance": "1. cli/cmd/agent_*.go subcommands for benchmark, condense, capabilities, replay set Hidden: true. 2. ddx agent --help no longer lists them. 3. They still work if invoked explicitly (not removed, just hidden). 4. cd cli \u0026\u0026 go build ./... green.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:cli",
+      "kind:cleanup"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:18:17Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "163374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T20:56:09.284959006Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "exit status 1\nresult_rev=fd288fb10b5193bb4cbbc190f1d6a9a16737df23\nbase_rev=fd288fb10b5193bb4cbbc190f1d6a9a16737df23\nretry_after=2026-05-03T02:56:09Z",
+          "created_at": "2026-05-02T20:56:09.811483203Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T03:18:17.03594462Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-03T02:56:09Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031817-1b05105a",
+    "prompt": ".ddx/executions/20260503T031817-1b05105a/prompt.md",
+    "manifest": ".ddx/executions/20260503T031817-1b05105a/manifest.json",
+    "result": ".ddx/executions/20260503T031817-1b05105a/result.json",
+    "checks": ".ddx/executions/20260503T031817-1b05105a/checks.json",
+    "usage": ".ddx/executions/20260503T031817-1b05105a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4fc9be2e-20260503T031817-1b05105a"
+  }
+}
