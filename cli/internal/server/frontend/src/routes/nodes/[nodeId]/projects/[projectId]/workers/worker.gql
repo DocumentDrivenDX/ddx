@@ -1,3 +1,20 @@
+# ADR-022 step 5b: derived-view query. reportedWorkers exposes the
+# worker_ingest in-memory view of trusted-peer-reported workers. Filtered
+# client-side by the current project's root path (see +layout.ts).
+query ReportedWorkersByProject {
+	reportedWorkers {
+		id
+		project
+		harness
+		state
+		lastEventAt
+		mirrorFailuresCount
+		hadDroppedBackfill
+		currentBead
+		currentAttempt
+	}
+}
+
 query WorkersByProject($projectID: String!) {
 	workersByProject(projectID: $projectID, first: 50) {
 		edges {
