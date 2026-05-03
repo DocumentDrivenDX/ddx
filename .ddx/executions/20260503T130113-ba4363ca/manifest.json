@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T130113-ba4363ca",
+  "bead_id": "ddx-1c8719eb",
+  "base_rev": "892cdb1739525b4b4872c8e8967b4b5bfa6923d0",
+  "created_at": "2026-05-03T13:01:15.689186749Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1c8719eb",
+    "title": "availability: Playwright e2e for the 5-provider scenario (claude/codex/openrouter/lmstudio-vidar/lmstudio-bragi)",
+    "description": "End-to-end test mocking the 5 providers from the user's spec: claude, codex, openrouter, lmstudio @vidar, lmstudio @bragi. Each visible with its model list.",
+    "acceptance": "1. Fixture mocks 5 providers + per-provider models. 2. Test asserts all 5 visible with model lists. 3. Refresh button drives a re-query.",
+    "parent": "ddx-12e97cb9",
+    "labels": [
+      "phase:2",
+      "story:9",
+      "area:tests",
+      "kind:test"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T13:01:13Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T13:01:13.82485991Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T130113-ba4363ca",
+    "prompt": ".ddx/executions/20260503T130113-ba4363ca/prompt.md",
+    "manifest": ".ddx/executions/20260503T130113-ba4363ca/manifest.json",
+    "result": ".ddx/executions/20260503T130113-ba4363ca/result.json",
+    "checks": ".ddx/executions/20260503T130113-ba4363ca/checks.json",
+    "usage": ".ddx/executions/20260503T130113-ba4363ca/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-1c8719eb-20260503T130113-ba4363ca"
+  },
+  "prompt_sha": "07a65921c132b9b2e797217eb50071618b4c52ad192b0b0535dc8ed106f7af51"
+}
