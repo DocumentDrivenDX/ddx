@@ -1,9 +1,10 @@
-package agent
+package agent_test
 
 import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/stretchr/testify/assert"
@@ -61,14 +62,13 @@ func TestApplyReviewTriageDecision_FirstBlockReAttempts(t *testing.T) {
 	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
 	seedBlocks(t, store, b.ID, now, 1)
 
-	worker := &ExecuteBeadWorker{Store: store}
-	require.NoError(t, worker.applyReviewTriageDecision(b.ID, "ddx", now.Add(time.Second), ""))
+	require.NoError(t, agent.ApplyReviewTriageDecision(store, b.ID, "ddx", now.Add(time.Second), ""))
 
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
-	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel)
+	assert.NotContains(t, got.Labels, agent.TriageNeedsHumanLabel)
 	if got.Extra != nil {
-		_, hasHint := got.Extra[TriageTierHintKey]
+		_, hasHint := got.Extra[agent.TriageTierHintKey]
 		assert.False(t, hasHint, "first BLOCK must not set tier hint")
 	}
 	ev := findEvent(t, store, b.ID, "triage-decision")
@@ -84,14 +84,13 @@ func TestApplyReviewTriageDecision_SecondBlockEscalates(t *testing.T) {
 	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
 	seedBlocks(t, store, b.ID, now, 2)
 
-	worker := &ExecuteBeadWorker{Store: store}
-	require.NoError(t, worker.applyReviewTriageDecision(b.ID, "ddx", now.Add(time.Hour), string(escalation.TierStandard)))
+	require.NoError(t, agent.ApplyReviewTriageDecision(store, b.ID, "ddx", now.Add(time.Hour), string(escalation.TierStandard)))
 
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
-	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel)
+	assert.NotContains(t, got.Labels, agent.TriageNeedsHumanLabel)
 	require.NotNil(t, got.Extra)
-	assert.Equal(t, string(escalation.TierSmart), got.Extra[TriageTierHintKey])
+	assert.Equal(t, string(escalation.TierSmart), got.Extra[agent.TriageTierHintKey])
 	ev := findEvent(t, store, b.ID, "triage-decision")
 	require.NotNil(t, ev)
 	assert.Contains(t, ev.Summary, "escalate_tier")
@@ -106,12 +105,11 @@ func TestApplyReviewTriageDecision_ThirdBlockNeedsHuman(t *testing.T) {
 	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
 	seedBlocks(t, store, b.ID, now, 3)
 
-	worker := &ExecuteBeadWorker{Store: store}
-	require.NoError(t, worker.applyReviewTriageDecision(b.ID, "ddx", now.Add(time.Hour), string(escalation.TierSmart)))
+	require.NoError(t, agent.ApplyReviewTriageDecision(store, b.ID, "ddx", now.Add(time.Hour), string(escalation.TierSmart)))
 
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
-	assert.Contains(t, got.Labels, TriageNeedsHumanLabel)
+	assert.Contains(t, got.Labels, agent.TriageNeedsHumanLabel)
 	ev := findEvent(t, store, b.ID, "triage-decision")
 	require.NotNil(t, ev)
 	assert.Contains(t, ev.Summary, "needs_human")
@@ -129,7 +127,7 @@ func TestApplyReviewTriageDecision_PairingDegradedBiasesToReAttempt(t *testing.T
 	seedBlocks(t, store, b.ID, now, 1)
 	// Pairing-degraded event between BLOCK 1 and BLOCK 2.
 	require.NoError(t, store.AppendEvent(b.ID, bead.BeadEvent{
-		Kind:      ReviewPairingDegradedEventKind,
+		Kind:      agent.ReviewPairingDegradedEventKind,
 		Summary:   "reviewer pinned to same provider",
 		Body:      "{}",
 		Source:    "test",
@@ -145,16 +143,15 @@ func TestApplyReviewTriageDecision_PairingDegradedBiasesToReAttempt(t *testing.T
 		CreatedAt: now.Add(time.Minute),
 	}))
 
-	worker := &ExecuteBeadWorker{Store: store}
-	require.NoError(t, worker.applyReviewTriageDecision(b.ID, "ddx", now.Add(time.Hour), string(escalation.TierStandard)))
+	require.NoError(t, agent.ApplyReviewTriageDecision(store, b.ID, "ddx", now.Add(time.Hour), string(escalation.TierStandard)))
 
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 	if got.Extra != nil {
-		_, hasHint := got.Extra[TriageTierHintKey]
+		_, hasHint := got.Extra[agent.TriageTierHintKey]
 		assert.False(t, hasHint, "pairing-degraded must override escalate_tier; no tier hint expected")
 	}
-	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel)
+	assert.NotContains(t, got.Labels, agent.TriageNeedsHumanLabel)
 	ev := findEvent(t, store, b.ID, "triage-decision")
 	require.NotNil(t, ev)
 	assert.Contains(t, ev.Summary, "re_attempt_with_context")

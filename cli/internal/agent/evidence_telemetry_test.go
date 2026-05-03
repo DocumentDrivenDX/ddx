@@ -199,13 +199,13 @@ func TestReviewEventBodySummary(t *testing.T) {
 	}
 
 	t.Run("review", func(t *testing.T) {
-		body := appendEventSummary(reviewEventBody("APPROVE", "ok", "path/to/log"), summary)
+		body := AppendEventSummary(ReviewEventBody("APPROVE", "ok", "path/to/log"), summary)
 		assertSummaryFields(t, body, summary)
 	})
 
 	t.Run("review-error", func(t *testing.T) {
-		body := appendEventSummary(
-			reviewErrorEventBody(evidence.OutcomeReviewTransport, 1, "abc123", "boom"),
+		body := AppendEventSummary(
+			ReviewErrorEventBody(evidence.OutcomeReviewTransport, 1, "abc123", "boom"),
 			summary,
 		)
 		assertSummaryFields(t, body, summary)
@@ -250,7 +250,7 @@ func TestReviewEventBodyCap(t *testing.T) {
 		ElapsedMS:   1<<31 - 1,
 	}
 	bigRationale := strings.Repeat("R", 100*1024)
-	body := appendEventSummary(reviewEventBody("BLOCK", bigRationale, "log"), summary)
+	body := AppendEventSummary(ReviewEventBody("BLOCK", bigRationale, "log"), summary)
 
 	require.NoError(t, store.AppendEvent("ddx-cap-1", bead.BeadEvent{
 		Kind:      "review",
