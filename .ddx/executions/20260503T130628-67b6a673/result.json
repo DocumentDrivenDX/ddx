@@ -1,0 +1,59 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "Playwright spec mocks the 5 specified providers with per-provider model lists, asserts all 5 rows render with expected models (incl. truncation drilldown), and verifies the per-row refresh button drives a RefreshProviderModels mutation for both HARNESS and ENDPOINT kinds.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "AC1 satisfied: GraphQL route mock returns 5 providers (claude/codex as HARNESS, openrouter/lmstudio @vidar/@bragi as ENDPOINT) with per-provider model lists in MODELS_BY_KEY.",
+      "location": "cli/internal/server/frontend/e2e/providers-five-scenario.spec.ts:38"
+    },
+    {
+      "severity": "info",
+      "summary": "AC2 satisfied: TC-068 iterates all 5 providers, asserts row visibility and expanded model list contains an expected model id.",
+      "location": "cli/internal/server/frontend/e2e/providers-five-scenario.spec.ts:268"
+    },
+    {
+      "severity": "info",
+      "summary": "AC3 satisfied: TC-069 clicks per-row refresh and asserts RefreshProviderModels mutation count increments with correct name/kind variables for both HARNESS and ENDPOINT rows.",
+      "location": "cli/internal/server/frontend/e2e/providers-five-scenario.spec.ts:307"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 604,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T130113-ba4363ca/manifest.json",
+          ".ddx/executions/20260503T130113-ba4363ca/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3203,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 5613,
+    "output_bytes": 1216,
+    "elapsed_ms": 72411,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
