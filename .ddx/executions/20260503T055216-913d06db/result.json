@@ -1,0 +1,58 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only an execution result.json artifact; no worker code, probe goroutine, ring buffer, or tests are present. Acceptance criteria 1-7 cannot be evaluated from this change.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No source changes for probe goroutine, register/disconnect transitions, ring buffer, or event mirror.",
+      "location": "cli/internal/agent/"
+    },
+    {
+      "severity": "block",
+      "summary": "No tests added (TestWorker_ProbeImmediateFirst, ProbeJitter, BackfillOnReconnect, BackoffOnFailures, NoServer_StillWorks, RealAttemptEvents_FlowToServer).",
+      "location": "cli/internal/agent/"
+    },
+    {
+      "severity": "info",
+      "summary": "Only a result.json evidence file is included in the diff.",
+      "location": ".ddx/executions/20260503T053005-4c51820b/result.json"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1573,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T053005-4c51820b/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1182,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 4489,
+    "output_bytes": 860,
+    "elapsed_ms": 64701,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
