@@ -11,9 +11,43 @@ ddx:
 ---
 # ADR-022: Worker Client–Server Architecture
 
-**Status:** Proposed (rev 4 — design pivot 2026-05-03 per user direction)
-**Date:** 2026-05-02 (rev 1) / 2026-05-03 (rev 2 + rev 3 + rev 4)
+**Status:** Proposed (rev 5 — fold codex rev 4 review feedback)
+**Date:** 2026-05-02 (rev 1) / 2026-05-03 (rev 2-5)
 **Authors:** TD bead `ddx-076147ee`
+
+**Rev 5 amendments (per codex review of rev 4):**
+- Resolved "No worker registration" banner contradiction: it's "no
+  authoritative registration/heartbeat/lease protocol" — there IS a
+  thin identity envelope POST for correlation
+- Resolved `--local` contradiction: deprecated no-op for one alpha
+  release (`v0.6.2-alphaN+1` after rev 5 lands), then deleted; NO
+  "force standalone" behavior
+- Resolved register cadence contradiction: continuous probe (no "once
+  at startup"), with explicit timing/jitter/backoff
+- Renamed event log file consistently: `.ddx/server/worker-events.jsonl`
+  (single name; corrected from `.jsonl` vs `events.jsonl` slip)
+- Added Probe + freshness state table (replaces deleted rev 3 timing
+  model with the smaller surface rev 4 actually needs)
+- Added Disconnected-work backfill section (worker replays event log
+  to server on Connected transition)
+- Added Cancel SLA section (worker checks `cancel-requested` every N
+  seconds during long attempts; default 10s mid-attempt poll)
+- Resolved `.ddx/workers/` contradiction: KEPT as compatibility writer
+  for `ddx agent doctor` until Gate D removes (one alpha release lag)
+- Resolved server address path: standardized as `~/.local/share/ddx/server.addr`
+  (XDG-compliant, matches current code) NOT `~/.local/share/ddx/server.addr` (XDG-compliant, matches current code)
+- Removed C7 from "NOT FROZEN" list — C7 deletes the per-Run
+  `attempted` map that rev 4 preserves; C7 is coordinated, not
+  unfrozen
+- Expanded roadmap from 5 to 9 beads: added UI/GraphQL consumption,
+  `ddx agent doctor` update, FEAT-006 amendment, server-spawn path
+  migration, backfill mechanism
+- Added derived-view contract: GraphQL schema fields, freshness
+  indicators, stale-state markers, duplicate-worker display
+- Added auth-context UI labeling: "trusted-peer reported, not
+  authoritative" per codex's threat-model operationalization request
+
+**Rev 4 design pivot (per user direction 2026-05-03):**
 
 **Rev 4 design pivot (per user direction 2026-05-03):**
 "Workers should always be autonomous. If they have a server to talk to,
@@ -30,8 +64,9 @@ surfaces — but is NOT required for correct operation. `--local` becomes
 path that workers take when no server is reachable.
 
 Rev 4 removes most of rev 3's machinery as no longer needed:
-- No worker registration, heartbeat, or claim-lease API (workers claim
-  from the bead store atomically as today)
+- No authoritative worker registration, heartbeat, or claim-lease API
+  (there IS a thin identity-envelope POST for correlation; workers
+  claim from the bead store atomically as today)
 - No long-poll `next-bead` endpoint (workers pick from the bead store)
 - No server-side picker (worker-side picker continues, with the
   diagnostic events from commit `80f51574` preserved)
@@ -162,7 +197,7 @@ Concretely:
    dependency on a server for correctness.
 3. **In parallel**, a small "server probe" goroutine inside the worker
    periodically (every N seconds, default 30) checks
-   `.ddx/server.addr` for a reachable server. State transitions:
+   `~/.local/share/ddx/server.addr` (XDG-compliant, matches current code) for a reachable server. State transitions:
    - **NotConnected → Connected:** server appeared; worker POSTs
      `register` with a thin identity envelope (project root, harness,
      executor pid/host); on success, worker stores the `worker_id` and
@@ -191,10 +226,12 @@ Concretely:
    server.
 
 **`--local` flag is removed.** Today's `--local` semantics are the
-default behavior; there's nothing to opt into. Operators who today pass
-`--local` will see a deprecation warning + the flag becomes a no-op for
-one release, then is deleted. The breaking-changes section documents
-this.
+default behavior; there's nothing to opt into. Operators who pass
+`--local` see a deprecation warning + the flag is a no-op (no
+"force standalone" behavior — the worker probes for a server normally;
+operators wanting to suppress the probe can stop the server). After one
+alpha release with the deprecation warning, the flag is deleted. The
+breaking-changes section documents this.
 
 This is **Proposal B-shaped** (server is passive observer) with one
 addition: the server can write back to the bead store to influence
@@ -301,7 +338,11 @@ both backed by `requireTrusted` (loopback or ts-net per ADR-006):
 
 ### POST /api/workers/register
 
-Worker-side: called once at startup AFTER a successful `.ddx/server.addr`
+Worker-side: called by the server-probe goroutine on every
+NotConnected → Connected transition (NOT just at startup). On
+re-connect after server crash, the worker re-registers and gets a new
+`worker_id`. Discovery uses
+`~/.local/share/ddx/server.addr` (XDG-compliant, matches current code)
 discovery. Body is a small identity envelope:
 
 ```json
@@ -386,6 +427,68 @@ Server restarts: workers' next event POST succeeds (or 410 if the
 server didn't recover the worker_id, in which case the worker
 re-registers and resumes). No in-flight work is at risk.
 
+### Probe + freshness state model
+
+Smaller than rev 3's claim/heartbeat model but still needs a single
+table. The server-probe goroutine:
+
+| Event | Threshold | Action |
+|---|---|---|
+| Worker process start | immediate (0s) | Probe `~/.local/share/ddx/server.addr`; on success, register |
+| Probe interval (steady state) | 30s default; 10s min; 5min max; jittered ±20% | Re-check reachability; emit register if NotConnected→Connected; nothing if Connected→Connected |
+| Connected POST fails (timeout, conn refused, 5xx) | immediate | Worker enters NotConnected; logs locally; continues working |
+| 5 consecutive probe failures | ~2.5 min default | Worker reduces probe rate to 5min (backoff); resets to 30s on next success |
+| Server replies 410 unknown_worker | immediate | Worker re-registers within same probe cycle |
+| Worker process exit (graceful) | immediate | Best-effort POST disconnect; not required for correctness |
+
+**Freshness indicators** (server-side, surfaced in the workers panel UI):
+
+- `worker_state` ∈ {connected, stale, disconnected}: connected = event
+  in last 2× probe interval; stale = 2-10× probe interval; disconnected
+  = > 10× probe interval (worker presumed dead)
+- `last_event_at`: timestamp of most recent event from this worker
+- `mirror_failures_count`: total POST failures since worker_id was issued
+  (operator can see if a worker is healthy but lossy)
+
+### Disconnected-work backfill
+
+A worker that started while no server was running may have claimed and
+finished beads before reaching Connected. To prevent the operator's UI
+from missing those events:
+
+- The worker maintains an in-memory ring buffer of the last N=200
+  events it emitted while NotConnected (kind, body, bead_id,
+  attempt_id, timestamp).
+- On NotConnected → Connected transition, the worker POSTs a
+  `/api/workers/<id>/backfill` request with the buffered events. Server
+  acknowledges with 204; worker clears the buffer.
+- If the buffer overflows (worker generated >200 events while
+  disconnected — possible during a long outage or many short attempts),
+  oldest events are dropped silently. The bead's local event log
+  remains complete; only the server's derived view is incomplete. UI
+  marks the worker as `had_dropped_backfill: true` so operators know to
+  consult bead-local logs.
+- Backfill is best-effort: a 5xx during backfill leaves the buffer
+  intact; worker tries again on next NotConnected → Connected.
+
+### Cancel SLA
+
+Operator-initiated cancel writes `extra.cancel-requested: true` to the
+bead via the server's `/api/beads/<id>/cancel` endpoint (or directly
+via the bead store). The worker honors at the next safe point:
+
+- **Mid-attempt poll** (default every 10s during long attempts): the
+  worker re-reads the bead's `extra` map. If `cancel-requested: true`
+  appears, the worker aborts the next LLM turn / next git operation
+  boundary and reports `preserved_for_review` with reason `operator_cancel`.
+- **Worst-case latency**: 10s (mid-attempt poll interval) plus the
+  current LLM turn duration (typically 5-30s). Operators expecting
+  faster cancel use OS signals.
+- **Idempotency**: a bead with `cancel-requested: true` already worked
+  is silently consumed (worker writes `cancel-honored: true` next to
+  it); a worker starting work on a bead with `cancel-requested: true`
+  immediately reports `preserved_for_review` and skips the attempt.
+
 ## Compatibility analysis
 
 ### Migrates cleanly (almost everything)
@@ -451,10 +554,10 @@ rule because nothing about the worker state machine changes.
   does NOT make ExecuteLoopSpec a wire format. The bead remains valuable
   as a worker-side struct unification (cobra → in-process flow) and
   should land independently.
-- **`ddx-5cb6e6cd` C5/C7/C9 refactor children** — NOT FROZEN. Rev 4
-  doesn't reshape the worker state machine; refactor children proceed
-  independently. They may need minor adjustments (emit events to the
-  new server endpoint when registered) but no large rework.
+- **`ddx-5cb6e6cd` C5 (no_changes adjudication)** — NOT FROZEN. Rev 5
+  doesn't reshape no_changes generation; mirroring stays an observer.
+- **`ddx-5cb6e6cd` C7 (uniform Guard contract; delete attempted/hookFailed maps)** — **COORDINATE.** Direct conflict: rev 5's worker keeps the per-Run `attempted` map (preserved from commit `41cb762e`); C7 wants to delete it. Resolution: C7 lands BEFORE rev 5 implementation work, OR rev 5 implementation work coordinates with C7's replacement (Guard-derived exclusion). Until coordinated, C7 stays parked.
+- **`ddx-5cb6e6cd` C9 (StopCondition + cost-cap)** — NOT FROZEN. The autonomous worker keeps the stay-alive defaults; C9's StopCondition becomes an internal worker construct, server sees terminal state via the result event.
 - **`ddx-dc157075` (stay-alive at commit `41cb762e`)** — already shipped
   and preserved. Worker's autonomous behavior plus 30s poll-interval
   default carry forward unchanged.
@@ -480,20 +583,33 @@ rule because nothing about the worker state machine changes.
 
 ## Implementation roadmap
 
-Rev 4 is small. The roadmap is 5 beads, all parallel-safe with the
-refactor epic and other in-flight work.
+Rev 5 expands from rev 4's 5 beads to 9, after codex flagged missing
+UI/doctor/FEAT-006/server-spawn-migration/backfill scope.
 
-1. **server: implement `POST /api/workers/register` + `POST /api/workers/<id>/event` endpoints** — thin ingestion endpoints; in-memory derived view backed by an append-only `.ddx/server/worker-events.jsonl` for history. Trusted boundary via existing `requireTrusted`. ~200 LOC.
+1. **server: ingestion endpoints** — implement `POST /api/workers/register` + `POST /api/workers/<id>/event` + `POST /api/workers/<id>/backfill`; in-memory derived view backed by append-only `.ddx/server/worker-events.jsonl`; freshness state machine (connected/stale/disconnected); requireTrusted boundary. ~300 LOC.
 
-2. **worker: add server-probe goroutine + best-effort event mirroring** — periodic `.ddx/server.addr` reachability check; transitions emit register/disconnect; events that today land in the bead's local event log also POST to the server when Connected; failures logged + ignored. ~150 LOC.
+2. **worker: server-probe goroutine + best-effort event mirror** — periodic reachability check on `~/.local/share/ddx/server.addr` (XDG-compliant, matches current code) with jittered 30s interval, immediate first probe, exponential backoff on consecutive failures; transitions emit register/disconnect; in-memory ring buffer for backfill (200-event cap); event POSTs are best-effort. ~250 LOC.
 
-3. **CLI: deprecate + remove `--local` flag** — first release: flag is a no-op with deprecation warning; following release: flag is deleted. Update CLAUDE.md, AGENTS.md, getting-started docs to remove `--local` references. ~50 LOC + doc edits.
+3. **server: operator-cancel** — `/api/beads/<id>/cancel` writes `extra.cancel-requested: true`; worker mid-attempt poll (10s default) checks bead `extra` and aborts at next safe point with `preserved_for_review` reason `operator_cancel`; idempotency via `cancel-honored: true`. ~150 LOC.
 
-4. **server: add operator-cancel via bead-store marker** — server's `/api/beads/<id>/cancel` endpoint writes `extra.cancel-requested: true`; worker observes on next loop iteration and aborts at next safe point with `preserved_for_review` outcome. ~100 LOC.
+4. **CLI: deprecate `--local`** — flag becomes no-op with deprecation warning; update CLAUDE.md, AGENTS.md, getting-started, and the cobra help text. Existing tests asserting `--local`-specific behavior get rewritten or deleted. (Codex notes the sweep is larger than 50 LOC: `cli/cmd/work_test.go`, `agent_execute_loop_test.go`, `zero_config_work_test.go`, `skills/ddx/reference/work.md`, demos.) ~150 LOC + doc edits.
 
-5. **acceptance + soak** — uses `ddx-50da9674` clean fixture repo. Multi-worker drain with server up; restart server mid-flight; verify worker continues + reconnects + reports. Then drain with NO server; verify identical behavior. Soak: ≥1 week of normal operator use without falling back to anything. Final bead.
+5. **server: derived-view GraphQL + UI workers panel** — schema fields: `workers { id, project, harness, state, last_event_at, mirror_failures_count, had_dropped_backfill, current_bead, current_attempt }`; UI surfaces freshness indicators + duplicate-worker display + the "trusted-peer reported, not authoritative" labeling. Existing workers panel migrated. ~400 LOC frontend + ~100 LOC backend.
 
-Total estimated effort: 1-2 weeks (vs 8-10 weeks for rev 3's design).
+6. **`ddx agent doctor` migration** — read worker state from server's runtime registry when available; fall back to `.ddx/workers/` on-disk files when no server. The on-disk format stays as the fallback-source-of-truth for one alpha release lag, then deprecated. ~150 LOC.
+
+7. **server-spawn path migration** — `cli/internal/server/workers.go` and `handleStartExecuteLoopWorker` switch from hand-marshalled spec to `exec ddx work` with env-vars. The legacy spec serialization deletes when this lands. ~200 LOC + test updates.
+
+8. **FEAT-006 amendment** — replace the rev 3 worker-contract section with rev 5's autonomous-default + best-effort-mirror description. Drop session-token/heartbeat/`next-bead`/result/disconnect contract; add register/event/backfill/cancel + freshness state. ~200 lines docs.
+
+9. **acceptance + soak** — uses `ddx-50da9674` clean fixture repo. Multi-worker drain WITH server; restart server mid-flight; verify worker continues + reconnects + backfills. Then drain with NO server; verify identical behavior. Operator-cancel test (write marker, observe `preserved_for_review` with `operator_cancel` reason within SLA). Soak: ≥1 week of normal operator use. Final bead.
+
+Plus one COORDINATION bead, NOT new work but a parking-lot for the
+C7 conflict:
+
+10. **coordinate: C7 (Guard contract, delete attempted map) with rev 5 worker** — either C7 lands first and rev 5 implementation uses Guard-derived exclusion, OR C7 stays parked until rev 5's worker code defines its replacement for the per-Run attempted map. Decision documented; no LOC.
+
+Total estimated effort: 2-4 weeks (vs 1-2 weeks for rev 4's understated 5-bead roadmap, vs 8-10 weeks for rev 3's design).
 
 ## Consequences
 
@@ -533,10 +649,13 @@ Total estimated effort: 1-2 weeks (vs 8-10 weeks for rev 3's design).
 ## References
 
 - Bead `ddx-076147ee` — this TD's source.
-- Bead `ddx-29058e2a` — `ExecuteLoopSpec` drift, subsumed by registration payload.
-- Bead `ddx-5cb6e6cd` — `run`/`try`/`work` refactor epic; ordering depends on this ADR.
-- Bead `ddx-dc157075` — stay-alive fix, subsumed by long-poll worker.
-- Bead `ddx-4c51d33e` — cross-project leak; project-binding via session token prevents recurrence in worker paths.
+- Bead `ddx-29058e2a` — `ExecuteLoopSpec` drift; rev 5 keeps this as a worker-side struct unification (NOT a wire format).
+- Bead `ddx-5cb6e6cd` — `run`/`try`/`work` refactor epic; rev 5 sequences C5/C9 in parallel, C7 coordinated.
+- Bead `ddx-dc157075` — stay-alive fix at commit `41cb762e`; rev 5 keeps the autonomous-loop semantics.
+- Bead `ddx-4c51d33e` — cross-project leak (LAYER 1 at commit `33b97f25`); rev 5 prevents recurrence at the worker level (one worker per project bead store).
+- Bead `ddx-9d55601f` — picker priority bug at commit `80f51574`; diagnostic events mirror to server when Connected.
+- Bead `ddx-9e4c238d` — auto-routing rejection bug; orthogonal to rev 5.
+- Bead `ddx-50da9674` — clean fixture repo; rev 5's acceptance soak depends on it.
 - ADR-006 — ts-net authentication (trust model for `requireTrusted`).
 - ADR-007 — federation topology (multi-node ownership of project queues).
 - ADR-021 — operator-prompt beads (existing trust pattern this ADR mirrors).
