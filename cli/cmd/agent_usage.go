@@ -242,20 +242,6 @@ func parseSince(s string) (time.Time, error) {
 	return t, nil
 }
 
-// aggregateUsage reads the sharded session index and returns per-harness aggregates.
-func aggregateUsage(logFile, harnessFilter string, since time.Time, mirrored map[string]struct{}) ([]usageRow, error) {
-	byHarness, order, err := aggregateUsageAggs(logFile, harnessFilter, since, nil, mirrored)
-	if err != nil {
-		return nil, err
-	}
-
-	rows := make([]usageRow, 0, len(order))
-	for _, h := range order {
-		rows = append(rows, byHarness[h].toRow(h))
-	}
-	return rows, nil
-}
-
 func aggregateUsageFromSessionIndex(logDir, harnessFilter string, since time.Time, mirrored map[string]struct{}) ([]usageRow, error) {
 	records, err := readUsageSessionIndexRecords(logDir, harnessFilter, since)
 	if err != nil {
@@ -282,48 +268,6 @@ func aggregateUsageFromSessionIndex(logDir, harnessFilter string, since time.Tim
 		rows = append(rows, byHarness[h].toRow(h))
 	}
 	return rows, nil
-}
-
-// aggregateUsageAggs is the compatibility-aware session aggregator used by
-// both the primary routing-store path and the legacy fallback path.
-func aggregateUsageAggs(logFile, harnessFilter string, since time.Time, cutoffByHarness map[string]time.Time, mirrored map[string]struct{}) (map[string]*usageAgg, []string, error) {
-	byHarness := map[string]*usageAgg{}
-	order := []string{}
-
-	err := agent.ForEachJSONL[agent.SessionEntry](logFile, func(entry agent.SessionEntry) error {
-		if entry.Timestamp.Before(since) {
-			return nil
-		}
-		if mirrored != nil {
-			if key := usageMirrorKey(entry.NativeSessionID, entry.TraceID, entry.SpanID); key != "" {
-				if _, ok := mirrored[key]; ok {
-					return nil
-				}
-			}
-		}
-		if cutoffByHarness != nil {
-			if cutoff, ok := cutoffByHarness[entry.Harness]; ok && !cutoff.IsZero() && !entry.Timestamp.Before(cutoff) {
-				return nil
-			}
-		}
-		if harnessFilter != "" && entry.Harness != harnessFilter {
-			return nil
-		}
-
-		a, exists := byHarness[entry.Harness]
-		if !exists {
-			a = &usageAgg{}
-			byHarness[entry.Harness] = a
-			order = append(order, entry.Harness)
-		}
-		a.addSession(entry)
-		return nil
-	})
-	if err != nil {
-		return nil, nil, err
-	}
-
-	return byHarness, order, nil
 }
 
 // aggregateUsageFromRoutingMetrics prefers the minimal routing-outcome store
@@ -475,24 +419,6 @@ func usageMirrorKey(nativeSessionID, traceID, spanID string) string {
 	default:
 		return ""
 	}
-}
-
-func readUsageSessionRecords(logFile, harnessFilter string, since time.Time) ([]usageSessionRecord, error) {
-	var records []usageSessionRecord
-	err := agent.ForEachJSONL[agent.SessionEntry](logFile, func(entry agent.SessionEntry) error {
-		if entry.Timestamp.Before(since) {
-			return nil
-		}
-		if harnessFilter != "" && entry.Harness != harnessFilter {
-			return nil
-		}
-		records = append(records, usageSessionRecord{
-			entry: entry,
-			key:   usageMirrorKey(entry.NativeSessionID, entry.TraceID, entry.SpanID),
-		})
-		return nil
-	})
-	return records, err
 }
 
 func readUsageSessionIndexRecords(logDir, harnessFilter string, since time.Time) ([]usageSessionRecord, error) {

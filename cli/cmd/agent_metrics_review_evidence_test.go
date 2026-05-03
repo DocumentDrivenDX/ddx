@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -75,7 +76,8 @@ func TestReviewEvidenceApproveAttributesToTier(t *testing.T) {
 	require.GreaterOrEqual(t, reviewIdx, 0, "loop must append a kind:review event after APPROVE")
 	assert.Less(t, routingIdx, reviewIdx, "routing must precede review for correct tier attribution")
 
-	rows, err := computeReviewOutcomes(dir)
+	report, err := computeReviewOutcomesReport(dir, 0, time.Time{})
+	rows := report.Rows
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, "claude/sonnet", rows[0].Tier)
@@ -141,7 +143,8 @@ func TestReviewEvidenceRequestChangesCountedAsRejection(t *testing.T) {
 	assert.True(t, hasRouting, "loop must append kind:routing on the reopened-after-review path")
 	assert.True(t, hasReview, "loop must append kind:review with REQUEST_CHANGES summary")
 
-	rows, err := computeReviewOutcomes(dir)
+	report, err := computeReviewOutcomesReport(dir, 0, time.Time{})
+	rows := report.Rows
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 	assert.Equal(t, "claude/sonnet", rows[0].Tier)

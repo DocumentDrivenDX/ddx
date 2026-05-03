@@ -343,17 +343,6 @@ func reviewVerdictCategory(summary string) string {
 	return ""
 }
 
-// computeReviewOutcomes is a thin wrapper that returns only the per-tier
-// rows of the review-outcomes report. Retained for callers that pre-date the
-// FEAT-022 §17 metrics surface (prompt-size quantiles + failure classes).
-func computeReviewOutcomes(workingDir string) ([]reviewOutcomesRow, error) {
-	report, err := computeReviewOutcomesReport(workingDir, 0, time.Time{})
-	if err != nil {
-		return nil, err
-	}
-	return report.Rows, nil
-}
-
 // computeReviewOutcomesReport scans every bead in workingDir/.ddx and
 // produces the FEAT-022 §17 review-outcomes report:
 //   - per-tier verdict aggregates (Rows): each kind:review event is

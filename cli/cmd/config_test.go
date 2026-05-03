@@ -244,7 +244,7 @@ func TestConfigCommand_Help(t *testing.T) {
 	freshConfigCmd := &cobra.Command{
 		Use:   "config [get|set|validate] [key] [value]",
 		Short: "Manage DDx configuration",
-		RunE:  runConfig,
+		RunE:  func(cmd *cobra.Command, args []string) error { return nil },
 	}
 	freshConfigCmd.Flags().BoolP("global", "g", false, "Edit global configuration")
 	freshConfigCmd.Flags().BoolP("local", "l", false, "Edit local project configuration")

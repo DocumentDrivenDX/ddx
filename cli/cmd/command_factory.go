@@ -85,39 +85,6 @@ func NewCommandFactory(workingDir string) *CommandFactory {
 	}
 }
 
-// NewCommandFactoryWithViper creates a factory with a custom viper instance
-func NewCommandFactoryWithViper(workingDir string, v *viper.Viper) *CommandFactory {
-	return &CommandFactory{
-		Version:       Version,
-		Commit:        Commit,
-		Date:          Date,
-		WorkingDir:    workingDir,
-		viperInstance: v,
-	}
-}
-
-// withWorkingDir returns a sibling factory that shares configuration/runtime
-// dependencies but does not copy lock-bearing state by value.
-func (f *CommandFactory) withWorkingDir(workingDir string) *CommandFactory {
-	return &CommandFactory{
-		Version:                            f.Version,
-		Commit:                             f.Commit,
-		Date:                               f.Date,
-		WorkingDir:                         workingDir,
-		AgentRunnerOverride:                f.AgentRunnerOverride,
-		ExecAgentRunnerOverride:            f.ExecAgentRunnerOverride,
-		executeBeadGitOverride:             f.executeBeadGitOverride,
-		executeBeadOrchestratorGitOverride: f.executeBeadOrchestratorGitOverride,
-		executeBeadLandingGitOverride:      f.executeBeadLandingGitOverride,
-		executeBeadLandingAdvancerOverride: f.executeBeadLandingAdvancerOverride,
-		syncGitRunnerOverride:              f.syncGitRunnerOverride,
-		tryExecutorOverride:                f.tryExecutorOverride,
-		viperInstance:                      f.viperInstance,
-		updateChecker:                      f.updateChecker,
-		updateDone:                         f.updateDone,
-	}
-}
-
 // NewRootCommand creates a fresh root command with all subcommands
 func (f *CommandFactory) NewRootCommand() *cobra.Command {
 	// Local flag variables scoped to this command instance
@@ -576,11 +543,6 @@ PowerShell:
 	promptsCmd.AddCommand(f.newPromptsListCommand())
 	promptsCmd.AddCommand(f.newPromptsShowCommand())
 	rootCmd.AddCommand(promptsCmd)
-}
-
-// Helper function to get library path from environment or flag
-func getLibraryPathFromEnv() string {
-	return os.Getenv("DDX_LIBRARY_BASE_PATH")
 }
 
 // resolveAgentSession looks up a session by ID from the agent session log.
