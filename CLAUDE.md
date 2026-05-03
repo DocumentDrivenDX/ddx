@@ -143,6 +143,10 @@ git add <files>
 lefthook run pre-commit
 ```
 
+### Test fixtures
+
+Tests and demos that need a clean ddx-initialized git repo (without polluting this project) should use the shared fixture helper rather than rolling their own `t.TempDir()` setup. Call `testutils.NewFixtureRepo(t, profile)` (under `cli/internal/testutils/`) which wraps `scripts/build-fixture-repo.sh` and auto-cleans via `t.Cleanup`. Profiles: `minimal`, `standard`, `multi-project`, `federated`. See `scripts/build-fixture-repo.md` for layout details.
+
 Pre-commit checks include:
 - Secrets detection
 - Binary file prevention
