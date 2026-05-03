@@ -2,6 +2,12 @@ package agent
 
 import "strings"
 
+// OperatorCancelReason marks a landing preserved because the operator
+// cancelled the attempt mid-flight via /api/beads/<id>/cancel. ADR-022
+// §Cancel SLA: the worker aborts at the next safe point (between LLM turns /
+// git ops) and emits a preserved_for_review result with this exact reason.
+const OperatorCancelReason = "operator_cancel"
+
 // PushFailedReasonPrefix is the canonical Reason prefix written by the
 // landing layer when `git push` rejects the new tip after a local merge or
 // fast-forward succeeded. ClassifyExecuteBeadStatus matches on this prefix
@@ -200,6 +206,8 @@ func classifyLandingFailureMode(landingOutcome, landingReason string, gateResult
 			return classifyGateFailure(gateResults)
 		case RatchetPreserveReason:
 			return FailureModeRatchetMiss
+		case OperatorCancelReason:
+			return ""
 		}
 		// Other preserved reasons (e.g. "agent execution failed",
 		// "--no-merge specified") defer to the worker's classification.
@@ -336,6 +344,8 @@ func ClassifyExecuteBeadStatus(outcome string, exitCode int, reason string) stri
 			return ExecuteBeadStatusPostRunCheckFailed
 		case RatchetPreserveReason:
 			return ExecuteBeadStatusRatchetFailed
+		case OperatorCancelReason:
+			return ExecuteBeadStatusPreservedNeedsReview
 		default:
 			if isPreservedNeedsReviewReason(reason) {
 				return ExecuteBeadStatusPreservedNeedsReview

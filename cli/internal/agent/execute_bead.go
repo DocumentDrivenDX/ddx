@@ -99,6 +99,20 @@ type BeadEventAppender interface {
 	AppendEvent(id string, event bead.BeadEvent) error
 }
 
+// BeadCancelStore reads/writes the cancel markers on a bead's Extra map.
+// Implemented by *bead.Store. ADR-022 §Cancel SLA: the worker polls
+// IsCancelRequested mid-attempt and on a positive read writes
+// MarkCancelHonored before aborting at the next safe point.
+type BeadCancelStore interface {
+	IsCancelRequested(id string) (bool, error)
+	MarkCancelHonored(id string) error
+}
+
+// CancelPollInterval is how often the worker checks for an operator cancel
+// while an agent attempt is in flight. ADR-022 §Cancel SLA names 10s as the
+// default. Exposed as a variable so tests can override it.
+var CancelPollInterval = 10 * time.Second
+
 // ExecuteBeadRuntime carries the non-durable plumbing for an execute-bead
 // run: per-invocation intent (FromRev, PromptFile, WorkerID) and
 // non-serializable injection seams (BeadEvents, Service, AgentRunner).
@@ -112,6 +126,7 @@ type ExecuteBeadRuntime struct {
 	PromptFile  string // override prompt file (auto-generated if empty)
 	WorkerID    string // from DDX_WORKER_ID env or caller
 	BeadEvents  BeadEventAppender
+	BeadCancel  BeadCancelStore // optional: enables operator-cancel mid-attempt poll
 	Service     agentlib.FizeauService
 	AgentRunner AgentRunner
 }
@@ -718,7 +733,16 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		PermissionsOverride:   "unrestricted", // isolated worktree; writes must not require approval
 	}
 
-	agentResult, agentErr := dispatchAgentRun(ctx, projectRoot, runtime.Service, runtime.AgentRunner, rcfg, runRuntime)
+	// Operator-cancel mid-attempt poll (ADR-022 §Cancel SLA). The poll
+	// re-reads the bead's Extra every CancelPollInterval; on
+	// cancel-requested:true it cancels the dispatch context (which kills the
+	// agent subprocess at the next syscall boundary) and writes
+	// cancel-honored:true so subsequent cancel POSTs are silent no-ops.
+	dispatchCtx, dispatchCancel := context.WithCancel(ctx)
+	defer dispatchCancel()
+	cancelHonored := startCancelPoll(dispatchCtx, dispatchCancel, beadID, runtime.BeadCancel)
+
+	agentResult, agentErr := dispatchAgentRun(dispatchCtx, projectRoot, runtime.Service, runtime.AgentRunner, rcfg, runRuntime)
 	finishedAt := time.Now().UTC()
 
 	exitCode := 0
@@ -939,6 +963,23 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				res.Error = res.Reason
 			}
 		}
+	}
+
+	// Operator-cancel override (ADR-022 §Cancel SLA). When the mid-attempt
+	// poll detected cancel-requested:true on the bead, force the result into
+	// the preserved_for_review channel with reason "operator_cancel" so the
+	// orchestrator and supervisor surface it as an operator-driven preserve
+	// rather than a generic task_failed/no_evidence outcome.
+	if cancelHonored != nil && cancelHonored.Load() {
+		res.Outcome = "preserved"
+		res.Reason = OperatorCancelReason
+		res.Error = ""
+		res.ExitCode = 0
+		res.FailureMode = ""
+		res.Status = ExecuteBeadStatusPreservedNeedsReview
+		res.Detail = ExecuteBeadStatusDetail(res.Status, OperatorCancelReason, "")
+		_ = writeArtifactJSON(artifacts.ResultAbs, res)
+		return res, nil
 	}
 
 	// Classify failure mode from worker-level signals. ApplyLandingToResult
