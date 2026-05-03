@@ -1,0 +1,42 @@
+{
+  "attempt_id": "20260503T200645-f1713f26",
+  "bead_id": "ddx-f261d2a0",
+  "base_rev": "8179503c529b02c70d1ecb16b2f645fb0adafd6b",
+  "created_at": "2026-05-03T20:06:49.606966757Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f261d2a0",
+    "title": "cli: add 'ddx try \u003cbead-id\u003e' command — operator-targeted one-shot bead execution",
+    "description": "PROBLEM\nOperators have no way to dispatch a SPECIFIC bead through the production execution machinery (claim → try.Attempt → land → review). Today's surfaces:\n- 'ddx work' drains by picker priority — can't force a specific bead\n- 'ddx work --once' drains the top of the queue once — still picker-controlled\n- 'ddx agent run --prompt' invokes the agent but doesn't claim, doesn't merge, doesn't write to bead event log\n\nThis blocks: (1) deterministic queue ordering during refactor execution, (2) the 3-path comparison study (ddx-31f745cd) which needs a way to target one fixture bead at a time, (3) operator-driven debugging when a bead misbehaves under autonomous drain.\n\nROOT CAUSE\n'ddx try' was originally bundled into refactor child C13 (ddx-387a0178) along with the file rename. C13 is sequenced AFTER C7 / C9 because the rename touches execute_bead_loop.go which those children also touch. But 'ddx try' itself is ADDITIVE — a new CLI subcommand that delegates to existing machinery — and doesn't conflict with the refactor children. Splitting 'ddx try' out lets it ship FIRST and unblocks operator-controlled execution for the entire rest of the refactor work.\n\nCode today (relevant entry points):\n- cli/cmd/work.go: 'ddx work' command implementation (calls into agent.ExecuteBeadLoopRuntime)\n- cli/cmd/agent_cmd.go: 'ddx agent execute-loop' (the underlying loop runner)\n- cli/internal/agent/execute_bead_loop.go: ExecuteBeadWorker.Run + nextCandidate\n- cli/internal/bead/store.go:1246 ReadyExecution + Claim\n\nPROPOSED FIX\nAdd a new top-level command at cli/cmd/try.go:\n\n  ddx try \u003cbead-id\u003e [--harness=\u003cname\u003e] [--model=\u003cname\u003e] [--profile=\u003cname\u003e]\n\nBehavior:\n1. Look up the bead by ID via the bead store; fail-fast with a clear message if not found.\n2. Verify the bead is in a claimable state (status open OR stale-in_progress per existing semantics); fail-fast if status closed/cancelled OR if it has unmet dependencies.\n3. Force-target this single bead. Two implementation strategies (pick simpler):\n   STRATEGY A (thin wrapper): construct an ExecuteBeadLoopRuntime with --once + a custom nextCandidate that returns ONLY this bead-id, skipping the picker. Call ExecuteBeadWorker.Run.\n   STRATEGY B (direct invocation): claim the bead, build the runtime config, call try.Attempt directly (or whatever the underlying single-bead execution function is today). Skip the loop.\n   Recommend STRATEGY A — reuses the existing claim + executor + outcome paths; smaller diff; less risk of behavior divergence.\n4. Honor --harness / --model / --profile / --opaque-passthrough exactly the way 'ddx work' does (same flag plumbing).\n5. Exit with the bead's terminal status (success → 0; preserved/no_changes/blocked → non-zero with structured stderr).\n\nNON-SCOPE\n- File rename of execute_bead_loop.go (still owned by C13)\n- Refactor of execute-bead surface into try/work packages (refactor epic)\n- Multi-bead try (use 'ddx work' for that)\n- Server-side targeting (a future enhancement; v1 is local CLI only)\n- Auto-discovery of dependencies (operator must use 'ddx bead ready' first)\n\nINTERSECTION\n- C13 (ddx-387a0178) currently includes 'ADD ddx try CLI command' in its scope. After this bead lands, amend C13 to drop that line.\n- 3-path comparison study (ddx-31f745cd) Path A uses 'ddx try' as the production-path executor; this bead unblocks that study.\n- Refactor children Wave 2 dispatch will use 'ddx try' (codex harness) to deterministically dispatch each child in dep order.",
+    "acceptance": "1. cli/cmd/try.go exists implementing 'ddx try \u003cbead-id\u003e' as a cobra subcommand. Help text describes operator-targeted execution + the relationship to 'ddx work'.\n\n2. 'ddx try unknown-bead-id' exits non-zero with stderr 'bead not found: unknown-bead-id'.\n\n3. 'ddx try \u003cclosed-bead-id\u003e' exits non-zero with stderr 'bead is not claimable (status=closed)'. Same shape for cancelled.\n\n4. 'ddx try \u003cbead-id-with-unmet-deps\u003e' exits non-zero with stderr 'bead has unmet dependencies: \u003clist\u003e'.\n\n5. 'ddx try \u003cready-bead-id\u003e' claims the bead, executes via the existing execute-bead-loop machinery (one iteration, one bead), writes evidence to .ddx/executions/\u003crun-id\u003e/, and exits with the bead's terminal status code (0 = success/already_satisfied; 1 = preserved_for_review/no_changes; 2 = execution_failed).\n\n6. Flag plumbing: --harness, --model, --profile, --provider, --effort, --opaque-passthrough, --no-review, --review-harness, --review-model. Each flag, when set, plumbs identically to the corresponding 'ddx work' flag (same struct fields in the runtime config).\n\n7. WIRED-IN: the new 'ddx try' command is registered in cli/cmd/root.go (or wherever the cobra root command assembles subcommands). Verified by 'ddx try --help' output AND by 'git grep \"tryCmd\\|NewTryCommand\" cli/cmd/' showing the registration.\n\n8. Tests in cli/cmd/try_test.go:\n   - TestTry_BeadNotFound — invalid ID returns the documented stderr + non-zero exit\n   - TestTry_BeadClosed — closed bead returns the documented stderr + non-zero exit\n   - TestTry_BeadUnmetDeps — bead with unclosed dep returns the documented stderr + non-zero exit\n   - TestTry_HappyPath_ClaimsAndExecutes — fixture bead + stub executor; assert bead is claimed, attempted, and outcome reported (use the existing test fixtures from agent_execute_loop_test.go as a template)\n   - TestTry_FlagsPlumbThrough — set --harness=codex --model=gpt-5.4-mini and assert these reach the runtime config (capture via stub)\n\n9. Quality gates:\n   - cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/...\n   - lefthook run pre-commit\n\n10. Conventional commit message ending [\u003cthis-bead-id\u003e]. Stage cli/cmd/try.go + cli/cmd/try_test.go + any cli/cmd/root.go registration line specifically; DO NOT use git add -A.\n\n11. Manual verification (operator runs after merge): 'ddx try ddx-50da9674' (closed fixture-repo bead) returns non-zero with the closed-bead message; 'ddx try \u003csome-ready-bead\u003e' actually claims and executes it.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "area:cli",
+      "area:agent",
+      "kind:feature",
+      "reliability",
+      "bead-quality",
+      "wave:0"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T20:06:45Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T20:06:45.629383516Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T200645-f1713f26",
+    "prompt": ".ddx/executions/20260503T200645-f1713f26/prompt.md",
+    "manifest": ".ddx/executions/20260503T200645-f1713f26/manifest.json",
+    "result": ".ddx/executions/20260503T200645-f1713f26/result.json",
+    "checks": ".ddx/executions/20260503T200645-f1713f26/checks.json",
+    "usage": ".ddx/executions/20260503T200645-f1713f26/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-f261d2a0-20260503T200645-f1713f26"
+  },
+  "prompt_sha": "d6473c95aedc86f27391e026431a2c96f6a9d561d105fc9197f1eb935b92444a"
+}
