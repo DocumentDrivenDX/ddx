@@ -1,0 +1,49 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff only contains execution manifest/result JSON for the attempt — no actual web/Runs page changes are visible. Cannot evaluate any of the three AC items (chip primitives import, virtualization threshold, live worker phase updates) from this diff.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No source changes to Runs page or shared chip/virtualization primitives present in the diff; only execution evidence files were added.",
+      "location": ".ddx/executions/20260503T072233-8ba5b582/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 652,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T072233-8ba5b582/manifest.json",
+          ".ddx/executions/20260503T072233-8ba5b582/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 59442,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 61900,
+    "output_bytes": 581,
+    "elapsed_ms": 62994,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
