@@ -176,6 +176,20 @@ type ExecuteBeadReport struct {
 	// DecompositionRationale is a free-form explanation accompanying
 	// DecompositionRecommendation. Optional.
 	DecompositionRationale string `json:"decomposition_rationale,omitempty"`
+	// Disrupted marks a failed attempt as worker-disrupted rather than
+	// model-gave-up: the model was prevented from making progress by an
+	// external cause (context cancellation, executor SIGKILL/SIGTERM,
+	// transport-class provider error, server restart, routing preflight
+	// rejection). The execute-loop bypasses the no-progress cooldown for
+	// Disrupted reports so the bead is immediately re-claimable instead of
+	// being parked for hours on a transient outage. ddx-5b3e57f4.
+	Disrupted bool `json:"disrupted,omitempty"`
+	// DisruptionReason carries the kind of disruption detected when
+	// Disrupted=true (e.g. "context_canceled", "context_deadline",
+	// "transport_error", "preflight_rejected"). Used in the
+	// `disruption_detected` event body so operators can see which class is
+	// occurring.
+	DisruptionReason string `json:"disruption_reason,omitempty"`
 }
 
 type ExecuteBeadExecutor interface {
@@ -606,12 +620,22 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					"reason":  rerr.Error(),
 				})
 				report := ExecuteBeadReport{
-					BeadID:  candidate.ID,
-					Status:  ExecuteBeadStatusExecutionFailed,
-					Detail:  detail,
-					Harness: harness,
-					Model:   model,
+					BeadID:           candidate.ID,
+					Status:           ExecuteBeadStatusExecutionFailed,
+					Detail:           detail,
+					Harness:          harness,
+					Model:            model,
+					Disrupted:        true,
+					DisruptionReason: "preflight_rejected",
 				}
+				// ddx-5b3e57f4: a routing preflight rejection is an operator
+				// configuration issue (harness/model allow-list mismatch), not
+				// evidence the model could not make progress. Mark the report
+				// Disrupted and emit the diagnostic event so operators can see
+				// disruption rates without parking the bead in a no-progress
+				// cooldown.
+				emitDisruptionDetected(emit, w.Store, candidate.ID,
+					"preflight_rejected", detail, harness, model, assignee, now().UTC())
 				result.Attempts++
 				result.Failures++
 				result.LastFailureStatus = report.Status
@@ -742,6 +766,27 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 		if report.Detail == "" {
 			report.Detail = ExecuteBeadStatusDetail(report.Status, "", "")
+		}
+		// ddx-5b3e57f4: distinguish worker-disrupted from model-gave-up.
+		// A failed attempt where the loop ctx was cancelled, or the executor
+		// surfaced a transport-class error, is not evidence the model could
+		// not make progress — skip the no-progress cooldown so the bead is
+		// immediately re-claimable. If the executor itself already marked
+		// report.Disrupted (e.g. a future SIGKILL/SIGTERM or server-restart
+		// classifier inside ExecuteBeadWithConfig), preserve it.
+		if !report.Disrupted && report.Status != ExecuteBeadStatusSuccess {
+			if reason, disrupted := classifyDisruption(ctx, err); disrupted {
+				report.Disrupted = true
+				report.DisruptionReason = reason
+			}
+		}
+		if report.Disrupted {
+			reason := report.DisruptionReason
+			if reason == "" {
+				reason = "unknown"
+			}
+			emitDisruptionDetected(emit, w.Store, candidate.ID,
+				reason, report.Detail, report.Harness, report.Model, assignee, now().UTC())
 		}
 
 		result.Attempts++
@@ -1670,10 +1715,111 @@ func (w *ExecuteBeadWorker) adjudicateNoChanges(ctx context.Context, beadID stri
 }
 
 func shouldSuppressNoProgress(report ExecuteBeadReport) bool {
+	if report.Disrupted {
+		// ddx-5b3e57f4: a worker-disrupted attempt is not evidence the model
+		// could not make progress. Skip the 6h no-progress cooldown so the
+		// bead is immediately re-claimable by the next worker.
+		return false
+	}
 	if report.BaseRev == "" || report.ResultRev == "" {
 		return false
 	}
 	return report.BaseRev == report.ResultRev
+}
+
+// classifyDisruption examines the loop ctx and the executor's error to decide
+// whether a failed ExecuteBead attempt was caused by external disruption
+// (worker killed, context cancelled, transport error) rather than the model
+// genuinely producing nothing. Returns ok=true plus a short reason kind when
+// disruption is detected; the caller marks the report Disrupted to bypass the
+// no-progress cooldown (ddx-5b3e57f4). Reason kinds are stable strings used
+// in the disruption_detected event:
+//
+//	context_canceled, context_deadline, transport_error
+func classifyDisruption(ctx context.Context, executorErr error) (string, bool) {
+	if ctx != nil {
+		switch ctx.Err() {
+		case context.Canceled:
+			return "context_canceled", true
+		case context.DeadlineExceeded:
+			return "context_deadline", true
+		}
+	}
+	if executorErr == nil {
+		return "", false
+	}
+	if isTransportError(executorErr) {
+		return "transport_error", true
+	}
+	return "", false
+}
+
+// isTransportError returns true when err looks like a transport-class failure
+// (network reset, connection refused, TLS error, gateway, provider 5xx). The
+// signal is fuzzy on purpose: callers (classifyDisruption) only use it to
+// flag a failure as Disrupted so the bead skips the long no-progress cooldown
+// and is retried promptly. False positives are cheap (one quick retry); false
+// negatives are expensive (6h park for a transient outage).
+func isTransportError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	for _, marker := range []string{
+		"connection refused",
+		"connection reset",
+		"connection closed",
+		"no route to host",
+		"network is unreachable",
+		"i/o timeout",
+		"context deadline exceeded",
+		"tls handshake",
+		"eof",
+		"broken pipe",
+		"bad gateway",
+		"service unavailable",
+		"gateway timeout",
+		"transport",
+	} {
+		if strings.Contains(msg, marker) {
+			return true
+		}
+	}
+	return false
+}
+
+// emitDisruptionDetected records a structured `disruption_detected` event for
+// the bead and the loop event sink so operators can see disruption rates and
+// which class is firing (ddx-5b3e57f4 AC #5).
+func emitDisruptionDetected(emit func(string, map[string]any), store BeadEventAppender, beadID, reason, detail, harness, model, assignee string, now time.Time) {
+	emit("disruption_detected", map[string]any{
+		"bead_id": beadID,
+		"reason":  reason,
+		"detail":  detail,
+		"harness": harness,
+		"model":   model,
+	})
+	if store == nil || beadID == "" {
+		return
+	}
+	body, err := json.Marshal(map[string]any{
+		"reason":  reason,
+		"detail":  detail,
+		"harness": harness,
+		"model":   model,
+	})
+	bodyStr := detail
+	if err == nil {
+		bodyStr = string(body)
+	}
+	_ = store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "disruption_detected",
+		Summary:   reason,
+		Body:      bodyStr,
+		Actor:     assignee,
+		Source:    "ddx agent execute-loop",
+		CreatedAt: now,
+	})
 }
 
 // classifyReviewError maps a reviewer error and partial result into one of the
