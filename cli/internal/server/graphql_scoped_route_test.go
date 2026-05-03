@@ -14,6 +14,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // seedDocsProject creates a temp project rooted at root with a single
@@ -136,8 +138,9 @@ func TestGraphQL_ScopedRoute_RejectsUnregisteredProject(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	t.Setenv("DDX_NODE_NAME", "gql-scope-404-test")
 
-	root := t.TempDir()
-	projA, _ := seedDocsProject(t, root, "proj-a", "alpha", "Alpha A")
+	// Migrated to use the shared fixture helper (ddx-50da9674): the 404 path
+	// only needs a real ddx-initialized project, no seeded docs.
+	projA := testutils.NewFixtureRepo(t, "minimal")
 
 	srv := New(":0", projA)
 	t.Cleanup(func() { _ = srv.Shutdown() })
