@@ -41,6 +41,13 @@ type ExecuteBeadLoopRuntime struct {
 	SessionID      string
 	WorkerID       string
 	ProjectRoot    string
+	// WakeCh, when non-nil, signals the idle-poll sleep to return immediately
+	// so the loop re-scans the queue. Used by the operator-prompt approve /
+	// auto-approve mutations (Story 15) to avoid a poll-interval-sized delay
+	// before a freshly-approved bead is claimed. Implementations must send
+	// non-blocking (server-side helpers do); the loop only waits for a
+	// receive on WakeCh during the idle sleep, never elsewhere.
+	WakeCh <-chan struct{}
 }
 
 // DefaultReviewMaxRetries is the number of reviewer attempts allowed per
@@ -733,6 +740,23 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 		if report.Status == ExecuteBeadStatusSuccess {
 			appendLoopRoutingEvidence(w.Store, candidate.ID, report, now().UTC())
+			// Story 15: when an operator-prompt bead succeeds, scan
+			// base..result for affected beads and artifacts, and append
+			// origin_operator_prompt_id back-link events. Failure is
+			// logged but does not fail the attempt — the bead's own
+			// commit has already landed and the audit data is best-effort.
+			if candidate.IssueType == bead.IssueTypeOperatorPrompt {
+				affected, affErr := computeOperatorPromptAffected(runtime.ProjectRoot, report.BaseRev, report.ResultRev, candidate.ID)
+				if affErr != nil {
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "operator-prompt backlinks scan: %v\n", affErr)
+					}
+				} else if recErr := recordOperatorPromptBacklinks(w.Store, candidate.ID, affected, assignee, now().UTC()); recErr != nil {
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "operator-prompt backlinks: %v\n", recErr)
+					}
+				}
+			}
 			// Close the bead early when review is skipped. The closure gate
 			// (ddx-e30e60a9) accepts this path because closing_commit_sha is
 			// set and there is no malformed-APPROVE event to reject.
@@ -1857,6 +1881,30 @@ func sleepWithContext(ctx context.Context, d time.Duration) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-timer.C:
+		return nil
+	}
+}
+
+// sleepOrWake sleeps for d unless ctx is cancelled or a wake signal arrives on
+// wakeCh. A wake signal returns nil (the loop re-scans the queue) so callers
+// like operatorPromptApprove can shorten the next-tick latency from a full
+// PollInterval to ~0. wakeCh may be nil — in which case this is equivalent to
+// sleepWithContext.
+func sleepOrWake(ctx context.Context, d time.Duration, wakeCh <-chan struct{}) error {
+	if d <= 0 {
+		return nil
+	}
+	if wakeCh == nil {
+		return sleepWithContext(ctx, d)
+	}
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-timer.C:
+		return nil
+	case <-wakeCh:
 		return nil
 	}
 }

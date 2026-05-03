@@ -4736,6 +4736,7 @@ func (s *Server) serveGraphQL(w http.ResponseWriter, r *http.Request, workingDir
 			PromptCapBytes:                     serverPromptCapBytes,
 			BuildSHA:                           serverBuildSHA(),
 			NodeID:                             s.state.Node.ID,
+			ExecuteLoopWaker:                   s.workers,
 			Federation:                         fedProvider,
 		},
 		Directives: ddxgraphql.DirectiveRoot{},
