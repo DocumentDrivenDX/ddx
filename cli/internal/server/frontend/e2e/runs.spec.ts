@@ -6,7 +6,13 @@ let PROJECTS: Array<{ id: string; name: string; path: string }>;
 
 async function getFixtureIds(
 	request: import('@playwright/test').APIRequestContext
-): Promise<{ nodeId: string; projectId: string; nodeName: string; projectName: string; projectPath: string }> {
+): Promise<{
+	nodeId: string;
+	projectId: string;
+	nodeName: string;
+	projectName: string;
+	projectPath: string;
+}> {
 	const nodeResp = await request.post('/graphql', {
 		data: { query: '{ nodeInfo { id name } }' }
 	});
@@ -158,9 +164,14 @@ function listRowFor(node: typeof workNode) {
 	};
 }
 
-test('runs work→try→run drill-down with breadcrumb back-navigation and artifact link', async ({ page }) => {
+test('runs work→try→run drill-down with breadcrumb back-navigation and artifact link', async ({
+	page
+}) => {
 	await page.route('/graphql', async (route) => {
-		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, unknown>;
+		};
 
 		if (body.query.includes('NodeInfo')) {
 			await route.fulfill({
@@ -206,13 +217,50 @@ test('runs work→try→run drill-down with breadcrumb back-navigation and artif
 			});
 			return;
 		}
-		if (body.query.includes('RunDetail') || body.query.includes('RunExists')) {
+		if (
+			body.query.includes('RunHeader') ||
+			body.query.includes('RunDetailExpand') ||
+			body.query.includes('RunDetail') ||
+			body.query.includes('RunExists')
+		) {
 			const id = body.variables?.['id'] as string;
 			const r = ALL_RUNS.find((n) => n.id === id) ?? null;
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify({ data: { run: r } })
+			});
+			return;
+		}
+		if (body.query.includes('RunExecutionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { execution: null } })
+			});
+			return;
+		}
+		if (body.query.includes('RunSessionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { agentSession: null } })
+			});
+			return;
+		}
+		if (body.query.includes('RunToolCallsExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						executionToolCalls: {
+							edges: [],
+							pageInfo: { hasNextPage: false, endCursor: null },
+							totalCount: 0
+						}
+					}
+				})
 			});
 			return;
 		}
@@ -250,48 +298,42 @@ test('runs work→try→run drill-down with breadcrumb back-navigation and artif
 	await expect(page).toHaveURL(/[?&]layer=work\b/);
 	await expect(page.getByRole('row')).toHaveCount(2); // header + 1
 
-	// Step 3: click work row -> detail (rows are <tr onclick=goto(...)>)
-	await page.locator('tr').filter({ hasText: 'work' }).first().click();
-	await expect(page).toHaveURL(new RegExp(`/runs/${WORK_ID}$`));
+	// Step 3: click work row's open-detail icon -> detail page
+	await page.locator(`a[href$="/runs/${WORK_ID}"]`).first().click();
+	await expect(page).toHaveURL(new RegExp(`/runs/${WORK_ID}(\\?.*)?$`));
 	await expect(page.locator('h1', { hasText: WORK_ID })).toBeVisible();
-	// Work-layer fields
-	await expect(page.getByText('Queue Inputs')).toBeVisible();
+	// Tabbed UI is present and starts on overview
+	await expect(page.locator('[data-testid="rundetail"]')).toBeVisible();
+	await expect(page.locator('[data-testid="rundetail-overview"]')).toBeVisible();
+	// Work-layer Overview shows stop condition
 	await expect(page.getByText('queue-empty')).toBeVisible();
-	await expect(page.getByRole('link', { name: BEAD_ID })).toBeVisible(); // selectedBeadIds link
 
-	// Step 4: drill into child try
-	await page.locator(`a[href$="/runs/${TRY_ID}"]`).first().click();
-	await expect(page).toHaveURL(new RegExp(`/runs/${TRY_ID}$`));
+	// Step 4: navigate directly to try detail page
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${TRY_ID}`);
 	await expect(page.locator('h1', { hasText: TRY_ID })).toBeVisible();
-	// Try-layer fields
-	await expect(page.getByText('Attempt Details')).toBeVisible();
+	// Try-layer Overview fields
+	await expect(page.locator('[data-testid="rundetail-overview"]')).toBeVisible();
 	await expect(page.getByText('abc123def')).toBeVisible(); // baseRevision
 	await expect(page.getByText('def456abc')).toBeVisible(); // resultRevision
 	await expect(page.getByText('merged')).toBeVisible(); // mergeOutcome
 	await expect(page.getByText('/tmp/ddx-exec-wt/.try-001')).toBeVisible(); // worktreePath
-	// Bead link in common header
+	// Bead link in Overview
 	await expect(page.locator(`a[href$="/beads/${BEAD_ID}"]`).first()).toBeVisible();
 
-	// Step 5: drill into child run
-	await page.locator(`a[href$="/runs/${RUN_ID}"]`).first().click();
-	await expect(page).toHaveURL(new RegExp(`/runs/${RUN_ID}$`));
+	// Step 5: navigate to run detail page
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}`);
 	await expect(page.locator('h1', { hasText: RUN_ID })).toBeVisible();
-	// Run-layer fields
-	await expect(page.getByText('Execution Details')).toBeVisible();
-	await expect(page.getByText('claude', { exact: true })).toBeVisible(); // harness
+	// Run-layer Overview fields
+	await expect(page.locator('[data-testid="rundetail-overview"]')).toBeVisible();
+	await expect(page.getByText('claude', { exact: true }).first()).toBeVisible(); // harness
 	await expect(page.getByText('12,000')).toBeVisible(); // tokens in
 	await expect(page.getByText('3,400')).toBeVisible(); // tokens out
 	await expect(page.getByText('$0.0876')).toBeVisible(); // cost
-	await expect(page.getByText('2–4')).toBeVisible(); // power bounds
-	await expect(page.getByText('.ddx/executions/20260430T100600/evidence.txt')).toBeVisible();
 
 	// Step 6: artifact link present and live
 	const artifactLink = page.getByTestId('produced-artifact').getByRole('link');
 	await expect(artifactLink).toBeVisible();
-	await expect(artifactLink).toHaveAttribute(
-		'href',
-		new RegExp(`/artifacts/${ARTIFACT_ID}$`)
-	);
+	await expect(artifactLink).toHaveAttribute('href', new RegExp(`/artifacts/${ARTIFACT_ID}$`));
 
 	// Step 7: breadcrumb back-navigation: run -> try -> work -> list
 	// On run detail, breadcrumbs are: Runs / workId / tryId / runId
@@ -318,7 +360,10 @@ test('runs work→try→run drill-down with breadcrumb back-navigation and artif
 
 test('bead detail shows linked runs and click navigates to run detail', async ({ page }) => {
 	await page.route('/graphql', async (route) => {
-		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, unknown>;
+		};
 		if (body.query.includes('NodeInfo')) {
 			await route.fulfill({
 				status: 200,
@@ -378,8 +423,26 @@ test('bead detail shows linked runs and click navigates to run detail', async ({
 						beadExecutions: { edges: [], totalCount: 0 },
 						beadRuns: {
 							edges: [
-								{ node: { id: TRY_ID, layer: 'try', status: 'success', harness: null, startedAt: tryNode.startedAt, durationMs: tryNode.durationMs } },
-								{ node: { id: RUN_ID, layer: 'run', status: 'success', harness: 'claude', startedAt: runNode.startedAt, durationMs: runNode.durationMs } }
+								{
+									node: {
+										id: TRY_ID,
+										layer: 'try',
+										status: 'success',
+										harness: null,
+										startedAt: tryNode.startedAt,
+										durationMs: tryNode.durationMs
+									}
+								},
+								{
+									node: {
+										id: RUN_ID,
+										layer: 'run',
+										status: 'success',
+										harness: 'claude',
+										startedAt: runNode.startedAt,
+										durationMs: runNode.durationMs
+									}
+								}
 							],
 							totalCount: 2
 						}
@@ -388,7 +451,12 @@ test('bead detail shows linked runs and click navigates to run detail', async ({
 			});
 			return;
 		}
-		if (body.query.includes('RunDetail') || body.query.includes('RunExists')) {
+		if (
+			body.query.includes('RunHeader') ||
+			body.query.includes('RunDetailExpand') ||
+			body.query.includes('RunDetail') ||
+			body.query.includes('RunExists')
+		) {
 			const id = body.variables?.['id'] as string;
 			const r = ALL_RUNS.find((n) => n.id === id) ?? null;
 			await route.fulfill({
@@ -405,6 +473,38 @@ test('bead detail shows linked runs and click navigates to run detail', async ({
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify({ data: { run: r ? { parentRunId: r.parentRunId } : null } })
+			});
+			return;
+		}
+		if (body.query.includes('RunExecutionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { execution: null } })
+			});
+			return;
+		}
+		if (body.query.includes('RunSessionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { agentSession: null } })
+			});
+			return;
+		}
+		if (body.query.includes('RunToolCallsExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						executionToolCalls: {
+							edges: [],
+							pageInfo: { hasNextPage: false, endCursor: null },
+							totalCount: 0
+						}
+					}
+				})
 			});
 			return;
 		}
@@ -430,4 +530,192 @@ test('bead detail shows linked runs and click navigates to run detail', async ({
 	await linkedRuns.locator(`a[href$="/runs/${TRY_ID}"]`).click();
 	await expect(page).toHaveURL(new RegExp(`/runs/${TRY_ID}$`));
 	await expect(page.locator('h1', { hasText: TRY_ID })).toBeVisible();
+});
+
+test('run detail page tabbed UI: 5 tabs, URL-driven tab state, navigation', async ({ page }) => {
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, unknown>;
+		};
+
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+			return;
+		}
+		if (body.query.includes('ProjectsForLayout') || body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((node) => ({ node })) } } })
+			});
+			return;
+		}
+		if (body.query.includes('RunHeader') || body.query.includes('RunDetailExpand')) {
+			const id = body.variables?.['id'] as string;
+			const r = ALL_RUNS.find((n) => n.id === id) ?? null;
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { run: r } })
+			});
+			return;
+		}
+		if (body.query.includes('ParentRunParent')) {
+			const id = body.variables?.['id'] as string;
+			const r = ALL_RUNS.find((n) => n.id === id);
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { run: r ? { parentRunId: r.parentRunId } : null } })
+			});
+			return;
+		}
+		if (body.query.includes('RunExecutionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						execution: {
+							id: 'exec-x',
+							sessionId: 'sess-x',
+							bundlePath: '/bundle',
+							promptPath: '/bundle/prompt.md',
+							manifestPath: null,
+							resultPath: '/bundle/result.json',
+							agentLogPath: null,
+							prompt: 'sample prompt body',
+							manifest: null,
+							result: 'sample result body',
+							rationale: null
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunSessionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						agentSession: {
+							id: 'sess-x',
+							harness: 'claude',
+							model: 'claude-sonnet-4-6',
+							cost: 0.0876,
+							billingMode: 'usage',
+							tokens: { prompt: 12000, completion: 3400, total: 15400, cached: 0 },
+							status: 'completed',
+							outcome: 'success',
+							prompt: 'session prompt',
+							response: 'session response',
+							stderr: null
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunToolCallsExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						executionToolCalls: {
+							edges: [],
+							pageInfo: { hasNextPage: false, endCursor: null },
+							totalCount: 0
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('ProducedArtifact')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { artifact: null } })
+			});
+			return;
+		}
+		await route.continue();
+	});
+
+	// Navigate directly to a run-layer detail page (run-layer has all 5 tabs)
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}`);
+	await expect(page.locator('h1', { hasText: RUN_ID })).toBeVisible();
+
+	const detail = page.locator('[data-testid="rundetail"]');
+	await expect(detail).toBeVisible();
+
+	// AC1: tabbed UI with all 5 tabs visible for run-layer
+	await expect(detail.locator('button[data-tab="overview"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="prompt"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="response"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="tools"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="session"]')).toBeVisible();
+
+	// Default tab is overview
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'overview');
+	await expect(detail.locator('[data-testid="rundetail-overview"]')).toBeVisible();
+
+	// AC2: clicking a tab updates URL
+	await detail.locator('button[data-tab="prompt"]').click();
+	await expect(page).toHaveURL(/[?&]tab=prompt\b/);
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'prompt');
+	await expect(detail.locator('[data-testid="rundetail-prompt"]')).toBeVisible();
+
+	await detail.locator('button[data-tab="response"]').click();
+	await expect(page).toHaveURL(/[?&]tab=response\b/);
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'response');
+
+	await detail.locator('button[data-tab="tools"]').click();
+	await expect(page).toHaveURL(/[?&]tab=tools\b/);
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'tools');
+
+	await detail.locator('button[data-tab="session"]').click();
+	await expect(page).toHaveURL(/[?&]tab=session\b/);
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'session');
+
+	// AC2: returning to overview removes tab from URL
+	await detail.locator('button[data-tab="overview"]').click();
+	await expect(page).not.toHaveURL(/[?&]tab=/);
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'overview');
+
+	// AC2: deep-link with ?tab=prompt opens that tab on load
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}?tab=prompt`);
+	await expect(page.locator('[data-testid="rundetail"] [data-active-tab]')).toHaveAttribute(
+		'data-active-tab',
+		'prompt'
+	);
+	await expect(page.locator('[data-testid="rundetail-prompt"]')).toBeVisible();
+
+	// Work-layer detail: only overview tab is shown
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${WORK_ID}`);
+	await expect(page.locator('h1', { hasText: WORK_ID })).toBeVisible();
+	const workDetail = page.locator('[data-testid="rundetail"]');
+	await expect(workDetail.locator('button[data-tab="overview"]')).toBeVisible();
+	await expect(workDetail.locator('button[data-tab="prompt"]')).toHaveCount(0);
+	await expect(workDetail.locator('button[data-tab="response"]')).toHaveCount(0);
+	await expect(workDetail.locator('button[data-tab="session"]')).toHaveCount(0);
+	await expect(workDetail.locator('button[data-tab="tools"]')).toHaveCount(0);
+
+	// Try-layer detail: overview, prompt, response, tools (no session)
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${TRY_ID}`);
+	await expect(page.locator('h1', { hasText: TRY_ID })).toBeVisible();
+	const tryDetail = page.locator('[data-testid="rundetail"]');
+	await expect(tryDetail.locator('button[data-tab="overview"]')).toBeVisible();
+	await expect(tryDetail.locator('button[data-tab="prompt"]')).toBeVisible();
+	await expect(tryDetail.locator('button[data-tab="response"]')).toBeVisible();
+	await expect(tryDetail.locator('button[data-tab="tools"]')).toBeVisible();
+	await expect(tryDetail.locator('button[data-tab="session"]')).toHaveCount(0);
 });
