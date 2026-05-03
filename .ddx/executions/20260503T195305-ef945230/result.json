@@ -1,0 +1,49 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "TD-030 satisfies all 8 ACs: concrete ID, depends_on [ADR-004,SD-004,FEAT-004], all five locked decisions baked in (D1-D5), GraphQL-only transport with rationale, background plan + axon-82b6f7b2 cross-referenced, alpha/beta/GA gates mapped to axon beads.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Diff shown is execution evidence only; actual TD content was committed in 731c2431 and verified by reading the file directly.",
+      "location": "docs/helix/02-design/technical-designs/TD-030-axon-bead-backend.md"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 3363,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T194722-416d6e3a/manifest.json",
+          ".ddx/executions/20260503T194722-416d6e3a/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 6761,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 11930,
+    "output_bytes": 569,
+    "elapsed_ms": 76543,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
