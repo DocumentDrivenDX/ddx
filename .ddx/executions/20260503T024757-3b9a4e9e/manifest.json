@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260503T024757-3b9a4e9e",
+  "bead_id": "ddx-dfb1c6d7",
+  "base_rev": "22166effd010cb59f29f3ea4c21bd2faf154a229",
+  "created_at": "2026-05-03T02:47:59.267670332Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-dfb1c6d7",
+    "title": "chaos_test.go suite passes against axon backend",
+    "description": "Run the existing cli/internal/bead/chaos_test.go (and any related concurrency/contention tests) against the axon backend. Parameterize the test harness so the same suite runs against jsonl and axon backends. Fix any axon-side issues uncovered. Multi-worker fairness, claim correctness under contention, and crash/recovery semantics must hold.",
+    "acceptance": "1. chaos_test.go runs against the axon backend (parameterized or duplicated). 2. All assertions pass. 3. Multi-worker contention scenario verified — no double-claim, no lost-update. 4. CI runs the suite for both backends.",
+    "parent": "ddx-5d49b14e",
+    "labels": [
+      "phase:2",
+      " area:beads",
+      " area:storage",
+      " kind:test",
+      " backend-migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T02:47:57Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "163374",
+      "execute-loop-heartbeat-at": "2026-05-03T02:47:57.606426792Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T024757-3b9a4e9e",
+    "prompt": ".ddx/executions/20260503T024757-3b9a4e9e/prompt.md",
+    "manifest": ".ddx/executions/20260503T024757-3b9a4e9e/manifest.json",
+    "result": ".ddx/executions/20260503T024757-3b9a4e9e/result.json",
+    "checks": ".ddx/executions/20260503T024757-3b9a4e9e/checks.json",
+    "usage": ".ddx/executions/20260503T024757-3b9a4e9e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-dfb1c6d7-20260503T024757-3b9a4e9e"
+  }
+}
