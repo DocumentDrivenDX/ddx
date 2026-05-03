@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
@@ -1582,6 +1583,17 @@ func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) 
 	return f.runAgentExecuteLoopImpl(cmd, false)
 }
 
+// hostnameOrEmpty returns os.Hostname() or "" on error. Used to populate
+// the workerprobe identity envelope without short-circuiting probe startup
+// on a transient hostname-lookup failure.
+func hostnameOrEmpty() string {
+	h, err := os.Hostname()
+	if err != nil {
+		return ""
+	}
+	return h
+}
+
 // runAgentExecuteLoopImpl is the shared implementation for runAgentExecuteLoop
 // and runWork. When treatPassthroughAsOpaque is true (ddx work path),
 // harness/provider/model are passed to Execute unchanged and
@@ -1653,6 +1665,35 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if f, err := os.OpenFile(loopLogPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0o644); err == nil {
 		loopSink = f
 		defer f.Close() //nolint:errcheck
+	}
+
+	// ADR-022 step 2: spin up the worker server-probe + best-effort event
+	// mirror. The probe is autonomous-friendly: if no ddx-server is
+	// reachable, it buffers events into a 200-cap ring; on
+	// NotConnected→Connected transitions it registers and flushes the
+	// backfill. Per ADR-022 the worker keeps working regardless of probe
+	// state, so this code never blocks the loop on network I/O.
+	probeIdent := workerprobe.Identity{
+		ProjectRoot:  projectRoot,
+		Harness:      harness,
+		Model:        model,
+		ExecutorPID:  os.Getpid(),
+		ExecutorHost: hostnameOrEmpty(),
+		StartedAt:    time.Now().UTC(),
+	}
+	probe := workerprobe.New(probeIdent, workerprobe.Config{
+		AddrFunc: serverpkg.ReadServerAddr,
+	})
+	probeCtx, probeCancel := context.WithCancel(context.Background())
+	probe.Start(probeCtx)
+	defer func() {
+		probeCancel()
+		probe.Stop()
+	}()
+	if loopSink != nil {
+		loopSink = workerprobe.TeeJSONL(loopSink, probe)
+	} else {
+		loopSink = workerprobe.TeeJSONL(io.Discard, probe)
 	}
 
 	// Start session log tailer so the user sees progress during agent execution

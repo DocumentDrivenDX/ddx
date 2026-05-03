@@ -72,6 +72,15 @@ var (
 	ddxBuildErr  error
 )
 
+// ResolveDDxBinary is the exported variant of resolveDDxBinary. Tests outside
+// this package that need the ddx binary path (e.g. integration tests that
+// spawn `ddx work`) call this so the lazily-built binary is shared across
+// the test process.
+func ResolveDDxBinary(t *testing.T) string {
+	t.Helper()
+	return resolveDDxBinary(t, repoRoot(t))
+}
+
 // resolveDDxBinary returns the ddx binary path the script should use:
 //   - $DDX_BIN if set,
 //   - else `ddx` from PATH if available,
