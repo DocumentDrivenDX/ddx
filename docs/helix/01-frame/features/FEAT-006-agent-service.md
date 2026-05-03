@@ -341,6 +341,65 @@ The trust contract, audit-as-bead model, multi-node delegation policy,
 prompt-injection threat model, and allowed-mutation scope are captured in
 **ADR-021: Operator-Prompt Beads as the Web Write Path**.
 
+## Worker Contract (per ADR-022)
+
+Workers are **long-lived API clients of the server**, not forked
+subprocesses with private state. The same client/state-machine code path
+serves both `ddx work --local` (with an in-process API implementation) and
+server-spawned workers (talking to the HTTP API), parameterised by a
+`Transport` interface.
+
+A worker's lifecycle is fully described by six endpoints under
+`/api/workers/`:
+
+- `POST /register` — worker presents its `ExecuteLoopSpec`-shaped
+  registration payload (project root, harness, model preference, label
+  filter, capabilities); receives a `worker_id` and a project-bound
+  `session_token`. The registration payload is the **single source of
+  truth** for worker configuration; adding a new flag to `ddx work` means
+  adding one field here.
+- `POST /<id>/heartbeat` — mutual liveness signal; carries the worker's
+  state (`idle | claiming | executing | reviewing | draining`); response
+  carries a `server_command` (`continue | pause | drain | terminate`).
+- `GET /<id>/next-bead` — long-poll claim acquisition. Server picks an
+  eligible bead, creates a claim, and returns `{bead, attempt_id,
+  base_rev, claim_lease_ms}`. Workers that see a bare `{wait_for_seconds}`
+  reissue without exiting; empty queue is **not** a termination signal.
+- `POST /<id>/event` — appends to the bead's event log; uses the existing
+  bead event `kind`/`body` shape so CLI, MCP, and web-UI readers see
+  worker events without code changes.
+- `POST /<id>/result` — terminal disposition for an attempt
+  (`merged | preserved | no_changes | failed_rejected`), with evidence
+  directory and commit SHA. Reconciles against the server-side claim.
+- `POST /<id>/disconnect` — graceful shutdown; releases unclaimed lease.
+
+All endpoints require `requireTrusted` (per ADR-006). Session tokens are
+project-bound; a worker registered for project A cannot read or write
+state for project B even if it possesses a valid token, which prevents
+recurrence of the `ddx-4c51d33e` cross-project leak class in worker paths.
+
+**Restart survival** is a property of the design, not a feature:
+
+- If the server restarts, the worker's heartbeat fails. The worker keeps
+  executing the in-flight bead in its isolated worktree, marks itself as
+  disconnected, and reconnects when the server returns. Late results
+  arriving after a heartbeat-timeout reclaim are recorded as dropped
+  attempts; the new claim's outcome wins.
+- If the worker dies, the server's heartbeat-timeout reclaims the bead
+  for another worker after `3× heartbeat_interval`.
+
+The attempt-orchestration responsibilities listed under "DDx-side
+responsibilities" above (worktree creation, base-revision pinning, result
+landing, evidence capture) all execute **inside the worker process**,
+between `next-bead` and `result`. The server holds runtime claim and
+heartbeat state but does not run agents itself.
+
+The legacy bipartite execution paths — `cli/internal/agent/execute_bead_loop.go`
+and the server's exec-spawn path in `cli/internal/server/workers.go` — are
+both replaced by the single worker client + state machine in
+`cli/internal/agent/work/`. See ADR-022 for the full contract, sequence
+diagrams, compatibility analysis, and implementation roadmap.
+
 ## Migration status
 
 DDx is currently migrating from the legacy DDx-internal routing/harness
@@ -363,3 +422,4 @@ that have since moved upstream.
 - `docs/helix/03-test/test-plans/TP-014-token-awareness.md` — token-awareness coverage
 - `docs/helix/03-test/test-plans/TP-020-agent-routing-and-catalog-resolution.md` — routing and catalog resolution coverage
 - `docs/helix/02-design/adr/ADR-021-operator-prompt-beads-web-write-path.md` — operator-prompt beads as the web write path (Story 15)
+- `docs/helix/02-design/adr/ADR-022-worker-client-server-architecture.md` — workers as long-lived API clients; server-restart preserves in-flight work
