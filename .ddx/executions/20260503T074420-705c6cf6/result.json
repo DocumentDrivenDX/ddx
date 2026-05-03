@@ -1,0 +1,53 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "All ACs met: derived-view fields rendered, freshness badge with connected/stale/disconnected states, duplicate-worker rows grouped per project root with banner, non-authoritative label present, .gql query added, and Playwright spec covers all behaviors. Execution evidence reports task_succeeded.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Loader filters reportedWorkers client-side by project path; if /api/projects fails the filter falls through to show all workers (acceptable fallback, not an AC issue).",
+      "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.ts:130"
+    },
+    {
+      "severity": "info",
+      "summary": "Both inline gql template (in +layout.ts) and worker.gql duplicate the ReportedWorkersByProject definition; harmless but slight redundancy.",
+      "location": "cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/worker.gql:1"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1659,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T073734-a85b291e/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1227,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 4620,
+    "output_bytes": 1011,
+    "elapsed_ms": 86918,
+    "harness": "claude",
+    "model": "opus"
+  }
+}

@@ -1,0 +1,74 @@
+{
+  "attempt_id": "20260503T073940-14769e52",
+  "bead_id": ".execute-bead-wt-ddx-7b753655-20260503T064620-a387a207-7888e046",
+  "base_rev": "c0ecbf06faadac1c9c8c08f83d9db2136bd00f2d",
+  "created_at": "2026-05-03T07:39:41.586548142Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": ".execute-bead-wt-ddx-7b753655-20260503T064620-a387a207-7888e046",
+    "title": "ADR-022 step 5c: TestWorkersPanel_LiveTransitions wired-in integration test",
+    "description": "Wired-in integration test (from step 5 AC #8). Starts a real worker process; through the GraphQL workers query (step 5a) asserts the panel observes 'connected' state within 30s; advances time past 2× probe interval (60s) without events and asserts state transitions to 'stale'; advances past 10× probe interval (300s) and asserts 'disconnected'. Not fixture-based — exercises the live data flow with timing. Likely requires a clock-injection seam in worker_ingest.go's freshnessState (currently uses time.Now via parameter) so the test can advance synthetic time, and a way to spawn a worker that registers against the test's server. ~150 LOC + small clock-seam refactor in worker_ingest.go.",
+    "acceptance": "1. Test TestWorkersPanel_LiveTransitions exists in cli/internal/server/ (or graphql package).\n2. Test starts a real worker that registers with the test server via /api/workers/register.\n3. Asserts GraphQL query reports state='connected' within 30s of worker start.\n4. Without further events, after 2× probe interval (60s synthetic) asserts state='stale'.\n5. After 10× probe interval (300s synthetic) asserts state='disconnected'.\n6. Uses a clock-injection mechanism (not real wall-clock sleep) to keep test fast.\n7. cd cli \u0026\u0026 go test passes; lefthook pre-commit passes.\nDepends on step 5a backend.",
+    "parent": "ddx-7b753655",
+    "labels": [
+      "phase:2",
+      " area:test",
+      " area:server",
+      " kind:test",
+      " adr:022"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T07:39:40Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T07:37:46.428804311Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T07:38:23.251166153Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T07:39:00.133481532Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T07:39:37.138575732Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T07:39:40.059258055Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T073940-14769e52",
+    "prompt": ".ddx/executions/20260503T073940-14769e52/prompt.md",
+    "manifest": ".ddx/executions/20260503T073940-14769e52/manifest.json",
+    "result": ".ddx/executions/20260503T073940-14769e52/result.json",
+    "checks": ".ddx/executions/20260503T073940-14769e52/checks.json",
+    "usage": ".ddx/executions/20260503T073940-14769e52/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-.execute-bead-wt-ddx-7b753655-20260503T064620-a387a207-7888e046-20260503T073940-14769e52"
+  },
+  "prompt_sha": "56bc1f92d872dbbd5fa9f45101e93f19e1249d70f650b0254167a10cc1502e48"
+}
