@@ -246,8 +246,14 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				return agent.ExecuteBeadReport{}, execErr
 			}
 			if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
-				landReq := agent.BuildLandRequestFromResult(projectRoot, res)
-				landRes, landErr := localCoord.Submit(landReq)
+				targetBead, _ := store.Get(execBeadID)
+				landRes, _, landErr := agent.SubmitWithPreMergeChecks(
+					ctx, projectRoot, targetBead, res,
+					func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
+					bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+					resolveClaimAssignee(), "ddx try",
+					nil,
+				)
 				if landErr == nil {
 					agent.ApplyLandResultToExecuteBeadResult(res, landRes)
 				} else if execErr == nil {

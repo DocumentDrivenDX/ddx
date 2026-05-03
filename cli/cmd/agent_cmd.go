@@ -1807,8 +1807,14 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			return agent.ExecuteBeadReport{}, execErr
 		}
 		if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
-			landReq := agent.BuildLandRequestFromResult(projectRoot, res)
-			landRes, landErr := localCoord.Submit(landReq)
+			targetBead, _ := store.Get(beadID)
+			landRes, _, landErr := agent.SubmitWithPreMergeChecks(
+				ctx, projectRoot, targetBead, res,
+				func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
+				bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+				resolveClaimAssignee(), "ddx agent execute-loop",
+				nil,
+			)
 			if landErr == nil {
 				agent.ApplyLandResultToExecuteBeadResult(res, landRes)
 			} else if execErr == nil {

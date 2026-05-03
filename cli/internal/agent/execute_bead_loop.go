@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
@@ -82,6 +83,72 @@ const LandConflictCooldown = 15 * time.Minute
 // they are logged and emitted as loop-error events but do not terminate the
 // worker.
 const StoreErrorCooldown = 5 * time.Minute
+
+// SubmitWithPreMergeChecks is the canonical land-back step for the execute-bead
+// loop. It runs the project's .ddx/checks/*.yaml gate against the worker's
+// (baseRev, resultRev) before forwarding to submit. On Blocked, it preserves
+// the worker's result under refs/ddx/iterations/, records checks-blocked
+// events on the bead, and returns the synthesised LandResult{Status:"preserved"}
+// without ever calling submit. On pass, honoured checks-bypass annotations are
+// recorded as checks-bypass events and submit runs normally.
+//
+// submit is the project's land coordinator entry point (typically
+// LocalLandCoordinator.Submit or the server-side coordinator submit).
+//
+// The implementation lives in checks_premerge.go alongside its supporting
+// helpers (RunPreMergeChecks, AppendPreMergeChecksEvents,
+// PreserveAfterPreMergeChecks); this thin wrapper exists so the execute-bead
+// loop's land-back call site is one obvious helper rather than three nested
+// ones, and so callers wiring the gate do not need to import the helper layer
+// directly.
+func SubmitWithPreMergeChecks(
+	ctx context.Context,
+	projectRoot string,
+	b *bead.Bead,
+	res *ExecuteBeadResult,
+	submit func(LandRequest) (*LandResult, error),
+	eventStore BeadEventAppender,
+	actor, source string,
+	now func() time.Time,
+) (*LandResult, *PreMergeChecksOutcome, error) {
+	if now == nil {
+		now = time.Now
+	}
+	if submit == nil {
+		return nil, nil, fmt.Errorf("submit-with-pre-merge-checks: submit callback required")
+	}
+	evidenceDir := filepath.Join(projectRoot, res.ExecutionDir)
+	outcome, err := RunPreMergeChecks(ctx, projectRoot, b, res.BaseRev, res.ResultRev, evidenceDir)
+	if err != nil {
+		// Treat checks_bypass / loader errors as a hard preserve: the worker
+		// did its job; the operator misconfigured the gate. Better to park
+		// the result under an iteration ref than to silently land it.
+		ref := PreserveRef(res.BeadID, res.BaseRev)
+		if upErr := (&RealOrchestratorGitOps{}).UpdateRef(projectRoot, ref, res.ResultRev); upErr != nil {
+			return nil, nil, fmt.Errorf("preserving result after checks setup error: %w (original error: %v)", upErr, err)
+		}
+		return &LandResult{
+			Status:      "preserved",
+			PreserveRef: ref,
+			Reason:      "pre-merge checks setup error: " + err.Error(),
+		}, nil, nil
+	}
+	if outcome.Blocked {
+		land, perr := PreserveAfterPreMergeChecks(projectRoot, res, outcome, &RealOrchestratorGitOps{})
+		if perr != nil {
+			return nil, outcome, perr
+		}
+		if eventStore != nil {
+			_ = AppendPreMergeChecksEvents(eventStore, res.BeadID, outcome, actor, source, now().UTC())
+		}
+		return land, outcome, nil
+	}
+	if eventStore != nil && len(outcome.Bypassed) > 0 {
+		_ = AppendPreMergeChecksEvents(eventStore, res.BeadID, outcome, actor, source, now().UTC())
+	}
+	land, sErr := submit(BuildLandRequestFromResult(projectRoot, res))
+	return land, outcome, sErr
+}
 
 // handleOutcomeStoreError is called when a Store.* operation in the
 // post-Execute outcome block returns a non-nil error. It logs the error,
