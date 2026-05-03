@@ -3,6 +3,7 @@
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
 	import ConfirmDialog from '$lib/components/ConfirmDialog.svelte';
+	import OperatorPromptPanel from '$lib/components/OperatorPromptPanel.svelte';
 	import Tooltip from '$lib/components/Tooltip.svelte';
 	import { createClient } from '$lib/gql/client';
 	import { PROJECT_QUEUE_SUMMARY_QUERY, WORKER_DISPATCH_MUTATION } from '$lib/gql/feat008';
@@ -324,6 +325,8 @@
 			{/each}
 		</div>
 	</section>
+
+	<OperatorPromptPanel projectId={projectId()} nodeId={$page.params.nodeId ?? ''} />
 </div>
 
 <ConfirmDialog
