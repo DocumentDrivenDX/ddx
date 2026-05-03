@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260503T024930-354b52b3",
+  "bead_id": "ddx-bbdd7564",
+  "base_rev": "f895660f9e886086ae67c2e812ffdf8e873fb66f",
+  "created_at": "2026-05-03T02:49:31.899540683Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-bbdd7564",
+    "title": "Introduce selectable bead Backend interface in cli/internal/bead",
+    "description": "Refactor cli/internal/bead to expose a Backend interface (per the TD from ddx-6bb51a52) so the existing JSONL+flock+git store becomes one implementation among many. No behavior change yet — JSONL backend remains default. Add a config knob (e.g. .ddx.yml beads.backend or DDX_BEAD_BACKEND env) to select a backend. Existing tests must keep passing unchanged.",
+    "acceptance": "1. cli/internal/bead/backend.go defines the Backend interface (CRUD, claim, list/ready/blocked, dep ops, events append, archive split, JSONL export/import). 2. Current JSONL implementation refactored behind the interface; no caller changes outward behavior. 3. Backend selection plumbed via config + env (default jsonl). 4. go test ./cli/... passes. 5. chaos_test.go runs against the JSONL backend through the interface.",
+    "parent": "ddx-5d49b14e",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:storage",
+      "kind:refactor",
+      "backend-migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T02:49:30Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "163374",
+      "depends_on": "ddx-6bb51a52",
+      "execute-loop-heartbeat-at": "2026-05-03T02:49:30.503634821Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T024930-354b52b3",
+    "prompt": ".ddx/executions/20260503T024930-354b52b3/prompt.md",
+    "manifest": ".ddx/executions/20260503T024930-354b52b3/manifest.json",
+    "result": ".ddx/executions/20260503T024930-354b52b3/result.json",
+    "checks": ".ddx/executions/20260503T024930-354b52b3/checks.json",
+    "usage": ".ddx/executions/20260503T024930-354b52b3/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-bbdd7564-20260503T024930-354b52b3"
+  }
+}

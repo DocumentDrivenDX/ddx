@@ -884,14 +884,61 @@ This ADR sits **above** these beads:
   recurrence.** Project scoping moves from "every reader checks" to
   "session token binds project, server enforces."
 
-Implementation MUST land **before** any execution-path refactor children
-of `ddx-5cb6e6cd` that touch the loop body (C5, C7, C9 in that epic),
-otherwise those children refactor against the old model and need
-re-doing.
+### Shippable gates (split sequencing)
 
-Implementation MAY land in parallel with bug fixes that don't touch the
-execution path (e.g. graphql layer-2/layer-3 follow-ups, persona
-lifecycle, library registry).
+The full implementation is 8-10 weeks (per codex rev 2 review). C5/C7/C9
+do not need to wait for ALL of it. The roadmap is split into four gates;
+C5/C7/C9 unfreeze incrementally as each gate's contracts stabilise:
+
+**Gate 1 — Contract stable** (Phase A, roadmap steps 1, 1a, 2-7).
+Server API + registry + test transport. Output: API package + handlers +
+in-memory registry, no client migration yet. Estimated 2-3 weeks.
+**Unfreezes:** none. C5/C7/C9 still wait — the worker-side state machine
+contract isn't fixed.
+
+**Gate 2 — Worker state machine extracted** (Phase B, roadmap steps 8-10).
+`work.Worker` + `work.Transport` interface + `--local` migration. Output:
+the worker state machine is callable from both `--local` and (forthcoming)
+HTTP transport. Estimated 3 weeks.
+**Unfreezes:** C5 (no_changes adjudication) and C7 (Guard contract) — the
+disposition and claim contracts are now stable; refactor children can
+land against `try.Attempt` semantics inside `work.Worker`. C9
+(StopCondition) waits for Gate 3.
+
+**Gate 3 — Server-spawned migration + restart resilience** (Phase B-C,
+roadmap steps 11-13). Server-spawned worker uses register-then-poll;
+claim-reclaim on heartbeat timeout; restart-recovery handshake.
+Estimated 2-3 weeks.
+**Unfreezes:** C9 (StopCondition + cost-cap) — restart and reclaim
+semantics are now stable; StopCondition becomes worker-side state with
+server-visible projection.
+
+**Gate 4 — Cleanup + UI** (Phase D, roadmap steps 14-16).
+`ddx agent doctor` reads from runtime registry; UI workers panel; final
+cleanup of legacy paths; CHANGELOG. Estimated 1-2 weeks.
+**Unfreezes:** nothing additional; all refactor children already
+unfrozen. Gate 4 is parallel-safe with continuing refactor work.
+
+### Bead absorption table
+
+| Bead | Verdict | Notes |
+|---|---|---|
+| `ddx-29058e2a` (ExecuteLoopSpec unification) | **subsumed** | Spec becomes the registration payload at Gate 1. Bead closes when Gate 1 step 3 (register handler) lands. |
+| `ddx-dc157075` (stay-alive fix) | **subsumed but already shipped** | The 30s poll-interval default + attempted-map reset shipped at commit `41cb762e` BEFORE this ADR. Gate 2's `work.Worker` long-poll obviates the workaround; Gate 2 step 10 includes "preserve the diagnostic events from `41cb762e` — `picker.priority_skip`, `picker.claim_race`, `loop.idle/loop.active` substate — as new server-side events per Observability contract." |
+| `ddx-4c51d33e` (LAYER 1 GraphQL leak) | **already shipped + ADR prevents recurrence** | Commit `33b97f25` shipped the scoped route. Worker session-token binding prevents recurrence in worker paths. |
+| `ddx-055e8d32` LAYER 2 (resolver context refactor) | **already shipped** | Commit `07ea202d`. |
+| `ddx-5ae050dc` LAYER 3 (Node(id) resolution) | **already shipped** | Commit `5ee6b02c`. |
+| `ddx-9d55601f` (picker priority bug) | **already shipped** | Commit `80f51574`. Picker logic moves to server-side at Gate 1; ensure the `picker.priority_skip` event semantics are preserved per Observability contract. |
+| `ddx-5b3e57f4` (cooldown disrupted classification) | **parallel** | Independent of API design. Should land in parallel with Gate 1; Gate 1's API makes Disrupted naturally observable via worker disconnect events. |
+| `ddx-1e516bc9` (fizeau Execute upstream gap) | **parallel** | Independent of API design. Fizeau v0.10.4 already addresses some of this; verify post-bump. |
+| `ddx-5cb6e6cd` C5 (no_changes adjudication) | **freeze until Gate 2** | |
+| `ddx-5cb6e6cd` C7 (Guard contract) | **freeze until Gate 2** | |
+| `ddx-5cb6e6cd` C9 (StopCondition + cost-cap) | **freeze until Gate 3** | |
+| `ddx-5cb6e6cd` C8 (routing preflight relocation) | **parallel** | Routing preflight is Drain startup; doesn't conflict with worker API. |
+| `ddx-5cb6e6cd` C13 (file rename + ddx try CLI) | **parallel** | File rename should align with `cli/internal/agent/work/` package layout; coordinate naming with Gate 2. |
+| `ddx-1d867ec1` (rename execute_bead_loop file) | **parallel + coordinate** | Same as C13. |
+| `ddx-50da9674` (clean fixture repo infra) | **parallel + supports Stage 4** | Acceptance demo uses this. |
+| Other open beads (Story 6/8/14/15/16, REACH, axon backend, etc.) | **parallel** | No interaction with worker API. |
 
 ## Implementation roadmap
 
