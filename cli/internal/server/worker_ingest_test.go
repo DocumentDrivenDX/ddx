@@ -4,12 +4,16 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // postLoopback sends a JSON POST to path with body and returns the recorder.
@@ -198,6 +202,113 @@ func TestWorkerBackfill_PostsBufferedEvents(t *testing.T) {
 	if !snap[0].HadDroppedBackfill {
 		t.Error("HadDroppedBackfill should be true after dropped=true backfill")
 	}
+}
+
+// childEnvVar is set on the subprocess invocation of
+// TestHelperPostRegisterChild and carries the URL of the parent's
+// httptest.Server. Its presence is what activates the child code path; if
+// unset the child test simply skips so a normal `go test ./...` run is a
+// no-op for the helper.
+const childEnvVar = "DDX_INGESTION_E2E_REGISTER_URL"
+
+// TestServerIngestion_RealWorkerCanRegister is the wired-in integration
+// proof for ADR-022 step 1: it stands up the production HTTP path
+// (httptest.Server wrapping srv.Handler() — same mux, same requireTrusted
+// gate, same handler, real TCP socket) and then re-execs the test binary as
+// a subprocess to POST /api/workers/register over the network. The
+// assertion is on the parent's in-memory registry, proving the round-trip
+// from a real external HTTP client landed in the worker view.
+func TestServerIngestion_RealWorkerCanRegister(t *testing.T) {
+	if os.Getenv(childEnvVar) != "" {
+		// Defensive: should never happen because the child invocation runs
+		// only TestHelperPostRegisterChild, but if a future test runner
+		// fans out differently we don't want this test to spin up its own
+		// nested subprocess.
+		t.Skip("child invocation; covered by TestHelperPostRegisterChild")
+	}
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+	ts := httptest.NewServer(srv.Handler())
+	defer ts.Close()
+
+	cmd := exec.Command(os.Args[0],
+		"-test.run", "^TestHelperPostRegisterChild$",
+		"-test.v",
+		"-test.count=1",
+		"-test.timeout=30s",
+	)
+	cmd.Env = append(os.Environ(), childEnvVar+"="+ts.URL)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("subprocess failed: %v\n%s", err, out)
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	var snap []*workerRecord
+	for time.Now().Before(deadline) {
+		snap = srv.workerIngest.snapshot()
+		if len(snap) == 1 {
+			break
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	if len(snap) != 1 {
+		t.Fatalf("registry size: got %d, want 1; subprocess output:\n%s", len(snap), out)
+	}
+	rec := snap[0]
+	if rec.Identity.Harness != "subprocess-harness" {
+		t.Errorf("identity.harness: got %q, want subprocess-harness", rec.Identity.Harness)
+	}
+	if rec.Identity.ExecutorHost != "subprocess-host" {
+		t.Errorf("identity.executor_host: got %q, want subprocess-host", rec.Identity.ExecutorHost)
+	}
+	if rec.WorkerID == "" || !strings.HasPrefix(rec.WorkerID, "wkr-") {
+		t.Errorf("worker_id %q missing wkr- prefix", rec.WorkerID)
+	}
+	if rec.RegisteredAt.IsZero() {
+		t.Error("RegisteredAt unset")
+	}
+}
+
+// TestHelperPostRegisterChild is the subprocess half of
+// TestServerIngestion_RealWorkerCanRegister. It is a normal-looking Go
+// test that no-ops unless re-invoked with childEnvVar set, in which case
+// it performs a real net/http POST against the parent's httptest.Server.
+func TestHelperPostRegisterChild(t *testing.T) {
+	url := os.Getenv(childEnvVar)
+	if url == "" {
+		t.Skip("not invoked as subprocess child; parent test re-execs us")
+	}
+	body, err := json.Marshal(workerIdentity{
+		ProjectRoot:  "/tmp/subprocess-project",
+		Harness:      "subprocess-harness",
+		Model:        "claude-opus-4",
+		ExecutorPID:  os.Getpid(),
+		ExecutorHost: "subprocess-host",
+		StartedAt:    time.Now().UTC(),
+	})
+	if err != nil {
+		t.Fatalf("encode body: %v", err)
+	}
+	resp, err := http.Post(url+"/api/workers/register", "application/json", bytes.NewReader(body))
+	if err != nil {
+		t.Fatalf("POST /api/workers/register: %v", err)
+	}
+	defer resp.Body.Close()
+	respBody, _ := io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status=%d body=%s", resp.StatusCode, respBody)
+	}
+	var out struct {
+		WorkerID string `json:"worker_id"`
+	}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		t.Fatalf("decode response %q: %v", respBody, err)
+	}
+	if out.WorkerID == "" {
+		t.Fatal("empty worker_id in response")
+	}
+	fmt.Printf("subprocess registered worker_id=%s\n", out.WorkerID)
 }
 
 func TestWorkerEvent_410_TriggersReregister(t *testing.T) {
