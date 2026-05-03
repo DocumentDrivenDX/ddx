@@ -11,23 +11,47 @@ ddx:
 ---
 # ADR-022: Worker Client–Server Architecture
 
-**Status:** Proposed (rev 2 — amended 2026-05-03 per fresh-eyes review)
-**Date:** 2026-05-02 (rev 1) / 2026-05-03 (rev 2)
+**Status:** Proposed (rev 3 — amended 2026-05-03 per codex rev 2 review)
+**Date:** 2026-05-02 (rev 1) / 2026-05-03 (rev 2 + rev 3)
 **Authors:** TD bead `ddx-076147ee`
 
-**Rev 2 amendments:** added Threat model section (limits of session-token
-project binding); added Picker section (priority sort + capability/label
-filter + atomic claim); expanded `register` payload to full ExecuteLoopSpec
-(18 fields); added claim-lease-renewal semantics + `terminate` safety
-clarification to `heartbeat`; disambiguated `preserved` outcome into
-`preserved_for_review` (worker) vs `preserved_orphaned` (server); added
-dropped-attempt commit preservation (`refs/dropped/<bead-id>/<attempt-id>`);
-added long-poll back-pressure limits (8 per project, 1s min between polls);
-added Transport error-shape parity rule (HTTP and in-process return same
-envelope); added Capabilities dispatch rules; added ts-net partition
-recovery section with `partition_grace_seconds` / `partition_abort_seconds`;
-added Test Transport bead to roadmap; clarified FEAT-008 reference does
-NOT block UI bead.
+**Rev 3 amendments (per codex review of rev 2):**
+- Added `poll_interval_ms` to registration payload (preserves stay-alive
+  fix from commit `41cb762e`)
+- Reverted `label_filter` to string (matches current ddx-29058e2a contract;
+  array form deferred to separate ADR amendment)
+- Defined `model_ref` semantics distinct from `model`
+- Removed `from_rev` from worker registration (per-attempt concept, not
+  per-worker; moves to next-bead response or bead metadata)
+- Removed self-contradicting "structurally impossible" security claim
+  from Consequences
+- Added Capabilities defaulting rule (omitted/empty → `["bead-attempt"]`
+  for backward compat)
+- Added Unified timing model section (single state table replacing
+  competing claim_lease/heartbeat-timeout/partition-grace expiries)
+- Added Server startup recovery section (rehydration from beads +
+  legacy `.ddx/workers/`)
+- Added Cancel-during-claim race resolution (`first_heartbeat_ms`
+  threshold)
+- Added Observability contract section (structured server events for
+  picker/claim/attempt lifecycle)
+- Added Multi-tenant fairness section (server-wide caps for 76+ project
+  load)
+- Added Data migration section (legacy `.ddx/workers/` rewrite path)
+- Replaced "MUST land before C5/C7/C9" with split shippable gates;
+  C5/C7 unfreeze at Gate 2, C9 unfreezes at Gate 3
+- Added explicit Bead absorption table accounting for already-shipped
+  fixes (picker `80f51574`, stay-alive `41cb762e`, GraphQL LAYERs
+  `33b97f25`/`07ea202d`/`5ee6b02c`)
+- Added API versioning rule (additive within v1, breaking → v2 with
+  Accept header)
+
+**Rev 2 amendments:** added Threat model section; added Picker section;
+expanded `register` payload; added claim-lease-renewal + terminate
+clarification; disambiguated `preserved`; added dropped-attempt commit
+preservation; added long-poll back-pressure; added Transport error-shape
+parity; added Capabilities dispatch; added ts-net partition recovery;
+added Test Transport roadmap step; clarified FEAT-008 reference.
 **Layout note:** The bead description suggested `docs/helix/03-decide/`. The
 HELIX layout in this repo places ADRs at `docs/helix/02-design/adr/`. This ADR
 is filed in the actual location to keep the index discoverable; the next ADR
