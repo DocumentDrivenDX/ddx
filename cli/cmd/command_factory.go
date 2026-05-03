@@ -558,6 +558,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newVerifyCommand())
 	rootCmd.AddCommand(f.newJqCommand())
 	rootCmd.AddCommand(f.newWorkCommand())
+	rootCmd.AddCommand(f.newTryCommand())
 	rootCmd.AddCommand(f.newSyncCommand())
 
 	// Add prompts command group

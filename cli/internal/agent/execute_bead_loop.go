@@ -41,6 +41,11 @@ type ExecuteBeadLoopRuntime struct {
 	SessionID      string
 	WorkerID       string
 	ProjectRoot    string
+	// TargetBeadID, when non-empty, restricts nextCandidate to only return the
+	// named bead from the execution-ready queue. Used by `ddx try <bead-id>`
+	// to dispatch a single specific bead through the same claim → executor →
+	// land path the queue drain uses. When empty, the picker behaves normally.
+	TargetBeadID string
 	// WakeCh, when non-nil, signals the idle-poll sleep to return immediately
 	// so the loop re-scans the queue. Used by the operator-prompt approve /
 	// auto-approve mutations (Story 15) to avoid a poll-interval-sized delay
@@ -459,7 +464,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			return result, err
 		}
 
-		candidate, skips, ok, err := w.nextCandidate(attempted, runtime.LabelFilter)
+		candidate, skips, ok, err := w.nextCandidate(attempted, runtime.LabelFilter, runtime.TargetBeadID)
 		if err != nil {
 			exitReason = "fatal_config"
 			return result, err
@@ -1213,7 +1218,7 @@ type pickerSkip struct {
 // reason for each skip). The returned skips slice is only meaningful when
 // ok=true: it contains every entry that came BEFORE the chosen candidate
 // in the priority-sorted ReadyExecution result.
-func (w *ExecuteBeadWorker) nextCandidate(attempted map[string]struct{}, labelFilter string) (bead.Bead, []pickerSkip, bool, error) {
+func (w *ExecuteBeadWorker) nextCandidate(attempted map[string]struct{}, labelFilter, targetBeadID string) (bead.Bead, []pickerSkip, bool, error) {
 	ready, err := w.Store.ReadyExecution()
 	if err != nil {
 		return bead.Bead{}, nil, false, err
@@ -1222,6 +1227,10 @@ func (w *ExecuteBeadWorker) nextCandidate(attempted map[string]struct{}, labelFi
 	for _, candidate := range ready {
 		if _, seen := attempted[candidate.ID]; seen {
 			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, Reason: "in_attempted"})
+			continue
+		}
+		if targetBeadID != "" && candidate.ID != targetBeadID {
+			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, Reason: "target_filter"})
 			continue
 		}
 		if labelFilter != "" && !HasBeadLabel(candidate.Labels, labelFilter) {
