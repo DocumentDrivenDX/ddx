@@ -1,0 +1,78 @@
+{
+  "attempt_id": "20260503T025720-bb59ccca",
+  "bead_id": "ddx-a946c744",
+  "base_rev": "21696af5753c22de0af06641243a30de3900e1c6",
+  "created_at": "2026-05-03T02:57:22.370600324Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a946c744",
+    "title": "ddx try: pre-merge production-reachability check protocol + runner",
+    "description": "Add a language-agnostic check protocol to ddx so projects can declare mechanical pre-merge gates that ddx try evaluates before any worktree is merged back. Solves the recurring \"implemented but not wired\" failure mode at the platform layer rather than per-project.\n\nCONTEXT\n- Audit at /tmp/agent-surface-dead-code-audit.md surfaced 4 functions with tests but no production caller; reviewer didn't catch it because the diff \"looked right\" and tests passed.\n- ac_structural_check.go (cli/internal/agent/) is the existing seed: parses claims from AC prose for test_name/file_deleted/field_removed. It can't catch the unwired case because a unit test naming the function satisfies the claim vacuously.\n- Prior plan considered embedding Go-specific call-graph analysis directly in cli/internal/agent/. Rejected as a boundary violation (CLAUDE.md: \"DDx provides primitives; HELIX and others provide opinions\"). Each language ecosystem has its own dead-code tooling (Go: deadcode/callgraph; Python: vulture; TS: ts-prune/knip; Rust: cargo-udeps).\n\nDESIGN — protocol (declarative, plugin-based)\n- Discovery: .ddx/checks/*.yaml each declares one check: { name, command, when: pre_merge, applies_to: { paths: [globs] | always, labels: [...] } }\n- Inputs to check command (env vars): BEAD_ID, DIFF_BASE, DIFF_HEAD, PROJECT_ROOT, EVIDENCE_DIR, RUN_ID\n- Output contract: check writes ${EVIDENCE_DIR}/${name}.json with schema { status: pass|block|error, message: string, violations: [{file, line, symbol, kind, detail}] }\n- Exit code 0 = ran-to-completion (status field is authoritative); non-zero = check itself errored (treated as BLOCK with status=error)\n- Hook point: pre_merge — runs in the parent (after worker's worktree work is done, BEFORE the merge-back into integration branch). BLOCK aborts the merge; the worktree stays preserved per existing conventions for human resolution.\n- Bypass: bead-level annotation checks_bypass: [{name: \u003ccheck\u003e, reason: \u003ctext\u003e, bead: \u003cbead-id\u003e}] recorded in events. No CLI flag — bypass must be tracked.\n- Standalone: ddx ac run \u003cbead-id\u003e [--check \u003cname\u003e] runs the same checks locally so devs can iterate without spawning a full try attempt.\n\nWHY pre_merge (NOT pre_close in the worker)\n- User directive: \"We can't afford to merge this kind of dead code.\" Worker-side checks could be bypassed by a worker that ignores BLOCK; parent-side gate cannot.\n- Worker still gets feedback via ddx ac run for local iteration.\n\nNOT IN SCOPE\n- Multiple lifecycle hook points beyond pre_merge (add later if needed).\n- Check dependencies / ordering (independent + parallel until proven insufficient).\n- Plugin manifests, capability flags, version negotiation.\n- Auto-discovery beyond .ddx/checks/*.yaml.\n- Retry / timeout policy (project owns; checks should be fast).\n- Any specific language check (separate beads).\n\nOUT OF SCOPE: REACH-GO (the Go-specific deadcode-based check) and REACH-BACKFILL (the systematic application across cli/) are separate beads that depend on this one.\n\nFILES (anticipated)\n- cli/internal/checks/protocol.go — config schema + JSON I/O types\n- cli/internal/checks/loader.go — read .ddx/checks/*.yaml\n- cli/internal/checks/runner.go — subprocess invocation, env injection, output parsing, evidence dir mgmt\n- cli/internal/agent/execute_bead_loop.go — wire pre_merge call before merge step; BLOCK aborts merge\n- cli/cmd/ac.go — ddx ac run subcommand\n- cli/internal/checks/*_test.go — table-driven tests for protocol contract",
+    "acceptance": "1. Protocol spec: .ddx/checks/*.yaml schema documented; Go types in cli/internal/checks/protocol.go match the spec; JSON output schema documented.\n2. Loader reads all .ddx/checks/*.yaml at runtime; invalid YAML or unknown fields fail loudly with file:line.\n3. Runner invokes the configured command with documented env vars; reads ${EVIDENCE_DIR}/${name}.json; treats non-zero exit as status=error.\n4. ddx try integration: pre_merge hook runs ALL applicable checks (filtered by applies_to) in parallel before merge-back; any status=block or status=error aborts the merge and preserves the worktree per existing iteration-preservation conventions.\n5. checks_bypass annotation on the bead skips the named check and records an event with the reason; missing reason = bypass rejected.\n6. ddx ac run \u003cbead-id\u003e standalone subcommand runs the same checks against the current worktree state and prints results; exit 1 on any block/error.\n7. End-to-end test: a fixture .ddx/checks/dummy-fail.yaml with a script that always returns status=block. Run ddx try on a no-op bead; observe the merge is aborted, worktree preserved, evidence file written, event recorded.\n8. End-to-end test: same fixture + checks_bypass annotation on the bead → merge proceeds, bypass event recorded.\n9. cd cli \u0026\u0026 go test ./internal/checks/... ./cmd/... green; lefthook pre-commit passes.\n10. Evidence under .ddx/executions/\u003crun-id\u003e/ shows the check fixture wrote its result.json and ddx parsed it correctly.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:checks",
+      "kind:platform",
+      "prevention",
+      "triage:needs-investigation"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T02:57:20Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "163374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T20:51:35.10675671Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260502T204932-0e555908\",\"harness\":\"claude\",\"input_tokens\":16,\"output_tokens\":7133,\"total_tokens\":7149,\"cost_usd\":0.6323640000000001,\"duration_ms\":120475,\"exit_code\":0}",
+          "created_at": "2026-05-02T20:51:35.124392574Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=7149 cost_usd=0.6324"
+        },
+        {
+          "actor": "ddx",
+          "body": "Bead ddx-a946c744 was decomposed into two child beads rather than implemented in one attempt. Size check failed: 10 ACs spanning a new cli/internal/checks/ package, integration into the 1693-line execute_bead_loop.go merge flow, a new bead schema field (checks_bypass) with event recording, a new ddx ac CLI command, and two e2e fixture-driven try-runs. That mixes design, implementation, integration, and e2e across unrelated subsystems and is well over the ~6-AC / ~500-line / ~5-file threshold. Decomposition: - ddx-aee651ec — checks protocol package (protocol.go, loader.go, runner.go, *_test.go) + ddx ac run CLI subcommand. Self-contained, unit-testable, no agent loop touch. - ddx-3e60fd84 — pre_merge hook integration in execute_bead_loop.go + checks_bypass bead annotation + event recording + two e2e fixture tests. Depends on ddx-aee651ec. Dependency edge recorded: ddx-3e60fd84 blocks-on ddx-aee651ec. Parent ddx-a946c744 updated with notes pointing at children. Once both children land, the parent's ACs are fully covered and the parent can be closed without additional implementation work. No source files in this worktree were modified.",
+          "created_at": "2026-05-02T20:51:35.67823266Z",
+          "kind": "no_changes_needs_investigation",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes_needs_investigation"
+        },
+        {
+          "actor": "ddx",
+          "body": "no_changes\nrationale: status: needs_investigation\nreason: Bead ddx-a946c744 was decomposed into two child beads rather than implemented in one attempt. Size check failed: 10 ACs spanning a new cli/internal/checks/ package, integration into the 1693-line execute_bead_loop.go merge flow, a new bead schema field (checks_bypass) with event recording, a new ddx ac CLI command, and two e2e fixture-driven try-runs. That mixes design, implementation, integration, and e2e across unrelated subsystems and is well over the ~6-AC / ~500-line / ~5-file threshold.\n\nDecomposition:\n- ddx-aee651ec — checks protocol package (protocol.go, loader.go, runner.go, *_test.go) + ddx ac run CLI subcommand. Self-contained, unit-testable, no agent loop touch.\n- ddx-3e60fd84 — pre_merge hook integration in execute_bead_loop.go + checks_bypass bead annotation + event recording + two e2e fixture tests. Depends on ddx-aee651ec.\n\nDependency edge recorded: ddx-3e60fd84 blocks-on ddx-aee651ec. Parent ddx-a946c744 updated with notes pointing at children. Once both children land, the parent's ACs are fully covered and the parent can be closed without additional implementation work.\n\nNo source files in this worktree were modified.\nresult_rev=6d7359dd9d8d64b95f7e062f3a8834262d9b6113\nbase_rev=6d7359dd9d8d64b95f7e062f3a8834262d9b6113\nretry_after=2026-05-03T02:51:35Z",
+          "created_at": "2026-05-02T20:51:35.70021373Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T02:57:20.785108856Z",
+      "execute-loop-last-detail": "no_changes",
+      "execute-loop-last-status": "no_changes",
+      "execute-loop-no-changes-count": 1,
+      "execute-loop-retry-after": "2026-05-03T02:51:35Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T025720-bb59ccca",
+    "prompt": ".ddx/executions/20260503T025720-bb59ccca/prompt.md",
+    "manifest": ".ddx/executions/20260503T025720-bb59ccca/manifest.json",
+    "result": ".ddx/executions/20260503T025720-bb59ccca/result.json",
+    "checks": ".ddx/executions/20260503T025720-bb59ccca/checks.json",
+    "usage": ".ddx/executions/20260503T025720-bb59ccca/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a946c744-20260503T025720-bb59ccca"
+  }
+}

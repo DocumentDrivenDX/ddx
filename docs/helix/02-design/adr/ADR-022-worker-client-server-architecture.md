@@ -11,9 +11,51 @@ ddx:
 ---
 # ADR-022: Worker Client–Server Architecture
 
-**Status:** Proposed (rev 3 — amended 2026-05-03 per codex rev 2 review)
-**Date:** 2026-05-02 (rev 1) / 2026-05-03 (rev 2 + rev 3)
+**Status:** Proposed (rev 4 — design pivot 2026-05-03 per user direction)
+**Date:** 2026-05-02 (rev 1) / 2026-05-03 (rev 2 + rev 3 + rev 4)
 **Authors:** TD bead `ddx-076147ee`
+
+**Rev 4 design pivot (per user direction 2026-05-03):**
+"Workers should always be autonomous. If they have a server to talk to,
+they send results there. They should be able to do their own work and
+store their logs and artifacts locally without regard for the server.
+The server is strictly a value-added coordinator."
+
+This shifts the decision from Proposal A (server orchestrates; --local has
+in-process API impl) to a Proposal B-shaped design: workers are always
+autonomous against the bead store; server is an optional reporting target
+that provides centralized observability, cross-worker visibility, and UI
+surfaces — but is NOT required for correct operation. `--local` becomes
+"force standalone mode; don't try to reach a server" — the same code
+path that workers take when no server is reachable.
+
+Rev 4 removes most of rev 3's machinery as no longer needed:
+- No worker registration, heartbeat, or claim-lease API (workers claim
+  from the bead store atomically as today)
+- No long-poll `next-bead` endpoint (workers pick from the bead store)
+- No server-side picker (worker-side picker continues, with the
+  diagnostic events from commit `80f51574` preserved)
+- No server-side runtime registry as authoritative state (server's view
+  is derived from worker event reports — eventually-consistent best-effort)
+- No claim reconciliation across server restarts (server has no claims
+  to reconcile)
+- No partition recovery semantics (worker autonomy makes partition
+  irrelevant)
+- No data migration story (per user: delete history if needed; clean
+  slate is fine)
+
+Rev 4 keeps:
+- The unified `ExecuteLoopSpec` from `ddx-29058e2a` as a worker-side
+  struct (cobra → in-process flow); not a wire format
+- The picker priority sort + diagnostic events from commit `80f51574`
+- The stay-alive defaults from commit `41cb762e`
+- The cross-project boundary fixes from commits `33b97f25` /
+  `07ea202d` / `5ee6b02c`
+- The thin server-side event ingestion endpoint for best-effort reporting
+
+Earlier revisions (1-3) explored the server-orchestrates direction and
+are preserved in git history (commits `16fd637b`, `2c02bafe`, `83bf6ec6`)
+for the design rationale.
 
 **Rev 3 amendments (per codex review of rev 2):**
 - Added `poll_interval_ms` to registration payload (preserves stay-alive
