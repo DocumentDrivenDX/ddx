@@ -12,7 +12,7 @@ import (
 // a .ddx directory. It is the storage shape used by Store's built-in path and
 // is also the fallback ExternalBackend reaches for when bd/br cannot serve a
 // non-default collection (e.g. "beads-archive"). Constructed directly only
-// when a Backend value is needed standalone — Store's inline path predates
+// when a RawBackend value is needed standalone — Store's inline path predates
 // this type and continues to operate on the same file format.
 type JSONLBackend struct {
 	Dir      string
@@ -24,6 +24,9 @@ type JSONLBackend struct {
 // NewJSONLBackend constructs a JSONL-backed Backend rooted at dir. file and
 // lockDir must be absolute (or rooted under dir) and are written/locked
 // directly. lockWait bounds how long WithLock spins before giving up.
+// Compile-time check: JSONLBackend satisfies RawBackend.
+var _ RawBackend = (*JSONLBackend)(nil)
+
 func NewJSONLBackend(dir, file, lockDir string, lockWait time.Duration) *JSONLBackend {
 	return &JSONLBackend{Dir: dir, File: file, LockDir: lockDir, LockWait: lockWait}
 }

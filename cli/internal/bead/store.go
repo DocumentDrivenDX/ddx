@@ -44,8 +44,13 @@ type Store struct {
 	Prefix     string
 	LockDir    string
 	LockWait   time.Duration
-	backend    Backend // nil means use built-in JSONL
+	backend    RawBackend // nil means use built-in JSONL
 }
+
+// Compile-time check: *Store satisfies the high-level Backend interface
+// declared in backend.go. This is the contract chaos_test.go and (eventually)
+// cli/cmd callers program against.
+var _ Backend = (*Store)(nil)
 
 type StoreOption func(*Store)
 
@@ -70,15 +75,24 @@ func NewStore(dir string, opts ...StoreOption) *Store {
 		workingDir = filepath.Dir(dir)
 	}
 	prefix := envOr("DDX_BEAD_PREFIX", "")
-	if prefix == "" {
-		if cfg, err := config.LoadWithWorkingDir(workingDir); err == nil && cfg != nil && cfg.Bead != nil && cfg.Bead.IDPrefix != "" {
+	var configBackend string
+	if cfg, err := config.LoadWithWorkingDir(workingDir); err == nil && cfg != nil && cfg.Bead != nil {
+		if prefix == "" && cfg.Bead.IDPrefix != "" {
 			prefix = cfg.Bead.IDPrefix
 		}
+		configBackend = cfg.Bead.Backend
 	}
 	if prefix == "" {
 		prefix = detectPrefix(workingDir)
 	}
-	backendType := envOr("DDX_BEAD_BACKEND", BackendJSONL)
+	// Backend selection: env var wins, then config, then jsonl default.
+	backendType := os.Getenv("DDX_BEAD_BACKEND")
+	if backendType == "" {
+		backendType = configBackend
+	}
+	if backendType == "" {
+		backendType = BackendJSONL
+	}
 
 	s := &Store{
 		Collection: DefaultCollection,
@@ -102,7 +116,7 @@ func NewStore(dir string, opts ...StoreOption) *Store {
 	// import/export round-trip).
 	switch backendType {
 	case BackendBD, BackendBR:
-		var fallback Backend
+		var fallback RawBackend
 		if s.Collection != DefaultCollection {
 			fallback = NewJSONLBackend(s.Dir, s.File, s.LockDir, s.LockWait)
 		}
@@ -115,8 +129,8 @@ func NewStore(dir string, opts ...StoreOption) *Store {
 	return s
 }
 
-// NewStoreWithBackend creates a store with an explicit backend (for testing).
-func NewStoreWithBackend(dir string, b Backend) *Store {
+// NewStoreWithBackend creates a store with an explicit RawBackend (for testing).
+func NewStoreWithBackend(dir string, b RawBackend) *Store {
 	s := NewStore(dir)
 	s.backend = b
 	return s
