@@ -60,6 +60,11 @@ type CommandFactory struct {
 	// syncGitRunnerOverride replaces the real git runner in 'ddx sync' (for testing).
 	syncGitRunnerOverride syncGitRunner
 
+	// tryExecutorOverride, when non-nil, replaces the real executor used by
+	// "ddx try". Injected by tests to observe claim/execute/outcome without
+	// shelling out to a real agent harness.
+	tryExecutorOverride agent.ExecuteBeadExecutor
+
 	// Custom viper instance for isolation
 	viperInstance *viper.Viper
 
@@ -106,6 +111,7 @@ func (f *CommandFactory) withWorkingDir(workingDir string) *CommandFactory {
 		executeBeadLandingGitOverride:      f.executeBeadLandingGitOverride,
 		executeBeadLandingAdvancerOverride: f.executeBeadLandingAdvancerOverride,
 		syncGitRunnerOverride:              f.syncGitRunnerOverride,
+		tryExecutorOverride:                f.tryExecutorOverride,
 		viperInstance:                      f.viperInstance,
 		updateChecker:                      f.updateChecker,
 		updateDone:                         f.updateDone,
@@ -558,6 +564,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newVerifyCommand())
 	rootCmd.AddCommand(f.newJqCommand())
 	rootCmd.AddCommand(f.newWorkCommand())
+	rootCmd.AddCommand(f.newTryCommand())
 	rootCmd.AddCommand(f.newSyncCommand())
 
 	// Add prompts command group
