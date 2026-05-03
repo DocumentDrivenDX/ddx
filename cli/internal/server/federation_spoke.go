@@ -40,7 +40,7 @@ func (s *Server) EnableSpokeMode(ctx context.Context, hubURL, selfURL string, op
 		return nil
 	}
 	if strings.TrimSpace(hubURL) == "" {
-		return fmt.Errorf("federation: --hub URL required for spoke mode")
+		return fmt.Errorf("federation: --hub-address URL required for spoke mode")
 	}
 	if strings.TrimSpace(selfURL) == "" {
 		// Best-effort default: scheme is https + bind address. Operators can

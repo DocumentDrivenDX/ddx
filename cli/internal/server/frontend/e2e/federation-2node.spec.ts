@@ -139,7 +139,7 @@ async function spawnServer(opts: SpawnOpts): Promise<SpawnedServer> {
 	];
 	if (opts.hubMode) args.push('--hub-mode');
 	if (opts.allowPlainHTTP) args.push('--federation-allow-plain-http');
-	if (opts.hubURL) args.push('--hub', opts.hubURL);
+	if (opts.hubURL) args.push('--hub-address', opts.hubURL);
 	if (opts.selfURL) args.push('--federation-self-url', opts.selfURL);
 	const child = spawn(bin, args, {
 		cwd: root,

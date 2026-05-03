@@ -34,7 +34,7 @@ func spokeStatePath(t *testing.T) string {
 	return filepath.Join(dir, "spoke-state.json")
 }
 
-// AC: --hub= flag registers on startup. Spoke appears in hub registry.
+// AC: --hub-address flag registers on startup. Spoke appears in hub registry.
 func TestSpokeRegistersOnStart(t *testing.T) {
 	hub := newHubServer(t, false)
 	hubURL, _ := hubFromServer(t, hub)
@@ -270,7 +270,7 @@ func TestSpokeDeregisterBestEffortOnDeadHub(t *testing.T) {
 	}
 }
 
-// AC: --hub-mode and --hub= both set produces hub_spoke role.
+// AC: --hub-mode and --hub-address both set produces hub_spoke role.
 func TestFederationRoleHubSpoke(t *testing.T) {
 	// Spawn a peer hub that this server registers with.
 	peer := newHubServer(t, false)

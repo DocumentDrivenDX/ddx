@@ -6,6 +6,30 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+// AC (ddx-b69f04f8): the spoke-mode CLI exposes --hub-address as the
+// hub URL flag. Pin the name so a future rename triggers a test failure
+// rather than silently breaking systemd units / scripts that use it.
+func TestServerCommandExposesHubAddressFlag(t *testing.T) {
+	f := &CommandFactory{WorkingDir: t.TempDir()}
+	cmd := f.newServerCommand()
+
+	flag := cmd.Flags().Lookup("hub-address")
+	if flag == nil {
+		t.Fatalf("server command missing --hub-address flag")
+	}
+	if flag.Value.Type() != "string" {
+		t.Errorf("--hub-address should be a string flag, got %q", flag.Value.Type())
+	}
+	if flag.DefValue != "" {
+		t.Errorf("--hub-address default should be empty, got %q", flag.DefValue)
+	}
+
+	// The legacy --hub flag must not exist; we renamed to --hub-address.
+	if cmd.Flags().Lookup("hub") != nil {
+		t.Errorf("legacy --hub flag should be removed in favour of --hub-address")
+	}
+}
+
 func TestResolveTsnetAuthKey(t *testing.T) {
 	tests := []struct {
 		name      string
