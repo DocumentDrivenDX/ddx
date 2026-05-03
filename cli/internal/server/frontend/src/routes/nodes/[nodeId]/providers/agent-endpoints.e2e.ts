@@ -108,13 +108,61 @@ const TREND_30D = {
 	}))
 };
 
+const AGENT_METRICS_ROWS = [
+	{
+		key: 'claude',
+		attempts: 42,
+		successes: 36,
+		successRate: 0.857,
+		meanDurationMs: 12500,
+		p50DurationMs: 9000,
+		p95DurationMs: 28000,
+		meanCostUsd: 0.014,
+		effectiveCostPerSuccessUsd: 0.0163,
+		meanInputTokens: 1200,
+		meanOutputTokens: 450,
+		lastSeenAt: '2026-05-03T11:00:00Z'
+	},
+	{
+		key: 'codex',
+		attempts: 17,
+		successes: 12,
+		successRate: 0.706,
+		meanDurationMs: 19500,
+		p50DurationMs: 15000,
+		p95DurationMs: 41000,
+		meanCostUsd: 0.022,
+		effectiveCostPerSuccessUsd: 0.031,
+		meanInputTokens: 1500,
+		meanOutputTokens: 600,
+		lastSeenAt: '2026-05-03T10:30:00Z'
+	}
+];
+
 async function mockGraphQL(page: Page) {
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as {
 			query: string;
-			variables?: { name: string; windowDays: number };
+			variables?: { name: string; windowDays: number; window?: string };
 		};
 		const q = body.query;
+		if (q.includes('AgentMetricsByProvider')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						agentMetrics: {
+							window: body.variables?.window ?? 'W7D',
+							groupBy: 'PROVIDER',
+							revision: 'rev-test',
+							rows: AGENT_METRICS_ROWS
+						}
+					}
+				})
+			});
+			return;
+		}
 		if (q.includes('NodeInfo')) {
 			await route.fulfill({
 				status: 200,
@@ -188,6 +236,42 @@ test('unified view shows endpoints and harnesses with kind labels', async ({ pag
 	// Sparkline (24h) renders for rows with ≥6 hourly buckets of usage (AC 2).
 	await expect(page.getByTestId('endpoint-sparkline-bars-qwen-local')).toBeVisible();
 	await expect(page.getByTestId('endpoint-sparkline-bars-claude')).toBeVisible();
+});
+
+test('Availability/Performance section toggle drives URL and renders agentMetrics rows', async ({ page }) => {
+	await mockGraphQL(page);
+	await page.goto('/nodes/node-abc/providers');
+
+	// Both section chips are visible; default section is Availability.
+	await expect(page.getByTestId('section-chip-availability')).toHaveAttribute('aria-pressed', 'true');
+	await expect(page.getByTestId('section-chip-performance')).toHaveAttribute('aria-pressed', 'false');
+	await expect(page.getByTestId('agent-endpoints-table')).toBeVisible();
+
+	// Click Performance — URL gains ?section=performance and the perf table renders.
+	await page.getByTestId('section-chip-performance').click();
+	await expect(page).toHaveURL(/\?section=performance/);
+	await expect(page.getByTestId('performance-table')).toBeVisible();
+	await expect(page.getByTestId('performance-row-claude')).toBeVisible();
+	await expect(page.getByTestId('performance-row-codex')).toBeVisible();
+
+	// Drill-through link follows Story 8 chip query-param schema (k=v) and
+	// targets the per-provider detail page.
+	const link = page.getByTestId('performance-link-claude');
+	await expect(link).toHaveAttribute('href', '/nodes/node-abc/providers/claude?window=7d');
+
+	// Window chip switches via the same query-param schema.
+	await page.getByTestId('performance-window-24h').click();
+	await expect(page).toHaveURL(/section=performance/);
+	await expect(page).toHaveURL(/window=W24H/);
+	await expect(page.getByTestId('performance-link-claude')).toHaveAttribute(
+		'href',
+		'/nodes/node-abc/providers/claude?window=24h'
+	);
+
+	// Toggling back to Availability clears section param.
+	await page.getByTestId('section-chip-availability').click();
+	await expect(page).not.toHaveURL(/section=performance/);
+	await expect(page.getByTestId('agent-endpoints-table')).toBeVisible();
 });
 
 test('detail route renders 7d trend and projection callout', async ({ page }) => {

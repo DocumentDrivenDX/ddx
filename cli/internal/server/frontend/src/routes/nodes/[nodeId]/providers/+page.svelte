@@ -1,8 +1,53 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
 	import { createClient } from '$lib/gql/client';
 	import { gql } from 'graphql-request';
+	import FilterChip from '$lib/components/FilterChip.svelte';
+
+	const AGENT_METRICS_QUERY = gql`
+		query AgentMetricsByProvider($window: AgentMetricsWindow!) {
+			agentMetrics(window: $window, groupBy: PROVIDER) {
+				window
+				groupBy
+				revision
+				rows {
+					key
+					attempts
+					successes
+					successRate
+					meanDurationMs
+					p50DurationMs
+					p95DurationMs
+					meanCostUsd
+					effectiveCostPerSuccessUsd
+					meanInputTokens
+					meanOutputTokens
+					lastSeenAt
+				}
+			}
+		}
+	`;
+
+	interface AgentMetricsRow {
+		key: string;
+		attempts: number;
+		successes: number;
+		successRate: number;
+		meanDurationMs: number;
+		p50DurationMs: number;
+		p95DurationMs: number;
+		meanCostUsd: number;
+		effectiveCostPerSuccessUsd: number | null;
+		meanInputTokens: number;
+		meanOutputTokens: number;
+		lastSeenAt: string | null;
+	}
+
+	type SectionKey = 'availability' | 'performance';
+	type WindowKey = 'W24H' | 'W7D' | 'W30D';
+	const WINDOW_LABEL: Record<WindowKey, string> = { W24H: '24h', W7D: '7d', W30D: '30d' };
 
 	const PROVIDER_STATUSES_QUERY = gql`
 		query ProviderStatuses {
@@ -346,6 +391,89 @@
 		const nodeId = $page.params.nodeId;
 		return `/nodes/${nodeId}/providers/${encodeURIComponent(row.name)}`;
 	}
+
+	// Section toggle (Availability / Performance) is URL-driven via the Story 8
+	// chip query-param schema (`?section=availability|performance`). Default
+	// section is availability so the existing URL keeps working.
+	let section = $derived<SectionKey>(
+		($page.url.searchParams.get('section') as SectionKey | null) === 'performance'
+			? 'performance'
+			: 'availability'
+	);
+	let perfWindow = $derived<WindowKey>(
+		(($page.url.searchParams.get('window') ?? 'W7D') as WindowKey)
+	);
+
+	function setSection(next: SectionKey): void {
+		const params = new URLSearchParams($page.url.searchParams);
+		if (next === 'availability') params.delete('section');
+		else params.set('section', next);
+		const search = params.toString();
+		goto(search ? `?${search}` : $page.url.pathname, { replaceState: false });
+	}
+
+	function setWindow(next: WindowKey): void {
+		const params = new URLSearchParams($page.url.searchParams);
+		params.set('section', 'performance');
+		if (next === 'W7D') params.delete('window');
+		else params.set('window', next);
+		goto(`?${params.toString()}`, { replaceState: false });
+	}
+
+	let perfRows = $state<AgentMetricsRow[]>([]);
+	let perfLoading = $state(false);
+	let perfError = $state<string | null>(null);
+	let perfClient: ReturnType<typeof createClient> | null = null;
+
+	async function loadPerformance(window: WindowKey): Promise<void> {
+		if (!perfClient) perfClient = createClient();
+		perfLoading = true;
+		perfError = null;
+		try {
+			const res = await perfClient.request<{
+				agentMetrics: { rows: AgentMetricsRow[] };
+			}>(AGENT_METRICS_QUERY, { window });
+			perfRows = res.agentMetrics?.rows ?? [];
+		} catch (e) {
+			perfError = e instanceof Error ? e.message : String(e);
+		} finally {
+			perfLoading = false;
+		}
+	}
+
+	$effect(() => {
+		if (section === 'performance') {
+			void loadPerformance(perfWindow);
+		}
+	});
+
+	function perfDrillHref(row: AgentMetricsRow): string {
+		const nodeId = $page.params.nodeId;
+		// Drill-through links use the Story 8 chip query-param schema
+		// (lower-case key=value). `window` echoes the active selection so the
+		// detail page can scope its trend queries to the same span.
+		const win = WINDOW_LABEL[perfWindow];
+		return `/nodes/${nodeId}/providers/${encodeURIComponent(row.key)}?window=${win}`;
+	}
+
+	function fmtPct(n: number): string {
+		return `${Math.round(n * 100)}%`;
+	}
+
+	function fmtMs(n: number): string {
+		if (n < 1000) return `${Math.round(n)}ms`;
+		if (n < 60_000) return `${(n / 1000).toFixed(1)}s`;
+		const m = Math.floor(n / 60_000);
+		const s = Math.round((n % 60_000) / 1000);
+		return `${m}m ${s}s`;
+	}
+
+	function fmtUsd(n: number | null): string {
+		if (n == null) return '—';
+		if (n === 0) return '$0';
+		if (n < 0.01) return `$${n.toFixed(4)}`;
+		return `$${n.toFixed(3)}`;
+	}
 </script>
 
 <svelte:head>
@@ -355,7 +483,7 @@
 <div class="space-y-6" data-testid="agent-endpoints">
 	<div class="flex items-center justify-between">
 		<h1 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">Agent availability</h1>
-		{#if !loading}
+		{#if section === 'availability' && !loading}
 			<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">
 				{rows.length} total ({rows.filter((r) => r.kind === 'ENDPOINT').length} endpoints · {rows.filter(
 					(r) => r.kind === 'HARNESS'
@@ -364,6 +492,26 @@
 		{/if}
 	</div>
 
+	<!-- Section toggle: Availability / Performance -->
+	<div class="flex flex-wrap items-center gap-2" data-testid="section-chips">
+		<span class="self-center font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted">Section</span>
+		<FilterChip
+			label="Availability"
+			testid="section-chip-availability"
+			active={section === 'availability'}
+			ariaPressed={section === 'availability'}
+			onclick={() => setSection('availability')}
+		/>
+		<FilterChip
+			label="Performance"
+			testid="section-chip-performance"
+			active={section === 'performance'}
+			ariaPressed={section === 'performance'}
+			onclick={() => setSection('performance')}
+		/>
+	</div>
+
+	{#if section === 'availability'}
 	<!-- Default route widget -->
 	{#if defaultRoute && defaultRoute.modelRef}
 		<div
@@ -643,5 +791,89 @@
 				</tbody>
 			</table>
 		</div>
+	{/if}
+	{:else}
+	<!-- Performance section: agentMetrics(groupBy: PROVIDER) -->
+	<div class="flex flex-wrap items-center gap-2" data-testid="performance-window-chips">
+		<span class="self-center font-label-caps text-label-caps uppercase text-fg-muted dark:text-dark-fg-muted">Window</span>
+		<FilterChip
+			label="24h"
+			testid="performance-window-24h"
+			active={perfWindow === 'W24H'}
+			ariaPressed={perfWindow === 'W24H'}
+			onclick={() => setWindow('W24H')}
+		/>
+		<FilterChip
+			label="7d"
+			testid="performance-window-7d"
+			active={perfWindow === 'W7D'}
+			ariaPressed={perfWindow === 'W7D'}
+			onclick={() => setWindow('W7D')}
+		/>
+		<FilterChip
+			label="30d"
+			testid="performance-window-30d"
+			active={perfWindow === 'W30D'}
+			ariaPressed={perfWindow === 'W30D'}
+			onclick={() => setWindow('W30D')}
+		/>
+	</div>
+	{#if perfLoading}
+		<div class="py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted" data-testid="performance-loading">
+			Loading performance metrics…
+		</div>
+	{:else if perfError}
+		<div
+			class="border border-border-line bg-bg-surface p-4 text-body-sm text-error dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-error"
+			data-testid="performance-error"
+		>
+			Error: {perfError}
+		</div>
+	{:else}
+		<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
+			<table class="w-full text-sm" data-testid="performance-table">
+				<thead>
+					<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
+						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Provider</th>
+						<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Attempts</th>
+						<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Success</th>
+						<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">p50</th>
+						<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">p95</th>
+						<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Mean cost</th>
+						<th class="px-4 py-3 text-right text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Cost / success</th>
+					</tr>
+				</thead>
+				<tbody>
+					{#each perfRows as row (row.key)}
+						<tr
+							class="border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface"
+							data-testid="performance-row-{row.key}"
+						>
+							<td class="px-4 py-3 font-medium text-fg-ink dark:text-dark-fg-ink">
+								<a
+									class="text-accent-lever hover:underline dark:text-dark-accent-lever"
+									href={perfDrillHref(row)}
+									data-testid="performance-link-{row.key}">{row.key}</a
+								>
+							</td>
+							<td class="px-4 py-3 text-right tabular-nums text-fg-muted dark:text-dark-fg-muted">{row.attempts}</td>
+							<td class="px-4 py-3 text-right tabular-nums text-fg-muted dark:text-dark-fg-muted">{fmtPct(row.successRate)}</td>
+							<td class="px-4 py-3 text-right tabular-nums text-fg-muted dark:text-dark-fg-muted">{fmtMs(row.p50DurationMs)}</td>
+							<td class="px-4 py-3 text-right tabular-nums text-fg-muted dark:text-dark-fg-muted">{fmtMs(row.p95DurationMs)}</td>
+							<td class="px-4 py-3 text-right tabular-nums text-fg-muted dark:text-dark-fg-muted">{fmtUsd(row.meanCostUsd)}</td>
+							<td class="px-4 py-3 text-right tabular-nums text-fg-muted dark:text-dark-fg-muted">{fmtUsd(row.effectiveCostPerSuccessUsd)}</td>
+						</tr>
+					{/each}
+					{#if perfRows.length === 0}
+						<tr>
+							<td colspan="7" class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">
+								No agent attempts recorded in this window.
+							</td>
+						</tr>
+					{/if}
+				</tbody>
+			</table>
+		</div>
+	{/if}
 	{/if}
 </div>
