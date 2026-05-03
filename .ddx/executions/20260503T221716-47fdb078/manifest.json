@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260503T221716-47fdb078",
+  "bead_id": "ddx-cb63cdfc",
+  "base_rev": "823ced625935a40a12172a0a073a221ae18e6520",
+  "created_at": "2026-05-03T22:17:18.383060941Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cb63cdfc",
+    "title": "Migration tool: .ddx/beads.jsonl + archive → axon backend",
+    "description": "Add a one-shot migration command (e.g. ddx bead migrate --to axon) that reads .ddx/beads.jsonl and .ddx/beads-archive.jsonl and writes them losslessly into the axon backend. Idempotent; safe to re-run. Does not delete the source files (operator removes after verification).",
+    "acceptance": "1. ddx bead migrate --to axon command exists and is documented in --help. 2. After migration, every bead (including events and archive entries) round-trips: ddx bead export | diff against pre-migration export = empty. 3. Idempotent: running twice produces no duplicates. 4. Test fixture under cli/internal/bead/testdata covers a representative beads.jsonl + archive.",
+    "parent": "ddx-5d49b14e",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:storage",
+      "kind:tool",
+      "backend-migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T22:17:16Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "execute-loop-heartbeat-at": "2026-05-03T22:17:16.754896824Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T221716-47fdb078",
+    "prompt": ".ddx/executions/20260503T221716-47fdb078/prompt.md",
+    "manifest": ".ddx/executions/20260503T221716-47fdb078/manifest.json",
+    "result": ".ddx/executions/20260503T221716-47fdb078/result.json",
+    "checks": ".ddx/executions/20260503T221716-47fdb078/checks.json",
+    "usage": ".ddx/executions/20260503T221716-47fdb078/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-cb63cdfc-20260503T221716-47fdb078"
+  },
+  "prompt_sha": "c38d2c44458a5d5179f285dc319c4b9af96641b940e337512e7eb0437d18b53f"
+}
