@@ -1,0 +1,73 @@
+{
+  "attempt_id": "20260503T060104-e7053ec7",
+  "bead_id": "ddx-d99a1dd1",
+  "base_rev": "f7adfc00fed1d694f9f67441a5c85430efcd1f20",
+  "created_at": "2026-05-03T06:01:05.509525379Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d99a1dd1",
+    "title": "runs: re-queue UI (try, run) + 'Start worker from this drain' (work)",
+    "description": "Re-queue button on layer=try and layer=run rows. For layer=work, a 'Start worker from this drain' action prefilling the original queue inputs (codex-pushed; user confirmed).",
+    "acceptance": "1. Re-queue button visible on try and run rows. 2. Modal prefilled with original config; idempotency key generated client-side. 3. work-layer 'Start worker' action prefilled with original drain config.",
+    "parent": "ddx-723d93f2",
+    "labels": [
+      "phase:2",
+      "story:8",
+      "area:web",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T06:01:04Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T05:58:34.047225918Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T05:59:17.99355701Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:00:01.781684181Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:00:45.710297066Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T06:01:04.031584715Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T060104-e7053ec7",
+    "prompt": ".ddx/executions/20260503T060104-e7053ec7/prompt.md",
+    "manifest": ".ddx/executions/20260503T060104-e7053ec7/manifest.json",
+    "result": ".ddx/executions/20260503T060104-e7053ec7/result.json",
+    "checks": ".ddx/executions/20260503T060104-e7053ec7/checks.json",
+    "usage": ".ddx/executions/20260503T060104-e7053ec7/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d99a1dd1-20260503T060104-e7053ec7"
+  },
+  "prompt_sha": "3ae700c3ff6c6b9938542497d399b71ed6beb3f3a518eaeaeede874ac5d56b98"
+}
