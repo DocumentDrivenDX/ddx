@@ -53,7 +53,7 @@ func (r *queryResolver) ProviderModels(ctx context.Context, name string, kind Pr
 		return nil, fmt.Errorf("invalid kind: %s", kind)
 	}
 
-	key := providerModelsCacheKey(r.WorkingDir, name, kind)
+	key := providerModelsCacheKey(r.workingDir(ctx), name, kind)
 
 	if cached, ok := lookupProviderModelsCache(key); ok {
 		// Serve cached copy with fromCache=true; do NOT alter fetchedAt.
@@ -62,7 +62,7 @@ func (r *queryResolver) ProviderModels(ctx context.Context, name string, kind Pr
 		return out, nil
 	}
 
-	res, err := loadProviderModels(ctx, r.WorkingDir, name, kind, key)
+	res, err := loadProviderModels(ctx, r.workingDir(ctx), name, kind, key)
 	if err != nil {
 		return nil, err
 	}
@@ -86,8 +86,8 @@ func (r *mutationResolver) RefreshProviderModels(ctx context.Context, name strin
 		return nil, fmt.Errorf("invalid kind: %s", kind)
 	}
 
-	key := providerModelsCacheKey(r.WorkingDir, name, kind)
-	res, err := refreshProviderModels(ctx, r.WorkingDir, name, kind, key)
+	key := providerModelsCacheKey(r.workingDir(ctx), name, kind)
+	res, err := refreshProviderModels(ctx, r.workingDir(ctx), name, kind, key)
 	if err != nil {
 		return nil, err
 	}

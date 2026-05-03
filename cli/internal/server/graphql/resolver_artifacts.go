@@ -90,7 +90,7 @@ type ddxGeneratedBy struct {
 // for the given project. Documents come from the FEAT-007 doc graph; other
 // artifacts come from .ddx.yaml sidecar files found under .ddx/plugins/.
 func (r *queryResolver) Artifacts(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, mediaType *string, search *string, sortKey *ArtifactSort, staleness *string, phase *string, prefix []string) (*ArtifactConnection, error) {
-	root := r.projectRoot(projectID)
+	root := r.projectRoot(ctx, projectID)
 
 	artifacts, err := collectArtifacts(root)
 	if err != nil {
@@ -714,7 +714,7 @@ func titleFromDoc(d docgraph.Document) string {
 // Artifact is the resolver for the artifact(projectID, id) query.
 // It returns a single artifact by ID, loading file content for text-based media types.
 func (r *queryResolver) Artifact(ctx context.Context, projectID string, id string) (*Artifact, error) {
-	root := r.projectRoot(projectID)
+	root := r.projectRoot(ctx, projectID)
 	artifacts, err := collectArtifacts(root)
 	if err != nil {
 		return nil, fmt.Errorf("collecting artifacts: %w", err)

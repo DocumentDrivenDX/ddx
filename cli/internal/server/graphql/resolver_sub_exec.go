@@ -7,11 +7,14 @@ import (
 	"time"
 )
 
-// ExecLogProvider fetches execution run logs by run ID.
-// Implementations should return a non-nil error when the run is not yet
-// available so the resolver can retry.
+// ExecLogProvider fetches execution run logs by run ID. The workingDir
+// argument identifies the project root the lookup should be scoped to;
+// LAYER 2 of the GraphQL multi-project fix (ddx-055e8d32) threads this
+// per-request value via context so the singleton resolver can serve any
+// registered project. Implementations should return a non-nil error when the
+// run is not yet available so the resolver can retry.
 type ExecLogProvider interface {
-	GetExecLog(runID string) (stdout, stderr string, err error)
+	GetExecLog(workingDir, runID string) (stdout, stderr string, err error)
 }
 
 // CoordinatorMetricsSnap is a point-in-time snapshot of land-coordinator
@@ -47,7 +50,7 @@ func (r *subscriptionResolver) ExecutionEvidence(ctx context.Context, runID stri
 		ticker := time.NewTicker(500 * time.Millisecond)
 		defer ticker.Stop()
 		for {
-			stdout, stderr, err := r.ExecLogs.GetExecLog(runID)
+			stdout, stderr, err := r.ExecLogs.GetExecLog(r.workingDir(ctx), runID)
 			if err == nil {
 				now := time.Now().UTC().Format(time.RFC3339)
 				seq := 0

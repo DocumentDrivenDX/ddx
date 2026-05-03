@@ -12,12 +12,13 @@ import (
 )
 
 // execLogAdapter implements ddxgraphql.ExecLogProvider using the exec store.
-type execLogAdapter struct {
-	workingDir string
-}
+// LAYER 2 of the GraphQL multi-project fix (ddx-055e8d32): workingDir is no
+// longer carried on the adapter — the resolver supplies the per-request
+// workingDir via context, threaded through ExecLogProvider.GetExecLog.
+type execLogAdapter struct{}
 
-func (a *execLogAdapter) GetExecLog(runID string) (string, string, error) {
-	store := ddxexec.NewStore(a.workingDir)
+func (a *execLogAdapter) GetExecLog(workingDir, runID string) (string, string, error) {
+	store := ddxexec.NewStore(workingDir)
 	return store.Log(runID)
 }
 

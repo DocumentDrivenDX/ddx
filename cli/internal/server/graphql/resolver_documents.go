@@ -23,7 +23,8 @@ func (r *queryResolver) DocumentByPath(ctx context.Context, path string) (*Docum
 		return nil, fmt.Errorf("path is required")
 	}
 
-	cleaned, err := cleanDocumentPath(r.WorkingDir, path)
+	wd := r.workingDir(ctx)
+	cleaned, err := cleanDocumentPath(wd, path)
 	if err != nil {
 		return nil, err
 	}
@@ -31,7 +32,7 @@ func (r *queryResolver) DocumentByPath(ctx context.Context, path string) (*Docum
 	// Prefer the docgraph-tracked location: the documents list surfaces files
 	// walked under workingDir, so the detail view must read from the same root
 	// (otherwise the URL for a valid list entry 404s).
-	if graph, graphErr := docgraph.BuildGraphWithConfig(r.WorkingDir); graphErr == nil {
+	if graph, graphErr := docgraph.BuildGraphWithConfig(wd); graphErr == nil {
 		if id, ok := graph.PathToID[cleaned]; ok {
 			if d, ok := graph.Documents[id]; ok {
 				absPath := d.Path
@@ -51,7 +52,7 @@ func (r *queryResolver) DocumentByPath(ctx context.Context, path string) (*Docum
 	// Fall back to the configured library path so documents created via the
 	// documentWrite mutation (which target the library) remain readable even
 	// when they have no DDx frontmatter and so do not appear in the graph.
-	cfg, err := config.LoadWithWorkingDir(r.WorkingDir)
+	cfg, err := config.LoadWithWorkingDir(wd)
 	if err != nil {
 		return nil, fmt.Errorf("loading config: %w", err)
 	}
@@ -60,7 +61,7 @@ func (r *queryResolver) DocumentByPath(ctx context.Context, path string) (*Docum
 	}
 	libPath := cfg.Library.Path
 	if !filepath.IsAbs(libPath) {
-		libPath = filepath.Join(r.WorkingDir, libPath)
+		libPath = filepath.Join(wd, libPath)
 	}
 
 	fullPath := filepath.Join(libPath, cleaned)
@@ -98,7 +99,7 @@ func cleanDocumentPath(workingDir, path string) (string, error) {
 
 // Documents is the resolver for the documents field with Relay cursor pagination.
 func (r *queryResolver) Documents(ctx context.Context, first *int, after *string, last *int, before *string, typeArg *string) (*DocumentConnection, error) {
-	graph, err := docgraph.BuildGraphWithConfig(r.WorkingDir)
+	graph, err := docgraph.BuildGraphWithConfig(r.workingDir(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("building document graph: %w", err)
 	}
@@ -178,7 +179,7 @@ func (r *queryResolver) Documents(ctx context.Context, first *int, after *string
 
 // DocGraph is the resolver for the docGraph field.
 func (r *queryResolver) DocGraph(ctx context.Context) (*DocGraph, error) {
-	graph, err := docgraph.BuildGraphWithConfig(r.WorkingDir)
+	graph, err := docgraph.BuildGraphWithConfig(r.workingDir(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("building document graph: %w", err)
 	}
@@ -218,7 +219,7 @@ func (r *queryResolver) DocGraph(ctx context.Context) (*DocGraph, error) {
 // same structured issue list used by the full graph query so dashboards can
 // pull integrity state independently of the heavy graph payload.
 func (r *queryResolver) DocGraphIssues(ctx context.Context) ([]*GraphIssue, error) {
-	graph, err := docgraph.BuildGraphWithConfig(r.WorkingDir)
+	graph, err := docgraph.BuildGraphWithConfig(r.workingDir(ctx))
 	if err != nil {
 		return nil, fmt.Errorf("building document graph: %w", err)
 	}
