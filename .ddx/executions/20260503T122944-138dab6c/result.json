@@ -1,0 +1,59 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "Diff contains only execution evidence (manifest.json, result.json) — no source code changes. Cannot verify ACs 1-3 (refactor moved, loop body cleaned, fixture byte-identical) from this diff alone.",
+  "findings": [
+    {
+      "severity": "block",
+      "summary": "No source code changes present in diff; cannot confirm runConflictRecovery was moved into try package",
+      "location": "cli/internal/agent/"
+    },
+    {
+      "severity": "block",
+      "summary": "No evidence loop body at execute_bead_loop.go:826-859 was modified to drop conflict-recovery references",
+      "location": "cli/internal/agent/execute_bead_loop.go"
+    },
+    {
+      "severity": "block",
+      "summary": "No fixture diff or test output included to verify byte-identical lifecycle and green tests",
+      "location": "cli/internal/agent/"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 667,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T121622-7b5ecfc1/manifest.json",
+          ".ddx/executions/20260503T121622-7b5ecfc1/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 3259,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 5732,
+    "output_bytes": 845,
+    "elapsed_ms": 63156,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
