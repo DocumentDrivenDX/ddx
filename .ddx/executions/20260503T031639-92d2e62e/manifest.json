@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260503T031639-92d2e62e",
+  "bead_id": "ddx-0c8c9670",
+  "base_rev": "6d83f2b40596f14d03f427943c9a94010cdd7ed4",
+  "created_at": "2026-05-03T03:16:40.920682534Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0c8c9670",
+    "title": "Document bd/doltdb fallback wiring for bead backend",
+    "description": "Single-artifact documentation under docs/ that explains how to wire bd (with its doltdb backend) as the bead backend if axon adoption stalls. Cover: required interface adapter, JSONL interchange (already supported via ddx bead import/export), claim/lock translation, and tradeoffs (external dependency on bd codebase, git-for-data semantics). This is the documented fallback path; no code required.",
+    "acceptance": "1. Single doc under docs/ describing bd-as-bead-backend wiring. 2. Covers interface adapter, JSONL interchange, claim/lock translation, tradeoffs. 3. Cross-references the axon TD for comparison.",
+    "parent": "ddx-5d49b14e",
+    "labels": [
+      "phase:2",
+      " area:beads",
+      " area:storage",
+      " kind:docs",
+      " backend-migration"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:16:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "163374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T14:57:29.290223285Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\nresult_rev=c75cf9acaefc7c73c1bb4b8aa24bf8af573e572f\nbase_rev=c75cf9acaefc7c73c1bb4b8aa24bf8af573e572f\nretry_after=2026-05-02T20:57:29Z",
+          "created_at": "2026-05-02T14:57:29.379922763Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T03:16:39.513321157Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-02T20:57:29Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031639-92d2e62e",
+    "prompt": ".ddx/executions/20260503T031639-92d2e62e/prompt.md",
+    "manifest": ".ddx/executions/20260503T031639-92d2e62e/manifest.json",
+    "result": ".ddx/executions/20260503T031639-92d2e62e/result.json",
+    "checks": ".ddx/executions/20260503T031639-92d2e62e/checks.json",
+    "usage": ".ddx/executions/20260503T031639-92d2e62e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-0c8c9670-20260503T031639-92d2e62e"
+  }
+}
