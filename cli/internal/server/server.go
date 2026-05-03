@@ -148,6 +148,11 @@ type Server struct {
 	// from the request context.
 	gqlOnce    sync.Once
 	gqlHandler http.Handler
+
+	// workerIngest is the in-memory derived view of worker reports per
+	// ADR-022 rev 5 §Worker-server interface. Workers POST register/event/
+	// backfill best-effort; the registry is non-authoritative.
+	workerIngest *workerIngestRegistry
 }
 
 // New creates a new DDx server bound to addr, serving data from workingDir.
@@ -178,6 +183,7 @@ func New(addr, workingDir string) *Server {
 		csrfTokens:                         csrfStore,
 		operatorPromptIdempotency:          ddxgraphql.NewMemoryIdempotencyCache(),
 		operatorPromptAutoApproveAllowlist: parseOperatorPromptAllowlistEnv(os.Getenv("DDX_OPERATOR_PROMPT_ALLOWLIST")),
+		workerIngest:                       newWorkerIngestRegistry(workingDir),
 	}
 	state.coordinatorReg = workers.LandCoordinators
 
@@ -843,6 +849,14 @@ func (s *Server) routes() {
 	scoped("GET /api/projects/{project}/agent/workers/{id}/log", s.handleAgentWorkerLog)
 	scoped("GET /api/projects/{project}/agent/workers/{id}/prompt", s.handleAgentWorkerPrompt)
 	scoped("GET /api/projects/{project}/agent/coordinators", s.handleAgentCoordinators)
+
+	// Worker ingestion (ADR-022 rev 5 §Worker-server interface). Workers
+	// POST best-effort to register, mirror events, and backfill events
+	// buffered while NotConnected. Project membership is carried in the
+	// register payload — these endpoints are NOT project-scoped.
+	trusted("POST /api/workers/register", s.handleWorkerRegister)
+	trusted("POST /api/workers/{id}/event", s.handleWorkerEvent)
+	trusted("POST /api/workers/{id}/backfill", s.handleWorkerBackfill)
 
 	// Project-scoped worker endpoints (FEAT-002 §22-24)
 	trusted("GET /api/projects/{project}/workers", s.handleProjectWorkerList)
