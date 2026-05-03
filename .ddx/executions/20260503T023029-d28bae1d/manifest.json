@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260503T023029-d28bae1d",
+  "bead_id": "ddx-92e10599",
+  "base_rev": "a297703f313d29d247695484cfc55a121bbcb89e",
+  "created_at": "2026-05-03T02:30:30.945948095Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-92e10599",
+    "title": "S15-6: SvelteKit prompt input + preview + recent-bead pane + approve UI + Playwright",
+    "description": "Build SvelteKit project-home UI: textarea + tier picker + submit; visible 'this is what we will send' preview before approve; tail of recent operator-prompt beads with live status (reuse beads subscription); click-through to bead detail for diff/evidence; Approve \u0026 queue button. Strict escaping for prompt and assistant outputs. See /tmp/story-15-final.md §Implementation #4 and §Additional security controls bullet 5.",
+    "acceptance": "Project home renders prompt input gated to requireTrusted sessions; submit shows preview, then Approve transitions bead to ready; recent prompts pane updates live via subscription; click-through opens bead detail; Playwright e2e covers submit→approve→bead-advance flow and XSS escaping for both prompt text and assistant evidence rendering.",
+    "parent": "ddx-1d85c927",
+    "labels": [
+      "phase:2",
+      "story:15",
+      "kind:ui"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T02:30:29Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "163374",
+      "execute-loop-heartbeat-at": "2026-05-03T02:30:29.622761623Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T023029-d28bae1d",
+    "prompt": ".ddx/executions/20260503T023029-d28bae1d/prompt.md",
+    "manifest": ".ddx/executions/20260503T023029-d28bae1d/manifest.json",
+    "result": ".ddx/executions/20260503T023029-d28bae1d/result.json",
+    "checks": ".ddx/executions/20260503T023029-d28bae1d/checks.json",
+    "usage": ".ddx/executions/20260503T023029-d28bae1d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-92e10599-20260503T023029-d28bae1d"
+  }
+}
