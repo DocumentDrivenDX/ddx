@@ -6,6 +6,15 @@ hardest rule: **the bead description must be readable cold**. An
 automated `ddx try` run has no chat history, no open
 tabs, no prior context — only what's in the bead.
 
+> **Authoring contract.** This file is the worked-example tutorial.
+> The enforcement bar is `docs/helix/06-iterate/bead-authoring-template.md`
+> (the 8-criterion rubric: title, root-cause-with-file-line, numbered
+> verifiable AC with specific `Test*` names, wired-in assertion, test
+> + lefthook gate, labels with cross-refs, parent + deps, standalone
+> description). Beads scoring < 7/8 will fail in autonomous drain
+> (principle P7, `docs/helix/06-iterate/reliability-principles.md`).
+> Walk the template's checklist before invoking `ddx bead create`.
+
 ## Required structure
 
 Every bead you create should have:
@@ -13,11 +22,17 @@ Every bead you create should have:
 1. **Title** — imperative, specific. "Fix the pagination off-by-one
    in the bead list endpoint", not "Pagination bug".
 2. **Type** — `task`, `bug`, `epic`, or `chore`.
-3. **Description** — inline context (see below).
-4. **Acceptance criteria** — a command that passes.
-5. **Labels** — at minimum `area:<subsystem>` and `kind:<category>`.
+3. **Description** — inline context with **ROOT CAUSE cited by file:line**
+   and an explicit **NOT IN SCOPE** block (see below).
+4. **Acceptance criteria** — numbered lines, each one a verifiable
+   condition; tests named by `Test*` symbol; closes with the
+   `cd cli && go test ./<pkg>/... -run <Pattern>` line and
+   `lefthook run pre-commit passes.`
+5. **Labels** — at minimum `phase:<n>`, `area:<subsystem>`, `kind:<category>`,
+   plus cross-refs (`adr:NNN`, `prevention`, `triage:*`) when applicable.
 6. **`spec-id`** (when applicable) — pointer to the governing
    FEAT-\*, SD-\*, TD-\*, or ADR-\* that authorizes the work.
+7. **Parent** — `--parent <id>` on every non-root bead.
 
 ## Inline context, not links
 
