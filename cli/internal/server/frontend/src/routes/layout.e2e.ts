@@ -21,7 +21,6 @@ test('loads / and NavShell links exist', async ({ page }) => {
 		'Documents',
 		'Graph',
 		'Workers',
-		'Sessions',
 		'Personas',
 		'Commits',
 		'All Beads'

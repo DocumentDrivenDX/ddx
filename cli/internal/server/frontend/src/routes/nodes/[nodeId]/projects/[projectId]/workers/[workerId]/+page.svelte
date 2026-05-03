@@ -184,7 +184,7 @@
 	}
 
 	function sessionsHref(): string {
-		return `/nodes/${data.nodeId}/projects/${data.projectId}/sessions`;
+		return `/nodes/${data.nodeId}/projects/${data.projectId}/runs?layer=run`;
 	}
 
 	const workerSessions = $derived(data.sessions ?? []);
