@@ -1,0 +1,49 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "All 5 hygiene beads' AC text substituted TD-NNN→TD-031 (verified in beads.jsonl). Migration survey at expected path enumerates statuses per repo + active/archive split. Only canonical statuses observed; survey explicitly states 'No migration needed.'",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Bead description named '~/Projects/agent (Fizeau bead store)'; agent surveyed '~/Projects/fizeau' and explicitly flagged the label slip in the survey doc. Reasonable interpretation, transparently documented.",
+      "location": ".ddx/executions/20260503T215301-954ada5f/migration-survey.md"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1569,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T215301-954ada5f/manifest.json",
+          ".ddx/executions/20260503T215301-954ada5f/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 104817,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 108192,
+    "output_bytes": 698,
+    "elapsed_ms": 92303,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
