@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"sync"
 	"time"
 )
@@ -290,6 +291,47 @@ func (s *Server) handleWorkerBackfill(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// workerIngestView is the wire shape returned by GET /api/workers — a
+// flattened snapshot of the runtime registry used by `ddx agent doctor`
+// (ADR-022 step 6). The on-disk .ddx/workers/<id>/status.json layout
+// remains the fallback source for one alpha release.
+type workerIngestView struct {
+	WorkerID            string    `json:"worker_id"`
+	ProjectRoot         string    `json:"project_root"`
+	Harness             string    `json:"harness,omitempty"`
+	Model               string    `json:"model,omitempty"`
+	RegisteredAt        time.Time `json:"registered_at"`
+	LastEventAt         time.Time `json:"last_event_at"`
+	MirrorFailuresCount int       `json:"mirror_failures_count"`
+	HadDroppedBackfill  bool      `json:"had_dropped_backfill,omitempty"`
+	Freshness           string    `json:"freshness"`
+}
+
+// handleWorkerIngestList serves GET /api/workers: a snapshot of the
+// in-memory runtime registry (ADR-022 rev 5). Empty list when no workers
+// have registered. Fields mirror workerRecord plus a derived freshness
+// classification.
+func (s *Server) handleWorkerIngestList(w http.ResponseWriter, r *http.Request) {
+	snap := s.workerIngest.snapshot()
+	now := time.Now().UTC()
+	out := make([]workerIngestView, 0, len(snap))
+	for _, rec := range snap {
+		out = append(out, workerIngestView{
+			WorkerID:            rec.WorkerID,
+			ProjectRoot:         rec.Identity.ProjectRoot,
+			Harness:             rec.Identity.Harness,
+			Model:               rec.Identity.Model,
+			RegisteredAt:        rec.RegisteredAt,
+			LastEventAt:         rec.LastEventAt,
+			MirrorFailuresCount: rec.MirrorFailuresCount,
+			HadDroppedBackfill:  rec.HadDroppedBackfill,
+			Freshness:           freshnessState(rec, now),
+		})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].RegisteredAt.After(out[j].RegisteredAt) })
+	writeJSON(w, http.StatusOK, out)
 }
 
 func decodeWorkerIngestBody(r *http.Request, v any) error {
