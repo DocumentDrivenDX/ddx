@@ -118,7 +118,7 @@ test('TC-060: providers page loads with heading', async ({ page }) => {
 	await mockGraphQL(page);
 	await page.goto(BASE_URL);
 
-	await expect(page.getByRole('heading', { name: 'Agent endpoints' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Agent availability' })).toBeVisible();
 });
 
 // TC-061: Provider table has expected columns

@@ -203,14 +203,14 @@
 						: 'border-transparent text-fg-muted hover:bg-bg-canvas hover:text-fg-ink dark:text-dark-fg-muted dark:hover:bg-dark-bg-canvas dark:hover:text-dark-fg-ink'}"
 				>
 					<Radio class="h-4 w-4 shrink-0" />
-					Providers
+					Agent availability
 				</a>
 			{:else}
 				<span
 					class="flex items-center gap-3 border-l-2 border-transparent px-4 py-2.5 font-body-md text-body-sm text-fg-muted/50 dark:text-dark-fg-muted/50"
 				>
 					<Radio class="h-4 w-4 shrink-0" />
-					Providers
+					Agent availability
 				</span>
 			{/if}
 		</nav>

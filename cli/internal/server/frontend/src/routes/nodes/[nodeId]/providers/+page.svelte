@@ -65,6 +65,40 @@
 		}
 	`;
 
+	const PROVIDER_MODELS_QUERY = gql`
+		query ProviderModels($name: String!, $kind: ProviderKind!) {
+			providerModels(name: $name, kind: $kind) {
+				name
+				kind
+				baseURL
+				fetchedAt
+				fromCache
+				models {
+					id
+					contextLength
+					available
+				}
+			}
+		}
+	`;
+
+	const REFRESH_PROVIDER_MODELS_MUTATION = gql`
+		mutation RefreshProviderModels($name: String!, $kind: ProviderKind!) {
+			refreshProviderModels(name: $name, kind: $kind) {
+				name
+				kind
+				baseURL
+				fetchedAt
+				fromCache
+				models {
+					id
+					contextLength
+					available
+				}
+			}
+		}
+	`;
+
 	const DEFAULT_ROUTE_QUERY = gql`
 		query DefaultRouteStatus {
 			defaultRouteStatus {
@@ -109,6 +143,21 @@
 		sparkline: number[];
 	}
 
+	interface ProviderModelEntry {
+		id: string;
+		contextLength: number | null;
+		available: boolean;
+	}
+
+	interface ProviderModelsResult {
+		name: string;
+		kind: 'ENDPOINT' | 'HARNESS';
+		baseURL: string;
+		fetchedAt: string;
+		fromCache: boolean;
+		models: ProviderModelEntry[];
+	}
+
 	interface DefaultRouteStatus {
 		modelRef: string;
 		resolvedProvider: string | null;
@@ -124,6 +173,66 @@
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 	let firstPaintAt = $state<number | null>(null);
+
+	// Per-row model snapshots loaded on demand when a row is expanded.
+	const modelsByKey = $state<Record<string, ProviderModelsResult>>({});
+	const modelsLoading = $state<Record<string, boolean>>({});
+	const modelsError = $state<Record<string, string>>({});
+	const expanded = $state<Record<string, boolean>>({});
+
+	// Threshold above which the inline list is truncated and a drilldown
+	// link to the per-provider detail page is shown.
+	const MODEL_LIST_INLINE_LIMIT = 10;
+
+	function rowKey(row: ProviderStatus): string {
+		return row.kind + '|' + row.name;
+	}
+
+	let modelsClient: ReturnType<typeof createClient> | null = null;
+
+	async function loadModels(row: ProviderStatus): Promise<void> {
+		const key = rowKey(row);
+		if (!modelsClient) modelsClient = createClient();
+		modelsLoading[key] = true;
+		delete modelsError[key];
+		try {
+			const res = await modelsClient.request<{
+				providerModels: ProviderModelsResult | null;
+			}>(PROVIDER_MODELS_QUERY, { name: row.name, kind: row.kind });
+			if (res.providerModels) modelsByKey[key] = res.providerModels;
+		} catch (e) {
+			modelsError[key] = e instanceof Error ? e.message : String(e);
+		} finally {
+			modelsLoading[key] = false;
+		}
+	}
+
+	async function refreshModels(row: ProviderStatus): Promise<void> {
+		const key = rowKey(row);
+		if (!modelsClient) modelsClient = createClient();
+		modelsLoading[key] = true;
+		delete modelsError[key];
+		try {
+			const res = await modelsClient.request<{
+				refreshProviderModels: ProviderModelsResult;
+			}>(REFRESH_PROVIDER_MODELS_MUTATION, { name: row.name, kind: row.kind });
+			modelsByKey[key] = res.refreshProviderModels;
+			expanded[key] = true;
+		} catch (e) {
+			modelsError[key] = e instanceof Error ? e.message : String(e);
+		} finally {
+			modelsLoading[key] = false;
+		}
+	}
+
+	function toggleExpanded(row: ProviderStatus): void {
+		const key = rowKey(row);
+		const next = !expanded[key];
+		expanded[key] = next;
+		if (next && !modelsByKey[key] && !modelsLoading[key]) {
+			void loadModels(row);
+		}
+	}
 
 	$effect(() => {
 		if (!loading && firstPaintAt === null) {
@@ -240,12 +349,12 @@
 </script>
 
 <svelte:head>
-	<title>Agent endpoints · DDx</title>
+	<title>Agent availability · DDx</title>
 </svelte:head>
 
 <div class="space-y-6" data-testid="agent-endpoints">
 	<div class="flex items-center justify-between">
-		<h1 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">Agent endpoints</h1>
+		<h1 class="text-headline-md font-headline-md text-fg-ink dark:text-dark-fg-ink">Agent availability</h1>
 		{#if !loading}
 			<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">
 				{rows.length} total ({rows.filter((r) => r.kind === 'ENDPOINT').length} endpoints · {rows.filter(
@@ -327,6 +436,9 @@
 						>
 						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
 							>Trend (24h)</th
+						>
+						<th class="px-4 py-3 text-left text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted"
+							>Models</th
 						>
 					</tr>
 				</thead>
@@ -418,7 +530,7 @@
 									<span class="text-label-caps font-label-caps text-fg-muted dark:text-dark-fg-muted">not reported</span>
 								{/if}
 							</td>
-							<td class="px-4 py-3" data-testid="endpoint-sparkline-{row.name}">
+								<td class="px-4 py-3" data-testid="endpoint-sparkline-{row.name}">
 								{#if row.sparkline && row.sparkline.length >= 6}
 									{@const max = sparklineMax(row.sparkline)}
 									<div
@@ -439,11 +551,90 @@
 									<span class="text-label-caps font-label-caps text-fg-muted dark:text-dark-fg-muted">—</span>
 								{/if}
 							</td>
+							<td class="px-4 py-3" data-testid="endpoint-models-cell-{row.name}">
+								<div class="flex items-center gap-2">
+									<button
+										type="button"
+										class="inline-flex items-center gap-1 text-accent-lever hover:underline dark:text-dark-accent-lever"
+										data-testid="endpoint-models-toggle-{row.name}"
+										aria-expanded={expanded[rowKey(row)] ? 'true' : 'false'}
+										onclick={() => toggleExpanded(row)}
+									>
+										<span aria-hidden="true">{expanded[rowKey(row)] ? '▼' : '▶'}</span>
+										<span>{row.modelCount} models</span>
+									</button>
+									<button
+										type="button"
+										class="inline-flex items-center border border-border-line px-1.5 py-0.5 text-label-caps font-label-caps uppercase text-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface disabled:opacity-50"
+										data-testid="endpoint-models-refresh-{row.name}"
+										title="Refresh model list"
+										aria-label="Refresh model list for {row.name}"
+										disabled={modelsLoading[rowKey(row)]}
+										onclick={() => refreshModels(row)}
+									>
+										{modelsLoading[rowKey(row)] ? '…' : '↻'}
+									</button>
+								</div>
+							</td>
 						</tr>
+						{#if expanded[rowKey(row)]}
+							<tr
+								class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface"
+								data-testid="endpoint-models-row-{row.name}"
+							>
+								<td colspan="9" class="px-4 py-3">
+									{#if modelsLoading[rowKey(row)] && !modelsByKey[rowKey(row)]}
+										<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">Loading models…</span>
+									{:else if modelsError[rowKey(row)]}
+										<span class="text-body-sm text-error dark:text-dark-error"
+											>Error: {modelsError[rowKey(row)]}</span
+										>
+									{:else if modelsByKey[rowKey(row)]}
+										{@const snap = modelsByKey[rowKey(row)]}
+										{@const total = snap.models.length}
+										{@const shown = total > MODEL_LIST_INLINE_LIMIT ? snap.models.slice(0, MODEL_LIST_INLINE_LIMIT) : snap.models}
+										<div class="space-y-2">
+											<div class="flex flex-wrap items-center gap-3 text-label-caps font-label-caps uppercase text-fg-muted dark:text-dark-fg-muted">
+												<span>{total} model{total === 1 ? '' : 's'}</span>
+												<span title="Last fetched {snap.fetchedAt}">{snap.fromCache ? 'cached' : 'fresh'}</span>
+											</div>
+											{#if total === 0}
+												<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">No models discovered.</span>
+											{:else}
+												<ul
+													class="flex flex-wrap gap-x-4 gap-y-1 font-mono-code text-mono-code"
+													data-testid="endpoint-models-list-{row.name}"
+												>
+													{#each shown as m (m.id)}
+														<li class="text-fg-ink dark:text-dark-fg-ink">
+															<span class={m.available ? '' : 'text-fg-muted line-through dark:text-dark-fg-muted'}>{m.id}</span>
+															{#if m.contextLength}
+																<span class="text-label-caps text-fg-muted dark:text-dark-fg-muted">· {m.contextLength}</span>
+															{/if}
+														</li>
+													{/each}
+												</ul>
+												{#if total > MODEL_LIST_INLINE_LIMIT}
+													<a
+														class="text-body-sm text-accent-lever hover:underline dark:text-dark-accent-lever"
+														href={detailHref(row)}
+														data-testid="endpoint-models-drilldown-{row.name}"
+													>
+														View all {total} models →
+													</a>
+												{/if}
+											{/if}
+										</div>
+									{:else}
+										<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">No data.</span>
+									{/if}
+								</td>
+							</tr>
+						{/if}
 					{/each}
 					{#if rows.length === 0}
 						<tr>
-							<td colspan="8" class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">
+							<td colspan="9" class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted">
 								No agent endpoints configured. Add providers to .ddx/config.yaml or install a
 								harness binary.
 							</td>
