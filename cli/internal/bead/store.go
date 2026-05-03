@@ -124,6 +124,17 @@ func NewStore(dir string, opts ...StoreOption) *Store {
 			s.backend = ext
 		}
 		// Fall through to JSONL if tool not available
+	case BackendAxon:
+		// Per ddx-95ec5ed5 AC §3 the axon backend ships behind a feature
+		// flag until ddx-743bc194 (chaos conformance) signs off. Routing
+		// only happens when DDX_AXON_EXPERIMENTAL is truthy; otherwise we
+		// warn once and fall through to JSONL so the workspace stays
+		// usable on misconfiguration.
+		if AxonExperimentalEnabled() {
+			s.backend = NewAxonBackend(s.Dir, s.LockWait)
+		} else {
+			fmt.Fprintf(os.Stderr, "bead: backend=axon ignored: set %s=1 to opt in (axon backend is experimental)\n", AxonExperimentalEnv)
+		}
 	}
 
 	return s
@@ -330,6 +341,19 @@ func foldLatestBeads(beads []Bead) []Bead {
 }
 
 func (s *Store) readAllLatestRaw() ([]Bead, []string, error) {
+	// When a non-JSONL backend is configured, the raw bead corpus lives
+	// outside .ddx/<collection>.jsonl entirely (axon: two collections under
+	// .ddx/axon/; bd/br: an external tool's store). Delegate the read so
+	// every read-modify-write path inside Store stays consistent with the
+	// backend's storage layout. Backends are responsible for returning
+	// already-folded beads.
+	if s.backend != nil {
+		all, err := s.backend.ReadAll()
+		if err != nil {
+			return nil, nil, err
+		}
+		return all, nil, nil
+	}
 	beads, warnings, err := s.readAllRaw()
 	if err != nil {
 		return nil, nil, err

@@ -360,8 +360,10 @@ type LibraryConfig struct {
 // BeadConfig represents bead tracker configuration settings.
 type BeadConfig struct {
 	IDPrefix string `yaml:"id_prefix,omitempty" json:"id_prefix,omitempty"`
-	// Backend selects the storage backend ("jsonl", "bd", or "br"). Default is
-	// "jsonl". Overridden by the DDX_BEAD_BACKEND environment variable when set.
+	// Backend selects the storage backend ("jsonl", "bd", "br", or "axon").
+	// Default is "jsonl". Overridden by the DDX_BEAD_BACKEND environment
+	// variable when set. The "axon" backend is experimental and requires
+	// DDX_AXON_EXPERIMENTAL=1 to be honoured (per ddx-95ec5ed5).
 	Backend string `yaml:"backend,omitempty" json:"backend,omitempty"`
 }
 
