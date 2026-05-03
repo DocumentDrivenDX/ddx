@@ -1,0 +1,161 @@
+{
+  "attempt_id": "20260503T062403-e612ea98",
+  "bead_id": "ddx-2bb01b91",
+  "base_rev": "0180d37d82f5086536a9a7591ab6a7de20099bcb",
+  "created_at": "2026-05-03T06:24:06.725297614Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2bb01b91",
+    "title": "agentmetrics: GraphQL agentMetrics(window, groupBy) resolver + revision-keyed cache",
+    "description": "GraphQL resolver agentMetrics(window: 24h|7d|30d, groupBy: MODEL|HARNESS|PROVIDER|TIER) returning attempts, success_rate, mean+p50+p95 duration_ms, mean cost, effective cost/success, in/out tokens, last_seen_at. Revision-keyed cache (survives ADR-004 archive). Default window=7d; all-time removed from UI.",
+    "acceptance": "1. agentMetrics query in GraphQL schema. 2. 4 axes supported (MODEL/HARNESS/PROVIDER/TIER). 3. 3 windows (24h/7d/30d). 4. Cache keyed by run-store revision. 5. Per-axis tests.",
+    "parent": "ddx-64b9a198",
+    "labels": [
+      "phase:2",
+      "story:11",
+      "area:server",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T06:24:03Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "463338",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:07:08.856682954Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-03T06:17:54.624858743Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260503T060706-03afb7f5\",\"harness\":\"claude\",\"input_tokens\":85,\"output_tokens\":30247,\"total_tokens\":30332,\"cost_usd\":4.6473847500000005,\"duration_ms\":646398,\"exit_code\":0}",
+          "created_at": "2026-05-03T06:17:54.657886169Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=30332 cost_usd=4.6474"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-03T06:18:00.198592134Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "Diff contains only an execution result.json evidence file. No GraphQL schema, resolver, cache, or tests are present to evaluate against any of the 5 AC items.\nharness=claude\nmodel=opus\ninput_bytes=3686\noutput_bytes=931\nelapsed_ms=62669",
+          "created_at": "2026-05-03T06:19:04.922102979Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "",
+          "body": "",
+          "created_at": "2026-05-03T06:19:04.944142458Z",
+          "kind": "reopen",
+          "source": "",
+          "summary": "review: BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"action\":\"re_attempt_with_context\",\"mode\":\"review_block\"}",
+          "created_at": "2026-05-03T06:19:04.966499436Z",
+          "kind": "triage-decision",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block: re_attempt_with_context"
+        },
+        {
+          "actor": "erik",
+          "body": "post-merge review: BLOCK (flagged for human)\nDiff contains only an execution result.json evidence file. No GraphQL schema, resolver, cache, or tests are present to evaluate against any of the 5 AC items.\nresult_rev=a45969951e08419679c40ea5d1ba3d4315324026\nbase_rev=95deccd10e6c7efd56b63fcdb9810ad08230e195",
+          "created_at": "2026-05-03T06:19:05.002031151Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:19:13.608819664Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:19:59.583158479Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:20:45.56044188Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:21:31.715998171Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:22:17.648558489Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:23:03.55958167Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
+          "created_at": "2026-05-03T06:23:49.368568909Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "preflight_rejected"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T06:24:03.865044109Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T062403-e612ea98",
+    "prompt": ".ddx/executions/20260503T062403-e612ea98/prompt.md",
+    "manifest": ".ddx/executions/20260503T062403-e612ea98/manifest.json",
+    "result": ".ddx/executions/20260503T062403-e612ea98/result.json",
+    "checks": ".ddx/executions/20260503T062403-e612ea98/checks.json",
+    "usage": ".ddx/executions/20260503T062403-e612ea98/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2bb01b91-20260503T062403-e612ea98"
+  },
+  "prompt_sha": "b375d0208048513a551bb7e1cfa75a5230a12c7333213552292c004899321ff7"
+}
