@@ -1,0 +1,6 @@
+{"actor":"ddx","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"claude-sonnet-4-6\",\"fallback_chain\":[]}","kind":"routing","source":"ddx agent execute-bead","summary":"provider=claude model=claude-sonnet-4-6"}
+{"actor":"ddx","body":"result_rev=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\nbase_rev=ffffffffffffffffffffffffffffffffffffffff","kind":"execute-bead","source":"ddx agent execute-loop","summary":"merged_success"}
+{"actor":"ddx","body":"post-merge review: BLOCK (flagged for human)","kind":"review","source":"ddx agent execute-loop","summary":"review: BLOCK"}
+{"kind":"reopen","summary":"review: BLOCK"}
+{"actor":"ddx","body":"{\"verdict\":\"needs_human\",\"reason\":\"review BLOCK escalated\"}","kind":"triage-decision","source":"ddx triage dispatch","summary":"verdict=needs_human"}
+{"data":{"base_rev":"ffffffffffffffffffffffffffffffffffffffff","bead_id":"ddx-baseline-block","detail":"review: BLOCK","duration_ms":34567,"result_rev":"eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee","session_id":"session-baseline-block","status":"review_block"},"kind":"bead.result","stream":"loop"}

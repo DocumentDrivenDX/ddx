@@ -1,0 +1,4 @@
+{"actor":"ddx","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"claude-sonnet-4-6\",\"fallback_chain\":[]}","kind":"routing","source":"ddx agent execute-bead","summary":"provider=claude model=claude-sonnet-4-6"}
+{"actor":"ddx","body":"agent: provider error: 500 internal","kind":"execute-bead","source":"ddx agent execute-loop","summary":"execution_failed"}
+{"actor":"ddx","body":"provider error: 500 internal","kind":"loop-error","source":"ddx agent execute-loop","summary":"execute returned error"}
+{"data":{"bead_id":"ddx-baseline-fail","detail":"provider error","duration_ms":11234,"session_id":"session-baseline-fail","status":"execution_failed"},"kind":"bead.result","stream":"loop"}

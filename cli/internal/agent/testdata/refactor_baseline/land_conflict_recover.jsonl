@@ -1,0 +1,4 @@
+{"actor":"ddx","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"claude-sonnet-4-6\",\"fallback_chain\":[]}","kind":"routing","source":"ddx agent execute-bead","summary":"provider=claude model=claude-sonnet-4-6"}
+{"actor":"ddx","body":"{\"strategy\":\"rebase\",\"attempts\":1,\"resolved\":true}","kind":"land-conflict-auto-recovered","source":"ddx agent execute-loop","summary":"land conflict auto-recovered"}
+{"actor":"ddx","body":"result_rev=1111111111111111111111111111111111111111\nbase_rev=2222222222222222222222222222222222222222","kind":"execute-bead","source":"ddx agent execute-loop","summary":"merged_success"}
+{"data":{"base_rev":"2222222222222222222222222222222222222222","bead_id":"ddx-baseline-landrecover","detail":"merged after land-conflict auto-recover","duration_ms":45678,"result_rev":"1111111111111111111111111111111111111111","session_id":"session-baseline-landrecover","status":"merged_success"},"kind":"bead.result","stream":"loop"}

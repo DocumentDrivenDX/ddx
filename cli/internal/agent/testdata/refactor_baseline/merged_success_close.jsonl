@@ -1,0 +1,3 @@
+{"actor":"ddx","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"claude-sonnet-4-6\",\"fallback_chain\":[]}","kind":"routing","source":"ddx agent execute-bead","summary":"provider=claude model=claude-sonnet-4-6"}
+{"actor":"ddx","body":"result_rev=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\nbase_rev=bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","kind":"execute-bead","source":"ddx agent execute-loop","summary":"merged_success"}
+{"data":{"base_rev":"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb","bead_id":"ddx-baseline-merged","detail":"merged","duration_ms":12345,"result_rev":"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","session_id":"session-baseline-merged","status":"merged_success"},"kind":"bead.result","stream":"loop"}

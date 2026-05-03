@@ -1,0 +1,4 @@
+{"actor":"ddx","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"claude-sonnet-4-6\",\"fallback_chain\":[]}","kind":"routing","source":"ddx agent execute-bead","summary":"provider=claude model=claude-sonnet-4-6"}
+{"actor":"ddx","body":"{\"children\":[\"ddx-c1\",\"ddx-c2\",\"ddx-c3\"]}","kind":"decomposition-recommendation","source":"ddx agent execute-loop","summary":"decompose into 3 children"}
+{"actor":"ddx","body":"agent declined: bead too large; decomposed into ddx-c1, ddx-c2, ddx-c3","kind":"execute-bead","source":"ddx agent execute-loop","summary":"declined_needs_decomposition"}
+{"data":{"bead_id":"ddx-baseline-decompose","detail":"decomposed","duration_ms":7890,"session_id":"session-baseline-decompose","status":"declined_needs_decomposition"},"kind":"bead.result","stream":"loop"}

@@ -1,0 +1,3 @@
+{"actor":"ddx","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"claude-sonnet-4-6\",\"fallback_chain\":[]}","kind":"routing","source":"ddx agent execute-bead","summary":"provider=claude model=claude-sonnet-4-6"}
+{"actor":"ddx","body":"git push failed: remote rejected (auth)","kind":"execute-bead","source":"ddx agent execute-loop","summary":"push_failed"}
+{"data":{"base_rev":"4444444444444444444444444444444444444444","bead_id":"ddx-baseline-pushfail","detail":"push failed","duration_ms":8901,"preserve_ref":"refs/ddx/iterations/ddx-baseline-pushfail/attempt-1","result_rev":"3333333333333333333333333333333333333333","session_id":"session-baseline-pushfail","status":"push_failed"},"kind":"bead.result","stream":"loop"}

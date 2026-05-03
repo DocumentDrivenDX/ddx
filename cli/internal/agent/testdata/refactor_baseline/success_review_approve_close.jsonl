@@ -1,0 +1,4 @@
+{"actor":"ddx","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"claude-sonnet-4-6\",\"fallback_chain\":[]}","kind":"routing","source":"ddx agent execute-bead","summary":"provider=claude model=claude-sonnet-4-6"}
+{"actor":"ddx","body":"result_rev=cccccccccccccccccccccccccccccccccccccccc\nbase_rev=dddddddddddddddddddddddddddddddddddddddd","kind":"execute-bead","source":"ddx agent execute-loop","summary":"merged_success"}
+{"actor":"ddx","body":"post-merge review: APPROVE","kind":"review","source":"ddx agent execute-loop","summary":"review: APPROVE"}
+{"data":{"base_rev":"dddddddddddddddddddddddddddddddddddddddd","bead_id":"ddx-baseline-approve","detail":"review: APPROVE","duration_ms":23456,"result_rev":"cccccccccccccccccccccccccccccccccccccccc","session_id":"session-baseline-approve","status":"merged_success"},"kind":"bead.result","stream":"loop"}

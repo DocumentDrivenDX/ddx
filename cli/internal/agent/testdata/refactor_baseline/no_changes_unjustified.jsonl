@@ -1,0 +1,4 @@
+{"actor":"ddx","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"claude-sonnet-4-6\",\"fallback_chain\":[]}","kind":"routing","source":"ddx agent execute-bead","summary":"provider=claude model=claude-sonnet-4-6"}
+{"actor":"ddx","body":"no rationale or verification produced","kind":"execute-bead","source":"ddx agent execute-loop","summary":"no_changes_unjustified"}
+{"kind":"reopen","summary":"no_changes_unjustified (cooldown)"}
+{"data":{"bead_id":"ddx-baseline-unjust","detail":"reopened with cooldown","duration_ms":6789,"session_id":"session-baseline-unjust","status":"no_changes_unjustified"},"kind":"bead.result","stream":"loop"}
