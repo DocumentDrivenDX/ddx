@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260503T021724-8a33226e",
+  "bead_id": "ddx-5b3e57f4",
+  "base_rev": "70af508ab97823f10e636e22ca45ccdca223f0a8",
+  "created_at": "2026-05-03T02:17:29.792147649Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-5b3e57f4",
+    "title": "execute-loop: distinguish worker-disrupted from model-gave-up; do not cooldown on disruption",
+    "description": "The current cooldown logic treats any ExecutionFailed status as evidence the model can't make progress, applying noProgressCooldown=6h when BaseRev == ResultRev (cli/internal/agent/execute_bead_loop.go:1074-1086 via shouldSuppressNoProgress at line 1550). This silently freezes important work whenever a worker is disrupted (killed, server restart, network blip, OS issue) — disruption produces ExecutionFailed + no commit, indistinguishable from \"model genuinely tried and produced nothing.\"\n\nOBSERVED (today, 2026-05-02)\nAfter the picker fix investigation found the four \"starved\" P0 beads (ddx-dc157075, ddx-aee651ec, ddx-29058e2a, ddx-9d55601f) all had execute-loop-retry-after timestamps ~3 hours in the future. Investigation per ddx-9d55601f confirmed these were NOT genuine model failures — they were prior worker disruptions during this development session (worker kills, server restarts) being treated as model-gave-up.\n\nUser directive: \"Cooldown should be reserved for cases where the model is truly unable to make progress on a task.\"\n\nCURRENT COOLDOWN POLICY (cli/internal/agent/execute_bead_loop.go)\n- LandConflictCooldown = 15min — short cooldown after merge/land conflicts (line 64)\n- noProgressCooldown = 6h default — when shouldSuppressNoProgress is true (line 367)\n- MaxLoopCooldown = 24h — push_failed, push_conflict, decomposition decline (line 57)\n\nshouldSuppressNoProgress (line 1550): returns true if BaseRev != \"\" AND ResultRev != \"\" AND BaseRev == ResultRev. This catches:\n- Model wrote nothing AND came back cleanly (true no_progress) ✓\n- Worker killed mid-execution before commit (FALSE no_progress — disruption)\n- Network/provider error before model started (FALSE no_progress — disruption)\n- Routing preflight rejection (FALSE no_progress — config issue)\n\nThe mis-classification is the bug.\n\nPROPOSED FIX\n\nAdd a Disposition::Disrupted variant (or equivalent flag on ExecuteBeadReport) that explicitly marks results that are NOT evidence of model inability:\n- ctx.Err() != nil (cancellation, deadline, parent died)\n- syscall.SIGTERM / SIGINT received during execution\n- Provider-side 5xx, connection refused, timeout (transport disruption)\n- Worker process killed (parent never received clean result)\n- Server-restart-detected marker\n- Routing preflight rejection (operator config issue, not model failure)\n\nFor Disrupted: skip cooldown entirely (or use a tiny defer like 30s) and unclaim the bead so the next worker pickup is immediate.\nFor genuine no-progress (model returned clean with no commit AND rationale present): keep current 6h cooldown.\n\nALTERNATIVE: exponential backoff per bead. First failure: 5min; second: 30min; third: 2h; cap at 24h. Resets on any successful attempt or operator clear. This is more forgiving than the current flat 6h on the first hiccup.\n\nPROBABLY BOTH: Disrupted skips cooldown entirely; non-Disrupted failures use exponential backoff starting at 5min, not flat 6h.\n\nDETECTION POINTERS\n\n- ctx.Err() check at the call site that produces ExecutionFailed (line 513, 629, 637, 1011)\n- Check for `.ddx/executions/\u003crun-id\u003e/no_changes_rationale.txt` presence — if missing, the model never wrote one (likely disruption)\n- Check the executor's exit code: SIGKILL/SIGTERM = disruption; clean exit with empty result = no-progress\n- Track parent process restart count or boot ID; if changed since the attempt started, mark Disrupted\n\nNOT IN SCOPE\n- Changing the cooldown duration constants themselves\n- Reworking the per-bead retry policy framework (separate concern)\n- Changing land-conflict or push-failed cooldowns (those are correct as-is)\n- The exponential-backoff alternative is OPTIONAL; primary fix is Disrupted classification\n\nINTERSECTION WITH OTHER BEADS\n- ddx-dc157075 (worker stay-alive): the stay-alive fix prevents some classes of disruption (worker no longer exits on empty poll), but does NOT fix the cooldown-on-disruption mis-classification\n- ddx-076147ee (worker client-server architecture TD): if workers become long-lived clients, server-restart disruption goes away by construction. But this fix is needed BEFORE that TD is implemented because the disruption classification is needed regardless.\n- ddx-9228a484 C9 (StopCondition enum): may absorb this — the StopCondition enum could include Disrupted as a state. Verify and align.",
+    "acceptance": "1. ExecuteBeadReport gains an explicit Disrupted bool (or Disposition variant) set when the loop detects: ctx.Err() != nil, executor exited via SIGKILL/SIGTERM, transport-class provider error, or worker process restart marker.\n2. Detection at: cli/internal/agent/execute_bead_loop.go where ExecutionFailed is set (current lines 513 routing-preflight, 629/637 executor-error, 1011 in execute_bead.go) — each set point evaluates whether the failure is Disrupted.\n3. The cooldown branch (lines 1074-1086) checks Disrupted FIRST: if Disrupted, skip SetExecutionCooldown entirely; just Unclaim so the bead returns to ready.\n4. shouldSuppressNoProgress unchanged for genuine no-progress (BaseRev == ResultRev AND not Disrupted AND no rationale).\n5. New diagnostic event `disruption_detected` with kind, reason, and bead context — emitted when Disrupted is set so operators can see disruption rates.\n6. (Optional) Exponential backoff for non-Disrupted no-progress: first failure 5min; second 30min; third 2h; cap at 24h. Reset on success. If implementing: replace flat noProgressCooldown with this curve; document in code comment.\n7. Tests:\n   - TestLoop_DisruptedExecution_NoCooldown — context cancelled mid-execution; assert no execute-loop-retry-after set; bead returns to ready\n   - TestLoop_GenuineNoProgress_StillCooldowns — model returns clean with no commit + rationale; assert 6h cooldown set\n   - TestLoop_PreflightRejection_NoCooldown — routing preflight fails; assert disruption classification (operator config, not model failure)\n   - TestLoop_DisruptionEventEmitted — assert disruption_detected event appears in bead events\n8. Manual verification: kill an in-flight worker mid-execution; assert the bead is immediately re-claimable by the next worker (no 6h park).\n9. cd cli \u0026\u0026 go test ./internal/agent/... green; lefthook pre-commit passes.\n10. Documentation: update FEAT-006 (or wherever the cooldown policy is documented) to describe Disrupted vs no-progress and the policy rationale.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "kind:fix",
+      "observed-failure"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T02:17:24Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "163374",
+      "execute-loop-heartbeat-at": "2026-05-03T02:17:24.309469068Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T021724-8a33226e",
+    "prompt": ".ddx/executions/20260503T021724-8a33226e/prompt.md",
+    "manifest": ".ddx/executions/20260503T021724-8a33226e/manifest.json",
+    "result": ".ddx/executions/20260503T021724-8a33226e/result.json",
+    "checks": ".ddx/executions/20260503T021724-8a33226e/checks.json",
+    "usage": ".ddx/executions/20260503T021724-8a33226e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-5b3e57f4-20260503T021724-8a33226e"
+  }
+}

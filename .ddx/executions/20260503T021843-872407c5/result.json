@@ -1,0 +1,53 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "ADR-022 (567 lines) covers all ACs: evaluates Proposals A/B/C and picks A, full /api/workers/ contract for all 6 endpoints, mermaid diagrams for register/claim/restart/death/shutdown, compatibility analysis, --local in-process collapse, sequencing vs ddx-29058e2a/5cb6e6cd/dc157075, ordered roadmap, FEAT-006 amended.",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "ADR filed at docs/helix/02-design/adr/ADR-022-... rather than the AC-specified docs/helix/03-decide/ path; the ADR explicitly documents this deviation, noting 02-design/adr is the actual HELIX layout used in this repo and ADR-022 is the next number after ADR-021.",
+      "location": "docs/helix/02-design/adr/ADR-022-worker-client-server-architecture.md:17"
+    },
+    {
+      "severity": "info",
+      "summary": "AC #10 (user review/approval before filing implementation beads) is a process gate; ADR status is 'Proposed' which correctly defers bead filing pending this review.",
+      "location": "docs/helix/02-design/adr/ADR-022-worker-client-server-architecture.md:14"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 6471,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 108,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260503T021424-dac100b6/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 1175,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 9380,
+    "output_bytes": 1104,
+    "elapsed_ms": 49019,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
