@@ -1165,6 +1165,19 @@ type Run implements Node {
   stderr: String
   """Files in the run's bundle directory (path relative to bundle root, size, mimeType). Empty when no bundle."""
   bundleFiles: [RunBundleFile!]!
+
+  # ── AgentSession lossless-join fields (run layer only) ─────────────────
+  # AgentSession remains the canonical backing store under layer=run; these
+  # fields project session-only attributes onto Run so a single run(id:)
+  # query is lossless against AgentSession.
+  """Cost-basis bucket: "paid", "subscription", or "local" (run layer only)."""
+  billingMode: String
+  """Outcome classification distinct from status (e.g. raw "success"/"failure"/"timeout"; run layer only)."""
+  outcome: String
+  """Human-readable outcome detail when the harness emitted one (run layer only)."""
+  detail: String
+  """Number of cached/prompt-cache-hit tokens, when reported by the harness (run layer only)."""
+  cachedTokens: Int
 }
 
 """RunToolCall is one normalized tool-call entry persisted at drain time."""
