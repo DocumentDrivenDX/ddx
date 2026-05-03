@@ -1,0 +1,59 @@
+{
+  "attempt_id": "20260503T031550-afd76f85",
+  "bead_id": "ddx-eddb9ab6",
+  "base_rev": "016dbb15c34da5136bb97859891fde2f0ff16549",
+  "created_at": "2026-05-03T03:15:52.11297305Z",
+  "requested": {
+    "harness": "claude",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-eddb9ab6",
+    "title": "prompts: prompt_sha in manifest.json + render-size CI fixture",
+    "description": "Add prompt_sha hash to manifest.json so attempts can be sliced by prompt version. Add a render-size CI fixture that fails if prompt size grows unexpectedly.",
+    "acceptance": "1. manifest.json includes prompt_sha. 2. CI fixture asserts size budget. 3. resolver_feat008 efficacy view can slice by prompt_sha.",
+    "parent": "ddx-a61bf8ee",
+    "labels": [
+      "phase:2",
+      "story:12",
+      "area:agent",
+      "kind:measurement"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-03T03:15:50Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "163374",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
+          "created_at": "2026-05-02T14:57:18.593376873Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "exit status 1\nresult_rev=90a9180408174e21af2ed40bcaea3576d4590bef\nbase_rev=90a9180408174e21af2ed40bcaea3576d4590bef\nretry_after=2026-05-02T20:57:18Z",
+          "created_at": "2026-05-02T14:57:18.675825273Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-03T03:15:50.692332976Z",
+      "execute-loop-last-detail": "exit status 1",
+      "execute-loop-last-status": "execution_failed",
+      "execute-loop-retry-after": "2026-05-02T20:57:18Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260503T031550-afd76f85",
+    "prompt": ".ddx/executions/20260503T031550-afd76f85/prompt.md",
+    "manifest": ".ddx/executions/20260503T031550-afd76f85/manifest.json",
+    "result": ".ddx/executions/20260503T031550-afd76f85/result.json",
+    "checks": ".ddx/executions/20260503T031550-afd76f85/checks.json",
+    "usage": ".ddx/executions/20260503T031550-afd76f85/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-eddb9ab6-20260503T031550-afd76f85"
+  }
+}
