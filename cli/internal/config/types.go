@@ -12,6 +12,7 @@ type NewConfig struct {
 	Version         string              `yaml:"version" json:"version"`
 	Library         *LibraryConfig      `yaml:"library" json:"library"`
 	Bead            *BeadConfig         `yaml:"bead,omitempty" json:"bead,omitempty"`
+	BeadQuality     *BeadQualityConfig  `yaml:"bead-quality,omitempty" json:"bead-quality,omitempty"`
 	System          *SystemConfig       `yaml:"system,omitempty" json:"system,omitempty"`
 	PersonaBindings map[string]string   `yaml:"persona_bindings,omitempty" json:"persona_bindings,omitempty"`
 	UpdateCheck     *UpdateCheckConfig  `yaml:"update_check,omitempty" json:"update_check,omitempty"`
@@ -39,6 +40,19 @@ type NewConfig struct {
 // of action names; missing modes inherit the binary default ladder.
 type TriagePolicyConfig struct {
 	Policies map[string][]string `yaml:"policies,omitempty" json:"policies,omitempty"`
+}
+
+// BeadQualityConfig controls bead quality gates that run before dispatch.
+type BeadQualityConfig struct {
+	Lint *BeadQualityLintConfig `yaml:"lint,omitempty" json:"lint,omitempty"`
+}
+
+// BeadQualityLintConfig controls the pre-dispatch lint threshold behavior.
+type BeadQualityLintConfig struct {
+	// BlockThresholdScore, when positive, blocks dispatch for valid lint
+	// results whose score falls below the threshold. Zero or unset keeps the
+	// default warn-only behavior.
+	BlockThresholdScore *int `yaml:"block_threshold_score,omitempty" json:"block_threshold_score,omitempty"`
 }
 
 // ResolveTriagePolicy returns the effective triage policy for this config,
@@ -69,6 +83,18 @@ func (c *NewConfig) ResolveTriagePolicy() triage.TriagePolicy {
 		policy.Ladders[mode] = ladder
 	}
 	return policy
+}
+
+// ResolveBeadQualityLintBlockThresholdScore returns the effective lint block
+// threshold. Defaults to 0, which means warn-only.
+func (c *NewConfig) ResolveBeadQualityLintBlockThresholdScore() int {
+	if c == nil || c.BeadQuality == nil || c.BeadQuality.Lint == nil || c.BeadQuality.Lint.BlockThresholdScore == nil {
+		return 0
+	}
+	if *c.BeadQuality.Lint.BlockThresholdScore <= 0 {
+		return 0
+	}
+	return *c.BeadQuality.Lint.BlockThresholdScore
 }
 
 // ResolveReviewMaxRetries returns the effective reviewer retry cap for this

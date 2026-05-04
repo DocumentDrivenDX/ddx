@@ -76,6 +76,25 @@
       },
       "additionalProperties": false
     },
+    "bead-quality": {
+      "type": "object",
+      "description": "Bead quality gates that run before dispatch",
+      "properties": {
+        "lint": {
+          "type": "object",
+          "description": "Pre-dispatch bead quality lint settings",
+          "properties": {
+            "block_threshold_score": {
+              "type": "integer",
+              "minimum": 0,
+              "description": "If positive, block dispatch when lint score falls below this threshold. Zero or unset keeps warn-only behavior."
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "persona_bindings": {
       "type": "object",
       "description": "Bindings between roles and persona names",

@@ -8,17 +8,18 @@ import "time"
 //
 // See SD-024 / TD-024 §Test config constructors.
 type TestLoopConfigOpts struct {
-	Assignee                string
-	ReviewMaxRetries        int
-	NoProgressCooldown      time.Duration
-	MaxNoChangesBeforeClose int
-	HeartbeatInterval       time.Duration
-	Harness                 string
-	Model                   string
-	Profile                 string
-	MinTier                 string
-	MaxTier                 string
-	EvidenceCaps            EvidenceCapsConfig
+	Assignee                           string
+	ReviewMaxRetries                   int
+	NoProgressCooldown                 time.Duration
+	MaxNoChangesBeforeClose            int
+	HeartbeatInterval                  time.Duration
+	Harness                            string
+	Model                              string
+	Profile                            string
+	MinTier                            string
+	MaxTier                            string
+	BeadQualityLintBlockThresholdScore int
+	EvidenceCaps                       EvidenceCapsConfig
 }
 
 // NewTestConfigForLoop returns a *Config that, when Resolve()d with the
@@ -33,11 +34,17 @@ type TestLoopConfigOpts struct {
 func NewTestConfigForLoop(opts TestLoopConfigOpts) *Config {
 	reviewMaxRetries := opts.ReviewMaxRetries
 	maxNoChanges := opts.MaxNoChangesBeforeClose
+	lintBlockThreshold := opts.BeadQualityLintBlockThresholdScore
 
 	caps := opts.EvidenceCaps
 
 	return &Config{
 		Version: "1.0",
+		BeadQuality: &BeadQualityConfig{
+			Lint: &BeadQualityLintConfig{
+				BlockThresholdScore: &lintBlockThreshold,
+			},
+		},
 		Agent: &AgentConfig{
 			Harness: opts.Harness,
 			Model:   opts.Model,

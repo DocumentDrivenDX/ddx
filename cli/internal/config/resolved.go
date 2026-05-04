@@ -108,6 +108,7 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	}
 
 	r.evidenceCaps = c.ResolveEvidenceCaps(r.harness)
+	r.beadQualityLintBlockThresholdScore = c.ResolveBeadQualityLintBlockThresholdScore()
 
 	r.contextBudget = overrides.ContextBudget
 	if r.contextBudget == "" && c != nil {
@@ -163,32 +164,33 @@ func LoadAndResolve(projectRoot string, overrides CLIOverrides) (ResolvedConfig,
 type ResolvedConfig struct {
 	sealed bool
 
-	assignee                string
-	reviewMaxRetries        int
-	noProgressCooldown      time.Duration
-	maxNoChangesBeforeClose int
-	heartbeatInterval       time.Duration
-	harness                 string
-	model                   string
-	provider                string
-	modelRef                string
-	profile                 string
-	minTier                 string
-	maxTier                 string
-	effort                  string
-	minPower                int
-	maxPower                int
-	passthrough             AgentPassthrough
-	permissions             string
-	timeout                 time.Duration
-	wallClock               time.Duration
-	contextBudget           string
-	evidenceCaps            evidence.Caps
-	sessionLogDir           string
-	mirrorConfig            *ExecutionsMirrorConfig
-	reasoningLevels         map[string][]string
-	providerRequestTimeout  time.Duration
-	triagePolicy            triage.TriagePolicy
+	assignee                           string
+	reviewMaxRetries                   int
+	noProgressCooldown                 time.Duration
+	maxNoChangesBeforeClose            int
+	heartbeatInterval                  time.Duration
+	harness                            string
+	model                              string
+	provider                           string
+	modelRef                           string
+	profile                            string
+	minTier                            string
+	maxTier                            string
+	effort                             string
+	minPower                           int
+	maxPower                           int
+	passthrough                        AgentPassthrough
+	permissions                        string
+	timeout                            time.Duration
+	wallClock                          time.Duration
+	contextBudget                      string
+	evidenceCaps                       evidence.Caps
+	sessionLogDir                      string
+	mirrorConfig                       *ExecutionsMirrorConfig
+	reasoningLevels                    map[string][]string
+	providerRequestTimeout             time.Duration
+	beadQualityLintBlockThresholdScore int
+	triagePolicy                       triage.TriagePolicy
 }
 
 // requireSealed panics if r was not produced by Resolve / LoadAndResolve.
@@ -341,6 +343,13 @@ func (r ResolvedConfig) ReasoningLevels() map[string][]string {
 func (r ResolvedConfig) TriagePolicy() triage.TriagePolicy {
 	r.requireSealed()
 	return r.triagePolicy
+}
+
+// BeadQualityLintBlockThresholdScore returns the lint threshold used by the
+// pre-dispatch bead quality gate. Zero means warn-only.
+func (r ResolvedConfig) BeadQualityLintBlockThresholdScore() int {
+	r.requireSealed()
+	return r.beadQualityLintBlockThresholdScore
 }
 
 func cloneStringSliceMap(m map[string][]string) map[string][]string {

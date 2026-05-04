@@ -105,3 +105,27 @@ func TestResolvedConfig_TriagePolicyAccessor(t *testing.T) {
 	got := resolved.TriagePolicy().Decide("ddx-test", triage.FailureModeReviewBlock, nil)
 	assert.Equal(t, triage.ActionNeedsHuman, got)
 }
+
+func TestSchemaAcceptsBeadQualityLintBlockThreshold(t *testing.T) {
+	v, err := NewValidator()
+	require.NoError(t, err)
+	require.NoError(t, v.Validate([]byte(`version: "1.0"
+bead-quality:
+  lint:
+    block_threshold_score: 5
+`)))
+}
+
+func TestResolvedConfig_BeadQualityLintBlockThresholdAccessor(t *testing.T) {
+	cfg := &NewConfig{
+		BeadQuality: &BeadQualityConfig{
+			Lint: &BeadQualityLintConfig{
+				BlockThresholdScore: intPtr(7),
+			},
+		},
+	}
+	resolved := cfg.Resolve(CLIOverrides{})
+	assert.Equal(t, 7, resolved.BeadQualityLintBlockThresholdScore())
+}
+
+func intPtr(v int) *int { return &v }
