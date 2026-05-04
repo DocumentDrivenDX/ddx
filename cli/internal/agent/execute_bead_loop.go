@@ -711,6 +711,43 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 		}
 
+		if runtime.PreDispatchLintHook != nil {
+			lintResult, lintErr := runtime.PreDispatchLintHook(ctx, candidate.ID)
+			lintThreshold := rcfg.BeadQualityLintBlockThresholdScore()
+			appendPreDispatchLintEvent(w.Store, candidate.ID, lintResult, lintErr, lintThreshold, assignee, now().UTC())
+
+			if lintErr != nil {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "pre-dispatch lint: %v (continuing to claim %s)\n", lintErr, candidate.ID)
+				}
+				emit("pre_dispatch_lint.warn", map[string]any{
+					"bead_id": candidate.ID,
+					"warning": lintErr.Error(),
+				})
+			} else if lintThreshold > 0 && lintResult.Score < lintThreshold {
+				blockMsg := fmt.Sprintf(
+					"pre-dispatch lint blocked dispatch for %s: score=%d below threshold=%d; see bead-lifecycle MODE: lint guidance in .agents/skills/ddx/bead-lifecycle/SKILL.md",
+					candidate.ID, lintResult.Score, lintThreshold,
+				)
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintln(runtime.Log, blockMsg)
+				}
+				emit("pre_dispatch_lint.blocked", map[string]any{
+					"bead_id":          candidate.ID,
+					"score":            lintResult.Score,
+					"threshold_score":  lintThreshold,
+					"skill":            "bead-lifecycle",
+					"skill_path":       ".agents/skills/ddx/bead-lifecycle/SKILL.md",
+					"dispatch_skipped": true,
+					"warning_mode":     false,
+					"rationale":        lintResult.Rationale,
+					"suggested_fixes":  lintResult.SuggestedFixes,
+					"waivers_applied":  lintResult.WaiversApplied,
+				})
+				continue
+			}
+		}
+
 		if err := w.Store.Claim(candidate.ID, assignee); err != nil {
 			// Another worker won the race for this bead. Emit a structured
 			// claim_race event so concurrent-worker losses are observable
@@ -1315,6 +1352,59 @@ func appendLoopRoutingEvidence(store BeadEventAppender, beadID string, report Ex
 		Summary:   summary,
 		Body:      string(body),
 		Actor:     "ddx",
+		Source:    "ddx agent execute-loop",
+		CreatedAt: createdAt,
+	})
+}
+
+func appendPreDispatchLintEvent(store BeadEventAppender, beadID string, result LintResult, lintErr error, threshold int, actor string, createdAt time.Time) {
+	if store == nil || beadID == "" {
+		return
+	}
+	body := map[string]any{
+		"score":           result.Score,
+		"rationale":       result.Rationale,
+		"suggested_fixes": result.SuggestedFixes,
+		"waivers_applied": result.WaiversApplied,
+	}
+	summary := fmt.Sprintf("score=%d", result.Score)
+	if threshold > 0 {
+		body["threshold_score"] = threshold
+	}
+	if lintErr != nil {
+		body["warning"] = lintErr.Error()
+		summary = "warning " + summary
+	} else if threshold > 0 && result.Score < threshold {
+		body["dispatch_blocked"] = true
+	}
+	if encoded, err := json.Marshal(body); err == nil {
+		_ = store.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      "bead-quality.lint",
+			Summary:   summary,
+			Body:      string(encoded),
+			Actor:     actor,
+			Source:    "ddx agent execute-loop",
+			CreatedAt: createdAt,
+		})
+		return
+	}
+	parts := []string{
+		fmt.Sprintf("score=%d", result.Score),
+		"rationale=" + result.Rationale,
+		fmt.Sprintf("suggested_fixes=%v", result.SuggestedFixes),
+		fmt.Sprintf("waivers_applied=%v", result.WaiversApplied),
+	}
+	if threshold > 0 {
+		parts = append(parts, fmt.Sprintf("threshold_score=%d", threshold))
+	}
+	if lintErr != nil {
+		parts = append(parts, "warning="+lintErr.Error())
+	}
+	_ = store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "bead-quality.lint",
+		Summary:   summary,
+		Body:      strings.Join(parts, "\n"),
+		Actor:     actor,
 		Source:    "ddx agent execute-loop",
 		CreatedAt: createdAt,
 	})

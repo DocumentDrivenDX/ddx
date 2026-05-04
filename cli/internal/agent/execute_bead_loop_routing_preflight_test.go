@@ -1,7 +1,10 @@
 package agent
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
+	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -18,10 +21,14 @@ import (
 // of ExecuteBeadLoopStore is delegated to the embedded *bead.Store.
 type claimCountingStore struct {
 	*bead.Store
-	claimCalls int32
+	claimCalls  int32
+	beforeClaim func()
 }
 
 func (s *claimCountingStore) Claim(id, assignee string) error {
+	if s.beforeClaim != nil {
+		s.beforeClaim()
+	}
 	atomic.AddInt32(&s.claimCalls, 1)
 	return s.Store.Claim(id, assignee)
 }
@@ -210,4 +217,221 @@ func TestRoutingPreflightDetailFormat(t *testing.T) {
 		"detail should carry harness=codex; got %q", detail)
 	assert.True(t, strings.Contains(detail, "model=qwen3"),
 		"detail should carry model=qwen3; got %q", detail)
+}
+
+func TestLoop_LintHook_FiresPreClaim(t *testing.T) {
+	inner, _, _ := newExecuteLoopTestStore(t)
+	var hookSeen int32
+	store := &claimCountingStore{
+		Store: inner,
+		beforeClaim: func() {
+			if atomic.LoadInt32(&hookSeen) == 0 {
+				t.Fatal("PreDispatchLintHook must run before Claim")
+			}
+		},
+	}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-lint-order",
+				ResultRev: "abc123",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		PreDispatchLintHook: func(ctx context.Context, beadID string) (LintResult, error) {
+			atomic.StoreInt32(&hookSeen, 1)
+			return LintResult{Score: 9, Rationale: "ok"}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&hookSeen), "pre-dispatch lint hook must run")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "claim should proceed after lint")
+}
+
+func TestLintHook_LowScore_WarnDoesNotBlock(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-lint-warn",
+				ResultRev: "def456",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		PreDispatchLintHook: func(ctx context.Context, beadID string) (LintResult, error) {
+			return LintResult{
+				Score:          2,
+				Rationale:      "missing acceptance criteria",
+				SuggestedFixes: []string{"add numbered AC"},
+				WaiversApplied: []string{"epic"},
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "warn-only lint must not block claim")
+	require.Len(t, result.Results, 1)
+
+	events, err := inner.Events(candidate.ID)
+	require.NoError(t, err)
+	var lintEvent *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "bead-quality.lint" {
+			lintEvent = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, lintEvent, "lint event must be appended")
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(lintEvent.Body), &body))
+	assert.Equal(t, float64(2), body["score"])
+	assert.Equal(t, "missing acceptance criteria", body["rationale"])
+	assert.Contains(t, body["suggested_fixes"], "add numbered AC")
+	assert.Contains(t, body["waivers_applied"], "epic")
+}
+
+func TestLintHook_BlockMode_RefusesDispatchOnLowScore(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	var log bytes.Buffer
+	var loop bytes.Buffer
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatal("executor must not run when lint blocks dispatch")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{
+		Assignee:                           "worker",
+		BeadQualityLintBlockThresholdScore: 5,
+	}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:      true,
+		Log:       &log,
+		EventSink: &loop,
+		PreDispatchLintHook: func(ctx context.Context, beadID string) (LintResult, error) {
+			return LintResult{
+				Score:          2,
+				Rationale:      "standalone prompt missing root cause",
+				SuggestedFixes: []string{"add ROOT CAUSE with file:line"},
+				WaiversApplied: []string{"none"},
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, int32(0), atomic.LoadInt32(&store.claimCalls), "blocked lint must prevent Claim")
+	assert.Contains(t, log.String(), "bead-lifecycle")
+	assert.Contains(t, log.String(), "MODE: lint")
+	assert.Contains(t, loop.String(), "pre_dispatch_lint.blocked")
+
+	events, err := inner.Events(candidate.ID)
+	require.NoError(t, err)
+	var lintEvent *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "bead-quality.lint" {
+			lintEvent = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, lintEvent, "blocked lint must still append the lint event")
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(lintEvent.Body), &body))
+	assert.Equal(t, float64(2), body["score"])
+	assert.Equal(t, float64(5), body["threshold_score"])
+	assert.Equal(t, true, body["dispatch_blocked"])
+}
+
+func TestLintHook_SkillMissing_ProceedsWithWarning(t *testing.T) {
+	runLintWarningProceedTest(t, "skill missing: bead-lifecycle", func(ctx context.Context, beadID string) (LintResult, error) {
+		return LintResult{}, fmt.Errorf("skill missing: bead-lifecycle")
+	})
+}
+
+func TestLintHook_BadJSON_ProceedsWithWarning(t *testing.T) {
+	runLintWarningProceedTest(t, "bad JSON from hook", func(ctx context.Context, beadID string) (LintResult, error) {
+		return LintResult{}, fmt.Errorf("bad JSON from hook")
+	})
+}
+
+func TestLintHook_Timeout_ProceedsWithWarning(t *testing.T) {
+	runLintWarningProceedTest(t, "hook timeout", func(ctx context.Context, beadID string) (LintResult, error) {
+		return LintResult{}, fmt.Errorf("hook timeout")
+	})
+}
+
+func runLintWarningProceedTest(t *testing.T, warning string, hook func(context.Context, string) (LintResult, error)) {
+	t.Helper()
+
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-lint-warn",
+				ResultRev: "warn-123",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:                true,
+		PreDispatchLintHook: hook,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "warning lint must proceed to claim")
+	require.Len(t, result.Results, 1)
+
+	events, err := inner.Events(candidate.ID)
+	require.NoError(t, err)
+	var lintEvent *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "bead-quality.lint" {
+			lintEvent = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, lintEvent, "warning lint must append the lint event")
+	assert.Contains(t, lintEvent.Body, warning)
 }
