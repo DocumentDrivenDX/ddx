@@ -1,0 +1,31 @@
+{
+  "mode": "lint",
+  "bead_type": "epic",
+  "source": "Curated from ddx-a9d130d0, the bead-lifecycle quality framework epic.",
+  "input_summary": {
+    "title": "EPIC: bead-lifecycle quality framework - make P7 mechanically true (lint + triage)",
+    "labels": ["phase:2", "area:beads", "area:agent", "kind:platform", "reliability", "bead-quality", "adr:023"],
+    "description_traits": [
+      "aggregate scope covering lint, triage, refine, runner composition, and policy",
+      "children provide concrete implementation slices",
+      "epic itself should not be dispatched as a single implementation unit"
+    ],
+    "acceptance_traits": [
+      "requires child beads to cover concrete commands",
+      "does not need one Test* symbol on the epic itself"
+    ]
+  },
+  "expected_output": {
+    "score": 8,
+    "rationale": [
+      {"criterion": "c", "verdict": "waived", "reason": "epic delegates specific tests to children while requiring collective verification"},
+      {"criterion": "d", "verdict": "waived", "reason": "epic is an aggregate container rather than a direct code-path change"},
+      {"criterion": "h", "verdict": "pass", "reason": "epic is sufficient for decomposition, not direct execution"}
+    ],
+    "suggested_fixes": [],
+    "waivers_applied": [
+      {"criterion": "c", "waiver": "epic", "reason": "specific implementation tests live on children"},
+      {"criterion": "d", "waiver": "epic", "reason": "no direct implementation path is expected"}
+    ]
+  }
+}

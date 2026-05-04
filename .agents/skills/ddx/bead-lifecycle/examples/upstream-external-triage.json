@@ -1,0 +1,39 @@
+{
+  "mode": "triage",
+  "bead_type": "upstream/external work",
+  "source": "Curated from upstream-dependent beads such as ddx-1e516bc9 and blocked-on-upstream backend beads.",
+  "input_summary": {
+    "outcome_event": "execution_failed",
+    "session_log_excerpt": "Local code cannot complete because upstream package has not released the required API; issue filed upstream and local bump is blocked.",
+    "bead_traits": [
+      "requires external repository change before local verification can pass",
+      "local follow-up should wait for upstream release or split issue-filing from dependency bump"
+    ]
+  },
+  "expected_output": {
+    "classification": "operator_input_needed",
+    "recommended_action": "escalate_to_operator",
+    "rationale": "The next action depends on upstream ownership or release timing outside this repository.",
+    "suggested_amendments": [
+      {
+        "target": "description",
+        "amendment": "Split upstream issue/PR filing from the local dependency bump, or add an explicit wait condition tied to the upstream release."
+      }
+    ],
+    "suggested_followup_beads": [
+      {
+        "title": "agent: bump upstream dependency after routing fix release",
+        "description": "PROBLEM: local verification remains blocked until the upstream package releases the routing fix. ROOT CAUSE: cli/go.mod pins the older upstream version. PROPOSED FIX: update the dependency after release and rerun the named integration tests. NON-SCOPE: filing the upstream fix itself.",
+        "acceptance": [
+          "1. cli/go.mod and cli/go.sum reference the released upstream version containing the fix.",
+          "2. TestExecute_ExplicitHarnessEmptyModelWithProfile_RoutesWithinHarness passes.",
+          "3. cd cli && go test ./internal/agent/... ./cmd/... passes.",
+          "4. lefthook run pre-commit passes."
+        ],
+        "labels": ["phase:2", "area:agent", "kind:fix", "upstream"],
+        "parent": "ddx-parent",
+        "deps": ["ddx-upstream-fix: upstream release must exist before bump"]
+      }
+    ]
+  }
+}

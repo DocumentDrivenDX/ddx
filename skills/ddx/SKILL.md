@@ -103,6 +103,7 @@ Before responding, read the matching file.
 | write/plan work, "create a bead", "file this as work", bead metadata, acceptance criteria, dependencies | `reference/beads.md` |
 | "do work", "drain the queue", "run the next bead", "execute a bead", "run work", verify-and-close | `reference/work.md` |
 | "review this", "check against spec", bead review, quorum review, code review, adversarial check | `reference/review.md` |
+| "score a bead", "triage a failed attempt", "refine a bead", bead authoring lint | `bead-lifecycle/` |
 | "run an agent", "dispatch", harness/provider/model passthrough, power, effort, "use a persona", role bindings | `reference/agents.md` |
 | "what's on the queue", "what's ready", "how am I doing", health check, "ddx doctor", sync status | `reference/status.md` |
 
