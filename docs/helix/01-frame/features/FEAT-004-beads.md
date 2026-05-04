@@ -158,6 +158,57 @@ This matches how bd derives its prefix, ensuring beads created by DDx and bd in 
 
 **Workflow validation hooks:** An executable at `.ddx/hooks/validate-bead-create` (and `validate-bead-update`) receives the bead JSON on stdin. Exit codes: 0 = ok, 1 = hard error (stderr = message, creation blocked), 2 = warning (stderr = message, creation proceeds).
 
+### Authoring quality lint
+
+ADR-023 (`../../02-design/adr/ADR-023-bead-lifecycle-quality-policy.md`)
+adds a bead-lifecycle quality policy on top of the base bead validators.
+Base validation answers "is this a valid bead record?" Authoring quality
+lint answers "is this bead a sufficient standalone prompt for an agent?"
+
+The lint rubric is the 8-criterion checklist in
+`../../06-iterate/bead-authoring-template.md`:
+
+- title names the subsystem and change;
+- description contains problem, root cause with file:line, proposed fix,
+  and non-scope;
+- acceptance criteria are numbered, verifiable, and name concrete tests
+  where tests apply;
+- new code paths have wired-in assertions;
+- acceptance criteria name `cd cli && go test ...` and
+  `lefthook run pre-commit`;
+- labels include phase, area, kind, and cross-references;
+- parent and dependency state is explicit;
+- the full bead body is sufficient for a competent sub-agent.
+
+The authoring-quality hook is not another schema validator embedded in
+the JSONL backend. It invokes the bead-lifecycle workflow skill packaged
+with the `ddx` skill tree (FEAT-011) and returns a criterion-by-criterion
+score plus repair hints. The same skill is used by FEAT-010's
+post-attempt triage hook so pre-dispatch and post-attempt behavior do not
+drift.
+
+Waivers use existing bead labels; no new bead fields are introduced.
+Type-level waivers come from the template: doc-only beads may skip test-name
+and wired-in code-path criteria, epics may satisfy those criteria through
+children, and pure deletion or rename beads may skip the wired-in criterion
+when the delete/rename target and behavior-preservation assertion are clear.
+Rare one-off exceptions use `lint-waiver:<criterion>` labels such as
+`lint-waiver:c`. A waiver suppresses one criterion, not the whole lint report.
+
+Lint results are ephemeral execution evidence, not durable tracker state.
+For `ddx try` and `ddx work`, the report is written under the attempt evidence
+directory beside the prompt, result, and hook logs. For create/update-time
+preview flows, the report may be printed only to stdout/stderr. The bead row
+continues to store only ordinary schema fields, labels, custom fields, and
+events.
+
+In WARN-ONLY mode, low scores print diagnostics and dispatch proceeds. In
+BLOCK mode, only a successfully computed low score blocks dispatch. Hook
+infrastructure failures fail open: DDx records the hook failure and proceeds
+because the failure is not a trustworthy lint score. Operators may use
+`--force --reason <text>` at dispatch time; the reason is recorded as an
+event rather than silently bypassing the policy.
+
 ## CLI Surface
 
 ```
