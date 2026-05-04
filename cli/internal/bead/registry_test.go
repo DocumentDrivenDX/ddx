@@ -10,11 +10,10 @@ import (
 
 func TestDefaultRegistryShipsBeadsAndArchive(t *testing.T) {
 	r := DefaultRegistry()
-	ids := r.IDs()
-	require.Equal(t,
-		[]CollectionID{CollectionID(DefaultCollection), CollectionID(BeadsArchiveCollection)},
-		ids,
-		"C3 ships the archive partner alongside the active beads collection")
+	_, beadsOK := r.Lookup(CollectionID(DefaultCollection))
+	require.True(t, beadsOK, "default registry must register the active beads collection")
+	_, archiveOK := r.Lookup(CollectionID(BeadsArchiveCollection))
+	require.True(t, archiveOK, "C3 ships the archive partner alongside the active beads collection")
 }
 
 func TestRegistryResolveUsesRegisteredSpec(t *testing.T) {

@@ -65,12 +65,8 @@ func acquireDirLock(dir, lockDir string, wait time.Duration) error {
 	}
 }
 
-// breakStaleLock checks if the existing lock is stale (owner dead or too old)
-// and breaks it if so. Returns true if lock was broken.
-func (s *Store) breakStaleLock() bool {
-	return breakStaleLockDir(s.LockDir)
-}
-
+// breakStaleLockDir checks if the existing lock is stale (owner dead or too
+// old) and breaks it if so. Returns true if lock was broken.
 func breakStaleLockDir(lockDir string) bool {
 	pidData, err := os.ReadFile(filepath.Join(lockDir, "pid"))
 	if err == nil {

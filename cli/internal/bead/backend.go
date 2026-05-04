@@ -74,11 +74,3 @@ const (
 )
 
 const DefaultCollection = "beads"
-
-// NewBackend returns a Backend rooted at dir. The selected RawBackend is
-// resolved from (in priority order): the DDX_BEAD_BACKEND env var, the
-// .ddx/config.yaml beads.backend field, then the jsonl default. opts are
-// the same StoreOption values accepted by NewStore.
-func NewBackend(dir string, opts ...StoreOption) Backend {
-	return NewStore(dir, opts...)
-}

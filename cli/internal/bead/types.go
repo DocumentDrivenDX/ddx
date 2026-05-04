@@ -120,42 +120,6 @@ const (
 	OperatorPromptDefaultAcceptance = "Agent must produce a diff or no_changes rationale; the prompt body is the contract."
 )
 
-// IsValidStatusTransition reports whether a bead may move from `from` to `to`
-// under the documented state machine. Self-transitions (from == to) and
-// transitions to/from the empty string (used by Create defaults) are rejected;
-// callers that want to seed a fresh status should set b.Status directly before
-// validateBead runs.
-//
-// The matrix below is the normative implementation of TD-031 §3 (Transition
-// Matrix). `closed` and `cancelled` are terminal — re-opening a closed bead
-// is not a transition; it is filing a follow-up bead with `replaces` set.
-//
-// Allowed transitions:
-//
-//	proposed    → open, cancelled
-//	open        → in_progress, blocked, cancelled
-//	in_progress → open, closed, blocked
-//	blocked     → open, cancelled
-//	closed      → (terminal)
-//	cancelled   → (terminal)
-func IsValidStatusTransition(from, to string) bool {
-	if from == "" || to == "" || from == to {
-		return false
-	}
-	allowed := map[string]map[string]bool{
-		StatusProposed:   {StatusOpen: true, StatusCancelled: true},
-		StatusOpen:       {StatusInProgress: true, StatusBlocked: true, StatusCancelled: true},
-		StatusInProgress: {StatusOpen: true, StatusClosed: true, StatusBlocked: true},
-		StatusBlocked:    {StatusOpen: true, StatusCancelled: true},
-		StatusClosed:     {},
-		StatusCancelled:  {},
-	}
-	if next, ok := allowed[from]; ok {
-		return next[to]
-	}
-	return false
-}
-
 // OperatorPromptMutationGuard enforces the no-self-mutation rule from
 // Story 15: an operator-prompt bead's execution may not create, edit, or
 // close another operator-prompt bead. The guard returns nil when the

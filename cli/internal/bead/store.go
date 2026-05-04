@@ -140,13 +140,6 @@ func NewStore(dir string, opts ...StoreOption) *Store {
 	return s
 }
 
-// NewStoreWithBackend creates a store with an explicit RawBackend (for testing).
-func NewStoreWithBackend(dir string, b RawBackend) *Store {
-	s := NewStore(dir)
-	s.backend = b
-	return s
-}
-
 // NewStoreWithCollection creates a store for a named logical collection.
 func NewStoreWithCollection(dir, collection string) *Store {
 	return NewStore(dir, WithCollection(collection))
@@ -1264,15 +1257,6 @@ func (s *Store) Reopen(id string, reason string, appendNotes string) error {
 	})
 }
 
-// detectCurrentCommit returns the current git HEAD SHA, or empty if not in a git repo.
-func (s *Store) detectCurrentCommit() string {
-	out, err := gitpkg.Command(context.Background(), s.Dir, "rev-parse", "HEAD").Output()
-	if err != nil {
-		return ""
-	}
-	return strings.TrimSpace(string(out))
-}
-
 // List returns beads matching optional filters.
 // where is an optional map of key=value predicates that match against
 // known struct fields and Extra (unknown/workflow-specific) fields.
@@ -1819,11 +1803,7 @@ func (s *Store) validateBead(b *Bead) error {
 	if b.Priority < MinPriority || b.Priority > MaxPriority {
 		return fmt.Errorf("bead: priority must be %d-%d, got %d", MinPriority, MaxPriority, b.Priority)
 	}
-	switch b.Status {
-	case StatusOpen, StatusInProgress, StatusClosed, StatusBlocked,
-		StatusProposed, StatusCancelled:
-		// ok
-	default:
+	if !IsCanonicalStatus(b.Status) {
 		return fmt.Errorf("bead: invalid status: %s", b.Status)
 	}
 	// Self-ref check

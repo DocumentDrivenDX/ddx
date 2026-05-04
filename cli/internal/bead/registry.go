@@ -2,7 +2,6 @@ package bead
 
 import (
 	"path/filepath"
-	"sort"
 	"sync"
 )
 
@@ -98,18 +97,6 @@ func (r *Registry) Resolve(id CollectionID) CollectionSpec {
 		return spec
 	}
 	return CollectionSpec{ID: id}
-}
-
-// IDs returns the registered collection IDs in lexical order.
-func (r *Registry) IDs() []CollectionID {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
-	out := make([]CollectionID, 0, len(r.specs))
-	for id := range r.specs {
-		out = append(out, id)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i] < out[j] })
-	return out
 }
 
 // defaultRegistry is the process-wide registry. It ships with the active

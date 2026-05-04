@@ -57,38 +57,6 @@ func TestNewOperatorPromptBeadDefaults(t *testing.T) {
 	assert.Equal(t, "(empty operator prompt)", empty.Title)
 }
 
-// TestStatusTransitionsForProposed locks down the documented state machine:
-// proposed → open and proposed → cancelled are allowed; everything else
-// out of proposed is rejected. Callers (UI approval flow) rely on this
-// envelope to decide which buttons to enable.
-func TestStatusTransitionsForProposed(t *testing.T) {
-	cases := []struct {
-		from, to string
-		want     bool
-	}{
-		{StatusProposed, StatusOpen, true},
-		{StatusProposed, StatusCancelled, true},
-		{StatusProposed, StatusInProgress, false},
-		{StatusProposed, StatusClosed, false},
-		{StatusProposed, StatusBlocked, false},
-		{StatusProposed, StatusProposed, false},
-		{StatusOpen, StatusInProgress, true},
-		{StatusInProgress, StatusClosed, true},
-		// closed and cancelled are terminal per TD-031 §3; reopening
-		// is filing a follow-up bead, not a transition.
-		{StatusClosed, StatusOpen, false},
-		{StatusCancelled, StatusOpen, false},
-		{"", StatusOpen, false},
-		{StatusOpen, "", false},
-		{"bogus", StatusOpen, false},
-	}
-	for _, tc := range cases {
-		t.Run(tc.from+"->"+tc.to, func(t *testing.T) {
-			assert.Equal(t, tc.want, IsValidStatusTransition(tc.from, tc.to))
-		})
-	}
-}
-
 // TestOperatorPromptMutationGuardMatrix covers the 2x2 actor/target matrix
 // from Story 15 §Additional security controls: only an operator-prompt
 // actor mutating an operator-prompt target is denied.

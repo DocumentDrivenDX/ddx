@@ -3,7 +3,6 @@ package bead
 import (
 	"fmt"
 	"os"
-	"path/filepath"
 	"sort"
 	"time"
 )
@@ -84,20 +83,4 @@ func (j *JSONLBackend) WithLock(fn func() error) error {
 	}
 	defer os.RemoveAll(j.LockDir)
 	return fn()
-}
-
-// jsonlFallbackForCollection builds a JSONLBackend for the given collection
-// rooted at ddxDir, using the default registry's spec to resolve file/lock
-// paths. Used by the external backend when bd/br cannot serve a non-default
-// collection through their CLI surface.
-func jsonlFallbackForCollection(ddxDir, collection string, lockWait time.Duration) *JSONLBackend {
-	spec := DefaultRegistry().Resolve(CollectionID(collection))
-	file, lockDir := spec.PathsUnder(ddxDir)
-	// Defensive — Resolve should always return non-empty names, but guard
-	// against an empty CollectionID by computing a conventional pair.
-	if file == ddxDir || lockDir == ddxDir {
-		file = filepath.Join(ddxDir, collection+".jsonl")
-		lockDir = filepath.Join(ddxDir, collection+".lock")
-	}
-	return NewJSONLBackend(ddxDir, file, lockDir, lockWait)
 }
