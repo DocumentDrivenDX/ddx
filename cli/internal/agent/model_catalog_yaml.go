@@ -60,18 +60,6 @@ func LoadModelCatalogYAML(path string) (*ModelCatalogYAML, error) {
 	return &cat, nil
 }
 
-// WriteModelCatalogYAML writes the catalog to the given path, creating parent dirs.
-func WriteModelCatalogYAML(path string, cat *ModelCatalogYAML) error {
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	data, err := yaml.Marshal(cat)
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, data, 0o644)
-}
-
 // ApplyModelCatalogYAML overlays the YAML catalog onto a Catalog, adding or
 // replacing entries for each tier defined in the YAML.
 func ApplyModelCatalogYAML(cat *Catalog, yml *ModelCatalogYAML) {

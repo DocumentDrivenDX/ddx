@@ -42,7 +42,7 @@ func TestIntegration_CodexEcho(t *testing.T) {
 		Harness: "codex",
 		Timeout: 30 * time.Second,
 	}).Resolve(config.CLIOverrides{})
-	result, err := r.RunWithConfig(context.Background(), rcfg, AgentRunRuntime{
+	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{
 		Prompt: `print("hello from codex integration test")`,
 	})
 	require.NoError(t, err)
@@ -59,7 +59,7 @@ func TestIntegration_ClaudeEcho(t *testing.T) {
 		Harness: "claude",
 		Timeout: 60 * time.Second,
 	}).Resolve(config.CLIOverrides{})
-	result, err := r.RunWithConfig(context.Background(), rcfg, AgentRunRuntime{
+	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{
 		Prompt: "Respond with exactly: INTEGRATION_TEST_OK",
 	})
 	require.NoError(t, err)
@@ -76,7 +76,7 @@ func TestIntegration_OpencodeEcho(t *testing.T) {
 		Harness: "opencode",
 		Timeout: 60 * time.Second,
 	}).Resolve(config.CLIOverrides{})
-	result, err := r.RunWithConfig(context.Background(), rcfg, AgentRunRuntime{
+	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{
 		Prompt: "Respond with exactly: INTEGRATION_TEST_OK",
 	})
 	require.NoError(t, err)
@@ -109,7 +109,7 @@ func TestIntegration_PiEcho(t *testing.T) {
 		Harness: "pi",
 		Timeout: 60 * time.Second,
 	}).Resolve(config.CLIOverrides{})
-	result, err := r.RunWithConfig(context.Background(), rcfg, AgentRunRuntime{
+	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{
 		Prompt: "Respond with exactly: INTEGRATION_TEST_OK",
 	})
 	require.NoError(t, err)
@@ -136,7 +136,7 @@ func TestIntegration_GeminiEcho(t *testing.T) {
 		Harness: "gemini",
 		Timeout: 180 * time.Second,
 	}).Resolve(config.CLIOverrides{})
-	result, err := r.RunWithConfig(context.Background(), rcfg, AgentRunRuntime{
+	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{
 		Prompt: "Respond with exactly: INTEGRATION_TEST_OK",
 	})
 	require.NoError(t, err)

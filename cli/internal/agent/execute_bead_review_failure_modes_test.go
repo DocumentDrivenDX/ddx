@@ -19,17 +19,17 @@ import (
 func TestExecuteBeadWorker_ReviewerFailureModesKeepBeadOpen(t *testing.T) {
 	tests := []struct {
 		name     string
-		reviewer BeadReviewerFunc
+		reviewer beadReviewerFunc
 	}{
 		{
 			name: "reviewer exits non-zero (returns error)",
-			reviewer: BeadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+			reviewer: beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
 				return nil, errors.New("reviewer harness exited with code 1")
 			}),
 		},
 		{
 			name: "reviewer output empty — parse returns unparseable",
-			reviewer: BeadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+			reviewer: beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
 				return &ReviewResult{
 					Verdict:   "",
 					RawOutput: "",
@@ -38,7 +38,7 @@ func TestExecuteBeadWorker_ReviewerFailureModesKeepBeadOpen(t *testing.T) {
 		},
 		{
 			name: "reviewer output unparseable — no recognizable verdict line",
-			reviewer: BeadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+			reviewer: beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
 				return &ReviewResult{
 					Verdict:   "",
 					RawOutput: "Reviewer crashed mid-stream with no structured verdict.",

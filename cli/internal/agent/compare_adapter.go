@@ -367,15 +367,6 @@ type QuorumRuntime struct {
 	Threshold int
 }
 
-// RunQuorumWithConfig threads a sealed ResolvedConfig + QuorumRuntime
-// through RunQuorumWith. The rcfg arg is no longer applied at this layer
-// — the per-arm RunFunc closure is expected to bind rcfg directly — and
-// is retained on the signature so legacy test callers compile.
-func RunQuorumWithConfig(run RunFunc, rcfg config.ResolvedConfig, runtime QuorumRuntime) ([]*Result, error) {
-	_ = rcfg
-	return RunQuorumWith(run, runtime)
-}
-
 // RunQuorumWithConfigViaService is the production entry point for
 // `ddx agent run --quorum`. It assembles a per-arm RunFunc backed by
 // dispatchViaResolvedConfig (which honors AgentRunRuntime overrides for

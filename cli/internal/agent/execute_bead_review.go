@@ -3,7 +3,6 @@ package agent
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path"
@@ -131,13 +130,6 @@ type BeadReader interface {
 // BeadReviewer runs a post-merge review for a completed bead.
 type BeadReviewer interface {
 	ReviewBead(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewResult, error)
-}
-
-// BeadReviewerFunc is a functional adapter implementing BeadReviewer.
-type BeadReviewerFunc func(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewResult, error)
-
-func (f BeadReviewerFunc) ReviewBead(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewResult, error) {
-	return f(ctx, beadID, resultRev, impl)
 }
 
 // beadReviewInstructions is the review contract embedded in the prompt.
@@ -829,23 +821,4 @@ func writeReviewArtifacts(artifacts *executeBeadArtifacts, manifest reviewArtifa
 		return err
 	}
 	return writeArtifactJSON(artifacts.ResultAbs, result)
-}
-
-func ReadReviewArtifactResult(path string) (*ReviewResult, error) {
-	//evidence:allow-unbounded — review result artifacts are small JSON
-	// documents written by writeReviewArtifacts; bounded by construction.
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		return nil, err
-	}
-	var artifact reviewArtifactResult
-	if err := json.Unmarshal(raw, &artifact); err != nil {
-		return nil, err
-	}
-	return &ReviewResult{
-		Verdict:   Verdict(artifact.Verdict),
-		Rationale: artifact.Rationale,
-		PerAC:     artifact.PerAC,
-		Error:     artifact.Error,
-	}, nil
 }

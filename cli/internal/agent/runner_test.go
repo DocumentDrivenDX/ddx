@@ -28,7 +28,7 @@ func TestRunLMStudioDispatchesThroughEmbeddedAgent(t *testing.T) {
 	// RunAgent will fail to resolve a provider — that's fine; the check
 	// is that the exec path is NEVER reached.
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "lmstudio"}).Resolve(config.CLIOverrides{})
-	_, _ = r.RunWithConfig(context.Background(), rcfg, AgentRunRuntime{Prompt: "hello"})
+	_, _ = runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "hello"})
 
 	// The mockExecutor's ExecuteInDir records the last binary it was
 	// asked to run. If the dispatch fix is working, it was never called
@@ -44,7 +44,7 @@ func TestRunOpenRouterDispatchesThroughEmbeddedAgent(t *testing.T) {
 	r := newTestRunner(mock)
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "openrouter"}).Resolve(config.CLIOverrides{})
-	_, _ = r.RunWithConfig(context.Background(), rcfg, AgentRunRuntime{Prompt: "hello"})
+	_, _ = runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "hello"})
 
 	if mock.lastBinary != "" {
 		t.Errorf("openrouter dispatch leaked to exec path: got lastBinary=%q (want empty)", mock.lastBinary)

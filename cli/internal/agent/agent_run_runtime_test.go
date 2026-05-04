@@ -34,7 +34,7 @@ func TestAgentRunRuntimeDelegation(t *testing.T) {
 		Correlation: map[string]string{"trace_id": "abc"},
 	}
 
-	result, err := r.RunWithConfig(context.Background(), rcfg, runtime)
+	result, err := runnerRunWithConfig(r, context.Background(), rcfg, runtime)
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "codex", result.Harness)
@@ -61,5 +61,5 @@ func TestAgentRunRuntimeDelegation_ZeroValueRcfgPanics(t *testing.T) {
 		require.NotNil(t, rec, "RunWithConfig with zero-value ResolvedConfig must panic via requireSealed")
 	}()
 	var rcfg config.ResolvedConfig
-	_, _ = r.RunWithConfig(context.Background(), rcfg, AgentRunRuntime{Prompt: "x"})
+	_, _ = runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "x"})
 }

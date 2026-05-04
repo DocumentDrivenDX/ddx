@@ -50,9 +50,9 @@ func TestHasBeadLabel(t *testing.T) {
 // ExecuteBeadWorker with reviewer — loop integration tests
 // ---------------------------------------------------------------------------
 
-// makeReviewer builds a BeadReviewerFunc that always returns the given verdict.
-func makeReviewer(verdict Verdict, output string) BeadReviewerFunc {
-	return BeadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+// makeReviewer builds a beadReviewerFunc that always returns the given verdict.
+func makeReviewer(verdict Verdict, output string) beadReviewerFunc {
+	return beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
 		return &ReviewResult{
 			Verdict:         verdict,
 			RawOutput:       output,
@@ -156,7 +156,7 @@ func TestExecuteBeadWorkerReviewBlockReopensAndFlagsHuman(t *testing.T) {
 				ResultRev: "deadbeef",
 			}, nil
 		}),
-		Reviewer: BeadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+		Reviewer: beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
 			return &ReviewResult{
 				Verdict:   VerdictBlock,
 				Rationale: "AC#3 regression test missing",
@@ -286,9 +286,11 @@ func TestDefaultBeadReviewerWritesReviewArtifacts(t *testing.T) {
 		require.NoError(t, err, "expected review artifact %s", path)
 	}
 
-	artifactResult, err := ReadReviewArtifactResult(resultPath)
+	rawResult, err := os.ReadFile(resultPath)
 	require.NoError(t, err)
-	assert.Equal(t, VerdictBlock, artifactResult.Verdict)
+	var artifactResult reviewArtifactResult
+	require.NoError(t, json.Unmarshal(rawResult, &artifactResult))
+	assert.Equal(t, string(VerdictBlock), artifactResult.Verdict)
 	assert.Equal(t, "AC#3 regression test missing", artifactResult.Rationale)
 
 	var manifest reviewArtifactManifest
@@ -312,7 +314,7 @@ func TestExecuteBeadWorkerNoReviewSkipsReviewer(t *testing.T) {
 				ResultRev: "cafebabe",
 			}, nil
 		}),
-		Reviewer: BeadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+		Reviewer: beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
 			reviewerCalled = true
 			return &ReviewResult{Verdict: VerdictRequestChanges}, nil
 		}),
@@ -350,7 +352,7 @@ func TestExecuteBeadWorkerReviewSkipLabelSkipsReviewer(t *testing.T) {
 				ResultRev: "feedface",
 			}, nil
 		}),
-		Reviewer: BeadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+		Reviewer: beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
 			reviewerCalled = true
 			return &ReviewResult{Verdict: VerdictRequestChanges}, nil
 		}),

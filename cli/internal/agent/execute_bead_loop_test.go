@@ -17,6 +17,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// satisfactionCheckerFunc is a test-local functional adapter for
+// SatisfactionChecker.
+type satisfactionCheckerFunc func(ctx context.Context, beadID string, noChangesCount int) (bool, string, error)
+
+func (f satisfactionCheckerFunc) CheckSatisfied(ctx context.Context, beadID string, noChangesCount int) (bool, string, error) {
+	return f(ctx, beadID, noChangesCount)
+}
+
 func TestExecuteBeadWorkerSuccessClosesBead(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	worker := &ExecuteBeadWorker{
@@ -791,7 +799,7 @@ func TestExecuteBeadWorkerCustomSatisfactionCheckerClosesBeadWhenSatisfied(t *te
 				Detail: "agent found no work",
 			}, nil
 		}),
-		SatisfactionChecker: SatisfactionCheckerFunc(func(ctx context.Context, beadID string, noChangesCount int) (bool, string, error) {
+		SatisfactionChecker: satisfactionCheckerFunc(func(ctx context.Context, beadID string, noChangesCount int) (bool, string, error) {
 			checkerCalled = true
 			assert.Equal(t, b.ID, beadID)
 			assert.Equal(t, 1, noChangesCount)
@@ -841,7 +849,7 @@ func TestExecuteBeadWorkerCustomSatisfactionCheckerLeavesBeadOpenWhenUnresolved(
 				ResultRev: "rev1",
 			}, nil
 		}),
-		SatisfactionChecker: SatisfactionCheckerFunc(func(ctx context.Context, beadID string, noChangesCount int) (bool, string, error) {
+		SatisfactionChecker: satisfactionCheckerFunc(func(ctx context.Context, beadID string, noChangesCount int) (bool, string, error) {
 			return false, "", nil
 		}),
 		Now: func() time.Time { return now },
@@ -951,38 +959,6 @@ func TestExecuteBeadWorkerNoChangesDoesNotStarveQueue(t *testing.T) {
 	nc, _ = store.Get(ncBead.ID)
 	assert.Equal(t, bead.StatusOpen, nc.Status, "ncBead stays open under NoChangesContract")
 	assert.Contains(t, nc.Labels, NoChangesLabelUnjustified)
-}
-
-// TestRationaleIsSpecific verifies the heuristic that decides whether a
-// no_changes rationale is specific enough to close the bead immediately.
-func TestRationaleIsSpecific(t *testing.T) {
-	cases := []struct {
-		rationale string
-		want      bool
-	}{
-		{"", false},
-		{"nothing to do", false},
-		{"agent found no work", false},
-		// 7-hex commit SHA
-		{"work already present in commit 1da6495 (store.go)", true},
-		// 12-hex commit SHA
-		{"see commit 0c60abf493c7 for details", true},
-		// 40-hex commit SHA
-		{"fully present since 0c60abf493c7117a9b5f7986c1412c1d513e2ef6", true},
-		// Test function name
-		{"TestReadyExecutionExcludesEpics already exists and passes", true},
-		{"confirmed by TestEpicFilterSmoke", true},
-		// Benchmark name
-		{"BenchmarkStore already exists", true},
-		// 6-char hex (too short to qualify as SHA)
-		{"short ref abc123 is not a commit", false},
-	}
-	for _, tc := range cases {
-		got := rationaleIsSpecific(tc.rationale)
-		if got != tc.want {
-			t.Errorf("rationaleIsSpecific(%q) = %v, want %v", tc.rationale, got, tc.want)
-		}
-	}
 }
 
 // TestExecuteBeadWorkerNoChangesVerifiedClosesImmediately verifies the
@@ -1519,7 +1495,7 @@ func TestExecuteBeadWorkerStoreErrorContinuesLoop(t *testing.T) {
 			// For the adjudicateNoChanges case, inject via SatisfactionChecker.
 			var satisfactionChecker SatisfactionChecker
 			if tc.wantOp == "adjudicateNoChanges" {
-				satisfactionChecker = SatisfactionCheckerFunc(func(ctx context.Context, beadID string, noChangesCount int) (bool, string, error) {
+				satisfactionChecker = satisfactionCheckerFunc(func(ctx context.Context, beadID string, noChangesCount int) (bool, string, error) {
 					if beadID == first.ID {
 						return false, "", injectedErr
 					}

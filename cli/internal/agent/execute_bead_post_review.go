@@ -329,14 +329,6 @@ func applyReviewTriageDecision(store ExecuteBeadLoopStore, beadID, actor string,
 	return applyTriageAction(store, beadID, actor, now, action, currentTier, pairedDegraded)
 }
 
-// ApplyReviewTriageDecision is the package-exported entry point for callers
-// outside the agent package (e.g. existing triage tests in agent_test that
-// exercise the BLOCK ladder directly). It is a thin wrapper around the
-// private applyReviewTriageDecision.
-func ApplyReviewTriageDecision(store ExecuteBeadLoopStore, beadID, actor string, now time.Time, currentTier string) error {
-	return applyReviewTriageDecision(store, beadID, actor, now, currentTier)
-}
-
 // latestBlockPairedDegraded reports whether the most recent BLOCK event was
 // paired with a review-pairing-degraded event from the same attempt window
 // (between the previous BLOCK and this one).
