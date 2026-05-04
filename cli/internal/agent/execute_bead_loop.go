@@ -22,10 +22,12 @@ import (
 // (assignee, retry caps, harness/model, tier bounds, etc.) live on
 // config.ResolvedConfig and are passed via Run's rcfg argument.
 type ExecuteBeadLoopRuntime struct {
-	Log          io.Writer
-	EventSink    io.Writer
-	ProgressCh   chan<- ProgressEvent
-	PreClaimHook func(ctx context.Context) error
+	Log                   io.Writer
+	EventSink             io.Writer
+	ProgressCh            chan<- ProgressEvent
+	PreClaimHook          func(ctx context.Context) error
+	PreDispatchLintHook   func(ctx context.Context, beadID string) (LintResult, error)
+	PostAttemptTriageHook func(ctx context.Context, beadID string, report ExecuteBeadReport) (TriageResult, error)
 	// RoutePreflight, when non-nil, is invoked between nextCandidate and
 	// Claim. It is expected to call upstream ResolveRoute against the
 	// loop's resolved (harness, model) and return whatever typed routing
@@ -263,6 +265,10 @@ type ExecuteBeadReport struct {
 	// `disruption_detected` event body so operators can see which class is
 	// occurring.
 	DisruptionReason string `json:"disruption_reason,omitempty"`
+	// OutcomeReason carries the machine-readable lifecycle classification for
+	// the attempt outcome. It complements Disrupted/DisruptionReason without
+	// changing their mechanical interruption semantics.
+	OutcomeReason string `json:"outcome_reason,omitempty"`
 }
 
 type ExecuteBeadExecutor interface {
@@ -1346,6 +1352,9 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 	if report.RetryAfter != "" {
 		parts = append(parts, fmt.Sprintf("retry_after=%s", report.RetryAfter))
 	}
+	if report.OutcomeReason != "" {
+		parts = append(parts, fmt.Sprintf("outcome_reason=%s", report.OutcomeReason))
+	}
 
 	return bead.BeadEvent{
 		Kind:      "execute-bead",
@@ -1526,10 +1535,22 @@ func shouldSuppressNoProgress(report ExecuteBeadReport) bool {
 		// bead is immediately re-claimable by the next worker.
 		return false
 	}
+	if isTransientOutcomeReason(report.OutcomeReason) {
+		return false
+	}
 	if report.BaseRev == "" || report.ResultRev == "" {
 		return false
 	}
 	return report.BaseRev == report.ResultRev
+}
+
+func isTransientOutcomeReason(reason string) bool {
+	switch reason {
+	case "transport", "quota", "routing", "timeout", "merge_conflict":
+		return true
+	default:
+		return false
+	}
 }
 
 // classifyDisruption examines the loop ctx and the executor's error to decide

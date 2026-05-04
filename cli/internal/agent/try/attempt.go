@@ -45,6 +45,7 @@ type Report struct {
 	DecompositionRationale      string
 	Disrupted                   bool
 	DisruptionReason            string
+	OutcomeReason               string
 }
 
 type Executor interface {

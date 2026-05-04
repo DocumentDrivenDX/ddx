@@ -38,6 +38,7 @@ func toTryReport(report ExecuteBeadReport) agenttry.Report {
 		DecompositionRationale:      report.DecompositionRationale,
 		Disrupted:                   report.Disrupted,
 		DisruptionReason:            report.DisruptionReason,
+		OutcomeReason:               report.OutcomeReason,
 	}
 }
 
@@ -73,6 +74,7 @@ func fromTryReport(report agenttry.Report) ExecuteBeadReport {
 		DecompositionRationale:      report.DecompositionRationale,
 		Disrupted:                   report.Disrupted,
 		DisruptionReason:            report.DisruptionReason,
+		OutcomeReason:               report.OutcomeReason,
 	}
 }
 

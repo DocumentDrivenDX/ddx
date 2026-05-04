@@ -25,6 +25,54 @@ func (f satisfactionCheckerFunc) CheckSatisfied(ctx context.Context, beadID stri
 	return f(ctx, beadID, noChangesCount)
 }
 
+func TestReport_OutcomeReason_Persists_BesideDisrupted(t *testing.T) {
+	report := ExecuteBeadReport{
+		BeadID:           "ddx-test",
+		Status:           ExecuteBeadStatusNoChanges,
+		Disrupted:        true,
+		DisruptionReason: "transport_error",
+		OutcomeReason:    "transport",
+	}
+
+	body, err := json.Marshal(report)
+	require.NoError(t, err)
+	assert.Contains(t, string(body), `"disrupted":true`)
+	assert.Contains(t, string(body), `"disruption_reason":"transport_error"`)
+	assert.Contains(t, string(body), `"outcome_reason":"transport"`)
+
+	event := executeBeadLoopEvent(report, "worker", time.Now().UTC())
+	assert.Equal(t, "execute-bead", event.Kind)
+	assert.Equal(t, ExecuteBeadStatusNoChanges, event.Summary)
+	assert.Contains(t, event.Body, "outcome_reason=transport")
+}
+
+func TestSuppressNoProgress_HonorsTransientReasons(t *testing.T) {
+	for _, reason := range []string{"transport", "quota", "routing", "timeout", "merge_conflict"} {
+		t.Run(reason, func(t *testing.T) {
+			report := ExecuteBeadReport{
+				Status:        ExecuteBeadStatusNoChanges,
+				BaseRev:       "same",
+				ResultRev:     "same",
+				OutcomeReason: reason,
+			}
+			assert.False(t, shouldSuppressNoProgress(report))
+		})
+	}
+
+	assert.True(t, shouldSuppressNoProgress(ExecuteBeadReport{
+		Status:        ExecuteBeadStatusNoChanges,
+		BaseRev:       "same",
+		ResultRev:     "same",
+		OutcomeReason: "tests_red",
+	}))
+	assert.False(t, shouldSuppressNoProgress(ExecuteBeadReport{
+		Status:        ExecuteBeadStatusNoChanges,
+		BaseRev:       "base",
+		ResultRev:     "result",
+		OutcomeReason: "tests_red",
+	}))
+}
+
 func TestExecuteBeadWorkerSuccessClosesBead(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	worker := &ExecuteBeadWorker{
