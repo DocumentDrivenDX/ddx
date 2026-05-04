@@ -103,6 +103,11 @@
 		return `/nodes/${p['nodeId']}/projects/${p['projectId']}/runs?layer=run`;
 	}
 
+	function providerHref(name: string): string {
+		const p = $page.params as Record<string, string>;
+		return `/nodes/${p['nodeId']}/providers/${encodeURIComponent(name)}`;
+	}
+
 	function errorText(err: unknown): string {
 		return err instanceof Error ? err.message : 'Worker action failed.';
 	}
@@ -421,7 +426,19 @@
 							{edge.node.id.slice(0, 8)}
 						</td>
 						<td class="px-4 py-3 text-fg-ink dark:text-dark-fg-ink">
-							{edge.node.kind}
+							<div class="space-y-1">
+								<div>{edge.node.kind}</div>
+								{#if edge.node.harness}
+									<a
+										href={providerHref(edge.node.harness)}
+										onclick={(event) => event.stopPropagation()}
+										class="text-body-sm text-accent-lever hover:underline dark:text-dark-accent-lever"
+										data-testid="worker-provider-link-{edge.node.id}"
+									>
+										{edge.node.harness}
+									</a>
+								{/if}
+							</div>
 						</td>
 						<td class="px-4 py-3">
 							<span

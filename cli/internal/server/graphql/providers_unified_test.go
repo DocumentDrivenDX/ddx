@@ -181,6 +181,9 @@ func TestProviderStatusesUsageFromSessionIndex(t *testing.T) {
 	if got := deref(endpoint.Usage.RequestsLast24h); got != 4 {
 		t.Errorf("requestsLast24h: got %d want 4", got)
 	}
+	if endpoint.RecentWorkerCount != 4 {
+		t.Errorf("recentWorkerCount: got %d want 4", endpoint.RecentWorkerCount)
+	}
 }
 
 // TestProviderTrendReturnsSeries seeds 7 days of usage and checks the trend

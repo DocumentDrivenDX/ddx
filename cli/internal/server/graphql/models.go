@@ -1746,6 +1746,8 @@ type ProviderStatus struct {
 	//   than 6 non-zero hourly buckets are available; the UI uses that floor to
 	//   decide whether to render the inline sparkline (FEAT-014 AC 2).
 	Sparkline []int `json:"sparkline"`
+	// Count of workers with recent sessions for this provider/harness.
+	RecentWorkerCount int `json:"recentWorkerCount"`
 }
 
 // ProviderTrend is the trend-detail payload for `/providers/[name]`.

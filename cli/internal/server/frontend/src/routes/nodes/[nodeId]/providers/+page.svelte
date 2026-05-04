@@ -65,6 +65,7 @@
 				cooldownUntil
 				lastCheckedAt
 				defaultForProfile
+				recentWorkerCount
 				usage {
 					tokensUsedLastHour
 					tokensUsedLast24h
@@ -93,6 +94,7 @@
 				cooldownUntil
 				lastCheckedAt
 				defaultForProfile
+				recentWorkerCount
 				usage {
 					tokensUsedLastHour
 					tokensUsedLast24h
@@ -183,6 +185,7 @@
 		cooldownUntil: string | null;
 		lastCheckedAt: string | null;
 		defaultForProfile: string[];
+		recentWorkerCount: number;
 		usage: ProviderUsage | null;
 		quota: ProviderQuota | null;
 		sparkline: number[];
@@ -617,6 +620,12 @@
 										cooldown
 									</span>
 								{/if}
+								<span
+									class="ml-1 inline-flex items-center border border-border-line px-1.5 py-0.5 text-label-caps font-label-caps uppercase text-fg-muted dark:border-dark-border-line dark:text-dark-fg-muted"
+									data-testid="provider-worker-count-{row.name}"
+								>
+									{row.recentWorkerCount} recent worker{row.recentWorkerCount === 1 ? '' : 's'}
+								</span>
 							</td>
 							<td
 								class="px-4 py-3 text-label-caps font-label-caps uppercase text-fg-muted dark:text-dark-fg-muted"

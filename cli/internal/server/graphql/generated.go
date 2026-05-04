@@ -968,6 +968,7 @@ type ComplexityRoot struct {
 		Quota             func(childComplexity int) int
 		Reachable         func(childComplexity int) int
 		Sparkline         func(childComplexity int) int
+		RecentWorkerCount func(childComplexity int) int
 		Status            func(childComplexity int) int
 		Usage             func(childComplexity int) int
 	}
@@ -29372,6 +29373,35 @@ func (ec *executionContext) fieldContext_ProviderStatus_sparkline(_ context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _ProviderStatus_recentWorkerCount(ctx context.Context, field graphql.CollectedField, obj *ProviderStatus) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ProviderStatus_recentWorkerCount,
+		func(ctx context.Context) (any, error) {
+			return obj.RecentWorkerCount, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ProviderStatus_recentWorkerCount(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ProviderStatus",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ProviderTrend_name(ctx context.Context, field graphql.CollectedField, obj *ProviderTrend) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -33180,6 +33210,8 @@ func (ec *executionContext) fieldContext_Query_providerStatuses(_ context.Contex
 				return ec.fieldContext_ProviderStatus_defaultForProfile(ctx, field)
 			case "sparkline":
 				return ec.fieldContext_ProviderStatus_sparkline(ctx, field)
+			case "recentWorkerCount":
+				return ec.fieldContext_ProviderStatus_recentWorkerCount(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ProviderStatus", field.Name)
 		},
@@ -48932,6 +48964,11 @@ func (ec *executionContext) _ProviderStatus(ctx context.Context, sel ast.Selecti
 			}
 		case "sparkline":
 			out.Values[i] = ec._ProviderStatus_sparkline(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "recentWorkerCount":
+			out.Values[i] = ec._ProviderStatus_recentWorkerCount(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

@@ -20,6 +20,7 @@ const PROVIDERS = [
 		cooldownUntil: null,
 		lastCheckedAt: '2026-04-23T12:00:00Z',
 		defaultForProfile: ['default'],
+		recentWorkerCount: 1,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null
 	},
@@ -37,6 +38,7 @@ const PROVIDERS = [
 		cooldownUntil: null,
 		lastCheckedAt: '2026-04-23T12:00:00Z',
 		defaultForProfile: [],
+		recentWorkerCount: 8,
 		usage: {
 			tokensUsedLastHour: 5000,
 			tokensUsedLast24h: 20000,
@@ -59,6 +61,7 @@ const PROVIDERS = [
 		cooldownUntil: '2026-04-15T12:00:00Z',
 		lastCheckedAt: '2026-04-23T12:00:00Z',
 		defaultForProfile: [],
+		recentWorkerCount: 0,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null
 	}
@@ -148,6 +151,9 @@ test('TC-062: provider rows render with correct data', async ({ page }) => {
 	// Provider types appear
 	await expect(page.getByText('anthropic')).toBeVisible();
 	await expect(page.getByText('openai-compat').first()).toBeVisible();
+	await expect(page.getByTestId('provider-worker-count-claude')).toHaveText('1 recent worker');
+	await expect(page.getByTestId('provider-worker-count-local-qwen')).toHaveText('8 recent workers');
+	await expect(page.getByTestId('provider-worker-count-remote-llm')).toHaveText('0 recent workers');
 
 	// Status messages appear
 	await expect(page.getByText('api key configured')).toBeVisible();

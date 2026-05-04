@@ -17,6 +17,7 @@ const ENDPOINT_ROWS = [
 		cooldownUntil: null,
 		lastCheckedAt: '2026-04-23T12:00:00Z',
 		defaultForProfile: ['default'],
+		recentWorkerCount: 220,
 		usage: {
 			tokensUsedLastHour: 12000,
 			tokensUsedLast24h: 300000,
@@ -43,6 +44,7 @@ const HARNESS_ROWS = [
 		cooldownUntil: null,
 		lastCheckedAt: '2026-04-23T12:00:00Z',
 		defaultForProfile: [],
+		recentWorkerCount: 65,
 		usage: {
 			tokensUsedLastHour: 5000,
 			tokensUsedLast24h: 80000,
@@ -71,6 +73,7 @@ const HARNESS_ROWS = [
 		cooldownUntil: null,
 		lastCheckedAt: '2026-04-23T12:00:00Z',
 		defaultForProfile: [],
+		recentWorkerCount: 12,
 		usage: {
 			tokensUsedLastHour: 0,
 			tokensUsedLast24h: 10000,
@@ -232,6 +235,9 @@ test('unified view shows endpoints and harnesses with kind labels', async ({ pag
 	// Tokens column populated for rows with usage.
 	await expect(page.getByTestId('endpoint-tokens-qwen-local')).toContainText('12.0k');
 	await expect(page.getByTestId('endpoint-tokens-claude')).toContainText('5.0k');
+	await expect(page.getByTestId('provider-worker-count-qwen-local')).toHaveText('220 recent workers');
+	await expect(page.getByTestId('provider-worker-count-claude')).toHaveText('65 recent workers');
+	await expect(page.getByTestId('provider-worker-count-codex')).toHaveText('12 recent workers');
 
 	// Sparkline (24h) renders for rows with ≥6 hourly buckets of usage (AC 2).
 	await expect(page.getByTestId('endpoint-sparkline-bars-qwen-local')).toBeVisible();

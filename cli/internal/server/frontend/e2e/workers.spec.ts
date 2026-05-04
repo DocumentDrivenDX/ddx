@@ -206,7 +206,7 @@ test('TC-040: workers page loads with heading and worker table', async ({ page }
 	await mockGraphQL(page);
 	await page.goto(BASE_URL);
 
-	await expect(page.getByRole('heading', { name: 'Workers' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Workers', exact: true })).toBeVisible();
 	await expect(page.getByText(/Workers drain the bead queue/)).toBeVisible();
 
 	// Table columns
@@ -245,6 +245,10 @@ test('TC-043: worker ID is truncated to 8 characters in the table', async ({ pag
 
 	// worker-aabbccdd → shows "worker-a" (first 8 chars)
 	await expect(page.getByText('worker-a')).toBeVisible();
+	await expect(page.getByTestId('worker-provider-link-worker-aabbccdd')).toHaveAttribute(
+		'href',
+		`/nodes/${NODE_INFO.id}/providers/claude`
+	);
 });
 
 // TC-044: Clicking a worker row navigates to the worker detail panel
@@ -418,7 +422,10 @@ test('workers page starts and stops an execute-loop worker with IA links', async
 
 	await page.goto(BASE_URL);
 	await expect(page.getByText(/Workers drain the bead queue/)).toBeVisible();
-	await expect(page.getByRole('link', { name: /recent sessions/i })).toHaveAttribute('href', /\/sessions$/);
+	await expect(page.getByRole('link', { name: /recent sessions/i })).toHaveAttribute(
+		'href',
+		/runs\?layer=run$/
+	);
 	await expect(page.getByRole('button', { name: 'Stop' })).toHaveCount(0);
 
 	await page.getByRole('button', { name: 'Start worker' }).click();
@@ -450,8 +457,8 @@ test('workers page starts and stops an execute-loop worker with IA links', async
 
 	await page.getByRole('button', { name: 'Close' }).click();
 	await page.getByRole('link', { name: /recent sessions/i }).click();
-	await expect(page).toHaveURL(/\/sessions$/);
-	await expect(page.getByText(/Sessions are immutable agent-run history/)).toBeVisible();
+	await expect(page).toHaveURL(/\/runs\?layer=run$/);
+	await expect(page.getByRole('heading', { name: 'Runs', exact: true })).toBeVisible();
 });
 
 // TC-048: Workers page subscribes to WorkerProgress for running workers (subscription exercised)
@@ -494,7 +501,7 @@ test('TC-048: WorkerProgress subscription is attempted for running workers', asy
 	await page.goto(BASE_URL);
 
 	// Wait for page to load
-	await expect(page.getByRole('heading', { name: 'Workers' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Workers', exact: true })).toBeVisible();
 	await expect(page.getByText('running')).toBeVisible();
 
 	// Give a moment for the subscription effect to run
@@ -893,7 +900,7 @@ test('workers list is scoped to the currently-selected project', async ({ page }
 
 	// Project A: only project-A's worker is visible.
 	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_A.id}/workers`);
-	await expect(page.getByRole('heading', { name: 'Workers' })).toBeVisible();
+	await expect(page.getByRole('heading', { name: 'Workers', exact: true })).toBeVisible();
 	await expect(page.getByText(/1 total/)).toBeVisible();
 	await expect(page.getByText('worker-a').first()).toBeVisible();
 	await expect(page.getByText('worker-b')).toHaveCount(0);

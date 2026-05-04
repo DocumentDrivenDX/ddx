@@ -23,6 +23,7 @@ interface MockProvider {
 	cooldownUntil: string | null;
 	lastCheckedAt: string;
 	defaultForProfile: string[];
+	recentWorkerCount: number;
 	usage: {
 		tokensUsedLastHour: number;
 		tokensUsedLast24h: number;
@@ -48,6 +49,7 @@ const PROVIDERS: MockProvider[] = [
 		cooldownUntil: null,
 		lastCheckedAt: '2026-05-03T12:00:00Z',
 		defaultForProfile: ['default'],
+		recentWorkerCount: 0,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null,
 		sparkline: []
@@ -66,6 +68,7 @@ const PROVIDERS: MockProvider[] = [
 		cooldownUntil: null,
 		lastCheckedAt: '2026-05-03T12:00:00Z',
 		defaultForProfile: [],
+		recentWorkerCount: 0,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null,
 		sparkline: []
@@ -84,6 +87,7 @@ const PROVIDERS: MockProvider[] = [
 		cooldownUntil: null,
 		lastCheckedAt: '2026-05-03T12:00:00Z',
 		defaultForProfile: [],
+		recentWorkerCount: 0,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null,
 		sparkline: []
@@ -102,6 +106,7 @@ const PROVIDERS: MockProvider[] = [
 		cooldownUntil: null,
 		lastCheckedAt: '2026-05-03T12:00:00Z',
 		defaultForProfile: [],
+		recentWorkerCount: 0,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null,
 		sparkline: []
@@ -120,6 +125,7 @@ const PROVIDERS: MockProvider[] = [
 		cooldownUntil: null,
 		lastCheckedAt: '2026-05-03T12:00:00Z',
 		defaultForProfile: [],
+		recentWorkerCount: 0,
 		usage: { tokensUsedLastHour: 0, tokensUsedLast24h: 0, requestsLastHour: 0, requestsLast24h: 0 },
 		quota: null,
 		sparkline: []

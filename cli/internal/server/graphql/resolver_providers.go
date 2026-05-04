@@ -130,6 +130,7 @@ func (r *queryResolver) HarnessStatuses(ctx context.Context) ([]*ProviderStatus,
 			DefaultForProfile: []string{},
 		}
 		ps.Usage = buildUsage(entries, info.Name, agent.MatchHarness, now)
+		ps.RecentWorkerCount = recentWorkerCount(entries, info.Name, agent.MatchHarness, now)
 		ps.Quota = quotaFromHarnessInfo(info)
 		ps.Sparkline = buildSparkline(entries, info.Name, agent.MatchHarness, now)
 		results = append(results, ps)
@@ -402,6 +403,7 @@ func providerStatusesFromInfos(providers []agentlib.ProviderInfo, entries []agen
 			ps.CooldownUntil = &s
 		}
 		ps.Usage = buildUsage(entries, p.Name, agent.MatchProvider, now)
+		ps.RecentWorkerCount = recentWorkerCount(entries, p.Name, agent.MatchProvider, now)
 		ps.Quota = quotaFromProviderInfo(p)
 		ps.Sparkline = buildSparkline(entries, p.Name, agent.MatchProvider, now)
 		results = append(results, ps)
@@ -413,6 +415,7 @@ func providerRowsWithUsage(rows []*ProviderStatus, entries []agent.SessionIndexE
 	out := cloneProviderRows(rows)
 	for _, row := range out {
 		row.Usage = buildUsage(entries, row.Name, agent.MatchProvider, now)
+		row.RecentWorkerCount = recentWorkerCount(entries, row.Name, agent.MatchProvider, now)
 		row.Sparkline = buildSparkline(entries, row.Name, agent.MatchProvider, now)
 	}
 	return out
@@ -496,6 +499,10 @@ func buildUsage(entries []agent.SessionIndexEntry, name string, kind agent.Usage
 	v4 := counts.RequestsLast24h
 	u.RequestsLast24h = &v4
 	return u
+}
+
+func recentWorkerCount(entries []agent.SessionIndexEntry, name string, kind agent.UsageMatchKind, now time.Time) int {
+	return agent.AggregateUsageCounts(entries, name, kind, now).RequestsLast24h
 }
 
 // quotaFromProviderInfo derives a ProviderQuota from the upstream ProviderInfo.
