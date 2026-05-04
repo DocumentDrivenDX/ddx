@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260504T215039-62669280",
+  "bead_id": "ddx-a9d130d0",
+  "base_rev": "d3d0589c2e69010a1493d8884e8357c06b3ef371",
+  "created_at": "2026-05-04T21:50:41.440814344Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a9d130d0",
+    "title": "EPIC: bead-lifecycle quality framework — make P7 mechanically true (lint + triage)",
+    "description": "PROBLEM\nPer RELIABILITY-PRINCIPLES bead ddx-06b77652 P7 ('bead = sufficient sub-agent prompt'), bead authoring quality is a dominant factor in execution success. Audit-1 (commit 86848d21) covered 20 beads; audit-2 (commit b2eb77d0) covered 108 beads; 88 of 108 scored ≤5 against the rubric. Evidence bead ddx-f339c399 documents one observed no_changes outcome (ddx-29058e2a, 2026-05-04) traced to bead-quality gap.\n\nROOT CAUSE\nToday nothing mechanically prevents authoring a bead that's insufficient as a sub-agent prompt OR catches a non-clean execution outcome before it triggers cooldown. The 9 fail-prone layers in ddx try / ddx work (per RELIABILITY-PRINCIPLES) are mostly fail-closed; bead authoring quality has no observability or enforcement layer at all.\n\nPROPOSED FRAMEWORK\nA SKILL-based bead-lifecycle quality framework, layered onto the existing ddx skill (matching the bead-breakdown/ sub-skill pattern at .agents/skills/ddx/bead-breakdown/SKILL.md). Three modes within ONE sub-skill: lint (pre-dispatch), triage (post-attempt outcome classification), refine (suggest amendments). ddx try integrates via small Go hooks that compose the existing layer-1 runner library to invoke the skill.\n\nNO new top-level skills. NO new ddx CLI verbs. NO LLM judgment baked into Go code.\n\nCHILD BEADS (4 sequential phases)\n1. ADR-023 + FEAT amendments (governance + policy)\n2. Sub-skill ships to all 5 paths + curated examples\n3. ddx try hook integration (warn-only mode) + OutcomeReason field\n4. Migration: close stale dups + retrofit 40 HIGH beads (during warn-only; collects baseline)\n\nAfter child #4 confirms baseline acceptable false-positive rate, BLOCK mode is enabled via config (no separate bead).\n\nNON-SCOPE\n- ddx work plan quality column (defer; informational, not blocking)\n- ddx bead refine standalone command (defer; refine mode in skill is invocable via ddx run)\n- Cross-project skill packaging (DDx-only first; package later per FEAT-015 project-local model)\n- in_progress-as-eligible bug (separate concern; queue correctness, not bead quality)\n\nGOVERNANCE\n- ADR-023 at docs/helix/02-design/adr/ADR-023-bead-lifecycle-quality-policy.md (codex correction: not 03-decide/)\n- FEAT-004 amend: bead validation hooks + waiver storage + tracker metadata (FEAT-004:150 already owns bead validation hooks)\n- FEAT-010 amend: ddx try / ddx work hook ordering + retry classification + outcome records\n- FEAT-011 amend: nested workflow-skill packaging (FEAT-011:180 stale — says DDx ships exactly one skill, but bead-breakdown/ exists)\n- FEAT-001 amend ONLY if --force --reason CLI flag added (defer to child #3 if needed)",
+    "acceptance": "1. All 4 child beads closed.\n2. ADR-023 status = Accepted.\n3. FEAT-004, FEAT-010, FEAT-011 amendments committed.\n4. Sub-skill .agents/skills/ddx/bead-lifecycle/SKILL.md exists in all 5 shipped paths (codex: skills/ddx/, cli/internal/skills/ddx/, .agents/skills/ddx/, .claude/skills/ddx/, .ddx/skills/ddx/).\n5. ddx try hooks fire in WARN-ONLY mode by default; BLOCK mode opt-in via config.\n6. Baseline lint score distribution recorded post-migration; threshold for BLOCK mode chosen empirically.\n7. Closed via final operator review confirming framework is operational.",
+    "parent": "ddx-e34994e2",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:agent",
+      "kind:platform",
+      "reliability",
+      "bead-quality",
+      "adr:023"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-04T21:50:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3748035",
+      "execute-loop-heartbeat-at": "2026-05-04T21:50:39.343784079Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260504T215039-62669280",
+    "prompt": ".ddx/executions/20260504T215039-62669280/prompt.md",
+    "manifest": ".ddx/executions/20260504T215039-62669280/manifest.json",
+    "result": ".ddx/executions/20260504T215039-62669280/result.json",
+    "checks": ".ddx/executions/20260504T215039-62669280/checks.json",
+    "usage": ".ddx/executions/20260504T215039-62669280/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a9d130d0-20260504T215039-62669280"
+  },
+  "prompt_sha": "f16f889a7e1ebaec17bde460b2a3002a331f5680d72977deadd513f98523faad"
+}
