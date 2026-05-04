@@ -59,10 +59,3 @@ func AppendEventSummary(body string, s EventBodySummary) string {
 	}
 	return body + "\n" + summary
 }
-
-// compareResultEventBody is the FEAT-022 §16 body shape for compare-result
-// events emitted by the grading flow. It is summary-only; the full per-arm
-// section detail lives on the grading attempt bundle.
-func compareResultEventBody(s EventBodySummary) string {
-	return formatEventBodySummary(s)
-}

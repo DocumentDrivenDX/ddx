@@ -92,7 +92,7 @@ func (r *ReviewFailureRunner) Executor() agent.ExecuteBeadExecutor {
 // failingReviewer shape (FEAT-022 §12 taxonomy): a non-nil error plus
 // a *ReviewResult whose Error field carries the canonical class.
 func (r *ReviewFailureRunner) Reviewer() agent.BeadReviewer {
-	return agent.BeadReviewerFunc(func(_ context.Context, _, resultRev string, _ agent.ImplementerRouting) (*agent.ReviewResult, error) {
+	return reviewerFunc(func(_ context.Context, _, resultRev string, _ agent.ImplementerRouting) (*agent.ReviewResult, error) {
 		n := int(r.reviewCalls.Add(1))
 		if n <= r.FailUntilCall {
 			class := r.failureClass()
@@ -109,6 +109,13 @@ func (r *ReviewFailureRunner) Reviewer() agent.BeadReviewer {
 			ResultRev: resultRev,
 		}, nil
 	})
+}
+
+// reviewerFunc is a local functional adapter implementing agent.BeadReviewer.
+type reviewerFunc func(ctx context.Context, beadID, resultRev string, impl agent.ImplementerRouting) (*agent.ReviewResult, error)
+
+func (f reviewerFunc) ReviewBead(ctx context.Context, beadID, resultRev string, impl agent.ImplementerRouting) (*agent.ReviewResult, error) {
+	return f(ctx, beadID, resultRev, impl)
 }
 
 // ReviewCalls returns the cumulative number of reviewer invocations.

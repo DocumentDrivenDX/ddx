@@ -13,7 +13,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DocumentDrivenDX/ddx/internal/config"
 	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
@@ -230,104 +229,6 @@ func (r *Runner) Run(opts RunArgs) (*Result, error) {
 	r.logSession(result, len(prompt), prompt, promptSource, opts.Correlation)
 	r.recordRoutingOutcome(result, elapsed, opts)
 	return result, nil
-}
-
-// RunWithConfig is the SD-024 successor to Run. It accepts a sealed
-// ResolvedConfig (durable knobs) and an AgentRunRuntime (plumbing +
-// per-invocation intent), assembles an equivalent RunArgs, and
-// delegates to Run. Behavior is identical to Run with an
-// equivalently-populated RunArgs.
-//
-// Stage 2 of SD-024: this method exists alongside Run; production
-// callers have not migrated yet.
-func (r *Runner) RunWithConfig(ctx context.Context, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
-	sessionLogDir := runtime.SessionLogDirOverride
-	if sessionLogDir == "" {
-		sessionLogDir = rcfg.SessionLogDir()
-	}
-	opts := RunArgs{
-		Context:       ctx,
-		Harness:       rcfg.Harness(),
-		Prompt:        runtime.Prompt,
-		PromptFile:    runtime.PromptFile,
-		PromptSource:  runtime.PromptSource,
-		Correlation:   runtime.Correlation,
-		Model:         rcfg.Model(),
-		Provider:      rcfg.Provider(),
-		ModelRef:      rcfg.ModelRef(),
-		Effort:        rcfg.Effort(),
-		Timeout:       rcfg.Timeout(),
-		WallClock:     rcfg.WallClock(),
-		WorkDir:       runtime.WorkDir,
-		Permissions:   rcfg.Permissions(),
-		SessionLogDir: sessionLogDir,
-	}
-	return r.Run(opts)
-}
-
-// ValidateForExecuteLoop checks harness availability and model compatibility
-// before any beads are claimed. Returns an error if the harness is not
-// available or if the model is clearly incompatible with the harness
-// (e.g. a local agent preset used with a non-agent harness). Emits a
-// deprecation warning to stderr if the model pin is deprecated.
-//
-// Call this in execute-loop before starting the worker so failures are
-// surfaced before any beads are claimed rather than mid-execution.
-func (r *Runner) ValidateForExecuteLoop(harnessName, model, provider, modelRef string) error {
-	if harnessName == "" {
-		return nil // no explicit harness; routing will pick at claim time
-	}
-
-	h, name, err := r.resolveHarness(RunArgs{Harness: harnessName})
-	if err != nil {
-		return err
-	}
-
-	if model != "" {
-		cat := r.catalog()
-
-		// Warn about deprecated model pins before any bead is claimed.
-		if dp, deprecated := cat.CheckDeprecatedPin(model, h.Surface); deprecated {
-			fmt.Fprintf(os.Stderr, "execute-loop: model %q is deprecated for harness %q; use %q instead\n",
-				model, name, dp.ReplacedBy)
-		}
-	}
-	return nil
-}
-
-// Capabilities reports the model and reasoning options for a harness.
-func (r *Runner) Capabilities(name string) (*HarnessCapabilities, error) {
-	harness, harnessName, err := r.resolveHarness(RunArgs{Harness: name})
-	if err != nil {
-		return nil, err
-	}
-
-	caps := &HarnessCapabilities{
-		Harness:             harnessName,
-		Available:           true,
-		Binary:              harness.Binary,
-		ReasoningLevels:     r.resolveReasoningLevels(harnessName, harness),
-		Surface:             harness.Surface,
-		CostClass:           harness.CostClass,
-		IsLocal:             harness.IsLocal,
-		ExactPinSupport:     harness.ExactPinSupport,
-		SupportsEffort:      harness.EffortFlag != "",
-		SupportsPermissions: len(harness.PermissionArgs) > 0,
-	}
-	if path, err := r.LookPath(harness.Binary); err == nil {
-		caps.Path = path
-	}
-
-	model := r.resolveModel(RunArgs{}, harnessName)
-	if model == "" {
-		model = harness.DefaultModel
-	}
-	if model != "" {
-		caps.Model = model
-		caps.Models = []string{model}
-	}
-
-	return caps, nil
 }
 
 // resolveHarness looks up the harness by name and checks availability.
@@ -957,71 +858,4 @@ func genSessionID() string {
 	b := make([]byte, 4)
 	_, _ = rand.Read(b)
 	return "as-" + hex.EncodeToString(b)
-}
-
-// TestProviderConnectivity sends a lightweight probe to check if the provider is reachable and has credits.
-// Returns ProviderStatus with connectivity information.
-func (r *Runner) TestProviderConnectivity(harnessName string, timeout time.Duration) ProviderStatus {
-	status := ProviderStatus{Reachable: false}
-
-	// Skip embedded harnesses - they don't have external providers
-	if harnessName == "virtual" || harnessName == "agent" {
-		status.Reachable = true
-		status.CreditsOK = true
-		return status
-	}
-
-	harness, ok := r.registry.Get(harnessName)
-	if !ok {
-		status.Error = "unknown harness"
-		return status
-	}
-
-	// Check if binary exists first
-	if harnessName != "virtual" && harnessName != "agent" {
-		if _, err := r.LookPath(harness.Binary); err != nil {
-			status.Error = "binary not found"
-			return status
-		}
-	}
-
-	// Send a lightweight probe request to test connectivity
-	probePrompt := "echo ok"
-	opts := RunArgs{
-		Harness: harnessName,
-		Prompt:  probePrompt,
-		Timeout: timeout,
-	}
-
-	start := time.Now()
-	result, err := r.Run(opts)
-	duration := time.Since(start)
-
-	if err != nil {
-		status.Error = fmt.Sprintf("probe failed: %v (%.0fs)", err, duration.Seconds())
-		// Check for common error patterns indicating credit/quota issues
-		errStr := strings.ToLower(err.Error())
-		if strings.Contains(errStr, "429") || strings.Contains(errStr, "quota") ||
-			strings.Contains(errStr, "credit") || strings.Contains(errStr, "insufficient") {
-			status.CreditsOK = false
-		}
-		return status
-	}
-
-	// Check exit code and error from result
-	if result.ExitCode != 0 || result.Error != "" {
-		errStr := strings.ToLower(result.Error)
-		status.Error = fmt.Sprintf("probe failed: %s (%.0fs)", result.Error, duration.Seconds())
-		// Check for credit/quota errors
-		if strings.Contains(errStr, "429") || strings.Contains(errStr, "quota") ||
-			strings.Contains(errStr, "credit") || strings.Contains(errStr, "insufficient") {
-			status.CreditsOK = false
-		}
-		return status
-	}
-
-	// Probe succeeded
-	status.Reachable = true
-	status.CreditsOK = true
-	return status
 }

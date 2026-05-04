@@ -129,61 +129,6 @@ func TestEvidenceAssemblyTelemetry(t *testing.T) {
 		assert.True(t, ok, "manifest.json must also carry evidence_assembly")
 	})
 
-	t.Run("grade", func(t *testing.T) {
-		mock := &mockExecutor{output: `{"arms":[{"arm":"agent","score":8,"max_score":10,"pass":true,"rationale":"ok"}]}`}
-		r := newTestRunner(mock)
-
-		// Force per-arm clamp by feeding a large arm output against a tight
-		// per-arm cap so a section carries truncation_reason=per_arm_cap.
-		bigOutput := strings.Repeat("A", 4*1024)
-		record := &ComparisonRecord{
-			ID:     "cmp-evid",
-			Prompt: "do the thing",
-			Arms: []ComparisonArm{
-				{Harness: "agent", Model: "m1", Output: bigOutput},
-			},
-		}
-		artifactDir := t.TempDir()
-		_, err := GradeFn(r, record, GradeOptions{
-			Grader: "codex",
-			Caps: evidence.Caps{
-				MaxPromptBytes:      4 * 1024 * 1024,
-				MaxInlinedFileBytes: 256, // forces per-arm clamp
-				MaxDiffBytes:        1024,
-			},
-			ArtifactDir: artifactDir,
-		})
-		require.NoError(t, err)
-
-		raw, err := os.ReadFile(filepath.Join(artifactDir, "result.json"))
-		require.NoError(t, err)
-		var doc map[string]any
-		require.NoError(t, json.Unmarshal(raw, &doc))
-		ea, ok := doc["evidence_assembly"].(map[string]any)
-		require.True(t, ok, "grade result.json must contain evidence_assembly: %s", string(raw))
-		assert.Greater(t, int(ea["input_bytes"].(float64)), 0)
-		assert.Greater(t, int(ea["output_bytes"].(float64)), 0)
-		secs, ok := ea["sections"].([]any)
-		require.True(t, ok)
-		require.NotEmpty(t, secs)
-
-		foundClampedArm := false
-		for _, rs := range secs {
-			s := rs.(map[string]any)
-			if reason, _ := s["truncation_reason"].(string); reason == "per_arm_cap" {
-				foundClampedArm = true
-			}
-		}
-		assert.True(t, foundClampedArm, "expected an arm section with truncation_reason=per_arm_cap")
-
-		// Manifest mirrors.
-		mraw, err := os.ReadFile(filepath.Join(artifactDir, "manifest.json"))
-		require.NoError(t, err)
-		var mdoc map[string]any
-		require.NoError(t, json.Unmarshal(mraw, &mdoc))
-		_, ok = mdoc["evidence_assembly"].(map[string]any)
-		assert.True(t, ok, "grade manifest.json must also carry evidence_assembly")
-	})
 }
 
 // TestReviewEventBodySummary covers FEAT-022 §16: review, review-error, and
@@ -214,10 +159,6 @@ func TestReviewEventBodySummary(t *testing.T) {
 			"event body must not carry per-section detail (lives only on the artifact)")
 	})
 
-	t.Run("compare-result", func(t *testing.T) {
-		body := compareResultEventBody(summary)
-		assertSummaryFields(t, body, summary)
-	})
 }
 
 func assertSummaryFields(t *testing.T, body string, s EventBodySummary) {

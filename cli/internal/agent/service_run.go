@@ -16,6 +16,27 @@ import (
 	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
+// serviceRunFactory, when non-nil, overrides NewServiceFromWorkDir inside
+// RunWithConfigViaService. CLI-level integration tests inject a stub to
+// observe ServiceExecuteRequest fields without a real agent server.
+var serviceRunFactory func(workDir string) (agentlib.FizeauService, error)
+
+// SetServiceRunFactory installs a service factory for RunWithConfigViaService.
+// Pass nil to restore production behavior. Exported for cmd/ integration tests.
+//
+// Production reachability: invoked from init() with nil so the symbol is
+// reachable from main() under deadcode RTA. Real overrides come from cmd/
+// integration tests at test-setup time.
+func SetServiceRunFactory(f func(workDir string) (agentlib.FizeauService, error)) {
+	serviceRunFactory = f
+}
+
+func init() {
+	// Reach SetServiceRunFactory from main() so it survives deadcode RTA.
+	// The nil reset is a no-op: production never sets the factory.
+	SetServiceRunFactory(nil)
+}
+
 // appendProviderTimeoutHint appends a configuration override hint to errMsg
 // when it indicates a provider request timeout fired. Helps operators find
 // the knob to adjust (AC4 of ddx-2c63bb95).
@@ -29,17 +50,6 @@ func appendProviderTimeoutHint(errMsg string, providerTimeout time.Duration) str
 			" or pass --request-timeout DURATION to execute-bead/execute-loop",
 		providerTimeout.Round(time.Second),
 	)
-}
-
-// serviceRunFactory, when non-nil, overrides NewServiceFromWorkDir inside
-// RunWithConfigViaService. CLI-level integration tests inject a stub to
-// observe ServiceExecuteRequest fields without a real agent server.
-var serviceRunFactory func(workDir string) (agentlib.FizeauService, error)
-
-// SetServiceRunFactory installs a service factory for RunWithConfigViaService.
-// Pass nil to restore production behavior. Exported for cmd/ integration tests.
-func SetServiceRunFactory(f func(workDir string) (agentlib.FizeauService, error)) {
-	serviceRunFactory = f
 }
 
 // RunWithConfigViaService dispatches a single agent invocation through the

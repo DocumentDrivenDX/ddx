@@ -286,13 +286,6 @@ type SatisfactionChecker interface {
 	CheckSatisfied(ctx context.Context, beadID string, noChangesCount int) (satisfied bool, evidence string, err error)
 }
 
-// SatisfactionCheckerFunc is a functional adapter for SatisfactionChecker.
-type SatisfactionCheckerFunc func(ctx context.Context, beadID string, noChangesCount int) (bool, string, error)
-
-func (f SatisfactionCheckerFunc) CheckSatisfied(ctx context.Context, beadID string, noChangesCount int) (bool, string, error) {
-	return f(ctx, beadID, noChangesCount)
-}
-
 type ExecuteBeadLoopStore interface {
 	ReadyExecution() ([]bead.Bead, error)
 	Claim(id, assignee string) error
@@ -391,14 +384,6 @@ type ExecuteBeadWorker struct {
 	// (escalating to land_conflict_needs_human); false means failed-but-retriable.
 	ConflictResolver func(ctx context.Context, beadID, preserveRef, projectRoot string) (newTip string, isBlocking bool, err error)
 
-	// ComplexityGate, when non-nil, is invoked between RoutePreflight and Claim.
-	// It evaluates whether the candidate bead is atomic (proceed to Claim),
-	// decomposable (file children, block parent, re-pick), or ambiguous
-	// (surface to human triage). When nil, the gate is bypassed and a one-time
-	// warning is emitted per Run() invocation. See triage.go and
-	// NewComplexityGate for the standard implementation.
-	ComplexityGate TriageGate
-
 	// conflictAutoRecoverFn replaces the default landConflictAutoRecover. Set
 	// in tests to inject controlled recovery results without a real git repo.
 	conflictAutoRecoverFn func(wd, preserveRef string, gitOps LandingGitOps) (string, error)
@@ -473,10 +458,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 	result := &ExecuteBeadLoopResult{}
 	attempted := make(map[string]struct{})
-	// triagedWarned suppresses the one-time boot warning when ComplexityGate is
-	// nil. One warning per Run() invocation is enough; the bool resets on the
-	// next worker boot.
-	triagedWarned := false
 	// hookFailed tracks beads whose pre-claim hook failed on first presentation
 	// in this run. A bead in hookFailed but not attempted gets one retry: on the
 	// second hook failure it moves to attempted so nextCandidate will skip it and
@@ -719,38 +700,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					exitReason = "once_complete"
 					return result, nil
 				}
-				continue
-			}
-		}
-
-		// Complexity triage gate (ddx-5bf4ee7e): pre-Claim decomposition check.
-		// When the gate is nil, decomposition responsibility shifts to the
-		// LLM-driven path inside execute-bead (ddx-b790449b AC5): the agent
-		// is prompted to recognize coarse beads, file children, and exit
-		// early. The pre-dispatch warning is intentionally suppressed —
-		// it is no longer accurate now that decomposition lives downstream.
-		if w.ComplexityGate == nil {
-			_ = triagedWarned // retained for future re-introduction of a typed gate
-		} else {
-			shouldClaim, triageErr := w.ComplexityGate(ctx, candidate)
-			if triageErr != nil {
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log,
-						"triage gate error for %s: %v (skipping)\n", candidate.ID, triageErr)
-				}
-				emit("triage.error", map[string]any{
-					"bead_id": candidate.ID,
-					"reason":  triageErr.Error(),
-				})
-				// A gate error does not count as an attempt; re-pick next candidate.
-				continue
-			}
-			if !shouldClaim {
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log,
-						"triage: skipped dispatch of %s (classified as non-atomic)\n", candidate.ID)
-				}
-				emit("triage.skipped", map[string]any{"bead_id": candidate.ID})
 				continue
 			}
 		}
@@ -1504,24 +1453,6 @@ func formatLoopResult(report ExecuteBeadReport) string {
 	}
 }
 
-// reCommitSHA matches a 7-to-40 character lowercase hex string that looks like a
-// git commit SHA. Used to detect whether a no_changes rationale cites a prior commit.
-var reCommitSHA = regexp.MustCompile(`\b[0-9a-f]{7,40}\b`)
-
-// reTestFuncName matches a Go test function name (TestXxx or BenchmarkXxx).
-var reTestFuncName = regexp.MustCompile(`\b(?:Test|Benchmark)[A-Z]\w*\b`)
-
-// rationaleIsSpecific returns true when the rationale string contains a reference
-// specific enough to treat a no_changes outcome as already_satisfied on the first
-// attempt. Currently this means: the rationale cites a commit SHA (7+ hex chars)
-// or a Go test function name. Vague rationales ("nothing to do") return false.
-func rationaleIsSpecific(rationale string) bool {
-	if rationale == "" {
-		return false
-	}
-	return reCommitSHA.MatchString(rationale) || reTestFuncName.MatchString(rationale)
-}
-
 // adjudicateNoChangesContract is the NoChangesContract (TD-031 §8.1)
 // adjudication path. It returns whether the bead should be closed as
 // already_satisfied, the evidence string for the close, and the contract
@@ -1598,50 +1529,6 @@ func addBeadLabel(store ExecuteBeadLoopStore, beadID, label string) error {
 		}
 		b.Labels = append(b.Labels, label)
 	})
-}
-
-// adjudicateNoChanges runs the no-change adjudication step for a bead.
-// It returns (satisfied, evidence, err). When satisfied is true the bead
-// should be closed as already_satisfied with the evidence string. When false
-// retry suppression (cooldown) should be applied and the bead left open.
-//
-// If a SatisfactionChecker is configured it is called first. Otherwise:
-//   - When the report carries a specific rationale (cites a commit SHA or test
-//     name), the bead is closed as already_satisfied on the first occurrence.
-//   - Otherwise the default count-based rule applies (close after maxNoChangesBeforeClose).
-func (w *ExecuteBeadWorker) adjudicateNoChanges(ctx context.Context, beadID string, noChangesCount, maxNoChangesBeforeClose int, rationale, acceptance, issueType, projectRoot string) (bool, string, error) {
-	if w.SatisfactionChecker != nil {
-		return w.SatisfactionChecker.CheckSatisfied(ctx, beadID, noChangesCount)
-	}
-	candidate := false
-	evidence := ""
-	switch {
-	case rationaleIsSpecific(rationale):
-		candidate = true
-		evidence = rationale
-	case noChangesCount >= maxNoChangesBeforeClose:
-		candidate = true
-		evidence = fmt.Sprintf("no_changes on %d consecutive attempt(s); bead treated as already satisfied", noChangesCount)
-	}
-	if !candidate {
-		return false, "", nil
-	}
-	// Tighten the gate: when AC names structural properties (test functions,
-	// deleted files, removed struct fields), refuse already_satisfied unless
-	// each property holds in the worktree / rationale. Prevents false closes
-	// where a regression suite passes but the AC's specific contract is unmet.
-	//
-	// operator-prompt beads carry an auto-generated AC stub (the prompt body
-	// IS the contract); the structural verifier does not apply and is
-	// skipped per Story 15 §Implementation #1.
-	if issueType != bead.IssueTypeOperatorPrompt {
-		if claims := ParseACClaims(acceptance); len(claims) > 0 {
-			if ok, why := VerifyACClaims(claims, projectRoot, rationale); !ok {
-				return false, why, nil
-			}
-		}
-	}
-	return true, evidence, nil
 }
 
 func shouldSuppressNoProgress(report ExecuteBeadReport) bool {

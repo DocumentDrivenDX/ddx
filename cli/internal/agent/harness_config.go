@@ -29,17 +29,6 @@ type harnessConfig struct {
 	TestOnly        bool
 }
 
-type harnessStatus struct {
-	Name      string `json:"name"`
-	Available bool   `json:"available"`
-	Binary    string `json:"binary"`
-	Path      string `json:"path,omitempty"`
-	Error     string `json:"error,omitempty"`
-}
-
-// harnessPreferenceOrder defines the default harness preference when multiple are available.
-var harnessPreferenceOrder = []string{"codex", "claude", "gemini", "opencode", "agent", "pi", "openrouter", "lmstudio"}
-
 // builtinHarnessConfigs defines known harnesses and how to invoke them.
 var builtinHarnessConfigs = map[string]harnessConfig{
 	"codex": {
@@ -229,72 +218,4 @@ func (r *harnessRegistry) Get(name string) (harnessConfig, bool) {
 func (r *harnessRegistry) Has(name string) bool {
 	_, ok := r.harnesses[name]
 	return ok
-}
-
-// Names returns all registered harness names in preference order.
-func (r *harnessRegistry) Names() []string {
-	var names []string
-	// First add preferred harnesses that exist in registry
-	for _, name := range harnessPreferenceOrder {
-		if _, ok := r.harnesses[name]; ok {
-			names = append(names, name)
-		}
-	}
-	// Then add any extras not in preference list
-	for name := range r.harnesses {
-		found := false
-		for _, pref := range harnessPreferenceOrder {
-			if name == pref {
-				found = true
-				break
-			}
-		}
-		if !found {
-			names = append(names, name)
-		}
-	}
-	return names
-}
-
-// Discover checks which harnesses are available on the system.
-func (r *harnessRegistry) Discover() []harnessStatus {
-	var statuses []harnessStatus
-	lookPath := r.LookPath
-	if lookPath == nil {
-		lookPath = DefaultLookPath
-	}
-	for _, name := range r.Names() {
-		h := r.harnesses[name]
-		status := harnessStatus{
-			Name:   name,
-			Binary: h.Binary,
-		}
-		// Embedded harnesses are always available — no binary lookup needed.
-		if name == "virtual" || name == "agent" || name == "script" {
-			status.Available = true
-			status.Path = "(embedded)"
-		} else if h.IsHTTPProvider {
-			// HTTP-only providers: availability determined by probe, not binary.
-			status.Available = true
-			status.Path = "(http)"
-		} else if path, err := lookPath(h.Binary); err != nil {
-			status.Available = false
-			status.Error = "binary not found"
-		} else {
-			status.Available = true
-			status.Path = path
-		}
-		statuses = append(statuses, status)
-	}
-	return statuses
-}
-
-// FirstAvailable returns the first available harness in preference order.
-func (r *harnessRegistry) FirstAvailable() (string, bool) {
-	for _, s := range r.Discover() {
-		if s.Available {
-			return s.Name, true
-		}
-	}
-	return "", false
 }

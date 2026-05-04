@@ -153,7 +153,7 @@ func TestApplyCatalogFromServiceProfilesAdded(t *testing.T) {
 	ApplyCatalogFromService(context.Background(), cat, newFullStub())
 
 	for _, name := range []string{"code-high", "smart", "code-medium", "standard", "code-economy", "cheap"} {
-		assert.True(t, cat.KnownOnAnySurface(name), "profile %q must be in catalog", name)
+		assert.True(t, catalogKnownOnAnySurface(cat, name), "profile %q must be in catalog", name)
 	}
 }
 
@@ -162,7 +162,7 @@ func TestApplyCatalogFromServiceAliasesAdded(t *testing.T) {
 	ApplyCatalogFromService(context.Background(), cat, newFullStub())
 
 	for _, alias := range []string{"high", "medium", "economy"} {
-		assert.True(t, cat.KnownOnAnySurface(alias), "alias %q must be in catalog", alias)
+		assert.True(t, catalogKnownOnAnySurface(cat, alias), "alias %q must be in catalog", alias)
 	}
 }
 
@@ -252,7 +252,7 @@ func TestApplyCatalogFromServiceDeprecatedEntryAdded(t *testing.T) {
 	cat := NewCatalog(nil)
 	ApplyCatalogFromService(context.Background(), cat, newFullStub())
 
-	entry, ok := cat.Entry("claude-sonnet-4")
+	entry, ok := catalogEntry(cat, "claude-sonnet-4")
 	assert.True(t, ok, "deprecated entry must be in catalog")
 	assert.True(t, entry.Deprecated)
 	assert.Equal(t, "code-medium", entry.ReplacedBy)

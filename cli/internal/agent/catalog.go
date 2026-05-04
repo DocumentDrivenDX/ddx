@@ -114,11 +114,6 @@ func (c *Catalog) AddBlockedModelID(id string) {
 	c.blockedModelIDs[id] = true
 }
 
-// IsBlockedModelID reports whether a concrete model ID is blocked.
-func (c *Catalog) IsBlockedModelID(id string) bool {
-	return c.blockedModelIDs[id]
-}
-
 // CheckDeprecatedPin returns the DeprecatedPin entry for an explicit model
 // string, or ok=false if the pin is not deprecated.
 // If surface is non-empty and the pin entry has a Surface set, the match is
@@ -156,37 +151,6 @@ func (c *Catalog) Resolve(ref, surface string) (string, bool) {
 		return "", false
 	}
 	return model, true
-}
-
-// Entry returns the full catalog entry for a ref.
-func (c *Catalog) Entry(ref string) (CatalogEntry, bool) {
-	e, ok := c.entries[ref]
-	return e, ok
-}
-
-// KnownOnAnySurface returns true if the ref has a mapping on at least one surface.
-func (c *Catalog) KnownOnAnySurface(ref string) bool {
-	e, ok := c.entries[ref]
-	if !ok {
-		return false
-	}
-	return len(e.Surfaces) > 0
-}
-
-// NormalizeModelRef resolves a raw --model input:
-//   - If the value is known in the catalog on at least one surface, it is
-//     treated as a logical ModelRef.
-//   - Otherwise it is treated as an exact ModelPin (bypasses catalog).
-//
-// Exactly one of modelRef or modelPin will be non-empty.
-func (c *Catalog) NormalizeModelRef(model string) (modelRef, modelPin string) {
-	if model == "" {
-		return "", ""
-	}
-	if c.KnownOnAnySurface(model) {
-		return model, ""
-	}
-	return "", model
 }
 
 // BuiltinCatalog is the DDx shared routing catalog built from the YAML seed.

@@ -260,11 +260,13 @@ func TestProjectRunOutHoursUsesRemainingHeadroom(t *testing.T) {
 // TestQuotaFromRateLimitSignalShape ensures the exposed helper round-trips
 // parsed rate-limit headers into the GraphQL ProviderQuota.
 func TestQuotaFromRateLimitSignalShape(t *testing.T) {
-	sig := agent.ParseRateLimitHeaders("claude", map[string][]string{
-		"Anthropic-Ratelimit-Tokens-Limit":     {"50000"},
-		"Anthropic-Ratelimit-Tokens-Remaining": {"49500"},
-		"Anthropic-Ratelimit-Tokens-Reset":     {"2026-04-23T05:00:00Z"},
-	})
+	resetAt, _ := time.Parse(time.RFC3339, "2026-04-23T05:00:00Z")
+	sig := agent.RateLimitSignal{
+		CeilingTokens:        50000,
+		CeilingWindowSeconds: 60,
+		Remaining:            49500,
+		ResetAt:              resetAt,
+	}
 	q := QuotaFromRateLimitSignal(sig)
 	if q == nil {
 		t.Fatal("expected quota from sig")
@@ -317,11 +319,13 @@ func TestHarnessQuotaFromCapturedRateLimitSignal(t *testing.T) {
 	t.Cleanup(resetHarnessRateLimitCache)
 	resetHarnessRateLimitCache()
 
-	sig := agent.ParseRateLimitHeaders("claude", map[string][]string{
-		"Anthropic-Ratelimit-Tokens-Limit":     {"80000"},
-		"Anthropic-Ratelimit-Tokens-Remaining": {"60000"},
-		"Anthropic-Ratelimit-Tokens-Reset":     {"2026-04-24T05:00:00Z"},
-	})
+	resetAt, _ := time.Parse(time.RFC3339, "2026-04-24T05:00:00Z")
+	sig := agent.RateLimitSignal{
+		CeilingTokens:        80000,
+		CeilingWindowSeconds: 60,
+		Remaining:            60000,
+		ResetAt:              resetAt,
+	}
 	if !sig.HasAny() {
 		t.Fatal("expected signal to have fields")
 	}
@@ -379,10 +383,12 @@ func TestProviderTrendProjectionFromSeededUsageAndCeiling(t *testing.T) {
 		}, t0)
 	}
 	// Record a ceiling via the rate-limit cache (10,000 tokens remaining).
-	sig := agent.ParseRateLimitHeaders("claude", map[string][]string{
-		"Anthropic-Ratelimit-Tokens-Limit":     {"50000"},
-		"Anthropic-Ratelimit-Tokens-Remaining": {"10000"},
-	})
+	sig := agent.RateLimitSignal{
+		CeilingTokens:        50000,
+		CeilingWindowSeconds: 60,
+		Remaining:            10000,
+		ResetAt:              time.Time{},
+	}
 	RecordHarnessRateLimit("claude", sig)
 
 	r := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}

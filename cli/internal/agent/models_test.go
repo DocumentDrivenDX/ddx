@@ -17,26 +17,6 @@ func TestResolveModelTier(t *testing.T) {
 	assert.Equal(t, "", ResolveModelTier("unknown", escalation.TierSmart))
 }
 
-func TestDefaultBenchmarkArms(t *testing.T) {
-	arms := DefaultBenchmarkArms()
-	assert.Len(t, arms, 9)
-	labels := map[string]bool{}
-	for _, a := range arms {
-		labels[a.Label] = true
-		a.ResolveArm()
-		assert.NotEmpty(t, a.Model, "arm %s should resolve a model", a.Label)
-	}
-	assert.True(t, labels["agent-smart"])
-	assert.True(t, labels["agent-standard"])
-	assert.True(t, labels["agent-cheap"])
-	assert.True(t, labels["codex-smart"])
-	assert.True(t, labels["codex-standard"])
-	assert.True(t, labels["codex-cheap"])
-	assert.True(t, labels["claude-smart"])
-	assert.True(t, labels["claude-standard"])
-	assert.True(t, labels["claude-cheap"])
-}
-
 func TestBenchmarkArmsToCompare(t *testing.T) {
 	arms := []BenchmarkArm{
 		{Label: "a", Harness: "agent", Tier: escalation.TierSmart},

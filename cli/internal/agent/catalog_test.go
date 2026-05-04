@@ -15,7 +15,7 @@ func TestAgentRoutingDoesNotDuplicateEmbeddedBackendPoolStrategy(t *testing.T) {
 	// surface. It does not contain provider, endpoint, or strategy fields.
 	// This test asserts that the CatalogEntry struct has no such fields and
 	// that BuiltinCatalog.Resolve returns only a model string.
-	entry, ok := BuiltinCatalog.Entry("qwen3")
+	entry, ok := catalogEntry(BuiltinCatalog, "qwen3")
 	require.True(t, ok, "qwen3 must be in the catalog")
 	assert.False(t, entry.Deprecated)
 
@@ -183,9 +183,9 @@ func TestIsBlockedModelID(t *testing.T) {
 	cat := NewCatalog(nil)
 	cat.AddBlockedModelID("gpt-3.5-turbo")
 
-	assert.True(t, cat.IsBlockedModelID("gpt-3.5-turbo"))
-	assert.False(t, cat.IsBlockedModelID("gpt-5.4"))
-	assert.False(t, cat.IsBlockedModelID(""))
+	assert.True(t, catalogIsBlockedModelID(cat, "gpt-3.5-turbo"))
+	assert.False(t, catalogIsBlockedModelID(cat, "gpt-5.4"))
+	assert.False(t, catalogIsBlockedModelID(cat, ""))
 }
 
 // TestApplyModelCatalogYAMLPopulatesBlockedModels verifies that
@@ -200,8 +200,8 @@ func TestApplyModelCatalogYAMLPopulatesBlockedModels(t *testing.T) {
 	cat := NewCatalog(nil)
 	ApplyModelCatalogYAML(cat, yml)
 
-	assert.True(t, cat.IsBlockedModelID("old-bad-model"), "blocked model must be registered")
-	assert.False(t, cat.IsBlockedModelID("current-good-model"), "non-blocked model must not be registered")
+	assert.True(t, catalogIsBlockedModelID(cat, "old-bad-model"), "blocked model must be registered")
+	assert.False(t, catalogIsBlockedModelID(cat, "current-good-model"), "non-blocked model must not be registered")
 }
 
 // TestDefaultModelCatalogYAMLBlockedModelsNeverResolve verifies that the
@@ -219,7 +219,7 @@ func TestDefaultModelCatalogYAMLBlockedModelsNeverResolve(t *testing.T) {
 		"claude-3-5-sonnet-20241022",
 	}
 	for _, id := range blockedIDs {
-		assert.True(t, cat.IsBlockedModelID(id), "default blocked model %q must be registered", id)
+		assert.True(t, catalogIsBlockedModelID(cat, id), "default blocked model %q must be registered", id)
 	}
 }
 
@@ -247,6 +247,6 @@ func TestCatalogCloneIsIndependent(t *testing.T) {
 	assert.True(t, ok)
 	assert.Equal(t, "gpt-5.4-mini", pin.ReplacedBy)
 
-	assert.True(t, cat.IsBlockedModelID("blocked-model"))
-	assert.False(t, cat.IsBlockedModelID("new-blocked-model"))
+	assert.True(t, catalogIsBlockedModelID(cat, "blocked-model"))
+	assert.False(t, catalogIsBlockedModelID(cat, "new-blocked-model"))
 }
