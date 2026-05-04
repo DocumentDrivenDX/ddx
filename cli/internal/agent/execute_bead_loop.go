@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	agenttry "github.com/DocumentDrivenDX/ddx/internal/agent/try"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
@@ -769,16 +770,22 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 		nextPhase("running", false)
 
-		report, err := w.Executor.Execute(ctx, candidate.ID)
+		// tryExecutor preserves the legacy w.Executor.Execute(ctx, candidate.ID)
+		// invocation while letting try.Attempt own conflict recovery.
+		attemptOut, err := agenttry.Attempt(ctx, w.Store, candidate.ID, agenttry.AttemptOpts{
+			Bead:             candidate,
+			Executor:         tryExecutor(w.Executor),
+			Store:            w.Store,
+			ProjectRoot:      runtime.ProjectRoot,
+			AutoRecover:      tryAutoRecover(w.conflictAutoRecoverFn),
+			ConflictResolver: w.ConflictResolver,
+			Assignee:         assignee,
+			Now:              now,
+			Cooldown:         LandConflictCooldown,
+		})
 		hbCancel()
 		hbWG.Wait()
-		if err != nil {
-			report = ExecuteBeadReport{
-				BeadID: candidate.ID,
-				Status: ExecuteBeadStatusExecutionFailed,
-				Detail: err.Error(),
-			}
-		}
+		report := fromTryReport(attemptOut.Report)
 		if report.BeadID == "" {
 			report.BeadID = candidate.ID
 		}
@@ -812,7 +819,17 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 		result.Attempts++
 
-		if report.Status == ExecuteBeadStatusSuccess {
+		if attemptOut.StoreErr != nil {
+			if w.handleOutcomeStoreError(ctx, candidate.ID, attemptOut.StoreErrOp, attemptOut.StoreErr, assignee, result, runtime, now) {
+				continue
+			}
+			return result, ctx.Err()
+		}
+
+		if attemptOut.Disposition == agenttry.OutcomeSuccess {
+			result.Successes++
+			result.LastSuccessAt = now().UTC()
+		} else if report.Status == ExecuteBeadStatusSuccess {
 			appendLoopRoutingEvidence(w.Store, candidate.ID, report, now().UTC())
 			// Story 15: when an operator-prompt bead succeeds, scan
 			// base..result for affected beads and artifacts, and append
@@ -865,38 +882,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				result.Failures++
 				result.LastFailureStatus = report.Status
 			}
-		} else if ShouldAttemptConflictRecovery(report, runtime.ProjectRoot) {
-			// C4 (ddx-358f2457): the auto-merge / focused-resolve / close-or-park
-			// state machine now lives in RunConflictRecovery so the loop only sees
-			// a structured outcome (Disposition=Merged on success;
-			// Disposition=Park / NeedsHuman on failure). Store errors are surfaced
-			// via StoreErrOp/StoreErr so this loop continues to drive
-			// handleOutcomeStoreError unchanged.
-			recOut := RunConflictRecovery(ctx, ConflictRecoveryInput{
-				Bead:             candidate,
-				Report:           report,
-				ProjectRoot:      runtime.ProjectRoot,
-				AutoRecover:      w.conflictAutoRecoverFn,
-				ConflictResolver: w.ConflictResolver,
-				Store:            w.Store,
-				Assignee:         assignee,
-				Now:              now,
-				Cooldown:         LandConflictCooldown,
-			})
-			report = recOut.Report
-			if recOut.StoreErr != nil {
-				if w.handleOutcomeStoreError(ctx, candidate.ID, recOut.StoreErrOp, recOut.StoreErr, assignee, result, runtime, now) {
-					continue
-				}
-				return result, ctx.Err()
-			}
-			if recOut.Disposition == ConflictRecoveryMerged {
-				result.Successes++
-				result.LastSuccessAt = now().UTC()
-			} else {
-				result.Failures++
-				result.LastFailureStatus = report.Status
-			}
+		} else if attemptOut.Disposition == agenttry.OutcomePark {
+			result.Failures++
+			result.LastFailureStatus = report.Status
 		} else {
 			if err := w.Store.Unclaim(candidate.ID); err != nil {
 				if w.handleOutcomeStoreError(ctx, candidate.ID, "Unclaim", err, assignee, result, runtime, now) {
