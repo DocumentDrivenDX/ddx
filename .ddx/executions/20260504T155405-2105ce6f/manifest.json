@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260504T155405-2105ce6f",
+  "bead_id": "ddx-c8dc1146",
+  "base_rev": "3e240cc64c13b988f11cf0dfeb08ca6542b541c0",
+  "created_at": "2026-05-04T15:54:49.991057591Z",
+  "requested": {
+    "harness": "codex",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c8dc1146",
+    "title": "agent: add quality hook contracts and OutcomeReason carrier",
+    "description": "PROBLEM\n  ddx try needs lint and triage extension points plus an outcome classification carrier before hook implementations can be wired safely. Today ExecuteBeadLoopRuntime exposes PreClaimHook and RoutePreflight only, and ExecuteBeadReport carries Disrupted/DisruptionReason but no sibling OutcomeReason for post-attempt triage.\n\nROOT CAUSE\n  cli/internal/agent/execute_bead_loop.go:24-38 defines ExecuteBeadLoopRuntime with PreClaimHook and RoutePreflight closures but no PreDispatchLintHook or PostAttemptTriageHook slot. cli/internal/agent/execute_bead_loop.go:198-266 defines ExecuteBeadReport with Disrupted and DisruptionReason but no OutcomeReason field. cli/internal/agent/execute_bead_loop.go:1522-1532 suppresses no-progress cooldowns only through Disrupted/BaseRev/ResultRev checks.\n\nPROPOSED FIX\n  - Add LintResult, TriageResult, and FollowupBead structs in cli/internal/agent/quality_hooks.go or alongside ExecuteBeadLoopRuntime.\n  - Add ExecuteBeadLoopRuntime.PreDispatchLintHook func(ctx context.Context, beadID string) (LintResult, error).\n  - Add ExecuteBeadLoopRuntime.PostAttemptTriageHook func(ctx context.Context, beadID string, report ExecuteBeadReport) (TriageResult, error).\n  - Add ExecuteBeadReport.OutcomeReason string beside Disrupted/DisruptionReason, preserving the existing Disrupted bool and JSON shape.\n  - Include outcome_reason in executeBeadLoopEvent body serialization when populated.\n  - Extend shouldSuppressNoProgress so OutcomeReason values transport, quota, routing, timeout, and merge_conflict also bypass no-progress cooldown; keep the existing Disrupted short-circuit unchanged.\n\nNON-SCOPE\n  - Invoking either hook in the loop; covered by sibling child beads.\n  - Runner-backed bead-lifecycle skill calls; covered by lint/triage implementation child beads.\n  - cli/cmd/try.go wiring; covered by the CLI wiring child bead.\n  - GraphQL exposure of OutcomeReason.\n\nPARENT\n  ddx-e1a576a7.\n\nDEPS\n  ddx-e1a576a7 per decomposition edge requested by the parent attempt instructions.",
+    "acceptance": "1. cli/internal/agent/execute_bead_loop.go or cli/internal/agent/quality_hooks.go defines LintResult, TriageResult, and FollowupBead with the fields documented in parent ddx-e1a576a7.\n2. ExecuteBeadLoopRuntime exposes PreDispatchLintHook and PostAttemptTriageHook with signatures func(ctx context.Context, beadID string) (LintResult, error) and func(ctx context.Context, beadID string, report ExecuteBeadReport) (TriageResult, error).\n3. ExecuteBeadReport includes OutcomeReason string with json tag outcome_reason,omitempty beside the existing Disrupted and DisruptionReason fields; Disrupted remains unchanged.\n4. TestReport_OutcomeReason_Persists_BesideDisrupted verifies executeBeadLoopEvent records outcome_reason while preserving disrupted/disruption_reason behavior.\n5. TestSuppressNoProgress_HonorsTransientReasons verifies OutcomeReason values transport, quota, routing, timeout, and merge_conflict bypass no-progress cooldown while non-transient reasons retain existing BaseRev/ResultRev behavior.\n6. cd cli \u0026\u0026 go test ./internal/agent/... green.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-e1a576a7",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "kind:feature",
+      "reliability",
+      "bead-quality",
+      "adr:023"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-04T15:54:02Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3581353",
+      "execute-loop-heartbeat-at": "2026-05-04T15:54:02.660854861Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260504T155405-2105ce6f",
+    "prompt": ".ddx/executions/20260504T155405-2105ce6f/prompt.md",
+    "manifest": ".ddx/executions/20260504T155405-2105ce6f/manifest.json",
+    "result": ".ddx/executions/20260504T155405-2105ce6f/result.json",
+    "checks": ".ddx/executions/20260504T155405-2105ce6f/checks.json",
+    "usage": ".ddx/executions/20260504T155405-2105ce6f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c8dc1146-20260504T155405-2105ce6f"
+  },
+  "prompt_sha": "cfcef13f0005a803b1fab5af6299dd6ec9d92fbf8eb6cfd513ef87e4a2c4c71c"
+}
