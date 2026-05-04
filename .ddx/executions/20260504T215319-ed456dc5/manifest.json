@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260504T215319-ed456dc5",
+  "bead_id": "ddx-ad41ccb1",
+  "base_rev": "8d6b5b3aa9eb6a08043f8b350227726205cc9413",
+  "created_at": "2026-05-04T21:53:21.240883057Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ad41ccb1",
+    "title": "agent-output: print selected route economics in default ddx work output",
+    "description": "PROBLEM\n  The default human output for ddx work should tell the operator which harness/provider/model were selected and the predicted speed, cost, and power for that route. Today the summary is mostly bead-level status, so operators cannot quickly see whether fizeau routed to the expected class of model or why a run is slow/expensive.\n\nROOT CAUSE\n  fizeau already emits routing_decision with selected harness/provider/model and candidate components: service_execute.go:431 emits ServiceRoutingDecisionData, and service_events.go:142-183 exposes candidates[].cost_usd_per_1k_tokens plus components.power and components.speed_tps. DDx drains only harness/provider/model and selected candidate power in cli/internal/agent/agent_runner_service.go:234-318; Result in cli/internal/agent/types.go:96-122 has ActualPower but no predicted_speed_tps or predicted_cost_usd_per_1k_tokens. cli/internal/agent/execute_bead.go:831-850 copies only harness/provider/model/ActualPower from Result, and cli/cmd/agent_cmd.go:1955-1961 prints failed attempts without route economics.\n\nPROPOSED FIX\n  - Extend cli/internal/agent.Result and ExecuteBeadReport with route prediction fields: PredictedSpeedTPS float64, PredictedCostUSDPer1kTokens float64, PredictedPower int, and CostSource string if available. Keep ActualPower for final/routing_actual behavior.\n  - Update drainServiceEvents to select the eligible candidate matching routing_decision.model and copy components.speed_tps, cost_usd_per_1k_tokens, cost_source, and components.power.\n  - Propagate the fields through executeOnService -\u003e ExecuteBeadWithConfig -\u003e ExecuteBeadReport -\u003e result.json and execute-bead event bodies.\n  - In default non-JSON ddx work / execute-loop output, print a concise route line near bead claim or first attempt completion: harness=\u003ch\u003e provider=\u003cp\u003e model=\u003cm\u003e power=\u003cn\u003e speed=\u003ctps\u003e tok/s cost=$\u003cx\u003e/1k tok. Keep --json output machine-readable and add fields there rather than human prose.\n\nNON-SCOPE\n  - Changing fizeau routing scoring.\n  - New upstream fizeau fields; current routing_decision already has the needed candidate data.\n  - Progress-event rendering; tracked in ddx-cad808ea.\n\nPARENT\n  No parent.\n\nDEPS\n  No deps. fizeau already emits routing_decision candidate cost/speed/power fields.",
+    "acceptance": "1. cli/internal/agent/types.go Result includes predicted route fields for speed TPS, cost USD per 1k tokens, cost source, and predicted power without removing ActualPower.\n2. TestDrainServiceEvents_CapturesRouteEconomics verifies routing_decision.candidates for the selected eligible model populate speed_tps, cost_usd_per_1k_tokens, cost_source, and power.\n3. TestExecuteBead_ReportIncludesRouteEconomics verifies ExecuteBeadReport/result.json carries harness/provider/model plus predicted speed/cost/power fields.\n4. TestWorkDefaultOutput_PrintsSelectedRouteEconomics verifies non-JSON ddx work output includes harness, provider, model, predicted speed, cost, and power for an attempted bead.\n5. TestWorkJSONOutput_IncludesRouteEconomicsWithoutHumanLines verifies --json includes the fields structurally and does not include the human route line.\n6. cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... green.\n7. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:cli",
+      "kind:feature",
+      "operator-ux",
+      "routing"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-04T21:53:19Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3748035",
+      "execute-loop-heartbeat-at": "2026-05-04T21:53:19.020498398Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260504T215319-ed456dc5",
+    "prompt": ".ddx/executions/20260504T215319-ed456dc5/prompt.md",
+    "manifest": ".ddx/executions/20260504T215319-ed456dc5/manifest.json",
+    "result": ".ddx/executions/20260504T215319-ed456dc5/result.json",
+    "checks": ".ddx/executions/20260504T215319-ed456dc5/checks.json",
+    "usage": ".ddx/executions/20260504T215319-ed456dc5/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ad41ccb1-20260504T215319-ed456dc5"
+  },
+  "prompt_sha": "ac0bcd22039748930f07c70473eebf207ab90ca15ac8099c31742b6ed8d51405"
+}
