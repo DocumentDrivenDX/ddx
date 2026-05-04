@@ -92,14 +92,18 @@ type AgentRunRuntime struct {
 
 // Result holds the output of an agent invocation.
 type Result struct {
-	Harness         string `json:"harness"`
-	Provider        string `json:"provider,omitempty"`
-	Model           string `json:"model,omitempty"`
-	ActualPower     int    `json:"actual_power,omitempty"`
-	ExitCode        int    `json:"exit_code"`
-	Output          string `json:"output"`
-	CondensedOutput string `json:"condensed_output,omitempty"`
-	Stderr          string `json:"stderr,omitempty"`
+	Harness                     string  `json:"harness"`
+	Provider                    string  `json:"provider,omitempty"`
+	Model                       string  `json:"model,omitempty"`
+	ActualPower                 int     `json:"actual_power,omitempty"`
+	PredictedPower              int     `json:"predicted_power,omitempty"`
+	PredictedSpeedTPS           float64 `json:"predicted_speed_tps,omitempty"`
+	PredictedCostUSDPer1kTokens float64 `json:"predicted_cost_usd_per_1k_tokens,omitempty"`
+	PredictedCostSource         string  `json:"predicted_cost_source,omitempty"`
+	ExitCode                    int     `json:"exit_code"`
+	Output                      string  `json:"output"`
+	CondensedOutput             string  `json:"condensed_output,omitempty"`
+	Stderr                      string  `json:"stderr,omitempty"`
 	// Routing evidence populated by the embedded agent harness (RunAgent) or
 	// the script harness (RunScript). Used by ExecuteBead to record kind:routing
 	// evidence on the bead.

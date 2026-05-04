@@ -208,14 +208,18 @@ type ExecuteBeadReport struct {
 	// served the implementer's call. Forwarded to the post-merge reviewer so
 	// it can request MinPower=actualPower+1 and bias routing toward a
 	// stronger reviewer (R4 pairing).
-	ActualPower int    `json:"actual_power,omitempty"`
-	Status      string `json:"status"`
-	Detail      string `json:"detail,omitempty"`
-	SessionID   string `json:"session_id,omitempty"`
-	BaseRev     string `json:"base_rev,omitempty"`
-	ResultRev   string `json:"result_rev,omitempty"`
-	PreserveRef string `json:"preserve_ref,omitempty"`
-	RetryAfter  string `json:"retry_after,omitempty"`
+	ActualPower                 int     `json:"actual_power,omitempty"`
+	PredictedPower              int     `json:"predicted_power,omitempty"`
+	PredictedSpeedTPS           float64 `json:"predicted_speed_tps,omitempty"`
+	PredictedCostUSDPer1kTokens float64 `json:"predicted_cost_usd_per_1k_tokens,omitempty"`
+	PredictedCostSource         string  `json:"predicted_cost_source,omitempty"`
+	Status                      string  `json:"status"`
+	Detail                      string  `json:"detail,omitempty"`
+	SessionID                   string  `json:"session_id,omitempty"`
+	BaseRev                     string  `json:"base_rev,omitempty"`
+	ResultRev                   string  `json:"result_rev,omitempty"`
+	PreserveRef                 string  `json:"preserve_ref,omitempty"`
+	RetryAfter                  string  `json:"retry_after,omitempty"`
 	// NoChangesRationale carries the agent's explanation when status == no_changes.
 	NoChangesRationale string `json:"no_changes_rationale,omitempty"`
 	// ReviewVerdict is the post-merge review verdict (APPROVE, REQUEST_CHANGES,
@@ -1444,6 +1448,21 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 	}
 	if report.OutcomeReason != "" {
 		parts = append(parts, fmt.Sprintf("outcome_reason=%s", report.OutcomeReason))
+	}
+	if report.PredictedPower > 0 {
+		parts = append(parts, fmt.Sprintf("predicted_power=%d", report.PredictedPower))
+	}
+	if report.PredictedSpeedTPS > 0 {
+		parts = append(parts, fmt.Sprintf("predicted_speed_tps=%.1f", report.PredictedSpeedTPS))
+	}
+	if report.PredictedCostUSDPer1kTokens > 0 {
+		cost := fmt.Sprintf("predicted_cost_usd_per_1k_tokens=%.6f", report.PredictedCostUSDPer1kTokens)
+		if report.PredictedCostSource != "" {
+			cost += fmt.Sprintf(" source=%s", report.PredictedCostSource)
+		}
+		parts = append(parts, cost)
+	} else if report.PredictedCostSource != "" {
+		parts = append(parts, fmt.Sprintf("predicted_cost_source=%s", report.PredictedCostSource))
 	}
 
 	return bead.BeadEvent{

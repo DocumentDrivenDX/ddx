@@ -228,6 +228,10 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		if routing.Harness != "" {
 			result.Harness = routing.Harness
 		}
+		result.PredictedPower = routing.PredictedPower
+		result.PredictedSpeedTPS = routing.PredictedSpeedTPS
+		result.PredictedCostUSDPer1kTokens = routing.PredictedCostUSDPer1kTokens
+		result.PredictedCostSource = routing.PredictedCostSource
 	}
 	if actualPower > 0 {
 		result.ActualPower = actualPower

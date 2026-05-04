@@ -27,11 +27,15 @@ func (f satisfactionCheckerFunc) CheckSatisfied(ctx context.Context, beadID stri
 
 func TestReport_OutcomeReason_Persists_BesideDisrupted(t *testing.T) {
 	report := ExecuteBeadReport{
-		BeadID:           "ddx-test",
-		Status:           ExecuteBeadStatusNoChanges,
-		Disrupted:        true,
-		DisruptionReason: "transport_error",
-		OutcomeReason:    "transport",
+		BeadID:                      "ddx-test",
+		Status:                      ExecuteBeadStatusNoChanges,
+		Disrupted:                   true,
+		DisruptionReason:            "transport_error",
+		OutcomeReason:               "transport",
+		PredictedPower:              82,
+		PredictedSpeedTPS:           35.5,
+		PredictedCostUSDPer1kTokens: 0.012345,
+		PredictedCostSource:         "catalog",
 	}
 
 	body, err := json.Marshal(report)
@@ -44,6 +48,9 @@ func TestReport_OutcomeReason_Persists_BesideDisrupted(t *testing.T) {
 	assert.Equal(t, "execute-bead", event.Kind)
 	assert.Equal(t, ExecuteBeadStatusNoChanges, event.Summary)
 	assert.Contains(t, event.Body, "outcome_reason=transport")
+	assert.Contains(t, event.Body, "predicted_power=82")
+	assert.Contains(t, event.Body, "predicted_speed_tps=35.5")
+	assert.Contains(t, event.Body, "predicted_cost_usd_per_1k_tokens=0.012345 source=catalog")
 }
 
 func TestSuppressNoProgress_HonorsTransientReasons(t *testing.T) {

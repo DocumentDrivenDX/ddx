@@ -1807,23 +1807,27 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			tierStr = string(tier)
 		}
 		return agent.ExecuteBeadReport{
-			BeadID:             res.BeadID,
-			AttemptID:          res.AttemptID,
-			WorkerID:           res.WorkerID,
-			Harness:            res.Harness,
-			Provider:           res.Provider,
-			Model:              res.Model,
-			ActualPower:        res.ActualPower,
-			Tier:               tierStr,
-			Status:             res.Status,
-			Detail:             res.Detail,
-			SessionID:          res.SessionID,
-			BaseRev:            res.BaseRev,
-			ResultRev:          res.ResultRev,
-			PreserveRef:        res.PreserveRef,
-			NoChangesRationale: res.NoChangesRationale,
-			CostUSD:            res.CostUSD,
-			DurationMS:         int64(res.DurationMS),
+			BeadID:                      res.BeadID,
+			AttemptID:                   res.AttemptID,
+			WorkerID:                    res.WorkerID,
+			Harness:                     res.Harness,
+			Provider:                    res.Provider,
+			Model:                       res.Model,
+			ActualPower:                 res.ActualPower,
+			PredictedPower:              res.PredictedPower,
+			PredictedSpeedTPS:           res.PredictedSpeedTPS,
+			PredictedCostUSDPer1kTokens: res.PredictedCostUSDPer1kTokens,
+			PredictedCostSource:         res.PredictedCostSource,
+			Tier:                        tierStr,
+			Status:                      res.Status,
+			Detail:                      res.Detail,
+			SessionID:                   res.SessionID,
+			BaseRev:                     res.BaseRev,
+			ResultRev:                   res.ResultRev,
+			PreserveRef:                 res.PreserveRef,
+			NoChangesRationale:          res.NoChangesRationale,
+			CostUSD:                     res.CostUSD,
+			DurationMS:                  int64(res.DurationMS),
 		}, nil
 	}
 
@@ -1950,6 +1954,11 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 
 	fmt.Fprintf(cmd.OutOrStdout(), "\nproject: %s\n", projectRoot)
 	fmt.Fprintf(cmd.OutOrStdout(), "completed: %d  |  successes: %d  |  failures: %d\n", result.Attempts, result.Successes, result.Failures)
+	for _, attempt := range result.Results {
+		if route := formatAttemptRouteEconomics(attempt); route != "" {
+			fmt.Fprintf(cmd.OutOrStdout(), "route: %s\n", route)
+		}
+	}
 	if result.Failures > 0 {
 		fmt.Fprintf(cmd.OutOrStdout(), "\nfailed:\n")
 		for _, attempt := range result.Results {
@@ -1963,6 +1972,40 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		}
 	}
 	return nil
+}
+
+func formatAttemptRouteEconomics(attempt agent.ExecuteBeadReport) string {
+	if attempt.Harness == "" && attempt.Provider == "" && attempt.Model == "" {
+		return ""
+	}
+	parts := []string{}
+	if attempt.Harness != "" {
+		parts = append(parts, "harness="+attempt.Harness)
+	}
+	if attempt.Provider != "" {
+		parts = append(parts, "provider="+attempt.Provider)
+	}
+	if attempt.Model != "" {
+		parts = append(parts, "model="+attempt.Model)
+	}
+	power := attempt.PredictedPower
+	if power == 0 {
+		power = attempt.ActualPower
+	}
+	if power > 0 {
+		parts = append(parts, fmt.Sprintf("power=%d", power))
+	}
+	if attempt.PredictedSpeedTPS > 0 {
+		parts = append(parts, fmt.Sprintf("speed=%.1f tok/s", attempt.PredictedSpeedTPS))
+	}
+	if attempt.PredictedCostUSDPer1kTokens > 0 {
+		cost := fmt.Sprintf("cost=$%.6f/1k tok", attempt.PredictedCostUSDPer1kTokens)
+		if attempt.PredictedCostSource != "" {
+			cost += " source=" + attempt.PredictedCostSource
+		}
+		parts = append(parts, cost)
+	}
+	return strings.Join(parts, " ")
 }
 
 // resolveProjectRoot returns the project root to use for execute-loop,

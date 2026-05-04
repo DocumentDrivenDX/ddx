@@ -65,16 +65,20 @@ type ExecuteBeadResult struct {
 	// operators diagnose silent commit failures before the worktree is cleaned up.
 	NoEvidencePaths []string `json:"no_evidence_paths,omitempty"`
 
-	Harness     string  `json:"harness,omitempty"`
-	Provider    string  `json:"provider,omitempty"`
-	Model       string  `json:"model,omitempty"`
-	ActualPower int     `json:"actual_power,omitempty"`
-	SessionID   string  `json:"session_id,omitempty"`
-	DurationMS  int     `json:"duration_ms"`
-	Tokens      int     `json:"tokens,omitempty"`
-	CostUSD     float64 `json:"cost_usd,omitempty"`
-	ExitCode    int     `json:"exit_code"`
-	Error       string  `json:"error,omitempty"`
+	Harness                     string  `json:"harness,omitempty"`
+	Provider                    string  `json:"provider,omitempty"`
+	Model                       string  `json:"model,omitempty"`
+	ActualPower                 int     `json:"actual_power,omitempty"`
+	PredictedPower              int     `json:"predicted_power,omitempty"`
+	PredictedSpeedTPS           float64 `json:"predicted_speed_tps,omitempty"`
+	PredictedCostUSDPer1kTokens float64 `json:"predicted_cost_usd_per_1k_tokens,omitempty"`
+	PredictedCostSource         string  `json:"predicted_cost_source,omitempty"`
+	SessionID                   string  `json:"session_id,omitempty"`
+	DurationMS                  int     `json:"duration_ms"`
+	Tokens                      int     `json:"tokens,omitempty"`
+	CostUSD                     float64 `json:"cost_usd,omitempty"`
+	ExitCode                    int     `json:"exit_code"`
+	Error                       string  `json:"error,omitempty"`
 
 	// FailureMode classifies why an execution did not land cleanly. Empty
 	// when the bead was merged (task_succeeded landing outcome). Populated
@@ -827,6 +831,10 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	resultHarness := rcfg.Harness()
 	resultProvider := ""
 	actualPower := 0
+	predictedPower := 0
+	predictedSpeedTPS := 0.0
+	predictedCostUSDPer1kTokens := 0.0
+	predictedCostSource := ""
 	agentErrMsg := ""
 	if agentResult != nil {
 		exitCode = agentResult.ExitCode
@@ -849,6 +857,10 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		if agentResult.ActualPower > 0 {
 			actualPower = agentResult.ActualPower
 		}
+		predictedPower = agentResult.PredictedPower
+		predictedSpeedTPS = agentResult.PredictedSpeedTPS
+		predictedCostUSDPer1kTokens = agentResult.PredictedCostUSDPer1kTokens
+		predictedCostSource = agentResult.PredictedCostSource
 	}
 	if agentErr != nil {
 		if exitCode == 0 {
@@ -870,29 +882,33 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	resultRev, revErr := gitOps.HeadRev(wtPath)
 	if revErr != nil {
 		res := &ExecuteBeadResult{
-			BeadID:       beadID,
-			AttemptID:    attemptID,
-			WorkerID:     runtime.WorkerID,
-			BaseRev:      baseRev,
-			ResultRev:    baseRev, // no commits readable; treat as no output
-			Harness:      resultHarness,
-			Provider:     resultProvider,
-			Model:        resultModel,
-			ActualPower:  actualPower,
-			SessionID:    sessionID,
-			DurationMS:   int(finishedAt.Sub(startedAt).Milliseconds()),
-			Tokens:       tokens,
-			CostUSD:      costUSD,
-			ExitCode:     1,
-			Error:        agentErrMsg,
-			Reason:       revErr.Error(), // HeadRev failure; orchestrator prefers this over Error for Reason
-			ExecutionDir: artifacts.DirRel,
-			PromptFile:   artifacts.PromptRel,
-			ManifestFile: artifacts.ManifestRel,
-			ResultFile:   artifacts.ResultRel,
-			StartedAt:    startedAt,
-			FinishedAt:   finishedAt,
-			Outcome:      ExecuteBeadOutcomeTaskFailed,
+			BeadID:                      beadID,
+			AttemptID:                   attemptID,
+			WorkerID:                    runtime.WorkerID,
+			BaseRev:                     baseRev,
+			ResultRev:                   baseRev, // no commits readable; treat as no output
+			Harness:                     resultHarness,
+			Provider:                    resultProvider,
+			Model:                       resultModel,
+			ActualPower:                 actualPower,
+			PredictedPower:              predictedPower,
+			PredictedSpeedTPS:           predictedSpeedTPS,
+			PredictedCostUSDPer1kTokens: predictedCostUSDPer1kTokens,
+			PredictedCostSource:         predictedCostSource,
+			SessionID:                   sessionID,
+			DurationMS:                  int(finishedAt.Sub(startedAt).Milliseconds()),
+			Tokens:                      tokens,
+			CostUSD:                     costUSD,
+			ExitCode:                    1,
+			Error:                       agentErrMsg,
+			Reason:                      revErr.Error(), // HeadRev failure; orchestrator prefers this over Error for Reason
+			ExecutionDir:                artifacts.DirRel,
+			PromptFile:                  artifacts.PromptRel,
+			ManifestFile:                artifacts.ManifestRel,
+			ResultFile:                  artifacts.ResultRel,
+			StartedAt:                   startedAt,
+			FinishedAt:                  finishedAt,
+			Outcome:                     ExecuteBeadOutcomeTaskFailed,
 		}
 		res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
 		populateWorkerStatus(res)
@@ -938,28 +954,33 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				prelimOutcome = ExecuteBeadOutcomeTaskFailed
 			}
 			prelimRes := &ExecuteBeadResult{
-				BeadID:       beadID,
-				AttemptID:    attemptID,
-				WorkerID:     runtime.WorkerID,
-				BaseRev:      baseRev,
-				ResultRev:    "", // unknown until commit is made
-				Harness:      resultHarness,
-				Provider:     resultProvider,
-				Model:        resultModel,
-				SessionID:    sessionID,
-				DurationMS:   int(finishedAt.Sub(startedAt).Milliseconds()),
-				Tokens:       tokens,
-				CostUSD:      costUSD,
-				ExitCode:     exitCode,
-				Error:        agentErrMsg,
-				ExecutionDir: artifacts.DirRel,
-				PromptFile:   artifacts.PromptRel,
-				ManifestFile: artifacts.ManifestRel,
-				ResultFile:   artifacts.ResultRel,
-				UsageFile:    usageFileRel,
-				StartedAt:    startedAt,
-				FinishedAt:   finishedAt,
-				Outcome:      prelimOutcome,
+				BeadID:                      beadID,
+				AttemptID:                   attemptID,
+				WorkerID:                    runtime.WorkerID,
+				BaseRev:                     baseRev,
+				ResultRev:                   "", // unknown until commit is made
+				Harness:                     resultHarness,
+				Provider:                    resultProvider,
+				Model:                       resultModel,
+				ActualPower:                 actualPower,
+				PredictedPower:              predictedPower,
+				PredictedSpeedTPS:           predictedSpeedTPS,
+				PredictedCostUSDPer1kTokens: predictedCostUSDPer1kTokens,
+				PredictedCostSource:         predictedCostSource,
+				SessionID:                   sessionID,
+				DurationMS:                  int(finishedAt.Sub(startedAt).Milliseconds()),
+				Tokens:                      tokens,
+				CostUSD:                     costUSD,
+				ExitCode:                    exitCode,
+				Error:                       agentErrMsg,
+				ExecutionDir:                artifacts.DirRel,
+				PromptFile:                  artifacts.PromptRel,
+				ManifestFile:                artifacts.ManifestRel,
+				ResultFile:                  artifacts.ResultRel,
+				UsageFile:                   usageFileRel,
+				StartedAt:                   startedAt,
+				FinishedAt:                  finishedAt,
+				Outcome:                     prelimOutcome,
 			}
 			populateWorkerStatus(prelimRes)
 			_ = writeArtifactJSON(artifacts.ResultAbs, prelimRes)
@@ -979,27 +1000,32 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	}
 
 	res := &ExecuteBeadResult{
-		BeadID:       beadID,
-		AttemptID:    attemptID,
-		WorkerID:     runtime.WorkerID,
-		BaseRev:      baseRev,
-		ResultRev:    resultRev,
-		Harness:      resultHarness,
-		Provider:     resultProvider,
-		Model:        resultModel,
-		SessionID:    sessionID,
-		DurationMS:   int(finishedAt.Sub(startedAt).Milliseconds()),
-		Tokens:       tokens,
-		CostUSD:      costUSD,
-		ExitCode:     exitCode,
-		Error:        agentErrMsg,
-		ExecutionDir: artifacts.DirRel,
-		PromptFile:   artifacts.PromptRel,
-		ManifestFile: artifacts.ManifestRel,
-		ResultFile:   artifacts.ResultRel,
-		UsageFile:    usageFileRel,
-		StartedAt:    startedAt,
-		FinishedAt:   finishedAt,
+		BeadID:                      beadID,
+		AttemptID:                   attemptID,
+		WorkerID:                    runtime.WorkerID,
+		BaseRev:                     baseRev,
+		ResultRev:                   resultRev,
+		Harness:                     resultHarness,
+		Provider:                    resultProvider,
+		Model:                       resultModel,
+		ActualPower:                 actualPower,
+		PredictedPower:              predictedPower,
+		PredictedSpeedTPS:           predictedSpeedTPS,
+		PredictedCostUSDPer1kTokens: predictedCostUSDPer1kTokens,
+		PredictedCostSource:         predictedCostSource,
+		SessionID:                   sessionID,
+		DurationMS:                  int(finishedAt.Sub(startedAt).Milliseconds()),
+		Tokens:                      tokens,
+		CostUSD:                     costUSD,
+		ExitCode:                    exitCode,
+		Error:                       agentErrMsg,
+		ExecutionDir:                artifacts.DirRel,
+		PromptFile:                  artifacts.PromptRel,
+		ManifestFile:                artifacts.ManifestRel,
+		ResultFile:                  artifacts.ResultRel,
+		UsageFile:                   usageFileRel,
+		StartedAt:                   startedAt,
+		FinishedAt:                  finishedAt,
 	}
 
 	// Classify worker outcome: task_succeeded / task_failed / task_no_changes /

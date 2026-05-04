@@ -16,6 +16,7 @@ import (
 // package (which is module-private).
 const (
 	serviceEventRoutingDecision = "routing_decision"
+	serviceEventProgress        = "progress"
 	serviceEventTextDelta       = "text_delta"
 	serviceEventToolCall        = "tool_call"
 	serviceEventToolResult      = "tool_result"
@@ -42,10 +43,19 @@ const (
 type (
 	serviceFinalData      = agentlib.ServiceFinalData
 	serviceFinalUsage     = agentlib.ServiceFinalUsage
-	serviceRoutingActual  = agentlib.ServiceRoutingActual
 	serviceToolCallData   = agentlib.ServiceToolCallData
 	serviceToolResultData = agentlib.ServiceToolResultData
 )
+
+type serviceRoutingActual struct {
+	Harness                     string
+	Provider                    string
+	Model                       string
+	PredictedPower              int
+	PredictedSpeedTPS           float64
+	PredictedCostUSDPer1kTokens float64
+	PredictedCostSource         string
+}
 
 // useNewAgentPath reports whether RunAgent should dispatch to the new
 // agentlib.FizeauService.Execute path. Default is on. Set the env var
@@ -147,6 +157,10 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		if routing.Model != "" {
 			result.Model = routing.Model
 		}
+		result.PredictedPower = routing.PredictedPower
+		result.PredictedSpeedTPS = routing.PredictedSpeedTPS
+		result.PredictedCostUSDPer1kTokens = routing.PredictedCostUSDPer1kTokens
+		result.PredictedCostSource = routing.PredictedCostSource
 	}
 	if actualPower > 0 {
 		result.ActualPower = actualPower
@@ -281,10 +295,13 @@ func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData,
 					Provider   string `json:"provider"`
 					Model      string `json:"model"`
 					Candidates []struct {
-						Model      string `json:"model"`
-						Eligible   bool   `json:"eligible"`
-						Components struct {
-							Power int `json:"power"`
+						Model              string  `json:"model"`
+						Eligible           bool    `json:"eligible"`
+						CostUSDPer1kTokens float64 `json:"cost_usd_per_1k_tokens"`
+						CostSource         string  `json:"cost_source"`
+						Components         struct {
+							Power    int     `json:"power"`
+							SpeedTPS float64 `json:"speed_tps"`
 						} `json:"components"`
 					} `json:"candidates"`
 				}
@@ -297,6 +314,10 @@ func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData,
 					for _, c := range payload.Candidates {
 						if c.Eligible && c.Model == payload.Model {
 							routingPower = c.Components.Power
+							routing.PredictedPower = c.Components.Power
+							routing.PredictedSpeedTPS = c.Components.SpeedTPS
+							routing.PredictedCostUSDPer1kTokens = c.CostUSDPer1kTokens
+							routing.PredictedCostSource = c.CostSource
 							break
 						}
 					}
@@ -421,7 +442,7 @@ func isNoopCompactionEvent(ev agentlib.ServiceEvent) bool {
 
 func isServiceProgressEvent(ev agentlib.ServiceEvent) bool {
 	switch string(ev.Type) {
-	case serviceEventTextDelta, serviceEventToolCall, serviceEventToolResult, serviceEventCompaction, serviceEventCompactionEnd:
+	case serviceEventProgress, serviceEventTextDelta, serviceEventToolCall, serviceEventToolResult, serviceEventCompaction, serviceEventCompactionEnd:
 		return true
 	default:
 		return false

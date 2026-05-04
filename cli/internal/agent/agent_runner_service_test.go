@@ -115,9 +115,14 @@ func TestDrainServiceEvents_ExtractsPowerFromRoutingDecisionCandidates(t *testin
 				"components": map[string]any{"power": 20},
 			},
 			{
-				"model":      "claude-3-5-sonnet",
-				"eligible":   true,
-				"components": map[string]any{"power": 65},
+				"model":                  "claude-3-5-sonnet",
+				"eligible":               true,
+				"cost_usd_per_1k_tokens": 0.0125,
+				"cost_source":            "catalog",
+				"components": map[string]any{
+					"power":     65,
+					"speed_tps": 42.5,
+				},
 			},
 		},
 	})
@@ -141,9 +146,14 @@ func TestDrainServiceEvents_ExtractsPowerFromRoutingDecisionCandidates(t *testin
 	}
 	close(events)
 
-	_, _, _, actualPower := drainServiceEvents(events)
+	_, _, routing, actualPower := drainServiceEvents(events)
 	assert.Equal(t, 65, actualPower,
 		"power must come from the eligible winning candidate in routing_decision.candidates")
+	require.NotNil(t, routing)
+	assert.Equal(t, 65, routing.PredictedPower)
+	assert.Equal(t, 42.5, routing.PredictedSpeedTPS)
+	assert.Equal(t, 0.0125, routing.PredictedCostUSDPer1kTokens)
+	assert.Equal(t, "catalog", routing.PredictedCostSource)
 }
 
 func noopCompactionServiceEvent(ts time.Time) agentlib.ServiceEvent {

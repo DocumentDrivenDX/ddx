@@ -147,6 +147,10 @@ func FormatSessionLogLines(lines []string) string {
 			fmt.Fprintf(&sb, "  ← llm response (%.0f tokens, %.1fs) %s%s\n", tokens, latency/1000, model, suffix)
 		case "llm.delta":
 			// Skip deltas — too verbose for summary
+		case "progress":
+			if line := formatProgressLogEntry(entry); line != "" {
+				fmt.Fprint(&sb, line)
+			}
 		case "tool.call":
 			data, _ := entry["data"].(map[string]any)
 			name, _ := data["tool"].(string)
@@ -260,4 +264,102 @@ func truncateStr(s string, maxLen int) string {
 		return s
 	}
 	return s[:maxLen-1] + "…"
+}
+
+func formatProgressLogEntry(entry map[string]any) string {
+	data, _ := entry["data"].(map[string]any)
+	phase, _ := data["phase"].(string)
+	state, _ := data["state"].(string)
+	message, _ := data["message"].(string)
+	toolName, _ := data["tool_name"].(string)
+	command, _ := data["command"].(string)
+	summary, _ := data["session_summary"].(string)
+	durationMS, _ := data["duration_ms"].(float64)
+	totalTokens := progressTokenCount(data)
+
+	tokenSuffix := progressTokenSuffix(totalTokens, false)
+	if totalTokens > 0 {
+		tokenSuffix = progressTokenSuffix(totalTokens, true)
+	}
+	durationSuffix := ""
+	if durationMS > 0 {
+		durationSuffix = fmt.Sprintf(" in %.1fs", durationMS/1000)
+	}
+
+	switch phase {
+	case "thinking":
+		switch state {
+		case "start":
+			return "  thinking ...\n"
+		case "complete":
+			return fmt.Sprintf("  thinking complete%s%s\n", progressTokenSuffix(totalTokens, false), durationSuffix)
+		case "update":
+			if message != "" {
+				return fmt.Sprintf("  thinking: %s\n", truncateStr(message, 100))
+			}
+		}
+	case "tool":
+		label := toolName
+		if command != "" {
+			label = command
+		}
+		if label == "" {
+			label = message
+		}
+		label = truncateStr(label, 100)
+		switch state {
+		case "start":
+			if label == "" {
+				return "  running tool call ...\n"
+			}
+			return fmt.Sprintf("  running tool call `%s` ...\n", label)
+		case "complete":
+			if label == "" {
+				return fmt.Sprintf("  tool call completed%s%s\n", durationSuffix, tokenSuffix)
+			}
+			return fmt.Sprintf("  tool call `%s` completed%s%s\n", label, durationSuffix, tokenSuffix)
+		}
+	case "response":
+		if state == "complete" {
+			if totalTokens > 0 {
+				return fmt.Sprintf("  sending response %d tok\n", totalTokens)
+			}
+			return "  sending response\n"
+		}
+	case "context", "compaction":
+		if summary != "" {
+			return fmt.Sprintf("  context: %s\n", truncateStr(summary, 140))
+		}
+		if message != "" {
+			return fmt.Sprintf("  context: %s\n", truncateStr(message, 140))
+		}
+	}
+	if message != "" {
+		return fmt.Sprintf("  %s\n", truncateStr(message, 140))
+	}
+	return ""
+}
+
+func progressTokenCount(data map[string]any) int {
+	for _, key := range []string{"total_tokens", "output_tokens", "input_tokens"} {
+		if v, ok := data[key]; ok {
+			switch n := v.(type) {
+			case float64:
+				return int(n)
+			case int:
+				return n
+			}
+		}
+	}
+	return 0
+}
+
+func progressTokenSuffix(tokens int, comma bool) string {
+	if tokens <= 0 {
+		return ""
+	}
+	if comma {
+		return fmt.Sprintf(", %d tok", tokens)
+	}
+	return fmt.Sprintf(" %d tok", tokens)
 }
