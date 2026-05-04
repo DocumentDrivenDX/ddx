@@ -2,18 +2,73 @@ package cmd
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	"github.com/DocumentDrivenDX/ddx/internal/agent/testfixtures"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// reviewFailureRunner is a test-local deterministic Executor + Reviewer pair
+// driving the "N reviewer failures, then 1 success" scenario. Test-local on
+// purpose: a shared cross-package testfixtures package would be unreachable
+// from main() under deadcode RTA (production-reachability check).
+type reviewFailureRunner struct {
+	resultRev     string
+	failUntilCall int
+	reviewCalls   atomic.Int32
+	execCalls     atomic.Int32
+}
+
+func (r *reviewFailureRunner) Executor() agent.ExecuteBeadExecutor {
+	return agent.ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+		n := r.execCalls.Add(1)
+		return agent.ExecuteBeadReport{
+			BeadID:    beadID,
+			Status:    agent.ExecuteBeadStatusSuccess,
+			SessionID: fmt.Sprintf("rfr-sess-%d", n),
+			ResultRev: r.resultRev,
+		}, nil
+	})
+}
+
+func (r *reviewFailureRunner) Reviewer() agent.BeadReviewer {
+	return reviewerFn(func(_ context.Context, _, resultRev string, _ agent.ImplementerRouting) (*agent.ReviewResult, error) {
+		n := int(r.reviewCalls.Add(1))
+		if n <= r.failUntilCall {
+			class := evidence.OutcomeReviewProviderEmpty
+			return &agent.ReviewResult{
+					Verdict:   agent.VerdictBlock,
+					Error:     class,
+					ResultRev: resultRev,
+				}, fmt.Errorf("review-failure-runner: %s: %w", class,
+					errors.New("simulated reviewer failure"))
+		}
+		return &agent.ReviewResult{
+			Verdict:   agent.VerdictApprove,
+			Rationale: "review-failure-runner: APPROVE",
+			ResultRev: resultRev,
+		}, nil
+	})
+}
+
+func (r *reviewFailureRunner) ReviewCalls() int { return int(r.reviewCalls.Load()) }
+func (r *reviewFailureRunner) ExecCalls() int   { return int(r.execCalls.Load()) }
+
+type reviewerFn func(ctx context.Context, beadID, resultRev string, impl agent.ImplementerRouting) (*agent.ReviewResult, error)
+
+func (f reviewerFn) ReviewBead(ctx context.Context, beadID, resultRev string, impl agent.ImplementerRouting) (*agent.ReviewResult, error) {
+	return f(ctx, beadID, resultRev, impl)
+}
 
 // TestReviewRetryThresholdFromConfigCLI is the SD-024 Stage 1 behavioral
 // proof that the CLI dispatch path at runAgentExecuteLoop carries
@@ -24,7 +79,7 @@ import (
 // (the same call the CLI dispatch site issues) and then invokes
 // ExecuteBeadWorker.RunWithConfig with an ExecuteBeadLoopRuntime shaped
 // identically to the runtime the CLI builds. The deterministic
-// review-failure fixture from testfixtures provides the executor +
+// review-failure fixture (test-local) provides the executor +
 // reviewer pair so behavior is observable end-to-end without a real
 // agent harness.
 //
@@ -69,9 +124,9 @@ review_max_retries: 5
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{ID: beadID, Title: "cli e2e review-retry threshold", Priority: 0}))
 
-	runner := &testfixtures.ReviewFailureRunner{
-		ResultRev:     fixedRev,
-		FailUntilCall: failUntil,
+	runner := &reviewFailureRunner{
+		resultRev:     fixedRev,
+		failUntilCall: failUntil,
 	}
 
 	worker := &agent.ExecuteBeadWorker{

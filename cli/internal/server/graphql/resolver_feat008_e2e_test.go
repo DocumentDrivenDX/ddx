@@ -3,18 +3,73 @@ package graphql
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	"github.com/DocumentDrivenDX/ddx/internal/agent/testfixtures"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// reviewFailureRunner is a test-local deterministic Executor + Reviewer pair
+// driving the "N reviewer failures, then 1 success" scenario. Test-local on
+// purpose: a shared cross-package testfixtures package would be unreachable
+// from main() under deadcode RTA (production-reachability check).
+type reviewFailureRunner struct {
+	resultRev     string
+	failUntilCall int
+	reviewCalls   atomic.Int32
+	execCalls     atomic.Int32
+}
+
+func (r *reviewFailureRunner) Executor() agent.ExecuteBeadExecutor {
+	return agent.ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+		n := r.execCalls.Add(1)
+		return agent.ExecuteBeadReport{
+			BeadID:    beadID,
+			Status:    agent.ExecuteBeadStatusSuccess,
+			SessionID: fmt.Sprintf("rfr-sess-%d", n),
+			ResultRev: r.resultRev,
+		}, nil
+	})
+}
+
+func (r *reviewFailureRunner) Reviewer() agent.BeadReviewer {
+	return reviewerFn(func(_ context.Context, _, resultRev string, _ agent.ImplementerRouting) (*agent.ReviewResult, error) {
+		n := int(r.reviewCalls.Add(1))
+		if n <= r.failUntilCall {
+			class := evidence.OutcomeReviewProviderEmpty
+			return &agent.ReviewResult{
+					Verdict:   agent.VerdictBlock,
+					Error:     class,
+					ResultRev: resultRev,
+				}, fmt.Errorf("review-failure-runner: %s: %w", class,
+					errors.New("simulated reviewer failure"))
+		}
+		return &agent.ReviewResult{
+			Verdict:   agent.VerdictApprove,
+			Rationale: "review-failure-runner: APPROVE",
+			ResultRev: resultRev,
+		}, nil
+	})
+}
+
+func (r *reviewFailureRunner) ReviewCalls() int { return int(r.reviewCalls.Load()) }
+func (r *reviewFailureRunner) ExecCalls() int   { return int(r.execCalls.Load()) }
+
+type reviewerFn func(ctx context.Context, beadID, resultRev string, impl agent.ImplementerRouting) (*agent.ReviewResult, error)
+
+func (f reviewerFn) ReviewBead(ctx context.Context, beadID, resultRev string, impl agent.ImplementerRouting) (*agent.ReviewResult, error) {
+	return f(ctx, beadID, resultRev, impl)
+}
 
 // capturingActionDispatcher records the projectRoot and rawArgs passed to
 // DispatchWorker so the test can assert that StartWorker resolved its
@@ -62,7 +117,7 @@ func (c *capturingActionDispatcher) StopWorker(ctx context.Context, id string) (
 //
 //  2. Loop-side: drive ExecuteBeadWorker.RunWithConfig with the same
 //     ResolvedConfig the production runWorker would produce from the same
-//     project root, using testfixtures.ReviewFailureRunner. Assert the
+//     project root, using a test-local reviewFailureRunner. Assert the
 //     bead closes on the (FailUntilCall+1)th attempt with no
 //     review-manual-required event — proving the threshold from config
 //     drives observable loop behavior on the GraphQL path.
@@ -142,9 +197,9 @@ agent:
 	require.Equal(t, threshold, rcfg.ReviewMaxRetries(),
 		"LoadAndResolve must surface review_max_retries from .ddx/config.yaml")
 
-	runner := &testfixtures.ReviewFailureRunner{
-		ResultRev:     fixedRev,
-		FailUntilCall: failUntil,
+	runner := &reviewFailureRunner{
+		resultRev:     fixedRev,
+		failUntilCall: failUntil,
 	}
 	worker := &agent.ExecuteBeadWorker{
 		Store:    store,
