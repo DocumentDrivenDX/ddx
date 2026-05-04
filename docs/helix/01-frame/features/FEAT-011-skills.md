@@ -129,14 +129,25 @@ Claude does not reliably auto-chase reference links; the router in
 > be grounded in the reference file's guidance, not this overview
 > alone."
 
-### Subagents: ship none
+### Nested workflow skills
 
-Subagent orchestration is harness-specific (Claude Code has
-`.claude/agents/` + `context: fork`; Codex has its own subagent
-surface; others differ). The `ddx` skill describes *actions* such as
-"run `ddx run` with this prompt" or "use the compare-prompts skill" and lets
-each harness decide how to run them. Multi-agent comparison is a workflow skill
-composition, not a skill-frontmatter directive.
+Subagent orchestration remains harness-specific (Claude Code has
+`.claude/agents/` + `context: fork`; Codex has its own subagent surface;
+others differ). DDx does not ship harness-specific subagent definitions.
+
+DDx does ship nested workflow skills under the root skill tree when a
+workflow has enough procedure to deserve its own reusable instructions. Current
+examples include `bead-breakdown/`, `replay-bead/`, `compare-prompts/`,
+`benchmark-suite/`, `effort-estimate/`, and `adversarial-review/`. ADR-023
+(`../../02-design/adr/ADR-023-bead-lifecycle-quality-policy.md`) adds the
+same model for bead-lifecycle quality: pre-dispatch lint and post-attempt
+triage invoke a nested workflow skill while keeping routing through the root
+`ddx` skill.
+
+Nested workflow skills are compositions over FEAT-010's three layers. They may
+tell the harness to run `ddx run`, `ddx try`, or `ddx work`, but they do not
+create a fourth run layer, bespoke storage shape, or harness-specific
+frontmatter contract.
 
 ### Installation
 
@@ -162,6 +173,13 @@ composition, not a skill-frontmatter directive.
   copy under `cli/internal/skills/ddx/`. Because `go:embed` cannot
   traverse upward, a `make copy-skills` target rsyncs
   `skills/ddx/` → `cli/internal/skills/ddx/` before every build.
+- The five shipped `ddx` skill paths are:
+  `skills/ddx/` (source), `cli/internal/skills/ddx/` (embedded copy),
+  `.agents/skills/ddx/` (Codex/agentskills project copy),
+  `.claude/skills/ddx/` (Claude Code project copy), and
+  `.ddx/skills/ddx/` (DDx-managed project copy). Nested workflow skills
+  live under each copied tree so lifecycle hooks and human-invoked skills
+  see the same instructions.
 
 ### AGENTS.md: merge, not clobber
 
@@ -256,7 +274,7 @@ token budget and doesn't compete with conversation context
 **As a** user upgrading from an older DDx version with
 `.claude/skills/ddx-run/` and similar dirs already present
 **I want** `ddx init` to remove the old dirs and install only the
-new single-skill layout
+  new root-skill layout
 **So that** the harness doesn't see stale, conflicting skills
 
 **Acceptance Criteria:**
@@ -308,8 +326,8 @@ improvements
 
 ## Implementation Notes
 
-The migration from the 7-sibling-skills layout to the single `ddx`
-skill is sequenced into phases; see the Phase 1 / Phase 2 / Phase 3
+The migration from the 7-sibling-skills layout to the root `ddx`
+skill tree is sequenced into phases; see the Phase 1 / Phase 2 / Phase 3
 epic beads for the work breakdown. Phase 1 is the critical path
 (ship the new surface + eval suite + init/update changes); Phase 2
 is cleanup of old references; Phase 3 is the persona roster trim

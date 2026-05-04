@@ -323,6 +323,57 @@ requested bounds and actual power metadata.
 The evaluation log is persisted on the layer-3 record so a human or
 tool can audit which condition fired and on which iteration.
 
+## Quality Hooks
+
+ADR-023 (`../../02-design/adr/ADR-023-bead-lifecycle-quality-policy.md`)
+adds two quality hooks to the layer-2/layer-3 lifecycle. The hooks are
+implemented in `ExecuteBeadLoopRuntime` at the same boundary that already
+owns bead selection, attempt finalization, and retry classification.
+
+`PreDispatchLintHook` runs after a bead has been selected and verified as
+dependency-eligible, but before DDx creates or starts the agent attempt. It
+receives the bead record, current execution policy, hook mode
+(`WARN-ONLY` or `BLOCK`), and the attempt evidence directory. It invokes the
+bead-lifecycle workflow skill from FEAT-011 and writes a criterion report into
+the evidence bundle. In WARN-ONLY mode, the report is diagnostic. In BLOCK
+mode, a valid low score stops the layer-2 attempt before agent invocation.
+
+`PostAttemptTriageHook` runs after the attempt has produced its owned
+evidence: commits or no-changes rationale, command results, review verdicts,
+merge/preserve result, and any structural validation result. It invokes the
+same bead-lifecycle workflow skill against the attempt bundle and returns an
+attempt classification such as prompt-quality issue, task-quality issue,
+infrastructure failure, deterministic setup failure, or operator action
+required. This classification feeds retry reporting and operator UX; it does
+not replace the existing success/no-changes/failed outcome taxonomy.
+
+Both hooks are fail-open for infrastructure failures. If the skill package is
+missing, the hook process crashes, evidence cannot be written, or the model
+invocation fails, DDx records the hook error and continues with the underlying
+attempt flow. Only a successfully computed low lint score can block dispatch,
+and only when BLOCK mode is active. `--force --reason <text>` records an event
+with the actor, reason, hook mode, and overridden criteria before proceeding.
+
+`ExecuteBeadReport` gains an `OutcomeReason` field beside the existing
+`Disrupted` flag. `Disrupted` remains the coarse boolean that the attempt did
+not complete normally. `OutcomeReason` is the machine-readable reason selected
+by lifecycle classification, for example:
+
+- `bead_lint_warn`
+- `bead_lint_blocked`
+- `forced_with_reason`
+- `triage_prompt_quality`
+- `triage_task_quality`
+- `triage_infrastructure_failure`
+- `triage_operator_action`
+- `hook_unavailable_fail_open`
+
+Layer-3 `ddx work` records include the hook summaries for each child layer-2
+attempt in the stop-condition evaluation log. A blocked lint result counts as a
+terminal non-success outcome for that bead under the current policy, so the
+existing `blocked`, `deferred`, and `no_progress` loop rules can reason about
+it without a fourth run layer or a separate run type.
+
 ## No Run-Type Catalog
 
 DDx will not introduce additional run kinds beyond the three layers.
