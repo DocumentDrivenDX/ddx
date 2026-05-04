@@ -1,0 +1,11 @@
+verification_command: ddx bead show ddx-c8dc1146 >/dev/null && ddx bead show ddx-d1dae2dd >/dev/null && ddx bead show ddx-68706ef9 >/dev/null && ddx bead show ddx-4375292b >/dev/null && ddx bead show ddx-9c81b20f >/dev/null
+
+status: decomposed
+reason: ddx-e1a576a7 exceeded the execute-bead Step 0 size threshold. It has 14 acceptance criteria spanning multiple feature-sized slices: runtime hook contracts, ExecuteBeadReport serialization, no-progress cooldown policy, pre-dispatch lint policy, runner-backed lint implementation, runner-backed triage implementation, post-outcome loop integration, config-backed block mode, cli/cmd/try.go wiring, and broad agent/cmd tests. Per the bead instructions, no partial implementation was attempted.
+
+children:
+- ddx-c8dc1146: agent shared quality hook contracts and ExecuteBeadReport.OutcomeReason carrier.
+- ddx-d1dae2dd: execute-loop pre-dispatch lint invocation, warn/block/fail-open policy, and bead-quality.lint event behavior.
+- ddx-68706ef9: runner-backed bead-lifecycle lint hook implementation.
+- ddx-4375292b: runner-backed post-attempt triage hook, loop invocation, and OutcomeReason population.
+- ddx-9c81b20f: cli/cmd/try.go runtime wiring for both hooks.
