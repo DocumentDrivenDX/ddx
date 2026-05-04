@@ -91,6 +91,52 @@ rationale, post-run checks, review verdicts, and cooldown policy. The agent's
 exit status and actual model/power are inputs to that decision, not the whole
 decision.
 
+### Quality hooks
+
+ADR-023 defines two lifecycle quality hooks owned by the layer-2 and layer-3
+execution loop. They are hooks inside `ExecuteBeadLoopRuntime`, not new run
+layers and not new bead-schema fields.
+
+`PreDispatchLintHook` runs after the worker has selected and claimed a bead, and
+after bead-to-prompt context has been resolved enough to know the description,
+acceptance criteria, labels, parent, deps, bead type, and evidence directory.
+It runs before the layer-1 agent invocation starts. Inputs include the bead JSON,
+the resolved mode (`warn` or `block`), any `lint-waiver:<criterion>` labels,
+the rubric-skip rules from `docs/helix/06-iterate/bead-authoring-template.md`,
+and the path where ephemeral lint evidence should be written. The hook invokes
+the nested bead-lifecycle skill under the `ddx` skill tree.
+
+In WARN-ONLY mode, `PreDispatchLintHook` records findings and dispatch proceeds.
+In BLOCK mode, dispatch stops only when the hook returns a valid low lint score
+after rubric skips and label waivers are applied. Infrastructure failures are
+classified as hook errors, recorded in evidence, and fail open per ADR-023.
+When a valid BLOCK result stops dispatch, DDx prints the failed criteria,
+missing fields, waiver labels, and suggested `ddx bead update` commands before
+returning a non-success attempt outcome.
+
+`PostAttemptTriageHook` runs after the attempt has produced its local evidence:
+agent result, commit/no-commit state, no-changes rationale if any, post-run
+checks, review verdict, merge/preserve result, and the pre-dispatch lint report.
+It uses the same bead-lifecycle skill to classify whether the outcome is a
+normal attempt result, a quality-policy failure, a missing-evidence failure, or
+an infrastructure failure. The hook must never rewrite the attempt result or
+erase artifacts; it only adds triage evidence and feeds retry/stop
+classification.
+
+`ExecuteBeadReport` gains `OutcomeReason` beside the existing `Disrupted`
+signal. `Disrupted` remains the mechanical indicator that normal completion was
+interrupted. `OutcomeReason` is the stable classification string that explains
+why the attempt ended, such as `lint_warn`, `lint_blocked`,
+`lint_hook_error_fail_open`, `triage_missing_evidence`, `review_blocked`,
+`post_run_check_failed`, or `success`. Layer-3 `ddx work` records aggregate
+these reasons when evaluating retry eligibility, no-progress, blocked, and
+deferred stop conditions.
+
+The hook evidence lives in the attempt evidence bundle and is surfaced through
+the unified run substrate. The originating bead may receive an evidence event
+only for explicit operator override (`--force --reason`) or other existing
+audit events; lint scores are not copied into `.ddx/beads.jsonl`.
+
 ### Layer 3 — `ddx work` (queue drain)
 
 A layer-3 run is one drain of the bead queue. It iterates `ddx try`

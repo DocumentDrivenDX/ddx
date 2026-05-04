@@ -10,18 +10,20 @@ ddx:
 # Feature: DDx Agent Skills
 
 **ID:** FEAT-011
-**Status:** Implemented (single `ddx` skill present in `skills/`, `cli/internal/skills/`, `.agents/skills/`, and `.claude/skills/`; site copy pending)
+**Status:** Implemented (root `ddx` skill with nested workflow skills present in `skills/`, `cli/internal/skills/`, `.agents/skills/`, `.claude/skills/`, and `.ddx/skills/`; site copy pending)
 **Priority:** P1
 **Owner:** DDx Team
 
 ## Overview
 
-DDx ships a single agent-facing skill (`ddx`) that makes any
-skills-compatible coding agent "ddx-aware" after `ddx init`. The skill
-is written to the [agentskills.io](https://agentskills.io) open
-standard so it works identically in Claude Code, OpenAI Codex, Gemini
-CLI, Cursor, OpenCode, and any other harness that implements the
-standard.
+DDx ships a single root agent-facing skill (`ddx`) that makes any
+skills-compatible coding agent "ddx-aware" after `ddx init`. Under that root,
+DDx may ship nested workflow skills such as `bead-breakdown/`, `replay-bead/`,
+`compare-prompts/`, and the bead-lifecycle quality skill governed by ADR-023.
+The root skill and nested skills are written to the
+[agentskills.io](https://agentskills.io) open standard so they work identically
+in Claude Code, OpenAI Codex, Gemini CLI, Cursor, OpenCode, and any other
+harness that implements the standard.
 
 When the user says "do work", "review this", "what's on the queue",
 "create a bead", or any DDx concept, the harness discovers the `ddx`
@@ -60,7 +62,7 @@ The consolidated design fixes each of these.
 
 ## Architecture
 
-### Single skill, progressive disclosure
+### Root skill plus nested workflow skills
 
 ```
 skills/ddx/
@@ -71,8 +73,13 @@ skills/ddx/
 │   ├── review.md           # bead-review (AC grade) + quorum code review
 │   ├── agents.md           # harness/profile dispatch, personas
 │   └── status.md           # queue state, doctor, health checks
-└── evals/
-    └── routing.jsonl       # ~15 phrase→expected-routing fixtures
+├── evals/
+│   └── routing.jsonl       # ~15 phrase→expected-routing fixtures
+├── bead-breakdown/
+│   └── SKILL.md            # workflow skill composition over ddx bead create
+├── replay-bead/
+│   └── SKILL.md            # workflow skill composition over ddx run / try
+└── ...
 ```
 
 At harness startup, only the skill's `name` + `description` metadata
@@ -82,6 +89,15 @@ intent router matches a phrase, the harness reads the matching
 "Pattern 2: Domain-specific organization" pattern and matches how
 Codex and other agentskills.io implementations progressively disclose
 skill content.
+
+Nested workflow skills are independent skills stored below the root `ddx/`
+directory so DDx can package them with the core domain vocabulary without
+returning to the stale flat sibling model (`ddx-bead`, `ddx-run`,
+`ddx-review`, etc.). They describe reusable workflows over DDx primitives:
+break down an epic into beads, replay a bead under altered conditions, compare
+prompt variants, estimate effort, run adversarial review, and perform
+bead-lifecycle lint/triage. They do not introduce new DDx run kinds; FEAT-010's
+three-layer architecture remains the execution substrate.
 
 ### Portability contract
 
@@ -132,6 +148,11 @@ composition, not a skill-frontmatter directive.
   `.agents/skills/ddx/`, and `.ddx/skills/ddx/` as real files
   (symlinks break after `git clone` on a fresh machine, and DDx no
   longer creates symlinks during install — see FEAT-015).
+- DDx maintains five shipped copies of the root skill tree:
+  `skills/ddx/` as source, `cli/internal/skills/ddx/` for `go:embed`,
+  `.agents/skills/ddx/` for Codex and agentskills-compatible harnesses,
+  `.claude/skills/ddx/` for Claude Code, and `.ddx/skills/ddx/` as the
+  project-local DDx-managed copy.
 - On init and on `ddx update`, stale ddx-prefixed skill directories
   from prior DDx versions are removed:
   `ddx-bead`, `ddx-run`, `ddx-agent`, `ddx-review`, `ddx-status`,
@@ -177,12 +198,15 @@ load-bearing, not optional. The repo ships:
 
 ### Functional
 
-1. DDx ships exactly one skill (`ddx`) in `skills/ddx/`; no sibling
-   `ddx-*` skill directories.
+1. DDx ships exactly one root skill tree (`ddx`) in `skills/ddx/`; no sibling
+   `ddx-*` skill directories. Workflow-specific DDx skills live as nested
+   subdirectories under the root tree.
 2. `SKILL.md` frontmatter contains only `name` and `description`.
 3. `SKILL.md` body is under 500 lines and includes an explicit
    intent-router directive.
-4. `reference/*.md` files are linked one level deep from `SKILL.md`.
+4. `reference/*.md` files are linked one level deep from the root `SKILL.md`;
+   nested workflow skills carry their own `SKILL.md` and optional local
+   `reference/`, `scripts/`, or `evals/` as needed.
 5. `ddx init` copies the skill, removes stale `ddx-*` dirs, and
    merges the AGENTS.md block without clobbering user content.
 6. `ddx update` refreshes `.claude/skills/ddx/` and removes stale
@@ -271,6 +295,7 @@ improvements
 - FEAT-001 (CLI commands the skill wraps)
 - FEAT-006 (agent service — harnesses, profiles, personas)
 - FEAT-009 (registry for package-install guidance inside `reference/agents.md`)
+- ADR-023 (bead-lifecycle quality policy using nested workflow skills)
 - agentskills.io open standard
 
 ## Out of Scope

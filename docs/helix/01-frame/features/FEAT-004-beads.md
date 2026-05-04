@@ -158,6 +158,55 @@ This matches how bd derives its prefix, ensuring beads created by DDx and bd in 
 
 **Workflow validation hooks:** An executable at `.ddx/hooks/validate-bead-create` (and `validate-bead-update`) receives the bead JSON on stdin. Exit codes: 0 = ok, 1 = hard error (stderr = message, creation blocked), 2 = warning (stderr = message, creation proceeds).
 
+### Authoring quality lint
+
+ADR-023 adds lifecycle-quality lint on top of the existing validation-hook
+surface. Base validation still protects the reusable bead schema; authoring
+quality lint protects the "bead as prompt" contract needed by `ddx try`,
+`ddx work`, and autonomous sub-agent execution.
+
+The lint rubric is the 8-criterion template in
+`docs/helix/06-iterate/bead-authoring-template.md`:
+
+- title is scoped and imperative
+- description contains problem, root cause with file:line, proposed fix, and
+  non-scope
+- acceptance criteria are numbered, verifiable, and name concrete tests or
+  observable artifacts when tests apply
+- new code paths include wired-in assertions
+- acceptance criteria name the applicable `go test` command and
+  `lefthook run pre-commit`
+- labels include phase, area, kind, and cross-references
+- parent and dependencies are explicit
+- the bead body is sufficient for a competent sub-agent to execute without
+  asking for operator context
+
+Lint is implemented as a workflow quality hook that invokes the nested
+bead-lifecycle skill under the `ddx` skill tree. DDx owns passing bead JSON,
+mode, waiver labels, and evidence paths into the hook; the skill owns producing
+human-readable criterion findings. Hook output is ephemeral execution evidence,
+not durable bead schema. For `ddx try` and `ddx work`, the lint report is stored
+under the attempt evidence directory alongside the prompt, result, checks, and
+triage records. `beads.jsonl` is not extended with lint-score fields.
+
+Waiver storage uses existing labels. The durable form is
+`lint-waiver:<criterion>`, such as `lint-waiver:c` for the concrete-test-name
+criterion. Built-in rubric skips come from the authoring template: doc-only
+beads may skip test-name and wired-in criteria, epic beads may satisfy those
+criteria through children, and deletion/rename beads may skip wired-in checks
+when behavior preservation is asserted.
+
+Manual override is explicit and audited. When an operator dispatches with
+`--force --reason <text>`, DDx appends an evidence event recording the actor,
+reason, mode, waived criteria, and lint summary. The override does not mutate
+the bead schema and does not suppress future lint runs.
+
+WARN-ONLY is the default mode: lint findings are reported but create/update and
+dispatch proceed. BLOCK mode is opt-in and may block dispatch only after valid
+lint output, rubric skips, and label waivers have been applied. Hook
+infrastructure failures follow ADR-023's fail-open rule and are reported as
+warnings, not schema validation failures.
+
 ## CLI Surface
 
 ```
