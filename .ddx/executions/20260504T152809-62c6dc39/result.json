@@ -1,0 +1,59 @@
+{
+  "verdict": "APPROVE",
+  "rationale": "All 8 AC items are satisfied: 5 identical bead-lifecycle/SKILL.md paths exist with correct frontmatter and the four required sections (LINT/TRIAGE/REFINE/WAIVER) with explicit JSON contracts; 7 curated examples (within 5-10) cover all required bead types; parent ddx SKILL.md router points at bead-lifecycle/; conventional commit ends with [ddx-922b5b1f].",
+  "findings": [
+    {
+      "severity": "info",
+      "summary": "Diff under review only shows post-merge execution evidence (manifest.json/result.json); actual implementation landed in commit 100939a0 (feat: add bead lifecycle skill [ddx-922b5b1f]) and was verified directly on disk.",
+      "location": ".ddx/executions/20260504T151256-31de7eb5/"
+    },
+    {
+      "severity": "info",
+      "summary": "All 5 shipped SKILL.md copies are byte-identical (diff -r returns empty across pairs).",
+      "location": ".agents/skills/ddx/bead-lifecycle/SKILL.md"
+    },
+    {
+      "severity": "info",
+      "summary": "Parent router gained the bead-lifecycle entry covering score/triage/refine intents.",
+      "location": ".agents/skills/ddx/SKILL.md:106"
+    }
+  ],
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 4763,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260504T151256-31de7eb5/manifest.json",
+          ".ddx/executions/20260504T151256-31de7eb5/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 7907,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 14476,
+    "output_bytes": 1131,
+    "elapsed_ms": 171692,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
