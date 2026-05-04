@@ -1,0 +1,17 @@
+verification_command: ddx bead show ddx-1a9cc01f >/dev/null && ddx bead show ddx-76cf71f4 >/dev/null && ddx bead show ddx-da9e9491 >/dev/null && ddx bead show ddx-ce1d6309 >/dev/null && ddx bead show ddx-89a9c305 >/dev/null && ddx bead show ddx-16722d4e >/dev/null
+
+status: decomposed
+reason: ddx-29058e2a exceeds the execute-bead size threshold, so this attempt intentionally filed focused child beads and made no implementation changes.
+
+children:
+- ddx-1a9cc01f: agent: introduce canonical ExecuteLoopSpec package
+- ddx-76cf71f4: cmd: parse execute-loop flags into ExecuteLoopSpec
+- ddx-da9e9491: server: decode REST execute-loop workers from ExecuteLoopSpec
+- ddx-ce1d6309: server: route GraphQL worker dispatch through ExecuteLoopSpec
+- ddx-89a9c305: server: replace ExecuteLoopWorkerSpec with unified spec in workers
+- ddx-16722d4e: agent: update reachability roots for ExecuteLoopSpec package
+
+size_check:
+- The parent has 17 acceptance criteria spanning cobra flag parsing, HTTP JSON transport, GraphQL dispatch, worker persistence, runWorker runtime consumption, backward compatibility, forward compatibility, reflection tests, and manual end-to-end verification.
+- The expected implementation would touch more than five files across cli/cmd, cli/internal/agent, and cli/internal/server, with a projected footprint above 500 LOC.
+- Per the execute-bead Step 0 contract, decomposition is the successful outcome and implementation is deferred to the children.
