@@ -35,7 +35,7 @@ func TestFormatSessionLogLines_ProgressThinking(t *testing.T) {
 	got := FormatSessionLogLines(lines)
 	assert.Contains(t, got, "  thinking ...\n")
 	assert.Contains(t, got, "  thinking update: reviewing files\n")
-	assert.Contains(t, got, "  thinking complete 8 tok in 5s\n")
+	assert.Contains(t, got, "  thinking complete 8 tok in 5s, 1.6 tok/s\n")
 }
 
 func TestFormatSessionLogLines_LLMPayloadSizes(t *testing.T) {
@@ -64,7 +64,7 @@ func TestFormatSessionLogLines_LLMPayloadSizes(t *testing.T) {
 	got := FormatSessionLogLines(lines)
 	assert.Contains(t, got, "  → llm request (attempt 0, req=")
 	assert.Contains(t, got, "[inspect routing logs]\n")
-	assert.Contains(t, got, "  ← llm response (42 tokens, 2.5s, text=17B think=2.0KB tool_in=32B) claude-sonnet-4-6 → Bash\n")
+	assert.Contains(t, got, "  ← llm response (42 tokens, 2.5s, 16.8 tok/s, text=17B think=2.0KB tool_in=32B) claude-sonnet-4-6 → Bash\n")
 }
 
 func TestFormatSessionLogLines_ProgressTool(t *testing.T) {
@@ -460,7 +460,7 @@ func TestFormatSessionLogLines_ProgressResponseAndContext(t *testing.T) {
 	}
 
 	got := FormatSessionLogLines(lines)
-	assert.Contains(t, got, "  response complete 100 tok in 4.2s\n")
+	assert.Contains(t, got, "  response complete 100 tok in 4.2s, 23.8 tok/s\n")
 	assert.Contains(t, got, "  context summary: edited routing output and verified tests\n")
 	assert.Contains(t, got, "  compaction complete 4800 -> 1200 tokens: trimmed prompt history and preserved tool outputs\n")
 }

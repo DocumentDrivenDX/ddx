@@ -163,7 +163,11 @@ func FormatSessionLogLines(lines []string) string {
 			if byteHints != "" {
 				byteHints = ", " + byteHints
 			}
-			fmt.Fprintf(&sb, "  ← llm response (%.0f tokens, %.1fs%s) %s%s\n", tokens, latency/1000, byteHints, model, suffix)
+			throughput := formatTokenThroughput(int(tokens), int(latency))
+			if throughput != "" {
+				throughput = ", " + throughput
+			}
+			fmt.Fprintf(&sb, "  ← llm response (%.0f tokens, %.1fs%s%s) %s%s\n", tokens, latency/1000, throughput, byteHints, model, suffix)
 		case "llm.delta":
 			// Skip deltas — too verbose for summary
 		case "progress":
@@ -433,7 +437,7 @@ func formatThinkingProgressLine(state string, data map[string]any) string {
 		tokens := progressTokenCount(data, "output_tokens", "total_tokens", "input_tokens")
 		duration := progressDurationString(data)
 		if tokens > 0 && duration != "" {
-			return fmt.Sprintf("thinking complete %d tok in %s", tokens, duration)
+			return fmt.Sprintf("thinking complete %d tok in %s%s", tokens, duration, progressThroughputSuffix(data, tokens))
 		}
 		if tokens > 0 {
 			return fmt.Sprintf("thinking complete %d tok", tokens)
@@ -484,6 +488,21 @@ func formatToolProgressLine(state string, data map[string]any) string {
 	default:
 		return ""
 	}
+}
+
+func formatTokenThroughput(tokens int, durationMS int) string {
+	if tokens <= 0 || durationMS <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%s tok/s", strconv.FormatFloat(float64(tokens)*1000/float64(durationMS), 'f', 1, 64))
+}
+
+func progressThroughputSuffix(data map[string]any, tokens int) string {
+	throughput := formatTokenThroughput(tokens, progressInt(data, "duration_ms"))
+	if throughput == "" {
+		return ""
+	}
+	return ", " + throughput
 }
 
 func compactProgressToolDisplay(data map[string]any, toolName, command string, limit int) string {
@@ -816,7 +835,7 @@ func formatResponseProgressLine(state string, data map[string]any) string {
 		tokens := progressTokenCount(data, "output_tokens", "total_tokens", "input_tokens")
 		duration := progressDurationString(data)
 		if tokens > 0 && duration != "" {
-			return fmt.Sprintf("response complete %d tok in %s", tokens, duration)
+			return fmt.Sprintf("response complete %d tok in %s%s", tokens, duration, progressThroughputSuffix(data, tokens))
 		}
 		if tokens > 0 {
 			return fmt.Sprintf("response complete %d tok", tokens)
