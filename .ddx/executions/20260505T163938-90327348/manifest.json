@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260505T163938-90327348",
+  "bead_id": "ddx-a2212280",
+  "base_rev": "940b59c846785ba63a461360535a78753fc124dc",
+  "created_at": "2026-05-05T16:39:41.054750456Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a2212280",
+    "title": "agent: remove ResolveRoute preflight from work execution paths",
+    "description": "PROBLEM\nDDx execution paths still call ResolveRoute as a preflight even though Fizeau owns service routing for agent execution. That keeps DDx coupled to route-preview semantics during runtime execution and risks alternate behavior between status/debug surfaces and actual work execution.\n\nROOT CAUSE\n- cli/internal/server/workers.go:609-653 defines buildRoutePreflight and calls ResolveRoute before executing worker tasks.\n- cli/internal/server/workers_route_preflight_test.go asserts this preflight behavior, so tests currently lock in the boundary violation.\n- cmd routing lint currently checks command execution paths but does not cover server worker execution in cli/internal/server/workers.go.\n\nPROPOSED FIX\nRemove ResolveRoute preflight from worker execution paths. Keep ResolveRoute only on explicit status/debug/preview surfaces such as ddx agent route-status. Add lint/test coverage so non-status execution paths fail if they reintroduce ResolveRoute.\n\nNON-SCOPE\n- Removing route-status or provider/model inventory features.\n- Changing Fizeau routing APIs.\n- Changing final actual-route recording from Fizeau results.",
+    "acceptance": "1. buildRoutePreflight and RoutePreflight wiring are deleted from WorkerManager.runWorker and related execution paths.\n2. ResolveRoute remains available only in status/debug/preview surfaces, not in bead/work execution paths.\n3. TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel uses a stub service whose ResolveRoute fails and proves worker execution still proceeds without calling it.\n4. Existing route-preflight tests are removed or rewritten to assert the new boundary.\n5. cd cli \u0026\u0026 go test ./cmd -run 'TestRoutinglintNoResolveRouteInExecutionPaths|TestRoutinglintNonStatusFilesDoNotCallResolveRoute|TestWorkDoesNotCallResolveRoute' -count=1 passes.\n6. cd cli \u0026\u0026 go test ./internal/server -run 'TestWorker.*ResolveRoute|TestWorker_NoPreflight|TestRunWorker' -count=1 passes.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-dda48755",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:server",
+      "area:routing",
+      "kind:cleanup",
+      "upstream-fizeau"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-05T16:39:38Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2464742",
+      "execute-loop-heartbeat-at": "2026-05-05T16:39:38.778180739Z",
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service (consumer of ddx-agent contract)"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260505T163938-90327348",
+    "prompt": ".ddx/executions/20260505T163938-90327348/prompt.md",
+    "manifest": ".ddx/executions/20260505T163938-90327348/manifest.json",
+    "result": ".ddx/executions/20260505T163938-90327348/result.json",
+    "checks": ".ddx/executions/20260505T163938-90327348/checks.json",
+    "usage": ".ddx/executions/20260505T163938-90327348/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a2212280-20260505T163938-90327348"
+  },
+  "prompt_sha": "71674341361bfc14189d664cdc07d71ce378654b08457cdbdd58b8724b2aa086"
+}
