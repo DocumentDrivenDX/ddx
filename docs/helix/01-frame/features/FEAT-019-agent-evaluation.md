@@ -61,8 +61,11 @@ management, run lifecycle, or dispatch mechanics.
 
 When an evaluation record links into a preserved `try` or `run`, the shared
 project-scoped run-detail surface from FEAT-008/FEAT-010 is the canonical
-drill-down view, and the canonical access audit semantics stay on that
-surface. FEAT-019 does not own a parallel detail page for those links.
+drill-down view, including the layer-aware tab structure (`overview`;
+`overview` / `prompt` / `response` / `tools` / `evidence` for `try`;
+`overview` / `prompt` / `response` / `session` / `tools` / `evidence` for
+`run`). The canonical access audit semantics stay on that surface. FEAT-019
+does not own a parallel detail page for those links.
 
 ### Relationship to manual re-queue (FEAT-010 `runRequeue`)
 
@@ -70,11 +73,11 @@ Re-queue, exposed in the web UI on layer=`try` and layer=`run` Runs rows
 (FEAT-008 US-086c), is the **manual operator counterpart** to the
 evaluation auto-retry policies skills compose on top of FEAT-019 records.
 Both go through the same backend write surface — the FEAT-010
-`runRequeue` GraphQL mutation — and both produce the same
+`runRequeue` GraphQL mutation — and both produce the same canonical
 `run_requeue` audit event on the originating bead (schema in FEAT-010
-§"Re-queue audit events"). FEAT-019 does not own dispatch; it consumes
-the resulting layer-2 try / layer-1 run records the same way it consumes
-any other preserved `ddx try` iteration.
+§"Re-queue audit events"). FEAT-019 does not own dispatch; it consumes the
+resulting layer-2 try / layer-1 run records the same way it consumes any
+other preserved `ddx try` iteration.
 
 ### Relationship to workflow skills and tools
 

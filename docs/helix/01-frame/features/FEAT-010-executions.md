@@ -487,7 +487,7 @@ recorded on the run.
 | `ddx_runs_log` | `GET /api/runs/:id/log` | Raw logs / attachment bodies | read |
 | `ddx_runs_result` | `GET /api/runs/:id/result` | Structured result payload | read |
 | `ddx_artifact_regenerate` | `POST /api/artifacts/:id/regenerate` | Trigger regeneration of one artifact; returns the new run id | **write — narrow** |
-| (GraphQL) | `Mutation.runRequeue` | Re-queue the originating bead of an existing run record (manual operator re-queue from the Runs UI); requires `idempotencyKey`; emits a `run_requeue` audit event on the bead | **write — narrow** |
+| (GraphQL) | `Mutation.runRequeue` | Re-queue the originating bead of an existing run record (manual operator re-queue from the Runs UI); requires `idempotencyKey`; emits a canonical `run_requeue` audit event on the bead (schema below) | **write — narrow** |
 
 The HTTP/MCP read surface is total over the unified run substrate.
 
@@ -505,18 +505,18 @@ submissions with the same `idempotencyKey` collapse to a single
 re-queue and a single event (`deduplicated=true` is returned to all
 subsequent callers); if the cached idempotency record points at a
 missing bead, the requeue is replayed against the run's current
-originating bead. The event uses the standard `bead.BeadEvent` envelope
-with the following fields:
+originating bead. The event uses the standard `bead.BeadEvent`
+envelope:
 
 | Field | Value |
 |---|---|
-| `kind` | `run_requeue` (constant `RunRequeueEventKind`) |
+| `kind` | `run_requeue` (`RunRequeueEventKind`) |
 | `summary` | `run requeued` |
-| `actor` | Operator identity (`unknown`/`anonymous` when no identity is resolvable from the inbound HTTP request) |
+| `actor` | Resolved operator identity; falls back to `anonymous` when no request identity is available |
 | `source` | `graphql:runRequeue` |
-| `body` | Single line: `identity=<kind> actor=<actor> run_id=<runId> idempotency_key=<key> layer_override=<layer-or-empty>` |
+| `body` | Single line `key=value` payload: `identity=<identity.kind> actor=<identity.actor> run_id=<runId> idempotency_key=<key> layer_override=<layer-or-empty>` |
 
-The `body` line is structured for grep/jq parsing: each token is a
+The body line is structured for grep/jq parsing: each token is a
 `key=value` pair separated by single spaces. `layer_override` is the
 empty string when the caller did not pass `RunRequeueInput.layer`.
 `identity.kind` is the resolver-selected operator identity class
@@ -552,29 +552,6 @@ project-scoped identity of the inspection:
 | `actor` | Viewer identity derived from the authenticated project member |
 | `source` | `graphql:run` |
 | `body` | Single line: `project_id=<projectId> run_id=<runId> layer=<layer> visibility=project_membership` |
-
-### Re-queue audit events
-
-The `runRequeue` mutation appends a `run_requeue` event to the originating
-bead every time a re-queue succeeds. There is no separate persisted
-re-queue record beyond the reopened bead and this audit event.
-
-The event payload is append-only and uses a single-line `key=value` body so
-operators and tests can parse it with grep or jq:
-
-| Field | Value |
-|---|---|
-| `kind` | `run_requeue` |
-| `summary` | `run requeued` |
-| `actor` | Viewer identity derived from the authenticated operator; falls back to `anonymous` |
-| `source` | `graphql:runRequeue` |
-| `body` | Single line: `identity=<identity.kind> actor=<identity.actor> run_id=<runId> idempotency_key=<idempotencyKey> layer_override=<layerOverrideOrEmpty>` |
-
-`identity.kind` reflects the operator identity class selected by the GraphQL
-resolver (`unknown`, `localhost`, or `tsnet`). `layer_override` is empty when
-the caller does not supply `RunRequeueInput.layer`. Duplicate
-`idempotencyKey` submissions dedupe to the same originating bead and do not
-append a second `run_requeue` event.
 
 ### Layer-to-substrate mapping for the Runs UI
 

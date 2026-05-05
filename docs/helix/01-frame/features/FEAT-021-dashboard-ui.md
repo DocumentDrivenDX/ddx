@@ -25,7 +25,10 @@ and shareable.
 
 The dashboard UI is implemented as a SvelteKit application with graphql-request for
 GraphQL data fetching. Every page uses `+page.ts` load functions to fetch data
-from the `/graphql` endpoint defined in SD-022.
+from the `/graphql` endpoint defined in SD-022. The shared run-detail surface
+uses the FEAT-008/FEAT-010 tab structure: `overview`; `overview` / `prompt` /
+`response` / `tools` / `evidence` for `try`; `overview` / `prompt` /
+`response` / `session` / `tools` / `evidence` for `run`.
 
 ## Problem Statement
 

@@ -82,7 +82,7 @@ project-scoped tabs in the global navigation, in this order:
 | Beads | `beads` | Bead list / kanban / ready / detail (US-082*) |
 | Artifacts | `artifacts` | Artifact browser (US-080, US-081b, US-083) |
 | Graph | `graph` | Document dependency graph (US-081, US-081c) |
-| Runs | `runs` | Layer-aware run history with `work` / `try` / `run` chips, row expansion, and re-queue (US-086b, US-086c) |
+| Runs | `runs` | Layer-aware run history with `work` / `try` / `run` chips, row expansion into the shared run-detail tab structure, and re-queue (US-086b, US-086c) |
 | Workers | `workers` | Live + recent worker processes for this project (US-085b, US-086, US-086a) |
 | Personas | `personas` | Persona browser + role bindings (US-097) |
 | Plugins | `plugins` | Plugin registry + install/uninstall (US-098) |
@@ -91,7 +91,12 @@ project-scoped tabs in the global navigation, in this order:
 
 **Sessions and Executions are retired as top-level activity tabs**
 (Story 8). The unified Runs tab carries the shared layer-aware tab
-structure and inline row expansion that surface what those tabs used to show:
+structure and inline row expansion that surface what those tabs used to
+show. The shared detail tabs are:
+
+- `work` rows: `overview`
+- `try` rows: `overview`, `prompt`, `response`, `tools`, `evidence`
+- `run` rows: `overview`, `prompt`, `response`, `session`, `tools`, `evidence`
 
 - `layer=run` rows expand to AgentSession transcript / billing / cached
   tokens / stderr (the old Sessions detail).
