@@ -22,9 +22,9 @@ func NewClaudeInjector() ClaudeInjector {
 
 // NewClaudeInjectorWithPath creates a new Claude injector with a specific file path
 func NewClaudeInjectorWithPath(claudeFilePath string) ClaudeInjector {
-	return &ClaudeInjectorImpl{
-		claudeFilePath: claudeFilePath,
-	}
+	injector := NewClaudeInjector().(*ClaudeInjectorImpl)
+	injector.claudeFilePath = claudeFilePath
+	return injector
 }
 
 // InjectPersona injects a single persona into CLAUDE.md for the specified role

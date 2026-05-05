@@ -6,14 +6,13 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/tabwriter"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/persona"
 	"github.com/spf13/cobra"
-	"golang.org/x/text/cases"
-	"golang.org/x/text/language"
 	"gopkg.in/yaml.v3"
 )
 
@@ -614,35 +613,20 @@ func personaStatus(workingDir string) (PersonaStatus, error) {
 
 	status.HasCLAUDEFile = true
 
-	// Read CLAUDE.md
-	content, err := os.ReadFile(claudePath)
+	injector := persona.NewClaudeInjectorWithPath(claudePath)
+	loadedPersonas, err := injector.GetLoadedPersonas()
 	if err != nil {
 		return status, fmt.Errorf("failed to read CLAUDE.md: %w", err)
 	}
-
-	// Parse loaded personas
-	claudeStr := string(content)
-	if strings.Contains(claudeStr, "<!-- PERSONAS:START -->") &&
-		strings.Contains(claudeStr, "<!-- PERSONAS:END -->") {
-		// Extract persona section
-		startIdx := strings.Index(claudeStr, "<!-- PERSONAS:START -->")
-		endIdx := strings.Index(claudeStr, "<!-- PERSONAS:END -->")
-		if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
-			personaSection := claudeStr[startIdx:endIdx]
-
-			// Parse loaded personas
-			lines := strings.Split(personaSection, "\n")
-			for _, line := range lines {
-				if strings.HasPrefix(line, "### ") {
-					// Parse role and persona from header
-					header := strings.TrimPrefix(line, "### ")
-					parts := strings.Split(header, ": ")
-					if len(parts) == 2 {
-						status.LoadedRoles = append(status.LoadedRoles, parts[0])
-						status.LoadedPersonas = append(status.LoadedPersonas, parts[1])
-					}
-				}
-			}
+	if len(loadedPersonas) > 0 {
+		roles := make([]string, 0, len(loadedPersonas))
+		for role := range loadedPersonas {
+			roles = append(roles, role)
+		}
+		sort.Strings(roles)
+		for _, role := range roles {
+			status.LoadedRoles = append(status.LoadedRoles, role)
+			status.LoadedPersonas = append(status.LoadedPersonas, loadedPersonas[role])
 		}
 	}
 
@@ -680,101 +664,86 @@ func personaLoad(workingDir string, personas ...string) ([]string, error) {
 		claudePath = filepath.Join(workingDir, "CLAUDE.md")
 	}
 
-	var claudeContent string
-	if data, err := os.ReadFile(claudePath); err == nil {
-		claudeContent = string(data)
-	} else {
-		// Create new CLAUDE.md
-		claudeContent = "# CLAUDE.md\n\nProject guidance for my application."
+	if _, err := os.Stat(claudePath); err != nil && !os.IsNotExist(err) {
+		return nil, fmt.Errorf("failed to inspect CLAUDE.md: %w", err)
 	}
-
-	// Remove existing persona section if present
-	startMarker := "<!-- PERSONAS:START -->"
-	endMarker := "<!-- PERSONAS:END -->"
-	startIdx := strings.Index(claudeContent, startMarker)
-	if startIdx != -1 {
-		endIdx := strings.Index(claudeContent, endMarker)
-		if endIdx != -1 {
-			claudeContent = claudeContent[:startIdx] + claudeContent[endIdx+len(endMarker):]
-		}
-	}
-
-	// Build persona content
-	var personaSection strings.Builder
-	personaSection.WriteString("\n" + startMarker + "\n")
-	personaSection.WriteString("## Active Personas\n\n")
 
 	// Track loaded personas
 	loadedPersonas := []string{}
 
 	// If specific personas requested, load those; otherwise load all bound personas
+	var specificPersona *persona.Persona
+	var boundPersonas map[string]*persona.Persona
 	if len(personas) > 0 {
 		// Load specific personas
 		for _, personaName := range personas {
-			content, err := personaInjectionContent(loader, personaName)
+			loadedPersona, err := loader.LoadPersona(personaName)
 			if err != nil {
 				if isPersonaNotFound(err) {
 					return nil, fmt.Errorf("persona '%s' not found", personaName)
 				}
 				return nil, err
 			}
-			if err := validatePersonaContent(content, personaName); err != nil {
+			if err := validatePersonaContent(loadedPersona.Content, personaName); err != nil {
 				return nil, err
 			}
-			// Just add the content - personas have their own titles
-			personaSection.WriteString(content + "\n")
 			loadedPersonas = append(loadedPersonas, personaName)
+			if len(personas) == 1 {
+				specificPersona = loadedPersona
+			} else {
+				if boundPersonas == nil {
+					boundPersonas = make(map[string]*persona.Persona, len(personas))
+				}
+				role := personaName
+				if len(loadedPersona.Roles) > 0 && strings.TrimSpace(loadedPersona.Roles[0]) != "" {
+					role = loadedPersona.Roles[0]
+				}
+				boundPersonas[role] = loadedPersona
+			}
 		}
 	} else {
 		// Load all bound personas from config
 		if cfg.PersonaBindings != nil {
+			boundPersonas = make(map[string]*persona.Persona, len(cfg.PersonaBindings))
 			for role, personaName := range cfg.PersonaBindings {
-				content, err := personaInjectionContent(loader, personaName)
+				loadedPersona, err := loader.LoadPersona(personaName)
 				if err != nil {
 					if isPersonaNotFound(err) {
 						continue
 					}
 					return nil, err
 				}
-				if err := validatePersonaContent(content, personaName); err != nil {
+				if err := validatePersonaContent(loadedPersona.Content, personaName); err != nil {
 					return nil, err
 				}
-				// Add role header with proper capitalization
-				caser := cases.Title(language.English)
-				capitalizedRole := caser.String(strings.ReplaceAll(role, "-", " "))
-				personaSection.WriteString(fmt.Sprintf("### %s: %s\n", capitalizedRole, personaName))
-				personaSection.WriteString(content + "\n")
+				boundPersonas[role] = loadedPersona
 				loadedPersonas = append(loadedPersonas, personaName)
 			}
 		}
 	}
 
-	personaSection.WriteString(endMarker + "\n")
-
-	// Append persona section to CLAUDE.md
-	claudeContent += personaSection.String()
-
-	// Write updated CLAUDE.md
-	if err := os.WriteFile(claudePath, []byte(claudeContent), 0644); err != nil {
-		return nil, fmt.Errorf("failed to write CLAUDE.md: %w", err)
+	if len(loadedPersonas) > 0 {
+		injector := persona.NewClaudeInjectorWithPath(claudePath)
+		if err := injector.RemovePersonas(); err != nil {
+			return nil, err
+		}
+		switch {
+		case specificPersona != nil:
+			role := specificPersona.Name
+			if len(specificPersona.Roles) > 0 && strings.TrimSpace(specificPersona.Roles[0]) != "" {
+				role = specificPersona.Roles[0]
+			}
+			if err := injector.InjectPersona(specificPersona, role); err != nil {
+				return nil, err
+			}
+		case len(boundPersonas) > 0:
+			if err := injector.InjectMultiple(boundPersonas); err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	return loadedPersonas, nil
-}
-
-func personaInjectionContent(loader persona.PersonaLoader, personaName string) (string, error) {
-	loaded, err := loader.LoadPersona(personaName)
-	if err != nil {
-		return "", err
-	}
-	if loaded.FilePath == "" {
-		return loaded.Content, nil
-	}
-	content, err := os.ReadFile(loaded.FilePath)
-	if err != nil {
-		return "", err
-	}
-	return string(content), nil
 }
 
 func isPersonaNotFound(err error) bool {

@@ -23,9 +23,9 @@ func NewBindingManager() BindingManager {
 
 // NewBindingManagerWithPath creates a new binding manager with a specific config path
 func NewBindingManagerWithPath(configPath string) BindingManager {
-	return &BindingManagerImpl{
-		configPath: configPath,
-	}
+	manager := NewBindingManager().(*BindingManagerImpl)
+	manager.configPath = configPath
+	return manager
 }
 
 // GetBinding returns the persona bound to the specified role

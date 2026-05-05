@@ -32,10 +32,7 @@ type PersonaLoaderImpl struct {
 func NewPersonaLoader(workingDir string) PersonaLoader {
 	libraryDir := resolveLibraryPersonasDir(workingDir)
 	projectDir := resolveProjectPersonasDir(workingDir)
-	return &PersonaLoaderImpl{
-		personasDir: libraryDir,
-		projectDir:  projectDir,
-	}
+	return NewPersonaLoaderWithDirs(libraryDir, projectDir)
 }
 
 // NewPersonaLoaderWithDir creates a new persona loader with a specific
@@ -50,10 +47,9 @@ func NewPersonaLoaderWithDir(dir string) PersonaLoader {
 // NewPersonaLoaderWithDirs creates a loader with explicit library and project
 // directories. Either may be empty to disable that source.
 func NewPersonaLoaderWithDirs(libraryDir, projectDir string) PersonaLoader {
-	return &PersonaLoaderImpl{
-		personasDir: libraryDir,
-		projectDir:  projectDir,
-	}
+	loader := NewPersonaLoaderWithDir(libraryDir).(*PersonaLoaderImpl)
+	loader.projectDir = projectDir
+	return loader
 }
 
 // resolveLibraryPersonasDir resolves the library persona directory.
