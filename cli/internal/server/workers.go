@@ -1742,27 +1742,22 @@ func relToProject(projectRoot, path string) string {
 	return rel
 }
 
-// workerHarnessHealthy reports whether the upstream service has an active
-// failure cooldown recorded against the given harness. RouteStatus is the
-// service-owned health source. When RouteStatus is unavailable, the harness is
-// considered healthy.
+// workerHarnessHealthy reports whether the upstream service currently exposes
+// the given harness as available. When live status is unavailable, the harness
+// is considered healthy so transient status failures do not hide workers.
 func workerHarnessHealthy(ctx context.Context, svc agentlib.FizeauService, harness string) bool {
 	if svc == nil || harness == "" {
 		return true
 	}
-	report, err := svc.RouteStatus(ctx)
-	if err != nil || report == nil {
+	infos, err := svc.ListHarnesses(ctx)
+	if err != nil {
 		return true
 	}
-	for _, route := range report.Routes {
-		for _, cand := range route.Candidates {
-			if cand.Provider != harness {
-				continue
-			}
-			if !cand.Healthy {
-				return false
-			}
+	for _, info := range infos {
+		if info.Name != harness {
+			continue
 		}
+		return info.Available
 	}
 	return true
 }

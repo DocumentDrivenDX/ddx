@@ -47,6 +47,7 @@ func TestFormatSessionLogLines_RendersFizeauProgressEvents(t *testing.T) {
 		mustSessionLogLine(t, "progress", map[string]any{
 			"phase":           "context",
 			"state":           "update",
+			"message":         "ddx-99419bc1 #1 context edited routing output and verified tests",
 			"session_summary": "edited routing output and verified tests",
 		}),
 	}
@@ -57,7 +58,7 @@ func TestFormatSessionLogLines_RendersFizeauProgressEvents(t *testing.T) {
 	assert.Contains(t, got, "  ddx-99419bc1 #1 tool `ls -al` start\n")
 	assert.Contains(t, got, "  ddx-99419bc1 #1 tool `ls -al` done 3.0s\n")
 	assert.Contains(t, got, "  ddx-99419bc1 #1 done 100tok\n")
-	assert.Contains(t, got, "  context: edited routing output and verified tests\n")
+	assert.Contains(t, got, "  ddx-99419bc1 #1 context edited routing output and verified tests\n")
 	assert.NotContains(t, got, "running tool call")
 }
 

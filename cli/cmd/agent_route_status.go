@@ -17,56 +17,46 @@ import (
 
 // routeStatusJSON is the top-level JSON output shape.
 type routeStatusJSON struct {
-	Routes          []routeStatusRouteJSON    `json:"routes,omitempty"`
+	Selection       *routeStatusSelectionJSON `json:"selection,omitempty"`
+	Providers       []routeStatusProviderJSON `json:"providers,omitempty"`
+	Models          []routeStatusModelJSON    `json:"models,omitempty"`
 	RecentDecisions []routeStatusDecisionJSON `json:"recent_decisions,omitempty"`
 	ActiveCooldowns []routeStatusCooldownJSON `json:"active_cooldowns,omitempty"`
 }
 
-// routeStatusCandidateJSON is the JSON-serialisable form of one route candidate.
-// Power is sourced from the cached LastDecision.Candidates (display-only; not
-// used to alter routing). Zero means power is unavailable for this candidate.
-type routeStatusCandidateJSON struct {
-	Provider      string  `json:"provider"`
-	Model         string  `json:"model,omitempty"`
-	Healthy       bool    `json:"healthy"`
-	InCooldown    bool    `json:"in_cooldown,omitempty"`
-	CooldownUntil string  `json:"cooldown_until,omitempty"`
-	AvgDurationMs float64 `json:"avg_duration_ms,omitempty"`
-	Reliability   float64 `json:"reliability,omitempty"`
-	Score         float64 `json:"score,omitempty"`
-	Reason        string  `json:"reason,omitempty"`
-	Power         int     `json:"power,omitempty"`
+type routeStatusSelectionJSON struct {
+	Harness  string `json:"harness,omitempty"`
+	Provider string `json:"provider,omitempty"`
+	Endpoint string `json:"endpoint,omitempty"`
+	Model    string `json:"model,omitempty"`
+	Power    int    `json:"power,omitempty"`
+	Reason   string `json:"reason,omitempty"`
 }
 
-// routeStatusDecisionCandidateJSON is the JSON-serialisable form of one
-// RouteDecision candidate from the cached LastDecision trace. Observability
-// only — not used to alter ExecuteRequest routing fields.
-type routeStatusDecisionCandidateJSON struct {
-	Provider string  `json:"provider"`
-	Model    string  `json:"model,omitempty"`
-	Eligible bool    `json:"eligible"`
-	Power    int     `json:"power,omitempty"`
-	Score    float64 `json:"score,omitempty"`
-	Reason   string  `json:"reason,omitempty"`
+type routeStatusProviderJSON struct {
+	Name          string `json:"name"`
+	Type          string `json:"type,omitempty"`
+	Status        string `json:"status,omitempty"`
+	DefaultModel  string `json:"default_model,omitempty"`
+	CostClass     string `json:"cost_class,omitempty"`
+	Quota         string `json:"quota,omitempty"`
+	Usage         string `json:"usage,omitempty"`
+	CooldownUntil string `json:"cooldown_until,omitempty"`
+	Error         string `json:"error,omitempty"`
 }
 
-// routeStatusLastDecisionJSON is the JSON-serialisable form of the cached
-// RouteDecision for a route. Rendered for debug observability only.
-type routeStatusLastDecisionJSON struct {
-	Provider   string                             `json:"provider,omitempty"`
-	Model      string                             `json:"model,omitempty"`
-	Reason     string                             `json:"reason,omitempty"`
-	Candidates []routeStatusDecisionCandidateJSON `json:"candidates,omitempty"`
-}
-
-// routeStatusRouteJSON is the JSON-serialisable form of one model route.
-type routeStatusRouteJSON struct {
-	RouteKey         string                       `json:"route_key"`
-	Strategy         string                       `json:"strategy"`
-	SelectedProvider string                       `json:"selected_provider,omitempty"`
-	SelectedModel    string                       `json:"selected_model,omitempty"`
-	Candidates       []routeStatusCandidateJSON   `json:"candidates"`
-	LastDecision     *routeStatusLastDecisionJSON `json:"last_decision,omitempty"` // observability only
+type routeStatusModelJSON struct {
+	Provider             string  `json:"provider,omitempty"`
+	Harness              string  `json:"harness,omitempty"`
+	Model                string  `json:"model"`
+	Available            bool    `json:"available"`
+	AutoRoutable         bool    `json:"auto_routable"`
+	Power                int     `json:"power,omitempty"`
+	InputCostPerMTokUSD  float64 `json:"input_cost_per_mtok_usd,omitempty"`
+	OutputCostPerMTokUSD float64 `json:"output_cost_per_mtok_usd,omitempty"`
+	SpeedTokensPerSec    float64 `json:"speed_tokens_per_sec,omitempty"`
+	CatalogRef           string  `json:"catalog_ref,omitempty"`
+	RankPosition         int     `json:"rank_position,omitempty"`
 }
 
 // recentRoutingDecision is a merged view of a single routing decision sourced from
@@ -190,10 +180,178 @@ type routeStatusDecisionJSON struct {
 }
 
 type routeStatusCooldownJSON struct {
-	Route         string `json:"route"`
 	Provider      string `json:"provider"`
-	FailedAt      string `json:"failed_at"`
 	CooldownUntil string `json:"cooldown_until"`
+}
+
+type routeStatusCooldown struct {
+	provider      string
+	cooldownUntil time.Time
+}
+
+func routeStatusProvidersJSON(providers []agentlib.ProviderInfo, harnesses []agentlib.HarnessInfo) []routeStatusProviderJSON {
+	harnessByName := make(map[string]agentlib.HarnessInfo, len(harnesses))
+	for _, h := range harnesses {
+		harnessByName[h.Name] = h
+	}
+
+	rows := make([]routeStatusProviderJSON, 0, len(providers)+len(harnesses))
+	seen := make(map[string]struct{}, len(providers))
+	for _, p := range providers {
+		seen[p.Name] = struct{}{}
+		row := routeStatusProviderJSON{
+			Name:         p.Name,
+			Type:         p.Type,
+			Status:       p.Status,
+			DefaultModel: p.DefaultModel,
+			Quota:        formatQuotaState(p.Quota),
+			Usage:        formatUsageWindows(p.UsageWindows),
+		}
+		if p.CooldownState != nil && !p.CooldownState.Until.IsZero() {
+			row.CooldownUntil = p.CooldownState.Until.UTC().Format(time.RFC3339)
+		}
+		if p.LastError != nil {
+			row.Error = p.LastError.Detail
+		}
+		if h, ok := harnessByName[p.Name]; ok {
+			row.CostClass = h.CostClass
+			if row.Quota == "" {
+				row.Quota = formatQuotaState(h.Quota)
+			}
+			if row.Usage == "" {
+				row.Usage = formatUsageWindows(h.UsageWindows)
+			}
+		}
+		rows = append(rows, row)
+	}
+	for _, h := range harnesses {
+		if _, ok := seen[h.Name]; ok || !h.AutoRoutingEligible {
+			continue
+		}
+		status := "unavailable"
+		if h.Available {
+			status = "available"
+		}
+		row := routeStatusProviderJSON{
+			Name:         h.Name,
+			Type:         h.Type,
+			Status:       status,
+			DefaultModel: h.DefaultModel,
+			CostClass:    h.CostClass,
+			Quota:        formatQuotaState(h.Quota),
+			Usage:        formatUsageWindows(h.UsageWindows),
+		}
+		if h.LastError != nil {
+			row.Error = h.LastError.Detail
+		}
+		rows = append(rows, row)
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].Name < rows[j].Name })
+	return rows
+}
+
+func routeStatusModelsJSON(models []agentlib.ModelInfo) []routeStatusModelJSON {
+	rows := make([]routeStatusModelJSON, 0, len(models))
+	for _, m := range models {
+		rows = append(rows, routeStatusModelJSON{
+			Provider:             m.Provider,
+			Harness:              m.Harness,
+			Model:                m.ID,
+			Available:            m.Available,
+			AutoRoutable:         m.AutoRoutable,
+			Power:                m.Power,
+			InputCostPerMTokUSD:  m.Cost.InputPerMTok,
+			OutputCostPerMTokUSD: m.Cost.OutputPerMTok,
+			SpeedTokensPerSec:    m.PerfSignal.SpeedTokensPerSec,
+			CatalogRef:           m.CatalogRef,
+			RankPosition:         m.RankPosition,
+		})
+	}
+	sort.Slice(rows, func(i, j int) bool {
+		if rows[i].Provider != rows[j].Provider {
+			return rows[i].Provider < rows[j].Provider
+		}
+		return rows[i].Model < rows[j].Model
+	})
+	return rows
+}
+
+func providerCooldowns(providers []agentlib.ProviderInfo) []routeStatusCooldown {
+	var out []routeStatusCooldown
+	for _, p := range providers {
+		if p.CooldownState == nil || p.CooldownState.Until.IsZero() || time.Now().After(p.CooldownState.Until) {
+			continue
+		}
+		out = append(out, routeStatusCooldown{provider: p.Name, cooldownUntil: p.CooldownState.Until})
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].provider < out[j].provider })
+	return out
+}
+
+func formatQuotaState(q *agentlib.QuotaState) string {
+	if q == nil {
+		return "-"
+	}
+	status := q.Status
+	if status == "" {
+		status = "unknown"
+	}
+	if len(q.Windows) == 0 {
+		return status
+	}
+	best := q.Windows[0]
+	for _, w := range q.Windows[1:] {
+		if w.UsedPercent > best.UsedPercent {
+			best = w
+		}
+	}
+	if best.UsedPercent > 0 {
+		return fmt.Sprintf("%s %.0f%% %s", status, best.UsedPercent, best.Name)
+	}
+	return status
+}
+
+func formatUsageWindows(windows []agentlib.UsageWindow) string {
+	if len(windows) == 0 {
+		return "-"
+	}
+	w := windows[0]
+	for _, candidate := range windows {
+		if candidate.Name == "7d" {
+			w = candidate
+			break
+		}
+	}
+	parts := []string{}
+	if w.TotalTokens > 0 {
+		parts = append(parts, fmt.Sprintf("%dtok", w.TotalTokens))
+	}
+	if w.CostUSD > 0 {
+		parts = append(parts, fmt.Sprintf("$%.4f", w.CostUSD))
+	}
+	if len(parts) == 0 {
+		return "-"
+	}
+	if w.Name != "" {
+		parts = append(parts, w.Name)
+	}
+	return strings.Join(parts, " ")
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
+}
+
+func formatCostPerMTok(v float64) string {
+	if v <= 0 {
+		return "-"
+	}
+	return fmt.Sprintf("%.2f", v)
 }
 
 func truncateRouteStr(value string, n int) string {
@@ -206,56 +364,18 @@ func truncateRouteStr(value string, n int) string {
 	return value[:n-2] + ".."
 }
 
-// candidatePowerFromLastDecision returns the power value for a (provider, model)
-// pair from the cached LastDecision candidates, or 0 if unavailable. This is
-// observability-only; the returned value must not alter ExecuteRequest routing.
-func candidatePowerFromLastDecision(dec *agentlib.RouteDecision, provider, model string) int {
-	if dec == nil {
-		return 0
-	}
-	for _, c := range dec.Candidates {
-		if c.Provider == provider && c.Model == model {
-			return c.Components.Power
-		}
-	}
-	return 0
-}
-
-// lastDecisionToJSON converts a RouteDecision to its JSON-serialisable form.
-// Returns nil when dec is nil. Display-only; does not alter routing fields.
-func lastDecisionToJSON(dec *agentlib.RouteDecision) *routeStatusLastDecisionJSON {
-	if dec == nil {
-		return nil
-	}
-	jd := &routeStatusLastDecisionJSON{
-		Provider: dec.Provider,
-		Model:    dec.Model,
-		Reason:   dec.Reason,
-	}
-	for _, c := range dec.Candidates {
-		jd.Candidates = append(jd.Candidates, routeStatusDecisionCandidateJSON{
-			Provider: c.Provider,
-			Model:    c.Model,
-			Eligible: c.Eligible,
-			Power:    c.Components.Power,
-			Score:    c.Score,
-			Reason:   c.Reason,
-		})
-	}
-	return jd
-}
-
 func (f *CommandFactory) newAgentRouteStatusCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "route-status",
-		Short: "Show routing table, recent decisions, and active health cooldowns",
-		Long: `Shows the current provider routing state, recent routing decisions, and
-any health cooldowns currently in effect.
+		Short: "Show live provider/model routing status",
+		Long: `Shows the live provider and model inventory used by Fizeau routing:
+provider status, presented models, power, cost, usage, quota, recent decisions,
+and active cooldowns.
 
-Examples:
-  ddx agent route-status
-  ddx agent route-status --model qwen3.5-27b
-  ddx agent route-status --json`,
+	Examples:
+	  ddx agent route-status
+	  ddx agent route-status --model qwen3.5-27b
+	  ddx agent route-status --json`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			model, _ := cmd.Flags().GetString("model")
@@ -267,42 +387,38 @@ Examples:
 			}
 
 			ctx := context.Background()
-			report, err := svc.RouteStatus(ctx)
+			providers, err := svc.ListProviders(ctx)
 			if err != nil {
-				return fmt.Errorf("getting route status: %w", err)
+				return fmt.Errorf("listing providers: %w", err)
 			}
-
-			// Filter by --model flag if specified.
+			harnesses, err := svc.ListHarnesses(ctx)
+			if err != nil {
+				return fmt.Errorf("listing harnesses: %w", err)
+			}
+			models, err := svc.ListModels(ctx, agentlib.ModelFilter{})
+			if err != nil {
+				return fmt.Errorf("listing models: %w", err)
+			}
 			if model != "" {
-				found := false
-				for _, r := range report.Routes {
-					if r.Model == model {
-						found = true
-						break
+				filtered := models[:0]
+				for _, m := range models {
+					if m.ID == model {
+						filtered = append(filtered, m)
 					}
 				}
-				if !found {
-					return fmt.Errorf("no route configured for model key %q — check .fizeau/config.yaml", model)
-				}
-				filtered := report.Routes[:0]
-				for _, r := range report.Routes {
-					if r.Model == model {
-						filtered = append(filtered, r)
-					}
-				}
-				report.Routes = filtered
+				models = filtered
 			}
 
-			if len(report.Routes) == 0 {
-				if !asJSON {
-					fmt.Fprintln(cmd.OutOrStdout(), "No model routes configured in .fizeau/config.yaml.")
-					fmt.Fprintln(cmd.OutOrStdout(), "Use --model <route-key> or configure model_routes in .fizeau/config.yaml.")
-				} else {
-					enc := json.NewEncoder(cmd.OutOrStdout())
-					enc.SetIndent("", "  ")
-					return enc.Encode(routeStatusJSON{})
+			var selection *routeStatusSelectionJSON
+			if decision, err := svc.ResolveRoute(ctx, agentlib.RouteRequest{}); err == nil && decision != nil {
+				selection = &routeStatusSelectionJSON{
+					Harness:  decision.Harness,
+					Provider: decision.Provider,
+					Endpoint: decision.Endpoint,
+					Model:    decision.Model,
+					Power:    decision.Power,
+					Reason:   decision.Reason,
 				}
-				return nil
 			}
 
 			// Load recent routing decisions from two complementary sources:
@@ -342,66 +458,12 @@ Examples:
 				recentDecisions = recentDecisions[len(recentDecisions)-maxRecent:]
 			}
 
-			// Collect active cooldowns across all routes from the report.
-			type cooldownEntry struct {
-				route         string
-				provider      string
-				failedAt      time.Time
-				cooldownUntil time.Time
-			}
-			var activeCooldowns []cooldownEntry
-			seenCooldownKeys := make(map[string]struct{})
-			for _, entry := range report.Routes {
-				for _, cand := range entry.Candidates {
-					if cand.Cooldown != nil && time.Now().Before(cand.Cooldown.Until) {
-						ck := entry.Model + "|" + cand.Provider
-						if _, seen := seenCooldownKeys[ck]; !seen {
-							seenCooldownKeys[ck] = struct{}{}
-							// FailedAt is not directly available; use Until minus a best-effort estimate.
-							// We record Until and leave FailedAt as zero for cooldowns from the service.
-							activeCooldowns = append(activeCooldowns, cooldownEntry{
-								route:         entry.Model,
-								provider:      cand.Provider,
-								cooldownUntil: cand.Cooldown.Until,
-							})
-						}
-					}
-				}
-			}
-			sort.Slice(activeCooldowns, func(i, j int) bool {
-				return activeCooldowns[i].route < activeCooldowns[j].route
-			})
+			activeCooldowns := providerCooldowns(providers)
 
 			if asJSON {
-				payload := routeStatusJSON{}
-				for _, entry := range report.Routes {
-					rj := routeStatusRouteJSON{
-						RouteKey:     entry.Model,
-						Strategy:     entry.Strategy,
-						LastDecision: lastDecisionToJSON(entry.LastDecision),
-					}
-					for _, cand := range entry.Candidates {
-						cj := routeStatusCandidateJSON{
-							Provider:      cand.Provider,
-							Model:         cand.Model,
-							Healthy:       cand.Healthy,
-							AvgDurationMs: cand.RecentLatencyMS,
-							Reliability:   cand.ProviderReliabilityRate,
-							Power:         candidatePowerFromLastDecision(entry.LastDecision, cand.Provider, cand.Model),
-						}
-						if cand.Cooldown != nil && !cand.Cooldown.Until.IsZero() {
-							cj.InCooldown = true
-							cj.CooldownUntil = cand.Cooldown.Until.UTC().Format(time.RFC3339)
-							cj.Reason = fmt.Sprintf("cooldown until %s", cand.Cooldown.Until.Format(time.RFC3339))
-						}
-						rj.Candidates = append(rj.Candidates, cj)
-						if cand.Healthy && rj.SelectedProvider == "" {
-							rj.SelectedProvider = cand.Provider
-							rj.SelectedModel = cand.Model
-						}
-					}
-					payload.Routes = append(payload.Routes, rj)
-				}
+				payload := routeStatusJSON{Selection: selection}
+				payload.Providers = routeStatusProvidersJSON(providers, harnesses)
+				payload.Models = routeStatusModelsJSON(models)
 				for _, d := range recentDecisions {
 					jd := routeStatusDecisionJSON{
 						ObservedAt:  d.ObservedAt.UTC().Format(time.RFC3339),
@@ -421,12 +483,8 @@ Examples:
 				}
 				for _, c := range activeCooldowns {
 					cd := routeStatusCooldownJSON{
-						Route:         c.route,
 						Provider:      c.provider,
 						CooldownUntil: c.cooldownUntil.UTC().Format(time.RFC3339),
-					}
-					if !c.failedAt.IsZero() {
-						cd.FailedAt = c.failedAt.UTC().Format(time.RFC3339)
 					}
 					payload.ActiveCooldowns = append(payload.ActiveCooldowns, cd)
 				}
@@ -436,88 +494,59 @@ Examples:
 			}
 
 			out := cmd.OutOrStdout()
-
-			// --- Section 1: Route Table ---
-			for i, entry := range report.Routes {
-				if i > 0 {
-					fmt.Fprintln(out)
+			if selection != nil {
+				fmt.Fprintf(out, "Selected: %s/%s", selection.Provider, selection.Model)
+				if selection.Harness != "" {
+					fmt.Fprintf(out, " via %s", selection.Harness)
 				}
-
-				selectedProvider := ""
-				selectedModel := ""
-				for _, cand := range entry.Candidates {
-					if cand.Healthy {
-						selectedProvider = cand.Provider
-						selectedModel = cand.Model
-						break
-					}
+				if selection.Power > 0 {
+					fmt.Fprintf(out, " power=%d", selection.Power)
 				}
-
-				strategy := entry.Strategy
-				if strategy == "" {
-					strategy = "first-available"
+				if selection.Reason != "" {
+					fmt.Fprintf(out, " (%s)", selection.Reason)
 				}
+				fmt.Fprintln(out)
+			} else {
+				fmt.Fprintln(out, "Selected: (none)")
+			}
+			fmt.Fprintln(out)
 
-				fmt.Fprintf(out, "Route: %s\n", entry.Model)
-				fmt.Fprintf(out, "Strategy: %s\n", strategy)
-				if selectedProvider != "" {
-					fmt.Fprintf(out, "Selected: %s (%s)\n", selectedProvider, selectedModel)
-				} else {
-					fmt.Fprintf(out, "Selected: (none — all candidates down or in cooldown)\n")
-				}
+			fmt.Fprintln(out, "Providers")
+			fmt.Fprintf(out, "%-24s %-12s %-14s %-11s %-18s %s\n",
+				"PROVIDER", "TYPE", "STATUS", "COST", "QUOTA", "USAGE")
+			for _, p := range routeStatusProvidersJSON(providers, harnesses) {
+				fmt.Fprintf(out, "%-24s %-12s %-14s %-11s %-18s %s\n",
+					truncateRouteStr(p.Name, 24),
+					truncateRouteStr(p.Type, 12),
+					truncateRouteStr(p.Status, 14),
+					truncateRouteStr(p.CostClass, 11),
+					truncateRouteStr(p.Quota, 18),
+					truncateRouteStr(p.Usage, 32),
+				)
+			}
 
-				fmt.Fprintf(out, "%-12s %-32s %-10s %-6s %-10s %-12s %s\n",
-					"PROVIDER", "MODEL", "HEALTH", "POWER", "RELIABILITY", "LATENCY_MS", "REASON")
-				for _, cand := range entry.Candidates {
-					health := "available"
-					reason := ""
-					if cand.Cooldown != nil && !cand.Cooldown.Until.IsZero() {
-						health = "cooldown"
-						reason = fmt.Sprintf("cooldown until %s", cand.Cooldown.Until.Format(time.RFC3339))
-					} else if !cand.Healthy {
-						health = "down"
-					}
-					power := candidatePowerFromLastDecision(entry.LastDecision, cand.Provider, cand.Model)
-					powerStr := "-"
-					if power > 0 {
-						powerStr = fmt.Sprintf("%d", power)
-					}
-					fmt.Fprintf(out, "%-12s %-32s %-10s %-6s %-10.2f %-12.0f %s\n",
-						cand.Provider,
-						truncateRouteStr(cand.Model, 32),
-						health,
-						powerStr,
-						cand.ProviderReliabilityRate,
-						cand.RecentLatencyMS,
-						reason,
-					)
+			fmt.Fprintln(out)
+			fmt.Fprintln(out, "Models")
+			fmt.Fprintf(out, "%-24s %-36s %-5s %-5s %-11s %-11s %s\n",
+				"PROVIDER", "MODEL", "POWER", "AUTO", "IN$/MTOK", "OUT$/MTOK", "STATUS")
+			for _, m := range routeStatusModelsJSON(models) {
+				status := "down"
+				if m.Available {
+					status = "up"
 				}
-
-				// Render LastDecision candidate trace when available (observability only).
-				if entry.LastDecision != nil && len(entry.LastDecision.Candidates) > 0 {
-					fmt.Fprintf(out, "Last decision: provider=%s model=%s reason=%s\n",
-						entry.LastDecision.Provider, entry.LastDecision.Model, entry.LastDecision.Reason)
-					fmt.Fprintf(out, "  %-8s %-12s %-28s %-6s %-8s %s\n",
-						"ELIGIBLE", "PROVIDER", "MODEL", "POWER", "SCORE", "REASON")
-					for _, c := range entry.LastDecision.Candidates {
-						eligible := "no"
-						if c.Eligible {
-							eligible = "yes"
-						}
-						powerStr := "-"
-						if c.Components.Power > 0 {
-							powerStr = fmt.Sprintf("%d", c.Components.Power)
-						}
-						fmt.Fprintf(out, "  %-8s %-12s %-28s %-6s %-8.3f %s\n",
-							eligible,
-							c.Provider,
-							truncateRouteStr(c.Model, 28),
-							powerStr,
-							c.Score,
-							c.Reason,
-						)
-					}
+				power := "-"
+				if m.Power > 0 {
+					power = fmt.Sprintf("%d", m.Power)
 				}
+				fmt.Fprintf(out, "%-24s %-36s %-5s %-5t %-11s %-11s %s\n",
+					truncateRouteStr(firstNonEmpty(m.Provider, m.Harness), 24),
+					truncateRouteStr(m.Model, 36),
+					power,
+					m.AutoRoutable,
+					formatCostPerMTok(m.InputCostPerMTokUSD),
+					formatCostPerMTok(m.OutputCostPerMTokUSD),
+					status,
+				)
 			}
 
 			// --- Section 2: Recent Routing Decisions ---
@@ -555,17 +584,10 @@ Examples:
 			if len(activeCooldowns) == 0 {
 				fmt.Fprintln(out, "  (none)")
 			} else {
-				fmt.Fprintf(out, "%-20s %-12s %-24s %s\n",
-					"ROUTE", "PROVIDER", "FAILED_AT", "COOLDOWN_UNTIL")
+				fmt.Fprintf(out, "%-24s %s\n", "PROVIDER", "COOLDOWN_UNTIL")
 				for _, c := range activeCooldowns {
-					failedAtStr := "-"
-					if !c.failedAt.IsZero() {
-						failedAtStr = c.failedAt.UTC().Format("2006-01-02T15:04:05Z")
-					}
-					fmt.Fprintf(out, "%-20s %-12s %-24s %s\n",
-						truncateRouteStr(c.route, 20),
+					fmt.Fprintf(out, "%-24s %s\n",
 						c.provider,
-						failedAtStr,
 						c.cooldownUntil.UTC().Format("2006-01-02T15:04:05Z"),
 					)
 				}
@@ -574,7 +596,7 @@ Examples:
 			return nil
 		},
 	}
-	cmd.Flags().String("model", "", "Requested model route key (e.g. qwen3.5-27b)")
+	cmd.Flags().String("model", "", "Filter to a concrete model id")
 	cmd.Flags().Bool("json", false, "Output JSON")
 	return cmd
 }

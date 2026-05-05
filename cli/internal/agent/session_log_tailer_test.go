@@ -16,8 +16,9 @@ func TestTailSessionLogs_ProgressEventsNotReplayed(t *testing.T) {
 	require.NoError(t, os.MkdirAll(logDir, 0o755))
 	logPath := filepath.Join(logDir, "agent-live.jsonl")
 	require.NoError(t, os.WriteFile(logPath, []byte(mustSessionLogLine(t, "progress", map[string]any{
-		"phase": "thinking",
-		"state": "start",
+		"phase":   "thinking",
+		"state":   "start",
+		"message": "ddx-99419bc1 #1 thinking ...",
 	})+"\n"), 0o644))
 
 	states := map[string]*fileTrackState{}
@@ -30,6 +31,7 @@ func TestTailSessionLogs_ProgressEventsNotReplayed(t *testing.T) {
 	require.NoError(t, appendTestLogLine(logPath, mustSessionLogLine(t, "progress", map[string]any{
 		"phase":         "thinking",
 		"state":         "complete",
+		"message":       "ddx-99419bc1 #1 thought 5.0s",
 		"output_tokens": 8,
 		"duration_ms":   5000,
 	})+"\n"))
@@ -38,7 +40,7 @@ func TestTailSessionLogs_ProgressEventsNotReplayed(t *testing.T) {
 	readNewLogLines(root, logDir, states, &out)
 	got := out.String()
 	assert.NotContains(t, got, "thinking ...")
-	assert.Contains(t, got, "thinking complete 8 tok in 5.0s")
+	assert.Contains(t, got, "ddx-99419bc1 #1 thought 5.0s")
 
 	out.Reset()
 	readNewLogLines(root, logDir, states, &out)

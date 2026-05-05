@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260505T014149-221cdee8",
+  "bead_id": "ddx-4d81bb26",
+  "base_rev": "d037dba3d2263736fc357aa4a3b087eef11603cf",
+  "created_at": "2026-05-05T01:41:59.782627915Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4d81bb26",
+    "title": "Remove remaining DDx-side usage/quota cache consumers",
+    "description": "PROBLEM\nDDx still has local usage/routing cache consumers after the provider-native parser removal bead closed. These paths can contradict Fizeau route/status semantics and preserve stale source names like stats-cache, quota-snapshot, ddx-metrics, routing-outcomes, and burn-summaries.\n\nEVIDENCE\n- cli/internal/agent/routing_metrics.go still defines RoutingMetricsStore and reads/writes routing-outcomes.jsonl and burn-summaries.jsonl.\n- cli/cmd/agent_usage.go reads RoutingMetricsStore for agent usage enrichment.\n- cli/cmd/agent_route_status.go merges RoutingMetricsStore data into route status.\n- cli/internal/server/providers.go reads RoutingMetricsStore and maps stats-cache/quota-snapshot/http-balance/http-models/recent-session-log into provider signal sources.\n- cli/cmd/agent_cmd.go still emits stats-cache as a signal kind.\n- Existing removal bead ddx-3610f1fc is closed and only covered the old parser/health-shadow layer.\n\nGOAL\nMake DDx a thin consumer of Fizeau service routing/status data. DDx may keep execution logs for audit, but provider availability/quota/current usage must not be derived from stale DDx-side cache files or provider-native cache labels.",
+    "acceptance": "1. Remove or demote RoutingMetricsStore consumers from provider availability, quota, route-status, and agent usage decisions; DDx must use Fizeau service ListHarnesses/ListProviders/RouteStatus/RecordRouteAttempt for those semantics.\n2. cli/internal/server/providers.go no longer reports stats-cache, quota-snapshot, http-balance, http-models, recent-session-log, or ddx-metrics as current provider signal sources unless they are direct Fizeau-provided source names with matching semantics.\n3. cli/cmd/agent_route_status.go no longer merges routing-outcomes.jsonl into current routing availability/status.\n4. cli/cmd/agent_usage.go does not infer current quota/headroom from DDx routing-outcomes.jsonl or burn-summaries.jsonl. Historical audit display remains allowed if clearly labeled audit-only.\n5. Tests cover stale local cache data not affecting provider quota/availability/status.\n6. cd cli \u0026\u0026 go test ./cmd ./internal/agent ./internal/server/... passes.",
+    "labels": [
+      "area:agent",
+      "area:routing",
+      "kind:cleanup",
+      "thin-consumer"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-05T01:41:49Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "19662",
+      "execute-loop-heartbeat-at": "2026-05-05T01:41:49.110212776Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260505T014149-221cdee8",
+    "prompt": ".ddx/executions/20260505T014149-221cdee8/prompt.md",
+    "manifest": ".ddx/executions/20260505T014149-221cdee8/manifest.json",
+    "result": ".ddx/executions/20260505T014149-221cdee8/result.json",
+    "checks": ".ddx/executions/20260505T014149-221cdee8/checks.json",
+    "usage": ".ddx/executions/20260505T014149-221cdee8/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4d81bb26-20260505T014149-221cdee8"
+  },
+  "prompt_sha": "cfac4c884937b0024aae232bfb74c02a4e0c40e9452c094b7341e82315c52adc"
+}

@@ -5,15 +5,13 @@ generated: true
 
 ## ddx agent route-status
 
-Show routing table, recent decisions, and active health cooldowns
+Show live provider/model routing status
 
 ### Synopsis
 
-Shows the current provider routing state, recent routing decisions, and
-any health cooldowns currently in effect.
-
-Uses the Fizeau Service.RouteStatus API. Requires model routes to be
-configured in .fizeau/config.yaml.
+Shows the live provider and model inventory used by Fizeau routing:
+provider status, presented models, power, cost, usage, quota, recent
+decisions, and active cooldowns.
 
 Examples:
   ddx agent route-status
@@ -29,7 +27,7 @@ ddx agent route-status [flags]
 ```
   -h, --help           help for route-status
       --json           Output JSON
-      --model string   Requested model route key (e.g. qwen3.5-27b)
+      --model string   Filter to a concrete model id
 ```
 
 ### Options inherited from parent commands
