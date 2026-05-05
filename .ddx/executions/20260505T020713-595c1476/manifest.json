@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260505T020713-595c1476",
+  "bead_id": "ddx-c47ec03b",
+  "base_rev": "8d6275335341ecbdd0ef98dc08c6b23c5347c0d0",
+  "created_at": "2026-05-05T02:07:15.960599303Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c47ec03b",
+    "title": "Stop DDx worker health checks from interpreting routing internals",
+    "description": "Worker health/status paths should not inspect Fizeau route tables or infer provider eligibility. DDx should either display Fizeau's harness/provider status DTOs directly or call a purpose-built health/status method. Audit cli/internal/server/workers.go and related GraphQL worker surfaces for code that calls ResolveRoute or RouteStatus to infer harness health, candidate availability, or provider cooldown. Keep execution-time routing inside Fizeau Execute. Status-only previews may call ResolveRoute, but worker lifecycle decisions should not duplicate Fizeau routing semantics.",
+    "acceptance": "1. cli/internal/server/workers.go does not call Fizeau RouteStatus and does not iterate route candidates. 2. Any remaining ResolveRoute calls in worker code are status/preflight only, documented, and covered by tests that they do not pin or mutate Execute routing. 3. Worker GraphQL/API status uses Fizeau HarnessInfo/ProviderInfo availability fields directly for display. 4. rg -n 'RouteStatus\\(|\\.Routes|\\.Candidates' cli/internal/server/workers.go returns no hits. 5. cd cli \u0026\u0026 go test ./internal/server/... -run 'Worker|Provider' passes.",
+    "labels": [
+      "area:server",
+      "area:workers",
+      "area:routing",
+      "kind:cleanup"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-05T02:07:13Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "19662",
+      "execute-loop-heartbeat-at": "2026-05-05T02:07:13.843461152Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260505T020713-595c1476",
+    "prompt": ".ddx/executions/20260505T020713-595c1476/prompt.md",
+    "manifest": ".ddx/executions/20260505T020713-595c1476/manifest.json",
+    "result": ".ddx/executions/20260505T020713-595c1476/result.json",
+    "checks": ".ddx/executions/20260505T020713-595c1476/checks.json",
+    "usage": ".ddx/executions/20260505T020713-595c1476/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c47ec03b-20260505T020713-595c1476"
+  },
+  "prompt_sha": "4856dc30cccdba3340199763f51cd413761e7d1ed8ae17dfb2c0b7e0d2cc1335"
+}
