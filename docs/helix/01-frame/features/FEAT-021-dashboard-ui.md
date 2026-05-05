@@ -131,9 +131,10 @@ label: `work`, `try`, or `run`.
 - Click to expand: DDx metadata, native session references, token usage,
   parent/child links, and artifact producer links
 - Layer-aware row expansion replaces the retired Sessions and Executions
-  tabs: `layer=run` rows expose the AgentSession transcript / billing /
-  cached-token detail; `layer=try` rows expose the `.ddx/executions/`
-  bundle metadata, check results, and verdict; `layer=work` rows expose
+  tabs and opens the shared tabbed run-detail surface: `layer=run` rows
+  expose `overview`, `prompt`, `response`, `session`, `tools`, and
+  `evidence`; `layer=try` rows expose `overview`, `prompt`, `response`,
+  `tools`, and `evidence`; `layer=work` rows expose `overview` only plus
   queue inputs and child run links.
 - Re-queue affordances per FEAT-008 US-086c (try-layer + run-layer
   re-queue button; work-layer "Start worker from this drain"); every
@@ -222,7 +223,9 @@ Layer-aware run detail for a single `work`, `try`, or `run` record. Work
 records show child try attempts, try records show child layer-1 runs, and
 layer-1 runs show prompt/config summary, selected harness/provider/model,
 power bounds, cost/token/duration signals, evidence links, and produced
-artifact links.
+artifact links. The tab strip is layer-aware: `work` shows `overview`; `try`
+shows `overview`, `prompt`, `response`, `tools`, and `evidence`; `run`
+shows `overview`, `prompt`, `response`, `session`, `tools`, and `evidence`.
 
 **GraphQL Query:** `run` by id with project filter per FEAT-010.
 
@@ -393,12 +396,15 @@ exists in the target project.
   harness, and time range; active filters are encoded in the URL
 - Given I click a `work` record, then I navigate to
   `/nodes/:nodeId/projects/:projectId/runs/:runId` and see the work detail:
-  queue inputs, selected beads, stop condition, and child try attempts
+  queue inputs, selected beads, stop condition, child try attempts, and the
+  `overview` tab
 - Given I click a child `try`, then I see bead id, base/result revisions,
-  worktree path, merge/preserve result, checks, and child layer-1 runs
+  worktree path, merge/preserve result, checks, child layer-1 runs, and the
+  `overview` / `prompt` / `response` / `tools` / `evidence` tabs
 - Given I click a layer-1 `run`, then I see prompt/config summary, power
-  bounds, selected harness/provider/model, tokens, cost, duration, output, and
-  evidence links
+  bounds, selected harness/provider/model, tokens, cost, duration, output,
+  evidence links, and the `overview` / `prompt` / `response` / `session` /
+  `tools` / `evidence` tabs
 - Given I am viewing any run detail, then breadcrumbs show the full
   `work → try → run` path and each crumb is a navigable link
 - Given a run produced an artifact, then the detail route links to the artifact
@@ -564,7 +570,7 @@ mocking of the GraphQL or HTTP layer.
 | `navigation.spec.ts` | US-091, US-092, US-094 | Root redirect → node overview → project picker → project switch preserving page context → bookmarkable URL round-trip → node identity visible |
 | `node-beads.spec.ts` | US-090 (beads) | Combined bead view → cross-project badges → filter by project → click bead → navigate to project-scoped detail → Back |
 | `node-runs.spec.ts` | US-090 (runs) | Combined run history → cross-project layer badges → filter → drill work→try→run → breadcrumbs back to list |
-| `runs.spec.ts` | US-094b | Project runs → apply layer filter → work detail → try detail → run detail → evidence link → artifact link → Back through full hierarchy |
+| `runs.spec.ts` | US-094b | Project runs → apply layer filter → work detail → try detail → run detail tabs/evidence → artifact link → Back through full hierarchy |
 | `commits.spec.ts` | US-093 | Bead with closing commit → commit log → highlighted commit → bead cross-link → Back |
 
 ## Dependencies

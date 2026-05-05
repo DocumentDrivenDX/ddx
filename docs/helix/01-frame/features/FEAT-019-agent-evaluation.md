@@ -55,7 +55,8 @@ a competing foundational execution model or dispatch mechanism.
 FEAT-019 is a child of FEAT-010. Comparison, replay, and benchmark records
 are stored in the FEAT-010 run substrate. FEAT-019 defines the storage schema
 extensions (`type: comparison`, `type: replay`, `type: benchmark`) and owns
-the web UI surfaces that display those records. It does not own worktree
+the web UI surfaces that display those records, including the tabbed
+project-scoped run-detail surface used for drill-down. It does not own worktree
 management, run lifecycle, or dispatch mechanics.
 
 When an evaluation record links into a preserved `try` or `run`, the shared
@@ -369,9 +370,12 @@ agent:
   provenance is inspected in the UI, then it traces back to the originating
   try session ID and hidden ref — no FEAT-019-owned duplicate provenance record exists.
 - Given an evaluation record links to a run detail, then opening that link
-  uses the shared project-scoped run-detail surface, including the Evidence
-  tab / download affordances and the same project-membership visibility rules
-  that drive the FEAT-008/FEAT-010 audit event.
+  uses the shared project-scoped run-detail surface, including the layer-
+  appropriate tab set (`overview`; `overview` / `prompt` / `response` /
+  `tools` / `evidence` for `try`; `overview` / `prompt` / `response` /
+  `session` / `tools` / `evidence` for `run`), the Evidence tab / download
+  affordances, and the same project-membership visibility rules that drive
+  the FEAT-008/FEAT-010 audit event.
 
 ## Dependencies
 

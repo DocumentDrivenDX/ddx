@@ -284,20 +284,24 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
      parent/child hierarchy, layer expansion, and re-queue affordances).
      Story 7's virtualization wrapper is reused with a Runs-specific live
      adapter when row counts exceed 1k.
-   - Inline row expansion is **layer-aware** (replaces the retired Sessions
-     and Executions top-level tabs):
+   - Inline row expansion is **layer-aware** and opens the shared tabbed
+     run-detail surface (replaces the retired Sessions and Executions
+     top-level tabs):
      - `layer=work` row expands to queue inputs, selected beads, stop
        condition, retry/defer decisions, and child try-attempt links in
-       chronological order.
+       chronological order. The detail panel exposes the `overview` tab only.
      - `layer=try` row expands to bead id, base/result revisions, isolated
        worktree path, merge/preserve outcome, checks, verdict, and child
        layer-1 run links — sourced losslessly from the
        `.ddx/executions/<attempt-id>/` bundle attached to the layer-2 record.
+       The detail panel exposes `overview`, `prompt`, `response`, `tools`,
+       and `evidence`.
      - `layer=run` row expands to prompt/config summary, power bounds,
        selected harness/provider/model, token + cached-token + cost +
        duration signals, output, stderr, and evidence links — sourced
        losslessly from the joined `AgentSession` row (FEAT-010 §"Layer-to-
-       substrate mapping for the Runs UI").
+       substrate mapping for the Runs UI"). The detail panel exposes
+       `overview`, `prompt`, `response`, `session`, `tools`, and `evidence`.
    - Drill-down links preserve hierarchy in both directions:
      `work` -> `try` -> `run`, with breadcrumbs back to parent records
    - Artifact-producing runs show `produces_artifact`; artifact pages link back
@@ -792,10 +796,13 @@ provider logs
   inputs, selected beads, stop condition, and child try attempts in order
 - Given I click a child `try` record, then I navigate to its detail showing
   bead id, base/result revisions, worktree path, merge or preserve outcome,
-  checks, and child layer-1 run records
+  checks, child layer-1 run records, and the `overview` / `prompt` /
+  `response` / `tools` / `evidence` tabs
 - Given I click a layer-1 `run` record, then I navigate to its detail showing
   prompt/config summary, power bounds, selected harness/provider/model,
-  duration, token and cost signals, output, and evidence links
+  duration, token and cost signals, output, evidence links, and the
+  `overview` / `prompt` / `response` / `session` / `tools` / `evidence`
+  tabs
 - Given I open the Evidence tab on a `try` or `run` detail, then whitelisted
   bundle files render inline and each file exposes a Download link to
   `/api/runs/:id/bundle?path=...`

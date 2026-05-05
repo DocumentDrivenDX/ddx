@@ -553,6 +553,29 @@ project-scoped identity of the inspection:
 | `source` | `graphql:run` |
 | `body` | Single line: `project_id=<projectId> run_id=<runId> layer=<layer> visibility=project_membership` |
 
+### Re-queue audit events
+
+The `runRequeue` mutation appends a `run_requeue` event to the originating
+bead every time a re-queue succeeds. There is no separate persisted
+re-queue record beyond the reopened bead and this audit event.
+
+The event payload is append-only and uses a single-line `key=value` body so
+operators and tests can parse it with grep or jq:
+
+| Field | Value |
+|---|---|
+| `kind` | `run_requeue` |
+| `summary` | `run requeued` |
+| `actor` | Viewer identity derived from the authenticated operator; falls back to `anonymous` |
+| `source` | `graphql:runRequeue` |
+| `body` | Single line: `identity=<identity.kind> actor=<identity.actor> run_id=<runId> idempotency_key=<idempotencyKey> layer_override=<layerOverrideOrEmpty>` |
+
+`identity.kind` reflects the operator identity class selected by the GraphQL
+resolver (`unknown`, `localhost`, or `tsnet`). `layer_override` is empty when
+the caller does not supply `RunRequeueInput.layer`. Duplicate
+`idempotencyKey` submissions dedupe to the same originating bead and do not
+append a second `run_requeue` event.
+
 ### Layer-to-substrate mapping for the Runs UI
 
 The web Runs view (FEAT-008 §5, FEAT-021) renders three layer chips
@@ -560,9 +583,9 @@ backed by the unified substrate plus the legacy detail backings:
 
 | Chip | Substrate row | Detail backing for row expansion |
 |---|---|---|
-| `work` | `layer: 3` Run record | Layer-3 record's queue inputs / stop-condition log / child layer-2 attempt ids |
-| `try` | `layer: 2` Run record | The `.ddx/executions/<attempt-id>/` bundle attached to the layer-2 record (manifest, prompt, result, checks, verdict) |
-| `run` | `layer: 1` Run record | The associated `AgentSession` row (prompt / response / stderr / billing / cached-token detail) joined onto the layer-1 record |
+| `work` | `layer: 3` Run record | Layer-3 record's queue inputs / stop-condition log / child layer-2 attempt ids; the tabbed detail surface exposes `overview` only |
+| `try` | `layer: 2` Run record | The `.ddx/executions/<attempt-id>/` bundle attached to the layer-2 record (manifest, prompt, result, checks, verdict); the tabbed detail surface exposes `overview`, `prompt`, `response`, `tools`, and `evidence` |
+| `run` | `layer: 1` Run record | The associated `AgentSession` row (prompt / response / stderr / billing / cached-token detail) joined onto the layer-1 record; the tabbed detail surface exposes `overview`, `prompt`, `response`, `session`, `tools`, and `evidence` |
 
 `AgentSession` rows that have no parent layer-2 attempt (raw `ddx
 agent log` invocations) surface as synthesized `layer=run` Runs rows
