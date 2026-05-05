@@ -1,6 +1,7 @@
 schema {
   query: Query
   mutation: Mutation
+  subscription: Subscription
 }
 
 scalar JSON
@@ -14,6 +15,10 @@ type Query {
 type Mutation {
   createEntity(input: BeadInput!): Bead!
   updateEntity(id: ID!, expectedVersion: Int!, input: BeadInput!): Bead!
+}
+
+type Subscription {
+  changeEvents(projectID: ID!): ChangeEvent!
 }
 
 type Bead {
@@ -42,6 +47,16 @@ type Dependency {
   createdAt: String
   createdBy: String
   metadata: String
+}
+
+type ChangeEvent {
+  eventID: ID!
+  beadID: ID!
+  kind: String!
+  summary: String!
+  body: String!
+  actor: String!
+  timestamp: DateTime!
 }
 
 input BeadInput {

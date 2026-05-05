@@ -1,0 +1,15 @@
+fragment ChangeEventFields on ChangeEvent {
+  eventID
+  beadID
+  kind
+  summary
+  body
+  actor
+  timestamp
+}
+
+subscription ChangeEvents($projectID: ID!) {
+  changeEvents(projectID: $projectID) {
+    ...ChangeEventFields
+  }
+}

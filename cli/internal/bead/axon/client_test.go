@@ -81,6 +81,25 @@ func TestAxonClient_SchemaBindingsCompile(t *testing.T) {
 	require.Equal(t, local.Extra, input.Extra)
 	require.Len(t, input.Dependencies, 1)
 
+	lifecycle := bead.LifecycleEvent{
+		EventID:   "evt-1",
+		BeadID:    local.ID,
+		Kind:      "created",
+		Summary:   "created",
+		Body:      "body",
+		Actor:     "actor",
+		Timestamp: time.Unix(30, 0).UTC(),
+	}
+	change := ChangeEventFromLifecycle(lifecycle)
+	require.Equal(t, lifecycle.EventID, change.EventID)
+	require.Equal(t, lifecycle.BeadID, change.BeadID)
+	require.Equal(t, lifecycle.Kind, change.Kind)
+	require.Equal(t, lifecycle.Summary, change.Summary)
+	require.Equal(t, lifecycle.Body, change.Body)
+	require.Equal(t, lifecycle.Actor, change.Actor)
+	require.Equal(t, lifecycle.Timestamp, change.Timestamp)
+	require.Equal(t, lifecycle, change.ToLifecycleEvent())
+
 	_, err = client.ListBeads(context.Background())
 	require.NoError(t, err)
 
