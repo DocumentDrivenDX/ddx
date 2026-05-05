@@ -15,6 +15,10 @@ type fileTrackState struct {
 	offset int64
 }
 
+type sessionLogFile struct {
+	path string
+}
+
 // TailSessionLogs watches the agent log directory for new/modified session log
 // files and writes formatted progress to dst. It stops when ctx is cancelled.
 // Callers should run this in a goroutine while ExecuteBead runs synchronously.
@@ -23,13 +27,9 @@ func TailSessionLogs(ctx context.Context, projectRoot string, dst io.Writer) {
 	states := make(map[string]*fileTrackState)
 
 	// Record existing files so we don't replay old logs
-	if entries, err := os.ReadDir(logDir); err == nil {
-		for _, entry := range entries {
-			if !entry.IsDir() && strings.HasPrefix(entry.Name(), "agent-") && strings.HasSuffix(entry.Name(), ".jsonl") && !strings.HasPrefix(entry.Name(), "agent-loop-") {
-				if info, err := entry.Info(); err == nil {
-					states[filepath.Join(logDir, entry.Name())] = &fileTrackState{offset: info.Size()}
-				}
-			}
+	for _, file := range listSessionLogFiles(projectRoot, logDir) {
+		if info, err := os.Stat(file.path); err == nil {
+			states[file.path] = &fileTrackState{offset: info.Size()}
 		}
 	}
 
@@ -39,33 +39,18 @@ func TailSessionLogs(ctx context.Context, projectRoot string, dst io.Writer) {
 	for {
 		select {
 		case <-ctx.Done():
-			readNewLogLines(logDir, states, dst)
+			readNewLogLines(projectRoot, logDir, states, dst)
 			return
 		case <-ticker.C:
-			readNewLogLines(logDir, states, dst)
+			readNewLogLines(projectRoot, logDir, states, dst)
 		}
 	}
 }
 
 // readNewLogLines reads any new lines from agent session logs and formats them.
-func readNewLogLines(logDir string, states map[string]*fileTrackState, dst io.Writer) {
-	entries, err := os.ReadDir(logDir)
-	if err != nil {
-		return
-	}
-
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "agent-") || !strings.HasSuffix(entry.Name(), ".jsonl") {
-			continue
-		}
-		// Skip loop event files — their milestones are emitted directly via
-		// opts.Log in ExecuteBeadWorker; processing them here would produce
-		// duplicate output for human operators.
-		if strings.HasPrefix(entry.Name(), "agent-loop-") {
-			continue
-		}
-
-		path := filepath.Join(logDir, entry.Name())
+func readNewLogLines(projectRoot, logDir string, states map[string]*fileTrackState, dst io.Writer) {
+	for _, file := range listSessionLogFiles(projectRoot, logDir) {
+		path := file.path
 		st, err := os.Stat(path)
 		if err != nil {
 			continue
@@ -109,4 +94,33 @@ func readNewLogLines(logDir string, states map[string]*fileTrackState, dst io.Wr
 			}
 		}
 	}
+}
+
+func listSessionLogFiles(projectRoot, logDir string) []sessionLogFile {
+	var files []sessionLogFile
+	appendDirLogs := func(dir string) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
+				continue
+			}
+			name := entry.Name()
+			if strings.HasPrefix(name, "agent-loop-") {
+				continue
+			}
+			if strings.HasPrefix(name, "agent-") || strings.HasPrefix(name, "svc-") {
+				files = append(files, sessionLogFile{path: filepath.Join(dir, name)})
+			}
+		}
+	}
+
+	appendDirLogs(logDir)
+	embeddedDirs, _ := filepath.Glob(filepath.Join(projectRoot, ".ddx", "executions", "*", "embedded"))
+	for _, dir := range embeddedDirs {
+		appendDirLogs(dir)
+	}
+	return files
 }
