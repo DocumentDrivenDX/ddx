@@ -1,0 +1,1 @@
+verification_command: cd cli && go test ./internal/agent/... && go build ./... && ! rg -n "aggregateUsage\\b|aggregateUsageAggs\\b|readUsageSessionRecords\\b" cli -S
