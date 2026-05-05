@@ -1,0 +1,17 @@
+DELETE internal/server/perf/fixtures.go:61 DefaultBeadFixtureSpec — production copy was unreachable from cli/ roots and duplicated in fixtures_test.go for the benchmark harness.
+DELETE internal/server/perf/fixtures.go:85 BeadFixture.TotalBeads — production copy was unreachable from cli/ roots and duplicated in fixtures_test.go for the benchmark harness.
+DELETE internal/server/perf/fixtures.go:92 BuildBeadFixture — production copy was unreachable from cli/ roots and duplicated in fixtures_test.go for the benchmark harness.
+DELETE internal/server/perf/fixtures.go:174 seedProjectBeads — production copy was unreachable from cli/ roots and duplicated in fixtures_test.go for the benchmark harness.
+DELETE internal/server/perf/fixtures.go:213 seedProjectDocGraph — production copy was unreachable from cli/ roots and duplicated in fixtures_test.go for the benchmark harness.
+DELETE internal/server/perf/fixtures.go:229 seedProjectSessions — production copy was unreachable from cli/ roots and duplicated in fixtures_test.go for the benchmark harness.
+DELETE internal/server/perf/fixtures.go:257 Environment — production copy was unreachable from cli/ roots and duplicated in fixtures_test.go for the benchmark harness.
+DELETE internal/server/perf/harness.go:67 Targets — production copy was unreachable from cli/ roots and duplicated in harness_test.go for the benchmark harness.
+DELETE internal/server/perf/harness.go:150 RunMatrix — production copy was unreachable from cli/ roots and duplicated in harness_test.go for the benchmark harness.
+DELETE internal/server/perf/harness.go:217 variablesFor — production copy was unreachable from cli/ roots and duplicated in harness_test.go for the benchmark harness.
+DELETE internal/server/perf/harness.go:238 postGraphQL — production copy was unreachable from cli/ roots and duplicated in harness_test.go for the benchmark harness.
+DELETE internal/server/perf/harness.go:264 PostGraphQL — production copy was unreachable from cli/ roots and duplicated in harness_test.go for the benchmark harness.
+DELETE internal/server/perf/harness.go:275 percentileMillis — production copy was unreachable from cli/ roots and duplicated in harness_test.go for the benchmark harness.
+DELETE internal/server/perf/harness.go:287 percentile — production copy was unreachable from cli/ roots and duplicated in harness_test.go for the benchmark harness.
+DELETE internal/server/perf/harness.go:301 toMillis — production copy was unreachable from cli/ roots and duplicated in harness_test.go for the benchmark harness.
+DELETE internal/server/perf/report.go:18 WriteReports — production copy was unreachable from cli/ roots and duplicated in report_test.go for the benchmark harness.
+DELETE internal/server/perf/report.go:41 renderMarkdown — production copy was unreachable from cli/ roots and duplicated in report_test.go for the benchmark harness.
