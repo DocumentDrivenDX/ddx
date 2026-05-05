@@ -303,18 +303,6 @@ func (c *endpointServiceConfig) Provider(name string) (agentlib.ServiceProviderE
 	return entry, ok
 }
 
-func (c *endpointServiceConfig) ModelRouteNames() []string {
-	return nil
-}
-
-func (c *endpointServiceConfig) ModelRouteCandidates(string) []string {
-	return nil
-}
-
-func (c *endpointServiceConfig) ModelRouteConfig(string) agentlib.ServiceModelRouteConfig {
-	return agentlib.ServiceModelRouteConfig{}
-}
-
 func (c *endpointServiceConfig) HealthCooldown() time.Duration {
 	return 0
 }
