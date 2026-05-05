@@ -1,9 +1,12 @@
 package cmd
 
 import (
+	"bytes"
 	"encoding/json"
+	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,4 +83,77 @@ func TestWorkPassthroughNotValidated(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &res))
 	assert.True(t, res.NoReadyWork,
 		"ddx work with no ready beads must report no_ready_work=true")
+}
+
+func TestWorkDefaultOutput_PrintsSelectedRouteEconomics(t *testing.T) {
+	var out bytes.Buffer
+	err := writeExecuteLoopResult(&out, "/tmp/project", &agent.ExecuteBeadLoopResult{
+		Attempts:  1,
+		Successes: 1,
+		Failures:  0,
+		Results: []agent.ExecuteBeadReport{{
+			Harness:                     "agent",
+			Provider:                    "openai",
+			Model:                       "gpt-5.2",
+			ActualPower:                 78,
+			PredictedPower:              82,
+			PredictedSpeedTPS:           35.5,
+			PredictedCostUSDPer1kTokens: 0.012345,
+			PredictedCostSource:         "catalog",
+		}},
+	}, false)
+	require.NoError(t, err)
+
+	got := out.String()
+	expected := "route: harness=agent provider=openai model=gpt-5.2 power=82 speed=35.5 tok/s cost=$0.012345/1k tok source=catalog"
+	assert.Contains(t, got, expected)
+}
+
+func TestWorkJSONOutput_IncludesRouteEconomicsWithoutHumanLines(t *testing.T) {
+	var out bytes.Buffer
+	err := writeExecuteLoopResult(&out, "/tmp/project", &agent.ExecuteBeadLoopResult{
+		Attempts:  1,
+		Successes: 1,
+		Failures:  0,
+		Results: []agent.ExecuteBeadReport{{
+			Harness:                     "agent",
+			Provider:                    "openai",
+			Model:                       "gpt-5.2",
+			ActualPower:                 78,
+			PredictedPower:              82,
+			PredictedSpeedTPS:           35.5,
+			PredictedCostUSDPer1kTokens: 0.012345,
+			PredictedCostSource:         "catalog",
+		}},
+	}, true)
+	require.NoError(t, err)
+
+	jsonStart := strings.Index(out.String(), "{")
+	require.NotEqual(t, -1, jsonStart, "output should contain JSON: %s", out)
+	assert.NotContains(t, out.String()[:jsonStart], "route: ")
+
+	var res struct {
+		Attempts int `json:"attempts"`
+		Results  []struct {
+			Harness                     string  `json:"harness"`
+			Provider                    string  `json:"provider"`
+			Model                       string  `json:"model"`
+			ActualPower                 int     `json:"actual_power"`
+			PredictedPower              int     `json:"predicted_power"`
+			PredictedSpeedTPS           float64 `json:"predicted_speed_tps"`
+			PredictedCostUSDPer1kTokens float64 `json:"predicted_cost_usd_per_1k_tokens"`
+			PredictedCostSource         string  `json:"predicted_cost_source"`
+		} `json:"results"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(out.String()[jsonStart:]), &res))
+	require.Equal(t, 1, res.Attempts)
+	require.Len(t, res.Results, 1)
+	assert.Equal(t, "agent", res.Results[0].Harness)
+	assert.Equal(t, "openai", res.Results[0].Provider)
+	assert.Equal(t, "gpt-5.2", res.Results[0].Model)
+	assert.Equal(t, 78, res.Results[0].ActualPower)
+	assert.Equal(t, 82, res.Results[0].PredictedPower)
+	assert.Equal(t, 35.5, res.Results[0].PredictedSpeedTPS)
+	assert.Equal(t, 0.012345, res.Results[0].PredictedCostUSDPer1kTokens)
+	assert.Equal(t, "catalog", res.Results[0].PredictedCostSource)
 }

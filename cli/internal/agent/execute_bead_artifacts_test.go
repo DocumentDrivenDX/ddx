@@ -379,6 +379,87 @@ func TestExecuteBead_ResultShape(t *testing.T) {
 	}
 }
 
+// TestExecuteBead_ReportIncludesRouteEconomics verifies that result.json
+// carries the selected route fields alongside the existing execution fields.
+func TestExecuteBead_ReportIncludesRouteEconomics(t *testing.T) {
+	const beadID = "ddx-art-route"
+
+	projectRoot := setupArtifactTestProjectRoot(t)
+	gitOps := &artifactTestGitOps{
+		projectRoot: projectRoot,
+		baseRev:     "dddd000000000001",
+		resultRev:   "dddd000000000002",
+		wtSetupFn: func(wtPath string) {
+			setupArtifactTestWorktree(t, wtPath, beadID, "", false, 0)
+		},
+	}
+
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+		AgentRunner: &artifactTestAgentRunner{
+			result: &Result{
+				ExitCode:                    0,
+				Harness:                     "agent",
+				Provider:                    "openai",
+				Model:                       "gpt-5.2",
+				ActualPower:                 78,
+				PredictedPower:              82,
+				PredictedSpeedTPS:           35.5,
+				PredictedCostUSDPer1kTokens: 0.012345,
+				PredictedCostSource:         "catalog",
+			},
+		},
+	}, gitOps)
+	if err != nil {
+		t.Fatalf("ExecuteBead: %v", err)
+	}
+
+	resultPath := filepath.Join(projectRoot, ".ddx", "executions", res.AttemptID, "result.json")
+	raw, err := os.ReadFile(resultPath)
+	if err != nil {
+		t.Fatalf("reading result.json: %v", err)
+	}
+
+	var r struct {
+		Harness                     string  `json:"harness"`
+		Provider                    string  `json:"provider"`
+		Model                       string  `json:"model"`
+		ActualPower                 int     `json:"actual_power"`
+		PredictedPower              int     `json:"predicted_power"`
+		PredictedSpeedTPS           float64 `json:"predicted_speed_tps"`
+		PredictedCostUSDPer1kTokens float64 `json:"predicted_cost_usd_per_1k_tokens"`
+		PredictedCostSource         string  `json:"predicted_cost_source"`
+	}
+	if err := json.Unmarshal(raw, &r); err != nil {
+		t.Fatalf("parsing result.json: %v", err)
+	}
+
+	if r.Harness != "agent" {
+		t.Errorf("result.harness = %q, want %q", r.Harness, "agent")
+	}
+	if r.Provider != "openai" {
+		t.Errorf("result.provider = %q, want %q", r.Provider, "openai")
+	}
+	if r.Model != "gpt-5.2" {
+		t.Errorf("result.model = %q, want %q", r.Model, "gpt-5.2")
+	}
+	if r.ActualPower != 78 {
+		t.Errorf("result.actual_power = %d, want 78", r.ActualPower)
+	}
+	if r.PredictedPower != 82 {
+		t.Errorf("result.predicted_power = %d, want 82", r.PredictedPower)
+	}
+	if r.PredictedSpeedTPS != 35.5 {
+		t.Errorf("result.predicted_speed_tps = %v, want 35.5", r.PredictedSpeedTPS)
+	}
+	if r.PredictedCostUSDPer1kTokens != 0.012345 {
+		t.Errorf("result.predicted_cost_usd_per_1k_tokens = %v, want 0.012345", r.PredictedCostUSDPer1kTokens)
+	}
+	if r.PredictedCostSource != "catalog" {
+		t.Errorf("result.predicted_cost_source = %q, want %q", r.PredictedCostSource, "catalog")
+	}
+}
+
 // artifactTestOrchestratorGitOps is a no-op OrchestratorGitOps for artifact tests.
 type artifactTestOrchestratorGitOps struct{}
 

@@ -97,11 +97,11 @@ func TestExecuteBeadResultDetailReportsNoopCompactionWallClockBreaker(t *testing
 	assert.Contains(t, artifact.Detail, "time-based breaker")
 }
 
-// TestDrainServiceEvents_ExtractsPowerFromRoutingDecisionCandidates covers
-// AC#2/AC#4 of ddx-1534c574: the routing_decision event's winning candidate
-// (eligible=true, model matches payload.model) carries Components.Power; DDx
-// must surface this as ActualPower without touching the final event.
-func TestDrainServiceEvents_ExtractsPowerFromRoutingDecisionCandidates(t *testing.T) {
+// TestDrainServiceEvents_CapturesRouteEconomics covers the routing_decision
+// event's winning candidate (eligible=true, model matches payload.model)
+// carrying power, speed, and cost telemetry. DDx must surface those fields
+// from the selected eligible candidate without touching the final event.
+func TestDrainServiceEvents_CapturesRouteEconomics(t *testing.T) {
 	events := make(chan agentlib.ServiceEvent, 4)
 
 	routingPayload, err := json.Marshal(map[string]any{

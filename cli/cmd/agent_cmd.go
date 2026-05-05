@@ -1775,8 +1775,9 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		}
 		attemptRcfg, _ := config.LoadAndResolve(projectRoot, loopOverrides)
 		res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, agent.ExecuteBeadRuntime{
-			FromRev:    fromRev,
-			BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+			FromRev:     fromRev,
+			BeadEvents:  bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+			AgentRunner: f.AgentRunnerOverride,
 		}, gitOps)
 		if execErr != nil && res == nil {
 			return agent.ExecuteBeadReport{}, execErr
@@ -1914,67 +1915,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	if err != nil {
 		return err
 	}
-
-	if asJSON {
-		payload := struct {
-			ProjectRoot string `json:"project_root"`
-			*agent.ExecuteBeadLoopResult
-		}{
-			ProjectRoot:           projectRoot,
-			ExecuteBeadLoopResult: result,
-		}
-		enc := json.NewEncoder(cmd.OutOrStdout())
-		enc.SetIndent("", "  ")
-		return enc.Encode(payload)
-	}
-
-	if result.NoReadyWork {
-		fmt.Fprintf(cmd.OutOrStdout(), "project: %s\n", projectRoot)
-		fmt.Fprintln(cmd.OutOrStdout(), "No execution-ready beads.")
-		d := result.NoReadyWorkDetail
-		if len(d.SkippedEpics) > 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), "  skipped %d ready epic(s) (epics are structural containers; decompose into tasks): %s\n",
-				len(d.SkippedEpics), strings.Join(d.SkippedEpics, ", "))
-		}
-		if len(d.SkippedOnCooldown) > 0 {
-			retryHint := ""
-			if d.NextRetryAfter != "" {
-				retryHint = " (next retry-after: " + d.NextRetryAfter + ")"
-			}
-			fmt.Fprintf(cmd.OutOrStdout(), "  skipped %d bead(s) on retry cooldown%s: %s\n",
-				len(d.SkippedOnCooldown), retryHint, strings.Join(d.SkippedOnCooldown, ", "))
-		}
-		if len(d.SkippedNotEligible) > 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), "  skipped %d bead(s) with execution-eligible=false: %s\n",
-				len(d.SkippedNotEligible), strings.Join(d.SkippedNotEligible, ", "))
-		}
-		if len(d.SkippedSuperseded) > 0 {
-			fmt.Fprintf(cmd.OutOrStdout(), "  skipped %d superseded bead(s): %s\n",
-				len(d.SkippedSuperseded), strings.Join(d.SkippedSuperseded, ", "))
-		}
-		return nil
-	}
-
-	fmt.Fprintf(cmd.OutOrStdout(), "\nproject: %s\n", projectRoot)
-	fmt.Fprintf(cmd.OutOrStdout(), "completed: %d  |  successes: %d  |  failures: %d\n", result.Attempts, result.Successes, result.Failures)
-	for _, attempt := range result.Results {
-		if route := formatAttemptRouteEconomics(attempt); route != "" {
-			fmt.Fprintf(cmd.OutOrStdout(), "route: %s\n", route)
-		}
-	}
-	if result.Failures > 0 {
-		fmt.Fprintf(cmd.OutOrStdout(), "\nfailed:\n")
-		for _, attempt := range result.Results {
-			if attempt.Status != "success" {
-				fmt.Fprintf(cmd.OutOrStdout(), "  - %s: %s", attempt.BeadID, attempt.Detail)
-				if attempt.PreserveRef != "" {
-					fmt.Fprintf(cmd.OutOrStdout(), " (preserved)")
-				}
-				fmt.Fprintln(cmd.OutOrStdout())
-			}
-		}
-	}
-	return nil
+	return writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, asJSON)
 }
 
 func formatAttemptRouteEconomics(attempt agent.ExecuteBeadReport) string {
@@ -2007,8 +1948,73 @@ func formatAttemptRouteEconomics(attempt agent.ExecuteBeadReport) string {
 			cost += " source=" + attempt.PredictedCostSource
 		}
 		parts = append(parts, cost)
+	} else if attempt.PredictedCostSource != "" {
+		parts = append(parts, "cost_source="+attempt.PredictedCostSource)
 	}
 	return strings.Join(parts, " ")
+}
+
+func writeExecuteLoopResult(w io.Writer, projectRoot string, result *agent.ExecuteBeadLoopResult, asJSON bool) error {
+	if asJSON {
+		payload := struct {
+			ProjectRoot string `json:"project_root"`
+			*agent.ExecuteBeadLoopResult
+		}{
+			ProjectRoot:           projectRoot,
+			ExecuteBeadLoopResult: result,
+		}
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		return enc.Encode(payload)
+	}
+
+	if result.NoReadyWork {
+		fmt.Fprintf(w, "project: %s\n", projectRoot)
+		fmt.Fprintln(w, "No execution-ready beads.")
+		d := result.NoReadyWorkDetail
+		if len(d.SkippedEpics) > 0 {
+			fmt.Fprintf(w, "  skipped %d ready epic(s) (epics are structural containers; decompose into tasks): %s\n",
+				len(d.SkippedEpics), strings.Join(d.SkippedEpics, ", "))
+		}
+		if len(d.SkippedOnCooldown) > 0 {
+			retryHint := ""
+			if d.NextRetryAfter != "" {
+				retryHint = " (next retry-after: " + d.NextRetryAfter + ")"
+			}
+			fmt.Fprintf(w, "  skipped %d bead(s) on retry cooldown%s: %s\n",
+				len(d.SkippedOnCooldown), retryHint, strings.Join(d.SkippedOnCooldown, ", "))
+		}
+		if len(d.SkippedNotEligible) > 0 {
+			fmt.Fprintf(w, "  skipped %d bead(s) with execution-eligible=false: %s\n",
+				len(d.SkippedNotEligible), strings.Join(d.SkippedNotEligible, ", "))
+		}
+		if len(d.SkippedSuperseded) > 0 {
+			fmt.Fprintf(w, "  skipped %d superseded bead(s): %s\n",
+				len(d.SkippedSuperseded), strings.Join(d.SkippedSuperseded, ", "))
+		}
+		return nil
+	}
+
+	fmt.Fprintf(w, "\nproject: %s\n", projectRoot)
+	fmt.Fprintf(w, "completed: %d  |  successes: %d  |  failures: %d\n", result.Attempts, result.Successes, result.Failures)
+	for _, attempt := range result.Results {
+		if route := formatAttemptRouteEconomics(attempt); route != "" {
+			fmt.Fprintf(w, "route: %s\n", route)
+		}
+	}
+	if result.Failures > 0 {
+		fmt.Fprintf(w, "\nfailed:\n")
+		for _, attempt := range result.Results {
+			if attempt.Status != "success" {
+				fmt.Fprintf(w, "  - %s: %s", attempt.BeadID, attempt.Detail)
+				if attempt.PreserveRef != "" {
+					fmt.Fprintf(w, " (preserved)")
+				}
+				fmt.Fprintln(w)
+			}
+		}
+	}
+	return nil
 }
 
 // resolveProjectRoot returns the project root to use for execute-loop,
