@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260505T015657-d63d52b0",
+  "bead_id": "ddx-e543f054",
+  "base_rev": "d69261ba760f940f75743dce1ce4f1f79bf821bd",
+  "created_at": "2026-05-05T01:56:59.735060933Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e543f054",
+    "title": "Provider status must consume Fizeau status DTOs directly",
+    "description": "DDx provider/status surfaces still translate Fizeau HarnessInfo/ProviderInfo into DDx-local RoutingSignalSnapshot/read-model fields in cli/internal/server/providers.go and cli/internal/server/graphql/resolver_providers.go. That keeps provider quota, auth, freshness, usage, cost class, request-fit, and default-model interpretation in DDx instead of treating Fizeau as the routing/status authority. Replace DDx-local signal derivation with direct consumption of Fizeau public status DTOs, or add the missing DTO fields upstream first and then consume them. In-scope files: cli/internal/server/providers.go, cli/internal/server/graphql/resolver_providers.go, frontend/provider GraphQL models if field shape changes, tests. Out-of-scope: changing routing decisions or provider probing behavior inside Fizeau.",
+    "acceptance": "1. cli/internal/server/providers.go no longer has signalFromHarnessInfo, providerQuotaHeadroomStr, providerAuthStateStr, harnessDefaultModels, harnessCosCostClassStr, or DDx-local default-model guesses for Fizeau providers. 2. cli/internal/server/graphql/resolver_providers.go no longer reconstructs provider quota/auth/cost semantics from HarnessInfo when equivalent Fizeau DTO fields exist. 3. Any missing Fizeau field required by the UI is tracked upstream, not reimplemented in DDx. 4. Provider UI/API tests assert fields come from Fizeau ProviderInfo/HarnessInfo DTO values, not DDx heuristics. 5. cd cli \u0026\u0026 go test ./internal/server/... ./cmd/... passes.",
+    "labels": [
+      "area:server",
+      "area:providers",
+      "area:routing",
+      "kind:cleanup"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-05T01:56:57Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "19662",
+      "execute-loop-heartbeat-at": "2026-05-05T01:56:57.51452213Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260505T015657-d63d52b0",
+    "prompt": ".ddx/executions/20260505T015657-d63d52b0/prompt.md",
+    "manifest": ".ddx/executions/20260505T015657-d63d52b0/manifest.json",
+    "result": ".ddx/executions/20260505T015657-d63d52b0/result.json",
+    "checks": ".ddx/executions/20260505T015657-d63d52b0/checks.json",
+    "usage": ".ddx/executions/20260505T015657-d63d52b0/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e543f054-20260505T015657-d63d52b0"
+  },
+  "prompt_sha": "ca546f8586adb5f3435563bee28d0c048fd07a80bd885316f462133e4001474f"
+}
