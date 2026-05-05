@@ -1,10 +1,11 @@
 // Shared URL-state helper for list views (artifacts, etc.).
 // Reads/writes the well-known query params (q, mediaType, groupBy, sort,
-// filters.*) while preserving any unrelated keys, including ?back=.
+// staleness, phase, prefix, filters.*) while preserving any unrelated keys,
+// including ?back=.
 
 export type GroupBy = 'folder' | 'prefix' | 'mediaType' | 'workflowStage';
 
-// Reserved facet URL keys (TD-006 facet contract):
+// Reserved facet URL keys (TD-029 facet contract):
 //   q          — full-text search query (single)
 //   mediaType  — media-type filter (single, supports X/* wildcard)
 //   staleness  — staleness filter (single)
