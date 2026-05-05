@@ -11,10 +11,12 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"text/tabwriter"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	tierescalation "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -1616,13 +1618,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	// through fizeau's provider resolution. Provider configuration and any
 	// "no providers configured" error reporting is fizeau's concern; ddx
 	// does not read fizeau's config files.
-	//
-	// ddx-b2c9a245: tier is inferred per bead via escalation.InferTier in
-	// the executor closure below when no routing flags are present.
-	noRoutingFlags := harness == "" && model == "" && provider == "" && modelRef == "" &&
-		!cmd.Flags().Changed("profile")
-	autoInferTier := noRoutingFlags && !projectHasRoutingConfig(projectRoot)
-
 	// ADR-022: execute-loop always runs inline. The legacy --local flag is
 	// a deprecated no-op and the server-submit path is removed from this CLI
 	// surface — server-spawned workers exec `ddx work` directly.
@@ -1711,6 +1706,32 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 
 	profile = agent.NormalizeRoutingProfile(profile)
 
+	// SD-024 Stage 1: dispatch flows through LoadAndResolve + RunWithConfig
+	// so .ddx/config.yaml's durable knobs (review_max_retries,
+	// no_progress_cooldown, max_no_changes_before_close, heartbeat_interval,
+	// agent.harness/model/permissions, etc.) reach the running loop without
+	// per-knob CLI plumbing. CLI flag values feed CLIOverrides which win
+	// over the on-disk config when set.
+	overrides := config.CLIOverrides{
+		Assignee: resolveClaimAssignee(),
+		Harness:  harness,
+		Model:    model,
+		Provider: provider,
+		ModelRef: modelRef,
+		Profile:  profile,
+		Effort:   effort,
+		MinPower: minPower,
+	}
+	rcfg, err := config.LoadAndResolve(projectRoot, overrides)
+	if err != nil {
+		// Surface the LoadAndResolve error rather than letting a
+		// zero-value ResolvedConfig flow into RunWithConfig — the
+		// SD-024 sealed-construction sentinel would otherwise panic
+		// at first accessor read instead of producing a clean CLI error.
+		tailCancel()
+		return fmt.Errorf("load resolved config: %w", err)
+	}
+
 	// Cost-cap state shared across attempts for this loop run.
 	// paths. Accumulated billed spend (excluding local and subscription
 	// providers) above --max-cost trips the cap and halts further bead
@@ -1749,31 +1770,22 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	}
 
 	// singleTierAttempt runs one execution attempt with an explicit harness
-	// and model. It is called both by the non-escalating path and by each
-	// iteration of the tier escalation loop.
-	singleTierAttempt := func(ctx context.Context, beadID string, tier escalation.ModelTier, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
+	// and model. The caller controls MinPower per rung; this helper keeps the
+	// profile stable and only advances the power floor.
+	singleTierAttempt := func(ctx context.Context, beadID string, requestedMinPower int, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
 		gitOps := &agent.RealGitOps{}
 		attemptProvider := provider
 		if resolvedProvider != "" {
 			attemptProvider = resolvedProvider
 		}
-
-		// ddx-b2c9a245: when zero-config auto-route is active, derive the
-		// per-attempt profile from the inferred tier rather than the static
-		// "always cheap" fallback the previous hot-fix used.
-		attemptProfile := profile
-		if autoInferTier && tier != "" {
-			attemptProfile = escalation.TierToProfile(tier)
-		}
-
 		loopOverrides := config.CLIOverrides{
 			Harness:           resolvedHarness,
 			Model:             resolvedModel,
 			Provider:          attemptProvider,
 			ModelRef:          modelRef,
-			Profile:           attemptProfile,
+			Profile:           profile,
 			Effort:            effort,
-			MinPower:          minPower,
+			MinPower:          requestedMinPower,
 			MaxPower:          maxPower,
 			OpaquePassthrough: treatPassthroughAsOpaque,
 		}
@@ -1813,10 +1825,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		if execErr != nil {
 			return agent.ExecuteBeadReport{}, execErr
 		}
-		tierStr := ""
-		if tier != "" {
-			tierStr = string(tier)
-		}
 		return agent.ExecuteBeadReport{
 			BeadID:                      res.BeadID,
 			AttemptID:                   res.AttemptID,
@@ -1829,7 +1837,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			PredictedSpeedTPS:           res.PredictedSpeedTPS,
 			PredictedCostUSDPer1kTokens: res.PredictedCostUSDPer1kTokens,
 			PredictedCostSource:         res.PredictedCostSource,
-			Tier:                        tierStr,
 			Status:                      res.Status,
 			Detail:                      res.Detail,
 			SessionID:                   res.SessionID,
@@ -1840,6 +1847,30 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			CostUSD:                     res.CostUSD,
 			DurationMS:                  int64(res.DurationMS),
 		}, nil
+	}
+
+	var ladderOnce sync.Once
+	var ladder escalationFloorFinder
+	loadLadder := func() escalationFloorFinder {
+		ladderOnce.Do(func() {
+			ladder = tierescalation.NewLadder(nil)
+			svc, svcErr := agent.NewServiceFromWorkDir(projectRoot)
+			if svcErr != nil {
+				return
+			}
+			modelFilter := agentlib.ModelFilter{}
+			if harness != "" {
+				modelFilter.Harness = harness
+			}
+			modelCtx, cancel := context.WithTimeout(cmd.Context(), 2*time.Second)
+			defer cancel()
+			models, listErr := svc.ListModels(modelCtx, modelFilter)
+			if listErr != nil {
+				return
+			}
+			ladder = tierescalation.NewLadder(models)
+		})
+		return ladder
 	}
 
 	worker := &agent.ExecuteBeadWorker{
@@ -1853,22 +1884,15 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				cappedReport.BeadID = beadID
 				return cappedReport, nil
 			}
-			// Pass operator intent (harness/provider/model) directly to
-			// Execute via singleTierAttempt; do not pre-resolve the route
-			// (CONTRACT-003 / ddx-da19756a).
-			//
-			// ddx-b2c9a245: under zero-config auto-route, infer the tier
-			// from bead metadata (labels, kind, scope) and pass it through
-			// so singleTierAttempt selects the matching profile.
-			var inferredTier escalation.ModelTier
-			if autoInferTier {
-				if b, getErr := store.Get(beadID); getErr == nil {
-					inferredTier = escalation.InferTier(b)
-				} else {
-					inferredTier = escalation.TierCheap
-				}
-			}
-			report, err := singleTierAttempt(ctx, beadID, inferredTier, harness, provider, model)
+			report, err := runEscalatingSingleTierAttempts(
+				ctx,
+				rcfg.MinPower(),
+				loadLadder(),
+				func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+					return singleTierAttempt(ctx, beadID, requestedMinPower, harness, provider, model)
+				},
+				nil,
+			)
 			if err == nil {
 				accumulateBilledCost(report)
 				if cappedReport, capped := costCapTripped(); capped {
@@ -1878,31 +1902,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			}
 			return report, err
 		}),
-	}
-
-	// SD-024 Stage 1: dispatch flows through LoadAndResolve + RunWithConfig
-	// so .ddx/config.yaml's durable knobs (review_max_retries,
-	// no_progress_cooldown, max_no_changes_before_close, heartbeat_interval,
-	// agent.harness/model/permissions, etc.) reach the running loop without
-	// per-knob CLI plumbing. CLI flag values feed CLIOverrides which win
-	// over the on-disk config when set.
-	overrides := config.CLIOverrides{
-		Assignee: resolveClaimAssignee(),
-		Harness:  harness,
-		Model:    model,
-		Provider: provider,
-		ModelRef: modelRef,
-		Profile:  profile,
-		Effort:   effort,
-	}
-	rcfg, err := config.LoadAndResolve(projectRoot, overrides)
-	if err != nil {
-		// Surface the LoadAndResolve error rather than letting a
-		// zero-value ResolvedConfig flow into RunWithConfig — the
-		// SD-024 sealed-construction sentinel would otherwise panic
-		// at first accessor read instead of producing a clean CLI error.
-		tailCancel()
-		return fmt.Errorf("load resolved config: %w", err)
 	}
 
 	cliLandingOps := agent.RealLandingGitOps{}
