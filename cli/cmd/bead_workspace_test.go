@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/require"
 )
 
@@ -36,6 +37,50 @@ func TestBeadWorkspaceRoot_RelativeEnvInsideLinkedWorktreeUsesPrimaryWorkspace(t
 	got := factory.beadWorkspaceRoot()
 	require.Equal(t, projectRoot, got,
 		"relative DDX_BEAD_DIR inside execute-bead worktrees must resolve to the primary workspace, not the worktree")
+}
+
+func TestBeadCreate_RelativeEnvInsideLinkedWorktreeUsesPrimaryNamingAndStore(t *testing.T) {
+	tmp := t.TempDir()
+	projectRoot := filepath.Join(tmp, "origin-tree")
+	ddxDir := filepath.Join(projectRoot, ".ddx")
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte("version: \"1.0\"\nbead:\n  id_prefix: \"origin\"\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), nil, 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "README.md"), []byte("fixture\n"), 0o644))
+
+	runGitForWorkspaceTest(t, projectRoot, "init")
+	runGitForWorkspaceTest(t, projectRoot, "config", "user.name", "Test")
+	runGitForWorkspaceTest(t, projectRoot, "config", "user.email", "test@example.com")
+	runGitForWorkspaceTest(t, projectRoot, "config", "extensions.worktreeConfig", "true")
+	runGitForWorkspaceTest(t, projectRoot, "add", "README.md", ".ddx/config.yaml", ".ddx/beads.jsonl")
+	runGitForWorkspaceTest(t, projectRoot, "commit", "-m", "init")
+
+	worktreeRoot := filepath.Join(tmp, ".execute-bead-wt-ddx-12345678-20260505T000000-deadbeef")
+	runGitForWorkspaceTest(t, projectRoot, "worktree", "add", "--detach", worktreeRoot, "HEAD")
+	t.Cleanup(func() {
+		_ = exec.Command("git", "-C", projectRoot, "worktree", "remove", "--force", worktreeRoot).Run()
+	})
+
+	worktreeDDX := filepath.Join(worktreeRoot, ".ddx")
+	require.NoError(t, os.WriteFile(filepath.Join(worktreeDDX, "config.yaml"), []byte("version: \"1.0\"\nbead:\n  id_prefix: \"worktree\"\n"), 0o644))
+
+	t.Setenv("DDX_BEAD_DIR", ".ddx")
+	root := NewCommandFactory(worktreeRoot).NewRootCommand()
+	out, err := executeCommand(root, "bead", "create", "worktree-created bead", "--priority", "1")
+	require.NoError(t, err)
+
+	createdID := strings.TrimSpace(out)
+	require.True(t, strings.HasPrefix(createdID, "origin-"),
+		"bead create from a linked execute-bead worktree must use the primary workspace naming convention, got %q", createdID)
+
+	primaryStore := bead.NewStore(ddxDir)
+	created, err := primaryStore.Get(createdID)
+	require.NoError(t, err, "created bead must be written to the primary workspace store")
+	require.Equal(t, "worktree-created bead", created.Title)
+
+	worktreeStore := bead.NewStore(worktreeDDX)
+	_, err = worktreeStore.Get(createdID)
+	require.Error(t, err, "created bead must not be written to the isolated worktree store")
 }
 
 func runGitForWorkspaceTest(t *testing.T, dir string, args ...string) {
