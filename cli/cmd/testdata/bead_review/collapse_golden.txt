@@ -19,6 +19,7 @@ AC#2: 'covered' &gt; baseline
   <governing>
     <ref id="FEAT-XX" path="governing.md" title="Sample <Doc> & \"Title\"">
       <content>
+<untrusted-data>
 # FEAT-XX: Sample Governing Doc <with> "quoted" & 'apostrophes'
 
 This document includes XML-sensitive characters: `<`, `>`, `&`, `"`, `'`.
@@ -26,13 +27,16 @@ This document includes XML-sensitive characters: `<`, `>`, `&`, `"`, `'`.
 ## Requirement
 
 The reviewer must compare the diff against acceptance criteria.
+</untrusted-data>
       </content>
     </ref>
   </governing>
 
   <diff rev="deadbee">
+<untrusted-data>
 diff --git a/x.go b/x.go
 + added line with <tag> & "q" 'a'
+</untrusted-data>
   </diff>
 
   <instructions>

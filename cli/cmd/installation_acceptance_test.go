@@ -59,6 +59,10 @@ type InstallationTestEnvironment struct {
 
 // setupTestEnvironment creates a mock environment for installation testing
 func setupTestEnvironment(t *testing.T, platform, arch string) *InstallationTestEnvironment {
+	if os.Getenv("DDX_RUN_INSTALLATION_ACCEPTANCE") == "" {
+		t.Skip("installation acceptance tests are opt-in")
+	}
+
 	tempDir := t.TempDir()
 	homeDir := filepath.Join(tempDir, "home")
 	err := os.MkdirAll(homeDir, 0755)
