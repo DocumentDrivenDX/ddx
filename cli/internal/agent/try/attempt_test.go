@@ -2,6 +2,7 @@ package try
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -151,6 +152,108 @@ func TestAttempt_ConflictUnresolvable_ReturnsPark(t *testing.T) {
 	assert.NotEmpty(t, out.Report.RetryAfter)
 	require.Len(t, store.events, 1)
 	assert.Equal(t, "land-conflict-unresolvable", store.events[0].Kind)
+}
+
+func TestAttempt_DeclinedNeedsDecomposition_ParksWithStructuredEvent(t *testing.T) {
+	store := &attemptStore{}
+	now := time.Date(2026, 5, 5, 10, 11, 12, 0, time.UTC)
+	recommended := []string{"split: route trace", "split: retry policy"}
+	rationale := "scope is too large for one pass"
+
+	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
+		Store: store,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{
+				BeadID:                      beadID,
+				Status:                      StatusDeclinedNeedsDecomposition,
+				Detail:                      "decompose this bead",
+				BaseRev:                     "base",
+				SessionID:                   "session",
+				DecompositionRationale:      rationale,
+				DecompositionRecommendation: recommended,
+			}, nil
+		}),
+		Now: func() time.Time { return now },
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, OutcomePark, out.Disposition)
+	require.NotNil(t, out.Parking)
+	assert.True(t, out.Parking.Unclaim)
+	assert.True(t, out.Parking.RunPostAttemptTriage)
+	require.NotNil(t, out.Parking.Event)
+	assert.Equal(t, "decomposition-recommendation", out.Parking.Event.Kind)
+	assert.Equal(t, now.Add(maxAttemptCooldown), out.Parking.RetryAfter)
+	assert.Equal(t, now.Add(maxAttemptCooldown).Format(time.RFC3339), out.Report.RetryAfter)
+	require.Len(t, store.events, 0)
+
+	var body struct {
+		Rationale           string   `json:"rationale"`
+		RecommendedSubbeads []string `json:"recommended_subbeads"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(out.Parking.Event.Body), &body))
+	assert.Equal(t, rationale, body.Rationale)
+	assert.Equal(t, recommended, body.RecommendedSubbeads)
+}
+
+func TestAttempt_PushFailed_ParksWithCooldown(t *testing.T) {
+	store := &attemptStore{}
+	now := time.Date(2026, 5, 5, 10, 11, 12, 0, time.UTC)
+
+	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
+		Store: store,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{
+				BeadID: beadID,
+				Status: StatusPushFailed,
+				Detail: PushFailedReasonPrefix + " remote rejected",
+			}, nil
+		}),
+		Now: func() time.Time { return now },
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, OutcomePark, out.Disposition)
+	require.NotNil(t, out.Parking)
+	assert.True(t, out.Parking.Unclaim)
+	assert.True(t, out.Parking.RunPostAttemptTriage)
+	assert.Nil(t, out.Parking.Event)
+	assert.Equal(t, now.Add(maxAttemptCooldown), out.Parking.RetryAfter)
+	assert.Equal(t, now.Add(maxAttemptCooldown).Format(time.RFC3339), out.Report.RetryAfter)
+	require.Empty(t, store.events)
+}
+
+func TestAttempt_PushConflict_ParksWithCooldown(t *testing.T) {
+	store := &attemptStore{}
+	now := time.Date(2026, 5, 5, 10, 11, 12, 0, time.UTC)
+	detail := PushConflictReasonPrefix + " auto-recovery retry push: CONFLICT (content)"
+
+	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
+		Store: store,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{
+				BeadID:    beadID,
+				Status:    StatusPushConflict,
+				Detail:    detail,
+				BaseRev:   "base",
+				ResultRev: "result",
+				SessionID: "session",
+			}, nil
+		}),
+		Now: func() time.Time { return now },
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, OutcomePark, out.Disposition)
+	require.NotNil(t, out.Parking)
+	assert.True(t, out.Parking.Unclaim)
+	assert.True(t, out.Parking.RunPostAttemptTriage)
+	require.NotNil(t, out.Parking.Event)
+	assert.Equal(t, "push-conflict", out.Parking.Event.Kind)
+	assert.Equal(t, now.Add(maxAttemptCooldown), out.Parking.RetryAfter)
+	assert.Equal(t, now.Add(maxAttemptCooldown).Format(time.RFC3339), out.Report.RetryAfter)
+	require.Empty(t, store.events)
+	assert.Contains(t, out.Parking.Event.Body, detail)
 }
 
 func TestAttempt_RateLimit_Retry_HonorsRetryAfter(t *testing.T) {

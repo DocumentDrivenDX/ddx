@@ -2,6 +2,7 @@ package try
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -12,11 +13,19 @@ import (
 )
 
 const (
-	StatusExecutionFailed  = "execution_failed"
-	StatusLandConflict     = "land_conflict"
-	StatusSuccess          = "success"
-	StatusNoChanges        = "no_changes"
-	StatusAlreadySatisfied = "already_satisfied"
+	StatusExecutionFailed            = "execution_failed"
+	StatusLandConflict               = "land_conflict"
+	StatusSuccess                    = "success"
+	StatusNoChanges                  = "no_changes"
+	StatusAlreadySatisfied           = "already_satisfied"
+	StatusPushFailed                 = "push_failed"
+	StatusPushConflict               = "push_conflict"
+	StatusDeclinedNeedsDecomposition = "declined_needs_decomposition"
+)
+
+const (
+	PushFailedReasonPrefix   = "landed locally; push failed:"
+	PushConflictReasonPrefix = "landed locally; push conflict:"
 )
 
 type Report struct {
@@ -110,8 +119,27 @@ type Outcome struct {
 	Report      Report
 	Disposition Disposition
 	NoChanges   *NoChangesOutcome
+	Parking     *ParkingOutcome
 	StoreErrOp  string
 	StoreErr    error
+}
+
+// ParkingOutcome carries the structured instructions for outcomes that must
+// be parked instead of retried immediately.
+type ParkingOutcome struct {
+	Unclaim              bool
+	RetryAfter           time.Time
+	RunPostAttemptTriage bool
+	Event                *ParkingEvent
+}
+
+// ParkingEvent is the event template returned by Attempt for structured park
+// outcomes. The execute loop converts it into a bead.BeadEvent when it applies
+// the parking instructions.
+type ParkingEvent struct {
+	Kind    string
+	Summary string
+	Body    string
 }
 
 func Attempt(ctx context.Context, store Store, beadID string, opts AttemptOpts) (Outcome, error) {
@@ -220,7 +248,106 @@ func Attempt(ctx context.Context, store Store, beadID string, opts AttemptOpts) 
 		}, nil
 	}
 
+	if report.Status == StatusDeclinedNeedsDecomposition {
+		parkUntil := nowFn(opts.Now).UTC().Add(maxAttemptCooldown)
+		report.RetryAfter = parkUntil.Format(time.RFC3339)
+		event := buildDecompositionParkingEvent(report)
+		return Outcome{
+			Report:      report,
+			Disposition: OutcomePark,
+			Parking: &ParkingOutcome{
+				Unclaim:              true,
+				RetryAfter:           parkUntil,
+				RunPostAttemptTriage: true,
+				Event:                event,
+			},
+		}, nil
+	}
+
+	if report.Status == StatusPushFailed {
+		parkUntil := nowFn(opts.Now).UTC().Add(maxAttemptCooldown)
+		report.RetryAfter = parkUntil.Format(time.RFC3339)
+		return Outcome{
+			Report:      report,
+			Disposition: OutcomePark,
+			Parking: &ParkingOutcome{
+				Unclaim:              true,
+				RetryAfter:           parkUntil,
+				RunPostAttemptTriage: true,
+			},
+		}, nil
+	}
+
+	if report.Status == StatusPushConflict {
+		parkUntil := nowFn(opts.Now).UTC().Add(maxAttemptCooldown)
+		report.RetryAfter = parkUntil.Format(time.RFC3339)
+		event := buildPushConflictParkingEvent(report)
+		return Outcome{
+			Report:      report,
+			Disposition: OutcomePark,
+			Parking: &ParkingOutcome{
+				Unclaim:              true,
+				RetryAfter:           parkUntil,
+				RunPostAttemptTriage: true,
+				Event:                event,
+			},
+		}, nil
+	}
+
 	return Outcome{Report: report, Disposition: OutcomeReported}, err
+}
+
+func nowFn(fn func() time.Time) time.Time {
+	if fn != nil {
+		return fn()
+	}
+	return time.Now()
+}
+
+const maxAttemptCooldown = 24 * time.Hour
+
+func buildDecompositionParkingEvent(report Report) *ParkingEvent {
+	body, mErr := json.Marshal(map[string]any{
+		"rationale":            report.DecompositionRationale,
+		"recommended_subbeads": report.DecompositionRecommendation,
+		"detail":               report.Detail,
+		"base_rev":             report.BaseRev,
+		"session_id":           report.SessionID,
+	})
+	bodyStr := ""
+	if mErr == nil {
+		bodyStr = string(body)
+	} else {
+		bodyStr = fmt.Sprintf("rationale=%s\nrecommended_subbeads=%v",
+			report.DecompositionRationale, report.DecompositionRecommendation)
+	}
+	summary := "agent declined: needs decomposition"
+	if n := len(report.DecompositionRecommendation); n > 0 {
+		summary = fmt.Sprintf("%s (%d sub-beads)", summary, n)
+	}
+	return &ParkingEvent{
+		Kind:    "decomposition-recommendation",
+		Summary: summary,
+		Body:    bodyStr,
+	}
+}
+
+func buildPushConflictParkingEvent(report Report) *ParkingEvent {
+	body, mErr := json.Marshal(map[string]any{
+		"detail":     report.Detail,
+		"base_rev":   report.BaseRev,
+		"result_rev": report.ResultRev,
+		"session_id": report.SessionID,
+	})
+	bodyStr := report.Detail
+	if mErr == nil {
+		bodyStr = string(body)
+	}
+	return &ParkingEvent{
+		Kind:    "push-conflict",
+		Summary: "auto-merge after push race could not be resolved",
+		Body:    bodyStr,
+	}
 }
 
 type RateLimitRetryConfig struct {

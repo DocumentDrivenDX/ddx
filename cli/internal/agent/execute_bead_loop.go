@@ -890,6 +890,39 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			return result, ctx.Err()
 		}
 
+		if parking := attemptOut.Parking; parking != nil {
+			if parking.Unclaim {
+				if err := w.Store.Unclaim(candidate.ID); err != nil {
+					if w.handleOutcomeStoreError(ctx, candidate.ID, "Unclaim", err, assignee, result, runtime, now) {
+						continue
+					}
+					return result, ctx.Err()
+				}
+			}
+			if parking.RunPostAttemptTriage {
+				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
+			}
+			if parking.Event != nil {
+				_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+					Kind:      parking.Event.Kind,
+					Summary:   parking.Event.Summary,
+					Body:      parking.Event.Body,
+					Actor:     assignee,
+					Source:    "ddx agent execute-loop",
+					CreatedAt: now().UTC(),
+				})
+			}
+			if !parking.RetryAfter.IsZero() {
+				if err := w.Store.SetExecutionCooldown(candidate.ID, parking.RetryAfter, report.Status, report.Detail); err != nil {
+					if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", err, assignee, result, runtime, now) {
+						continue
+					}
+					return result, ctx.Err()
+				}
+				report.RetryAfter = parking.RetryAfter.Format(time.RFC3339)
+			}
+		}
+
 		if attemptOut.Disposition == agenttry.OutcomeSuccess {
 			result.Successes++
 			result.LastSuccessAt = now().UTC()
@@ -1017,11 +1050,13 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				result.LastFailureStatus = report.Status
 			}
 		} else {
-			if err := w.Store.Unclaim(candidate.ID); err != nil {
-				if w.handleOutcomeStoreError(ctx, candidate.ID, "Unclaim", err, assignee, result, runtime, now) {
-					continue
+			if attemptOut.Parking == nil && attemptOut.Disposition != agenttry.OutcomePark {
+				if err := w.Store.Unclaim(candidate.ID); err != nil {
+					if w.handleOutcomeStoreError(ctx, candidate.ID, "Unclaim", err, assignee, result, runtime, now) {
+						continue
+					}
+					return result, ctx.Err()
 				}
-				return result, ctx.Err()
 			}
 			if report.Status == ExecuteBeadStatusPreservedNeedsReview {
 				if err := w.Store.AppendNotes(candidate.ID, preservedNeedsReviewNote(report)); err != nil {
@@ -1030,103 +1065,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					}
 					return result, ctx.Err()
 				}
-				result.Failures++
-				result.LastFailureStatus = report.Status
-			} else if report.Status == ExecuteBeadStatusDeclinedNeedsDecomposition {
-				// Executor declined the bead because it is too large to
-				// deliver in one pass. Record a structured
-				// `decomposition-recommendation` event and park the bead
-				// long enough that subsequent loop iterations do NOT
-				// re-attempt it. An operator (or helix-evolve) clears the
-				// cooldown — typically by splitting the bead.
-				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
-				body, mErr := json.Marshal(map[string]any{
-					"rationale":            report.DecompositionRationale,
-					"recommended_subbeads": report.DecompositionRecommendation,
-					"detail":               report.Detail,
-					"base_rev":             report.BaseRev,
-					"session_id":           report.SessionID,
-				})
-				bodyStr := ""
-				if mErr == nil {
-					bodyStr = string(body)
-				} else {
-					bodyStr = fmt.Sprintf("rationale=%s\nrecommended_subbeads=%v",
-						report.DecompositionRationale, report.DecompositionRecommendation)
-				}
-				summary := "agent declined: needs decomposition"
-				if n := len(report.DecompositionRecommendation); n > 0 {
-					summary = fmt.Sprintf("%s (%d sub-beads)", summary, n)
-				}
-				_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-					Kind:      "decomposition-recommendation",
-					Summary:   summary,
-					Body:      bodyStr,
-					Actor:     assignee,
-					Source:    "ddx agent execute-loop",
-					CreatedAt: now().UTC(),
-				})
-				parkUntil := now().UTC().Add(CapLoopCooldown(MaxLoopCooldown))
-				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
-					if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", err, assignee, result, runtime, now) {
-						continue
-					}
-					return result, ctx.Err()
-				}
-				report.RetryAfter = parkUntil.Format(time.RFC3339)
-				result.Failures++
-				result.LastFailureStatus = report.Status
-			} else if report.Status == ExecuteBeadStatusPushFailed {
-				// Push failed after a successful local merge/ff. The bead is
-				// NOT closed (commits live only locally) — park it under the
-				// 24h cap so the loop re-attempts within a reasonable horizon.
-				// The push stderr in report.Detail is recorded as last_detail
-				// so it surfaces on the bead and on any direct claim attempt.
-				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
-				parkUntil := now().UTC().Add(CapLoopCooldown(MaxLoopCooldown))
-				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
-					if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", err, assignee, result, runtime, now) {
-						continue
-					}
-					return result, ctx.Err()
-				}
-				report.RetryAfter = parkUntil.Format(time.RFC3339)
-				result.Failures++
-				result.LastFailureStatus = report.Status
-			} else if report.Status == ExecuteBeadStatusPushConflict {
-				// The local target ref was advanced and the loop's
-				// auto-pull/merge/retry recovery hit a merge conflict it
-				// cannot resolve without operator input. Record a
-				// `push-conflict` event with the conflict context so the
-				// operator can find and resolve it, and park the bead under
-				// the same 24h cap as push_failed.
-				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
-				body, mErr := json.Marshal(map[string]any{
-					"detail":     report.Detail,
-					"base_rev":   report.BaseRev,
-					"result_rev": report.ResultRev,
-					"session_id": report.SessionID,
-				})
-				bodyStr := report.Detail
-				if mErr == nil {
-					bodyStr = string(body)
-				}
-				_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-					Kind:      "push-conflict",
-					Summary:   "auto-merge after push race could not be resolved",
-					Body:      bodyStr,
-					Actor:     assignee,
-					Source:    "ddx agent execute-loop",
-					CreatedAt: now().UTC(),
-				})
-				parkUntil := now().UTC().Add(CapLoopCooldown(MaxLoopCooldown))
-				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
-					if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", err, assignee, result, runtime, now) {
-						continue
-					}
-					return result, ctx.Err()
-				}
-				report.RetryAfter = parkUntil.Format(time.RFC3339)
 				result.Failures++
 				result.LastFailureStatus = report.Status
 			} else {
