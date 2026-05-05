@@ -92,20 +92,3 @@ func ReadRawServerAddr() string {
 	}
 	return af.URL
 }
-
-// readAddrFilePID returns the pid recorded in server.addr (0 if absent).
-func readAddrFilePID() int {
-	type addrFile struct {
-		PID int `json:"pid"`
-	}
-	path := filepath.Join(serverAddrDir(), "server.addr")
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return 0
-	}
-	var af addrFile
-	if err := json.Unmarshal(data, &af); err != nil {
-		return 0
-	}
-	return af.PID
-}

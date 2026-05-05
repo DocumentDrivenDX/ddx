@@ -29,19 +29,6 @@ var harnessRateLimitCache = struct {
 	byName map[string]agent.RateLimitSignal
 }{byName: make(map[string]agent.RateLimitSignal)}
 
-// RecordHarnessRateLimit stores the latest parsed rate-limit signal for a
-// harness invocation. Intended for the server's harness-dispatch path to call
-// after each response; tests use it directly.
-func RecordHarnessRateLimit(name string, sig agent.RateLimitSignal) {
-	name = strings.TrimSpace(name)
-	if name == "" || !sig.HasAny() {
-		return
-	}
-	harnessRateLimitCache.Lock()
-	harnessRateLimitCache.byName[name] = sig
-	harnessRateLimitCache.Unlock()
-}
-
 // LookupHarnessRateLimit returns the last-observed signal for a harness, or
 // ok=false if none has been recorded.
 func LookupHarnessRateLimit(name string) (agent.RateLimitSignal, bool) {
@@ -49,13 +36,6 @@ func LookupHarnessRateLimit(name string) (agent.RateLimitSignal, bool) {
 	defer harnessRateLimitCache.RUnlock()
 	sig, ok := harnessRateLimitCache.byName[name]
 	return sig, ok
-}
-
-// resetHarnessRateLimitCache is a test seam.
-func resetHarnessRateLimitCache() {
-	harnessRateLimitCache.Lock()
-	harnessRateLimitCache.byName = make(map[string]agent.RateLimitSignal)
-	harnessRateLimitCache.Unlock()
 }
 
 // ProviderStatuses is the resolver for the providerStatuses field.

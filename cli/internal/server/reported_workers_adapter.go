@@ -21,18 +21,6 @@ func newReportedWorkersAdapter(reg *workerIngestRegistry) *reportedWorkersAdapte
 	return &reportedWorkersAdapter{reg: reg, now: func() time.Time { return time.Now().UTC() }}
 }
 
-// setNow swaps the adapter's freshness clock. Safe to call concurrently with
-// GraphQL reads. ADR-022 step 5c integration tests use this to advance
-// synthetic time past the 2×/10× probe-interval thresholds without sleeping.
-func (a *reportedWorkersAdapter) setNow(now func() time.Time) {
-	if now == nil {
-		now = func() time.Time { return time.Now().UTC() }
-	}
-	a.mu.Lock()
-	a.now = now
-	a.mu.Unlock()
-}
-
 func (a *reportedWorkersAdapter) currentNow() time.Time {
 	a.mu.RLock()
 	defer a.mu.RUnlock()

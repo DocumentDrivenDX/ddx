@@ -287,11 +287,3 @@ func cloneProviderModelsResult(in *ProviderModelsResult) *ProviderModelsResult {
 	}
 	return &out
 }
-
-// resetProviderModelsCacheForTest is a test seam.
-func resetProviderModelsCacheForTest() {
-	providerModelsCache.Lock()
-	providerModelsCache.entries = make(map[string]providerModelsCacheEntry)
-	providerModelsCache.inFlight = make(map[string]chan struct{})
-	providerModelsCache.Unlock()
-}

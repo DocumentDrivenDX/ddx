@@ -2174,10 +2174,6 @@ func (s *Server) handleDocDiff(w http.ResponseWriter, r *http.Request) {
 
 // --- Execution Endpoints ---
 
-func (s *Server) execStore() *ddxexec.Store {
-	return ddxexec.NewStore(s.WorkingDir)
-}
-
 func (s *Server) handleExecDefinitions(w http.ResponseWriter, r *http.Request) {
 	store := s.execStoreForRequest(r)
 	artifactID := r.URL.Query().Get("artifact")
@@ -2839,10 +2835,6 @@ func (s *Server) handleAgentSessionDetail(w http.ResponseWriter, r *http.Request
 		return
 	}
 	writeJSON(w, http.StatusNotFound, map[string]string{"error": "session not found"})
-}
-
-func (s *Server) loadSessions() ([]agent.SessionEntry, error) {
-	return s.loadSessionsFor(s.WorkingDir)
 }
 
 func (s *Server) loadSessionsFor(workDir string) ([]agent.SessionEntry, error) {

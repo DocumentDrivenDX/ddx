@@ -220,19 +220,6 @@ func (r *workerIngestRegistry) append(workerID string, ev workerEvent) error {
 	return err
 }
 
-// close releases the log file handle. Safe to call when the file was
-// never opened. Used on server shutdown / test cleanup.
-func (r *workerIngestRegistry) close() error {
-	r.mu.Lock()
-	defer r.mu.Unlock()
-	if r.logFile == nil {
-		return nil
-	}
-	err := r.logFile.Close()
-	r.logFile = nil
-	return err
-}
-
 func newWorkerID() string {
 	var b [12]byte
 	if _, err := rand.Read(b[:]); err != nil {

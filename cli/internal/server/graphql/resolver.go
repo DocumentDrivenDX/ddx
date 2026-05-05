@@ -2,34 +2,11 @@ package graphql
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
-
-// NewResolver constructs a Resolver with mandatory fields validated.
-// Returns an error if state is nil or workingDir is empty, ensuring callers
-// cannot construct a resolver that would panic on first use.
-//
-// The workingDir argument acts as the FALLBACK default for resolver methods
-// that do not receive a per-request WorkingDir via context. LAYER 2 of the
-// GraphQL multi-project fix (ddx-055e8d32) routes requests with their own
-// WorkingDir via WithWorkingDir/WorkingDirFromContext; the field stays as a
-// safety net so legacy call sites and helpers without ctx do not panic.
-func NewResolver(state StateProvider, workingDir string) (*Resolver, error) {
-	if state == nil {
-		return nil, fmt.Errorf("resolver: state provider is required")
-	}
-	if workingDir == "" {
-		return nil, fmt.Errorf("resolver: working directory is required")
-	}
-	return &Resolver{
-		State:      state,
-		WorkingDir: workingDir,
-	}, nil
-}
 
 // workingDirKey is the context key used to thread a per-request WorkingDir
 // through GraphQL resolvers. LAYER 2 of the GraphQL multi-project fix

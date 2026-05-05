@@ -25,6 +25,15 @@ import (
 // (the helper test below skips), set by the parent integration test.
 const liveTransitionsChildEnv = "DDX_WORKERS_LIVE_TRANSITIONS_URL"
 
+func (a *reportedWorkersAdapter) setNow(now func() time.Time) {
+	if now == nil {
+		now = func() time.Time { return time.Now().UTC() }
+	}
+	a.mu.Lock()
+	a.now = now
+	a.mu.Unlock()
+}
+
 // TestWorkersPanel_LiveTransitions stands up a real httptest.Server, has a
 // real subprocess "worker" register against it, and asserts the GraphQL
 // reportedWorkers query reports each freshness transition (connected at <2×
