@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260505T113434-3317d134",
+  "bead_id": "ddx-0e5c3005",
+  "base_rev": "bd7ab90c9db971dff5453d7d4cb67bb254cec26f",
+  "created_at": "2026-05-05T11:34:37.337073785Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0e5c3005",
+    "title": "review: structured prompt assembly + FEAT-022 telemetry + injection delimiters",
+    "description": "Structured prompt assembly per turn (NOT naive verbatim+oldest-first truncation). Pinned: system rubric, artifact identity (path/sha/git_rev), Story 17 template+prompt, first-user-intent + explicit user decisions. Rolling: session memory summary, last K verbatim turns, unresolved findings. FEAT-022 byte accounting. Refuses with PROMPT_BUDGET_EXCEEDED if minimum pinned set won't fit. Untrusted-data delimiters (artifact body wrapped) for prompt-injection boundary.",
+    "acceptance": "1. Assembly function exists with structured pinned + summary + recent + unresolved. 2. FEAT-022 byte accounting per assembly. 3. PROMPT_BUDGET_EXCEEDED refusal with clear error. 4. Untrusted-data delimiters wrap artifact body. 5. Tests cover all four.",
+    "parent": "ddx-42b917fe",
+    "labels": [
+      "phase:2",
+      "story:18",
+      "area:server",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-05T11:34:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "19662",
+      "execute-loop-heartbeat-at": "2026-05-05T11:34:33.949448476Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260505T113434-3317d134",
+    "prompt": ".ddx/executions/20260505T113434-3317d134/prompt.md",
+    "manifest": ".ddx/executions/20260505T113434-3317d134/manifest.json",
+    "result": ".ddx/executions/20260505T113434-3317d134/result.json",
+    "checks": ".ddx/executions/20260505T113434-3317d134/checks.json",
+    "usage": ".ddx/executions/20260505T113434-3317d134/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-0e5c3005-20260505T113434-3317d134"
+  },
+  "prompt_sha": "24e00fb22be3f92d1947276e6b04d9d1baff9496484a2e8624789e884869e03b"
+}
