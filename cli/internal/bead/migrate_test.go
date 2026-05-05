@@ -265,12 +265,8 @@ func TestMigrateLargeFixtureSplits(t *testing.T) {
 	assert.False(t, second.Changed())
 }
 
-// TestMigrateToAxonRoundTripFromFixture loads the cli/internal/bead/testdata
-// fixture pair (.ddx/beads.jsonl + .ddx/beads-archive.jsonl), migrates to
-// the axon backend, and verifies that an export from the post-migration
-// axon-backed store matches the pre-migration JSONL export bead-for-bead
-// (sorted to ignore active-then-archive ordering quirks in ExportTo).
-func TestMigrateToAxonRoundTripFromFixture(t *testing.T) {
+func loadMigrateToAxonFixture(t *testing.T) (*Store, bytes.Buffer) {
+	t.Helper()
 	dir := filepath.Join(t.TempDir(), ".ddx")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 
@@ -288,6 +284,15 @@ func TestMigrateToAxonRoundTripFromFixture(t *testing.T) {
 	var preBuf bytes.Buffer
 	require.NoError(t, jsonlStore.ExportTo(&preBuf))
 	require.NotZero(t, preBuf.Len(), "fixture must produce a non-empty pre-migration export")
+	return jsonlStore, preBuf
+}
+
+// TestMigrate_AxonBackend_RoundTrip verifies that the fixture pair
+// (.ddx/beads.jsonl + .ddx/beads-archive.jsonl) migrates to axon and that a
+// post-migration export matches the pre-migration JSONL export bead-for-bead
+// (sorted to ignore active-then-archive ordering quirks in ExportTo).
+func TestMigrate_AxonBackend_RoundTrip(t *testing.T) {
+	jsonlStore, preBuf := loadMigrateToAxonFixture(t)
 
 	stats, err := jsonlStore.MigrateToAxon()
 	require.NoError(t, err)
@@ -299,41 +304,56 @@ func TestMigrateToAxonRoundTripFromFixture(t *testing.T) {
 
 	// Source files left intact — operator removes them after verification.
 	for _, src := range []string{"beads.jsonl", "beads-archive.jsonl"} {
-		_, statErr := os.Stat(filepath.Join(dir, src))
+		_, statErr := os.Stat(filepath.Join(jsonlStore.Dir, src))
 		assert.NoError(t, statErr, "source file %s must not be deleted by migration", src)
 	}
 	// Axon collection files exist.
 	for _, dst := range []string{"axon/ddx_beads.jsonl", "axon/ddx_bead_events.jsonl"} {
-		_, statErr := os.Stat(filepath.Join(dir, dst))
+		_, statErr := os.Stat(filepath.Join(jsonlStore.Dir, dst))
 		assert.NoError(t, statErr, "axon file %s must exist after migration", dst)
 	}
 
 	// Axon-backed export must match the JSONL export.
-	axStore := NewStore(dir)
-	axStore.backend = NewAxonBackend(dir, axStore.LockWait)
+	axStore := NewStore(jsonlStore.Dir)
+	axStore.backend = NewAxonBackend(jsonlStore.Dir, axStore.LockWait)
 	var postBuf bytes.Buffer
 	require.NoError(t, axStore.ExportTo(&postBuf))
 
 	pre := sortedNonEmptyLines(preBuf.String())
 	post := sortedNonEmptyLines(postBuf.String())
 	assert.Equal(t, pre, post, "post-migration export must round-trip the pre-migration export")
+}
 
-	// Idempotent: a second migration produces byte-identical axon files.
-	axBeadsBefore, err := os.ReadFile(filepath.Join(dir, "axon", "ddx_beads.jsonl"))
+// TestMigrate_AxonBackend_Idempotent verifies that a second migration pass on
+// the same fixture is a no-op at the axon file level.
+func TestMigrate_AxonBackend_Idempotent(t *testing.T) {
+	jsonlStore, _ := loadMigrateToAxonFixture(t)
+	stats, err := jsonlStore.MigrateToAxon()
 	require.NoError(t, err)
-	axEventsBefore, err := os.ReadFile(filepath.Join(dir, "axon", "ddx_bead_events.jsonl"))
+
+	axBeadsBefore, err := os.ReadFile(filepath.Join(jsonlStore.Dir, "axon", "ddx_beads.jsonl"))
+	require.NoError(t, err)
+	axEventsBefore, err := os.ReadFile(filepath.Join(jsonlStore.Dir, "axon", "ddx_bead_events.jsonl"))
 	require.NoError(t, err)
 
 	stats2, err := jsonlStore.MigrateToAxon()
 	require.NoError(t, err)
 	assert.Equal(t, stats, stats2, "second migration reports the same counts")
 
-	axBeadsAfter, err := os.ReadFile(filepath.Join(dir, "axon", "ddx_beads.jsonl"))
+	axBeadsAfter, err := os.ReadFile(filepath.Join(jsonlStore.Dir, "axon", "ddx_beads.jsonl"))
 	require.NoError(t, err)
-	axEventsAfter, err := os.ReadFile(filepath.Join(dir, "axon", "ddx_bead_events.jsonl"))
+	axEventsAfter, err := os.ReadFile(filepath.Join(jsonlStore.Dir, "axon", "ddx_bead_events.jsonl"))
 	require.NoError(t, err)
 	assert.Equal(t, string(axBeadsBefore), string(axBeadsAfter), "second migration must not duplicate bead rows")
 	assert.Equal(t, string(axEventsBefore), string(axEventsAfter), "second migration must not duplicate event rows")
+}
+
+// TestMigrateToAxonRoundTripFromFixture preserves the original broader name so
+// existing documentation stays accurate while the AC-specific names above give
+// the bead a direct test target.
+func TestMigrateToAxonRoundTripFromFixture(t *testing.T) {
+	TestMigrate_AxonBackend_RoundTrip(t)
+	TestMigrate_AxonBackend_Idempotent(t)
 }
 
 // TestMigrateToAxonNoSources is a defensive sanity test: an empty .ddx with
