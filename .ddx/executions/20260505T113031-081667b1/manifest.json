@@ -1,0 +1,80 @@
+{
+  "attempt_id": "20260505T113031-081667b1",
+  "bead_id": "ddx-e7b80a50",
+  "base_rev": "294ab5e4262e4899add1b09171f18c50289275de",
+  "created_at": "2026-05-05T11:30:33.489045895Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e7b80a50",
+    "title": "review: server session schema/store/lifecycle + manifest+turns.jsonl evidence contract",
+    "description": "PROBLEM\nNo server-side ReviewSession model, persistence layer, or schema exists. Story 18 review mutations and the Story 16 run-detail page both depend on a well-defined review session schema and persistence contract. Without this, both are blocked.\n\nROOT CAUSE\n- cli/internal/server/ contains no ReviewSession struct or persistence layer.\n- .ddx/reviews/ directory does not exist as a managed path (no mkdir, no lifecycle helpers).\n- The Story 16 page (ddx-4cd64068) needs to read review turns from .ddx/reviews/\u003csession-id\u003e/turns.jsonl; the contract must be agreed before both 16 and 18 can land without merge conflicts.\n- ddx-cd2ecf79 (artifact type spec, a dep) must land first for {template, review_prompt, preferred_reviewer} fields.\n\nPROPOSED FIX\n- Define ReviewSession struct (fields: id, artifact_id, artifact_sha, artifact_git_rev, system_rubric, template_ref, prompt_ref, status, turns[], cost_usd, max_billable_usd) in cli/internal/server/review_session.go.\n- Implement persistence under .ddx/reviews/\u003csession-id\u003e/:\n  - manifest.json: session metadata (id, status, cost, refs).\n  - turns.jsonl: append-only JSONL of turn records (actor, content, cost_usd, created_at).\n  - attachments/: binary attachments (if any).\n- Document the manifest.json + turns.jsonl contract explicitly as the Story 16 contract.\n\nNON-SCOPE\n- GraphQL mutations (ddx-de278b8d).\n- Turn dispatcher (ddx-f7c3d512).\n- Frontend rendering.",
+    "acceptance": "1. ReviewSession struct defined in cli/internal/server/review_session.go with all required fields.\n2. .ddx/reviews/\u003csession-id\u003e/manifest.json written on session create with correct schema.\n3. .ddx/reviews/\u003csession-id\u003e/turns.jsonl written as append-only JSONL.\n4. manifest.json + turns.jsonl format documented in source (comment block) as the Story 16 contract.\n5. TestReviewSession_CreatePersistsManifest verifies manifest.json written with correct fields.\n6. TestReviewSession_AppendTurn_TurnsJsonl verifies turn appended to turns.jsonl.\n7. TestReviewSession_RoundTrip verifies schema deserialization round-trip.\n8. cd cli \u0026\u0026 go test ./internal/server/... green.\n9. lefthook run pre-commit passes.",
+    "parent": "ddx-42b917fe",
+    "labels": [
+      "phase:2",
+      "story:18",
+      "area:server",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-05T11:30:31Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "19662",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-05T05:38:25.982676723Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T053132-343e05eb\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":5014367,\"output_tokens\":21397,\"total_tokens\":5035764,\"cost_usd\":0,\"duration_ms\":410997,\"exit_code\":0}",
+          "created_at": "2026-05-05T05:38:26.218359513Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=5035764 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-05T05:38:32.066193143Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=4d8af63c9e62459f1c0c448c3eca40e245f01ed1\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T01:43:36-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=9927\noutput_bytes=0\nelapsed_ms=4215",
+          "created_at": "2026-05-05T05:38:36.831364627Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=4d8af63c9e62459f1c0c448c3eca40e245f01ed1\nbase_rev=27d22cada34cbe9f895f0ca9d778e053a74b4bea",
+          "created_at": "2026-05-05T05:38:37.063984503Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-05T11:30:31.540606164Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260505T113031-081667b1",
+    "prompt": ".ddx/executions/20260505T113031-081667b1/prompt.md",
+    "manifest": ".ddx/executions/20260505T113031-081667b1/manifest.json",
+    "result": ".ddx/executions/20260505T113031-081667b1/result.json",
+    "checks": ".ddx/executions/20260505T113031-081667b1/checks.json",
+    "usage": ".ddx/executions/20260505T113031-081667b1/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e7b80a50-20260505T113031-081667b1"
+  },
+  "prompt_sha": "38204590ad8e8818f511e65fc931e155dbd02b666898f3a2354b069054e90e86"
+}
