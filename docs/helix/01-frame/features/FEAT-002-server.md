@@ -31,7 +31,9 @@ at `~/.local/share/ddx/server-state.json` (`$XDG_DATA_HOME/ddx/server-state.json
 when set), and the last-known server URL is written to
 `~/.local/share/ddx/server.addr` (see FEAT-020). The server binds multiple
 project roots concurrently; each request is resolved against one explicit
-project context before adapters run.
+project context before adapters run. DDx-owned worker lifecycle state remains
+separate from any forwarded Fizeau transcript/session payloads that may travel
+through agent-session records.
 
 ## Architecture
 
@@ -149,7 +151,8 @@ resolve exactly one project context.
 20. `GET /api/projects/:project/agent/sessions/:id` — invocation detail,
     including native session/trace references and any forwarded Fizeau
     event/transcript envelope data; these payloads are opaque to DDx, owned by
-    Fizeau, and are distinct from worker lifecycle events
+    Fizeau, and are distinct from worker lifecycle events. DDx reads them as
+    opaque attachments; it does not render the inner Fizeau session logs.
 21. MCP tool: `ddx_agent_sessions` (project selector required unless singleton compatibility mode applies)
 
 **Worker Progress (FEAT-006 embedded-agent progress contract)**
@@ -161,8 +164,9 @@ authoritative source for historical phase summaries.
 
 Worker lifecycle events are DDx-owned. Forwarded Fizeau agent events are
 opaque payloads attached to agent-session records, not worker lifecycle state,
-and the server surfaces them without interpreting transcript semantics. Fizeau
-owns transcript rendering and session-log presentation.
+and the server surfaces them without interpreting transcript semantics or
+rendering the inner session log. Fizeau owns transcript rendering and
+session-log presentation.
 
 22. `GET /api/projects/:project/workers` — list active and recently completed
     workers for a project; each entry includes worker identity, current status

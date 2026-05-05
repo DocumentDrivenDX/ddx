@@ -364,7 +364,7 @@ The cross-repo entanglement is the failure mode. **Do not supersede. Do not depr
 
 #### Files to GUT on the DDx side
 
-- `docs/helix/01-frame/features/FEAT-006-agent-service.md` — rewrite to one page: "DDx invokes LLMs via the ddx-agent contract. DDx-side responsibilities: bead-driven invocation, execute-bead orchestration, evidence/session capture. End." No harness, routing, provider, or inner-session rendering language survives.
+- `docs/helix/01-frame/features/FEAT-006-agent-service.md` — rewrite to one page: "DDx invokes LLMs via the ddx-agent contract. DDx-side responsibilities: bead-driven invocation, execute-bead orchestration, evidence/session capture. End." No harness, routing, provider, or inner-session rendering language survives; DDx only keeps copied/linkable evidence-envelope references, while Fizeau owns transcript rendering.
 
 #### Files to TRIM on the agent side (drop boundary claims; describe internals in agent's own language)
 

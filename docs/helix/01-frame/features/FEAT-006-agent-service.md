@@ -76,8 +76,9 @@ DDx owns:
 Fizeau owns the agent's transcript/progress/session rendering surface. DDx is
 a pass-through/marshalling consumer for Fizeau transcript events: it may
 forward Fizeau `ServiceEvent`s and link or copy Fizeau artifacts into the
-execution evidence bundle, but DDx does not interpret transcript semantics or
-inspect the Fizeau session log body.
+execution evidence bundle, but DDx does not render the inner Fizeau session
+log, and it does not interpret transcript semantics or inspect the opaque
+session log payload.
 
 ## Power Intent
 
@@ -196,9 +197,9 @@ details inside it. DDx owns only the envelope around that log:
 - DDx-owned attempt outcome, merge/preserve outcome, gates, and evidence refs
 
 DDx may link or copy the session log attachment for humans, but normal
-execution policy must not parse the inner session log to infer routing,
-provider health, model fallbacks, or retry destinations. Typed agent response
-fields and DDx-owned attempt evidence are the policy inputs.
+execution policy must not render or parse the inner session log to infer
+routing, provider health, model fallbacks, or retry destinations. Typed agent
+response fields and DDx-owned attempt evidence are the policy inputs.
 
 ## Layer Ownership Migration Table
 
