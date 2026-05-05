@@ -1,0 +1,2 @@
+verification_command: cd cli && go test ./internal/bead/axon/... && lefthook run pre-commit
+reason: The current tree already contains cli/internal/bead/axon/subscription_smoke_test.go with TestAxonSubscription_ReceivesBeadMutations, and it uses NewWebSocketSubscriptionTransport. I verified the package test target and pre-commit gate both pass without further edits.
