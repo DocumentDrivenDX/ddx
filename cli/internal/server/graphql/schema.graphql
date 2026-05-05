@@ -2126,6 +2126,60 @@ type Artifact implements Node {
   updatedAt: DateTime
   """Raw file content (text-based artifacts only; null for binary types)"""
   content: String
+  """Matched artifact type definitions for the artifact's path prefix."""
+  typeDefinitions: [ArtifactTypeDefinition!]!
+}
+
+"""ArtifactTypeDefinitionFile holds inline content for one definition file."""
+type ArtifactTypeDefinitionFile {
+  """Filesystem path relative to the plugin root."""
+  path: String!
+  """Inline file content loaded on demand."""
+  content: String!
+  """Whether the file was truncated to fit the size cap."""
+  isTruncated: Boolean!
+  """Total size of the underlying file in bytes."""
+  sizeBytes: Int!
+}
+
+"""ArtifactTypeDefinitionExample holds one worked example for a type."""
+type ArtifactTypeDefinitionExample {
+  """Filesystem path relative to the plugin root."""
+  path: String!
+  """Optional example description."""
+  description: String
+  """Inline file content loaded on demand."""
+  content: String!
+  """Whether the file was truncated to fit the size cap."""
+  isTruncated: Boolean!
+  """Total size of the underlying file in bytes."""
+  sizeBytes: Int!
+}
+
+"""ArtifactTypeDefinition describes a plugin artifact type entry."""
+type ArtifactTypeDefinition {
+  """Plugin package that owns the definition."""
+  plugin: String!
+  """Canonical type identifier from the plugin tree."""
+  typeId: String!
+  """Human-readable type name."""
+  name: String!
+  """Type description from meta.yml."""
+  description: String!
+  """Path prefix claimed by the type."""
+  prefix: String!
+  """Output naming pattern for the type."""
+  pattern: String!
+  """Optional phase grouping."""
+  phase: String!
+  """Path to the meta.yml file relative to the plugin root."""
+  sourceMetaPath: String!
+  """On-demand loaded template file."""
+  template: ArtifactTypeDefinitionFile!
+  """On-demand loaded prompt file."""
+  prompt: ArtifactTypeDefinitionFile!
+  """On-demand loaded examples."""
+  examples: [ArtifactTypeDefinitionExample!]!
 }
 
 """ArtifactEdge wraps an Artifact for Relay cursor connections."""

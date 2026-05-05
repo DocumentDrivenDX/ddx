@@ -171,6 +171,7 @@ func (r *Resolver) Subscription() SubscriptionResolver { return &subscriptionRes
 
 type mutationResolver struct{ *Resolver }
 type queryResolver struct{ *Resolver }
+type artifactResolver struct{ *Resolver }
 type subscriptionResolver struct{ *Resolver }
 
 // ─── Unimplemented query stubs ─────────────────────────────────────────────
