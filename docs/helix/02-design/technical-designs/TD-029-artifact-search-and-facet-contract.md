@@ -109,6 +109,31 @@ update to this TD:
 
 A filter narrows the set; grouping organizes the remaining set.
 
+## Page-local vs corpus-wide contract
+
+This note is the operational boundary for Story 5 and Story 6 owners:
+
+- Story 5 grouping is page-local by default. The browser groups only
+  the artifact edges currently loaded into the page result set.
+- Story 6 search and filter remain server-side. Any query that changes
+  result membership must continue to round-trip through the resolver so
+  pagination, bookmarks, and deep links stay correct.
+
+Treat these as the current contract, not an implementation accident.
+Add server-side `groupBy` when any of the following becomes true:
+
+- group headers must reflect the full corpus instead of the loaded page
+  slice
+- grouping needs to stay correct across page boundaries
+- page-local grouping can no longer represent the loaded set faithfully
+
+Add virtualization when any of the following becomes true:
+
+- the visible artifact list needs more than the flat 500-row DOM budget
+- scroll cost is dominated by DOM rendering rather than data loading
+- sticky grouping or similar UI behavior requires a larger steady-state
+  row count than the current non-virtualized contract tolerates
+
 ## Search semantics
 
 The `q` filter is a single-pass case-insensitive substring scan with the
