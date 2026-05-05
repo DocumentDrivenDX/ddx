@@ -14,8 +14,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // seedDocsProject creates a temp project rooted at root with a single
@@ -140,7 +138,7 @@ func TestGraphQL_ScopedRoute_RejectsUnregisteredProject(t *testing.T) {
 
 	// Migrated to use the shared fixture helper (ddx-50da9674): the 404 path
 	// only needs a real ddx-initialized project, no seeded docs.
-	projA := testutils.NewFixtureRepo(t, "minimal")
+	projA := newMinimalFixtureRepo(t)
 
 	srv := New(":0", projA)
 	t.Cleanup(func() { _ = srv.Shutdown() })
@@ -149,6 +147,27 @@ func TestGraphQL_ScopedRoute_RejectsUnregisteredProject(t *testing.T) {
 	if w.Code != http.StatusNotFound {
 		t.Fatalf("unregistered project: want 404, got %d body=%s", w.Code, w.Body.String())
 	}
+}
+
+// newMinimalFixtureRepo creates a bare DDx project root with the config files
+// needed for server.New to register the project during this test.
+func newMinimalFixtureRepo(t *testing.T) string {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, ".ddx"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	cfg := `version: "1.0"
+library:
+  path: ".ddx/plugins/ddx"
+  repository:
+    url: "https://example.com/lib"
+    branch: "main"
+`
+	if err := os.WriteFile(filepath.Join(root, ".ddx", "config.yaml"), []byte(cfg), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return root
 }
 
 // TestGraphQL_LegacyRoute_StillWorks is AC #4 + #7: the unchanged /graphql

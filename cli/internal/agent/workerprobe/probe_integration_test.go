@@ -12,7 +12,6 @@ import (
 	"time"
 
 	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
-	"github.com/DocumentDrivenDX/ddx/internal/testutils"
 )
 
 // TestWorker_RealAttemptEvents_FlowToServer is the wired-in end-to-end
@@ -48,7 +47,7 @@ func TestWorker_RealAttemptEvents_FlowToServer(t *testing.T) {
 	}
 	t.Setenv("DDX_BIN", binPath)
 
-	proj := testutils.NewFixtureRepo(t, "standard")
+	proj := buildFixtureRepo(t, binPath, "standard")
 	bin := binPath
 
 	// Real server — same constructor, same Handler, same requireTrusted gate.
@@ -146,6 +145,23 @@ func repoCLIDir(t *testing.T) string {
 		}
 		dir = parent
 	}
+}
+
+// buildFixtureRepo runs scripts/build-fixture-repo.sh with the supplied ddx
+// binary and profile, returning the created project root.
+func buildFixtureRepo(t *testing.T, bin, profile string) string {
+	t.Helper()
+	root := filepath.Dir(repoCLIDir(t))
+	script := filepath.Join(root, "scripts", "build-fixture-repo.sh")
+	dest := t.TempDir()
+
+	cmd := exec.Command("bash", script, dest, "--profile", profile)
+	cmd.Env = append(os.Environ(), "DDX_BIN="+bin)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("build-fixture-repo.sh failed (profile=%s): %v\n%s", profile, err, out)
+	}
+	return dest
 }
 
 // readLogLines returns each newline-separated line of the file at path,
