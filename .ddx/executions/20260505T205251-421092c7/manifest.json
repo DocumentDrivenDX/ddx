@@ -1,0 +1,49 @@
+{
+  "attempt_id": "20260505T205251-421092c7",
+  "bead_id": "ddx-07e6d2fa",
+  "base_rev": "66bd2ba28864e9c4c4e691035acc7b3aed1f5f34",
+  "created_at": "2026-05-05T20:52:54.458888241Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-07e6d2fa",
+    "title": "docs: clarify TD-031 no_changes lifecycle contract",
+    "description": "PROBLEM\nDDx already has TD-031 as the bead state-machine contract, but live ddx work behavior is still confusing no_changes attempt evidence with durable queue management. Operators now see beads parked on retry cooldown even when the real condition is already satisfied, needs human triage, parent/epic container picked by the ordinary worker, external blocker, or stale tracker metadata after a later success event.\n\nROOT CAUSE\n- docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md:164-208 defines no_changes_* events and an outcome mapping, but it does not explicitly state the two reliability invariants needed by current ddx work: cooldown is only for retryable time-based conditions, and every execution-skipped bead must have an explainable durable reason.\n- docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md:279-297 says no_changes outcomes drive status/label/event changes, but it does not clearly separate raw attempt outcome from durable bead action. That gap allowed implementation to use no_changes + retry-after as a generic parking lot.\n- docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md:202-208 does not cover reconciliation precedence for stale Extra fields such as execute-loop-last-status when later events show success.\n\nPROPOSED FIX\n- Amend TD-031 only; do not create a new disposition spec or persisted status.\n- Add a concise \"Lifecycle reliability invariants\" subsection: no_changes is attempt evidence, not durable queue state; retry-after is only for retryable time-based conditions; skipped execution must have an explainable durable reason surfaced in diagnostics.\n- Extend the existing outcome mapping with current no_changes cases: verified already satisfied, unverified, unjustified/no rationale, needs investigation, parent/epic/decomposed, external blocker, superseded, transient infra/quota/transport, and stale tracker metadata.\n- Define reconciliation precedence: latest terminal event and close evidence beat stale execute-loop-* Extra fields; reconciliation may clear stale no_changes/cooldown metadata but must preserve append-only events.\n- Keep TD-031 the sole canonical taxonomy; downstream FEAT/SD/ADR docs must cross-reference it rather than duplicate the table.\n\nNON-SCOPE\n- Editing FEAT-004, FEAT-010, SD-004, ADR-023, or skill files; follow-up beads handle narrow cross-references and vocabulary alignment.\n- Code changes to try/work/store behavior; follow-up implementation beads handle those.\n- Rewriting historical bead rows or clearing live cooldowns.\n\nPARENT\n- ddx-a9d130d0.\n\nDEPS\n- No deps. This builds on closed foundation beads ddx-673833f4, ddx-7d7a17c8, and ddx-9210f95a, but those are already closed.\n\nINTERSECTIONS\n- ddx-673833f4 authored the foundational TD-031; this bead amends it for observed live no_changes/cooldown reliability gaps.\n- ddx-7d7a17c8 reconciled earlier FEAT-004/SD-004 status vocabulary; this bead must not undo that work.\n- ddx-9210f95a added ADR-023 quality hooks; this bead defines the canonical queue-management target those hooks feed.",
+    "acceptance": "1. docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md contains one canonical no_changes/lifecycle action matrix and no competing disposition table is added elsewhere.\n2. TD-031 explicitly states: raw no_changes is attempt evidence, not durable bead queue state.\n3. TD-031 explicitly states: execute-loop-retry-after may be set only when retrying the same bead after time passes could plausibly succeed without human/spec/dependency changes.\n4. TD-031 explicitly states: every bead excluded from ordinary ddx work execution must have an explainable durable reason using existing mechanisms: dependency edge, blocked status/label, execution-eligible=false, superseded-by, epic/parent queue mode, or active retry cooldown.\n5. TD-031 defines reconciliation precedence for stale execute-loop-* Extra metadata versus latest terminal events.\n6. TestTDDocMatchesSchemaEnum remains green and confirms no new persisted status is introduced.\n7. cd cli \u0026\u0026 go test ./internal/bead/... -run TestTDDocMatchesSchemaEnum -count=1 passes.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-a9d130d0",
+    "labels": [
+      "phase:2",
+      "area:specs",
+      "area:beads",
+      "kind:doc",
+      "reliability",
+      "bead-lifecycle",
+      "spec:TD-031"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-05T20:52:51Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3918937",
+      "execute-loop-heartbeat-at": "2026-05-05T20:52:51.893586945Z",
+      "spec-id": "TD-031"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-031",
+      "path": "docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md",
+      "title": "Technical Design: Bead State Machine and Naming-Role Decisions"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260505T205251-421092c7",
+    "prompt": ".ddx/executions/20260505T205251-421092c7/prompt.md",
+    "manifest": ".ddx/executions/20260505T205251-421092c7/manifest.json",
+    "result": ".ddx/executions/20260505T205251-421092c7/result.json",
+    "checks": ".ddx/executions/20260505T205251-421092c7/checks.json",
+    "usage": ".ddx/executions/20260505T205251-421092c7/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-07e6d2fa-20260505T205251-421092c7"
+  },
+  "prompt_sha": "1a312d79d6455d2af77f34c9a970c60ed94b3fac76e715e06c6c38cd3448ef81"
+}
