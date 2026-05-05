@@ -1,0 +1,1 @@
+DELETE internal/registry/manifest.go:126 — `MarshalPackage` is absent from this checkout and the production manifest flow is already satisfied by `LoadPackageManifestWithFallback` from `cli/internal/registry/installer.go:63`; no wiring is needed.
