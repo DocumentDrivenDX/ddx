@@ -14,6 +14,7 @@
 	import { onMount } from 'svelte';
 	import { createClient } from '$lib/gql/client';
 	import { gql } from 'graphql-request';
+	import ArtifactTypePanel from '$lib/ArtifactTypePanel.svelte';
 
 	let { data }: { data: PageData } = $props();
 
@@ -271,6 +272,13 @@
 				{/if}
 			</dl>
 		</div>
+
+		{#if data.artifact.typeDefinitions.length > 0}
+			<ArtifactTypePanel
+				artifactPath={data.artifact.path}
+				typeDefinitions={data.artifact.typeDefinitions}
+			/>
+		{/if}
 
 		<!-- Renderer -->
 		<div class="border-border-line dark:border-dark-border-line border">

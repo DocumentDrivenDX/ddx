@@ -2,6 +2,7 @@
 // Pure, regex-based; safe to run on every render.
 
 export type GroupBy = import('$lib/urlState').GroupBy;
+import { prefixOf } from '$lib/artifacts/grouping';
 
 // folderOf("docs/helix/01-frame/prd.md") => "docs/helix/01-frame"
 // folderOf("README.md") => "/"
@@ -12,13 +13,7 @@ export function folderOf(path: string): string {
 	return m[1] || '/';
 }
 
-// prefixOf("docs/helix/01-frame/prd.md") => "docs"
-// prefixOf("/library/personas/x.md") => "library"
-const PREFIX_RE = /^\/?([^/]+)/;
-export function prefixOf(path: string): string {
-	const m = path.match(PREFIX_RE);
-	return m ? m[1] : '';
-}
+export { prefixOf };
 
 // Workflow stage derivation. Matches the canonical HELIX-style numbered
 // stage segment (e.g. 01-frame, 02-design) anywhere in the path. Returns

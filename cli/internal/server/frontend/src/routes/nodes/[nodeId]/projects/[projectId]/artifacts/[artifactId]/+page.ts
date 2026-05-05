@@ -1,6 +1,7 @@
 import type { PageLoad } from './$types'
 import { createClient } from '$lib/gql/client'
 import { gql } from 'graphql-request'
+import type { ArtifactTypeDefinition } from '$lib/artifactTypePanel'
 
 const ARTIFACT_DETAIL_QUERY = gql`
 	query ArtifactDetail($projectID: ID!, $id: ID!) {
@@ -14,6 +15,35 @@ const ARTIFACT_DETAIL_QUERY = gql`
 			updatedAt
 			ddxFrontmatter
 			content
+			typeDefinitions {
+				plugin
+				typeId
+				name
+				description
+				prefix
+				pattern
+				phase
+				sourceMetaPath
+				template {
+					path
+					content
+					isTruncated
+					sizeBytes
+				}
+				prompt {
+					path
+					content
+					isTruncated
+					sizeBytes
+				}
+				examples {
+					path
+					description
+					content
+					isTruncated
+					sizeBytes
+				}
+			}
 			generatedBy {
 				runId
 				promptSummary
@@ -47,6 +77,7 @@ export interface ArtifactDetail {
 	updatedAt: string | null
 	ddxFrontmatter: string | null
 	content: string | null
+	typeDefinitions: ArtifactTypeDefinition[]
 	generatedBy: ArtifactGeneratedBy | null
 }
 
