@@ -428,6 +428,10 @@ manual instrumentation
 - FEAT-008 (Web UI) — the provider dashboard view is the browser surface for
   FEAT-014's read model; FEAT-014 governs field semantics, unknown-state
   rules, and tooltip registry for that view
+- [[MET-001]] (ddx test wall time) — canonical `source: exec` MET artifact for
+  projected runtime metrics and evidence formatting
+- [[MET-002]] (cost per closed bead) — canonical `source: external` MET artifact
+  for process-cost reporting that consumes FEAT-014 usage signals
 - provider-native local stores such as `~/.codex/` and `~/.claude/`
 - embedded `ddx-agent` runtime telemetry and session references
 
