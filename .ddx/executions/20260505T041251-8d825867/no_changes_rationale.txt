@@ -1,0 +1,2 @@
+status: needs_investigation
+reason: This bead is already decomposed into four child beads (ddx-9210f95a, ddx-922b5b1f, ddx-e1a576a7, ddx-1107036a). The parent epic itself is not an implementation unit, and child ddx-e1a576a7 remains open, so the epic cannot be completed directly in this attempt.
