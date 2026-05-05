@@ -111,6 +111,31 @@ const TREND_30D = {
 	}))
 };
 
+const RECENT_USAGE_ROWS = [
+	{
+		id: 'session-001',
+		startedAt: '2026-05-03T10:00:00Z',
+		durationMs: 12500,
+		harness: 'claude',
+		provider: 'claude',
+		model: 'claude-sonnet-4-6',
+		effort: 'normal',
+		status: 'completed',
+		detail: 'finished successfully'
+	},
+	{
+		id: 'session-002',
+		startedAt: '2026-05-03T09:30:00Z',
+		durationMs: 8300,
+		harness: 'claude',
+		provider: 'claude',
+		model: 'claude-sonnet-4-6',
+		effort: 'normal',
+		status: 'failed',
+		detail: 'rate limited'
+	}
+];
+
 const AGENT_METRICS_ROWS = [
 	{
 		key: 'claude',
@@ -208,6 +233,22 @@ async function mockGraphQL(page: Page) {
 			});
 			return;
 		}
+		if (q.includes('ProviderRecentUsage')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						agentSessions: {
+							edges: RECENT_USAGE_ROWS.map((row) => ({ node: row })),
+							pageInfo: { hasNextPage: false, endCursor: null },
+							totalCount: RECENT_USAGE_ROWS.length
+						}
+					}
+				})
+			});
+			return;
+		}
 		await route.continue();
 	});
 }
@@ -288,4 +329,7 @@ test('detail route renders 7d trend and projection callout', async ({ page }) =>
 	await expect(page.getByTestId('series-7d')).toBeVisible();
 	await expect(page.getByTestId('series-30d')).toBeVisible();
 	await expect(page.getByTestId('projection-callout')).toContainText('Projected to hit quota');
+	await expect(page.getByTestId('recent-usage')).toBeVisible();
+	await expect(page.getByTestId('recent-usage-row-session-001')).toBeVisible();
+	await expect(page.getByTestId('recent-usage-row-session-002')).toBeVisible();
 });

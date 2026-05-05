@@ -68,6 +68,8 @@ type AgentSession struct {
 	WorkerID *string `json:"workerId,omitempty"`
 	// Agent harness used (e.g. "claude", "codex")
 	Harness string `json:"harness"`
+	// Provider used
+	Provider *string `json:"provider,omitempty"`
 	// Model identifier
 	Model string `json:"model"`
 	// Effort level applied
@@ -2337,6 +2339,8 @@ type WorkerExecutionResult struct {
 	WorkerID *string `json:"workerId,omitempty"`
 	// Harness used
 	Harness *string `json:"harness,omitempty"`
+	// Tier used
+	Tier *string `json:"tier,omitempty"`
 	// Provider used
 	Provider *string `json:"provider,omitempty"`
 	// Model used

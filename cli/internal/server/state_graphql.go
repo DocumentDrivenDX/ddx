@@ -504,6 +504,9 @@ func workerResultFromRecord(r *WorkerExecutionResult) *ddxgraphql.WorkerExecutio
 	if r.Harness != "" {
 		out.Harness = &r.Harness
 	}
+	if r.Tier != "" {
+		out.Tier = &r.Tier
+	}
 	if r.Provider != "" {
 		out.Provider = &r.Provider
 	}
@@ -630,11 +633,11 @@ func (s *ServerState) GetCoordinatorMetricsByProjectGraphQL(projectRoot string) 
 
 // GetAgentSessionsGraphQL implements ddxgraphql.StateProvider.
 // Reads pointer-only monthly session shards from every registered project.
-func (s *ServerState) GetAgentSessionsGraphQL(startedAfter, startedBefore *time.Time) []*ddxgraphql.AgentSession {
+func (s *ServerState) GetAgentSessionsGraphQL(provider string, startedAfter, startedBefore *time.Time) []*ddxgraphql.AgentSession {
 	projects := s.GetProjects(false)
 	var out []*ddxgraphql.AgentSession
 	for _, proj := range projects {
-		sessions := readProjectSessions(proj, startedAfter, startedBefore)
+		sessions := readProjectSessions(proj, provider, startedAfter, startedBefore)
 		out = append(out, sessions...)
 	}
 	// Newest first.
@@ -715,11 +718,12 @@ func (s *ServerState) GetSessionsCostSummaryGraphQL(projectID string, since, unt
 }
 
 // readProjectSessions reads monthly session shards for one project and maps to graphql types.
-func readProjectSessions(proj ProjectEntry, startedAfter, startedBefore *time.Time) []*ddxgraphql.AgentSession {
+func readProjectSessions(proj ProjectEntry, provider string, startedAfter, startedBefore *time.Time) []*ddxgraphql.AgentSession {
 	logDir := agent.SessionLogDirForWorkDir(proj.Path)
 	entries, err := agent.ReadSessionIndex(logDir, agent.SessionIndexQuery{
 		StartedAfter:  startedAfter,
 		StartedBefore: startedBefore,
+		Provider:      provider,
 		DefaultRecent: startedAfter == nil && startedBefore == nil,
 	})
 	if err != nil {
@@ -751,6 +755,7 @@ func agentSessionFromIndex(projectID string, e agent.SessionIndexEntry) *ddxgrap
 		ID:          e.ID,
 		ProjectID:   projectID,
 		Harness:     e.Harness,
+		Provider:    providerPtr(e.Provider),
 		Model:       e.Model,
 		Effort:      e.Effort,
 		DurationMs:  e.DurationMS,
@@ -813,6 +818,13 @@ func agentSessionFromIndex(projectID string, e agent.SessionIndexEntry) *ddxgrap
 		sess.ResultRev = &e.ResultRev
 	}
 	return sess
+}
+
+func providerPtr(value string) *string {
+	if value == "" {
+		return nil
+	}
+	return &value
 }
 
 // ─── Exec queries ─────────────────────────────────────────────────────────────

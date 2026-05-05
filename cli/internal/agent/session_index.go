@@ -61,6 +61,7 @@ type SessionIndexEntry struct {
 type SessionIndexQuery struct {
 	StartedAfter  *time.Time
 	StartedBefore *time.Time
+	Provider      string
 	DefaultRecent bool
 }
 
@@ -312,7 +313,7 @@ func ReadSessionIndex(logDir string, q SessionIndexQuery) ([]SessionIndexEntry, 
 	}
 	var out []SessionIndexEntry
 	if q.DefaultRecent && q.StartedAfter == nil && q.StartedBefore == nil {
-		out, err = readRecentSessionIndexFiles(files, 1000)
+		out, err = readRecentSessionIndexFiles(files, 1000, q)
 	} else {
 		out, err = readSessionIndexFiles(files, q)
 	}
@@ -335,7 +336,7 @@ func ReadSessionIndex(logDir string, q SessionIndexQuery) ([]SessionIndexEntry, 
 	return out, nil
 }
 
-func readRecentSessionIndexFiles(files []string, perFile int) ([]SessionIndexEntry, error) {
+func readRecentSessionIndexFiles(files []string, perFile int, q SessionIndexQuery) ([]SessionIndexEntry, error) {
 	var out []SessionIndexEntry
 	for _, file := range files {
 		data, err := os.ReadFile(file)
@@ -356,7 +357,9 @@ func readRecentSessionIndexFiles(files []string, perFile int) ([]SessionIndexEnt
 			}
 			var entry SessionIndexEntry
 			if err := json.Unmarshal(line, &entry); err == nil {
-				out = append(out, entry)
+				if sessionIndexEntryInRange(entry, q) {
+					out = append(out, entry)
+				}
 			}
 		}
 	}
@@ -559,6 +562,9 @@ func sessionIndexEntryInRange(entry SessionIndexEntry, q SessionIndexQuery) bool
 		return false
 	}
 	if q.StartedBefore != nil && !entry.StartedAt.Before(*q.StartedBefore) {
+		return false
+	}
+	if q.Provider != "" && !strings.EqualFold(strings.TrimSpace(entry.Provider), strings.TrimSpace(q.Provider)) {
 		return false
 	}
 	return true

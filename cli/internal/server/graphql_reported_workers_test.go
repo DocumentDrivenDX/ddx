@@ -221,7 +221,7 @@ func (*emptyStateProvider) GetWorkerProgressGraphQL(string) []*ddxgraphql.PhaseT
 	return nil
 }
 func (*emptyStateProvider) GetWorkerPromptGraphQL(string) string { return "" }
-func (*emptyStateProvider) GetAgentSessionsGraphQL(*time.Time, *time.Time) []*ddxgraphql.AgentSession {
+func (*emptyStateProvider) GetAgentSessionsGraphQL(string, *time.Time, *time.Time) []*ddxgraphql.AgentSession {
 	return nil
 }
 func (*emptyStateProvider) GetAgentSessionGraphQL(string) (*ddxgraphql.AgentSession, bool) {

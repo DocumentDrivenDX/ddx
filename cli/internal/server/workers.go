@@ -161,6 +161,7 @@ type WorkerExecutionResult struct {
 	AttemptID  string `json:"attempt_id,omitempty"`
 	WorkerID   string `json:"worker_id,omitempty"`
 	Harness    string `json:"harness,omitempty"`
+	Tier       string `json:"tier,omitempty"`
 	Provider   string `json:"provider,omitempty"`
 	Model      string `json:"model,omitempty"`
 	Status     string `json:"status,omitempty"`
@@ -591,6 +592,7 @@ func (m *WorkerManager) runPluginAction(ctx context.Context, id, dir string, spe
 		record.LastResult = &WorkerExecutionResult{
 			AttemptID: id,
 			WorkerID:  id,
+			Tier:      "",
 			Status:    state,
 			Detail:    fmt.Sprintf("%s plugin %s", spec.Action, spec.Name),
 		}
@@ -1015,6 +1017,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				AttemptID:  last.AttemptID,
 				WorkerID:   last.WorkerID,
 				Harness:    last.Harness,
+				Tier:       last.Tier,
 				Provider:   last.Provider,
 				Model:      last.Model,
 				Status:     last.Status,

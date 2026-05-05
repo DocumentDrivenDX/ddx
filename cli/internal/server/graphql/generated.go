@@ -73,6 +73,7 @@ type ComplexityRoot struct {
 		Outcome     func(childComplexity int) int
 		ProjectID   func(childComplexity int) int
 		Prompt      func(childComplexity int) int
+		Provider    func(childComplexity int) int
 		Response    func(childComplexity int) int
 		ResultRev   func(childComplexity int) int
 		StartedAt   func(childComplexity int) int
@@ -999,7 +1000,7 @@ type ComplexityRoot struct {
 	Query struct {
 		AgentMetrics                func(childComplexity int, window AgentMetricsWindow, groupBy AgentMetricsAxis) int
 		AgentSession                func(childComplexity int, id string) int
-		AgentSessions               func(childComplexity int, first *int, after *string, last *int, before *string, startedAfter *string, startedBefore *string) int
+		AgentSessions               func(childComplexity int, first *int, after *string, last *int, before *string, startedAfter *string, startedBefore *string, provider *string) int
 		Artifact                    func(childComplexity int, projectID string, id string) int
 		Artifacts                   func(childComplexity int, projectID string, first *int, after *string, last *int, before *string, mediaType *string, search *string, sort *ArtifactSort, staleness *string, phase *string, prefix []string) int
 		Bead                        func(childComplexity int, id string) int
@@ -1371,6 +1372,7 @@ type ComplexityRoot struct {
 		RetryAfter func(childComplexity int) int
 		SessionID  func(childComplexity int) int
 		Status     func(childComplexity int) int
+		Tier       func(childComplexity int) int
 		WorkerID   func(childComplexity int) int
 	}
 
@@ -1459,7 +1461,7 @@ type QueryResolver interface {
 	WorkerLog(ctx context.Context, workerID string) (*WorkerLog, error)
 	WorkerPrompt(ctx context.Context, workerID string) (string, error)
 	ReportedWorkers(ctx context.Context) ([]*ReportedWorker, error)
-	AgentSessions(ctx context.Context, first *int, after *string, last *int, before *string, startedAfter *string, startedBefore *string) (*AgentSessionConnection, error)
+	AgentSessions(ctx context.Context, first *int, after *string, last *int, before *string, startedAfter *string, startedBefore *string, provider *string) (*AgentSessionConnection, error)
 	AgentSession(ctx context.Context, id string) (*AgentSession, error)
 	SessionsCostSummary(ctx context.Context, projectID string, since *string, until *string) (*SessionsCostSummary, error)
 	Personas(ctx context.Context, projectID *string) ([]*Persona, error)
@@ -1712,6 +1714,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.AgentSession.Prompt(childComplexity), true
+	case "AgentSession.provider":
+		if e.ComplexityRoot.AgentSession.Provider == nil {
+			break
+		}
+
+		return e.ComplexityRoot.AgentSession.Provider(childComplexity), true
 	case "AgentSession.response":
 		if e.ComplexityRoot.AgentSession.Response == nil {
 			break
@@ -5584,7 +5592,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.AgentSessions(childComplexity, args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string), args["startedAfter"].(*string), args["startedBefore"].(*string)), true
+		return e.ComplexityRoot.Query.AgentSessions(childComplexity, args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string), args["startedAfter"].(*string), args["startedBefore"].(*string), args["provider"].(*string)), true
 	case "Query.artifact":
 		if e.ComplexityRoot.Query.Artifact == nil {
 			break
@@ -7559,6 +7567,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.WorkerExecutionResult.Status(childComplexity), true
+	case "WorkerExecutionResult.tier":
+		if e.ComplexityRoot.WorkerExecutionResult.Tier == nil {
+			break
+		}
+
+		return e.ComplexityRoot.WorkerExecutionResult.Tier(childComplexity), true
 	case "WorkerExecutionResult.workerId":
 		if e.ComplexityRoot.WorkerExecutionResult.WorkerID == nil {
 			break
@@ -8199,6 +8213,11 @@ func (ec *executionContext) field_Query_agentSessions_args(ctx context.Context, 
 		return nil, err
 	}
 	args["startedBefore"] = arg5
+	arg6, err := graphql.ProcessArgField(ctx, rawArgs, "provider", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["provider"] = arg6
 	return args, nil
 }
 
@@ -10139,6 +10158,35 @@ func (ec *executionContext) fieldContext_AgentSession_harness(_ context.Context,
 	return fc, nil
 }
 
+func (ec *executionContext) _AgentSession_provider(ctx context.Context, field graphql.CollectedField, obj *AgentSession) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_AgentSession_provider,
+		func(ctx context.Context) (any, error) {
+			return obj.Provider, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_AgentSession_provider(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "AgentSession",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _AgentSession_model(ctx context.Context, field graphql.CollectedField, obj *AgentSession) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -10808,6 +10856,8 @@ func (ec *executionContext) fieldContext_AgentSessionEdge_node(_ context.Context
 				return ec.fieldContext_AgentSession_workerId(ctx, field)
 			case "harness":
 				return ec.fieldContext_AgentSession_harness(ctx, field)
+			case "provider":
+				return ec.fieldContext_AgentSession_provider(ctx, field)
 			case "model":
 				return ec.fieldContext_AgentSession_model(ctx, field)
 			case "effort":
@@ -31386,7 +31436,7 @@ func (ec *executionContext) _Query_agentSessions(ctx context.Context, field grap
 		ec.fieldContext_Query_agentSessions,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().AgentSessions(ctx, fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string), fc.Args["startedAfter"].(*string), fc.Args["startedBefore"].(*string))
+			return ec.Resolvers.Query().AgentSessions(ctx, fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string), fc.Args["startedAfter"].(*string), fc.Args["startedBefore"].(*string), fc.Args["provider"].(*string))
 		},
 		nil,
 		ec.marshalNAgentSessionConnection2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐAgentSessionConnection,
@@ -31462,6 +31512,8 @@ func (ec *executionContext) fieldContext_Query_agentSession(ctx context.Context,
 				return ec.fieldContext_AgentSession_workerId(ctx, field)
 			case "harness":
 				return ec.fieldContext_AgentSession_harness(ctx, field)
+			case "provider":
+				return ec.fieldContext_AgentSession_provider(ctx, field)
 			case "model":
 				return ec.fieldContext_AgentSession_model(ctx, field)
 			case "effort":
@@ -39369,6 +39421,8 @@ func (ec *executionContext) fieldContext_Worker_lastResult(_ context.Context, fi
 				return ec.fieldContext_WorkerExecutionResult_workerId(ctx, field)
 			case "harness":
 				return ec.fieldContext_WorkerExecutionResult_harness(ctx, field)
+			case "tier":
+				return ec.fieldContext_WorkerExecutionResult_tier(ctx, field)
 			case "provider":
 				return ec.fieldContext_WorkerExecutionResult_provider(ctx, field)
 			case "model":
@@ -40236,6 +40290,35 @@ func (ec *executionContext) _WorkerExecutionResult_harness(ctx context.Context, 
 }
 
 func (ec *executionContext) fieldContext_WorkerExecutionResult_harness(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "WorkerExecutionResult",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _WorkerExecutionResult_tier(ctx context.Context, field graphql.CollectedField, obj *WorkerExecutionResult) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_WorkerExecutionResult_tier,
+		func(ctx context.Context) (any, error) {
+			return obj.Tier, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_WorkerExecutionResult_tier(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "WorkerExecutionResult",
 		Field:      field,
@@ -43021,6 +43104,8 @@ func (ec *executionContext) _AgentSession(ctx context.Context, sel ast.Selection
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "provider":
+			out.Values[i] = ec._AgentSession_provider(ctx, field, obj)
 		case "model":
 			out.Values[i] = ec._AgentSession_model(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -52690,6 +52775,8 @@ func (ec *executionContext) _WorkerExecutionResult(ctx context.Context, sel ast.
 			out.Values[i] = ec._WorkerExecutionResult_workerId(ctx, field, obj)
 		case "harness":
 			out.Values[i] = ec._WorkerExecutionResult_harness(ctx, field, obj)
+		case "tier":
+			out.Values[i] = ec._WorkerExecutionResult_tier(ctx, field, obj)
 		case "provider":
 			out.Values[i] = ec._WorkerExecutionResult_provider(ctx, field, obj)
 		case "model":

@@ -21,6 +21,26 @@
 		}
 	`;
 
+	const RECENT_USAGE_QUERY = gql`
+		query ProviderRecentUsage($provider: String!, $first: Int!) {
+			agentSessions(provider: $provider, first: $first) {
+				edges {
+					node {
+						id
+						startedAt
+						durationMs
+						harness
+						provider
+						model
+						effort
+						status
+						detail
+					}
+				}
+			}
+		}
+	`;
+
 	interface TrendPoint {
 		bucketStart: string;
 		tokens: number;
@@ -36,16 +56,29 @@
 		series: TrendPoint[];
 	}
 
+	interface AgentSessionRow {
+		id: string;
+		startedAt: string;
+		durationMs: number;
+		harness: string;
+		provider: string | null;
+		model: string;
+		effort: string;
+		status: string;
+		detail: string | null;
+	}
+
 	let name = $derived($page.params.name);
 	let trend7 = $state<ProviderTrend | null>(null);
 	let trend30 = $state<ProviderTrend | null>(null);
+	let recentUsage = $state<AgentSessionRow[]>([]);
 	let loading = $state(true);
 	let error = $state<string | null>(null);
 
 	onMount(async () => {
+		const client = createClient();
 		try {
-			const client = createClient();
-			const [r7, r30] = await Promise.all([
+			const [trend7Result, trend30Result, usageResult] = await Promise.all([
 				client.request<{ providerTrend: ProviderTrend | null }>(TREND_QUERY, {
 					name: name,
 					windowDays: 7
@@ -53,10 +86,17 @@
 				client.request<{ providerTrend: ProviderTrend | null }>(TREND_QUERY, {
 					name: name,
 					windowDays: 30
+				}),
+				client.request<{
+					agentSessions: { edges: Array<{ node: AgentSessionRow }> };
+				}>(RECENT_USAGE_QUERY, {
+					provider: name,
+					first: 12
 				})
 			]);
-			trend7 = r7.providerTrend ?? null;
-			trend30 = r30.providerTrend ?? null;
+			trend7 = trend7Result.providerTrend ?? null;
+			trend30 = trend30Result.providerTrend ?? null;
+			recentUsage = usageResult.agentSessions.edges.map((edge) => edge.node);
 		} catch (e) {
 			error = e instanceof Error ? e.message : String(e);
 		} finally {
@@ -101,6 +141,25 @@
 		if (n < 1000) return `${n}`;
 		if (n < 1_000_000) return `${(n / 1000).toFixed(1)}k`;
 		return `${(n / 1_000_000).toFixed(2)}M`;
+	}
+
+	function formatStartedAt(value: string): string {
+		const date = new Date(value);
+		if (Number.isNaN(date.getTime())) return value;
+		return date.toLocaleString([], {
+			month: 'short',
+			day: 'numeric',
+			hour: '2-digit',
+			minute: '2-digit'
+		});
+	}
+
+	function formatDuration(ms: number): string {
+		if (ms < 1000) return `${ms}ms`;
+		if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+		const minutes = Math.floor(ms / 60_000);
+		const seconds = Math.floor((ms % 60_000) / 1000);
+		return `${minutes}m ${seconds}s`;
 	}
 </script>
 
@@ -200,4 +259,50 @@
 			</div>
 		</section>
 	{/if}
+
+	<section class="border border-border-line p-4 dark:border-dark-border-line" data-testid="recent-usage">
+		<div class="mb-2 flex items-center justify-between">
+			<h2 class="text-body-sm font-semibold text-fg-ink dark:text-dark-fg-ink">Recent usage</h2>
+			<span class="text-label-caps font-label-caps text-fg-muted dark:text-dark-fg-muted">
+				{recentUsage.length} rows
+			</span>
+		</div>
+		{#if loading}
+			<div class="py-4 text-body-sm text-fg-muted dark:text-dark-fg-muted">Loading usage…</div>
+		{:else if error}
+			<div class="py-4 text-body-sm text-error dark:text-dark-error">Error: {error}</div>
+		{:else if recentUsage.length === 0}
+			<div class="py-4 text-body-sm text-fg-muted dark:text-dark-fg-muted">No recent usage rows.</div>
+		{:else}
+			<div class="overflow-x-auto">
+				<table class="min-w-full border-collapse text-left text-body-sm">
+					<thead>
+						<tr class="border-b border-border-line dark:border-dark-border-line">
+							<th class="py-2 pr-3 font-semibold">Started</th>
+							<th class="py-2 pr-3 font-semibold">Harness</th>
+							<th class="py-2 pr-3 font-semibold">Model</th>
+							<th class="py-2 pr-3 font-semibold">Status</th>
+							<th class="py-2 pr-3 font-semibold">Duration</th>
+							<th class="py-2 pr-3 font-semibold">Detail</th>
+						</tr>
+					</thead>
+					<tbody>
+						{#each recentUsage as row (row.id)}
+							<tr
+								class="border-b border-border-line/60 dark:border-dark-border-line/60"
+								data-testid="recent-usage-row-{row.id}"
+							>
+								<td class="py-2 pr-3 whitespace-nowrap">{formatStartedAt(row.startedAt)}</td>
+								<td class="py-2 pr-3">{row.harness}</td>
+								<td class="py-2 pr-3">{row.model}</td>
+								<td class="py-2 pr-3 capitalize">{row.status}</td>
+								<td class="py-2 pr-3 whitespace-nowrap">{formatDuration(row.durationMs)}</td>
+								<td class="py-2 pr-3 text-fg-muted dark:text-dark-fg-muted">{row.detail ?? '—'}</td>
+							</tr>
+						{/each}
+					</tbody>
+				</table>
+			</div>
+		{/if}
+	</section>
 </div>

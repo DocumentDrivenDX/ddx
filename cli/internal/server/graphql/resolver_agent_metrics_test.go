@@ -86,7 +86,7 @@ func (emptyStateProvider) GetWorkerProgressGraphQL(string) []*PhaseTransition {
 	return nil
 }
 func (emptyStateProvider) GetWorkerPromptGraphQL(string) string { return "" }
-func (emptyStateProvider) GetAgentSessionsGraphQL(*time.Time, *time.Time) []*AgentSession {
+func (emptyStateProvider) GetAgentSessionsGraphQL(string, *time.Time, *time.Time) []*AgentSession {
 	return nil
 }
 func (emptyStateProvider) GetAgentSessionGraphQL(string) (*AgentSession, bool) {

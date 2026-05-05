@@ -42,7 +42,7 @@ func (r *queryResolver) WorkerPrompt(ctx context.Context, workerID string) (stri
 }
 
 // AgentSessions is the resolver for the agentSessions field.
-func (r *queryResolver) AgentSessions(ctx context.Context, first *int, after *string, last *int, before *string, startedAfter *string, startedBefore *string) (*AgentSessionConnection, error) {
+func (r *queryResolver) AgentSessions(ctx context.Context, first *int, after *string, last *int, before *string, startedAfter *string, startedBefore *string, provider *string) (*AgentSessionConnection, error) {
 	var afterTime *time.Time
 	var beforeTime *time.Time
 	if startedAfter != nil && *startedAfter != "" {
@@ -55,7 +55,11 @@ func (r *queryResolver) AgentSessions(ctx context.Context, first *int, after *st
 			beforeTime = &parsed
 		}
 	}
-	sessions := r.State.GetAgentSessionsGraphQL(afterTime, beforeTime)
+	providerVal := ""
+	if provider != nil {
+		providerVal = *provider
+	}
+	sessions := r.State.GetAgentSessionsGraphQL(providerVal, afterTime, beforeTime)
 	return agentSessionConnectionFrom(sessions, first, after, last, before), nil
 }
 

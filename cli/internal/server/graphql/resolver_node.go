@@ -70,7 +70,7 @@ type StateProvider interface {
 	GetWorkerPromptGraphQL(id string) string
 
 	// AgentSession queries
-	GetAgentSessionsGraphQL(startedAfter, startedBefore *time.Time) []*AgentSession
+	GetAgentSessionsGraphQL(provider string, startedAfter, startedBefore *time.Time) []*AgentSession
 	GetAgentSessionGraphQL(id string) (*AgentSession, bool)
 	GetSessionsCostSummaryGraphQL(projectID string, since, until *time.Time) *SessionsCostSummary
 
