@@ -150,7 +150,11 @@ function makeSessionsResponse(sessions: Record<string, unknown>[] = []) {
 /**
  * Set up GraphQL route mocking for the workers pages.
  */
-async function mockGraphQL(page: import('@playwright/test').Page, workers = WORKERS) {
+async function mockGraphQL(
+	page: import('@playwright/test').Page,
+	workers = WORKERS,
+	reportedWorkers: Record<string, unknown>[] = []
+) {
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as { query: string };
 
@@ -167,6 +171,12 @@ async function mockGraphQL(page: import('@playwright/test').Page, workers = WORK
 				body: JSON.stringify({
 					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
 				})
+			});
+		} else if (body.query.includes('ReportedWorkersByProject') || body.query.includes('reportedWorkers')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { reportedWorkers } })
 			});
 		} else if (body.query.includes('WorkersByProject')) {
 			await route.fulfill({
@@ -236,6 +246,31 @@ test('TC-042: workers page shows total count', async ({ page }) => {
 	await page.goto(BASE_URL);
 
 	await expect(page.getByText(/3 total/)).toBeVisible();
+});
+
+// TC-043a: Provider links navigate from worker rows to availability detail
+test('TC-043: worker rows link to provider detail page', async ({ page }) => {
+	await mockGraphQL(page, WORKERS, [
+		{
+			id: 'reported-001',
+			project: PROJECTS[0].path,
+			harness: 'claude',
+			state: 'connected',
+			lastEventAt: '2026-01-01T10:30:00Z',
+			mirrorFailuresCount: 0,
+			hadDroppedBackfill: false,
+			currentBead: 'bead-002',
+			currentAttempt: null
+		}
+	]);
+	await page.goto(BASE_URL);
+
+	await expect(page.getByTestId('reported-worker-provider-link-reported-001')).toHaveAttribute(
+		'href',
+		`/nodes/${NODE_INFO.id}/providers/claude`
+	);
+	await page.getByTestId('worker-provider-link-worker-aabbccdd').click();
+	await expect(page).toHaveURL(new RegExp(`/nodes/${NODE_INFO.id}/providers/claude$`));
 });
 
 // TC-043: Worker ID is shown as truncated (first 8 chars)

@@ -566,7 +566,13 @@
 											{rw.id.slice(0, 12)}
 										</td>
 										<td class="px-4 py-2 text-fg-ink dark:text-dark-fg-ink">
-											{rw.harness}
+											<a
+												href={providerHref(rw.harness)}
+												class="text-body-sm text-accent-lever hover:underline dark:text-dark-accent-lever"
+												data-testid="reported-worker-provider-link-{rw.id}"
+											>
+												{rw.harness}
+											</a>
 										</td>
 										<td class="px-4 py-2">
 											<span
