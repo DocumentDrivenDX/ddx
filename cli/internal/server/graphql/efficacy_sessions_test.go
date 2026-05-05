@@ -47,7 +47,7 @@ func TestEfficacyRowsReadsSessionIndexAsStrictSupersetOfLegacyEvidence(t *testin
 	appendSessionForTest(t, workDir, agent.SessionIndexEntry{ID: "agent-run-session", Harness: "agent-run", Provider: "anthropic", Model: "claude-sonnet-4-6", StartedAt: now.Add(2 * time.Minute), DurationMS: 3000, InputTokens: 300, OutputTokens: 80, Outcome: "success", NativeLogRef: ".ddx/agent-logs/agent-run-session.jsonl"}, now.Add(2*time.Minute))
 	appendSessionForTest(t, workDir, agent.SessionIndexEntry{ID: "benchmark-session", Harness: "benchmark", Provider: "local", Model: "qwen3.5-27b", StartedAt: now.Add(3 * time.Minute), DurationMS: 4000, InputTokens: 400, OutputTokens: 90, Outcome: "failure", Detail: "benchmark failed"}, now.Add(3*time.Minute))
 
-	rows, err := (&queryResolver{Resolver: &Resolver{WorkingDir: workDir}}).EfficacyRows(context.Background(), nil, nil, nil)
+	rows, err := (&queryResolver{Resolver: &Resolver{WorkingDir: workDir}}).EfficacyRows(context.Background(), nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -87,7 +87,7 @@ func TestEfficacyRowsFreshWithinTwoSeconds(t *testing.T) {
 
 	deadline := time.Now().Add(2 * time.Second)
 	for {
-		rows, err := resolver.EfficacyRows(context.Background(), nil, nil, nil)
+		rows, err := resolver.EfficacyRows(context.Background(), nil, nil, nil, nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -129,7 +129,7 @@ func TestEfficacyRowsSparklineTracksHourlySuccessRate(t *testing.T) {
 		}, ts)
 	}
 
-	rows, err := resolver.EfficacyRows(context.Background(), nil, nil, nil)
+	rows, err := resolver.EfficacyRows(context.Background(), nil, nil, nil, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -167,7 +167,7 @@ func TestEfficacyRowsDateFilterAndPerfTargets(t *testing.T) {
 	ctx := context.Background()
 
 	allTimeInProcess := measureP95(20, func() {
-		if rows, err := resolver.EfficacyRows(ctx, nil, nil, nil); err != nil {
+		if rows, err := resolver.EfficacyRows(ctx, nil, nil, nil, nil); err != nil {
 			t.Fatal(err)
 		} else if len(rows) < 10 {
 			t.Fatalf("fixture produced %d rows, want >= 10", len(rows))
@@ -179,7 +179,7 @@ func TestEfficacyRowsDateFilterAndPerfTargets(t *testing.T) {
 
 	since := now.AddDate(0, 0, -30).Format(time.RFC3339)
 	filteredInProcess := measureP95(20, func() {
-		if rows, err := resolver.EfficacyRows(ctx, &since, nil, nil); err != nil {
+		if rows, err := resolver.EfficacyRows(ctx, &since, nil, nil, nil); err != nil {
 			t.Fatal(err)
 		} else if len(rows) < 10 {
 			t.Fatalf("date-filter fixture produced %d rows, want >= 10", len(rows))
@@ -207,7 +207,7 @@ func TestEfficacyRowsDateFilterAndPerfTargets(t *testing.T) {
 	seedEfficacySessionFixture(t, stretchDir, 50_000, 24, now)
 	stretchResolver := &queryResolver{Resolver: &Resolver{WorkingDir: stretchDir}}
 	stretchInProcess := measureP95(10, func() {
-		if rows, err := stretchResolver.EfficacyRows(ctx, nil, nil, nil); err != nil {
+		if rows, err := stretchResolver.EfficacyRows(ctx, nil, nil, nil, nil); err != nil {
 			t.Fatal(err)
 		} else if len(rows) < 10 {
 			t.Fatalf("stretch fixture produced %d rows, want >= 10", len(rows))
@@ -299,6 +299,59 @@ func TestEfficacyRowsSmokeOverRealBackend(t *testing.T) {
 		t.Fatalf("efficacyAttempts click-into took %s, exceeding the 1s navigation ceiling", clickInto)
 	}
 	t.Logf("efficacy real-backend smoke: rows=%d firstRowKey=%s clickInto=%s", len(rowsData.Data.EfficacyRows), firstRowKey, clickInto)
+}
+
+func TestEfficacyRowsCanFilterByPromptSHA(t *testing.T) {
+	workDir := t.TempDir()
+	now := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
+
+	appendSessionForTest(t, workDir, agent.SessionIndexEntry{
+		ID:         "prompt-a",
+		BeadID:     "bead-a",
+		Harness:    "codex",
+		Provider:   "openai",
+		Model:      "gpt-5",
+		PromptSHA:  "aaa111",
+		StartedAt:  now,
+		DurationMS: 1000,
+		Outcome:    "success",
+		BundlePath: ".ddx/executions/prompt-a",
+	}, now)
+	appendSessionForTest(t, workDir, agent.SessionIndexEntry{
+		ID:         "prompt-b",
+		BeadID:     "bead-b",
+		Harness:    "codex",
+		Provider:   "openai",
+		Model:      "gpt-5",
+		PromptSHA:  "bbb222",
+		StartedAt:  now.Add(time.Minute),
+		DurationMS: 2000,
+		Outcome:    "success",
+		BundlePath: ".ddx/executions/prompt-b",
+	}, now.Add(time.Minute))
+
+	resolver := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
+	rows, err := resolver.EfficacyRows(context.Background(), nil, nil, nil, strPtr("aaa111"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("EfficacyRows(promptSha) returned %d rows, want 1", len(rows))
+	}
+	if rows[0].Attempts != 1 {
+		t.Fatalf("EfficacyRows(promptSha) attempts=%d, want 1", rows[0].Attempts)
+	}
+
+	attempts, err := resolver.EfficacyAttempts(context.Background(), "codex|openai|gpt-5", nil, nil, nil, strPtr("bbb222"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if attempts.RowKey != "codex|openai|gpt-5" {
+		t.Fatalf("EfficacyAttempts(promptSha) rowKey=%q, want codex|openai|gpt-5", attempts.RowKey)
+	}
+	if len(attempts.Attempts) != 1 || attempts.Attempts[0].BeadID != "bead-b" {
+		t.Fatalf("EfficacyAttempts(promptSha) attempts=%+v, want one attempt for bead-b", attempts.Attempts)
+	}
 }
 
 func appendSessionForTest(t *testing.T, workDir string, entry agent.SessionIndexEntry, ts time.Time) {

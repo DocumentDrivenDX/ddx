@@ -72,6 +72,10 @@ func TestPromptSizeReport(t *testing.T) {
 		Bytes         int    `json:"bytes"`
 		PromptSHA     string `json:"prompt_sha"`
 	}
+	const (
+		fullByteBudget    = 5800
+		minimalByteBudget = 5600
+	)
 
 	// Selector at execute_bead.go routes (agent|fiz|embedded) to the Agent
 	// variant; everything else (claude/codex/opencode/unknown) to the Claude
@@ -126,6 +130,18 @@ func TestPromptSizeReport(t *testing.T) {
 	for _, r := range rows {
 		if r.Words == 0 || r.Bytes == 0 {
 			t.Errorf("empty rendered prompt for variant=%s budget=%q", r.Variant, r.ContextBudget)
+		}
+	}
+	// Hard ceiling: the prompt report is a CI fixture, so it should fail if
+	// the rendered prompt grows past the measured byte budgets.
+	for _, r := range rows {
+		limit := fullByteBudget
+		if r.ContextBudget == "minimal" {
+			limit = minimalByteBudget
+		}
+		if r.Bytes > limit {
+			t.Errorf("variant=%s budget=%q rendered %d bytes; must be <= %d",
+				r.Variant, r.ContextBudget, r.Bytes, limit)
 		}
 	}
 	// Minimal must be strictly smaller than full for both variants — the

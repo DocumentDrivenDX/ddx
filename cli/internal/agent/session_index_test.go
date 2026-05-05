@@ -214,6 +214,28 @@ func TestSessionIndexPreservesWorkerIDCorrelation(t *testing.T) {
 	}
 }
 
+func TestSessionIndexPreservesPromptSHACorrelation(t *testing.T) {
+	projectRoot := t.TempDir()
+	started := time.Date(2026, 4, 22, 12, 0, 0, 0, time.UTC)
+	inputs := SessionIndexInputs{
+		Harness: "codex",
+		Model:   "gpt-5.4",
+		Correlation: map[string]string{
+			"session_id": "session-prompt",
+			"prompt_sha": "abc123",
+		},
+	}
+	entry := SessionIndexEntryFromResult(projectRoot, inputs, &Result{ExitCode: 0}, started, started.Add(time.Second))
+
+	if entry.PromptSHA != "abc123" {
+		t.Fatalf("PromptSHA=%q, want abc123", entry.PromptSHA)
+	}
+	legacy := SessionIndexEntryToLegacy(entry)
+	if got := legacy.Correlation["prompt_sha"]; got != "abc123" {
+		t.Fatalf("legacy correlation prompt_sha=%q, want abc123", got)
+	}
+}
+
 func TestSessionIndexShardFilesSelectsOnlyIntersectingDateRange(t *testing.T) {
 	logDir := filepath.Join(t.TempDir(), ".ddx", "agent-logs")
 	for month := time.January; month <= time.June; month++ {

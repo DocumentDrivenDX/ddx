@@ -2902,6 +2902,8 @@ type Query {
     until: String
     """Project identifier whose session index should be read."""
     projectId: String
+    """Filter to attempts rendered from this exact prompt SHA."""
+    promptSha: String
   ): [EfficacyRow!]!
 
   """Return attempt details for one efficacy row."""
@@ -2914,6 +2916,8 @@ type Query {
     until: String
     """Project identifier whose session index should be read."""
     projectId: String
+    """Filter to attempts rendered from this exact prompt SHA."""
+    promptSha: String
   ): EfficacyAttempts!
 
   """Return model comparison records."""

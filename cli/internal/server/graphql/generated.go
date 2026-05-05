@@ -1055,8 +1055,8 @@ type ComplexityRoot struct {
 		DocStale                    func(childComplexity int) int
 		DocumentByPath              func(childComplexity int, path string) int
 		Documents                   func(childComplexity int, first *int, after *string, last *int, before *string, typeArg *string) int
-		EfficacyAttempts            func(childComplexity int, rowKey string, since *string, until *string, projectID *string) int
-		EfficacyRows                func(childComplexity int, since *string, until *string, projectID *string) int
+		EfficacyAttempts            func(childComplexity int, rowKey string, since *string, until *string, projectID *string, promptSha *string) int
+		EfficacyRows                func(childComplexity int, since *string, until *string, projectID *string, promptSha *string) int
 		ExecDefinition              func(childComplexity int, id string) int
 		ExecDefinitions             func(childComplexity int, first *int, after *string, last *int, before *string, artifactID *string) int
 		ExecRun                     func(childComplexity int, id string) int
@@ -1528,8 +1528,8 @@ type QueryResolver interface {
 	ProviderTrend(ctx context.Context, name string, windowDays int) (*ProviderTrend, error)
 	QueueSummary(ctx context.Context, projectID string) (*QueueSummary, error)
 	QueueAndWorkersSummary(ctx context.Context, projectID string) (*QueueAndWorkersSummary, error)
-	EfficacyRows(ctx context.Context, since *string, until *string, projectID *string) ([]*EfficacyRow, error)
-	EfficacyAttempts(ctx context.Context, rowKey string, since *string, until *string, projectID *string) (*EfficacyAttempts, error)
+	EfficacyRows(ctx context.Context, since *string, until *string, projectID *string, promptSha *string) ([]*EfficacyRow, error)
+	EfficacyAttempts(ctx context.Context, rowKey string, since *string, until *string, projectID *string, promptSha *string) (*EfficacyAttempts, error)
 	Comparisons(ctx context.Context) ([]*ComparisonRecord, error)
 	PluginsList(ctx context.Context) ([]*PluginInfo, error)
 	PluginDetail(ctx context.Context, name string) (*PluginInfo, error)
@@ -5991,7 +5991,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.EfficacyAttempts(childComplexity, args["rowKey"].(string), args["since"].(*string), args["until"].(*string), args["projectId"].(*string)), true
+		return e.ComplexityRoot.Query.EfficacyAttempts(childComplexity, args["rowKey"].(string), args["since"].(*string), args["until"].(*string), args["projectId"].(*string), args["promptSha"].(*string)), true
 	case "Query.efficacyRows":
 		if e.ComplexityRoot.Query.EfficacyRows == nil {
 			break
@@ -6002,7 +6002,7 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 			return 0, false
 		}
 
-		return e.ComplexityRoot.Query.EfficacyRows(childComplexity, args["since"].(*string), args["until"].(*string), args["projectId"].(*string)), true
+		return e.ComplexityRoot.Query.EfficacyRows(childComplexity, args["since"].(*string), args["until"].(*string), args["projectId"].(*string), args["promptSha"].(*string)), true
 	case "Query.execDefinition":
 		if e.ComplexityRoot.Query.ExecDefinition == nil {
 			break
@@ -8815,6 +8815,11 @@ func (ec *executionContext) field_Query_efficacyAttempts_args(ctx context.Contex
 		return nil, err
 	}
 	args["projectId"] = arg3
+	arg4, err := graphql.ProcessArgField(ctx, rawArgs, "promptSha", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["promptSha"] = arg4
 	return args, nil
 }
 
@@ -8836,6 +8841,11 @@ func (ec *executionContext) field_Query_efficacyRows_args(ctx context.Context, r
 		return nil, err
 	}
 	args["projectId"] = arg2
+	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "promptSha", ec.unmarshalOString2ᚖstring)
+	if err != nil {
+		return nil, err
+	}
+	args["promptSha"] = arg3
 	return args, nil
 }
 
@@ -34463,7 +34473,7 @@ func (ec *executionContext) _Query_efficacyRows(ctx context.Context, field graph
 		ec.fieldContext_Query_efficacyRows,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().EfficacyRows(ctx, fc.Args["since"].(*string), fc.Args["until"].(*string), fc.Args["projectId"].(*string))
+			return ec.Resolvers.Query().EfficacyRows(ctx, fc.Args["since"].(*string), fc.Args["until"].(*string), fc.Args["projectId"].(*string), fc.Args["promptSha"].(*string))
 		},
 		nil,
 		ec.marshalNEfficacyRow2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐEfficacyRowᚄ,
@@ -34532,7 +34542,7 @@ func (ec *executionContext) _Query_efficacyAttempts(ctx context.Context, field g
 		ec.fieldContext_Query_efficacyAttempts,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().EfficacyAttempts(ctx, fc.Args["rowKey"].(string), fc.Args["since"].(*string), fc.Args["until"].(*string), fc.Args["projectId"].(*string))
+			return ec.Resolvers.Query().EfficacyAttempts(ctx, fc.Args["rowKey"].(string), fc.Args["since"].(*string), fc.Args["until"].(*string), fc.Args["projectId"].(*string), fc.Args["promptSha"].(*string))
 		},
 		nil,
 		ec.marshalNEfficacyAttempts2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐEfficacyAttempts,
