@@ -32,8 +32,16 @@ func TestSanitizeBaseURL(t *testing.T) {
 // query within the TTL does not invoke the live fetcher and surfaces
 // fromCache=true without mutating the cached fetchedAt timestamp.
 func TestProviderModelsCacheServesFromCacheWithinTTL(t *testing.T) {
-	resetProviderModelsCacheForTest()
-	t.Cleanup(resetProviderModelsCacheForTest)
+	providerModelsCache.Lock()
+	providerModelsCache.entries = make(map[string]providerModelsCacheEntry)
+	providerModelsCache.inFlight = make(map[string]chan struct{})
+	providerModelsCache.Unlock()
+	t.Cleanup(func() {
+		providerModelsCache.Lock()
+		providerModelsCache.entries = make(map[string]providerModelsCacheEntry)
+		providerModelsCache.inFlight = make(map[string]chan struct{})
+		providerModelsCache.Unlock()
+	})
 
 	var calls int32
 	prev := providerModelsFetcher
@@ -80,8 +88,16 @@ func TestProviderModelsCacheServesFromCacheWithinTTL(t *testing.T) {
 // TestProviderModelsCacheExpiresAfterTTL verifies expired entries trigger a
 // fresh live fetch.
 func TestProviderModelsCacheExpiresAfterTTL(t *testing.T) {
-	resetProviderModelsCacheForTest()
-	t.Cleanup(resetProviderModelsCacheForTest)
+	providerModelsCache.Lock()
+	providerModelsCache.entries = make(map[string]providerModelsCacheEntry)
+	providerModelsCache.inFlight = make(map[string]chan struct{})
+	providerModelsCache.Unlock()
+	t.Cleanup(func() {
+		providerModelsCache.Lock()
+		providerModelsCache.entries = make(map[string]providerModelsCacheEntry)
+		providerModelsCache.inFlight = make(map[string]chan struct{})
+		providerModelsCache.Unlock()
+	})
 
 	prevTTL := providerModelsCacheTTL
 	providerModelsCacheTTL = 10 * time.Millisecond
@@ -113,8 +129,16 @@ func TestProviderModelsCacheExpiresAfterTTL(t *testing.T) {
 // TestProviderModelsInFlightGuard verifies concurrent queries for the same
 // (workDir, name, kind) collapse into a single underlying fetch.
 func TestProviderModelsInFlightGuard(t *testing.T) {
-	resetProviderModelsCacheForTest()
-	t.Cleanup(resetProviderModelsCacheForTest)
+	providerModelsCache.Lock()
+	providerModelsCache.entries = make(map[string]providerModelsCacheEntry)
+	providerModelsCache.inFlight = make(map[string]chan struct{})
+	providerModelsCache.Unlock()
+	t.Cleanup(func() {
+		providerModelsCache.Lock()
+		providerModelsCache.entries = make(map[string]providerModelsCacheEntry)
+		providerModelsCache.inFlight = make(map[string]chan struct{})
+		providerModelsCache.Unlock()
+	})
 
 	var calls int32
 	release := make(chan struct{})
@@ -152,8 +176,16 @@ func TestProviderModelsInFlightGuard(t *testing.T) {
 // TestRefreshProviderModelsBypassesCache verifies the mutation always invokes
 // a live fetch regardless of cache state.
 func TestRefreshProviderModelsBypassesCache(t *testing.T) {
-	resetProviderModelsCacheForTest()
-	t.Cleanup(resetProviderModelsCacheForTest)
+	providerModelsCache.Lock()
+	providerModelsCache.entries = make(map[string]providerModelsCacheEntry)
+	providerModelsCache.inFlight = make(map[string]chan struct{})
+	providerModelsCache.Unlock()
+	t.Cleanup(func() {
+		providerModelsCache.Lock()
+		providerModelsCache.entries = make(map[string]providerModelsCacheEntry)
+		providerModelsCache.inFlight = make(map[string]chan struct{})
+		providerModelsCache.Unlock()
+	})
 
 	var calls int32
 	prev := providerModelsFetcher
@@ -188,8 +220,16 @@ func TestRefreshProviderModelsBypassesCache(t *testing.T) {
 }
 
 func TestProviderModelsRejectsEmptyName(t *testing.T) {
-	resetProviderModelsCacheForTest()
-	t.Cleanup(resetProviderModelsCacheForTest)
+	providerModelsCache.Lock()
+	providerModelsCache.entries = make(map[string]providerModelsCacheEntry)
+	providerModelsCache.inFlight = make(map[string]chan struct{})
+	providerModelsCache.Unlock()
+	t.Cleanup(func() {
+		providerModelsCache.Lock()
+		providerModelsCache.entries = make(map[string]providerModelsCacheEntry)
+		providerModelsCache.inFlight = make(map[string]chan struct{})
+		providerModelsCache.Unlock()
+	})
 	r := &queryResolver{Resolver: &Resolver{WorkingDir: "/tmp/wd"}}
 	if _, err := r.ProviderModels(context.Background(), "  ", ProviderKindEndpoint); err == nil {
 		t.Fatalf("expected error for empty name")

@@ -55,11 +55,10 @@ func fixtureWorkingDir(t *testing.T) string {
 
 func newTestResolver(t *testing.T, wd string) *queryResolver {
 	t.Helper()
-	r, err := NewResolver(emptyStateProvider{}, wd)
-	if err != nil {
-		t.Fatalf("NewResolver: %v", err)
+	if wd == "" {
+		t.Fatal("working directory is required")
 	}
-	return &queryResolver{Resolver: r}
+	return &queryResolver{Resolver: &Resolver{State: emptyStateProvider{}, WorkingDir: wd}}
 }
 
 // emptyStateProvider satisfies StateProvider with zero-value returns.
