@@ -67,6 +67,12 @@ Both checkpoints invoke the same nested bead-lifecycle workflow skill under the
 agent-readable findings; DDx remains responsible for hook timing, evidence
 placement, and outcome classification.
 
+Post-attempt triage classifications feed
+[`TD-031`](../technical-designs/TD-031-bead-state-machine.md). ADR-023 does not
+define final queue mutation policy; TD-031 remains the source of truth for
+whether an attempt closes, stays open for human triage, becomes blocked, is
+superseded, or receives a retry cooldown.
+
 ### Staged Rollout
 
 The default rollout is WARN-ONLY.

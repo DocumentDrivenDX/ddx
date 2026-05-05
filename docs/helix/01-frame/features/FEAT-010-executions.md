@@ -91,6 +91,11 @@ rationale, post-run checks, review verdicts, and cooldown policy. The agent's
 exit status and actual model/power are inputs to that decision, not the whole
 decision.
 
+Layer 2 records raw attempt evidence. Layer 3 applies
+[`TD-031`](../../02-design/technical-designs/TD-031-bead-state-machine.md) when
+that evidence requires durable bead action such as close-as-already-satisfied,
+human triage, blocked, retry cooldown, or stale no_changes metadata cleanup.
+
 ### Quality hooks
 
 ADR-023 defines two lifecycle quality hooks owned by the layer-2 and layer-3
@@ -145,6 +150,8 @@ across ready beads until a stop condition is met. It owns:
 - Queue iteration order
 - Claim acquisition, claim release, and shutdown/interruption cleanup for
   claimed beads, using the TD-031 claim-state contract
+- Durable bead action after each layer-2 attempt, using TD-031's outcome,
+  no_changes, cooldown, and stale-metadata rules
 - No-progress / stop-condition evaluation
 - A loop-level record that references its child layer-2 records by
   attempt id and reports terminal disposition (drained, blocked,

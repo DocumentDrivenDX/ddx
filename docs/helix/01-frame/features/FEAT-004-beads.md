@@ -76,6 +76,11 @@ The name follows the `bd` (Dolt-backed) and `br` (SQLite-backed) convention: sho
 
 Unknown fields in imported or existing beads are preserved on read/write. This allows HELIX to store `spec-id`, `execution-eligible`, `claimed-at`, `claimed-pid`, `superseded-by`, and `replaces` without DDx needing to understand them.
 
+TD-031 defines how lifecycle actions use the existing carriers: persisted
+bd/br statuses, labels, dependency edges, append-only events, and preserved
+`Extra` fields. FEAT-004 does not introduce additional status vocabulary for
+no_changes, cooldown, superseded, or execution-readiness cases.
+
 ### Queue Semantics For Epics
 
 Epics remain first-class beads, but they are not consumed by the same

@@ -188,6 +188,9 @@ The tracker queue views are derived from one in-memory snapshot.
 - A bead is ready when every dependency is `closed`.
 - Execution-ready views additionally filter on `execution-eligible` and
   `superseded-by`.
+- Execution-ready diagnostics must expose TD-031's distinct skipped reasons:
+  active cooldown, not executable, superseded, blocked, and epic-only/container
+  work. These reasons must not be collapsed into a generic cooldown bucket.
 - Results are sorted by priority, then by stable iteration order from the
   parsed snapshot.
 
