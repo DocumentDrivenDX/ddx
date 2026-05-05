@@ -1701,7 +1701,37 @@ func (m *WorkerManager) readActiveSessionLog(handle *workerHandle) string {
 		start = len(lines) - 50
 	}
 
-	return agent.FormatSessionLogLines(lines[start:])
+	return formatActiveSessionLogLines(lines[start:])
+}
+
+func formatActiveSessionLogLines(lines []string) string {
+	var progress []agentlib.ServiceProgressData
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		var entry map[string]any
+		if err := json.Unmarshal([]byte(line), &entry); err != nil {
+			continue
+		}
+		if typ, _ := entry["type"].(string); typ != agentlib.ServiceEventTypeProgress {
+			continue
+		}
+		var data agentlib.ServiceProgressData
+		rawData, err := json.Marshal(entry["data"])
+		if err != nil {
+			continue
+		}
+		if err := json.Unmarshal(rawData, &data); err != nil {
+			continue
+		}
+		progress = append(progress, data)
+	}
+	if len(progress) > 0 {
+		return agent.FormatServiceProgressEntries(progress)
+	}
+	return agent.FormatSessionLogLines(lines)
 }
 
 // buildPreClaimHook returns a PreClaimHook function that fetches origin and

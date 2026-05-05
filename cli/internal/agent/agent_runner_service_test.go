@@ -38,7 +38,7 @@ func TestDrainServiceEventsIgnoresCompactionTelemetry(t *testing.T) {
 	}
 	close(events)
 
-	final, _, _ := drainServiceEvents(events)
+	final, _, _, _ := drainServiceEvents(events)
 	require.NotNil(t, final)
 	assert.Equal(t, "success", final.Status)
 	assert.Empty(t, final.Error)
@@ -59,7 +59,7 @@ func TestDrainServiceEventsKeepsFinalAfterCompactionTelemetry(t *testing.T) {
 	}
 	close(events)
 
-	final, _, _ := drainServiceEvents(events)
+	final, _, _, _ := drainServiceEvents(events)
 	require.NotNil(t, final)
 	assert.Equal(t, "success", final.Status)
 	assert.Empty(t, final.Error)
@@ -115,7 +115,7 @@ func TestDrainServiceEvents_CapturesRouteEconomics(t *testing.T) {
 	}
 	close(events)
 
-	_, routing, actualPower := drainServiceEvents(events)
+	_, routing, actualPower, _ := drainServiceEvents(events)
 	assert.Equal(t, 65, actualPower,
 		"power must come from the eligible winning candidate in routing_decision.candidates")
 	require.NotNil(t, routing)
@@ -123,6 +123,53 @@ func TestDrainServiceEvents_CapturesRouteEconomics(t *testing.T) {
 	assert.Equal(t, 42.5, routing.PredictedSpeedTPS)
 	assert.Equal(t, 0.0125, routing.PredictedCostUSDPer1kTokens)
 	assert.Equal(t, "catalog", routing.PredictedCostSource)
+}
+
+// TestDrainServiceEvents_ForwardsCanonicalProgressPayload proves canonical
+// Fizeau progress is surfaced directly from the ServiceEvent stream rather
+// than being reconstructed from session-log JSONL.
+func TestDrainServiceEvents_ForwardsCanonicalProgressPayload(t *testing.T) {
+	events := make(chan agentlib.ServiceEvent, 2)
+	progressPayload, err := json.Marshal(map[string]any{
+		"phase":           "tool",
+		"state":           "complete",
+		"task_id":         "ddx-1234",
+		"turn_index":      7,
+		"tool_name":       "apply_patch",
+		"action":          "add test implementation",
+		"target":          "cli/internal/file.go",
+		"output_summary":  "out=312B 12 lines \"Success. Updated the following files:\"",
+		"output_excerpt":  "12 lines \"Success. Updated the following files:\"",
+		"output_bytes":    312,
+		"output_lines":    12,
+		"duration_ms":     35,
+		"tok_per_sec":     18.4,
+		"input_tokens":    10,
+		"output_tokens":   20,
+		"total_tokens":    30,
+		"session_summary": "add test implementation",
+	})
+	require.NoError(t, err)
+	events <- agentlib.ServiceEvent{
+		Type: "progress",
+		Time: time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
+		Data: progressPayload,
+	}
+	events <- agentlib.ServiceEvent{
+		Type: "final",
+		Time: time.Date(2026, 4, 30, 12, 0, 1, 0, time.UTC),
+		Data: json.RawMessage(`{"status":"success","exit_code":0,"final_text":"done"}`),
+	}
+	close(events)
+
+	_, _, _, progress := drainServiceEvents(events)
+	require.Len(t, progress, 1)
+	assert.Equal(t, "ddx-1234", progress[0].TaskID)
+	assert.Equal(t, 7, progress[0].TurnIndex)
+	assert.Equal(t, "add test implementation", progress[0].Action)
+	assert.Equal(t, "cli/internal/file.go", progress[0].Target)
+	assert.Contains(t, FormatServiceProgressEntries(progress), "ok ddx-1234 7 add test implementation to cli/internal/file.go")
+	assert.Contains(t, FormatServiceProgressEntries(progress), "< out=312B 12 lines")
 }
 
 func compactionTelemetryServiceEvent(ts time.Time) agentlib.ServiceEvent {
