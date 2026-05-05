@@ -22,6 +22,14 @@ func writeMetricArtifact(t *testing.T, wd, id string) {
 	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
 }
 
+func writeArtifact(t *testing.T, wd, dir, id string) {
+	t.Helper()
+	path := filepath.Join(wd, "docs", dir, id+".md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+	content := "---\nddx:\n  id: " + id + "\n---\n# " + id + "\n"
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+}
+
 func writeMetricDefinition(t *testing.T, wd string, def Definition) {
 	t.Helper()
 	store := ddxexec.NewStore(wd)
@@ -81,6 +89,37 @@ func TestValidateRunAndHistory(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, history, 1)
 	assert.Equal(t, rec.RunID, history[0].RunID)
+}
+
+func TestDefinitionAndHistoryPreferMetricArtifactID(t *testing.T) {
+	wd := t.TempDir()
+	writeMetricArtifact(t, wd, "MET-001")
+	writeArtifact(t, wd, "misc", "DOC-001")
+	writeMetricDefinition(t, wd, Definition{
+		DefinitionID: "metric-startup-time@1",
+		MetricID:     "MET-001",
+		Command:      []string{"sh", "-c", "printf '14.6ms\\n'"},
+		Thresholds:   Thresholds{Warn: 20, Ratchet: 30, Unit: "ms"},
+		Comparison:   ComparisonLowerIsBetter,
+		Active:       true,
+		CreatedAt:    mustTime(t, "2026-04-04T15:00:00Z"),
+	})
+
+	store := NewStore(wd)
+	def, err := store.LoadDefinition("MET-001")
+	require.NoError(t, err)
+	assert.Equal(t, "MET-001", def.MetricID)
+
+	rec, err := store.Run(context.Background(), "MET-001")
+	require.NoError(t, err)
+	assert.Equal(t, "MET-001", rec.ArtifactID)
+	assert.Equal(t, "MET-001", rec.MetricID)
+
+	history, err := store.History("MET-001")
+	require.NoError(t, err)
+	require.Len(t, history, 1)
+	assert.Equal(t, "MET-001", history[0].MetricID)
+	assert.Equal(t, "MET-001", history[0].ArtifactID)
 }
 
 func TestCompareAndTrend(t *testing.T) {

@@ -90,7 +90,10 @@ ddx metric list        # metric artifacts
 ddx metric show MET-001  # metric definition + recent history
 ```
 
-`ddx metric run <MET-id>` is a convenience wrapper over `ddx exec run <definition-id>` that resolves the latest active definition bound to the metric artifact.
+`ddx metric` inspection commands are read-only projections over the exec
+substrate. `ddx metric run <MET-id>` is the convenience wrapper for
+`ddx exec run <definition-id>` that resolves the latest active definition
+bound to the metric artifact.
 
 ## Key Commands
 

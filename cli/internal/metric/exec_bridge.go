@@ -3,13 +3,9 @@ package metric
 import ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 
 func metricDefinitionFromExec(def ddxexec.Definition) (Definition, error) {
-	metricID := ""
-	if len(def.ArtifactIDs) > 0 {
-		metricID = def.ArtifactIDs[0]
-	}
 	out := Definition{
 		DefinitionID: def.ID,
-		MetricID:     metricID,
+		MetricID:     metricArtifactID(def.ArtifactIDs),
 		Command:      append([]string{}, def.Executor.Command...),
 		Cwd:          def.Executor.Cwd,
 		Env:          cloneStringMap(def.Executor.Env),
@@ -31,7 +27,7 @@ func metricDefinitionFromExec(def ddxexec.Definition) (Definition, error) {
 func metricHistoryFromExec(rec ddxexec.RunRecord) (HistoryRecord, error) {
 	out := HistoryRecord{
 		RunID:        rec.RunID,
-		MetricID:     firstArtifactID(rec.ArtifactIDs),
+		MetricID:     metricArtifactID(rec.ArtifactIDs),
 		DefinitionID: rec.DefinitionID,
 		ObservedAt:   rec.StartedAt,
 		Status:       StatusPass,
@@ -39,7 +35,7 @@ func metricHistoryFromExec(rec ddxexec.RunRecord) (HistoryRecord, error) {
 		DurationMS:   rec.FinishedAt.Sub(rec.StartedAt).Milliseconds(),
 		Stdout:       rec.Result.Stdout,
 		Stderr:       rec.Result.Stderr,
-		ArtifactID:   firstArtifactID(rec.ArtifactIDs),
+		ArtifactID:   metricArtifactID(rec.ArtifactIDs),
 	}
 	if rec.Status != ddxexec.StatusSuccess {
 		out.Status = StatusFail
@@ -67,9 +63,14 @@ func cloneStringMap(in map[string]string) map[string]string {
 	return out
 }
 
-func firstArtifactID(ids []string) string {
+func metricArtifactID(ids []string) string {
 	if len(ids) == 0 {
 		return ""
+	}
+	for _, id := range ids {
+		if len(id) >= 4 && id[:4] == "MET-" {
+			return id
+		}
 	}
 	return ids[0]
 }
