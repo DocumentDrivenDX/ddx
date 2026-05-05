@@ -77,6 +77,8 @@ func TestExecuteBeadInstructionsLoadBearingGuardrails(t *testing.T) {
 		{name: "reports_no_tmp", any: []string{"/tmp"}},
 		{name: "no_changes_rationale", any: []string{"no_changes_rationale.txt"}},
 		{name: "step0_size_check", any: []string{"## Step 0: size check"}},
+		{name: "step0_large_description_hint", any: []string{"exceeds 8000 bytes", "split-first pass"}},
+		{name: "step0_depth_cap", any: []string{"Auto-decomposition is capped at depth 2", "third-level split"}},
 		{name: "decompose_bead_create", any: []string{"ddx bead create"}},
 		{name: "decompose_bead_dep_add", any: []string{"ddx bead dep add"}},
 		{name: "decompose_bead_update", any: []string{"ddx bead update"}},
@@ -167,6 +169,7 @@ func TestExecuteBeadInstructionsRenderedInvariants(t *testing.T) {
 		"ddx bead create",
 		"ddx bead dep add",
 		"ddx bead update",
+		"Auto-decomposition is capped at depth 2",
 	}
 	for _, c := range cases {
 		c := c

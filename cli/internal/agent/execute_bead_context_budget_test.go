@@ -275,3 +275,111 @@ for cheap-tier attempts with minimal context budget.
 		t.Errorf("minimal budget prompt should not include spec content")
 	}
 }
+
+func TestExecuteBead_LargeDescriptionGetsStep0Hint(t *testing.T) {
+	root := t.TempDir()
+	wt := t.TempDir()
+
+	b := &bead.Bead{
+		ID:          "ddx-large-desc",
+		Title:       "Large description test",
+		Description: strings.Repeat("x", executeBeadLargeDescriptionHintThreshold+1),
+		Acceptance:  "Large descriptions trigger the Step 0 hint",
+		Labels:      []string{"test"},
+	}
+
+	arts, err := createArtifactBundle(root, wt, "20260101T000000-large0001")
+	if err != nil {
+		t.Fatalf("createArtifactBundle: %v", err)
+	}
+
+	prompt, _, err := buildPrompt(root, b, nil, arts, "1234abcd", "", "claude", "")
+	if err != nil {
+		t.Fatalf("buildPrompt: %v", err)
+	}
+
+	s := string(prompt)
+	if !strings.Contains(s, "Large description hint") {
+		t.Fatalf("prompt missing large-description hint: %s", s)
+	}
+	if !strings.Contains(s, "split-first pass") {
+		t.Fatalf("prompt missing split-first hint: %s", s)
+	}
+	if !strings.Contains(s, "8001 bytes") {
+		t.Fatalf("prompt missing concrete large-description byte count: %s", s)
+	}
+}
+
+func TestExecuteBead_ThirdLevelDecompositionGetsRejectedWithExplanation(t *testing.T) {
+	root := t.TempDir()
+	wt := t.TempDir()
+	ddxDir := filepath.Join(root, ".ddx")
+	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	store := bead.NewStore(ddxDir)
+	if err := store.Init(); err != nil {
+		t.Fatal(err)
+	}
+
+	rootBead := &bead.Bead{
+		ID:    "ddx-root",
+		Title: "Root bead",
+	}
+	childBead := &bead.Bead{
+		ID:     "ddx-child",
+		Title:  "Child bead",
+		Parent: rootBead.ID,
+	}
+	grandchildBead := &bead.Bead{
+		ID:     "ddx-grandchild",
+		Title:  "Grandchild bead",
+		Parent: childBead.ID,
+	}
+	for _, b := range []*bead.Bead{rootBead, childBead, grandchildBead} {
+		if err := store.Create(b); err != nil {
+			t.Fatalf("store.Create(%s): %v", b.ID, err)
+		}
+	}
+
+	arts, err := createArtifactBundle(root, wt, "20260101T000000-depth0001")
+	if err != nil {
+		t.Fatalf("createArtifactBundle: %v", err)
+	}
+
+	cases := []struct {
+		name    string
+		bead    *bead.Bead
+		wantCap bool
+	}{
+		{name: "root", bead: rootBead, wantCap: false},
+		{name: "child", bead: childBead, wantCap: false},
+		{name: "grandchild", bead: grandchildBead, wantCap: true},
+	}
+
+	for _, tc := range cases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			prompt, _, err := buildPrompt(root, tc.bead, nil, arts, "1234abcd", "", "claude", "")
+			if err != nil {
+				t.Fatalf("buildPrompt: %v", err)
+			}
+			s := string(prompt)
+			gotCap := strings.Contains(s, "Decomposition depth cap")
+			if gotCap != tc.wantCap {
+				t.Fatalf("cap hint presence = %v, want %v; prompt=%s", gotCap, tc.wantCap, s)
+			}
+			if tc.wantCap {
+				if !strings.Contains(s, "already at decomposition depth 2") {
+					t.Fatalf("grandchild prompt missing explicit depth explanation: %s", s)
+				}
+				if !strings.Contains(s, "reject the split") {
+					t.Fatalf("grandchild prompt missing rejection guidance: %s", s)
+				}
+				if !strings.Contains(s, "no_changes_rationale.txt") {
+					t.Fatalf("grandchild prompt missing no_changes rationale guidance: %s", s)
+				}
+			}
+		})
+	}
+}

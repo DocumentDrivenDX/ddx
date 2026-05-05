@@ -1405,6 +1405,8 @@ The bead is too big when any of these holds:
 - AC mixes design, implementation, integration tests, and docs as separate top-level deliverables.
 - Description names multiple feature-sized sub-pieces.
 - More than ~500 lines across more than ~5 files in unrelated packages.
+- If the bead description exceeds 8000 bytes, treat Step 0 as a split-first pass and favor child-bead scoping before implementation.
+- Auto-decomposition is capped at depth 2: root beads may split once, decomposed children may split once more, and third-level splits must be rejected with an explanation.
 
 If too big, decompose — do not attempt the work:
 
@@ -1573,6 +1575,7 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 	sb.WriteString("<execute-bead>\n")
 
 	instructions := strings.ReplaceAll(executeBeadInstructionsText(harness), "{{.AttemptDir}}", artifacts.DirRel)
+	instructions += executeBeadDynamicStep0Hints(workDir, b)
 	// Put the largely static instructions first so prefix caches can reuse as
 	// much of the prompt as possible before the bead-specific XML starts.
 	fmt.Fprintf(&sb, "  <instructions>\n%s\n  </instructions>\n", xmlEscape(instructions))
@@ -1645,6 +1648,60 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 	sb.WriteString("</execute-bead>\n")
 
 	return []byte(sb.String()), "synthesized", nil
+}
+
+const executeBeadLargeDescriptionHintThreshold = 8000
+const executeBeadAutoDecompositionDepthCap = 2
+
+func executeBeadDynamicStep0Hints(workDir string, b *bead.Bead) string {
+	if b == nil {
+		return ""
+	}
+
+	var sb strings.Builder
+	desc := strings.TrimSpace(b.Description)
+	if len(desc) > executeBeadLargeDescriptionHintThreshold {
+		fmt.Fprintf(&sb, "\n\n## Large description hint\n")
+		fmt.Fprintf(&sb, "This bead description is %d bytes (> %d). Treat Step 0 as a split-first pass and prefer child-bead scoping before implementation.\n",
+			len(desc), executeBeadLargeDescriptionHintThreshold)
+	}
+
+	depth := beadDecompositionDepth(workDir, b)
+	if depth >= executeBeadAutoDecompositionDepthCap {
+		fmt.Fprintf(&sb, "\n\n## Decomposition depth cap\n")
+		fmt.Fprintf(&sb, "This bead is already at decomposition depth %d. Do not create another child layer; if it is still too large, reject the split with a short explanation and write no_changes_rationale.txt instead.\n",
+			depth)
+	}
+
+	return sb.String()
+}
+
+func beadDecompositionDepth(workDir string, b *bead.Bead) int {
+	if b == nil {
+		return 0
+	}
+
+	store := bead.NewStore(filepath.Join(workDir, ".ddx"))
+	depth := 0
+	seen := map[string]struct{}{}
+	current := b
+	for current != nil {
+		parentID := strings.TrimSpace(current.Parent)
+		if parentID == "" {
+			break
+		}
+		depth++
+		if _, ok := seen[parentID]; ok {
+			break
+		}
+		seen[parentID] = struct{}{}
+		parent, err := store.Get(parentID)
+		if err != nil || parent == nil {
+			break
+		}
+		current = parent
+	}
+	return depth
 }
 
 // promptSHA returns the hex-encoded sha256 of the rendered prompt bytes.
