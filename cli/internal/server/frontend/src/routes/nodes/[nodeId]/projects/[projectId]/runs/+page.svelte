@@ -3,6 +3,7 @@
 	import { page } from '$app/stores'
 	import { goto } from '$app/navigation'
 	import { createClient } from '$lib/gql/client'
+	import { subscribeWorkerProgress } from '$lib/gql/subscriptions'
 	import { PROJECT_RUNS_QUERY, PAGE_SIZE } from './+page'
 	import type { RunEdge, RunNode, RunConnection, PageInfo } from './+page'
 	import { RunRowDetail } from '$lib/runDetail'
@@ -24,6 +25,7 @@
 	let loadingMore = $state(false)
 	let harnessInput = $state(data.activeHarness ?? '')
 	let expanded = $state<Set<string>>(new Set())
+	let livePhaseByRunId = $state<Map<string, string>>(new Map())
 
 	type ActionMode = 'requeue' | 'startWorker'
 	let actionDialogOpen = $state(false)
@@ -152,12 +154,35 @@
 	let edges = $derived([...data.runs.edges, ...appendedEdges])
 	let pageInfo = $derived<PageInfo>(appendedPageInfo ?? data.runs.pageInfo)
 
-	let virtualized = $derived(edges.length >= VIRTUALIZE_THRESHOLD)
+	let virtualized = $derived(edges.length > VIRTUALIZE_THRESHOLD)
 	let rowStyle = $derived(
 		virtualized
 			? `content-visibility: auto; contain-intrinsic-size: 0 ${VIRTUAL_ROW_HEIGHT_PX}px;`
 			: ''
 	)
+	let liveWorkRunIds = $derived(
+		edges
+			.filter((edge) => edge.node.layer === 'work' && edge.node.status === 'running')
+			.map((edge) => edge.node.id)
+	)
+
+	$effect(() => {
+		const runningIds = liveWorkRunIds
+		if (runningIds.length === 0) {
+			livePhaseByRunId = new Map()
+			return
+		}
+
+		const disposers = runningIds.map((runId) =>
+			subscribeWorkerProgress(runId, (evt) => {
+				const next = new Map(livePhaseByRunId)
+				next.set(evt.workerID, evt.phase)
+				livePhaseByRunId = next
+			})
+		)
+
+		return () => disposers.forEach((dispose) => dispose())
+	})
 
 	const LAYER_OPTIONS = ['work', 'try', 'run']
 	const STATUS_OPTIONS = ['pending', 'running', 'success', 'failure', 'preserved']
@@ -250,6 +275,29 @@
 				return 'badge-status-running'
 			case 'preserved':
 				return 'badge-status-in-progress'
+			default:
+				return 'badge-status-open'
+		}
+	}
+
+	function phaseBadgeClass(phase: string): string {
+		switch (phase) {
+			case 'queueing':
+				return 'border-gray-300 bg-gray-100 text-gray-700 dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-muted'
+			case 'running':
+				return 'border-status-running bg-status-running/10 text-status-running'
+			case 'launching':
+				return 'border-status-open bg-status-open/10 text-status-open'
+			case 'post_checks':
+				return 'border-yellow-300 bg-yellow-100 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300'
+			case 'landing':
+				return 'border-purple-300 bg-purple-100 text-purple-800 dark:border-purple-700 dark:bg-purple-900/30 dark:text-purple-300'
+			case 'done':
+				return 'border-teal-300 bg-teal-100 text-teal-800 dark:border-teal-700 dark:bg-teal-900/30 dark:text-teal-300'
+			case 'preserved':
+				return 'badge-status-in-progress'
+			case 'failed':
+				return 'badge-status-failed'
 			default:
 				return 'badge-status-open'
 		}
@@ -365,6 +413,7 @@
 			<tbody>
 				{#each edges as edge (edge.cursor)}
 					{@const isExpanded = expanded.has(edge.node.id)}
+					{@const livePhase = livePhaseByRunId.get(edge.node.id)}
 					<tr
 						class="cursor-pointer border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface {isExpanded
 							? 'bg-accent-lever/10 dark:bg-dark-accent-lever/10'
@@ -385,6 +434,18 @@
 							<span class="inline-block border px-1.5 py-0.5 font-mono-code text-mono-code uppercase {statusBadgeClass(edge.node.status)}">
 								{edge.node.status}
 							</span>
+							{#if livePhase}
+								<div class="mt-1">
+									<span
+										data-testid="live-phase-{edge.node.id}"
+										class="inline-block rounded-full border px-2 py-0.5 font-label-caps text-[10px] uppercase tracking-wide {phaseBadgeClass(
+											livePhase ?? ''
+										)}"
+									>
+										{livePhase}
+									</span>
+								</div>
+							{/if}
 						</td>
 						<td class="px-4 py-3">
 							{#if edge.node.beadId}

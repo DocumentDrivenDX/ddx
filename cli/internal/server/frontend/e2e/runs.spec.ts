@@ -164,6 +164,69 @@ function listRowFor(node: typeof workNode) {
 	};
 }
 
+async function mockWorkerProgress(page: import('@playwright/test').Page) {
+	const subscriptions = new Map<
+		string,
+		Array<{ id: string; ws: { send: (message: string) => void } }>
+	>();
+
+	await page.routeWebSocket('**/graphql', (ws) => {
+		ws.onMessage((msg) => {
+			const parsed = JSON.parse(msg as string) as {
+				id?: string;
+				type: string;
+				payload?: { query?: string; variables?: { workerID?: string } };
+			};
+
+			if (parsed.type === 'connection_init') {
+				ws.send(JSON.stringify({ type: 'connection_ack' }));
+				return;
+			}
+
+			if (
+				parsed.type === 'subscribe' &&
+				parsed.id &&
+				parsed.payload?.query?.includes('workerProgress')
+			) {
+				const workerID = parsed.payload.variables?.workerID;
+				if (!workerID) return;
+				const existing = subscriptions.get(workerID) ?? [];
+				existing.push({ id: parsed.id, ws });
+				subscriptions.set(workerID, existing);
+			}
+		});
+	});
+
+	return {
+		hasSubscription(workerID: string) {
+			return (subscriptions.get(workerID)?.length ?? 0) > 0;
+		},
+		send(workerID: string, phase: string) {
+			const entries = subscriptions.get(workerID) ?? [];
+			for (const entry of entries) {
+				entry.ws.send(
+					JSON.stringify({
+						id: entry.id,
+						type: 'next',
+						payload: {
+							data: {
+								workerProgress: {
+									eventID: `${workerID}-${phase}`,
+									workerID,
+									phase,
+									timestamp: '2026-04-22T12:00:00Z',
+									logLine: null,
+									beadID: null
+								}
+							}
+						}
+					})
+				);
+			}
+		}
+	};
+}
+
 test('runs work→try→run drill-down with breadcrumb back-navigation and artifact link', async ({
 	page
 }) => {
@@ -530,6 +593,141 @@ test('bead detail shows linked runs and click navigates to run detail', async ({
 	await linkedRuns.locator(`a[href$="/runs/${TRY_ID}"]`).click();
 	await expect(page).toHaveURL(new RegExp(`/runs/${TRY_ID}$`));
 	await expect(page.locator('h1', { hasText: TRY_ID })).toBeVisible();
+});
+
+test('runs page virtualizes after 1000 rows and keeps live worker phases updating', async ({
+	page
+}) => {
+	const liveWorkerID = 'run-work-live-001';
+	const ws = await mockWorkerProgress(page);
+	const manyRows = Array.from({ length: 1001 }, (_, index) => {
+		const isLive = index === 0;
+		return {
+			id: isLive ? liveWorkerID : `run-work-${index + 1}`,
+			layer: 'work',
+			status: isLive ? 'running' : 'success',
+			projectID: PROJECT_ID,
+			beadId: isLive ? BEAD_ID : null,
+			startedAt: `2026-04-30T10:${String(index % 60).padStart(2, '0')}:00Z`,
+			durationMs: isLive ? 1200 : 600,
+			harness: null,
+			queueInputs: isLive ? '{"selected":["ddx-runs-test"]}' : null
+		};
+	});
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, unknown>;
+		};
+
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+			return;
+		}
+		if (body.query.includes('ProjectsForLayout') || body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((node) => ({ node })) } } })
+			});
+			return;
+		}
+		if (body.query.includes('ProjectRuns')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						runs: {
+							edges: manyRows.map((node) => ({ node, cursor: node.id })),
+							pageInfo: { hasNextPage: false, endCursor: null },
+							totalCount: manyRows.length
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('ParentRunParent')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { run: null } })
+			});
+			return;
+		}
+		if (
+			body.query.includes('RunHeader') ||
+			body.query.includes('RunDetailExpand') ||
+			body.query.includes('RunDetail') ||
+			body.query.includes('RunExists')
+		) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { run: null } })
+			});
+			return;
+		}
+		if (body.query.includes('RunExecutionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { execution: null } })
+			});
+			return;
+		}
+		if (body.query.includes('RunSessionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { agentSession: null } })
+			});
+			return;
+		}
+		if (body.query.includes('RunToolCallsExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						executionToolCalls: {
+							edges: [],
+							pageInfo: { hasNextPage: false, endCursor: null },
+							totalCount: 0
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('ProducedArtifact')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { artifact: null } })
+			});
+			return;
+		}
+		await route.continue();
+	});
+
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs?layer=work`);
+
+	await expect(page.getByTestId('runs-table')).toHaveAttribute('data-virtualized', 'true');
+	await expect(page.getByRole('row')).toHaveCount(1002);
+	await expect.poll(() => ws.hasSubscription(liveWorkerID)).toBe(true);
+
+	await expect(page.getByTestId(`live-phase-${liveWorkerID}`)).toHaveCount(0);
+	ws.send(liveWorkerID, 'queueing');
+	await expect(page.getByTestId(`live-phase-${liveWorkerID}`)).toHaveText('queueing');
+	ws.send(liveWorkerID, 'running');
+	await expect(page.getByTestId(`live-phase-${liveWorkerID}`)).toHaveText('running');
 });
 
 test('run detail page tabbed UI: 5 tabs, URL-driven tab state, navigation', async ({ page }) => {
