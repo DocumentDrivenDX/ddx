@@ -1,0 +1,43 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T06:18:47-04:00)",
+  "error": "review-error: transport",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1020,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260505T101154-d0ca2c08/manifest.json",
+          ".ddx/executions/20260505T101154-d0ca2c08/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 105094,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 107920,
+    "output_bytes": 0,
+    "elapsed_ms": 4176,
+    "harness": "claude",
+    "model": "claude-opus-4-6"
+  }
+}
