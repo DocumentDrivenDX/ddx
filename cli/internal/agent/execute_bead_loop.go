@@ -184,6 +184,30 @@ func (w *ExecuteBeadWorker) handleOutcomeStoreError(ctx context.Context, beadID,
 	return true
 }
 
+// runPostAttemptTriage invokes the optional post-attempt triage hook after
+// the attempt outcome has been finalized but before any cooldown decision is
+// applied. Hook failures are fail-open: the report is returned unchanged and
+// legacy cooldown behavior remains in force.
+func (w *ExecuteBeadWorker) runPostAttemptTriage(ctx context.Context, candidate bead.Bead, report ExecuteBeadReport, runtime ExecuteBeadLoopRuntime, assignee string, now func() time.Time) ExecuteBeadReport {
+	hook := runtime.PostAttemptTriageHook
+	if hook == nil {
+		return report
+	}
+	triage, err := hook(ctx, candidate.ID, report)
+	if err != nil {
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "post-attempt triage error (%s %s): %v (continuing)\n", candidate.ID, report.Status, err)
+		}
+		return report
+	}
+	if strings.TrimSpace(triage.Classification) == "" {
+		return report
+	}
+	report.OutcomeReason = triage.Classification
+	recordPostAttemptTriageEvent(w.Store, candidate.ID, report, triage, assignee, now().UTC())
+	return report
+}
+
 // CapLoopCooldown clamps a loop-set cooldown duration to MaxLoopCooldown.
 // The loop uses this for every SetExecutionCooldown call so no automatic
 // path can silently park a bead for a year.
@@ -1014,6 +1038,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				} else {
 					// Unresolved: suppress immediate retry so the queue can
 					// move on to other beads.
+					report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
 					if shouldSuppressNoProgress(report) {
 						retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
 						if cerr := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); cerr != nil {
@@ -1034,6 +1059,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				// long enough that subsequent loop iterations do NOT
 				// re-attempt it. An operator (or helix-evolve) clears the
 				// cooldown — typically by splitting the bead.
+				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
 				body, mErr := json.Marshal(map[string]any{
 					"rationale":            report.DecompositionRationale,
 					"recommended_subbeads": report.DecompositionRecommendation,
@@ -1076,6 +1102,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				// 24h cap so the loop re-attempts within a reasonable horizon.
 				// The push stderr in report.Detail is recorded as last_detail
 				// so it surfaces on the bead and on any direct claim attempt.
+				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
 				parkUntil := now().UTC().Add(CapLoopCooldown(MaxLoopCooldown))
 				if err := w.Store.SetExecutionCooldown(candidate.ID, parkUntil, report.Status, report.Detail); err != nil {
 					if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", err, assignee, result, runtime, now) {
@@ -1093,6 +1120,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				// `push-conflict` event with the conflict context so the
 				// operator can find and resolve it, and park the bead under
 				// the same 24h cap as push_failed.
+				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
 				body, mErr := json.Marshal(map[string]any{
 					"detail":     report.Detail,
 					"base_rev":   report.BaseRev,
@@ -1122,6 +1150,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				result.Failures++
 				result.LastFailureStatus = report.Status
 			} else {
+				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
 				if shouldSuppressNoProgress(report) {
 					retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
 					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); err != nil {
