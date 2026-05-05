@@ -45,6 +45,8 @@ func TestAttempt_NoChanges_StaysCanonical_NotNeedsInvestigation(t *testing.T) {
 	assert.Equal(t, StatusNoChanges, out.Report.Status)
 	require.NotNil(t, out.NoChanges)
 	assert.False(t, out.NoChanges.Satisfied)
+	assert.Equal(t, NoChangesActionNeedsHumanNoCooldown, out.NoChanges.Action)
+	assert.False(t, out.NoChanges.CooldownEligible)
 	assert.Equal(t, NoChangesEventNeedsInvestigation, out.NoChanges.EventKind)
 	assert.Equal(t, NoChangesLabelNeedsInvestigation, out.NoChanges.Label)
 	assert.Contains(t, out.NoChanges.EventBody, "provider quota unknown")
@@ -76,9 +78,93 @@ func TestAttempt_NoChanges_WiresAdjudicateNoChangesContract(t *testing.T) {
 	assert.Equal(t, StatusAlreadySatisfied, out.Report.Status)
 	require.NotNil(t, out.NoChanges)
 	assert.True(t, out.NoChanges.Satisfied)
+	assert.Equal(t, NoChangesActionCloseAlreadySatisfied, out.NoChanges.Action)
+	assert.False(t, out.NoChanges.CooldownEligible)
 	assert.Equal(t, NoChangesEventVerified, out.NoChanges.EventKind)
 	assert.Empty(t, out.NoChanges.Label)
 	assert.Equal(t, 1, runnerCalls)
+}
+
+func TestAttempt_NoChangesVerified_ReturnsCloseAlreadySatisfied(t *testing.T) {
+	store := &attemptStore{}
+
+	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
+		Store: store,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{
+				BeadID:             beadID,
+				Status:             StatusNoChanges,
+				NoChangesRationale: "verification_command: true",
+			}, nil
+		}),
+		VerificationRunner: func(context.Context, string, string) (int, string, error) {
+			return 0, "already green", nil
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, OutcomeReported, out.Disposition)
+	assert.Equal(t, StatusAlreadySatisfied, out.Report.Status)
+	require.NotNil(t, out.NoChanges)
+	assert.True(t, out.NoChanges.Satisfied)
+	assert.Equal(t, NoChangesActionCloseAlreadySatisfied, out.NoChanges.Action)
+	assert.False(t, out.NoChanges.CooldownEligible)
+	assert.Equal(t, NoChangesEventVerified, out.NoChanges.EventKind)
+	assert.Empty(t, out.NoChanges.Label)
+	assert.Equal(t, 1, store.noChangesCountCalls)
+}
+
+func TestAttempt_NoChangesNeedsInvestigation_ReturnsNeedsHumanNoCooldown(t *testing.T) {
+	store := &attemptStore{}
+
+	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
+		Store: store,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{
+				BeadID:             beadID,
+				Status:             StatusNoChanges,
+				NoChangesRationale: "status: needs_investigation\nreason: spec conflict needs operator",
+			}, nil
+		}),
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, OutcomeReported, out.Disposition)
+	assert.Equal(t, StatusNoChanges, out.Report.Status)
+	require.NotNil(t, out.NoChanges)
+	assert.False(t, out.NoChanges.Satisfied)
+	assert.Equal(t, NoChangesActionNeedsHumanNoCooldown, out.NoChanges.Action)
+	assert.False(t, out.NoChanges.CooldownEligible)
+	assert.Equal(t, NoChangesEventNeedsInvestigation, out.NoChanges.EventKind)
+	assert.Equal(t, NoChangesLabelNeedsInvestigation, out.NoChanges.Label)
+	assert.Contains(t, out.NoChanges.EventBody, "spec conflict needs operator")
+	assert.Empty(t, out.Report.RetryAfter)
+}
+
+func TestAttempt_NoChangesUnjustified_ReturnsBadAttemptNoLongCooldown(t *testing.T) {
+	store := &attemptStore{}
+
+	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
+		Store: store,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{
+				BeadID: beadID,
+				Status: StatusNoChanges,
+			}, nil
+		}),
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, OutcomeReported, out.Disposition)
+	assert.Equal(t, StatusNoChanges, out.Report.Status)
+	require.NotNil(t, out.NoChanges)
+	assert.False(t, out.NoChanges.Satisfied)
+	assert.Equal(t, NoChangesActionBadAttemptNoCooldown, out.NoChanges.Action)
+	assert.False(t, out.NoChanges.CooldownEligible)
+	assert.Equal(t, NoChangesEventUnjustified, out.NoChanges.EventKind)
+	assert.Equal(t, NoChangesLabelUnjustified, out.NoChanges.Label)
+	assert.Contains(t, out.NoChanges.EventBody, "rationale absent")
+	assert.Empty(t, out.Report.RetryAfter)
 }
 
 func TestAttempt_ConflictRecovered_ReturnsMergedOutcome(t *testing.T) {
@@ -221,6 +307,32 @@ func TestAttempt_PushFailed_ParksWithCooldown(t *testing.T) {
 	assert.Equal(t, now.Add(maxAttemptCooldown), out.Parking.RetryAfter)
 	assert.Equal(t, now.Add(maxAttemptCooldown).Format(time.RFC3339), out.Report.RetryAfter)
 	require.Empty(t, store.events)
+}
+
+func TestAttempt_TransportOrRateLimit_ReturnsRetryLaterCooldown(t *testing.T) {
+	store := &attemptStore{}
+	now := time.Date(2026, 5, 5, 10, 11, 12, 0, time.UTC)
+
+	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
+		Store: store,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{
+				BeadID: beadID,
+				Status: StatusPushFailed,
+				Detail: PushFailedReasonPrefix + " transport unavailable",
+			}, nil
+		}),
+		Now: func() time.Time { return now },
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, OutcomePark, out.Disposition)
+	require.NotNil(t, out.Parking)
+	assert.True(t, out.Parking.Unclaim)
+	assert.Equal(t, now.Add(maxAttemptCooldown), out.Parking.RetryAfter)
+	assert.Equal(t, now.Add(maxAttemptCooldown).Format(time.RFC3339), out.Report.RetryAfter)
+	assert.Equal(t, StatusPushFailed, out.Report.Status)
+	assert.Nil(t, out.NoChanges)
 }
 
 func TestAttempt_PushConflict_ParksWithCooldown(t *testing.T) {

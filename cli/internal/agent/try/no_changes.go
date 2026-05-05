@@ -122,12 +122,23 @@ type SatisfactionChecker interface {
 }
 
 type NoChangesOutcome struct {
-	Satisfied bool
-	Evidence  string
-	EventKind string
-	EventBody string
-	Label     string
+	Satisfied        bool
+	Action           NoChangesLifecycleAction
+	CooldownEligible bool
+	Evidence         string
+	EventKind        string
+	EventBody        string
+	Label            string
 }
+
+type NoChangesLifecycleAction string
+
+const (
+	NoChangesActionCloseAlreadySatisfied NoChangesLifecycleAction = "close_already_satisfied"
+	NoChangesActionNeedsHumanNoCooldown  NoChangesLifecycleAction = "needs_human_no_cooldown"
+	NoChangesActionBadAttemptNoCooldown  NoChangesLifecycleAction = "bad_attempt_no_cooldown"
+	NoChangesActionRetryLaterCooldown    NoChangesLifecycleAction = "retry_later_cooldown"
+)
 
 func adjudicateNoChangesContract(ctx context.Context, beadID string, report Report, projectRoot string, noChangesCount int, checker SatisfactionChecker, runner VerificationCommandRunner) (NoChangesOutcome, Report, error) {
 	if checker != nil {
@@ -140,9 +151,18 @@ func adjudicateNoChangesContract(ctx context.Context, beadID string, report Repo
 				report.Detail = evidence
 			}
 			report.Status = StatusAlreadySatisfied
-			return NoChangesOutcome{Satisfied: true, Evidence: evidence}, report, nil
+			return NoChangesOutcome{
+				Satisfied:        true,
+				Action:           NoChangesActionCloseAlreadySatisfied,
+				CooldownEligible: false,
+				Evidence:         evidence,
+			}, report, nil
 		}
-		return NoChangesOutcome{Satisfied: false}, report, nil
+		return NoChangesOutcome{
+			Satisfied:        false,
+			Action:           NoChangesActionBadAttemptNoCooldown,
+			CooldownEligible: false,
+		}, report, nil
 	}
 
 	parsed := ParseNoChangesRationale(report.NoChangesRationale)
@@ -164,17 +184,21 @@ func adjudicateNoChangesContract(ctx context.Context, beadID string, report Repo
 			report.Detail = evidence
 			report.Status = StatusAlreadySatisfied
 			return NoChangesOutcome{
-				Satisfied: true,
-				Evidence:  evidence,
-				EventKind: NoChangesEventVerified,
-				EventBody: body,
+				Satisfied:        true,
+				Action:           NoChangesActionCloseAlreadySatisfied,
+				CooldownEligible: false,
+				Evidence:         evidence,
+				EventKind:        NoChangesEventVerified,
+				EventBody:        body,
 			}, report, nil
 		}
 		return NoChangesOutcome{
-			Satisfied: false,
-			EventKind: NoChangesEventUnverified,
-			EventBody: body,
-			Label:     NoChangesLabelUnverified,
+			Satisfied:        false,
+			Action:           NoChangesActionBadAttemptNoCooldown,
+			CooldownEligible: false,
+			EventKind:        NoChangesEventUnverified,
+			EventBody:        body,
+			Label:            NoChangesLabelUnverified,
 		}, report, nil
 	case NoChangesKindNeedsInvestigation:
 		body := parsed.NeedsInvestigationReason
@@ -182,10 +206,12 @@ func adjudicateNoChangesContract(ctx context.Context, beadID string, report Repo
 			body = "(no reason provided)"
 		}
 		return NoChangesOutcome{
-			Satisfied: false,
-			EventKind: NoChangesEventNeedsInvestigation,
-			EventBody: body,
-			Label:     NoChangesLabelNeedsInvestigation,
+			Satisfied:        false,
+			Action:           NoChangesActionNeedsHumanNoCooldown,
+			CooldownEligible: false,
+			EventKind:        NoChangesEventNeedsInvestigation,
+			EventBody:        body,
+			Label:            NoChangesLabelNeedsInvestigation,
 		}, report, nil
 	default:
 		body := strings.TrimSpace(report.NoChangesRationale)
@@ -193,10 +219,12 @@ func adjudicateNoChangesContract(ctx context.Context, beadID string, report Repo
 			body = "(rationale absent)"
 		}
 		return NoChangesOutcome{
-			Satisfied: false,
-			EventKind: NoChangesEventUnjustified,
-			EventBody: body,
-			Label:     NoChangesLabelUnjustified,
+			Satisfied:        false,
+			Action:           NoChangesActionBadAttemptNoCooldown,
+			CooldownEligible: false,
+			EventKind:        NoChangesEventUnjustified,
+			EventBody:        body,
+			Label:            NoChangesLabelUnjustified,
 		}, report, nil
 	}
 }
