@@ -1,0 +1,2 @@
+status: needs_investigation
+reason: The requested behavior spans multiple feature-sized slices and no single existing prompt-assembly seam covers all four ACs. I decomposed ddx-0e5c3005 into child beads .execute-bead-wt-ddx-0e5c3005-20260505T113434-3317d134-f25a64d9 (structured multi-turn prompt assembly, FEAT-022 byte accounting, and PROMPT_BUDGET_EXCEEDED refusal) and .execute-bead-wt-ddx-0e5c3005-20260505T113434-3317d134-7fb75345 (untrusted-data artifact delimiters). A follow-up should implement those slices independently and then reconcile the parent contract.
