@@ -1677,9 +1677,12 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		loopSink = workerprobe.TeeJSONL(io.Discard, probe)
 	}
 
-	// Start session log tailer so the user sees progress during agent execution
+	// Start session log tailer so the user sees progress during agent execution.
+	// JSON mode must stay machine-readable, so suppress the live human tailer.
 	tailCtx, tailCancel := context.WithCancel(context.Background())
-	go agent.TailSessionLogs(tailCtx, projectRoot, cmd.OutOrStdout())
+	if !asJSON {
+		go agent.TailSessionLogs(tailCtx, projectRoot, cmd.OutOrStdout())
+	}
 
 	// Instantiate a process-local LandCoordinator for the inline land path.
 	// Stopped on function exit.

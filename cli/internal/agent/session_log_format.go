@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // Session log JSONL schema reference.
@@ -268,10 +269,214 @@ func truncateStr(s string, maxLen int) string {
 
 func formatProgressLogEntry(entry map[string]any) string {
 	data, _ := entry["data"].(map[string]any)
+	phase, _ := data["phase"].(string)
+	state, _ := data["state"].(string)
+	if line := formatStructuredProgressLine(phase, state, data); line != "" {
+		return "  " + line + "\n"
+	}
 	message, _ := data["message"].(string)
-
 	if message != "" {
 		return fmt.Sprintf("  %s\n", truncateStr(message, 120))
 	}
 	return ""
+}
+
+func formatStructuredProgressLine(phase, state string, data map[string]any) string {
+	switch phase {
+	case "thinking":
+		return formatThinkingProgressLine(state, data)
+	case "tool":
+		return formatToolProgressLine(state, data)
+	case "response":
+		return formatResponseProgressLine(state, data)
+	case "context":
+		return formatContextProgressLine(state, data)
+	case "compaction":
+		return formatCompactionProgressLine(state, data)
+	default:
+		return ""
+	}
+}
+
+func formatThinkingProgressLine(state string, data map[string]any) string {
+	switch state {
+	case "start":
+		return "thinking ..."
+	case "update":
+		msg := progressSummaryFromData(data)
+		if msg == "" {
+			msg = "thinking update ..."
+		} else {
+			msg = "thinking update: " + msg
+		}
+		return truncateStr(msg, 120)
+	case "complete":
+		tokens := progressTokenCount(data, "output_tokens", "total_tokens", "input_tokens")
+		duration := progressDurationString(data)
+		if tokens > 0 && duration != "" {
+			return fmt.Sprintf("thinking complete %d tok in %s", tokens, duration)
+		}
+		if tokens > 0 {
+			return fmt.Sprintf("thinking complete %d tok", tokens)
+		}
+		if duration != "" {
+			return fmt.Sprintf("thinking complete in %s", duration)
+		}
+		return "thinking complete"
+	default:
+		return ""
+	}
+}
+
+func formatToolProgressLine(state string, data map[string]any) string {
+	toolName, _ := data["tool_name"].(string)
+	command, _ := data["command"].(string)
+	display := toolName
+	if command != "" {
+		display = command
+	}
+	if display != "" {
+		display = fmt.Sprintf("`%s`", truncateStr(display, 80))
+	}
+	switch state {
+	case "start":
+		if display != "" {
+			return fmt.Sprintf("running tool call %s ...", display)
+		}
+		return "running tool call ..."
+	case "complete":
+		tokens := progressTokenCount(data, "total_tokens", "output_tokens", "input_tokens")
+		duration := progressDurationString(data)
+		line := "tool call completed"
+		if display != "" {
+			line = "tool call " + display + " completed"
+		}
+		switch {
+		case duration != "" && tokens > 0:
+			line += fmt.Sprintf(" in %s, %d tok", duration, tokens)
+		case duration != "":
+			line += fmt.Sprintf(" in %s", duration)
+		case tokens > 0:
+			line += fmt.Sprintf(", %d tok", tokens)
+		}
+		return line
+	default:
+		return ""
+	}
+}
+
+func formatResponseProgressLine(state string, data map[string]any) string {
+	switch state {
+	case "complete":
+		tokens := progressTokenCount(data, "output_tokens", "total_tokens", "input_tokens")
+		duration := progressDurationString(data)
+		if tokens > 0 && duration != "" {
+			return fmt.Sprintf("response complete %d tok in %s", tokens, duration)
+		}
+		if tokens > 0 {
+			return fmt.Sprintf("response complete %d tok", tokens)
+		}
+		if duration != "" {
+			return fmt.Sprintf("response complete in %s", duration)
+		}
+		return "response complete"
+	default:
+		return ""
+	}
+}
+
+func formatContextProgressLine(state string, data map[string]any) string {
+	switch state {
+	case "update", "complete":
+		summary := progressSummaryFromData(data)
+		if summary != "" {
+			return truncateStr("context summary: "+summary, 120)
+		}
+		msg := "context summary updated"
+		if state == "complete" {
+			msg = "context summary complete"
+		}
+		return msg
+	default:
+		return ""
+	}
+}
+
+func formatCompactionProgressLine(state string, data map[string]any) string {
+	switch state {
+	case "start":
+		return "compaction started"
+	case "update":
+		summary := progressSummaryFromData(data)
+		if summary != "" {
+			return truncateStr("compaction update: "+summary, 120)
+		}
+		return "compaction update"
+	case "complete":
+		before := progressInt(data, "tokens_before")
+		after := progressInt(data, "tokens_after")
+		summary := progressSummaryFromData(data)
+		line := "compaction complete"
+		if before > 0 && after > 0 {
+			line = fmt.Sprintf("compaction complete %d -> %d tokens", before, after)
+		}
+		if summary != "" {
+			line += ": " + summary
+		}
+		return truncateStr(line, 120)
+	default:
+		return ""
+	}
+}
+
+func progressSummaryFromData(data map[string]any) string {
+	if data == nil {
+		return ""
+	}
+	for _, key := range []string{"session_summary", "summary", "message"} {
+		if v, ok := data[key].(string); ok && strings.TrimSpace(v) != "" {
+			return truncateStr(strings.TrimSpace(v), 120)
+		}
+	}
+	return ""
+}
+
+func progressTokenCount(data map[string]any, keys ...string) int {
+	for _, key := range keys {
+		if v, ok := data[key]; ok {
+			switch n := v.(type) {
+			case float64:
+				if n > 0 {
+					return int(n)
+				}
+			case int:
+				if n > 0 {
+					return n
+				}
+			}
+		}
+	}
+	return 0
+}
+
+func progressInt(data map[string]any, key string) int {
+	if data == nil {
+		return 0
+	}
+	switch v := data[key].(type) {
+	case float64:
+		return int(v)
+	case int:
+		return v
+	default:
+		return 0
+	}
+}
+
+func progressDurationString(data map[string]any) string {
+	ms := progressInt(data, "duration_ms")
+	if ms <= 0 {
+		return ""
+	}
+	return (time.Duration(ms) * time.Millisecond).String()
 }

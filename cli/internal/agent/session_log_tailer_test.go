@@ -40,7 +40,7 @@ func TestTailSessionLogs_ProgressEventsNotReplayed(t *testing.T) {
 	readNewLogLines(root, logDir, states, &out)
 	got := out.String()
 	assert.NotContains(t, got, "thinking ...")
-	assert.Contains(t, got, "ddx-99419bc1 #1 thought 5.0s")
+	assert.Contains(t, got, "thinking complete 8 tok in 5s")
 
 	out.Reset()
 	readNewLogLines(root, logDir, states, &out)
