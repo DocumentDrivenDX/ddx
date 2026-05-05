@@ -1,0 +1,1 @@
+DELETE internal/registry/manifest.go:126 — the stale `MarshalPackage` coordinate from the bead description is no longer present in this checkout; the production manifest-loading path now flows through `LoadPackageManifestWithFallback` at `cli/internal/registry/manifest.go:124` and is called from `cli/internal/registry/audit.go:52` and `cli/internal/registry/installer.go:63`.
