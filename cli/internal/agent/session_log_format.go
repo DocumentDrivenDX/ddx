@@ -277,6 +277,10 @@ func formatProgressLogEntry(entry map[string]any) string {
 	durationMS, _ := data["duration_ms"].(float64)
 	totalTokens := progressTokenCount(data)
 
+	if message != "" {
+		return fmt.Sprintf("  %s\n", truncateStr(message, 120))
+	}
+
 	tokenSuffix := progressTokenSuffix(totalTokens, false)
 	if totalTokens > 0 {
 		tokenSuffix = progressTokenSuffix(totalTokens, true)
