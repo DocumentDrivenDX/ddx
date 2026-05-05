@@ -51,6 +51,12 @@ type HistoryRecord struct {
 	ArtifactID   string           `json:"artifact_id,omitempty"`
 }
 
+// HistoryGroup groups one metric history series by unit.
+type HistoryGroup struct {
+	Unit    string          `json:"unit,omitempty"`
+	Records []HistoryRecord `json:"records"`
+}
+
 // ComparisonResult records the comparison against a baseline or target.
 type ComparisonResult struct {
 	Baseline  float64 `json:"baseline"`

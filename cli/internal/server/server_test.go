@@ -504,15 +504,21 @@ func TestMetricHistoryEndpoint(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
-	var history []metric.HistoryRecord
+	var history []metric.HistoryGroup
 	if err := json.Unmarshal(w.Body.Bytes(), &history); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if len(history) != 2 {
-		t.Fatalf("expected 2 history records, got %d", len(history))
+	if len(history) != 1 {
+		t.Fatalf("expected 1 history group, got %d", len(history))
 	}
-	if history[0].MetricID != "MET-001" {
-		t.Errorf("expected MET-001, got %q", history[0].MetricID)
+	if history[0].Unit != "ms" {
+		t.Errorf("expected ms, got %q", history[0].Unit)
+	}
+	if len(history[0].Records) != 2 {
+		t.Fatalf("expected 2 records in first group, got %d", len(history[0].Records))
+	}
+	if history[0].Records[0].MetricID != "MET-001" {
+		t.Errorf("expected MET-001, got %q", history[0].Records[0].MetricID)
 	}
 }
 
@@ -572,11 +578,11 @@ func TestMCPMetricHistory(t *testing.T) {
 	content := result["content"].([]any)
 	text := content[0].(map[string]any)["text"].(string)
 
-	var history []metric.HistoryRecord
+	var history []metric.HistoryGroup
 	if err := json.Unmarshal([]byte(text), &history); err != nil {
 		t.Fatalf("MCP metric_history not valid JSON: %v", err)
 	}
-	if len(history) != 2 || history[0].MetricID != "MET-001" {
+	if len(history) != 1 || history[0].Unit != "ms" || len(history[0].Records) != 2 {
 		t.Fatalf("unexpected history payload: %+v", history)
 	}
 }

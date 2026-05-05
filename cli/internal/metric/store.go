@@ -90,6 +90,9 @@ func (s *Store) Compare(metricID, against string) (HistoryRecord, ComparisonResu
 	if len(history) == 0 {
 		return HistoryRecord{}, ComparisonResult{}, fmt.Errorf("no history for metric %q", metricID)
 	}
+	if _, err := singleHistoryUnit(metricID, history); err != nil {
+		return HistoryRecord{}, ComparisonResult{}, err
+	}
 	current := history[len(history)-1]
 	target, err := selectComparisonTarget(history, against)
 	if err != nil {
@@ -108,7 +111,11 @@ func (s *Store) Trend(metricID string) (TrendSummary, error) {
 	if len(history) == 0 {
 		return TrendSummary{}, fmt.Errorf("no history for metric %q", metricID)
 	}
-	summary := TrendSummary{MetricID: metricID, Min: history[0].Value, Max: history[0].Value, Latest: history[len(history)-1].Value, Unit: history[len(history)-1].Unit, UpdatedAt: history[len(history)-1].ObservedAt}
+	unit, err := singleHistoryUnit(metricID, history)
+	if err != nil {
+		return TrendSummary{}, err
+	}
+	summary := TrendSummary{MetricID: metricID, Min: history[0].Value, Max: history[0].Value, Latest: history[len(history)-1].Value, Unit: unit, UpdatedAt: history[len(history)-1].ObservedAt}
 	var sum float64
 	for _, rec := range history {
 		if rec.Value < summary.Min {
@@ -119,13 +126,20 @@ func (s *Store) Trend(metricID string) (TrendSummary, error) {
 		}
 		sum += rec.Value
 		summary.UpdatedAt = rec.ObservedAt
-		if rec.Unit != "" {
-			summary.Unit = rec.Unit
-		}
 	}
 	summary.Count = len(history)
 	summary.Average = sum / float64(len(history))
 	return summary, nil
+}
+
+// GroupedHistory returns history rows partitioned by unit while preserving
+// the observed order within each unit group.
+func (s *Store) GroupedHistory(metricID string) ([]HistoryGroup, error) {
+	history, err := s.History(metricID)
+	if err != nil {
+		return nil, err
+	}
+	return groupHistoryByUnit(history), nil
 }
 
 func (s *Store) LoadDefinition(metricID string) (Definition, error) {
@@ -227,4 +241,52 @@ func comparisonFor(current, baseline float64, direction string) ComparisonResult
 		Delta:     delta,
 		Direction: direction,
 	}
+}
+
+func singleHistoryUnit(metricID string, history []HistoryRecord) (string, error) {
+	var (
+		unit    string
+		seenSet = map[string]struct{}{}
+		seen    []string
+	)
+	for _, rec := range history {
+		if _, ok := seenSet[rec.Unit]; ok {
+			continue
+		}
+		seenSet[rec.Unit] = struct{}{}
+		seen = append(seen, rec.Unit)
+		if len(seen) == 1 {
+			unit = rec.Unit
+		}
+	}
+	if len(seen) <= 1 {
+		return unit, nil
+	}
+	units := make([]string, 0, len(seen))
+	for _, v := range seen {
+		if v == "" {
+			units = append(units, "(none)")
+			continue
+		}
+		units = append(units, v)
+	}
+	return "", fmt.Errorf("metric %q has mixed units: %s", metricID, strings.Join(units, ", "))
+}
+
+func groupHistoryByUnit(history []HistoryRecord) []HistoryGroup {
+	if len(history) == 0 {
+		return []HistoryGroup{}
+	}
+	indexByUnit := make(map[string]int, len(history))
+	groups := make([]HistoryGroup, 0, len(history))
+	for _, rec := range history {
+		idx, ok := indexByUnit[rec.Unit]
+		if !ok {
+			idx = len(groups)
+			indexByUnit[rec.Unit] = idx
+			groups = append(groups, HistoryGroup{Unit: rec.Unit})
+		}
+		groups[idx].Records = append(groups[idx].Records, rec)
+	}
+	return groups
 }

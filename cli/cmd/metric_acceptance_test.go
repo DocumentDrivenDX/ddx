@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -21,11 +20,19 @@ func newMetricTestRoot(t *testing.T, workingDir string) *CommandFactory {
 	return NewCommandFactory(workingDir)
 }
 
+func writeMetricArtifact(t *testing.T, workingDir, id, title string) {
+	t.Helper()
+	artifactPath := filepath.Join(workingDir, "docs", "metrics", id+".md")
+	require.NoError(t, os.MkdirAll(filepath.Dir(artifactPath), 0o755))
+	if title == "" {
+		title = id
+	}
+	require.NoError(t, os.WriteFile(artifactPath, []byte("---\nddx:\n  id: "+id+"\n---\n# "+title+"\n"), 0o644))
+}
+
 func writeMetricFixture(t *testing.T, workingDir string) {
 	t.Helper()
-	artifactPath := filepath.Join(workingDir, "docs", "metrics", "MET-001.md")
-	require.NoError(t, os.MkdirAll(filepath.Dir(artifactPath), 0o755))
-	require.NoError(t, os.WriteFile(artifactPath, []byte("---\nddx:\n  id: MET-001\n---\n# Metric Startup Time\n"), 0o644))
+	writeMetricArtifact(t, workingDir, "MET-001", "Metric Startup Time")
 
 	store := ddxexec.NewStore(workingDir)
 	require.NoError(t, store.SaveDefinition(ddxexec.Definition{
@@ -82,9 +89,11 @@ func TestMetricCommandsValidateRunHistoryAndCompare(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, validateOut, "validated")
 
-	store := ddxexec.NewStore(workingDir)
-	_, err = store.Run(context.Background(), "exec-metric-startup-time@baseline")
+	execRunOut, err := executeCommand(rootCmd, "exec", "run", "exec-metric-startup-time@baseline", "--json")
 	require.NoError(t, err)
+	var execRun ddxexec.RunRecord
+	require.NoError(t, json.Unmarshal([]byte(execRunOut), &execRun))
+	assert.Equal(t, "exec-metric-startup-time@baseline", execRun.DefinitionID)
 
 	runOut, err := executeCommand(rootCmd, "metric", "run", "MET-001", "--json")
 	require.NoError(t, err)
@@ -117,9 +126,11 @@ func TestMetricCommandsValidateRunHistoryAndCompare(t *testing.T) {
 
 	historyOut, err := executeCommand(rootCmd, "metric", "history", "MET-001", "--json")
 	require.NoError(t, err)
-	var history []metric.HistoryRecord
+	var history []metric.HistoryGroup
 	require.NoError(t, json.Unmarshal([]byte(historyOut), &history))
-	require.Len(t, history, 2)
+	require.Len(t, history, 1)
+	assert.Equal(t, "ms", history[0].Unit)
+	require.Len(t, history[0].Records, 2)
 
 	compareOut, err := executeCommand(rootCmd, "metric", "compare", "MET-001", "--against", "baseline", "--json")
 	require.NoError(t, err)
@@ -132,6 +143,69 @@ func TestMetricCommandsValidateRunHistoryAndCompare(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(trendOut), &trend))
 	assert.Equal(t, 2, trend.Count)
 	assert.Equal(t, "MET-001", trend.MetricID)
+}
+
+func TestMetricCommandsRefuseMixedUnitsAndGroupHistoryByUnit(t *testing.T) {
+	workingDir := t.TempDir()
+	writeMetricArtifact(t, workingDir, "MET-001", "")
+
+	store := ddxexec.NewStore(workingDir)
+	require.NoError(t, store.SaveDefinition(ddxexec.Definition{
+		ID:          "exec-metric-startup-time@baseline",
+		ArtifactIDs: []string{"MET-001"},
+		Executor: ddxexec.ExecutorSpec{
+			Kind:    ddxexec.ExecutorKindCommand,
+			Command: []string{"sh", "-c", "printf '20ms\\n'"},
+		},
+		Result: ddxexec.ResultSpec{Metric: &ddxexec.MetricResultSpec{Unit: "ms"}},
+		Evaluation: ddxexec.Evaluation{
+			Comparison: metric.ComparisonLowerIsBetter,
+			Thresholds: ddxexec.Thresholds{WarnMS: 20, RatchetMS: 30},
+		},
+		Active:    true,
+		CreatedAt: mustMetricTime(t, "2026-04-04T15:00:00Z"),
+	}))
+	require.NoError(t, store.SaveDefinition(ddxexec.Definition{
+		ID:          "exec-metric-startup-time@usd",
+		ArtifactIDs: []string{"MET-001"},
+		Executor: ddxexec.ExecutorSpec{
+			Kind:    ddxexec.ExecutorKindCommand,
+			Command: []string{"sh", "-c", "printf '10USD\\n'"},
+		},
+		Result: ddxexec.ResultSpec{Metric: &ddxexec.MetricResultSpec{Unit: "USD"}},
+		Evaluation: ddxexec.Evaluation{
+			Comparison: metric.ComparisonLowerIsBetter,
+			Thresholds: ddxexec.Thresholds{WarnMS: 20, RatchetMS: 30},
+		},
+		Active:    true,
+		CreatedAt: mustMetricTime(t, "2026-04-04T15:01:00Z"),
+	}))
+
+	factory := newMetricTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+
+	_, err := executeCommand(rootCmd, "exec", "run", "exec-metric-startup-time@baseline")
+	require.NoError(t, err)
+	_, err = executeCommand(rootCmd, "exec", "run", "exec-metric-startup-time@usd")
+	require.NoError(t, err)
+
+	_, err = executeCommand(rootCmd, "metric", "compare", "MET-001", "--against", "baseline")
+	require.Error(t, err)
+	assert.Contains(t, strings.ToLower(err.Error()), "mixed units")
+
+	_, err = executeCommand(rootCmd, "metric", "trend", "MET-001")
+	require.Error(t, err)
+	assert.Contains(t, strings.ToLower(err.Error()), "mixed units")
+
+	historyOut, err := executeCommand(rootCmd, "metric", "history", "MET-001", "--json")
+	require.NoError(t, err)
+	var grouped []metric.HistoryGroup
+	require.NoError(t, json.Unmarshal([]byte(historyOut), &grouped))
+	require.Len(t, grouped, 2)
+	assert.Equal(t, "ms", grouped[0].Unit)
+	assert.Equal(t, "USD", grouped[1].Unit)
+	require.Len(t, grouped[0].Records, 1)
+	require.Len(t, grouped[1].Records, 1)
 }
 
 func mustMetricTime(t *testing.T, value string) time.Time {

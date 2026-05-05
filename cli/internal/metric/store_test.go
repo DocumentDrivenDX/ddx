@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -162,6 +163,52 @@ func TestCompareAndTrend(t *testing.T) {
 	assert.InDelta(t, 14.6, trend.Latest, 0.01)
 	assert.InDelta(t, 17.3, trend.Average, 0.01)
 	assert.NotEmpty(t, firstRec.RunID)
+}
+
+func TestCompareAndTrendRejectMixedUnitsAndGroupHistoryByUnit(t *testing.T) {
+	wd := t.TempDir()
+	writeMetricArtifact(t, wd, "MET-001")
+	writeMetricDefinition(t, wd, Definition{
+		DefinitionID: "metric-startup-time@1",
+		MetricID:     "MET-001",
+		Command:      []string{"sh", "-c", "printf '20ms\\n'"},
+		Thresholds:   Thresholds{Warn: 20, Ratchet: 30, Unit: "ms"},
+		Comparison:   ComparisonLowerIsBetter,
+		Active:       true,
+		CreatedAt:    mustTime(t, "2026-04-04T15:00:00Z"),
+	})
+
+	store := NewStore(wd)
+	_, err := store.Run(context.Background(), "MET-001")
+	require.NoError(t, err)
+
+	writeMetricDefinition(t, wd, Definition{
+		DefinitionID: "metric-startup-time@2",
+		MetricID:     "MET-001",
+		Command:      []string{"sh", "-c", "printf '0.01USD\\n'"},
+		Thresholds:   Thresholds{Warn: 20, Ratchet: 30, Unit: "USD"},
+		Comparison:   ComparisonLowerIsBetter,
+		Active:       true,
+		CreatedAt:    mustTime(t, "2026-04-04T15:01:00Z"),
+	})
+	_, err = store.Run(context.Background(), "MET-001")
+	require.NoError(t, err)
+
+	_, _, err = store.Compare("MET-001", "baseline")
+	require.Error(t, err)
+	assert.Contains(t, strings.ToLower(err.Error()), "mixed units")
+
+	_, err = store.Trend("MET-001")
+	require.Error(t, err)
+	assert.Contains(t, strings.ToLower(err.Error()), "mixed units")
+
+	groups, err := store.GroupedHistory("MET-001")
+	require.NoError(t, err)
+	require.Len(t, groups, 2)
+	assert.Equal(t, "ms", groups[0].Unit)
+	assert.Equal(t, "USD", groups[1].Unit)
+	require.Len(t, groups[0].Records, 1)
+	require.Len(t, groups[1].Records, 1)
 }
 
 func TestConcurrentHistoryWrites(t *testing.T) {

@@ -2987,7 +2987,7 @@ func (s *Server) handleMetricHistory(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	store := metric.NewStore(s.workingDirForRequest(r))
-	history, err := store.History(id)
+	history, err := store.GroupedHistory(id)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -5067,7 +5067,7 @@ func (s *Server) mcpMetricHistory(workingDir, id string) mcpToolResult {
 		return mcpToolResult{Content: []mcpContent{mcpText("id is required")}, IsError: true}
 	}
 	store := metric.NewStore(workingDir)
-	history, err := store.History(id)
+	history, err := store.GroupedHistory(id)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}

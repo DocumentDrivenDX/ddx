@@ -228,17 +228,24 @@ func (f *CommandFactory) runMetricCompareCommand(cmd *cobra.Command, args []stri
 }
 
 func (f *CommandFactory) runMetricHistoryCommand(cmd *cobra.Command, args []string) error {
-	records, err := f.metricStore().History(args[0])
+	groups, err := f.metricStore().GroupedHistory(args[0])
 	if err != nil {
 		return err
 	}
 	if cmd.Flags().Changed("json") {
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent("", "  ")
-		return enc.Encode(records)
+		return enc.Encode(groups)
 	}
-	for _, rec := range records {
-		fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %.3f%s  %s\n", rec.ObservedAt.Format(time.RFC3339), rec.RunID, rec.Value, rec.Unit, rec.Status)
+	for _, group := range groups {
+		unit := group.Unit
+		if unit == "" {
+			unit = "(none)"
+		}
+		fmt.Fprintf(cmd.OutOrStdout(), "unit: %s\n", unit)
+		for _, rec := range group.Records {
+			fmt.Fprintf(cmd.OutOrStdout(), "  %s  %s  %.3f%s  %s\n", rec.ObservedAt.Format(time.RFC3339), rec.RunID, rec.Value, rec.Unit, rec.Status)
+		}
 	}
 	return nil
 }
