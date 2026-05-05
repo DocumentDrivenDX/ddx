@@ -207,3 +207,69 @@ func TestReviewEventBodyCap(t *testing.T) {
 	assert.LessOrEqual(t, len(stored.Body), bead.MaxFieldBytes,
 		"event body must respect MaxFieldBytes after AppendEvent's capFieldBytes")
 }
+
+// TestReviewPromptTelemetryIncludesSectionBytes verifies the review path
+// persists FEAT-022 section-byte accounting in the emitted artifact bundle.
+func TestReviewPromptTelemetryIncludesSectionBytes(t *testing.T) {
+	projectRoot := t.TempDir()
+	out, err := exec.Command("git", "init", projectRoot).CombinedOutput()
+	require.NoError(t, err, string(out))
+
+	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:          "ddx-telemetry-bytes",
+		Title:       "telemetry bytes",
+		Description: "exercise section accounting",
+		Acceptance:  "AC#1: byte accounting is emitted",
+		Notes:       "notes",
+	}))
+	out, err = exec.Command("git", "-C", projectRoot, "add", "-A").CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "-C", projectRoot, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "init").CombinedOutput()
+	require.NoError(t, err, string(out))
+	headRaw, err := exec.Command("git", "-C", projectRoot, "rev-parse", "HEAD").Output()
+	require.NoError(t, err)
+	head := strings.TrimSpace(string(headRaw))
+
+	reviewer := &DefaultBeadReviewer{
+		ProjectRoot: projectRoot,
+		BeadStore:   store,
+		Runner: &reviewRunnerStub{result: &Result{
+			Harness:    "claude",
+			Model:      "claude-opus-4-6",
+			Output:     "```json\n{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}\n```",
+			DurationMS: 9,
+		}},
+		Caps: evidence.Caps{
+			MaxPromptBytes:       32 * 1024,
+			MaxInlinedFileBytes:  4 * 1024,
+			MaxDiffBytes:         4 * 1024,
+			MaxGoverningDocBytes: 4 * 1024,
+		},
+	}
+
+	res, err := reviewer.ReviewBead(context.Background(), "ddx-telemetry-bytes", head, ImplementerRouting{Harness: "claude", Model: "claude-sonnet"})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	resultPath := filepath.Join(projectRoot, filepath.FromSlash(res.ExecutionDir), "result.json")
+	raw, err := os.ReadFile(resultPath)
+	require.NoError(t, err)
+
+	var doc map[string]any
+	require.NoError(t, json.Unmarshal(raw, &doc))
+	ea, ok := doc["evidence_assembly"].(map[string]any)
+	require.True(t, ok)
+	assert.Greater(t, int(ea["input_bytes"].(float64)), 0)
+	assert.Greater(t, int(ea["output_bytes"].(float64)), 0)
+	sections, ok := ea["sections"].([]any)
+	require.True(t, ok)
+	require.NotEmpty(t, sections)
+	for _, rawSection := range sections {
+		section, ok := rawSection.(map[string]any)
+		require.True(t, ok)
+		assert.Contains(t, section, "name")
+		assert.Contains(t, section, "bytes_included")
+	}
+}

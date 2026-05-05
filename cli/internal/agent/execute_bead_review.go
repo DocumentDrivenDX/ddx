@@ -601,8 +601,8 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev 
 			Error:            evidence.OutcomeReviewContextOverflow,
 			EvidenceAssembly: overflowTelemetry,
 		})
-		return reviewRes, fmt.Errorf("reviewer: %s (assembled prompt %d bytes exceeds cap %d; see %s)",
-			evidence.OutcomeReviewContextOverflow, len(prompt), caps.MaxPromptBytes, artifacts.DirRel)
+		return reviewRes, fmt.Errorf("reviewer: PROMPT_BUDGET_EXCEEDED/context_overflow (assembled prompt %d bytes exceeds cap %d; see %s)",
+			len(prompt), caps.MaxPromptBytes, artifacts.DirRel)
 	}
 
 	// Resolve reviewer harness and model. The implementer's harness is
