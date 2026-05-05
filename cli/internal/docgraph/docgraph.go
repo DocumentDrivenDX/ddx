@@ -41,14 +41,15 @@ var (
 type IssueKind string
 
 const (
-	IssueDuplicateID         IssueKind = "duplicate_id"
-	IssueParseError          IssueKind = "parse_error"
-	IssueMissingDep          IssueKind = "missing_dep"
-	IssueIDPathMissing       IssueKind = "id_path_missing"
-	IssueIDPathMismatch      IssueKind = "id_path_mismatch"
-	IssueRequiredRootMissing IssueKind = "required_root_missing"
-	IssueCascadeUnknown      IssueKind = "cascade_unknown"
-	IssueCycle               IssueKind = "cycle"
+	IssueDuplicateID           IssueKind = "duplicate_id"
+	IssueParseError            IssueKind = "parse_error"
+	IssueMissingDep            IssueKind = "missing_dep"
+	IssueMissingMetricArtifact IssueKind = "missing_metric_artifact"
+	IssueIDPathMissing         IssueKind = "id_path_missing"
+	IssueIDPathMismatch        IssueKind = "id_path_mismatch"
+	IssueRequiredRootMissing   IssueKind = "required_root_missing"
+	IssueCascadeUnknown        IssueKind = "cascade_unknown"
+	IssueCycle                 IssueKind = "cycle"
 )
 
 // GraphIssue is a structured description of a problem in the document graph.
@@ -116,6 +117,9 @@ type Graph struct {
 	PathToID   map[string]string
 	Dependents map[string][]string
 	Issues     []GraphIssue
+	// ValidationWarnings carries non-fatal validation output that should be
+	// shown by doc validate but must not fail graph construction.
+	ValidationWarnings []string
 	// Warnings is kept for callers still rendering the flat string list; it is
 	// derived from Issues at the end of graph construction via MessageLines().
 	Warnings []string
@@ -229,6 +233,7 @@ func buildGraph(workingDir string, roots []string) (*Graph, error) {
 	g.buildDependents()
 	g.detectMissingDeps()
 	g.detectCycles()
+	g.validateMetricReferences()
 	g.applyConfigDefaults()
 	g.finalizeWarnings()
 	return g, nil
@@ -280,6 +285,102 @@ func (g *Graph) finalizeWarnings() {
 	if g.Warnings == nil {
 		g.Warnings = []string{}
 	}
+	if len(g.ValidationWarnings) > 1 {
+		sort.Strings(g.ValidationWarnings)
+	}
+}
+
+// validateMetricReferences resolves metric-linked execution definitions and
+// records fatal errors for dangling metric_id values plus warnings when the
+// linked metric artifact's documentary budget disagrees with the gate ratchet.
+func (g *Graph) validateMetricReferences() {
+	for _, id := range sortedDocIDs(g.Documents) {
+		doc := g.Documents[id]
+		if doc == nil || doc.ExecDef == nil || doc.ExecDef.Metric == nil {
+			continue
+		}
+		metricID := strings.TrimSpace(doc.ExecDef.Metric.MetricID)
+		if metricID == "" {
+			continue
+		}
+
+		metricDoc, ok := g.Documents[metricID]
+		if !ok || metricDoc == nil || !isMetricArtifact(metricDoc) {
+			g.Issues = append(g.Issues, GraphIssue{
+				Kind:    IssueMissingMetricArtifact,
+				Path:    doc.Path,
+				ID:      metricID,
+				Message: fmt.Sprintf("document %q declares execution metric_id %q which does not resolve to a MET artifact", doc.ID, metricID),
+			})
+			continue
+		}
+
+		budget, budgetOK := metricBudget(metricDoc)
+		if !budgetOK {
+			continue
+		}
+		ratchet, ratchetOK := execRatchet(doc)
+		if !ratchetOK {
+			continue
+		}
+		if budget != ratchet {
+			g.ValidationWarnings = append(g.ValidationWarnings,
+				fmt.Sprintf("metric artifact %q budget %g conflicts with gate ratchet %g on %q; gate ratchet is authoritative", metricID, budget, ratchet, doc.ID))
+		}
+	}
+}
+
+func isMetricArtifact(doc *Document) bool {
+	if doc == nil || !strings.HasPrefix(doc.ID, "MET-") || doc.frontmatter == nil {
+		return false
+	}
+	return findMappingValue(doc.frontmatter, "metric") != nil
+}
+
+func metricBudget(doc *Document) (float64, bool) {
+	if doc == nil || doc.frontmatter == nil {
+		return 0, false
+	}
+	metricNode := findMappingValue(doc.frontmatter, "metric")
+	if metricNode == nil {
+		return 0, false
+	}
+	budgetNode := findMappingValue(metricNode, "budget")
+	if budgetNode == nil {
+		return 0, false
+	}
+	var budget float64
+	if err := budgetNode.Decode(&budget); err != nil {
+		return 0, false
+	}
+	return budget, true
+}
+
+func execRatchet(doc *Document) (float64, bool) {
+	if doc == nil || doc.frontmatter == nil {
+		return 0, false
+	}
+	ddxNode := findMappingValue(doc.frontmatter, "ddx")
+	if ddxNode == nil {
+		return 0, false
+	}
+	execNode := findMappingValue(ddxNode, "execution")
+	if execNode == nil {
+		return 0, false
+	}
+	threshNode := findMappingValue(execNode, "thresholds")
+	if threshNode == nil {
+		return 0, false
+	}
+	ratchetNode := findMappingValue(threshNode, "ratchet")
+	if ratchetNode == nil {
+		return 0, false
+	}
+	var ratchet float64
+	if err := ratchetNode.Decode(&ratchet); err != nil {
+		return 0, false
+	}
+	return ratchet, true
 }
 
 func (g *Graph) applyConfigDefaults() {

@@ -483,16 +483,38 @@ func (f *CommandFactory) newDocValidateCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			if len(graph.Warnings) == 0 {
+			out := cmd.OutOrStdout()
+			hasDiagnostics := false
+			hasFatalIssue := false
+			for _, issue := range graph.Issues {
+				hasDiagnostics = true
+				if isDocValidateFatalIssue(issue.Kind) {
+					hasFatalIssue = true
+					fmt.Fprintf(out, "error: %s\n", issue.Message)
+					continue
+				}
+				fmt.Fprintf(out, "warning: %s\n", issue.Message)
+			}
+			for _, warning := range graph.ValidationWarnings {
+				hasDiagnostics = true
+				fmt.Fprintf(out, "warning: %s\n", warning)
+			}
+			if !hasDiagnostics {
 				fmt.Fprintln(cmd.OutOrStdout(), "Document graph is valid.")
 				return nil
 			}
-			for _, w := range graph.Warnings {
-				fmt.Fprintf(cmd.OutOrStdout(), "warning: %s\n", w)
+			if hasFatalIssue {
+				cmd.SilenceUsage = true
+				cmd.SilenceErrors = true
+				return NewExitError(ExitCodeGeneralError, "")
 			}
 			return nil
 		},
 	}
+}
+
+func isDocValidateFatalIssue(kind docgraph.IssueKind) bool {
+	return kind == docgraph.IssueMissingMetricArtifact
 }
 
 func printDocGraphJSON(cmd *cobra.Command, graph *docgraph.Graph) error {
