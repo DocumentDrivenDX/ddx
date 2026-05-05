@@ -1,0 +1,75 @@
+{
+  "attempt_id": "20260505T080610-488c2e88",
+  "bead_id": "ddx-3c4618e3",
+  "base_rev": "24d1c3cc228b393fc14904c65427e8c613a57e9f",
+  "created_at": "2026-05-05T08:06:12.686271255Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-3c4618e3",
+    "title": "Drop Fizeau model route compatibility stubs from DDx",
+    "description": "DDx no longer exposes or depends on model_routes. After the upstream Fizeau ServiceConfig contract removes ModelRouteNames, ModelRouteCandidates, and ModelRouteConfig, delete the no-op compatibility methods from cli/internal/agent/serviceconfig.go. These methods currently exist only because github.com/DocumentDrivenDX/fizeau v0.10.7 requires them; they must not be treated as a DDx routing concept. Also keep ddx agent route-status on live provider/model inventory: providers, models, quota, usage, cost, power, and current ResolveRoute preview. In-scope files: cli/go.mod, cli/go.sum, cli/internal/agent/serviceconfig.go, route-status tests if the Fizeau API shape changes. Out-of-scope: reintroducing any model_routes config, route table, route key, or candidate-list surface in DDx.",
+    "acceptance": "1. cli/go.mod is bumped to a Fizeau release whose ServiceConfig interface has no ModelRoute* methods. 2. cli/internal/agent/serviceconfig.go contains no ModelRouteNames, ModelRouteCandidates, ModelRouteConfig, ServiceModelRouteConfig, model_routes, or route key references. 3. ddx agent route-status still reports live providers/models with status, cost, usage/quota, and power. 4. rg -n 'model_routes|ModelRoute|model route|route key|No model routes|Requested model route' cli/cmd cli/internal/agent cli/internal/server website/content/docs/cli/commands/ddx_agent_route-status.md returns no hits. 5. cd cli \u0026\u0026 go test ./cmd -run TestAgentRouteStatus -count=1 \u0026\u0026 go test ./internal/agent -run 'TestFormatSessionLogLines|TestTailSessionLogs' -count=1 passes.",
+    "labels": [
+      "area:agent",
+      "area:routing",
+      "kind:cleanup",
+      "triage:needs-investigation"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-05T08:06:10Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "19662",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-05T01:56:54.980253537Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T015533-5135830f\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":625414,\"output_tokens\":6786,\"total_tokens\":632200,\"cost_usd\":0,\"duration_ms\":75846,\"exit_code\":0}",
+          "created_at": "2026-05-05T01:56:55.232314885Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=632200 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "The requested cleanup is blocked by the currently published `github.com/DocumentDrivenDX/fizeau` releases. `go list -m -versions github.com/DocumentDrivenDX/fizeau` stops at `v0.10.7`, and the local module cache for `v0.10.7` still defines `ServiceConfig.ModelRouteNames`, `ModelRouteCandidates`, and `ModelRouteConfig` in `service.go`, so removing the compatibility stubs in `cli/internal/agent/serviceconfig.go` would break compilation without a newer upstream release or an approved replacement module path. verified: - `cd cli \u0026\u0026 go test ./cmd -run TestAgentRouteStatus -count=1` - `cd cli \u0026\u0026 go test ./internal/agent -run 'TestFormatSessionLogLines|TestTailSessionLogs' -count=1` - `rg -n 'model_routes|ModelRoute|model route|route key|No model routes|Requested model route' cli/cmd cli/internal/agent cli/internal/server website/content/docs/cli/commands/ddx_agent_route-status.md` follow_up_needed: Publish or identify a `fizeau` release that removes the `ModelRoute*` methods from `ServiceConfig`, then bump `cli/go.mod` and delete the stub methods from `cli/internal/agent/serviceconfig.go`.",
+          "created_at": "2026-05-05T01:56:56.244256274Z",
+          "kind": "no_changes_needs_investigation",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes_needs_investigation"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: needs_investigation\nreason: The requested cleanup is blocked by the currently published `github.com/DocumentDrivenDX/fizeau` releases. `go list -m -versions github.com/DocumentDrivenDX/fizeau` stops at `v0.10.7`, and the local module cache for `v0.10.7` still defines `ServiceConfig.ModelRouteNames`, `ModelRouteCandidates`, and `ModelRouteConfig` in `service.go`, so removing the compatibility stubs in `cli/internal/agent/serviceconfig.go` would break compilation without a newer upstream release or an approved replacement module path.\n\nverified:\n- `cd cli \u0026\u0026 go test ./cmd -run TestAgentRouteStatus -count=1`\n- `cd cli \u0026\u0026 go test ./internal/agent -run 'TestFormatSessionLogLines|TestTailSessionLogs' -count=1`\n- `rg -n 'model_routes|ModelRoute|model route|route key|No model routes|Requested model route' cli/cmd cli/internal/agent cli/internal/server website/content/docs/cli/commands/ddx_agent_route-status.md`\n\nfollow_up_needed: Publish or identify a `fizeau` release that removes the `ModelRoute*` methods from `ServiceConfig`, then bump `cli/go.mod` and delete the stub methods from `cli/internal/agent/serviceconfig.go`.\nresult_rev=8064271c682597791a65bb4be8253d7fe878e66c\nbase_rev=8064271c682597791a65bb4be8253d7fe878e66c\nretry_after=2026-05-05T07:56:56Z",
+          "created_at": "2026-05-05T01:56:56.706706384Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-05T08:06:10.795612076Z",
+      "execute-loop-last-detail": "no_changes",
+      "execute-loop-last-status": "no_changes",
+      "execute-loop-no-changes-count": 1,
+      "execute-loop-retry-after": "2026-05-05T07:56:56Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260505T080610-488c2e88",
+    "prompt": ".ddx/executions/20260505T080610-488c2e88/prompt.md",
+    "manifest": ".ddx/executions/20260505T080610-488c2e88/manifest.json",
+    "result": ".ddx/executions/20260505T080610-488c2e88/result.json",
+    "checks": ".ddx/executions/20260505T080610-488c2e88/checks.json",
+    "usage": ".ddx/executions/20260505T080610-488c2e88/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-3c4618e3-20260505T080610-488c2e88"
+  },
+  "prompt_sha": "77549a9e2f77d9209f7a19728d5a74aefe84654a9e5343f1c6b4dce2898276b1"
+}
