@@ -294,7 +294,7 @@ func BuildReviewPromptBounded(b *bead.Bead, iter int, rev, diff, projectRoot str
 				if truncated {
 					txt += evidence.TruncationMarker
 				}
-				fmt.Fprintf(&sb, "      <content>\n%s\n      </content>\n", txt)
+				fmt.Fprintf(&sb, "      <content>\n%s\n      </content>\n", evidence.DelimitUntrustedData(txt))
 				sec := evidence.EvidenceAssemblySection{
 					Name:          "governing:" + ref.ID,
 					BytesIncluded: len(content),
@@ -316,7 +316,7 @@ func BuildReviewPromptBounded(b *bead.Bead, iter int, rev, diff, projectRoot str
 	clampedDiff, diffSection := evidence.ClampDiff(rankedDiff, caps.MaxDiffBytes)
 	diffSection.Name = "diff"
 	sections = append(sections, diffSection)
-	fmt.Fprintf(&sb, "  <diff rev=%q>\n%s\n  </diff>\n\n", rev, strings.TrimRight(clampedDiff, "\n"))
+	fmt.Fprintf(&sb, "  <diff rev=%q>\n%s\n  </diff>\n\n", rev, evidence.DelimitUntrustedData(strings.TrimRight(clampedDiff, "\n")))
 
 	// ── Instructions section ────────────────────────────────────────────────
 	instructions := strings.ReplaceAll(beadReviewInstructions, "<bead-id>", b.ID)

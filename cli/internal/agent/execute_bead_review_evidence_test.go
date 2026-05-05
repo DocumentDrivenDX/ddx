@@ -200,6 +200,32 @@ func TestBuildReviewPrompt_PreDispatchShortCircuit(t *testing.T) {
 		"residual overflow after trimming must surface so callers can short-circuit")
 }
 
+func TestArtifactBodyDelimitedAsUntrusted(t *testing.T) {
+	caps := testCaps()
+	root := t.TempDir()
+	docRel := "docs/body.md"
+	docAbs := filepath.Join(root, filepath.FromSlash(docRel))
+	require.NoError(t, os.MkdirAll(filepath.Dir(docAbs), 0o755))
+	const payload = "artifact payload"
+	require.NoError(t, os.WriteFile(docAbs, []byte(payload), 0o644))
+
+	diff := "diff --git a/notes.txt b/notes.txt\n@@ -1 +1 @@\n+" + payload + "\n"
+	b := makeBigBead()
+	refs := []GoverningRef{{ID: "FEAT-1", Path: docRel, Title: "Body"}}
+	res := BuildReviewPromptBounded(b, 1, "rev-delim", diff, root, refs, BuildReviewPromptOptions{Caps: caps})
+
+	docExpected := evidence.DelimitUntrustedData(payload)
+	diffExpected := evidence.DelimitUntrustedData(strings.TrimRight(diff, "\n"))
+	assert.Contains(t, res.Prompt, docExpected,
+		"governing-doc artifact bodies must be wrapped in the canonical untrusted-data envelope")
+	assert.Contains(t, res.Prompt, diffExpected,
+		"diff artifact bodies must be wrapped in the canonical untrusted-data envelope")
+	assert.Contains(t, res.Prompt, evidence.UntrustedDataOpen)
+	assert.Contains(t, res.Prompt, evidence.UntrustedDataClose)
+	assert.Contains(t, res.Prompt, payload,
+		"the raw artifact payload must remain inside the wrapper")
+}
+
 // TestReviewContextOverflow asserts the executor honors the pre-dispatch
 // short-circuit: when bounded assembly cannot fit the prompt, no provider
 // run happens and the surfaced error carries the literal substring
