@@ -1,0 +1,3 @@
+status: completed
+verification_command: cd cli && go test ./internal/agent/... && lefthook run pre-commit
+rationale: The repository already contains cli/internal/agent/lint_hook.go and matching tests that satisfy the bead contract, so no source edits were required in this execution attempt.
