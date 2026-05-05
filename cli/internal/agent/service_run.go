@@ -212,7 +212,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		return nil, fmt.Errorf("agent: execute: %w", err)
 	}
 
-	final, toolCalls, routing, actualPower := drainServiceEvents(events)
+	final, routing, actualPower := drainServiceEvents(events)
 	finishedAt := time.Now().UTC()
 	elapsed := finishedAt.Sub(start)
 
@@ -220,7 +220,6 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		Harness:    harness,
 		Model:      model,
 		DurationMS: int(elapsed.Milliseconds()),
-		ToolCalls:  toolCalls,
 	}
 	if routing != nil {
 		result.Provider = routing.Provider
@@ -258,6 +257,8 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		if final.CostUSD > 0 {
 			result.CostUSD = final.CostUSD
 		}
+		result.ExitCode = final.ExitCode
+		result.Error = final.Error
 		if final.RoutingActual != nil {
 			if result.Provider == "" {
 				result.Provider = final.RoutingActual.Provider
@@ -266,35 +267,11 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 				result.Model = final.RoutingActual.Model
 			}
 		}
-		switch final.Status {
-		case "success", "":
-			// happy path
-		case "stalled":
-			result.ExitCode = 1
-			if final.Error != "" {
-				result.Error = "stalled: " + final.Error
-			} else {
-				result.Error = "stalled"
-			}
-		case "timed_out":
-			result.ExitCode = 1
-			result.Error = fmt.Sprintf("timeout after %v", wall.Round(time.Second))
-		case "cancelled":
-			result.ExitCode = 1
-			result.Error = "cancelled"
-		default:
-			result.ExitCode = 1
-			if final.Error != "" {
-				result.Error = final.Error
-			} else {
-				result.Error = final.Status
-			}
-		}
-		result.Error = appendProviderTimeoutHint(result.Error, providerTimeout)
 		if final.SessionLogPath != "" {
 			result.AgentSessionID = final.SessionLogPath
 		}
 	}
+	result.Error = appendProviderTimeoutHint(result.Error, providerTimeout)
 	entry := SessionIndexEntryFromResult(workDir, SessionIndexInputs{
 		Harness:     harness,
 		Model:       model,

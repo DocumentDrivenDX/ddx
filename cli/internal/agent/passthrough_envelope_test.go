@@ -25,13 +25,20 @@ type passthroughTestService struct {
 	executeCalled       bool
 	lastReq             agentlib.ServiceExecuteRequest
 	listHarnessesCalled bool
+	executeEvents       []agentlib.ServiceEvent
 }
 
 func (s *passthroughTestService) Execute(ctx context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 	s.executeCalled = true
 	s.lastReq = req
-	ch := make(chan agentlib.ServiceEvent, 1)
-	ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok"}`)}
+	ch := make(chan agentlib.ServiceEvent, len(s.executeEvents)+1)
+	if len(s.executeEvents) > 0 {
+		for _, evt := range s.executeEvents {
+			ch <- evt
+		}
+	} else {
+		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok"}`)}
+	}
 	close(ch)
 	return ch, nil
 }
@@ -226,6 +233,42 @@ func TestExecuteOnService_RoleAndCorrelationIDReachServiceRequest(t *testing.T) 
 	}
 	if svc.lastReq.CorrelationID != "ddx-bead-1:attempt-2" {
 		t.Fatalf("ServiceExecuteRequest.CorrelationID = %q, want ddx-bead-1:attempt-2", svc.lastReq.CorrelationID)
+	}
+}
+
+// TestExecuteOnService_IgnoresToolCallTranscriptProjection verifies the
+// service path keeps Fizeau tool_call/tool_result events opaque rather than
+// reconstructing a DDx tool transcript from them.
+func TestExecuteOnService_IgnoresToolCallTranscriptProjection(t *testing.T) {
+	svc := &passthroughTestService{
+		executeEvents: []agentlib.ServiceEvent{
+			{Type: "tool_call", Data: []byte(`{"id":"call-1","name":"Read","input":{"path":"README.md"}}`)},
+			{Type: "tool_result", Data: []byte(`{"id":"call-1","output":"ok","duration_ms":1}`)},
+			{Type: "final", Data: []byte(`{"status":"success","exit_code":0,"final_text":"done","usage":{"input_tokens":1,"output_tokens":2,"total_tokens":3},"cost_usd":0.25}`)},
+		},
+	}
+	rcfg := resolvedWithPassthrough("claude", "anthropic", "claude-3-7-sonnet", 0, 0)
+
+	result, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "hello",
+	})
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if result == nil {
+		t.Fatal("expected result")
+	}
+	if result.Output != "done" {
+		t.Fatalf("Result.Output = %q, want %q", result.Output, "done")
+	}
+	if result.Tokens != 3 || result.InputTokens != 1 || result.OutputTokens != 2 {
+		t.Fatalf("token projection mismatch: %+v", result)
+	}
+	if result.CostUSD != 0.25 {
+		t.Fatalf("Result.CostUSD = %v, want 0.25", result.CostUSD)
+	}
+	if len(result.ToolCalls) != 0 {
+		t.Fatalf("expected no reconstructed tool transcript, got %+v", result.ToolCalls)
 	}
 }
 

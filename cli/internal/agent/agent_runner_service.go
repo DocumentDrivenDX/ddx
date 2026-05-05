@@ -16,10 +16,6 @@ import (
 // package (which is module-private).
 const (
 	serviceEventRoutingDecision = "routing_decision"
-	serviceEventProgress        = "progress"
-	serviceEventTextDelta       = "text_delta"
-	serviceEventToolCall        = "tool_call"
-	serviceEventToolResult      = "tool_result"
 	serviceEventFinal           = "final"
 )
 
@@ -33,10 +29,7 @@ const (
 // working without a sweep. New code can (and should) use agentlib types
 // directly.
 type (
-	serviceFinalData      = agentlib.ServiceFinalData
-	serviceFinalUsage     = agentlib.ServiceFinalUsage
-	serviceToolCallData   = agentlib.ServiceToolCallData
-	serviceToolResultData = agentlib.ServiceToolResultData
+	serviceFinalData = agentlib.ServiceFinalData
 )
 
 type serviceRoutingActual struct {
@@ -137,14 +130,13 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		return nil, fmt.Errorf("agent: execute: %w", err)
 	}
 
-	final, toolCalls, routing, actualPower := drainServiceEvents(events)
+	final, routing, actualPower := drainServiceEvents(events)
 	elapsed := time.Since(start)
 
 	result := &Result{
 		Harness:    "agent",
 		Model:      model,
 		DurationMS: int(elapsed.Milliseconds()),
-		ToolCalls:  toolCalls,
 	}
 	if routing != nil {
 		result.Provider = routing.Provider
@@ -179,6 +171,8 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		if final.CostUSD > 0 {
 			result.CostUSD = final.CostUSD
 		}
+		result.ExitCode = final.ExitCode
+		result.Error = final.Error
 		if final.RoutingActual != nil {
 			if result.Provider == "" {
 				result.Provider = final.RoutingActual.Provider
@@ -187,37 +181,13 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 				result.Model = final.RoutingActual.Model
 			}
 		}
-		switch final.Status {
-		case "success", "":
-			// happy path; no-op
-		case "stalled":
-			result.ExitCode = 1
-			if final.Error != "" {
-				result.Error = "stalled: " + final.Error
-			} else {
-				result.Error = "stalled"
-			}
-		case "timed_out":
-			result.ExitCode = 1
-			result.Error = fmt.Sprintf("timeout after %v", wallClock.Round(time.Second))
-		case "cancelled":
-			result.ExitCode = 1
-			result.Error = "cancelled"
-		default:
-			result.ExitCode = 1
-			if final.Error != "" {
-				result.Error = final.Error
-			} else {
-				result.Error = final.Status
-			}
-		}
-		result.Error = appendProviderTimeoutHint(result.Error, providerTimeout)
 		if final.SessionLogPath != "" {
 			// surface as session ID for downstream cross-reference (mirrors
 			// the legacy path's AgentSessionID population).
 			result.AgentSessionID = final.SessionLogPath
 		}
 	}
+	result.Error = appendProviderTimeoutHint(result.Error, providerTimeout)
 
 	promptSource := opts.PromptSource
 	if promptSource == "" {
@@ -233,15 +203,13 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 }
 
 // drainServiceEvents reads service events and returns the final-event payload,
-// the accumulated tool-call log, the routing decision (when present in the
-// routing_decision start event), and the power of the selected model (0 when
-// the routing_decision event does not include candidate power components).
-func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData, []ToolCallEntry, *serviceRoutingActual, int) {
+// the routing decision (when present in the routing_decision start event), and
+// the power of the selected model (0 when the routing_decision event does not
+// include candidate power components).
+func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData, *serviceRoutingActual, int) {
 	var final *serviceFinalData
 	var routing *serviceRoutingActual
 	var routingPower int
-	var toolCalls []ToolCallEntry
-	pending := make(map[string]*ToolCallEntry) // call_id -> entry awaiting result
 
 	for ev := range events {
 		switch string(ev.Type) {
@@ -278,26 +246,6 @@ func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData,
 					}
 				}
 			}
-		case serviceEventToolCall:
-			var data serviceToolCallData
-			if err := json.Unmarshal(ev.Data, &data); err == nil {
-				entry := &ToolCallEntry{
-					Tool:  data.Name,
-					Input: string(data.Input),
-				}
-				pending[data.ID] = entry
-			}
-		case serviceEventToolResult:
-			var data serviceToolResultData
-			if err := json.Unmarshal(ev.Data, &data); err == nil {
-				if entry, ok := pending[data.ID]; ok {
-					entry.Output = data.Output
-					entry.Error = data.Error
-					entry.Duration = int(data.DurationMS)
-					toolCalls = append(toolCalls, *entry)
-					delete(pending, data.ID)
-				}
-			}
 		case serviceEventFinal:
 			var data serviceFinalData
 			if err := json.Unmarshal(ev.Data, &data); err == nil {
@@ -305,13 +253,5 @@ func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData,
 			}
 		}
 	}
-	// Any tool_call without a matching tool_result still gets recorded.
-	return final, toolCallsWithPending(toolCalls, pending), routing, routingPower
-}
-
-func toolCallsWithPending(toolCalls []ToolCallEntry, pending map[string]*ToolCallEntry) []ToolCallEntry {
-	for _, entry := range pending {
-		toolCalls = append(toolCalls, *entry)
-	}
-	return toolCalls
+	return final, routing, routingPower
 }

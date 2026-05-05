@@ -38,7 +38,7 @@ func TestDrainServiceEventsIgnoresCompactionTelemetry(t *testing.T) {
 	}
 	close(events)
 
-	final, _, _, _ := drainServiceEvents(events)
+	final, _, _ := drainServiceEvents(events)
 	require.NotNil(t, final)
 	assert.Equal(t, "success", final.Status)
 	assert.Empty(t, final.Error)
@@ -59,7 +59,7 @@ func TestDrainServiceEventsKeepsFinalAfterCompactionTelemetry(t *testing.T) {
 	}
 	close(events)
 
-	final, _, _, _ := drainServiceEvents(events)
+	final, _, _ := drainServiceEvents(events)
 	require.NotNil(t, final)
 	assert.Equal(t, "success", final.Status)
 	assert.Empty(t, final.Error)
@@ -115,7 +115,7 @@ func TestDrainServiceEvents_CapturesRouteEconomics(t *testing.T) {
 	}
 	close(events)
 
-	_, _, routing, actualPower := drainServiceEvents(events)
+	_, routing, actualPower := drainServiceEvents(events)
 	assert.Equal(t, 65, actualPower,
 		"power must come from the eligible winning candidate in routing_decision.candidates")
 	require.NotNil(t, routing)
