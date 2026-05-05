@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260505T164739-a33aec7f",
+  "bead_id": "ddx-8dd19492",
+  "base_rev": "993a7ad0e6b7386fc6ed62d2213c1ae6aed5d13b",
+  "created_at": "2026-05-05T16:47:41.987541973Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8dd19492",
+    "title": "bead/axon: add WebSocket subscription integration smoke test",
+    "description": "PROBLEM\nTD-030 requires a live GraphQL subscription path so DDx can subscribe to Axon changeEvents for bead and bead-event updates. The current test suite in cli/internal/bead/axon_backend_test.go covers CRUD, deps, events, and import/export, but there is no subscription smoke test yet.\n\nROOT CAUSE\ncli/internal/bead/axon_backend_test.go:131-179 verifies the split event collection, but nothing in the package opens a WebSocket subscription and asserts that changeEvents are delivered in order. That leaves the live-update path unexercised.\n\nPROPOSED FIX\n- Add an integration test in cli/internal/bead/axon/ that opens the subscription endpoint, performs a small bead mutation sequence, and asserts the expected changeEvents arrive.\n- Reuse the generated Axon client and subscription transport from the client-scaffolding bead.\n- Keep the test isolated and deterministic so it can run in the normal package suite.\n\nNON-SCOPE\n- Core backend CRUD logic.\n- Config selection.\n- Package-wide backend matrix work.",
+    "acceptance": "1. TestAxonSubscription_ChangeEventsStream or TestAxonSubscription_ReceivesBeadMutations is added and passes.\n2. The subscription smoke test uses the generated Axon client and a WebSocket transport.\n3. cd cli \u0026\u0026 go test ./internal/bead/axon/... passes.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-8d747049",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:storage",
+      "kind:feature",
+      "blocked-on-upstream:axon-05c1019d",
+      "blocked-on-upstream:axon-82b6f7b2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-05T16:47:39Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2464742",
+      "execute-loop-heartbeat-at": "2026-05-05T16:47:39.319847681Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260505T164739-a33aec7f",
+    "prompt": ".ddx/executions/20260505T164739-a33aec7f/prompt.md",
+    "manifest": ".ddx/executions/20260505T164739-a33aec7f/manifest.json",
+    "result": ".ddx/executions/20260505T164739-a33aec7f/result.json",
+    "checks": ".ddx/executions/20260505T164739-a33aec7f/checks.json",
+    "usage": ".ddx/executions/20260505T164739-a33aec7f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-8dd19492-20260505T164739-a33aec7f"
+  },
+  "prompt_sha": "89251377544339e2e53f0a38136b684571ffbe263228c7d534c3f8ada601cf41"
+}
