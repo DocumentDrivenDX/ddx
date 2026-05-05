@@ -1,0 +1,73 @@
+schema {
+  query: Query
+  mutation: Mutation
+}
+
+scalar JSON
+scalar DateTime
+
+type Query {
+  ddxBead(id: ID!): Bead
+  ddxBeads: [Bead!]!
+}
+
+type Mutation {
+  createEntity(input: BeadInput!): Bead!
+  updateEntity(id: ID!, expectedVersion: Int!, input: BeadInput!): Bead!
+}
+
+type Bead {
+  id: ID!
+  title: String!
+  status: String!
+  priority: Int!
+  issueType: String!
+  owner: String
+  createdAt: DateTime
+  createdBy: String
+  updatedAt: DateTime
+  labels: [String!]!
+  parent: ID
+  description: String
+  acceptance: String
+  notes: String
+  dependencies: [Dependency!]!
+  extra: JSON
+}
+
+type Dependency {
+  issueID: ID!
+  dependsOnID: ID!
+  type: String!
+  createdAt: String
+  createdBy: String
+  metadata: String
+}
+
+input BeadInput {
+  id: ID
+  title: String!
+  status: String!
+  priority: Int!
+  issueType: String!
+  owner: String
+  createdAt: DateTime
+  createdBy: String
+  updatedAt: DateTime
+  labels: [String!]!
+  parent: ID
+  description: String
+  acceptance: String
+  notes: String
+  dependencies: [DependencyInput!]!
+  extra: JSON
+}
+
+input DependencyInput {
+  issueID: ID!
+  dependsOnID: ID!
+  type: String!
+  createdAt: String
+  createdBy: String
+  metadata: String
+}

@@ -1,0 +1,10 @@
+schema: schema.graphql
+operations:
+  - queries/*.graphql
+generated: generated.go
+package: axon
+bindings:
+  DateTime:
+    type: time.Time
+  JSON:
+    type: map[string]interface{}

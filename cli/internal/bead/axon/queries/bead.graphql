@@ -1,0 +1,49 @@
+fragment BeadFields on Bead {
+  id
+  title
+  status
+  priority
+  issueType
+  owner
+  createdAt
+  createdBy
+  updatedAt
+  labels
+  parent
+  description
+  acceptance
+  notes
+  dependencies {
+    issueID
+    dependsOnID
+    type
+    createdAt
+    createdBy
+    metadata
+  }
+  extra
+}
+
+query GetBead($id: ID!) {
+  ddxBead(id: $id) {
+    ...BeadFields
+  }
+}
+
+query ListBeads {
+  ddxBeads {
+    ...BeadFields
+  }
+}
+
+mutation CreateBead($input: BeadInput!) {
+  createEntity(input: $input) {
+    ...BeadFields
+  }
+}
+
+mutation UpdateBead($id: ID!, $expectedVersion: Int!, $input: BeadInput!) {
+  updateEntity(id: $id, expectedVersion: $expectedVersion, input: $input) {
+    ...BeadFields
+  }
+}
