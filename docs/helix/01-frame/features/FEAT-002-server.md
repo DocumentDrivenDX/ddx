@@ -102,11 +102,12 @@ divergence, and recovery contract are specified in SD-020.
 
 ### Replay-Backed Execution Evidence
 
-Execute-bead attempts store their normalized prompt, manifest, transcript, and
-runtime metrics under `.ddx/executions/<attempt-id>/` inside the project that
-owns the bead (see FEAT-006). These bundles are the replay-backed source of
-truth that server endpoints and dashboards read to reconstruct attempt history;
-the server does not own a separate transcript store.
+Execute-bead attempts store their normalized prompt, manifest, runtime
+metrics, and any copied or linked Fizeau transcript artifacts under
+`.ddx/executions/<attempt-id>/` inside the project that owns the bead (see
+FEAT-006). These bundles are the replay-backed source of truth that server
+endpoints and dashboards read to reconstruct attempt history; the server does
+not own a separate transcript store.
 
 ## Requirements
 
@@ -145,7 +146,9 @@ resolve exactly one project context.
 **Agent Activity (FEAT-006)**
 19. `GET /api/projects/:project/agent/sessions` — list recent DDx agent invocations
 20. `GET /api/projects/:project/agent/sessions/:id` — invocation detail, including native
-    session/trace references and any DDx-owned transcript data
+    session/trace references and any forwarded Fizeau event/transcript envelope
+    data; these payloads are opaque to DDx and are distinct from worker
+    lifecycle events
 21. MCP tool: `ddx_agent_sessions` (project selector required unless singleton compatibility mode applies)
 
 **Worker Progress (FEAT-006 embedded-agent progress contract)**
@@ -154,6 +157,10 @@ Worker state is read from the WorkerManager's in-memory registry plus the
 per-project `.ddx/workers/` directory. The WorkerManager is the single
 authoritative source for live phase state; the on-disk records are the
 authoritative source for historical phase summaries.
+
+Worker lifecycle events are DDx-owned. Forwarded Fizeau agent events are
+opaque payloads attached to agent-session records, not worker lifecycle state,
+and the server surfaces them without interpreting transcript semantics.
 
 22. `GET /api/projects/:project/workers` — list active and recently completed
     workers for a project; each entry includes worker identity, current status

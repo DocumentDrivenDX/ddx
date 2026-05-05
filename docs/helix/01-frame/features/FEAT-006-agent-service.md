@@ -73,6 +73,11 @@ DDx owns:
   and prior run metadata. On retry, DDx may raise `MinPower`. The agent owns
   how those power bounds map to a concrete model/provider.
 
+Fizeau owns the agent's transcript/progress/session rendering surface. DDx may
+forward Fizeau `ServiceEvent`s and link or copy Fizeau artifacts into the
+execution evidence bundle, but DDx does not interpret transcript semantics or
+render the inner Fizeau session log.
+
 ## Power Intent
 
 DDx does not route. DDx chooses request-level power bounds and sends them to
@@ -189,10 +194,10 @@ details inside it. DDx owns only the envelope around that log:
 - pointer or copied attachment for `ExecuteResponse.SessionLogPath`
 - DDx-owned attempt outcome, merge/preserve outcome, gates, and evidence refs
 
-DDx may render or link the session log for humans, but normal execution policy
-must not parse the inner session log to infer routing, provider health, model
-fallbacks, or retry destinations. Typed agent response fields and DDx-owned
-attempt evidence are the policy inputs.
+DDx may link or copy the session log attachment for humans, but normal
+execution policy must not parse the inner session log to infer routing,
+provider health, model fallbacks, or retry destinations. Typed agent response
+fields and DDx-owned attempt evidence are the policy inputs.
 
 ## Layer Ownership Migration Table
 
