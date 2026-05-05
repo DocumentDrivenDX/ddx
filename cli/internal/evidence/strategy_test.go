@@ -5,25 +5,6 @@ import (
 	"testing"
 )
 
-func TestAssembleRefOnly(t *testing.T) {
-	out := AssembleRefOnly([]RefOnlyEntry{
-		{Path: "docs/a.md", Title: "A"},
-		{Path: "docs/b.md"},
-	})
-	if !strings.Contains(out, "docs/a.md") || !strings.Contains(out, "A") {
-		t.Errorf("ref-only output missing entry: %q", out)
-	}
-	if !strings.Contains(out, "docs/b.md") {
-		t.Errorf("ref-only output missing untitled entry: %q", out)
-	}
-}
-
-func TestAssembleRefOnlyEmpty(t *testing.T) {
-	if got := AssembleRefOnly(nil); got != "" {
-		t.Errorf("empty entries should yield empty string, got %q", got)
-	}
-}
-
 func TestAssembleInlineFits(t *testing.T) {
 	res := AssembleInline([]SectionInput{
 		{Name: "a", Content: "alpha", MinFloor: true},

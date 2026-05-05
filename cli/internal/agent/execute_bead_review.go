@@ -315,8 +315,12 @@ func BuildReviewPromptBounded(b *bead.Bead, iter int, rev, diff, projectRoot str
 	sb.WriteString("</bead-review>\n")
 
 	out := sb.String()
+	assembled := evidence.AssembleInline([]evidence.SectionInput{{
+		Name:    "review-prompt",
+		Content: out,
+	}}, len(out))
 	return BuildReviewPromptResult{
-		Prompt:   out,
+		Prompt:   assembled.Prompt,
 		Overflow: len(out) > caps.MaxPromptBytes,
 		Sections: sections,
 	}

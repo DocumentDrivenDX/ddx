@@ -7,6 +7,7 @@ package agent
 // shipped to a provider as-is.
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
@@ -25,14 +26,14 @@ var promptFileCapBytes = evidence.DefaultMaxPromptBytes
 // adjusts the cap (.ddx/config.yaml:evidence_caps.max_prompt_bytes).
 func readPromptFileBounded(path string) ([]byte, error) {
 	cap := promptFileCapBytes
-	content, truncated, originalBytes, err := evidence.ReadFileClamped(path, cap)
+	content, err := evidence.ReadFileHardFail(path, cap, path)
 	if err != nil {
+		if errors.Is(err, evidence.ErrOversize) {
+			return nil, fmt.Errorf(
+				"prompt file %q exceeds cap: %v (configurable via .ddx/config.yaml:evidence_caps.max_prompt_bytes)",
+				path, err)
+		}
 		return nil, err
-	}
-	if truncated {
-		return nil, fmt.Errorf(
-			"prompt file %q exceeds cap: observed %d bytes, cap %d bytes (configurable via .ddx/config.yaml:evidence_caps.max_prompt_bytes)",
-			path, originalBytes, cap)
 	}
 	return content, nil
 }
