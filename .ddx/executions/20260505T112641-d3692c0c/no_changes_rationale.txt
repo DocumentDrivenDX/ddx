@@ -1,0 +1,15 @@
+status: complete
+verification_command: cd cli && go test ./internal/server/... ./internal/federation/...
+
+The bead is already satisfied by existing code in this worktree, so no source edits were required.
+
+Evidence:
+- `cli/cmd/server.go` wires `--hub-address` into `EnableSpokeMode` on startup.
+- `cli/internal/server/federation_spoke.go` starts spoke registration, jittered heartbeat, URL-change detection, and shutdown deregistration.
+- `cli/internal/federation/spoke.go` implements idempotent register, heartbeat jitter around 30s, and re-register-on-404 handling.
+- `cli/internal/server/federation_hub.go` rejects duplicate node_id from a different identity and uses the 2-minute stale threshold via the registry layer.
+- `cli/internal/server/federation_spoke_test.go` and `cli/internal/server/federation_hub_test.go` already cover the named acceptance tests.
+
+Verified command:
+- `cd cli && go test ./internal/server/... ./internal/federation/...`
+- `cd cli && lefthook run pre-commit`
