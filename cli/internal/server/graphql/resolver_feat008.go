@@ -916,6 +916,7 @@ func buildSessionIndexEfficacySnapshot(entries []agent.SessionIndexEntry) effica
 	}
 	rows := make([]*EfficacyRow, 0, len(grouped))
 	attemptDetails := map[string][]*EfficacyAttempt{}
+	now := time.Now().UTC()
 	for rowKey, group := range grouped {
 		sort.Slice(group, func(i, j int) bool { return group[i].CreatedAt.After(group[j].CreatedAt) })
 		attemptDetails[rowKey] = make([]*EfficacyAttempt, 0, len(group))
@@ -940,6 +941,7 @@ func buildSessionIndexEfficacySnapshot(entries []agent.SessionIndexEntry) effica
 				EvidenceBundleURL: attempt.EvidencePath,
 			})
 		}
+		sparkline := buildEfficacySparkline(group, now)
 		parts := strings.Split(rowKey, "|")
 		row := &EfficacyRow{
 			RowKey:             rowKey,
@@ -953,6 +955,7 @@ func buildSessionIndexEfficacySnapshot(entries []agent.SessionIndexEntry) effica
 			MedianOutputTokens: medianInt(outputTokens),
 			MedianDurationMs:   medianInt(durations),
 			MedianCostUsd:      medianFloatPtr(costs),
+			Sparkline:          sparkline,
 		}
 		if row.SuccessRate < efficacyWarningFloor {
 			row.Warning = &EfficacyWarning{Kind: "below-adaptive-floor", Threshold: floatPtr(efficacyWarningFloor)}
@@ -967,6 +970,51 @@ func buildSessionIndexEfficacySnapshot(entries []agent.SessionIndexEntry) effica
 	})
 
 	return efficacySnapshot{rows: rows, attempts: attemptDetails}
+}
+
+func buildEfficacySparkline(attempts []sessionEfficacyAttempt, now time.Time) []int {
+	if len(attempts) == 0 {
+		return nil
+	}
+	if now.IsZero() {
+		now = time.Now().UTC()
+	}
+	end := now.UTC().Truncate(time.Hour).Add(time.Hour)
+	start := end.Add(-24 * time.Hour)
+	const bucketSize = time.Hour
+	bucketCount := int(end.Sub(start) / bucketSize)
+	if bucketCount <= 0 {
+		return nil
+	}
+	successes := make([]int, bucketCount)
+	attemptCounts := make([]int, bucketCount)
+	nonEmpty := 0
+	for _, attempt := range attempts {
+		ts := attempt.CreatedAt.UTC()
+		if ts.Before(start) || !ts.Before(end) {
+			continue
+		}
+		idx := int(ts.Sub(start) / bucketSize)
+		if idx < 0 || idx >= bucketCount {
+			continue
+		}
+		attemptCounts[idx]++
+		if attempt.Outcome == "succeeded" {
+			successes[idx]++
+		}
+	}
+	sparkline := make([]int, bucketCount)
+	for i := range sparkline {
+		if attemptCounts[i] == 0 {
+			continue
+		}
+		nonEmpty++
+		sparkline[i] = (successes[i]*100 + attemptCounts[i]/2) / attemptCounts[i]
+	}
+	if nonEmpty < 6 {
+		return nil
+	}
+	return sparkline
 }
 
 func efficacyAttemptFromSession(entry agent.SessionIndexEntry) sessionEfficacyAttempt {

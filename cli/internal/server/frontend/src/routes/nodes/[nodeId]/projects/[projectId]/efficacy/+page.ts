@@ -16,6 +16,7 @@ const EFFICACY_ROWS_QUERY = gql`
 			medianOutputTokens
 			medianDurationMs
 			medianCostUsd
+			sparkline
 			warning {
 				kind
 				threshold
@@ -51,6 +52,7 @@ export interface EfficacyRow {
 	medianOutputTokens: number;
 	medianDurationMs: number;
 	medianCostUsd: number | null;
+	sparkline?: number[] | null;
 	warning: EfficacyWarning | null;
 	tier?: string | null;
 	labels?: string[] | null;

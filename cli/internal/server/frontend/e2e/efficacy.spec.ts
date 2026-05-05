@@ -12,6 +12,10 @@ const PROJECT_ID = 'proj-1';
 const PROJECTS = [{ id: PROJECT_ID, name: 'Project Alpha', path: '/repos/alpha' }];
 const BASE_URL = `/nodes/node-abc/projects/${PROJECT_ID}/efficacy`;
 
+function makeSparkline(base: number, step: number): number[] {
+	return Array.from({ length: 24 }, (_, i) => Math.max(0, base - i * step));
+}
+
 const EFFICACY_ROWS = [
 	{
 		harness: 'codex',
@@ -24,6 +28,7 @@ const EFFICACY_ROWS = [
 		medianOutputTokens: 1100,
 		medianDurationMs: 28000,
 		medianCostUsd: 0.032,
+		sparkline: makeSparkline(100, 4),
 		warning: null
 	},
 	{
@@ -37,6 +42,7 @@ const EFFICACY_ROWS = [
 		medianOutputTokens: 1500,
 		medianDurationMs: 45000,
 		medianCostUsd: 0.047,
+		sparkline: makeSparkline(92, 3),
 		warning: null
 	},
 	{
@@ -50,6 +56,7 @@ const EFFICACY_ROWS = [
 		medianOutputTokens: 900,
 		medianDurationMs: 62000,
 		medianCostUsd: null,
+		sparkline: makeSparkline(60, 2),
 		warning: { kind: 'below-adaptive-floor', threshold: 0.7 }
 	}
 ];
@@ -100,6 +107,7 @@ const TEN_K_SESSION_FIXTURE_ROWS = TEN_K_SESSION_FIXTURE_GROUPS.map((g, i) => ({
 	medianOutputTokens: 1200 + i,
 	medianDurationMs: 5500 + i * 100,
 	medianCostUsd: i % 5 === 0 ? null : 0.005 + i / 1000,
+	sparkline: makeSparkline(95 - i, 2 + (i % 3)),
 	warning: null
 }));
 
@@ -196,6 +204,23 @@ test('US-096.a: efficacy table lists every (harness, provider, model) tuple with
 	// No-cost-signal case uses em-dash placeholder, not empty or "0".
 	const noCostRow = table.getByRole('row', { name: /qwen3\.6/i });
 	await expect(noCostRow).toContainText('—');
+});
+
+test('US-096.a2: efficacy sparkline column and top-performers tile render', async ({ page }) => {
+	await mockEfficacy(page);
+	await page.goto(BASE_URL);
+
+	const table = page.getByRole('table', { name: /efficacy/i });
+	await expect(table.getByRole('columnheader', { name: /sparkline/i })).toBeVisible();
+
+	await expect(page.getByTestId('top-performers-tile')).toBeVisible();
+	const cards = page.getByTestId('top-performer-card');
+	await expect(cards).toHaveCount(3);
+	await expect(cards.first()).toContainText(/gpt-5/i);
+	await expect(cards.nth(1)).toContainText(/claude-sonnet-4-6/i);
+	await expect(cards.nth(2)).toContainText(/qwen3\.6-35b/i);
+
+	await expect(page.getByTestId('efficacy-sparkline-bars-codex|openai|gpt-5')).toBeVisible();
 });
 
 test('US-096.b: filtering by tier / label / spec-id updates table and encodes to URL', async ({

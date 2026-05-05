@@ -103,6 +103,59 @@ func TestEfficacyRowsFreshWithinTwoSeconds(t *testing.T) {
 	}
 }
 
+func TestEfficacyRowsSparklineTracksHourlySuccessRate(t *testing.T) {
+	workDir := t.TempDir()
+	resolver := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
+	projectID := agent.ProjectIDForPath(workDir)
+	now := time.Now().UTC()
+	bucketEnd := now.UTC().Truncate(time.Hour).Add(time.Hour)
+	bucketStart := bucketEnd.Add(-24 * time.Hour)
+	for i := 0; i < 6; i++ {
+		ts := bucketStart.Add(time.Duration(i)*time.Hour + 10*time.Minute)
+		outcome := "failure"
+		if i%2 == 0 {
+			outcome = "success"
+		}
+		appendSessionForTest(t, workDir, agent.SessionIndexEntry{
+			ID:         fmt.Sprintf("sparkline-%d", i),
+			ProjectID:  projectID,
+			Harness:    "codex",
+			Provider:   "openai",
+			Model:      "gpt-5",
+			StartedAt:  ts,
+			DurationMS: 1000 + i,
+			Outcome:    outcome,
+			BundlePath: fmt.Sprintf(".ddx/executions/sparkline-%d", i),
+		}, ts)
+	}
+
+	rows, err := resolver.EfficacyRows(context.Background(), nil, nil, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 efficacy row, got %d", len(rows))
+	}
+	got := rows[0].Sparkline
+	if got == nil {
+		t.Fatal("expected sparkline to be present")
+	}
+	if len(got) != 24 {
+		t.Fatalf("sparkline length = %d, want 24", len(got))
+	}
+	wantPrefix := []int{100, 0, 100, 0, 100, 0}
+	for i, want := range wantPrefix {
+		if got[i] != want {
+			t.Fatalf("sparkline[%d] = %d, want %d; got=%v", i, got[i], want, got)
+		}
+	}
+	for i, v := range got[len(wantPrefix):] {
+		if v != 0 {
+			t.Fatalf("sparkline[%d] = %d, want 0; got=%v", i+len(wantPrefix), v, got)
+		}
+	}
+}
+
 func TestEfficacyRowsDateFilterAndPerfTargets(t *testing.T) {
 	if raceEnabled {
 		t.Skip("perf thresholds are measured without the race detector")
@@ -188,7 +241,7 @@ func TestEfficacyRowsSmokeOverRealBackend(t *testing.T) {
 	seedEfficacySessionFixture(t, workDir, 10_000, 2, now)
 
 	httpHandler := efficacyHTTPHandler(workDir)
-	rowsResp := graphqlPOSTForTestReturningBody(t, httpHandler, `{ efficacyRows { rowKey harness provider model attempts successes successRate medianDurationMs medianCostUsd } }`)
+	rowsResp := graphqlPOSTForTestReturningBody(t, httpHandler, `{ efficacyRows { rowKey harness provider model attempts successes successRate medianDurationMs medianCostUsd sparkline } }`)
 	var rowsData struct {
 		Data struct {
 			EfficacyRows []struct {
@@ -198,6 +251,7 @@ func TestEfficacyRowsSmokeOverRealBackend(t *testing.T) {
 				SuccessRate      float64  `json:"successRate"`
 				MedianDurationMs int      `json:"medianDurationMs"`
 				MedianCostUsd    *float64 `json:"medianCostUsd"`
+				Sparkline        []int    `json:"sparkline"`
 			} `json:"efficacyRows"`
 		} `json:"data"`
 	}
@@ -206,6 +260,9 @@ func TestEfficacyRowsSmokeOverRealBackend(t *testing.T) {
 	}
 	if got := len(rowsData.Data.EfficacyRows); got < 5 {
 		t.Fatalf("expected at least 5 efficacy rows from the 10k fixture, got %d", got)
+	}
+	if got := len(rowsData.Data.EfficacyRows[0].Sparkline); got != 24 {
+		t.Fatalf("expected 24 sparkline buckets in real-backend smoke, got %d", got)
 	}
 
 	firstRowKey := rowsData.Data.EfficacyRows[0].RowKey

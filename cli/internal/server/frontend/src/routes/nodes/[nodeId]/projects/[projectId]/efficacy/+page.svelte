@@ -89,6 +89,15 @@
 			return tierMatches && labelMatches && specMatches;
 		})
 	);
+	const topPerformers = $derived(
+		[...filteredRows]
+			.sort((a, b) => {
+				if (b.successRate !== a.successRate) return b.successRate - a.successRate;
+				if (b.attempts !== a.attempts) return b.attempts - a.attempts;
+				return rowKey(a).localeCompare(rowKey(b));
+			})
+			.slice(0, 3)
+	);
 
 	$effect(() => {
 		tierFilter = data.activeTier;
@@ -213,6 +222,19 @@
 	function formatCost(value: number | null): string {
 		return value === null ? '—' : `$${value.toFixed(3)}`;
 	}
+
+	function sparklineMax(values: number[]): number {
+		let max = 0;
+		for (const value of values) {
+			if (value > max) max = value;
+		}
+		return max === 0 ? 1 : max;
+	}
+
+	function sparkBarHeight(value: number, max: number): string {
+		const pct = Math.round((value * 100) / max);
+		return `${Math.max(2, pct)}%`;
+	}
 </script>
 
 <svelte:head>
@@ -223,12 +245,14 @@
 	<header class="flex flex-wrap items-start justify-between gap-4">
 		<div>
 			<div
-				class="mb-2 inline-flex items-center gap-2 border border-[#3B5B7A]/30 bg-[#3B5B7A]/8 px-2 py-1 text-[11px] font-bold tracking-[0.05em] uppercase text-[#3B5B7A] dark:border-[#7BA3CC]/30 dark:bg-[#7BA3CC]/10 dark:text-[#7BA3CC]"
+				class="mb-2 inline-flex items-center gap-2 border border-[#3B5B7A]/30 bg-[#3B5B7A]/8 px-2 py-1 text-[11px] font-bold tracking-[0.05em] text-[#3B5B7A] uppercase dark:border-[#7BA3CC]/30 dark:bg-[#7BA3CC]/10 dark:text-[#7BA3CC]"
 			>
 				<BarChart3 class="h-3.5 w-3.5" />
 				Model routing evidence
 			</div>
-			<h1 class="text-xl font-bold tracking-[-0.02em] text-[#1F2125] dark:text-[#EDE6D6]">Efficacy</h1>
+			<h1 class="text-xl font-bold tracking-[-0.02em] text-[#1F2125] dark:text-[#EDE6D6]">
+				Efficacy
+			</h1>
 		</div>
 		{#if filteredRows.length > 0}
 			{@const selectionCount = filteredRows.filter((r) => selectedRowKeys.has(rowKey(r))).length}
@@ -240,7 +264,7 @@
 				title={canCompare
 					? `Compare ${selectionCount} selected rows`
 					: 'Select 2 or more rows to compare'}
-				class="inline-flex items-center gap-2 bg-[#3B5B7A] px-3 py-2 text-[11px] font-bold tracking-[0.05em] uppercase text-white hover:opacity-90 focus:ring-2 focus:ring-[#3B5B7A] focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#7BA3CC] dark:text-[#1A1815]"
+				class="inline-flex items-center gap-2 bg-[#3B5B7A] px-3 py-2 text-[11px] font-bold tracking-[0.05em] text-white uppercase hover:opacity-90 focus:ring-2 focus:ring-[#3B5B7A] focus:ring-offset-2 focus:outline-none disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#7BA3CC] dark:text-[#1A1815]"
 			>
 				<GitCompareArrows class="h-4 w-4" />
 				Compare selected{selectionCount >= 2 ? ` (${selectionCount})` : ''}
@@ -249,7 +273,9 @@
 	</header>
 
 	<form class="grid gap-3 md:grid-cols-[12rem_1fr_1fr]" aria-label="Efficacy filters">
-		<label class="space-y-1 text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
+		<label
+			class="space-y-1 text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
+		>
 			<span>Tier</span>
 			<select
 				name="tier"
@@ -268,7 +294,9 @@
 			</select>
 		</label>
 
-		<label class="space-y-1 text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
+		<label
+			class="space-y-1 text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
+		>
 			<span>Label</span>
 			<input
 				name="label"
@@ -283,7 +311,9 @@
 			/>
 		</label>
 
-		<label class="space-y-1 text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
+		<label
+			class="space-y-1 text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
+		>
 			<span>Spec ID</span>
 			<input
 				name="spec-id"
@@ -299,6 +329,81 @@
 		</label>
 	</form>
 
+	{#if topPerformers.length > 0}
+		<section
+			aria-label="Top performers"
+			class="border border-[#E4DDD0] bg-[#F9F6EF] p-4 dark:border-[#34302A] dark:bg-[#231F1A]"
+			data-testid="top-performers-tile"
+		>
+			<div class="mb-3 flex items-center justify-between gap-3">
+				<div>
+					<h2 class="text-base font-semibold text-[#1F2125] dark:text-[#EDE6D6]">Top performers</h2>
+					<p class="text-xs text-[#6B6558] dark:text-[#8E8674]">
+						Best success rates in the current filter
+					</p>
+				</div>
+				<span class="text-xs text-[#6B6558] dark:text-[#8E8674]">
+					Top {topPerformers.length}
+				</span>
+			</div>
+
+			<div class="grid gap-3 md:grid-cols-3">
+				{#each topPerformers as row, i (rowKey(row))}
+					<article
+						class="space-y-2 border border-[#E4DDD0] bg-[#FFFFFF] p-3 dark:border-[#34302A] dark:bg-[#1A1815]"
+						data-testid="top-performer-card"
+					>
+						<div class="flex items-start justify-between gap-3">
+							<div class="min-w-0">
+								<p class="truncate text-sm font-medium text-[#1F2125] dark:text-[#EDE6D6]">
+									{row.harness} / {row.provider} / {row.model}
+								</p>
+								<p class="text-xs text-[#6B6558] dark:text-[#8E8674]">
+									{row.successes}/{row.attempts} · {formatPercent(row.successRate)}
+								</p>
+							</div>
+							<span
+								class="text-[11px] tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
+							>
+								#{i + 1}
+							</span>
+						</div>
+
+						<div class="flex items-end justify-between gap-3">
+							<div class="min-w-0">
+								<p class="text-xs text-[#6B6558] dark:text-[#8E8674]">Median duration</p>
+								<p class="text-sm font-medium text-[#1F2125] dark:text-[#EDE6D6]">
+									{formatDuration(row.medianDurationMs)}
+								</p>
+							</div>
+							<div class="shrink-0 text-right" data-testid="top-performer-sparkline-{rowKey(row)}">
+								{#if row.sparkline && row.sparkline.length >= 6}
+									{@const max = sparklineMax(row.sparkline)}
+									<div
+										class="flex h-6 w-28 items-end gap-[1px]"
+										role="img"
+										aria-label="24-hour success-rate trend for {row.harness} / {row.provider} / {row.model}"
+										data-testid="top-performer-sparkline-bars-{rowKey(row)}"
+									>
+										{#each row.sparkline as v, i (i)}
+											<div
+												class="w-full bg-[#3B5B7A] dark:bg-[#7BA3CC]"
+												style="height: {sparkBarHeight(v, max)}"
+												title="{v}% success"
+											></div>
+										{/each}
+									</div>
+								{:else}
+									<span class="text-xs text-[#6B6558] dark:text-[#8E8674]">—</span>
+								{/if}
+							</div>
+						</div>
+					</article>
+				{/each}
+			</div>
+		</section>
+	{/if}
+
 	<div class="overflow-hidden border border-[#E4DDD0] dark:border-[#34302A]">
 		<table aria-label="Efficacy table" class="w-full text-sm">
 			<thead>
@@ -306,21 +411,46 @@
 					<th scope="col" class="w-10 px-4 py-3 text-left">
 						<span class="sr-only">Select row for comparison</span>
 					</th>
-					<th class="px-4 py-3 text-left text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">Harness</th>
-					<th class="px-4 py-3 text-left text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">Provider</th>
-					<th class="px-4 py-3 text-left text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">Model</th>
-					<th class="px-4 py-3 text-right text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">Attempts</th
+					<th
+						class="px-4 py-3 text-left text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
+						>Harness</th
 					>
-					<th class="px-4 py-3 text-right text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
+					<th
+						class="px-4 py-3 text-left text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
+						>Provider</th
+					>
+					<th
+						class="px-4 py-3 text-left text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
+						>Model</th
+					>
+					<th
+						class="px-4 py-3 text-right text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
+						>Attempts</th
+					>
+					<th
+						class="px-4 py-3 text-right text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
+					>
 						Success rate
 					</th>
-					<th class="px-4 py-3 text-right text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
+					<th
+						class="px-4 py-3 text-right text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
+					>
+						Sparkline
+					</th>
+					<th
+						class="px-4 py-3 text-right text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
+					>
 						Tokens
 					</th>
-					<th class="px-4 py-3 text-right text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
+					<th
+						class="px-4 py-3 text-right text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
+					>
 						Duration
 					</th>
-					<th class="px-4 py-3 text-right text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">Cost</th>
+					<th
+						class="px-4 py-3 text-right text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
+						>Cost</th
+					>
 				</tr>
 			</thead>
 			<tbody>
@@ -382,6 +512,27 @@
 						<td class="px-4 py-3 text-right text-[#6B6558] tabular-nums dark:text-[#8E8674]">
 							{row.successes}/{row.attempts} · {formatPercent(row.successRate)}
 						</td>
+						<td class="px-4 py-3 text-right" data-testid="efficacy-sparkline-{rowKey(row)}">
+							{#if row.sparkline && row.sparkline.length >= 6}
+								{@const max = sparklineMax(row.sparkline)}
+								<div
+									class="ml-auto flex h-6 w-28 items-end justify-end gap-[1px]"
+									role="img"
+									aria-label="24-hour success-rate trend for {row.harness} / {row.provider} / {row.model}"
+									data-testid="efficacy-sparkline-bars-{rowKey(row)}"
+								>
+									{#each row.sparkline as v, i (i)}
+										<div
+											class="w-full bg-[#3B5B7A] dark:bg-[#7BA3CC]"
+											style="height: {sparkBarHeight(v, max)}"
+											title="{v}% success"
+										></div>
+									{/each}
+								</div>
+							{:else}
+								<span class="text-[#6B6558] dark:text-[#8E8674]">—</span>
+							{/if}
+						</td>
 						<td class="px-4 py-3 text-right font-mono text-xs text-[#6B6558] dark:text-[#8E8674]">
 							{formatTokens(row.medianInputTokens, row.medianOutputTokens)}
 						</td>
@@ -395,7 +546,7 @@
 				{/each}
 				{#if filteredRows.length === 0}
 					<tr>
-						<td colspan="9" class="px-4 py-8 text-center text-[#6B6558] dark:text-[#8E8674]">
+						<td colspan="10" class="px-4 py-8 text-center text-[#6B6558] dark:text-[#8E8674]">
 							No efficacy rows match the current filters.
 						</td>
 					</tr>
@@ -405,10 +556,7 @@
 	</div>
 
 	<div class="grid gap-4 lg:grid-cols-[minmax(0,1fr)_24rem]">
-		<section
-			aria-label="Comparisons"
-			class="border border-[#E4DDD0] p-4 dark:border-[#34302A]"
-		>
+		<section aria-label="Comparisons" class="border border-[#E4DDD0] p-4 dark:border-[#34302A]">
 			<div class="mb-3 flex items-center justify-between">
 				<h2 class="text-base font-semibold text-[#1F2125] dark:text-[#EDE6D6]">Comparisons</h2>
 				<span class="text-xs text-[#6B6558] dark:text-[#8E8674]"
@@ -437,10 +585,7 @@
 		</section>
 
 		{#if selectedRowKey}
-			<aside
-				aria-label="Attempts detail"
-				class="border border-[#E4DDD0] p-4 dark:border-[#34302A]"
-			>
+			<aside aria-label="Attempts detail" class="border border-[#E4DDD0] p-4 dark:border-[#34302A]">
 				<h2 class="text-base font-semibold text-[#1F2125] dark:text-[#EDE6D6]">Last 10 attempts</h2>
 				<p class="mt-1 mb-3 text-xs text-[#6B6558] dark:text-[#8E8674]">{selectedRowLabel}</p>
 				{#if attemptsLoading}
@@ -449,13 +594,18 @@
 					<table class="w-full text-sm">
 						<thead>
 							<tr class="border-b border-[#E4DDD0] dark:border-[#34302A]">
-								<th class="py-2 pr-3 text-left text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]"
+								<th
+									class="py-2 pr-3 text-left text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
 									>Bead</th
 								>
-								<th class="px-3 py-2 text-left text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
+								<th
+									class="px-3 py-2 text-left text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
+								>
 									Outcome
 								</th>
-								<th class="px-3 py-2 text-right text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
+								<th
+									class="px-3 py-2 text-right text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
+								>
 									Cost
 								</th>
 							</tr>
@@ -539,7 +689,9 @@
 				{/each}
 			</ul>
 
-			<label class="block space-y-1 text-[11px] font-bold tracking-[0.05em] uppercase text-[#6B6558] dark:text-[#8E8674]">
+			<label
+				class="block space-y-1 text-[11px] font-bold tracking-[0.05em] text-[#6B6558] uppercase dark:text-[#8E8674]"
+			>
 				<span>Prompt</span>
 				<textarea
 					name="prompt"
@@ -557,7 +709,7 @@
 					type="button"
 					onclick={submitComparison}
 					disabled={dispatching || comparisonArms.length === 0 || !comparisonPrompt.trim()}
-					class="bg-[#3B5B7A] px-3 py-2 text-[11px] font-bold tracking-[0.05em] uppercase text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#7BA3CC] dark:text-[#1A1815]"
+					class="bg-[#3B5B7A] px-3 py-2 text-[11px] font-bold tracking-[0.05em] text-white uppercase hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-[#7BA3CC] dark:text-[#1A1815]"
 				>
 					{dispatching ? 'Starting...' : 'Start'}
 				</button>

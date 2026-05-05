@@ -1972,6 +1972,8 @@ type EfficacyRow {
   medianDurationMs: Int!
   """Median cost in USD when known"""
   medianCostUsd: Float
+  """Hourly success-rate sparkline for the last 24 hours, oldest-first"""
+  sparkline: [Int!]
   """Optional warning metadata"""
   warning: EfficacyWarning
 }

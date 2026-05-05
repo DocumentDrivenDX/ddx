@@ -881,6 +881,8 @@ type EfficacyRow struct {
 	MedianDurationMs int `json:"medianDurationMs"`
 	// Median cost in USD when known
 	MedianCostUsd *float64 `json:"medianCostUsd,omitempty"`
+	// Hourly success-rate sparkline for the last 24 hours, oldest-first
+	Sparkline []int `json:"sparkline,omitempty"`
 	// Optional warning metadata
 	Warning *EfficacyWarning `json:"warning,omitempty"`
 }

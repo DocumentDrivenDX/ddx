@@ -474,6 +474,7 @@ type ComplexityRoot struct {
 		Model              func(childComplexity int) int
 		Provider           func(childComplexity int) int
 		RowKey             func(childComplexity int) int
+		Sparkline          func(childComplexity int) int
 		SuccessRate        func(childComplexity int) int
 		Successes          func(childComplexity int) int
 		Warning            func(childComplexity int) int
@@ -967,8 +968,8 @@ type ComplexityRoot struct {
 		ProviderType      func(childComplexity int) int
 		Quota             func(childComplexity int) int
 		Reachable         func(childComplexity int) int
-		Sparkline         func(childComplexity int) int
 		RecentWorkerCount func(childComplexity int) int
+		Sparkline         func(childComplexity int) int
 		Status            func(childComplexity int) int
 		Usage             func(childComplexity int) int
 	}
@@ -3352,6 +3353,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.EfficacyRow.RowKey(childComplexity), true
+	case "EfficacyRow.sparkline":
+		if e.ComplexityRoot.EfficacyRow.Sparkline == nil {
+			break
+		}
+
+		return e.ComplexityRoot.EfficacyRow.Sparkline(childComplexity), true
 	case "EfficacyRow.successRate":
 		if e.ComplexityRoot.EfficacyRow.SuccessRate == nil {
 			break
@@ -5439,6 +5446,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ProviderStatus.Reachable(childComplexity), true
+	case "ProviderStatus.recentWorkerCount":
+		if e.ComplexityRoot.ProviderStatus.RecentWorkerCount == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ProviderStatus.RecentWorkerCount(childComplexity), true
 	case "ProviderStatus.sparkline":
 		if e.ComplexityRoot.ProviderStatus.Sparkline == nil {
 			break
@@ -18764,6 +18777,35 @@ func (ec *executionContext) fieldContext_EfficacyRow_medianCostUsd(_ context.Con
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Float does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _EfficacyRow_sparkline(ctx context.Context, field graphql.CollectedField, obj *EfficacyRow) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_EfficacyRow_sparkline,
+		func(ctx context.Context) (any, error) {
+			return obj.Sparkline, nil
+		},
+		nil,
+		ec.marshalOInt2ᚕintᚄ,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_EfficacyRow_sparkline(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "EfficacyRow",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -33275,6 +33317,8 @@ func (ec *executionContext) fieldContext_Query_harnessStatuses(_ context.Context
 				return ec.fieldContext_ProviderStatus_defaultForProfile(ctx, field)
 			case "sparkline":
 				return ec.fieldContext_ProviderStatus_sparkline(ctx, field)
+			case "recentWorkerCount":
+				return ec.fieldContext_ProviderStatus_recentWorkerCount(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type ProviderStatus", field.Name)
 		},
@@ -33578,6 +33622,8 @@ func (ec *executionContext) fieldContext_Query_efficacyRows(ctx context.Context,
 				return ec.fieldContext_EfficacyRow_medianDurationMs(ctx, field)
 			case "medianCostUsd":
 				return ec.fieldContext_EfficacyRow_medianCostUsd(ctx, field)
+			case "sparkline":
+				return ec.fieldContext_EfficacyRow_sparkline(ctx, field)
 			case "warning":
 				return ec.fieldContext_EfficacyRow_warning(ctx, field)
 			}
@@ -45632,6 +45678,8 @@ func (ec *executionContext) _EfficacyRow(ctx context.Context, sel ast.SelectionS
 			}
 		case "medianCostUsd":
 			out.Values[i] = ec._EfficacyRow_medianCostUsd(ctx, field, obj)
+		case "sparkline":
+			out.Values[i] = ec._EfficacyRow_sparkline(ctx, field, obj)
 		case "warning":
 			out.Values[i] = ec._EfficacyRow_warning(ctx, field, obj)
 		default:
@@ -56059,6 +56107,42 @@ func (ec *executionContext) marshalOID2ᚖstring(ctx context.Context, sel ast.Se
 	_ = ctx
 	res := graphql.MarshalID(*v)
 	return res
+}
+
+func (ec *executionContext) unmarshalOInt2ᚕintᚄ(ctx context.Context, v any) ([]int, error) {
+	if v == nil {
+		return nil, nil
+	}
+	var vSlice []any
+	vSlice = graphql.CoerceList(v)
+	var err error
+	res := make([]int, len(vSlice))
+	for i := range vSlice {
+		ctx := graphql.WithPathContext(ctx, graphql.NewPathWithIndex(i))
+		res[i], err = ec.unmarshalNInt2int(ctx, vSlice[i])
+		if err != nil {
+			return nil, err
+		}
+	}
+	return res, nil
+}
+
+func (ec *executionContext) marshalOInt2ᚕintᚄ(ctx context.Context, sel ast.SelectionSet, v []int) graphql.Marshaler {
+	if v == nil {
+		return graphql.Null
+	}
+	ret := make(graphql.Array, len(v))
+	for i := range v {
+		ret[i] = ec.marshalNInt2int(ctx, sel, v[i])
+	}
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
 }
 
 func (ec *executionContext) unmarshalOInt2ᚖint(ctx context.Context, v any) (*int, error) {
