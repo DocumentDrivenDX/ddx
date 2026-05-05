@@ -60,7 +60,7 @@ func TestParseClaudeStream(t *testing.T) {
 			wantFinalText:     "All done.",
 			wantSessionID:     "sess-abc",
 			wantModel:         "claude-sonnet-4-6",
-			wantProgressTypes: []string{"session.start", "llm.response", "tool.call", "llm.response"},
+			wantProgressTypes: []string{"session.start", "llm.response", "tool.call", "tool.result", "llm.response"},
 		},
 		{
 			name: "garbage lines are skipped",
@@ -79,7 +79,7 @@ func TestParseClaudeStream(t *testing.T) {
 			wantFinalText:     "ok",
 			wantSessionID:     "sess-xyz",
 			wantModel:         "claude-sonnet-4-6",
-			wantProgressTypes: []string{"session.start", "llm.response", "tool.call"},
+			wantProgressTypes: []string{"session.start", "llm.response", "tool.call", "tool.result"},
 		},
 		{
 			name: "text-only assistant without tool_use still emits progress",
@@ -143,12 +143,9 @@ func TestParseClaudeStream(t *testing.T) {
 	}
 }
 
-// TestParseClaudeStreamVerboseMode asserts that with DDX_LOG_VERBOSE=1
-// the parser produces enriched llm.response events (content, finish_reason,
-// full usage object including cache fields) and emits tool.call events
-// only after the matching tool_result, with input, output, duration_ms,
-// and error all populated.
-func TestParseClaudeStreamVerboseMode(t *testing.T) {
+// TestParseClaudeStreamDiagnosticMode asserts that with DDX_LOG_VERBOSE=1
+// the parser adds raw body fields without changing event ordering or types.
+func TestParseClaudeStreamDiagnosticMode(t *testing.T) {
 	t.Setenv("DDX_LOG_VERBOSE", "1")
 	input := strings.Join([]string{
 		`{"type":"system","subtype":"init","session_id":"sess-v","model":"claude-sonnet-4-6"}`,
@@ -183,44 +180,60 @@ func TestParseClaudeStreamVerboseMode(t *testing.T) {
 		}
 	}
 	require.Len(t, llmResponses, 2, "expected two llm.response events")
-	require.Len(t, toolCalls, 1, "expected one tool.call event (deferred until tool_result)")
+	var toolResults []map[string]interface{}
+	for _, line := range strings.Split(strings.TrimSpace(progressBuf.String()), "\n") {
+		if line == "" {
+			continue
+		}
+		var env envelope
+		require.NoError(t, json.Unmarshal([]byte(line), &env))
+		if env.Type == "tool.result" {
+			toolResults = append(toolResults, env.Data)
+		}
+	}
+	require.Len(t, toolCalls, 1, "expected one tool.call event")
+	require.Len(t, toolResults, 1, "expected one tool.result event")
 
 	// llm.response[0] — assistant turn that issued a tool_use.
 	first := llmResponses[0]
-	assert.Equal(t, "running ls", first["content"], "verbose llm.response must include content")
-	assert.Equal(t, "tool_use", first["finish_reason"], "verbose llm.response must include finish_reason")
+	assert.Equal(t, "running ls", first["content"], "diagnostic llm.response must include content")
+	assert.Equal(t, "tool_use", first["finish_reason"], "diagnostic llm.response must include finish_reason")
 	usage, ok := first["usage"].(map[string]interface{})
-	require.True(t, ok, "verbose llm.response must include usage object")
+	require.True(t, ok, "diagnostic llm.response must include usage object")
 	assert.EqualValues(t, 120, usage["input_tokens"])
 	assert.EqualValues(t, 42, usage["output_tokens"])
 	assert.EqualValues(t, 10, usage["cache_creation_input_tokens"])
 	assert.EqualValues(t, 80, usage["cache_read_input_tokens"])
 	assert.EqualValues(t, 162, usage["total_tokens"])
+	assert.EqualValues(t, len("running ls"), first["response_bytes"])
+	assert.EqualValues(t, len(`{"command":"ls"}`), first["tool_input_bytes"])
 
 	// llm.response[1] — final text turn.
 	second := llmResponses[1]
 	assert.Equal(t, "All done.", second["content"])
 	assert.Equal(t, "end_turn", second["finish_reason"])
 
-	// tool.call — verbose deferred event with output/duration/error populated.
+	// tool.call stays an immediate request event; tool.result carries output.
 	tc := toolCalls[0]
 	assert.Equal(t, "Bash", tc["tool"])
 	input2, ok := tc["input"].(map[string]interface{})
-	require.True(t, ok, "verbose tool.call must include decoded input")
+	require.True(t, ok, "tool.call must include decoded input")
 	assert.Equal(t, "ls", input2["command"])
-	assert.Equal(t, "README.md\nfoo.go", tc["output"], "verbose tool.call must include tool_result output")
-	_, hasDuration := tc["duration_ms"]
-	assert.True(t, hasDuration, "verbose tool.call must include duration_ms")
-	assert.Equal(t, "", tc["error"], "verbose tool.call must include error field (empty on success)")
+	assert.EqualValues(t, len(`{"command":"ls"}`), tc["input_bytes"])
 	assert.Equal(t, "ddx-verbose", tc["bead_id"])
 	assert.EqualValues(t, 1, tc["turn"])
+
+	result := toolResults[0]
+	assert.Equal(t, "Bash", result["tool"])
+	assert.Equal(t, "README.md\nfoo.go", result["output"], "diagnostic tool.result must include output")
+	assert.Equal(t, "", result["error"], "tool.result must include error field (empty on success)")
+	assert.EqualValues(t, len("README.md\nfoo.go"), toolResults[0]["output_bytes"])
 }
 
-// TestParseClaudeStreamVerboseLeanDefault asserts that the lean schema is
-// the default — when DDX_LOG_VERBOSE is unset, llm.response events
-// must NOT carry the verbose-only fields and tool.call events are emitted
-// immediately (without output/duration_ms/error).
-func TestParseClaudeStreamVerboseLeanDefault(t *testing.T) {
+// TestParseClaudeStreamStandardDefault asserts that the standard schema is
+// the default: raw diagnostic bodies are omitted, but compact payload sizes
+// and stable tool.call/tool.result events are still emitted.
+func TestParseClaudeStreamStandardDefault(t *testing.T) {
 	t.Setenv("DDX_LOG_VERBOSE", "")
 	input := strings.Join([]string{
 		`{"type":"system","subtype":"init","session_id":"sess-l","model":"claude-sonnet-4-6"}`,
@@ -230,7 +243,7 @@ func TestParseClaudeStreamVerboseLeanDefault(t *testing.T) {
 	}, "\n")
 
 	var progressBuf bytes.Buffer
-	_, err := parseClaudeStream(strings.NewReader(input), &progressBuf, "sess-l", "ddx-lean", time.Now())
+	_, err := parseClaudeStream(strings.NewReader(input), &progressBuf, "sess-l", "ddx-standard", time.Now())
 	require.NoError(t, err)
 
 	hasField := func(eventType, field string) bool {
@@ -251,12 +264,12 @@ func TestParseClaudeStreamVerboseLeanDefault(t *testing.T) {
 		}
 		return false
 	}
-	assert.False(t, hasField("llm.response", "content"), "lean llm.response must not include content")
-	assert.False(t, hasField("llm.response", "finish_reason"), "lean llm.response must not include finish_reason")
-	assert.False(t, hasField("llm.response", "usage"), "lean llm.response must not include verbose usage object")
-	assert.False(t, hasField("tool.call", "output"), "lean tool.call must not include output")
-	assert.False(t, hasField("tool.call", "duration_ms"), "lean tool.call must not include duration_ms")
-	assert.False(t, hasField("tool.call", "error"), "lean tool.call must not include error")
+	assert.False(t, hasField("llm.response", "content"), "standard llm.response must not include content")
+	assert.False(t, hasField("llm.response", "finish_reason"), "standard llm.response must not include finish_reason")
+	assert.False(t, hasField("llm.response", "usage"), "standard llm.response must not include verbose usage object")
+	assert.False(t, hasField("tool.result", "output"), "standard tool.result must not include output")
+	assert.True(t, hasField("tool.call", "input_bytes"), "standard tool.call must include input_bytes")
+	assert.True(t, hasField("tool.result", "output_bytes"), "standard tool.result must include output_bytes")
 }
 
 // TestParseClaudeStreamEmpty verifies the parser tolerates an empty stream

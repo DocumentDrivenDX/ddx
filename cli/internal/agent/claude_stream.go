@@ -51,11 +51,12 @@ type claudeAssistantMessage struct {
 }
 
 type claudeMessageBlock struct {
-	Type  string          `json:"type"`
-	Text  string          `json:"text,omitempty"`
-	ID    string          `json:"id,omitempty"`
-	Name  string          `json:"name,omitempty"`
-	Input json.RawMessage `json:"input,omitempty"`
+	Type     string          `json:"type"`
+	Text     string          `json:"text,omitempty"`
+	Thinking string          `json:"thinking,omitempty"`
+	ID       string          `json:"id,omitempty"`
+	Name     string          `json:"name,omitempty"`
+	Input    json.RawMessage `json:"input,omitempty"`
 }
 
 type claudeAssistantUsage struct {
@@ -67,8 +68,7 @@ type claudeAssistantUsage struct {
 
 // claudeUserMessage decodes the "message" field of a {"type":"user",...}
 // stream event so we can recover tool_result output, error flags, and
-// match them back to the originating tool_use_id. Used by verbose mode to
-// populate tool.call output/duration_ms/error fields.
+// match them back to the originating tool_use_id.
 type claudeUserMessage struct {
 	Content []claudeUserBlock `json:"content"`
 }
@@ -80,9 +80,7 @@ type claudeUserBlock struct {
 	IsError   bool            `json:"is_error,omitempty"`
 }
 
-// pendingToolCall tracks an in-flight tool_use awaiting its tool_result so
-// the parser can emit a single tool.call event with output, duration_ms,
-// and error populated. Only used in verbose mode.
+// pendingToolCall tracks an in-flight tool_use awaiting its tool_result.
 type pendingToolCall struct {
 	name      string
 	input     map[string]any
@@ -106,12 +104,11 @@ type claudeStreamResult struct {
 }
 
 // parseClaudeStream reads newline-delimited claude stream-json events from r,
-// writes translated progress entries to progressLog (one JSONL line per tool
-// call and a session.start event on init), and returns an aggregated
+// writes translated progress entries to progressLog, and returns an aggregated
 // claudeStreamResult covering token usage, final text, and counts.
 //
 // The progress entries use the same event type names the Fizeau harness
-// emits (session.start, tool.call, llm.response) so the existing
+// emits (session.start, llm.response, tool.call, tool.result) so the existing
 // TailSessionLogs / FormatSessionLogLines pipeline can render them as
 // real-time progress without any changes.
 //
@@ -215,6 +212,7 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 			// the assistant event into an llm.response-like progress entry.
 			var toolNames []map[string]string
 			var textOut strings.Builder
+			var responseBytes, thinkingBytes, toolInputBytes int
 			for _, block := range msg.Content {
 				switch block.Type {
 				case "text":
@@ -223,6 +221,11 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 							textOut.WriteString("\n")
 						}
 						textOut.WriteString(block.Text)
+						responseBytes += len([]byte(block.Text))
+					}
+				case "thinking":
+					if block.Thinking != "" {
+						thinkingBytes += len([]byte(block.Thinking))
 					}
 				case "tool_use":
 					name := block.Name
@@ -230,6 +233,7 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 						name = "tool"
 					}
 					toolNames = append(toolNames, map[string]string{"name": name})
+					toolInputBytes += len(block.Input)
 				}
 			}
 
@@ -238,14 +242,17 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 				latencyMS = 0
 			}
 			llmData := map[string]any{
-				"model":         res.Model,
-				"latency_ms":    latencyMS,
-				"tool_calls":    toolNames,
-				"turn":          res.TurnCount,
-				"bead_id":       beadID,
-				"elapsed_ms":    elapsedMS,
-				"input_tokens":  res.InputTokens,
-				"output_tokens": res.OutputTokens,
+				"model":            res.Model,
+				"latency_ms":       latencyMS,
+				"tool_calls":       toolNames,
+				"turn":             res.TurnCount,
+				"bead_id":          beadID,
+				"elapsed_ms":       elapsedMS,
+				"input_tokens":     res.InputTokens,
+				"output_tokens":    res.OutputTokens,
+				"response_bytes":   responseBytes,
+				"thinking_bytes":   thinkingBytes,
+				"tool_input_bytes": toolInputBytes,
 				"attempt": map[string]any{
 					"cost": map[string]any{
 						"raw": map[string]any{
@@ -268,10 +275,8 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 			data, _ := json.Marshal(llmData)
 			emit("llm.response", string(data))
 
-			// Emit (lean) or defer (verbose) a tool.call entry per tool_use
-			// block. Verbose mode buffers each call until the matching
-			// tool_result arrives so the emitted event includes output,
-			// duration_ms, and error.
+			// Emit tool.call immediately for every tool_use block. The
+			// matching user/tool_result event emits tool.result later.
 			for _, block := range msg.Content {
 				if block.Type != "tool_use" {
 					continue
@@ -281,22 +286,20 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 				if len(block.Input) > 0 {
 					_ = json.Unmarshal(block.Input, &input)
 				}
-				if verbose {
-					pendingTools[block.ID] = &pendingToolCall{
-						name:      block.Name,
-						input:     input,
-						startedAt: now,
-						turn:      res.TurnCount,
-						elapsedMS: elapsedMS,
-					}
-					continue
+				pendingTools[block.ID] = &pendingToolCall{
+					name:      block.Name,
+					input:     input,
+					startedAt: now,
+					turn:      res.TurnCount,
+					elapsedMS: elapsedMS,
 				}
 				toolData, _ := json.Marshal(map[string]any{
-					"tool":       block.Name,
-					"input":      input,
-					"bead_id":    beadID,
-					"elapsed_ms": elapsedMS,
-					"turn":       res.TurnCount,
+					"tool":        block.Name,
+					"input":       input,
+					"input_bytes": len(block.Input),
+					"bead_id":     beadID,
+					"elapsed_ms":  elapsedMS,
+					"turn":        res.TurnCount,
 				})
 				emit("tool.call", string(toolData))
 			}
@@ -311,9 +314,8 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 		case "user":
 			// user events carry tool_result content. They mark the moment
 			// the next LLM request is sent, so we reset the per-call
-			// latency baseline. In verbose mode they also flush deferred
-			// tool.call events with output, duration_ms, and error attached.
-			if verbose && len(ev.Message) > 0 && len(pendingTools) > 0 {
+			// latency baseline.
+			if len(ev.Message) > 0 && len(pendingTools) > 0 {
 				var um claudeUserMessage
 				if json.Unmarshal(ev.Message, &um) == nil {
 					for _, blk := range um.Content {
@@ -334,17 +336,20 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 						if durationMS < 0 {
 							durationMS = 0
 						}
-						toolData, _ := json.Marshal(map[string]any{
-							"tool":        pending.name,
-							"input":       pending.input,
-							"output":      output,
-							"duration_ms": durationMS,
-							"error":       errMsg,
-							"bead_id":     beadID,
-							"elapsed_ms":  pending.elapsedMS,
-							"turn":        pending.turn,
-						})
-						emit("tool.call", string(toolData))
+						resultPayload := map[string]any{
+							"tool":         pending.name,
+							"output_bytes": len([]byte(output)),
+							"duration_ms":  durationMS,
+							"error":        errMsg,
+							"bead_id":      beadID,
+							"elapsed_ms":   elapsedMS,
+							"turn":         pending.turn,
+						}
+						if verbose {
+							resultPayload["output"] = output
+						}
+						resultData, _ := json.Marshal(resultPayload)
+						emit("tool.result", string(resultData))
 					}
 				}
 			}
@@ -375,22 +380,25 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 	if err := scanner.Err(); err != nil && !errors.Is(err, io.EOF) {
 		return res, err
 	}
-	// Flush any deferred tool.call events whose tool_result never arrived
-	// (stream truncated or the model made a tool call as its final action).
-	if verbose && len(pendingTools) > 0 {
+	// Flush any tool calls whose tool_result never arrived (stream truncated
+	// or the model made a tool call as its final action).
+	if len(pendingTools) > 0 {
 		flushAt := time.Now()
 		for _, pending := range pendingTools {
-			toolData, _ := json.Marshal(map[string]any{
-				"tool":        pending.name,
-				"input":       pending.input,
-				"output":      "",
-				"duration_ms": flushAt.Sub(pending.startedAt).Milliseconds(),
-				"error":       "no tool_result received",
-				"bead_id":     beadID,
-				"elapsed_ms":  pending.elapsedMS,
-				"turn":        pending.turn,
-			})
-			emit("tool.call", string(toolData))
+			resultPayload := map[string]any{
+				"tool":         pending.name,
+				"output_bytes": 0,
+				"duration_ms":  flushAt.Sub(pending.startedAt).Milliseconds(),
+				"error":        "no tool_result received",
+				"bead_id":      beadID,
+				"elapsed_ms":   pending.elapsedMS,
+				"turn":         pending.turn,
+			}
+			if verbose {
+				resultPayload["output"] = ""
+			}
+			resultData, _ := json.Marshal(resultPayload)
+			emit("tool.result", string(resultData))
 		}
 	}
 	return res, nil
@@ -398,7 +406,7 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 
 // decodeToolResultContent normalizes the polymorphic tool_result.content
 // field (either a string or an array of {type:"text",text:"..."} blocks)
-// into a single string suitable for the verbose tool.call output field.
+// into a single string suitable for the diagnostic tool.result output field.
 func decodeToolResultContent(raw json.RawMessage) string {
 	if len(raw) == 0 {
 		return ""

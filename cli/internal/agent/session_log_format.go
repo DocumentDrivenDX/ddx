@@ -3,6 +3,7 @@ package agent
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -14,29 +15,26 @@ import (
 //
 //	{"session_id": string, "seq": int, "type": string, "ts": RFC3339Nano, "data": {...}}
 //
-// Two schema modes coexist. Lean mode is always on by default and is what
-// existing tooling consumes. Verbose mode is opt-in via the env var
-// DDX_LOG_VERBOSE=1; when set, the writer adds extra fields to a
-// few event types so a session can be replayed and root-caused without
-// loss of inputs and outputs. Lean fields are never removed in verbose
-// mode — verbose is strictly additive (with the single exception that
-// tool.call events are deferred until the matching tool_result arrives,
-// so they can include output/duration_ms/error in one line).
+// The standard schema is always emitted and is what existing tooling consumes.
+// Diagnostic logging is opt-in via DDX_LOG_VERBOSE=1; when set, the writer adds
+// raw body fields so a session can be replayed and root-caused without loss of
+// inputs and outputs. Diagnostic fields are strictly additive: event ordering
+// and event types stay the same across harnesses.
 //
 // Per-event-type fields:
 //
-//	session.start (lean and verbose):
+//	session.start:
 //	  data.model       string  — model id reported by the harness
 //	  data.session_id  string  — session id from the harness CLI
 //	  data.bead_id     string  — bead under which the session ran (may be "")
 //	  data.elapsed_ms  int     — ms since session start (always 0 here)
 //	  data.harness     string  — "claude" | "fiz" | etc.
 //
-//	llm.request (lean and verbose):
+//	llm.request:
 //	  data.attempt_index int        — request attempt counter (0-based)
 //	  data.messages      []object   — conversation messages (last user message hint used by the renderer)
 //
-//	llm.response (lean):
+//	llm.response:
 //	  data.model         string  — resolved model id
 //	  data.latency_ms    int     — per-call wall time (request → response)
 //	  data.tool_calls    []{name} — tool_use names emitted in this turn
@@ -47,7 +45,7 @@ import (
 //	  data.output_tokens int     — running output tokens (latest seen)
 //	  data.attempt.cost.raw.total_tokens int — running total
 //
-//	llm.response (verbose adds):
+//	llm.response (diagnostic adds):
 //	  data.content       string  — concatenated assistant text blocks for this turn
 //	  data.finish_reason string  — claude stop_reason ("end_turn", "tool_use", "max_tokens", ...)
 //	  data.usage object:
@@ -57,26 +55,29 @@ import (
 //	    cache_read_input_tokens     int
 //	    total_tokens                int
 //
-//	tool.call (lean):
+//	tool.call:
 //	  data.tool       string         — tool name
 //	  data.input      object         — tool arguments as decoded JSON
 //	  data.bead_id    string
 //	  data.elapsed_ms int            — ms since session start
 //	  data.turn       int            — assistant turn that issued the call
 //
-//	tool.call (verbose) — emitted when the matching tool_result arrives so output is populated:
-//	  data.tool        string
-//	  data.input       object
-//	  data.output      string  — tool_result content (joined if structured)
-//	  data.duration_ms int     — wall time from tool_use → tool_result
-//	  data.error       string  — non-empty when tool_result is_error=true; empty otherwise
-//	  data.bead_id     string
-//	  data.elapsed_ms  int     — ms-from-session-start at the time of the originating tool_use
-//	  data.turn        int     — assistant turn that issued the call
 //
-// Verbose mode is off by default; existing consumers of the lean schema
-// (TailSessionLogs, FormatSessionLogLines, the server worker log endpoint)
-// keep working unchanged because they tolerate extra fields.
+//	tool.result:
+//	  data.tool         string
+//	  data.output_bytes int
+//	  data.duration_ms  int     — wall time from tool_use → tool_result
+//	  data.error        string  — non-empty when tool_result is_error=true; empty otherwise
+//	  data.bead_id      string
+//	  data.elapsed_ms   int
+//	  data.turn         int
+//
+//	tool.result (diagnostic adds):
+//	  data.output string — tool_result content (joined if structured)
+//
+// Diagnostic logging is off by default; existing consumers of the standard
+// schema (TailSessionLogs, FormatSessionLogLines, the server worker log
+// endpoint) keep working unchanged because they tolerate extra fields.
 
 // FormatSessionLogLines formats Fizeau-style JSONL log entries into readable progress.
 // It is used by both the CLI (local execute-loop) and the server worker log endpoint.
@@ -99,6 +100,7 @@ func FormatSessionLogLines(lines []string) string {
 		case "llm.request":
 			data, _ := entry["data"].(map[string]any)
 			attemptIdx, _ := data["attempt_index"].(float64)
+			requestBytes := encodedPayloadSize(data["messages"])
 			// Extract a hint from the last user message in the conversation.
 			promptHint := ""
 			if msgs, ok := data["messages"].([]any); ok {
@@ -113,11 +115,18 @@ func FormatSessionLogLines(lines []string) string {
 					}
 				}
 			}
-			fmt.Fprintf(&sb, "  → llm request (attempt %.0f)%s\n", attemptIdx, promptHint)
+			sizeHint := formatSizeSuffix("req", requestBytes)
+			fmt.Fprintf(&sb, "  → llm request (attempt %.0f%s)%s\n", attemptIdx, sizeHint, promptHint)
 		case "llm.response":
 			data, _ := entry["data"].(map[string]any)
 			model, _ := data["model"].(string)
 			latency, _ := data["latency_ms"].(float64)
+			responseBytes := progressInt(data, "response_bytes")
+			if responseBytes <= 0 {
+				responseBytes = encodedPayloadSize(data["content"])
+			}
+			thinkingBytes := progressInt(data, "thinking_bytes")
+			toolInputBytes := progressInt(data, "tool_input_bytes")
 			// Tokens: data.attempt.cost.raw.total_tokens
 			var tokens float64
 			if attempt, ok := data["attempt"].(map[string]any); ok {
@@ -145,7 +154,15 @@ func FormatSessionLogLines(lines []string) string {
 			} else if finishReason != "" {
 				suffix = fmt.Sprintf(" (%s)", finishReason)
 			}
-			fmt.Fprintf(&sb, "  ← llm response (%.0f tokens, %.1fs) %s%s\n", tokens, latency/1000, model, suffix)
+			byteHints := formatPayloadHints([]payloadHint{
+				{label: "text", bytes: responseBytes},
+				{label: "think", bytes: thinkingBytes},
+				{label: "tool_in", bytes: toolInputBytes},
+			})
+			if byteHints != "" {
+				byteHints = ", " + byteHints
+			}
+			fmt.Fprintf(&sb, "  ← llm response (%.0f tokens, %.1fs%s) %s%s\n", tokens, latency/1000, byteHints, model, suffix)
 		case "llm.delta":
 			// Skip deltas — too verbose for summary
 		case "progress":
@@ -157,6 +174,15 @@ func FormatSessionLogLines(lines []string) string {
 			name, _ := data["tool"].(string)
 			inp, _ := data["input"].(map[string]any)
 			dur, _ := data["duration_ms"].(float64)
+			inputBytes := progressInt(data, "input_bytes")
+			if inputBytes <= 0 {
+				inputBytes = encodedPayloadSize(inp)
+			}
+			output, _ := data["output"].(string)
+			outputBytes := progressInt(data, "output_bytes")
+			if outputBytes <= 0 {
+				outputBytes = len([]byte(output))
+			}
 			argHint := ""
 			if len(inp) > 0 {
 				// Prefer path/command/query keys for display
@@ -172,6 +198,7 @@ func FormatSessionLogLines(lines []string) string {
 						break
 					}
 				}
+				argHint = compactToolDisplay("", argHint)
 			}
 			errMsg, _ := data["error"].(string)
 			errSuffix := ""
@@ -182,7 +209,38 @@ func FormatSessionLogLines(lines []string) string {
 			if dur > 0 {
 				durSuffix = fmt.Sprintf(" (%.1fs)", dur/1000)
 			}
-			fmt.Fprintf(&sb, "  🔧 %s %s%s%s\n", name, argHint, durSuffix, errSuffix)
+			sizeSuffix := formatPayloadHints([]payloadHint{
+				{label: "in", bytes: inputBytes},
+				{label: "out", bytes: outputBytes},
+			})
+			if sizeSuffix != "" {
+				sizeSuffix = " " + sizeSuffix
+			}
+			fmt.Fprintf(&sb, "  🔧 %s %s%s%s%s\n", name, argHint, sizeSuffix, durSuffix, errSuffix)
+		case "tool.result", "tool_result":
+			data, _ := entry["data"].(map[string]any)
+			name, _ := data["tool"].(string)
+			if name == "" {
+				name, _ = data["name"].(string)
+			}
+			output, _ := data["output"].(string)
+			outputBytes := progressInt(data, "output_bytes")
+			if outputBytes <= 0 {
+				outputBytes = len([]byte(output))
+			}
+			dur, _ := data["duration_ms"].(float64)
+			errMsg, _ := data["error"].(string)
+			durSuffix := ""
+			if dur > 0 {
+				durSuffix = " " + (time.Duration(int64(dur)) * time.Millisecond).String()
+			}
+			errSuffix := ""
+			if errMsg != "" {
+				errSuffix = " failed"
+			}
+			name = compactToolDisplay(name, "")
+			fmt.Fprintf(&sb, "  < %s out=%s%s%s\n",
+				name, formatByteSize(outputBytes), durSuffix, errSuffix)
 		case "bead.claimed":
 			data, _ := entry["data"].(map[string]any)
 			beadID, _ := data["bead_id"].(string)
@@ -267,6 +325,62 @@ func truncateStr(s string, maxLen int) string {
 	return s[:maxLen-1] + "…"
 }
 
+type payloadHint struct {
+	label string
+	bytes int
+}
+
+func formatPayloadHints(hints []payloadHint) string {
+	parts := make([]string, 0, len(hints))
+	for _, hint := range hints {
+		if hint.bytes <= 0 {
+			continue
+		}
+		parts = append(parts, hint.label+"="+formatByteSize(hint.bytes))
+	}
+	return strings.Join(parts, " ")
+}
+
+func formatSizeSuffix(label string, bytes int) string {
+	if bytes <= 0 {
+		return ""
+	}
+	return ", " + label + "=" + formatByteSize(bytes)
+}
+
+func formatByteSize(bytes int) string {
+	switch {
+	case bytes <= 0:
+		return "0B"
+	case bytes < 1024:
+		return fmt.Sprintf("%dB", bytes)
+	case bytes < 1024*1024:
+		return fmt.Sprintf("%.1fKB", float64(bytes)/1024)
+	default:
+		return fmt.Sprintf("%.1fMB", float64(bytes)/(1024*1024))
+	}
+}
+
+func encodedPayloadSize(v any) int {
+	if v == nil {
+		return 0
+	}
+	switch x := v.(type) {
+	case string:
+		return len([]byte(x))
+	case json.RawMessage:
+		return len(x)
+	case []byte:
+		return len(x)
+	default:
+		raw, err := json.Marshal(v)
+		if err != nil {
+			return 0
+		}
+		return len(raw)
+	}
+}
+
 func formatProgressLogEntry(entry map[string]any) string {
 	data, _ := entry["data"].(map[string]any)
 	phase, _ := data["phase"].(string)
@@ -331,38 +445,75 @@ func formatThinkingProgressLine(state string, data map[string]any) string {
 func formatToolProgressLine(state string, data map[string]any) string {
 	toolName, _ := data["tool_name"].(string)
 	command, _ := data["command"].(string)
-	display := toolName
-	if command != "" {
-		display = command
-	}
-	if display != "" {
-		display = fmt.Sprintf("`%s`", truncateStr(display, 80))
-	}
+	display := compactToolDisplay(toolName, command)
 	switch state {
 	case "start":
 		if display != "" {
-			return fmt.Sprintf("running tool call %s ...", display)
+			return truncateStr("> "+display, 120)
 		}
-		return "running tool call ..."
+		return "> tool"
 	case "complete":
 		tokens := progressTokenCount(data, "total_tokens", "output_tokens", "input_tokens")
 		duration := progressDurationString(data)
-		line := "tool call completed"
+		line := "ok"
 		if display != "" {
-			line = "tool call " + display + " completed"
+			line += " " + display
 		}
 		switch {
 		case duration != "" && tokens > 0:
-			line += fmt.Sprintf(" in %s, %d tok", duration, tokens)
+			line += fmt.Sprintf(" %s %dtok", duration, tokens)
 		case duration != "":
-			line += fmt.Sprintf(" in %s", duration)
+			line += " " + duration
 		case tokens > 0:
-			line += fmt.Sprintf(", %d tok", tokens)
+			line += fmt.Sprintf(" %dtok", tokens)
 		}
-		return line
+		return truncateStr(line, 120)
 	default:
 		return ""
 	}
+}
+
+func compactToolDisplay(toolName, command string) string {
+	display := strings.TrimSpace(command)
+	if display == "" {
+		display = strings.TrimSpace(toolName)
+	}
+	display = unwrapToolCommandSummary(display)
+	display = stripShellLoginWrapper(display)
+	display = strings.Join(strings.Fields(display), " ")
+	return truncateStr(display, 96)
+}
+
+func unwrapToolCommandSummary(display string) string {
+	display = strings.TrimSpace(display)
+	for _, prefix := range []string{`{command=`, `{"command":`} {
+		if !strings.HasPrefix(display, prefix) {
+			continue
+		}
+		value := strings.TrimPrefix(display, prefix)
+		value = strings.TrimSuffix(value, "}")
+		value = strings.TrimSpace(value)
+		if unquoted, err := strconv.Unquote(value); err == nil {
+			return unquoted
+		}
+		return strings.Trim(value, `"`)
+	}
+	return display
+}
+
+func stripShellLoginWrapper(command string) string {
+	command = strings.TrimSpace(command)
+	for _, prefix := range []string{"/bin/zsh -lc ", "zsh -lc ", "/bin/bash -lc ", "bash -lc "} {
+		if !strings.HasPrefix(command, prefix) {
+			continue
+		}
+		inner := strings.TrimSpace(strings.TrimPrefix(command, prefix))
+		if unquoted, err := strconv.Unquote(inner); err == nil {
+			return unquoted
+		}
+		return strings.Trim(inner, `"`)
+	}
+	return command
 }
 
 func formatResponseProgressLine(state string, data map[string]any) string {
