@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { readState, writeState, backHref, DEFAULT_GROUP_BY } from './urlState';
+import { KNOWN_KEYS, readState, writeState, backHref, DEFAULT_GROUP_BY } from './urlState';
 
 describe('urlState.readState', () => {
 	it('returns defaults for an empty URL', () => {
@@ -56,6 +56,57 @@ describe('urlState.readState', () => {
 	it('accepts the workflowStage axis in query params', () => {
 		const s = readState(new URLSearchParams('groupBy=workflowStage'));
 		expect(s.groupBy).toBe('workflowStage');
+	});
+});
+
+describe('urlState contract', () => {
+	it('publishes the reserved query keys', () => {
+		expect(Array.from(KNOWN_KEYS).sort()).toEqual([
+			'groupBy',
+			'mediaType',
+			'phase',
+			'prefix',
+			'q',
+			'sort',
+			'staleness'
+		]);
+	});
+
+	it('round-trips all reserved facets while preserving unrelated params', () => {
+		const params = new URLSearchParams(
+			'back=%2Fnodes%2Fnode-1%2Fprojects%2Fproject-1%2Fartifacts&filter.owner=team'
+		);
+
+		const next = writeState(params, {
+			q: 'needle',
+			mediaType: 'text/markdown',
+			groupBy: 'prefix',
+			sort: 'TITLE',
+			staleness: 'fresh',
+			phase: '01-frame',
+			prefix: ['ADR', 'FEAT']
+		});
+
+		expect(next.get('back')).toBe('/nodes/node-1/projects/project-1/artifacts');
+		expect(next.get('filter.owner')).toBe('team');
+		expect(next.get('q')).toBe('needle');
+		expect(next.get('mediaType')).toBe('text/markdown');
+		expect(next.get('groupBy')).toBe('prefix');
+		expect(next.get('sort')).toBe('TITLE');
+		expect(next.get('staleness')).toBe('fresh');
+		expect(next.get('phase')).toBe('01-frame');
+		expect(next.get('prefix')).toBe('ADR,FEAT');
+
+		expect(readState(next)).toEqual({
+			q: 'needle',
+			mediaType: 'text/markdown',
+			groupBy: 'prefix',
+			sort: 'TITLE',
+			staleness: 'fresh',
+			phase: '01-frame',
+			prefix: ['ADR', 'FEAT'],
+			filters: { owner: 'team' }
+		});
 	});
 });
 
