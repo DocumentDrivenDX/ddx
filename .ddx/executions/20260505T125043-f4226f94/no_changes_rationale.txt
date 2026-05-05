@@ -1,0 +1,2 @@
+verification_command: cd cli && go test ./internal/agent/... && cd .. && lefthook run pre-commit
+reason: The current worktree already satisfies the no_changes contract boundary in try.Attempt, and the required agent tests plus pre-commit gate pass without any additional code changes.
