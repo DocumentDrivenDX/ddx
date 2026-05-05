@@ -1,0 +1,8 @@
+verification_command: cd cli && go test ./internal/agent/... -run 'TestFormatSessionLogLines_ProgressThinking|TestFormatSessionLogLines_ProgressTool|TestFormatSessionLogLines_ProgressResponseAndContext|TestTailSessionLogs_ProgressEventsNotReplayed|TestTailSessionLogs_ReadsEmbeddedServiceProgress' && go test ./cmd/... -run 'TestWorkJSONOutput_IncludesRouteEconomicsWithoutHumanLines|TestAgentExecuteLoopUsesProjectRootForNoWorkScan' && lefthook run pre-commit
+
+The current tree already satisfies the bead contract:
+- `cli/internal/agent/session_log_format.go` renders `progress` events for thinking, tool, response, context, and compaction phases.
+- `cli/internal/agent/session_log_tailer.go` suppresses pre-existing log lines by seeding offsets from the current file sizes.
+- `cli/cmd/agent_cmd.go` skips the live tailer for `--json`, so machine output remains structured JSON.
+
+Evidence was verified with the named tests plus the full `cd cli && go test ./internal/agent/... ./cmd/...` sweep after building `cli/build/ddx` to satisfy the installation acceptance fixtures.
