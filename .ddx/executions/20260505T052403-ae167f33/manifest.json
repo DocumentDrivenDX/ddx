@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260505T052403-ae167f33",
+  "bead_id": "ddx-1d52a30c",
+  "base_rev": "ea26f7c593dbee0d1c1b9f0005aec6bfd2c72b71",
+  "created_at": "2026-05-05T05:24:05.793756691Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1d52a30c",
+    "title": "artifact-types: cli/internal/artifacttypes/ loader + index + mtime cache + path-escape guard",
+    "description": "New package cli/internal/artifacttypes/. Scans \u003cplugin\u003e/workflows/**/artifacts/*/meta.yml by default; respects package.yaml.artifact_type_roots opt-in. Normalizes to {plugin, typeId, name, description, prefix, pattern, phase, templatePath, promptPath, examples[], sourceMetaPath}. mtime-based cache. Path-escape guard for plugin paths.",
+    "acceptance": "1. Loader package built. 2. mtime cache invalidates correctly. 3. Path-escape guard refuses meta.yml outside the plugin tree. 4. Tests cover both new + legacy meta.yml shapes.",
+    "parent": "ddx-43d67aa5",
+    "labels": [
+      "phase:2",
+      "story:17",
+      "area:server",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-05T05:24:03Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "19662",
+      "execute-loop-heartbeat-at": "2026-05-05T05:24:03.757299855Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260505T052403-ae167f33",
+    "prompt": ".ddx/executions/20260505T052403-ae167f33/prompt.md",
+    "manifest": ".ddx/executions/20260505T052403-ae167f33/manifest.json",
+    "result": ".ddx/executions/20260505T052403-ae167f33/result.json",
+    "checks": ".ddx/executions/20260505T052403-ae167f33/checks.json",
+    "usage": ".ddx/executions/20260505T052403-ae167f33/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-1d52a30c-20260505T052403-ae167f33"
+  },
+  "prompt_sha": "1b303feaf47acbff0935261307a723921bbae414deaa90687b40bc0a94277281"
+}
