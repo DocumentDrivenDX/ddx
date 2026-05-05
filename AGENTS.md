@@ -112,7 +112,8 @@ is to keep the commits intact and use `--ff-only` or a `--no-ff` merge.
 ## Reviewer Mode
 
 - When a task explicitly calls for no-tool reviewer mode, keep the pass
-  read-only and evidence-based.
+  read-only and evidence-based. That convention is the structured-evidence
+  review mode described in TD-033; do not attach tools mid-pass.
 - Prefer the supplied artifacts and repo files over exploratory tool use.
 - If you need a factual citation, point to the smallest relevant file:line
   span and avoid broad re-reading of unrelated context.

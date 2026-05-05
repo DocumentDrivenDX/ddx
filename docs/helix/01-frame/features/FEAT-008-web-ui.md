@@ -238,7 +238,9 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
    *Review and re-evaluation:*
    - "Review" action: side-by-side view of the bead's acceptance criteria
      vs the latest execution results and implementation diff. The user or
-     agent evaluates whether the work actually meets the spec.
+     agent evaluates whether the work actually meets the spec. This dispatches
+     the TD-033 structured evidence envelope in no-tool reviewer mode so the
+     reviewer reasons only over the assembled evidence.
    - "Re-review" action on closed beads: re-evaluates against current
      artifact state — did the governing spec change since the bead was
      closed? If so, flag as potentially stale.

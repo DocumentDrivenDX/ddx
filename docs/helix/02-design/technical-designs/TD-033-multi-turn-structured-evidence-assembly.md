@@ -80,6 +80,9 @@ That convention matters because the review prompt is meant to be stable and
 auditable. If a reviewer needs additional evidence, the caller must assemble it
 up front rather than relying on a later tool call.
 
+This is the mode FEAT-006 uses when it launches review-bearing invocations and
+the mode FEAT-008 exposes through its browser-driven "Review" action.
+
 ### 4. Caller-specific ordering
 
 The shared envelope does not force a single assembly order across all call
@@ -97,4 +100,3 @@ sites.
 - This TD does not introduce map-reduce per-file review or any other
   parallel fan-out architecture.
 - This TD does not require a new repository-wide assembler type.
-

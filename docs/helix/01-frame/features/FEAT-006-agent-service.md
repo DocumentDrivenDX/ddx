@@ -51,9 +51,10 @@ DDx owns:
   git-aware orchestration.
 - **Structured prompt handoff.** Review, grading, and other prompt-bearing
   invocations use the bounded assembly invariants from FEAT-022 and the
-  caller-facing envelope described in TD-033. Review-mode sessions are
-  launched in no-tool reviewer mode so the agent reasons over the supplied
-  evidence instead of discovering new context at runtime.
+  caller-facing structured evidence envelope described in TD-033.
+  Review-mode sessions are launched in TD-033's no-tool reviewer mode so the
+  agent reasons over the supplied evidence instead of discovering new context
+  at runtime.
 - **Evidence and session capture.** DDx writes `.ddx/executions/<id>/`
   bundles with prompts, manifests, and result artifacts. The agent's session
   log path (returned in `ExecuteResponse.SessionLogPath`) is captured into

@@ -257,8 +257,8 @@ byte accounting on every review and grading attempt.
 18. **Structured assembly topology.** The multi-turn structured-evidence
     assembly architecture is specified in TD-033. FEAT-022 owns the
     bounded prompt invariants, section ordering, and failure semantics;
-    TD-033 owns the caller-facing assembly envelope and no-tool
-    reviewer-mode convention.
+    TD-033 owns the caller-facing structured evidence envelope and the
+    no-tool reviewer-mode convention used by FEAT-006 and FEAT-008.
 
 ### Non-Functional
 
