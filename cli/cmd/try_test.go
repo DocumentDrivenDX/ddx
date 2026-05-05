@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"os"
 	"strings"
 	"testing"
 
@@ -10,6 +11,30 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type tryHookRunnerStub struct {
+	t            *testing.T
+	promptSource []string
+}
+
+func (r *tryHookRunnerStub) Run(opts agent.RunArgs) (*agent.Result, error) {
+	r.promptSource = append(r.promptSource, opts.PromptSource)
+	switch opts.PromptSource {
+	case "bead-lifecycle-lint":
+		return &agent.Result{
+			ExitCode: 0,
+			Output:   `{"score":9,"rationale":"ok","suggested_fixes":[],"waivers_applied":[]}`,
+		}, nil
+	case "bead-lifecycle-triage":
+		return &agent.Result{
+			ExitCode: 0,
+			Output:   `{"classification":"transport","recommended_action":"retry","rationale":"transient","suggested_amendments":"none","suggested_followup_beads":[]}`,
+		}, nil
+	default:
+		r.t.Fatalf("unexpected prompt source: %q", opts.PromptSource)
+		return nil, nil
+	}
+}
 
 // TestTry_BeadNotFound verifies that "ddx try unknown-id" exits non-zero
 // and writes "bead not found: <id>" to stderr.
@@ -177,6 +202,62 @@ func TestTry_FlagsPlumbThrough(t *testing.T) {
 	assert.NotNil(t, tryCmd.Flags().Lookup("no-review-i-know-what-im-doing"), "try must expose the break-glass acknowledgement flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("review-harness"), "try must expose --review-harness flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("review-model"), "try must expose --review-model flag")
+}
+
+// TestTry_HooksWired verifies that ddx try wires the pre-dispatch lint and
+// post-attempt triage hooks into ExecuteBeadLoopRuntime, and that both hooks
+// route through the shared runner override seam.
+func TestTry_HooksWired(t *testing.T) {
+	env := NewTestEnvironment(t)
+	skillPath := env.Dir + "/.agents/skills/ddx/bead-lifecycle"
+	require.NoError(t, os.MkdirAll(skillPath, 0o755))
+	require.NoError(t, os.WriteFile(skillPath+"/SKILL.md", []byte("lint + triage"), 0o644))
+	store := bead.NewStore(env.Dir + "/.ddx")
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:    "hook-bead-001",
+		Title: "Hook wiring bead",
+	}))
+
+	runner := &tryHookRunnerStub{t: t}
+	factory := NewCommandFactory(env.Dir)
+	factory.AgentRunnerOverride = runner
+	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+		return agent.ExecuteBeadReport{
+			BeadID:    beadID,
+			Status:    agent.ExecuteBeadStatusNoChanges,
+			Detail:    "nothing changed",
+			BaseRev:   "feedface",
+			ResultRev: "feedface",
+			SessionID: "sess-hook",
+		}, nil
+	})
+
+	out, err := executeCommand(
+		factory.NewRootCommand(),
+		"try",
+		"hook-bead-001",
+		"--harness=codex",
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+	require.Error(t, err)
+	assert.Contains(t, out, "bead:", "try command should still render the terminal report")
+	assert.Equal(t, []string{"bead-lifecycle-lint", "bead-lifecycle-triage"}, runner.promptSource)
+
+	events, err := store.Events("hook-bead-001")
+	require.NoError(t, err)
+	var lintSeen, triageSeen bool
+	for _, ev := range events {
+		switch ev.Kind {
+		case "bead-quality.lint":
+			lintSeen = true
+		case "bead-quality.triage":
+			triageSeen = true
+		}
+	}
+	assert.True(t, lintSeen, "try must emit the lint event when the hook is wired")
+	assert.True(t, triageSeen, "try must emit the triage event when the hook is wired")
 }
 
 // TestTry_NoReviewRequiresAckFlag verifies the break-glass guardrail: the

@@ -323,15 +323,23 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	}
 
 	cliLandingOps := agent.RealLandingGitOps{}
+	var qualityRunner agent.AgentRunner
+	if f.AgentRunnerOverride != nil {
+		qualityRunner = f.AgentRunnerOverride
+	}
+	lintHook := agent.NewPreDispatchLintHook(projectRoot, store, rcfg, nil, qualityRunner)
+	triageHook := agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
 	result, runErr := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
-		Once:         true,
-		Log:          cmd.OutOrStdout(),
-		EventSink:    loopSink,
-		WorkerID:     resolveClaimAssignee(),
-		ProjectRoot:  projectRoot,
-		SessionID:    loopSessionID,
-		PreClaimHook: buildCLIPreClaimHook(projectRoot, cliLandingOps),
-		NoReview:     noReview,
+		Once:                  true,
+		Log:                   cmd.OutOrStdout(),
+		EventSink:             loopSink,
+		WorkerID:              resolveClaimAssignee(),
+		ProjectRoot:           projectRoot,
+		SessionID:             loopSessionID,
+		PreClaimHook:          buildCLIPreClaimHook(projectRoot, cliLandingOps),
+		PreDispatchLintHook:   lintHook,
+		PostAttemptTriageHook: triageHook,
+		NoReview:              noReview,
 	})
 	tailCancel()
 	if runErr != nil {
