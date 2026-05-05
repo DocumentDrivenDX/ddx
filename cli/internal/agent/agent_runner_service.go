@@ -58,9 +58,8 @@ func useNewAgentPath() bool {
 // runAgentViaService is the new RunAgent dispatch path that drives the
 // agent through agentlib.FizeauService.Execute and drains the resulting event
 // channel into a DDx Result. Old in-package code paths (RunAgent legacy
-// loop, embeddedCompactionConfig, buildAgentProvider, findTool,
-// wrapProviderWithDeadlines, stall + compaction-stuck circuit breakers)
-// stay in place; this function does NOT call them.
+// loop, embeddedCompactionConfig, buildAgentProvider, findTool, and
+// wrapProviderWithDeadlines) stay in place; this function does NOT call them.
 //
 // Stall detection: we delegate to the agent's StallPolicy. The agent
 // emits a stall event then a final event with Status="stalled".
