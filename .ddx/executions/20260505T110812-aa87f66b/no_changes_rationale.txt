@@ -1,0 +1,2 @@
+verification_command: cd cli && go test ./internal/agent/... ./cmd/... && lefthook run pre-commit
+reason: The current tree already renders fizeau progress events in cli/internal/agent/session_log_format.go, tails agent-*.jsonl once in cli/internal/agent/session_log_tailer.go, and the required verification gate passed after building cli/build/ddx.
