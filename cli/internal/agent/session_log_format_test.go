@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -112,8 +113,8 @@ func TestFormatSessionLogLines_ProgressToolStripsShellWrapper(t *testing.T) {
 	}
 
 	got := FormatSessionLogLines(lines)
-	assert.Contains(t, got, "  ok go test ./cmd -run TestAgentRouteStatus -count=1 3.2s\n")
-	assert.Contains(t, got, "  ok rg -n \"pre-execute\" . 40ms\n")
+	assert.Contains(t, got, "  ok test ./cmd -run TestAgentRouteStatus -count=1 3.2s\n")
+	assert.Contains(t, got, "  ok search \"pre-execute\" in . 40ms\n")
 	assert.NotContains(t, got, "/bin/zsh -lc")
 	assert.NotContains(t, got, "/bin/bash -lc")
 	assert.NotContains(t, got, "{command=")
@@ -161,7 +162,7 @@ func TestFormatSessionLogLines_ToolOutputCorpusStaysBounded(t *testing.T) {
 				"output_summary": "out=8.3KB 81 lines \"func runExecute(ctx context.Context, req ServiceExecuteRequest, decision RouteDecision)\"",
 				"duration_ms":    1450,
 			}),
-			want:       []string{"ok sed -n '240,320p' service_execute.go", "< out=8.3KB 81 lines", "1.45s"},
+			want:       []string{"ok inspect 240,320p in service_execute.go", "< out=8.3KB 81 lines", "1.45s"},
 			notWant:    []string{longCommandTail, "FULL_COMMAND_SHOULD_NOT_APPEAR"},
 			maxLineLen: 122,
 		},
@@ -281,7 +282,7 @@ func TestFormatSessionLogLines_MixedSessionCorpusKeepsContextAndTrim(t *testing.
 
 	for _, line := range strings.Split(strings.TrimSpace(got), "\n") {
 		if strings.Contains(line, "  < ") || strings.Contains(line, "  ok ") || strings.Contains(line, "  > ") {
-			assert.LessOrEqual(t, len(line), 122, "tool line should stay compact: %q", line)
+			assert.LessOrEqual(t, utf8.RuneCountInString(line), 122, "tool line should stay compact: %q", line)
 		}
 	}
 }
@@ -373,7 +374,7 @@ func TestFormatSessionLogLines_SourceShapeSamplesStayUseful(t *testing.T) {
 				}),
 			},
 			want: []string{
-				"< bash out=4.0KB 2 lines \"ok github.com/DocumentDrivenDX/ddx/internal/agent",
+				"< bash out=4.0KB 2 lines \"ok github.com/DocumentDrivenDX/ddx/internal/age…\"",
 				"1.4s",
 			},
 			notWant: []string{strings.Repeat("verbose-output-", 10)},
@@ -467,7 +468,7 @@ func TestFormatSessionLogLines_ProgressResponseAndContext(t *testing.T) {
 func assertFormattedLinesBounded(t *testing.T, got string, maxLen int) {
 	t.Helper()
 	for _, line := range strings.Split(strings.TrimSpace(got), "\n") {
-		assert.LessOrEqual(t, len(line), maxLen, "formatted line too long: %q", line)
+		assert.LessOrEqual(t, utf8.RuneCountInString(line), maxLen, "formatted line too long: %q", line)
 	}
 }
 

@@ -471,15 +471,16 @@ func formatToolProgressLine(state string, data map[string]any) string {
 		if outputSummary != "" {
 			line += " < " + compactOutputSummaryLimit(outputSummary, 56)
 		}
+		suffix := ""
 		switch {
 		case duration != "" && tokens > 0:
-			line += fmt.Sprintf(" %s %dtok", duration, tokens)
+			suffix = fmt.Sprintf(" %s %dtok", duration, tokens)
 		case duration != "":
-			line += " " + duration
+			suffix = " " + duration
 		case tokens > 0:
-			line += fmt.Sprintf(" %dtok", tokens)
+			suffix = fmt.Sprintf(" %dtok", tokens)
 		}
-		return truncateStr(line, 120)
+		return truncateStr(line, maxInt(1, 120-len(suffix))) + suffix
 	default:
 		return ""
 	}
@@ -515,10 +516,11 @@ func progressActionFromData(data map[string]any) string {
 func compactTargetedAction(action string, data map[string]any) string {
 	action = strings.Join(strings.Fields(strings.TrimSpace(action)), " ")
 	target := progressTargetFromData(data)
-	if target == "" || strings.Contains(action, target) || strings.Contains(action, compactPathToken(target, 64)) {
+	compactedTarget := compactPathToken(target, 36)
+	if target == "" || strings.Contains(action, target) || strings.Contains(action, compactedTarget) {
 		return action
 	}
-	return action + " to " + compactPathToken(target, 64)
+	return action + " to " + compactedTarget
 }
 
 func progressTargetFromData(data map[string]any) string {
@@ -572,11 +574,11 @@ func describeToolCommand(toolName, command string) string {
 	switch fields[0] {
 	case "sed":
 		if len(fields) >= 4 && fields[1] == "-n" {
-			return "inspect " + strings.Trim(fields[2], "'\"") + " in " + compactPathToken(fields[3], 64)
+			return "inspect " + strings.Trim(fields[2], "'\"") + " in " + compactPathToken(fields[3], 36)
 		}
 	case "cat":
 		if len(fields) >= 2 {
-			return "inspect " + compactPathToken(fields[len(fields)-1], 64)
+			return "inspect " + compactPathToken(fields[len(fields)-1], 36)
 		}
 	case "rg":
 		return describeRipgrepCommand(fields)
@@ -604,7 +606,7 @@ func describeRipgrepCommand(fields []string) string {
 		target = field
 	}
 	if target != "" && pattern != "" {
-		return "search " + strconv.Quote(truncateStr(pattern, 32)) + " in " + compactPathToken(target, 64)
+		return "search " + strconv.Quote(truncateStr(pattern, 32)) + " in " + compactPathToken(target, 36)
 	}
 	if pattern != "" {
 		return "search " + strconv.Quote(truncateStr(pattern, 32))
@@ -619,7 +621,7 @@ func describeGitCommand(fields []string) string {
 	switch fields[1] {
 	case "add":
 		if len(fields) > 2 {
-			return "stage " + strings.Join(compactPathTokens(fields[2:], 64), " ")
+			return "stage " + strings.Join(compactPathTokens(fields[2:], 36), " ")
 		}
 		return "stage changes"
 	case "commit":
