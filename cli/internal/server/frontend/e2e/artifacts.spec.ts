@@ -483,6 +483,146 @@ test('artifacts: body-match snippet renders with highlight and back-nav preserve
 	await expect(snippetRow.locator('mark')).toHaveText('fox');
 });
 
+// Group-by axes (folder/prefix/media type/workflow stage) plus search
+// composition. Verifies the page can switch among all grouping modes, then
+// keep the active grouping while a search query narrows the visible subset.
+test('artifacts: grouping axes render and compose with search filtering', async ({ page }) => {
+	const GROUPED_ARTIFACTS = [
+		{
+			id: 'artifact-frame-001',
+			path: 'docs/helix/01-frame/brief.md',
+			title: 'Frame Brief',
+			mediaType: 'text/markdown',
+			staleness: 'fresh'
+		},
+		{
+			id: 'artifact-design-001',
+			path: 'docs/helix/02-design/spec.md',
+			title: 'Design Spec',
+			mediaType: 'text/markdown',
+			staleness: 'stale'
+		},
+		{
+			id: 'artifact-readme-001',
+			path: 'docs/README.md',
+			title: 'Docs Readme',
+			mediaType: 'text/markdown',
+			staleness: 'fresh'
+		},
+		{
+			id: 'artifact-logo-001',
+			path: 'src/assets/logo.svg',
+			title: 'Logo',
+			mediaType: 'image/svg+xml',
+			staleness: 'fresh'
+		},
+		{
+			id: 'artifact-report-001',
+			path: 'src/reports/report.pdf',
+			title: 'Report',
+			mediaType: 'application/pdf',
+			staleness: 'missing'
+		}
+	];
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, unknown>;
+		};
+		const q = body.query;
+		if (q.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+			return;
+		}
+		if (q.includes('Projects') && !q.includes('projectID')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } }
+				})
+			});
+			return;
+		}
+		if (q.includes('query Artifacts(') || q.includes('ArtifactsByPath')) {
+			const search = String(body.variables?.search ?? '').toLowerCase();
+			const filtered = search
+				? GROUPED_ARTIFACTS.filter(
+						(a) =>
+							a.title.toLowerCase().includes(search) || a.path.toLowerCase().includes(search)
+					)
+				: GROUPED_ARTIFACTS;
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						artifacts: {
+							edges: filtered.map((a, i) => ({
+								node: {
+									id: a.id,
+									path: a.path,
+									title: a.title,
+									mediaType: a.mediaType,
+									staleness: a.staleness
+								},
+								cursor: `c${i}`
+							})),
+							pageInfo: { hasNextPage: false, endCursor: null },
+							totalCount: filtered.length
+						}
+					}
+				})
+			});
+			return;
+		}
+		await route.fulfill({
+			status: 200,
+			contentType: 'application/json',
+			body: JSON.stringify({ data: {} })
+		});
+	});
+
+	await page.goto(BASE_URL);
+	await expect(page.getByRole('rowgroup', { name: 'Folder: docs', exact: true })).toBeVisible();
+	await expect(page.getByRole('rowgroup', { name: 'Folder: docs/helix/01-frame' })).toBeVisible();
+	await expect(page.getByRole('rowgroup', { name: 'Folder: docs/helix/02-design' })).toBeVisible();
+	await expect(page.getByRole('rowgroup', { name: 'Folder: src/assets' })).toBeVisible();
+	await expect(page.getByRole('rowgroup', { name: 'Folder: src/reports' })).toBeVisible();
+
+	await page.getByLabel('Group by').selectOption('prefix');
+	await expect(page).toHaveURL(/[?&]groupBy=prefix\b/);
+	await expect(page.getByRole('rowgroup', { name: 'Prefix: docs' })).toBeVisible();
+	await expect(page.getByRole('rowgroup', { name: 'Prefix: src' })).toBeVisible();
+
+	await page.getByLabel('Group by').selectOption('mediaType');
+	await expect(page).toHaveURL(/[?&]groupBy=mediaType\b/);
+	await expect(page.getByRole('rowgroup', { name: 'Media type: application/pdf' })).toBeVisible();
+	await expect(page.getByRole('rowgroup', { name: 'Media type: image/svg+xml' })).toBeVisible();
+	await expect(page.getByRole('rowgroup', { name: 'Media type: text/markdown' })).toBeVisible();
+
+	await page.getByLabel('Group by').selectOption('workflowStage');
+	await expect(page).toHaveURL(/[?&]groupBy=workflowStage\b/);
+	await expect(page.getByRole('rowgroup', { name: 'Workflow stage: design' })).toBeVisible();
+	await expect(page.getByRole('rowgroup', { name: 'Workflow stage: frame' })).toBeVisible();
+	await expect(page.getByRole('rowgroup', { name: 'Workflow stage: Unstaged' })).toBeVisible();
+
+	await page.getByPlaceholder(/Search/i).first().fill('docs');
+	await expect(page).toHaveURL(/[?&]q=docs\b/);
+	await expect(page).toHaveURL(/[?&]groupBy=workflowStage\b/);
+	await expect(page.getByRole('rowgroup', { name: 'Workflow stage: design' })).toBeVisible();
+	await expect(page.getByRole('rowgroup', { name: 'Workflow stage: frame' })).toBeVisible();
+	await expect(page.getByRole('rowgroup', { name: 'Workflow stage: Unstaged' })).toBeVisible();
+	await expect(page.getByRole('cell', { name: 'Logo', exact: true })).toHaveCount(0);
+	await expect(page.getByRole('cell', { name: 'Report', exact: true })).toHaveCount(0);
+	await expect(page.getByRole('cell', { name: 'Docs Readme', exact: true })).toBeVisible();
+});
+
 // Mutation error path: server returns a typed error → inline message in the
 // provenance panel, page does not crash (AC#4).
 test('Regenerate error renders inline without crashing the page', async ({ page }) => {
