@@ -232,6 +232,32 @@ Released:
 - On terminal close (`closed` / `cancelled`) the claim metadata is left in
   place as historical record but is no longer authoritative.
 
+Worker shutdown and interruption:
+
+- A worker that receives graceful shutdown while no bead attempt has reached a
+  terminal mutation MUST release any active claim it owns before exiting. The
+  bead returns `in_progress → open`, claim metadata is cleared, and an
+  `unclaimed` event records `reason=worker_shutdown`.
+- If the worker has already applied a terminal mutation (`closed`,
+  `cancelled`, or `blocked`) for the current attempt, shutdown MUST NOT undo
+  that terminal state. The worker may emit best-effort worker-disconnect
+  telemetry, but bead state is already authoritative.
+- If the child agent process or attempt worktree is interrupted by context
+  cancellation, SIGTERM, SIGINT, or a server/operator cancel before a terminal
+  mutation, the attempt is classified as mechanically disrupted. The worker
+  preserves any available evidence, appends a structured attempt/interruption
+  event, releases the claim, and leaves the bead re-claimable unless a separate
+  explicit blocker or retryable cooldown was recorded.
+- An ungraceful worker death may strand an `in_progress` bead temporarily. The
+  stale-claim sweep is the recovery path: after the configured stale threshold,
+  it releases the claim, appends the recovery event, and makes the bead
+  queue-eligible again. This recovery MUST NOT delete the original attempt
+  events or evidence bundle.
+- Cooldown is not a shutdown-cleanup mechanism. A stopped or interrupted worker
+  may set `execute-loop-retry-after` only when the recorded outcome is a
+  retryable time-based condition; ordinary shutdown, SIGTERM/SIGINT, or
+  operator cancel releases the claim without parking the bead behind time.
+
 Stale claim handling (TriageContract owns the policy):
 
 - A claim is *stale* if `claimed-at` is older than the configured stale

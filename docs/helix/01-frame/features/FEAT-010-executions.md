@@ -143,6 +143,8 @@ A layer-3 run is one drain of the bead queue. It iterates `ddx try`
 across ready beads until a stop condition is met. It owns:
 
 - Queue iteration order
+- Claim acquisition, claim release, and shutdown/interruption cleanup for
+  claimed beads, using the TD-031 claim-state contract
 - No-progress / stop-condition evaluation
 - A loop-level record that references its child layer-2 records by
   attempt id and reports terminal disposition (drained, blocked,
@@ -151,6 +153,13 @@ across ready beads until a stop condition is met. It owns:
 Content-aware supervisory decisions (e.g., "comparison failed → enqueue
 reconciliation beads") are not layer-3 concerns. Those are skill or
 plugin compositions on top of the three layers.
+
+Layer 3 treats raw attempt evidence separately from durable bead action. When a
+worker stops, receives SIGTERM/SIGINT, loses its child agent process, or honors
+operator cancel before a terminal bead mutation, it follows TD-031: preserve
+evidence, record the interruption/disruption, release the claim, and leave the
+bead re-claimable unless an explicit retryable cooldown or blocker was recorded.
+Shutdown is not itself a reason to park a bead on `execute-loop-retry-after`.
 
 ## Agent Power and Retry
 

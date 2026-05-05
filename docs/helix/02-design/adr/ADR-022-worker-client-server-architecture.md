@@ -489,6 +489,19 @@ via the bead store). The worker honors at the next safe point:
   it); a worker starting work on a bead with `cancel-requested: true`
   immediately reports `preserved_for_review` and skips the attempt.
 
+### Worker shutdown and claim cleanup
+
+Claim cleanup follows TD-031 and stays worker-side because the bead store is the
+only claim authority. A graceful worker stop releases any claim whose attempt has
+not already reached a terminal bead mutation. SIGTERM/SIGINT, child-agent
+termination, and operator cancel are recorded as mechanical interruption or
+disruption evidence; they do not by themselves justify a retry cooldown. If the
+worker dies before cleanup runs, stale-claim recovery is the bounded repair path:
+the bead remains `in_progress` only until the configured stale threshold, then
+the store releases the claim and appends recovery evidence. The server may show
+the worker as stale or disconnected, but it does not own or reconcile bead
+claims.
+
 ## Compatibility analysis
 
 ### Migrates cleanly (almost everything)
