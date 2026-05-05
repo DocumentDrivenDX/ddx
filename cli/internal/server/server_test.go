@@ -16,6 +16,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	"github.com/DocumentDrivenDX/ddx/internal/metric"
 	"github.com/DocumentDrivenDX/ddx/internal/processmetrics"
 )
@@ -440,39 +441,52 @@ func TestProcessMetricsEndpoints(t *testing.T) {
 // so /api/metrics/{id}/history and /api/metrics/{id}/trend have data to read.
 func seedMetricHistory(t *testing.T, dir string) {
 	t.Helper()
-	store := metric.NewStore(dir)
+	execStore := ddxexec.NewStore(dir)
+	metricStore := metric.NewStore(dir)
 	if err := os.MkdirAll(filepath.Join(dir, "docs", "metrics"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(dir, "docs", "metrics", "MET-001.md"), []byte("---\nddx:\n  id: MET-001\n---\n# MET-001\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := store.SaveDefinition(metric.Definition{
-		DefinitionID: "metric-startup-time@1",
-		MetricID:     "MET-001",
-		Command:      []string{"sh", "-c", "printf '20ms\\n'"},
-		Thresholds:   metric.Thresholds{Warn: 20, Ratchet: 30, Unit: "ms"},
-		Comparison:   metric.ComparisonLowerIsBetter,
-		Active:       true,
-		CreatedAt:    time.Date(2026, 4, 4, 15, 0, 0, 0, time.UTC),
+	if err := execStore.SaveDefinition(ddxexec.Definition{
+		ID:          "metric-startup-time@1",
+		ArtifactIDs: []string{"MET-001"},
+		Executor: ddxexec.ExecutorSpec{
+			Kind:    ddxexec.ExecutorKindCommand,
+			Command: []string{"sh", "-c", "printf '20ms\\n'"},
+		},
+		Result: ddxexec.ResultSpec{Metric: &ddxexec.MetricResultSpec{Unit: "ms"}},
+		Evaluation: ddxexec.Evaluation{
+			Comparison: metric.ComparisonLowerIsBetter,
+			Thresholds: ddxexec.Thresholds{WarnMS: 20, RatchetMS: 30},
+		},
+		Active:    true,
+		CreatedAt: time.Date(2026, 4, 4, 15, 0, 0, 0, time.UTC),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Run(context.Background(), "MET-001"); err != nil {
+	if _, err := metricStore.Run(context.Background(), "MET-001"); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
-	if err := store.SaveDefinition(metric.Definition{
-		DefinitionID: "metric-startup-time@1",
-		MetricID:     "MET-001",
-		Command:      []string{"sh", "-c", "printf '10ms\\n'"},
-		Thresholds:   metric.Thresholds{Warn: 20, Ratchet: 30, Unit: "ms"},
-		Comparison:   metric.ComparisonLowerIsBetter,
-		Active:       true,
-		CreatedAt:    time.Date(2026, 4, 4, 15, 1, 0, 0, time.UTC),
+	if err := execStore.SaveDefinition(ddxexec.Definition{
+		ID:          "metric-startup-time@1",
+		ArtifactIDs: []string{"MET-001"},
+		Executor: ddxexec.ExecutorSpec{
+			Kind:    ddxexec.ExecutorKindCommand,
+			Command: []string{"sh", "-c", "printf '10ms\\n'"},
+		},
+		Result: ddxexec.ResultSpec{Metric: &ddxexec.MetricResultSpec{Unit: "ms"}},
+		Evaluation: ddxexec.Evaluation{
+			Comparison: metric.ComparisonLowerIsBetter,
+			Thresholds: ddxexec.Thresholds{WarnMS: 20, RatchetMS: 30},
+		},
+		Active:    true,
+		CreatedAt: time.Date(2026, 4, 4, 15, 1, 0, 0, time.UTC),
 	}); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := store.Run(context.Background(), "MET-001"); err != nil {
+	if _, err := metricStore.Run(context.Background(), "MET-001"); err != nil {
 		t.Fatalf("Run: %v", err)
 	}
 }

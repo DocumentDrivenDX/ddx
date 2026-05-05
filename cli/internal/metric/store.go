@@ -165,19 +165,6 @@ func (s *Store) LoadDefinition(metricID string) (Definition, error) {
 	return best, nil
 }
 
-func (s *Store) SaveDefinition(def Definition) error {
-	if def.DefinitionID == "" {
-		return fmt.Errorf("definition_id is required")
-	}
-	if def.MetricID == "" {
-		return fmt.Errorf("metric_id is required")
-	}
-	if s.execStore == nil {
-		return fmt.Errorf("metric store is not initialized")
-	}
-	return s.execStore.SaveDefinition(metricDefinitionToExec(def))
-}
-
 func (s *Store) History(metricID string) ([]HistoryRecord, error) {
 	if s.execStore == nil {
 		return []HistoryRecord{}, fmt.Errorf("metric store is not initialized")

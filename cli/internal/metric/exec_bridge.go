@@ -2,33 +2,6 @@ package metric
 
 import ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 
-func metricDefinitionToExec(def Definition) ddxexec.Definition {
-	return ddxexec.Definition{
-		ID:          def.DefinitionID,
-		ArtifactIDs: []string{def.MetricID},
-		Executor: ddxexec.ExecutorSpec{
-			Kind:    ddxexec.ExecutorKindCommand,
-			Command: append([]string{}, def.Command...),
-			Cwd:     def.Cwd,
-			Env:     cloneStringMap(def.Env),
-		},
-		Result: ddxexec.ResultSpec{
-			Metric: &ddxexec.MetricResultSpec{
-				Unit: def.Thresholds.Unit,
-			},
-		},
-		Evaluation: ddxexec.Evaluation{
-			Comparison: def.Comparison,
-			Thresholds: ddxexec.Thresholds{
-				WarnMS:    def.Thresholds.Warn,
-				RatchetMS: def.Thresholds.Ratchet,
-			},
-		},
-		Active:    def.Active,
-		CreatedAt: def.CreatedAt,
-	}
-}
-
 func metricDefinitionFromExec(def ddxexec.Definition) (Definition, error) {
 	metricID := ""
 	if len(def.ArtifactIDs) > 0 {

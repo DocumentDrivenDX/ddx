@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -23,8 +24,31 @@ func writeMetricArtifact(t *testing.T, wd, id string) {
 
 func writeMetricDefinition(t *testing.T, wd string, def Definition) {
 	t.Helper()
-	store := NewStore(wd)
-	require.NoError(t, store.SaveDefinition(def))
+	store := ddxexec.NewStore(wd)
+	require.NoError(t, store.SaveDefinition(ddxexec.Definition{
+		ID:          def.DefinitionID,
+		ArtifactIDs: []string{def.MetricID},
+		Executor: ddxexec.ExecutorSpec{
+			Kind:    ddxexec.ExecutorKindCommand,
+			Command: append([]string{}, def.Command...),
+			Cwd:     def.Cwd,
+			Env:     cloneStringMap(def.Env),
+		},
+		Result: ddxexec.ResultSpec{
+			Metric: &ddxexec.MetricResultSpec{
+				Unit: def.Thresholds.Unit,
+			},
+		},
+		Evaluation: ddxexec.Evaluation{
+			Comparison: def.Comparison,
+			Thresholds: ddxexec.Thresholds{
+				WarnMS:    def.Thresholds.Warn,
+				RatchetMS: def.Thresholds.Ratchet,
+			},
+		},
+		Active:    def.Active,
+		CreatedAt: def.CreatedAt,
+	}))
 }
 
 func TestValidateRunAndHistory(t *testing.T) {
@@ -182,7 +206,7 @@ func TestLegacyMetricsDirIgnored(t *testing.T) {
 
 func TestSaveDefinitionRoundTrips(t *testing.T) {
 	wd := t.TempDir()
-	store := NewStore(wd)
+	store := ddxexec.NewStore(wd)
 	def := Definition{
 		DefinitionID: "metric-startup-time@1",
 		MetricID:     "MET-001",
@@ -192,9 +216,32 @@ func TestSaveDefinitionRoundTrips(t *testing.T) {
 		Active:       true,
 		CreatedAt:    mustTime(t, "2026-04-04T15:00:00Z"),
 	}
-	require.NoError(t, store.SaveDefinition(def))
+	require.NoError(t, store.SaveDefinition(ddxexec.Definition{
+		ID:          def.DefinitionID,
+		ArtifactIDs: []string{def.MetricID},
+		Executor: ddxexec.ExecutorSpec{
+			Kind:    ddxexec.ExecutorKindCommand,
+			Command: append([]string{}, def.Command...),
+			Cwd:     def.Cwd,
+			Env:     cloneStringMap(def.Env),
+		},
+		Result: ddxexec.ResultSpec{
+			Metric: &ddxexec.MetricResultSpec{
+				Unit: def.Thresholds.Unit,
+			},
+		},
+		Evaluation: ddxexec.Evaluation{
+			Comparison: def.Comparison,
+			Thresholds: ddxexec.Thresholds{
+				WarnMS:    def.Thresholds.Warn,
+				RatchetMS: def.Thresholds.Ratchet,
+			},
+		},
+		Active:    def.Active,
+		CreatedAt: def.CreatedAt,
+	}))
 
-	loaded, err := store.LoadDefinition("MET-001")
+	loaded, err := NewStore(wd).LoadDefinition("MET-001")
 	require.NoError(t, err)
 	raw, err := json.Marshal(loaded)
 	require.NoError(t, err)
