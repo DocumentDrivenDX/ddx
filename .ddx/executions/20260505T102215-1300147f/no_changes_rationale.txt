@@ -1,0 +1,9 @@
+no_changes
+rationale: The requested behavior is already present in the current worktree, so no source changes were needed.
+
+Evidence:
+- `cli/internal/agent/triage_hook.go:73-208` defines `NewPostAttemptTriageHook`, builds a `MODE: triage` prompt, includes the bead body, `ExecuteBeadReport` JSON, recent bead events, and a bounded session-log excerpt, and dispatches through `dispatchViaResolvedConfig` with `AgentRunRuntime` rather than shelling out.
+- `cli/internal/agent/execute_bead_loop.go:191-212` and `cli/internal/agent/execute_bead_loop.go:1044-1168` invoke the post-attempt triage hook after the report is finalized and before cooldown decisions, then preserve legacy cooldown behavior when the hook fails.
+- `cli/internal/agent/triage_hook_test.go:80-285` covers runner-backed dispatch, prompt contents, hook ordering, outcome preservation, triage event recording, and fail-open cooldown behavior.
+
+verification_command: cd cli && go test ./internal/agent/... && lefthook run pre-commit
