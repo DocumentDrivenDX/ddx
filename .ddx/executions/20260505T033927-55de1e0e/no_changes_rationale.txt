@@ -1,0 +1,2 @@
+status: needs_investigation
+reason: The evidence bead content is already present in .ddx/beads.jsonl, and the required cross-links are already visible in ddx-06b77652 and ddx-31f745cd. The remaining acceptance item is the future closure condition: "Closed once the post-retrofit re-dispatch of ddx-29058e2a confirms P7 hypothesis." That confirmation has not happened in this execution, so closing the bead now would be premature.
