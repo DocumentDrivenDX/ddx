@@ -70,7 +70,8 @@ func TestRoutinglintNonStatusFilesDoNotCallResolveRoute(t *testing.T) {
 	// agent_cmd.go hosts the catalog-show health check, a status surface.
 	// All other non-test .go files in cmd/ must not call ResolveRoute.
 	allowedFiles := map[string]bool{
-		"agent_cmd.go": true,
+		"agent_cmd.go":          true,
+		"agent_route_status.go": true,
 	}
 
 	fset := token.NewFileSet()

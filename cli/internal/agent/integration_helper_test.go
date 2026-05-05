@@ -246,20 +246,6 @@ func gitCommitCount(t *testing.T, projectRoot string, refAndArgs ...string) int 
 	return n
 }
 
-// gitHasMergeCommits returns true when any merge commits exist in ref's history.
-func gitHasMergeCommits(t *testing.T, projectRoot, ref string) bool {
-	t.Helper()
-	out := runGitInteg(t, projectRoot, "log", "--merges", "--format=%H", ref)
-	return out != ""
-}
-
-// refExists returns true when the given git ref is present in the repo.
-func refExists(t *testing.T, projectRoot, ref string) bool {
-	t.Helper()
-	_, err := runGitIntegOutput(projectRoot, "rev-parse", "--verify", ref)
-	return err == nil
-}
-
 // ---------------------------------------------------------------------------
 // Store helpers
 // ---------------------------------------------------------------------------

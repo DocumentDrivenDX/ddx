@@ -390,7 +390,10 @@ func computeReviewOutcomesReport(workingDir string, window time.Duration, now ti
 	}
 
 	for _, b := range beads {
-		events := allBeadEventsFromExtra(b.Extra)
+		events, err := store.Events(b.ID)
+		if err != nil {
+			return reviewOutcomesReport{}, fmt.Errorf("read events for %s: %w", b.ID, err)
+		}
 		// Walk events in chronological order, tracking the most recent
 		// routing decision so each review is attributed to the tier that
 		// produced the work under review.
@@ -533,53 +536,6 @@ func quantile(values []int, q float64) int {
 		rank = len(sorted)
 	}
 	return sorted[rank-1]
-}
-
-// allBeadEventsFromExtra returns every BeadEvent stored on a bead, regardless
-// of kind. The route-status command has a routing-only extractor; here we
-// need both routing and review events so we walk Extra["events"] directly.
-func allBeadEventsFromExtra(extra map[string]any) []bead.BeadEvent {
-	if extra == nil {
-		return nil
-	}
-	raw, ok := extra["events"]
-	if !ok {
-		return nil
-	}
-	items, ok := raw.([]any)
-	if !ok {
-		return nil
-	}
-	out := make([]bead.BeadEvent, 0, len(items))
-	for _, item := range items {
-		m, ok := item.(map[string]any)
-		if !ok {
-			continue
-		}
-		e := bead.BeadEvent{}
-		if v, ok := m["kind"].(string); ok {
-			e.Kind = v
-		}
-		if v, ok := m["summary"].(string); ok {
-			e.Summary = v
-		}
-		if v, ok := m["body"].(string); ok {
-			e.Body = v
-		}
-		if v, ok := m["actor"].(string); ok {
-			e.Actor = v
-		}
-		if v, ok := m["source"].(string); ok {
-			e.Source = v
-		}
-		if v, ok := m["created_at"].(string); ok {
-			if t, err := time.Parse(time.RFC3339, v); err == nil {
-				e.CreatedAt = t
-			}
-		}
-		out = append(out, e)
-	}
-	return out
 }
 
 // parseRoutingHarnessModel extracts (provider, model) from a kind:routing
