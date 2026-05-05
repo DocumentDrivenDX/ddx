@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"net/http"
 	"strings"
-	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/federation"
 )
@@ -80,41 +78,8 @@ func (s *Server) EnableSpokeMode(ctx context.Context, hubURL, selfURL string, op
 	return nil
 }
 
-// SpokeOption customises the SpokeConfig used by EnableSpokeMode. Tests use
-// it to install short heartbeat intervals and a fake HTTP client.
+// SpokeOption customises the SpokeConfig used by EnableSpokeMode.
 type SpokeOption func(*federation.SpokeConfig)
-
-// WithSpokeHeartbeatInterval overrides the heartbeat cadence.
-func WithSpokeHeartbeatInterval(d time.Duration) SpokeOption {
-	return func(c *federation.SpokeConfig) { c.HeartbeatInterval = d }
-}
-
-// WithSpokeHeartbeatJitter overrides the heartbeat jitter fraction.
-func WithSpokeHeartbeatJitter(j float64) SpokeOption {
-	return func(c *federation.SpokeConfig) { c.HeartbeatJitterFraction = j }
-}
-
-// WithSpokeStatePath overrides the spoke-state.json path.
-func WithSpokeStatePath(p string) SpokeOption {
-	return func(c *federation.SpokeConfig) { c.StatePath = p }
-}
-
-// WithSpokeHTTPClient overrides the HTTP client used to call the hub.
-func WithSpokeHTTPClient(client *http.Client) SpokeOption {
-	return func(c *federation.SpokeConfig) { c.HTTPClient = client }
-}
-
-// WithSpokeSelfURL overrides the spoke's self-URL after defaults are applied.
-// Useful when a caller wants to advertise a different URL than the bind addr.
-func WithSpokeSelfURL(url string) SpokeOption {
-	return func(c *federation.SpokeConfig) { c.URL = url }
-}
-
-// WithSpokeNodeID overrides the node_id advertised to the hub. Useful for
-// tests where the server's persisted node_id is not deterministic.
-func WithSpokeNodeID(id string) SpokeOption {
-	return func(c *federation.SpokeConfig) { c.NodeID = id }
-}
 
 // SpokeAgent exposes the underlying federation.Spoke for tests and operator
 // introspection. Returns nil if spoke mode is not enabled.

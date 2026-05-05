@@ -34,6 +34,30 @@ func spokeStatePath(t *testing.T) string {
 	return filepath.Join(dir, "spoke-state.json")
 }
 
+func WithSpokeHeartbeatInterval(d time.Duration) SpokeOption {
+	return func(c *federation.SpokeConfig) { c.HeartbeatInterval = d }
+}
+
+func WithSpokeHeartbeatJitter(j float64) SpokeOption {
+	return func(c *federation.SpokeConfig) { c.HeartbeatJitterFraction = j }
+}
+
+func WithSpokeStatePath(p string) SpokeOption {
+	return func(c *federation.SpokeConfig) { c.StatePath = p }
+}
+
+func WithSpokeHTTPClient(client *http.Client) SpokeOption {
+	return func(c *federation.SpokeConfig) { c.HTTPClient = client }
+}
+
+func WithSpokeSelfURL(url string) SpokeOption {
+	return func(c *federation.SpokeConfig) { c.URL = url }
+}
+
+func WithSpokeNodeID(id string) SpokeOption {
+	return func(c *federation.SpokeConfig) { c.NodeID = id }
+}
+
 // AC: --hub-address flag registers on startup. Spoke appears in hub registry.
 func TestSpokeRegistersOnStart(t *testing.T) {
 	hub := newHubServer(t, false)

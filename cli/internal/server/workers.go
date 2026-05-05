@@ -1854,26 +1854,6 @@ func relToProject(projectRoot, path string) string {
 	return rel
 }
 
-// workerHarnessHealthy reports whether the upstream service currently exposes
-// the given harness as available. When live status is unavailable, the harness
-// is considered healthy so transient status failures do not hide workers.
-func workerHarnessHealthy(ctx context.Context, svc agentlib.FizeauService, harness string) bool {
-	if svc == nil || harness == "" {
-		return true
-	}
-	infos, err := svc.ListHarnesses(ctx)
-	if err != nil {
-		return true
-	}
-	for _, info := range infos {
-		if info.Name != harness {
-			continue
-		}
-		return info.Available
-	}
-	return true
-}
-
 // WorkerPruneResult describes one worker entry reaped by Prune.
 type WorkerPruneResult struct {
 	ID      string `json:"id"`

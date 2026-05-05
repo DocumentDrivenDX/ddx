@@ -86,32 +86,3 @@ func personaToGQL(p *persona.Persona) *Persona {
 		FilePath:    filePath,
 	}
 }
-
-func personaConnectionFrom(personas []*Persona, first *int, after *string, last *int, before *string) *PersonaConnection {
-	all := make([]*PersonaEdge, len(personas))
-	ids := make([]string, len(personas))
-	for i, p := range personas {
-		all[i] = &PersonaEdge{Node: p, Cursor: encodeStableCursor(p.ID)}
-		ids[i] = p.ID
-	}
-	startIdx, endIdx := stablePageBounds(ids, after, before)
-	slice := all[startIdx:endIdx]
-	truncByFirst, truncByLast := false, false
-	if first != nil && *first >= 0 && *first < len(slice) {
-		slice = slice[:*first]
-		truncByFirst = true
-	}
-	if last != nil && *last >= 0 && *last < len(slice) {
-		slice = slice[len(slice)-*last:]
-		truncByLast = true
-	}
-	pageInfo := &PageInfo{
-		HasPreviousPage: startIdx > 0 || truncByLast,
-		HasNextPage:     endIdx < len(all) || truncByFirst,
-	}
-	if len(slice) > 0 {
-		pageInfo.StartCursor = &slice[0].Cursor
-		pageInfo.EndCursor = &slice[len(slice)-1].Cursor
-	}
-	return &PersonaConnection{Edges: slice, PageInfo: pageInfo, TotalCount: len(all)}
-}

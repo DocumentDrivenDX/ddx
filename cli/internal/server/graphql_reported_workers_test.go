@@ -52,6 +52,17 @@ func newReportedWorkersHandler(reg *workerIngestRegistry, now func() time.Time) 
 	return gqlSrv
 }
 
+func (r *workerIngestRegistry) close() error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.logFile == nil {
+		return nil
+	}
+	err := r.logFile.Close()
+	r.logFile = nil
+	return err
+}
+
 func postReportedWorkers(t *testing.T, h http.Handler) reportedWorkersResponse {
 	t.Helper()
 	body, _ := json.Marshal(map[string]string{
