@@ -1,0 +1,13 @@
+status: needs_investigation
+reason: >
+  The evidence bead already exists in the bead store, and the required
+  cross-links back to ddx-06b77652 and ddx-31f745cd are already present.
+  The only unmet acceptance item is closure after a future post-retrofit
+  re-dispatch of ddx-29058e2a confirms the P7 hypothesis. That event has
+  not occurred in this execution, so there is no local repository change
+  to make without fabricating evidence.
+
+verification:
+  - ddx bead show ddx-f339c399
+  - ddx bead show ddx-06b77652
+  - ddx bead show ddx-31f745cd
