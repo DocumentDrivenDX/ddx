@@ -337,13 +337,14 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 							durationMS = 0
 						}
 						resultPayload := map[string]any{
-							"tool":         pending.name,
-							"output_bytes": len([]byte(output)),
-							"duration_ms":  durationMS,
-							"error":        errMsg,
-							"bead_id":      beadID,
-							"elapsed_ms":   elapsedMS,
-							"turn":         pending.turn,
+							"tool":           pending.name,
+							"output_bytes":   len([]byte(output)),
+							"output_excerpt": outputSummaryFromRaw(output),
+							"duration_ms":    durationMS,
+							"error":          errMsg,
+							"bead_id":        beadID,
+							"elapsed_ms":     elapsedMS,
+							"turn":           pending.turn,
 						}
 						if verbose {
 							resultPayload["output"] = output
@@ -386,13 +387,14 @@ func parseClaudeStream(r io.Reader, progressLog io.Writer, sessionID, beadID str
 		flushAt := time.Now()
 		for _, pending := range pendingTools {
 			resultPayload := map[string]any{
-				"tool":         pending.name,
-				"output_bytes": 0,
-				"duration_ms":  flushAt.Sub(pending.startedAt).Milliseconds(),
-				"error":        "no tool_result received",
-				"bead_id":      beadID,
-				"elapsed_ms":   pending.elapsedMS,
-				"turn":         pending.turn,
+				"tool":           pending.name,
+				"output_bytes":   0,
+				"output_excerpt": "",
+				"duration_ms":    flushAt.Sub(pending.startedAt).Milliseconds(),
+				"error":          "no tool_result received",
+				"bead_id":        beadID,
+				"elapsed_ms":     pending.elapsedMS,
+				"turn":           pending.turn,
 			}
 			if verbose {
 				resultPayload["output"] = ""

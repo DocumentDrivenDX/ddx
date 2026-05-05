@@ -33,9 +33,21 @@ make build
 # Run tests
 make test
 
-# Install locally
+# Install locally through the canonical installer
 make install
 ```
+
+`make install` delegates to `./install.sh --from-build cli/build/ddx`.
+For a prebuilt artifact, run the installer directly:
+
+```bash
+make build
+./install.sh --from-build
+```
+
+The canonical local binary is `${HOME}/.local/bin/ddx`. Do not copy
+`ddx` into ad hoc PATH locations; update the installer if a new install
+mode is needed.
 
 ### Set Up Git Hooks
 
@@ -78,7 +90,7 @@ make lint           # Run linter
 make fmt            # Format code
 make all            # Clean, deps, test, build
 make dev            # Hot reload development (requires air)
-make install        # Install to ~/.local/bin/ddx
+make install        # Install via ../install.sh --from-build build/ddx
 make build-all      # Cross-platform builds
 ```
 

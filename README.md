@@ -44,6 +44,21 @@ ddx bead list
 
 ## Development
 
+### Local Install
+
+The canonical local binary is `${HOME}/.local/bin/ddx`. Use the installer for
+all local deployments:
+
+```bash
+make build
+./install.sh --from-build
+```
+
+`make install` runs the same installer path after building. Avoid copying DDx
+to other PATH directories by hand; add an installer mode when a different
+deployment source is needed. Use `./install.sh --from-build --no-shell --prefix
+"$TMPDIR/ddx-install-test"` for throwaway installer checks.
+
 ### Build and Test CLI
 
 ```bash

@@ -145,8 +145,7 @@ lint:
 # Install locally for development
 install: build
 	@echo "Installing DDx locally..."
-	cp $(BUILD_DIR)/ddx $(HOME)/.local/bin/ddx
-	@echo "DDx installed to ~/.local/bin/ddx"
+	../install.sh --from-build $(BUILD_DIR)/ddx
 
 # Clean build artifacts
 clean:

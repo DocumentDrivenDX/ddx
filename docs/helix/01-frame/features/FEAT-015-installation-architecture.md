@@ -142,6 +142,8 @@ Desired behavior:
 
 1. **Binary-Only Installation**
    - Downloads `ddx` binary to `~/.local/bin/ddx`
+   - Installs a prebuilt local development binary with
+     `./install.sh --from-build [path]`, defaulting to `cli/build/ddx`
    - Sets up PATH in shell rc file
    - Sets up shell completions
    - Does NOT create `~/.ddx/`, `~/.agents/`, or `~/.claude/`

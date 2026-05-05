@@ -1,26 +1,24 @@
 # DDx Root Makefile
-# Builds CLI and copies to root for easy access
+# Builds and installs DDx through the canonical installer path.
 
 # Build variables
 VERSION ?= $(shell git describe --tags --always --dirty)
 CLI_DIR = cli
-ROOT_BINARY = ddx
+CLI_BINARY = $(CLI_DIR)/build/ddx
 
 .PHONY: all build clean test lint install help cli-build cli-clean cli-test cli-lint cli-bead-schema cli-skill-schema bead-schema skill-schema docs-routing-lint
 
-# Default target - build CLI and copy to root
+# Default target - build CLI
 all: build
 
-# Build CLI and copy to root
+# Build CLI
 build: cli-build
-	@echo "Copying CLI binary to root..."
-	cp $(CLI_DIR)/build/ddx $(ROOT_BINARY)
-	@echo "✅ DDx CLI built and available as ./$(ROOT_BINARY)"
+	@echo "✅ DDx CLI built at $(CLI_BINARY)"
 
 # Clean all build artifacts
 clean: cli-clean
-	@echo "Cleaning root binary..."
-	rm -f $(ROOT_BINARY)
+	@echo "Cleaning root binary artifacts..."
+	rm -f ddx
 
 # Run tests
 test: cli-test
@@ -42,8 +40,7 @@ docs-routing-lint:
 # Install locally
 install: build
 	@echo "Installing DDx locally..."
-	cp $(ROOT_BINARY) $(HOME)/.local/bin/ddx
-	@echo "✅ DDx installed to ~/.local/bin/ddx"
+	./install.sh --from-build $(CLI_BINARY)
 
 # Format code
 fmt:
@@ -86,7 +83,7 @@ cli-update-deps:
 # Development targets
 dev: build
 	@echo "Running DDx in development mode..."
-	./$(ROOT_BINARY) $(ARGS)
+	./$(CLI_BINARY) $(ARGS)
 
 # Build for all platforms
 build-all:
@@ -101,7 +98,7 @@ release:
 # MCP server management (uses local .claude/settings.local.json by default)
 mcp-list: build
 	@echo "Listing available MCP servers..."
-	./$(ROOT_BINARY) mcp list
+	./$(CLI_BINARY) mcp list
 
 mcp-install: build
 	@echo "Installing MCP server to local project configuration..."
@@ -109,7 +106,7 @@ mcp-install: build
 		echo "❌ Error: SERVER variable required. Usage: make mcp-install SERVER=server-name"; \
 		exit 1; \
 	fi
-	./$(ROOT_BINARY) mcp install $(SERVER) --config-path .claude/settings.local.json --yes
+	./$(CLI_BINARY) mcp install $(SERVER) --config-path .claude/settings.local.json --yes
 
 mcp-install-global: build
 	@echo "Installing MCP server to global configuration..."
@@ -117,29 +114,29 @@ mcp-install-global: build
 		echo "❌ Error: SERVER variable required. Usage: make mcp-install-global SERVER=server-name"; \
 		exit 1; \
 	fi
-	./$(ROOT_BINARY) mcp install $(SERVER) --yes
+	./$(CLI_BINARY) mcp install $(SERVER) --yes
 
 mcp-status: build
 	@echo "Checking MCP server status..."
-	./$(ROOT_BINARY) mcp status
+	./$(CLI_BINARY) mcp status
 
 # Diagnose project
 doctor: build
 	@echo "Running DDx diagnostics..."
-	./$(ROOT_BINARY) doctor
+	./$(CLI_BINARY) doctor
 
 # Update from master repository
 update: build
 	@echo "Updating DDx from master repository..."
-	./$(ROOT_BINARY) update
+	./$(CLI_BINARY) update
 
 # Show help
 help:
 	@echo "DDx Root Build System"
 	@echo ""
 	@echo "Main Targets:"
-	@echo "  all          - Build CLI and copy to root (default)"
-	@echo "  build        - Build CLI and copy to root"
+	@echo "  all          - Build CLI (default)"
+	@echo "  build        - Build CLI to cli/build/ddx"
 	@echo "  clean        - Clean all build artifacts"
 	@echo "  test         - Run all tests"
 	@echo "  lint         - Run linter"

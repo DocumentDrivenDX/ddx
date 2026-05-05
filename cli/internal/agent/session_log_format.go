@@ -66,6 +66,7 @@ import (
 //	tool.result:
 //	  data.tool         string
 //	  data.output_bytes int
+//	  data.output_excerpt string — compact first-line excerpt safe for progress logs
 //	  data.duration_ms  int     — wall time from tool_use → tool_result
 //	  data.error        string  — non-empty when tool_result is_error=true; empty otherwise
 //	  data.bead_id      string
@@ -188,13 +189,13 @@ func FormatSessionLogLines(lines []string) string {
 				// Prefer path/command/query keys for display
 				for _, key := range []string{"path", "command", "query", "file"} {
 					if v, ok := inp[key]; ok {
-						argHint = truncateStr(fmt.Sprintf("%v", v), 60)
+						argHint = fmt.Sprintf("%v", v)
 						break
 					}
 				}
 				if argHint == "" {
 					for _, v := range inp {
-						argHint = truncateStr(fmt.Sprintf("%v", v), 60)
+						argHint = fmt.Sprintf("%v", v)
 						break
 					}
 				}
@@ -239,8 +240,12 @@ func FormatSessionLogLines(lines []string) string {
 				errSuffix = " failed"
 			}
 			name = compactToolDisplay(name, "")
-			fmt.Fprintf(&sb, "  < %s out=%s%s%s\n",
-				name, formatByteSize(outputBytes), durSuffix, errSuffix)
+			excerpt := compactOutputExcerpt(data)
+			if excerpt != "" {
+				excerpt = " " + excerpt
+			}
+			fmt.Fprintf(&sb, "  < %s out=%s%s%s%s\n",
+				name, formatByteSize(outputBytes), excerpt, durSuffix, errSuffix)
 		case "bead.claimed":
 			data, _ := entry["data"].(map[string]any)
 			beadID, _ := data["bead_id"].(string)
@@ -455,9 +460,16 @@ func formatToolProgressLine(state string, data map[string]any) string {
 	case "complete":
 		tokens := progressTokenCount(data, "total_tokens", "output_tokens", "input_tokens")
 		duration := progressDurationString(data)
+		outputSummary, _ := data["output_summary"].(string)
+		if outputSummary != "" {
+			display = compactToolDisplayLimit(toolName, command, 48)
+		}
 		line := "ok"
 		if display != "" {
 			line += " " + display
+		}
+		if outputSummary != "" {
+			line += " < " + compactOutputSummaryLimit(outputSummary, 56)
 		}
 		switch {
 		case duration != "" && tokens > 0:
@@ -473,15 +485,137 @@ func formatToolProgressLine(state string, data map[string]any) string {
 	}
 }
 
+func compactOutputExcerpt(data map[string]any) string {
+	if data == nil {
+		return ""
+	}
+	for _, key := range []string{"output_excerpt", "output_summary"} {
+		if value, ok := data[key].(string); ok && strings.TrimSpace(value) != "" {
+			return compactOutputSummary(value)
+		}
+	}
+	if output, ok := data["output"].(string); ok {
+		return outputSummaryFromRaw(output)
+	}
+	return ""
+}
+
+func compactOutputSummary(summary string) string {
+	return compactOutputSummaryLimit(summary, 80)
+}
+
+func compactOutputSummaryLimit(summary string, limit int) string {
+	summary = strings.Join(strings.Fields(strings.TrimSpace(summary)), " ")
+	return truncateStr(summary, limit)
+}
+
+func outputSummaryFromRaw(output string) string {
+	output = strings.TrimSpace(output)
+	if output == "" {
+		return ""
+	}
+	byteCount := len([]byte(output))
+	lineCount := strings.Count(output, "\n") + 1
+	parts := []string{}
+	if lineCount == 1 {
+		parts = append(parts, "1 line")
+	} else {
+		parts = append(parts, fmt.Sprintf("%d lines", lineCount))
+	}
+	if byteCount > 40 {
+		for _, line := range strings.Split(output, "\n") {
+			line = strings.TrimSpace(line)
+			if line != "" {
+				parts = append(parts, strconv.Quote(truncateStr(line, 48)))
+				break
+			}
+		}
+	}
+	return compactOutputSummary(strings.Join(parts, " "))
+}
+
 func compactToolDisplay(toolName, command string) string {
+	return compactToolDisplayLimit(toolName, command, 96)
+}
+
+func compactToolDisplayLimit(toolName, command string, limit int) string {
 	display := strings.TrimSpace(command)
 	if display == "" {
 		display = strings.TrimSpace(toolName)
 	}
 	display = unwrapToolCommandSummary(display)
 	display = stripShellLoginWrapper(display)
-	display = strings.Join(strings.Fields(display), " ")
-	return truncateStr(display, 96)
+	display = firstShellCommandSegment(display)
+	fields := strings.Fields(display)
+	for i := range fields {
+		fields[i] = compactPathToken(fields[i], 36)
+	}
+	display = strings.Join(fields, " ")
+	return truncateStr(display, limit)
+}
+
+func compactPathToken(token string, limit int) string {
+	if limit <= 0 || len(token) <= limit || !strings.Contains(token, "/") {
+		return token
+	}
+	prefix, suffix := splitTokenAffixes(token)
+	core := strings.TrimPrefix(strings.TrimSuffix(token, suffix), prefix)
+	if len(core) <= limit || !strings.Contains(core, "/") {
+		return token
+	}
+	parts := strings.Split(core, "/")
+	last := parts[len(parts)-1]
+	if last == "" && len(parts) > 1 {
+		last = parts[len(parts)-2] + "/"
+	}
+	if last == "" {
+		return truncateStr(token, limit)
+	}
+	compacted := "…/" + last
+	if len(prefix)+len(compacted)+len(suffix) <= limit {
+		return prefix + compacted + suffix
+	}
+	return prefix + truncateStr(compacted, maxInt(1, limit-len(prefix)-len(suffix))) + suffix
+}
+
+func splitTokenAffixes(token string) (string, string) {
+	prefix := ""
+	suffix := ""
+	for len(token) > len(prefix) {
+		switch token[len(prefix)] {
+		case '\'', '"', '`', '(', '[', '{':
+			prefix += string(token[len(prefix)])
+		default:
+			goto suffixLoop
+		}
+	}
+suffixLoop:
+	for len(token) > len(prefix)+len(suffix) {
+		switch token[len(token)-len(suffix)-1] {
+		case '\'', '"', '`', ')', ']', '}', ',', ';':
+			suffix = string(token[len(token)-len(suffix)-1]) + suffix
+		default:
+			return prefix, suffix
+		}
+	}
+	return prefix, suffix
+}
+
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
+
+func firstShellCommandSegment(command string) string {
+	command = strings.TrimSpace(command)
+	for _, sep := range []string{" && ", " || ", " ; "} {
+		if idx := strings.Index(command, sep); idx >= 0 {
+			return strings.TrimSpace(command[:idx])
+		}
+	}
+	return command
 }
 
 func unwrapToolCommandSummary(display string) string {

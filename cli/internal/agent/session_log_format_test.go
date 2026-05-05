@@ -2,6 +2,7 @@ package agent
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -74,18 +75,20 @@ func TestFormatSessionLogLines_ProgressTool(t *testing.T) {
 			"command":   "ls -al",
 		}),
 		mustSessionLogLine(t, "progress", map[string]any{
-			"phase":        "tool",
-			"state":        "complete",
-			"tool_name":    "shell",
-			"command":      "ls -al /tmp/project/with/a/very/long/path/that/should/be/truncated/because/operators/do/not/need/full/output",
-			"duration_ms":  3000,
-			"total_tokens": 100,
+			"phase":          "tool",
+			"state":          "complete",
+			"tool_name":      "shell",
+			"command":        "ls -al /tmp/project/with/a/very/long/path/that/should/be/truncated/because/operators/do/not/need/full/output",
+			"output_summary": "out=57B 3 lines \"README.md\"",
+			"duration_ms":    3000,
+			"total_tokens":   100,
 		}),
 	}
 
 	got := FormatSessionLogLines(lines)
 	assert.Contains(t, got, "  > ls -al\n")
-	assert.Contains(t, got, "  ok ls -al /tmp/project/with/a/very/long/path/that/should/be/truncated/")
+	assert.Contains(t, got, "  ok ls -al …/output")
+	assert.Contains(t, got, " < out=57B 3 lines \"README.md\"")
 	assert.Contains(t, got, " 3s 100tok\n")
 	assert.NotContains(t, got, "operators/do/not/need/full/output")
 }
@@ -124,16 +127,163 @@ func TestFormatSessionLogLines_ToolPayloadSizes(t *testing.T) {
 			"input_bytes": 128,
 		}),
 		mustSessionLogLine(t, "tool.result", map[string]any{
-			"tool":         "Bash",
-			"output_bytes": 4096,
-			"duration_ms":  1200,
+			"tool":           "Bash",
+			"output_bytes":   4096,
+			"output_excerpt": "2 lines \"ok package\"",
+			"duration_ms":    1200,
 		}),
 	}
 
 	got := FormatSessionLogLines(lines)
 	assert.Contains(t, got, "  🔧 Bash go test ./... in=128B\n")
 	assert.NotContains(t, got, "/bin/zsh -lc")
-	assert.Contains(t, got, "  < Bash out=4.0KB 1.2s\n")
+	assert.Contains(t, got, "  < Bash out=4.0KB 2 lines \"ok package\" 1.2s\n")
+}
+
+func TestFormatSessionLogLines_ToolOutputCorpusStaysBounded(t *testing.T) {
+	longSecretTail := "FULL_OUTPUT_SHOULD_NOT_APPEAR_" + strings.Repeat("x", 200)
+	longCommandTail := "FULL_COMMAND_SHOULD_NOT_APPEAR_" + strings.Repeat("y", 200)
+	cases := []struct {
+		name        string
+		line        string
+		want        []string
+		notWant     []string
+		maxLineLen  int
+		expectLines int
+	}{
+		{
+			name: "progress complete with long command and output summary",
+			line: mustSessionLogLine(t, "progress", map[string]any{
+				"phase":          "tool",
+				"state":          "complete",
+				"tool_name":      "bash",
+				"command":        "sed -n '240,320p' service_execute.go && " + longCommandTail,
+				"output_summary": "out=8.3KB 81 lines \"func runExecute(ctx context.Context, req ServiceExecuteRequest, decision RouteDecision)\"",
+				"duration_ms":    1450,
+			}),
+			want:       []string{"ok sed -n '240,320p' service_execute.go", "< out=8.3KB 81 lines", "1.45s"},
+			notWant:    []string{longCommandTail, "FULL_COMMAND_SHOULD_NOT_APPEAR"},
+			maxLineLen: 122,
+		},
+		{
+			name: "tool result with explicit excerpt",
+			line: mustSessionLogLine(t, "tool.result", map[string]any{
+				"tool":           "Bash",
+				"output_bytes":   987654,
+				"output_excerpt": "120 lines \"--- FAIL: TestWorkerLogContext (0.03s)\"",
+				"duration_ms":    2300,
+			}),
+			want:       []string{"< Bash out=964.5KB", "120 lines", "TestWorkerLogContext", "2.3s"},
+			maxLineLen: 122,
+		},
+		{
+			name: "verbose raw output is summarized without leaking tail",
+			line: mustSessionLogLine(t, "tool.result", map[string]any{
+				"tool":         "Bash",
+				"output":       "first useful line\nsecond line\n" + longSecretTail,
+				"output_bytes": 4096,
+				"duration_ms":  10,
+			}),
+			want:       []string{"< Bash out=4.0KB", "3 lines", "\"first useful line\"", "10ms"},
+			notWant:    []string{longSecretTail, "FULL_OUTPUT_SHOULD_NOT_APPEAR", "second line"},
+			maxLineLen: 122,
+		},
+		{
+			name: "empty output keeps byte context",
+			line: mustSessionLogLine(t, "tool.result", map[string]any{
+				"tool":         "read",
+				"output_bytes": 0,
+				"duration_ms":  1,
+			}),
+			want:       []string{"< read out=0B 1ms"},
+			maxLineLen: 122,
+		},
+		{
+			name: "failed result preserves failure without full error body",
+			line: mustSessionLogLine(t, "tool.result", map[string]any{
+				"tool":           "Bash",
+				"output_bytes":   24,
+				"output_excerpt": "1 line \"permission denied\"",
+				"duration_ms":    5,
+				"error":          "permission denied: " + longSecretTail,
+			}),
+			want:       []string{"< Bash out=24B", "permission denied", "5ms failed"},
+			notWant:    []string{longSecretTail, "FULL_OUTPUT_SHOULD_NOT_APPEAR"},
+			maxLineLen: 122,
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := FormatSessionLogLines([]string{tc.line})
+			require.NotEmpty(t, got)
+			for _, want := range tc.want {
+				assert.Contains(t, got, want)
+			}
+			for _, notWant := range tc.notWant {
+				assert.NotContains(t, got, notWant)
+			}
+			assertFormattedLinesBounded(t, got, tc.maxLineLen)
+		})
+	}
+}
+
+func TestFormatSessionLogLines_MixedSessionCorpusKeepsContextAndTrim(t *testing.T) {
+	hugeOutput := strings.Join([]string{
+		"package agent",
+		"func TestFormatSessionLogLines_MixedSessionCorpusKeepsContextAndTrim(t *testing.T) {",
+		strings.Repeat("raw-log-body-", 80),
+	}, "\n")
+	lines := []string{
+		mustSessionLogLine(t, "session.start", map[string]any{"model": "claude-sonnet-4-6"}),
+		mustSessionLogLine(t, "llm.request", map[string]any{
+			"attempt_index": 2,
+			"messages": []map[string]any{
+				{"role": "user", "content": "Please inspect the worker log formatter and make output lines useful."},
+			},
+		}),
+		mustSessionLogLine(t, "llm.response", map[string]any{
+			"model":            "claude-sonnet-4-6",
+			"latency_ms":       4100,
+			"response_bytes":   71,
+			"thinking_bytes":   2048,
+			"tool_input_bytes": 512,
+			"attempt": map[string]any{
+				"cost": map[string]any{"raw": map[string]any{"total_tokens": 1234}},
+			},
+			"tool_calls": []map[string]any{{"name": "Bash"}},
+		}),
+		mustSessionLogLine(t, "tool.call", map[string]any{
+			"tool":        "Bash",
+			"input":       map[string]any{"command": `/bin/zsh -lc "sed -n '240,320p' cli/internal/agent/session_log_format.go"`},
+			"input_bytes": 95,
+		}),
+		mustSessionLogLine(t, "tool.result", map[string]any{
+			"tool":         "Bash",
+			"output":       hugeOutput,
+			"output_bytes": len([]byte(hugeOutput)),
+			"duration_ms":  7,
+		}),
+		mustSessionLogLine(t, "progress", map[string]any{
+			"phase":           "context",
+			"state":           "update",
+			"session_summary": "read formatter, added compact output hints, verified focused tests",
+		}),
+	}
+
+	got := FormatSessionLogLines(lines)
+	assert.Contains(t, got, "▶ session started (model: claude-sonnet-4-6)")
+	assert.Contains(t, got, "llm request (attempt 2")
+	assert.Contains(t, got, "sed -n '240,320p' …/session_log_format.go")
+	assert.Contains(t, got, "3 lines \"package agent\"")
+	assert.Contains(t, got, "context summary: read formatter")
+	assert.NotContains(t, got, strings.Repeat("raw-log-body-", 10))
+
+	for _, line := range strings.Split(strings.TrimSpace(got), "\n") {
+		if strings.Contains(line, "  < ") || strings.Contains(line, "  ok ") || strings.Contains(line, "  > ") {
+			assert.LessOrEqual(t, len(line), 122, "tool line should stay compact: %q", line)
+		}
+	}
 }
 
 func TestFormatSessionLogLines_ProgressResponseAndContext(t *testing.T) {
@@ -164,6 +314,13 @@ func TestFormatSessionLogLines_ProgressResponseAndContext(t *testing.T) {
 	assert.Contains(t, got, "  response complete 100 tok in 4.2s\n")
 	assert.Contains(t, got, "  context summary: edited routing output and verified tests\n")
 	assert.Contains(t, got, "  compaction complete 4800 -> 1200 tokens: trimmed prompt history and preserved tool outputs\n")
+}
+
+func assertFormattedLinesBounded(t *testing.T, got string, maxLen int) {
+	t.Helper()
+	for _, line := range strings.Split(strings.TrimSpace(got), "\n") {
+		assert.LessOrEqual(t, len(line), maxLen, "formatted line too long: %q", line)
+	}
 }
 
 func mustSessionLogLine(t *testing.T, typ string, data map[string]any) string {

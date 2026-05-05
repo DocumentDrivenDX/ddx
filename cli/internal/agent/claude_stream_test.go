@@ -226,6 +226,7 @@ func TestParseClaudeStreamDiagnosticMode(t *testing.T) {
 	result := toolResults[0]
 	assert.Equal(t, "Bash", result["tool"])
 	assert.Equal(t, "README.md\nfoo.go", result["output"], "diagnostic tool.result must include output")
+	assert.Equal(t, "2 lines", result["output_excerpt"], "tool.result should include a compact output hint")
 	assert.Equal(t, "", result["error"], "tool.result must include error field (empty on success)")
 	assert.EqualValues(t, len("README.md\nfoo.go"), toolResults[0]["output_bytes"])
 }
@@ -270,6 +271,7 @@ func TestParseClaudeStreamStandardDefault(t *testing.T) {
 	assert.False(t, hasField("tool.result", "output"), "standard tool.result must not include output")
 	assert.True(t, hasField("tool.call", "input_bytes"), "standard tool.call must include input_bytes")
 	assert.True(t, hasField("tool.result", "output_bytes"), "standard tool.result must include output_bytes")
+	assert.True(t, hasField("tool.result", "output_excerpt"), "standard tool.result must include compact output context")
 }
 
 // TestParseClaudeStreamEmpty verifies the parser tolerates an empty stream

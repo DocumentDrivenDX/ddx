@@ -2,6 +2,7 @@
 
 # DDx (Document-Driven Development eXperience) Installation Script
 # Usage: curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash
+#        ./install.sh --from-build cli/build/ddx
 
 set -e
 
@@ -15,6 +16,10 @@ NC='\033[0m' # No Color
 # Configuration
 DDX_REPO="https://github.com/DocumentDrivenDX/ddx"
 DDX_API="https://api.github.com/repos/DocumentDrivenDX/ddx"
+INSTALL_PREFIX="${HOME}/.local"
+INSTALL_SOURCE=""
+INSTALL_TAG=""
+SKIP_SHELL_SETUP="0"
 
 # Logging functions (all to stderr to avoid polluting command substitution)
 log() {
@@ -34,22 +39,91 @@ error() {
     exit 1
 }
 
+usage() {
+    cat >&2 <<'EOF'
+DDx installer
+
+Usage:
+  install.sh [options]
+
+Options:
+  --from-build [PATH]  Install an already-built ddx binary. Defaults to cli/build/ddx.
+  --prefix PATH       Install under PATH/bin/ddx. Defaults to $HOME/.local.
+  --version VERSION   Install release VERSION (same as DDX_VERSION).
+  --no-shell          Skip shell completions and PATH rc-file updates.
+  -h, --help          Show this help.
+
+Canonical local install path:
+  $HOME/.local/bin/ddx
+
+Examples:
+  curl -fsSL https://raw.githubusercontent.com/DocumentDrivenDX/ddx/main/install.sh | bash
+  make build
+  ./install.sh --from-build
+  ./install.sh --from-build cli/build/ddx --prefix "$HOME/.local"
+EOF
+}
+
+parse_args() {
+    while [ "$#" -gt 0 ]; do
+        case "$1" in
+            --from-build)
+                if [ "$#" -gt 1 ] && [ "${2#-}" = "$2" ]; then
+                    INSTALL_SOURCE="$2"
+                    shift 2
+                else
+                    INSTALL_SOURCE="cli/build/ddx"
+                    shift
+                fi
+                ;;
+            --prefix)
+                [ "$#" -gt 1 ] || error "--prefix requires a path"
+                INSTALL_PREFIX="$2"
+                shift 2
+                ;;
+            --version)
+                [ "$#" -gt 1 ] || error "--version requires a version"
+                INSTALL_TAG="$2"
+                shift 2
+                ;;
+            --no-shell)
+                SKIP_SHELL_SETUP="1"
+                shift
+                ;;
+            -h|--help)
+                usage
+                exit 0
+                ;;
+            *)
+                error "Unknown option: $1"
+                ;;
+        esac
+    done
+
+    if [ -n "$INSTALL_TAG" ]; then
+        DDX_VERSION="$INSTALL_TAG"
+        export DDX_VERSION
+    fi
+}
+
 # Check prerequisites
 check_prerequisites() {
     log "Checking prerequisites..."
-    
-    # Check for git
-    if ! command -v git &> /dev/null; then
-        error "Git is required but not installed. Please install git first."
-    fi
-    
-    # Check for basic utilities (curl/wget for downloading binaries)
-    if ! command -v curl &> /dev/null && ! command -v wget &> /dev/null; then
-        error "curl or wget is required but neither is installed."
+
+    if [ -z "$INSTALL_SOURCE" ]; then
+        # Check for git
+        if ! command -v git &> /dev/null; then
+            error "Git is required but not installed. Please install git first."
+        fi
+
+        # Check for basic utilities (curl/wget for downloading binaries)
+        if ! command -v curl &> /dev/null && ! command -v wget &> /dev/null; then
+            error "curl or wget is required but neither is installed."
+        fi
     fi
 
     # Check for git-subtree (required for sync features)
-    if ! git subtree 2>&1 | grep -q "git subtree"; then
+    if command -v git &> /dev/null && ! git subtree 2>&1 | grep -q "git subtree"; then
         warn "git-subtree not found. Some DDx features will be limited."
         echo ""
         case "$(uname -s)" in
@@ -101,7 +175,7 @@ resolve_version() {
 # Install CLI tool
 install_cli() {
     # Check if DDx is already installed
-    LOCAL_BIN="${HOME}/.local/bin"
+    LOCAL_BIN="${INSTALL_PREFIX}/bin"
     EXISTING_VERSION=""
     if [ -x "${LOCAL_BIN}/ddx" ]; then
         EXISTING_VERSION=$("${LOCAL_BIN}/ddx" version 2>/dev/null | head -1 | awk '{print $2}' || echo "")
@@ -111,6 +185,21 @@ install_cli() {
         log "Upgrading DDx from ${EXISTING_VERSION}..."
     else
         log "Installing DDx CLI tool..."
+    fi
+
+    mkdir -p "${LOCAL_BIN}"
+
+    if [ -n "$INSTALL_SOURCE" ]; then
+        if [ ! -f "$INSTALL_SOURCE" ]; then
+            error "Build artifact not found: ${INSTALL_SOURCE}. Run 'make build' first or pass --from-build PATH."
+        fi
+        if [ ! -x "$INSTALL_SOURCE" ]; then
+            error "Build artifact is not executable: ${INSTALL_SOURCE}"
+        fi
+        log "Installing DDx from build artifact: ${INSTALL_SOURCE}"
+        install -m 0755 "${INSTALL_SOURCE}" "${LOCAL_BIN}/ddx"
+        success "CLI tool installed from build artifact"
+        return
     fi
 
     # Resolve version
@@ -199,11 +288,8 @@ install_cli() {
     tar -xzf "${ARCHIVE_NAME}"
 
     # Install binary directly to local bin
-    mkdir -p "${LOCAL_BIN}"
-
-    # Move binary directly to local bin instead of DDx home
-    mv "${BINARY_NAME}" "${LOCAL_BIN}/ddx"
-    chmod +x "${LOCAL_BIN}/ddx"
+    # Install binary directly to local bin instead of DDx home.
+    install -m 0755 "${BINARY_NAME}" "${LOCAL_BIN}/ddx"
 
     success "CLI tool installed (${TAG})"
 }
@@ -243,7 +329,7 @@ update_path() {
     log "Checking PATH configuration..."
     
     # Local bin path
-    LOCAL_BIN="${HOME}/.local/bin"
+    LOCAL_BIN="${INSTALL_PREFIX}/bin"
     
     # Check if already in PATH
     if [[ ":$PATH:" == *":$LOCAL_BIN:"* ]]; then
@@ -283,13 +369,13 @@ verify_installation() {
     log "Verifying installation..."
 
     # Check if binary exists and is executable
-    LOCAL_BIN="${HOME}/.local/bin/ddx"
-    if [ ! -f "${LOCAL_BIN}" ] || [ ! -x "${LOCAL_BIN}" ]; then
-        error "Installation failed: DDx binary not found or not executable at ${LOCAL_BIN}"
+    LOCAL_DDX="${INSTALL_PREFIX}/bin/ddx"
+    if [ ! -f "${LOCAL_DDX}" ] || [ ! -x "${LOCAL_DDX}" ]; then
+        error "Installation failed: DDx binary not found or not executable at ${LOCAL_DDX}"
     fi
 
     # Test binary execution
-    if ! "${LOCAL_BIN}" version &> /dev/null; then
+    if ! "${LOCAL_DDX}" version &> /dev/null; then
         warn "DDx binary installed but 'ddx version' command failed. This may be normal if PATH is not yet configured."
     fi
 
@@ -311,7 +397,7 @@ show_getting_started() {
     echo "   ${DDX_REPO}          Online repository and documentation"
     echo ""
     echo "🔧 Binary Location:"
-    echo "   ${HOME}/.local/bin/ddx    DDx executable"
+    echo "   ${INSTALL_PREFIX}/bin/ddx    DDx executable"
     echo ""
     echo "⚡ Quick Start:"
     echo "   cd your-project"
@@ -327,13 +413,17 @@ show_getting_started() {
 
 # Main installation flow
 main() {
+    parse_args "$@"
+
     echo "🚀 Installing DDx - Document-Driven Development eXperience"
     echo ""
-    
+
     check_prerequisites
     install_cli
-    setup_completions
-    update_path
+    if [ "$SKIP_SHELL_SETUP" != "1" ]; then
+        setup_completions
+        update_path
+    fi
     verify_installation
     show_getting_started
 }
