@@ -519,10 +519,10 @@ with the following fields:
 The `body` line is structured for grep/jq parsing: each token is a
 `key=value` pair separated by single spaces. `layer_override` is the
 empty string when the caller did not pass `RunRequeueInput.layer`.
-Operator identity is captured via the same audit pathway used by
-operator-prompt beads (ADR-021); when the request carries no
-identifying header, the audit fields fall back to
-`identity=unknown actor=anonymous`.
+`identity.kind` is the resolver-selected operator identity class
+(`unknown`, `localhost`, or `tsnet`). `actor` is the resolved user or
+operator label; when the request carries no identifying header, the
+audit fields fall back to `identity=unknown actor=anonymous`.
 
 Consumers of the audit log (FEAT-008 Runs row expansion, evaluation
 skills under FEAT-019) treat `run_requeue` events as the canonical
@@ -583,9 +583,9 @@ backed by the unified substrate plus the legacy detail backings:
 
 | Chip | Substrate row | Detail backing for row expansion |
 |---|---|---|
-| `work` | `layer: 3` Run record | Layer-3 record's queue inputs / stop-condition log / child layer-2 attempt ids; the tabbed detail surface exposes `overview` only |
-| `try` | `layer: 2` Run record | The `.ddx/executions/<attempt-id>/` bundle attached to the layer-2 record (manifest, prompt, result, checks, verdict); the tabbed detail surface exposes `overview`, `prompt`, `response`, `tools`, and `evidence` |
-| `run` | `layer: 1` Run record | The associated `AgentSession` row (prompt / response / stderr / billing / cached-token detail) joined onto the layer-1 record; the tabbed detail surface exposes `overview`, `prompt`, `response`, `session`, `tools`, and `evidence` |
+| `work` | `layer: 3` Run record | Layer-3 record's queue inputs / stop-condition log / child layer-2 attempt ids; the shared tab strip exposes `overview` only |
+| `try` | `layer: 2` Run record | The `.ddx/executions/<attempt-id>/` bundle attached to the layer-2 record (manifest, prompt, result, checks, verdict); the shared tab strip exposes `overview`, `prompt`, `response`, `tools`, and `evidence` |
+| `run` | `layer: 1` Run record | The associated `AgentSession` row (prompt / response / stderr / billing / cached-token detail) joined onto the layer-1 record; the shared tab strip exposes `overview`, `prompt`, `response`, `session`, `tools`, and `evidence` |
 
 `AgentSession` rows that have no parent layer-2 attempt (raw `ddx
 agent log` invocations) surface as synthesized `layer=run` Runs rows

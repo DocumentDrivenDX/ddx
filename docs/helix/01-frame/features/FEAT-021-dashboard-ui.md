@@ -131,11 +131,11 @@ label: `work`, `try`, or `run`.
 - Click to expand: DDx metadata, native session references, token usage,
   parent/child links, and artifact producer links
 - Layer-aware row expansion replaces the retired Sessions and Executions
-  tabs and opens the shared tabbed run-detail surface: `layer=run` rows
-  expose `overview`, `prompt`, `response`, `session`, `tools`, and
-  `evidence`; `layer=try` rows expose `overview`, `prompt`, `response`,
-  `tools`, and `evidence`; `layer=work` rows expose `overview` only plus
-  queue inputs and child run links.
+  top-level activity tabs and opens the shared run-detail tab strip:
+  `layer=run` rows expose `overview`, `prompt`, `response`, `session`,
+  `tools`, and `evidence`; `layer=try` rows expose `overview`,
+  `prompt`, `response`, `tools`, and `evidence`; `layer=work` rows expose
+  `overview` only plus queue inputs and child run links.
 - Re-queue affordances per FEAT-008 US-086c (try-layer + run-layer
   re-queue button; work-layer "Start worker from this drain"); every
   successful re-queue emits a `run_requeue` audit event on the

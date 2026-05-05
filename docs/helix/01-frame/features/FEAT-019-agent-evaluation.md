@@ -371,7 +371,7 @@ agent:
   try session ID and hidden ref — no FEAT-019-owned duplicate provenance record exists.
 - Given an evaluation record links to a run detail, then opening that link
   uses the shared project-scoped run-detail surface, including the layer-
-  appropriate tab set (`overview`; `overview` / `prompt` / `response` /
+  appropriate tab strip (`overview`; `overview` / `prompt` / `response` /
   `tools` / `evidence` for `try`; `overview` / `prompt` / `response` /
   `session` / `tools` / `evidence` for `run`), the Evidence tab / download
   affordances, and the same project-membership visibility rules that drive

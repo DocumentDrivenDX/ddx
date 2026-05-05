@@ -6,6 +6,14 @@ ddx:
     - FEAT-008
     - FEAT-020
     - SD-019
+  review:
+    self_hash: 9ef914f2bdf656117902b4cc69f25128faeb36deb4dcaa40beb8392c95cc4291
+    deps:
+      FEAT-008: 58bdead83a18c4c082bb647c3676cafc62abf0ab787be8106ec6dc60b09f399b
+      FEAT-020: 44ad4fa73360e48dcc0c424359e59de7bf9080543bac753168056b7fa9f9ba14
+      SD-019: 829e86d8690e97d7bd651a295aa68a2dddef5b143c1c0e2b9f5a2deef88a805d
+      helix.prd: e0c67dbc961e1ff48dbe6f025f293f7cff523bc141e74d8bf0dcd067835254a2
+    reviewed_at: "2026-05-05T15:03:29Z"
 ---
 # Feature: Multi-Node Dashboard UI
 

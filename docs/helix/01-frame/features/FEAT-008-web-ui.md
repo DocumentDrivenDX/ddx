@@ -89,9 +89,9 @@ project-scoped tabs in the global navigation, in this order:
 | Commits | `commits` | Project git commit log (US-093, FEAT-021) |
 | Efficacy | `efficacy` | Model efficacy + comparisons (US-096) |
 
-**Sessions and Executions are retired as top-level tabs** (Story 8). The
-unified Runs tab carries layer chips and inline row expansion that
-surface what those tabs used to show:
+**Sessions and Executions are retired as top-level activity tabs**
+(Story 8). The unified Runs tab carries the shared layer-aware tab
+structure and inline row expansion that surface what those tabs used to show:
 
 - `layer=run` rows expand to AgentSession transcript / billing / cached
   tokens / stderr (the old Sessions detail).
@@ -288,7 +288,7 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
      adapter when row counts exceed 1k.
    - Inline row expansion is **layer-aware** and opens the shared tabbed
      run-detail surface (replaces the retired Sessions and Executions
-     top-level tabs):
+     top-level activity tabs and uses the shared layer-aware tab strip):
      - `layer=work` row expands to queue inputs, selected beads, stop
        condition, retry/defer decisions, and child try-attempt links in
        chronological order. The detail panel exposes the `overview` tab only.
