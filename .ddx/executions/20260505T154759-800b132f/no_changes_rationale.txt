@@ -1,0 +1,11 @@
+status: needs_investigation
+reason: The evidence bead already exists in the bead store and the requested cross-links are already present, but acceptance item 4 requires a future event that has not happened in this worktree: "Closed once the post-retrofit re-dispatch of ddx-29058e2a confirms P7 hypothesis." I can verify the current evidence state, but I cannot truthfully close this bead yet without that confirmation.
+
+What I looked for:
+- `ddx bead show ddx-f339c399` shows the bead exists, is tracked as `ddx-f339c399`, and carries the exact evidence text about the 2026-05-04 `ddx try ddx-29058e2a --harness=codex` no_changes outcome.
+- `ddx bead show ddx-06b77652` already contains `ddx-f339c399` under EVIDENCE for P7 in RELIABILITY-PRINCIPLES.
+- `ddx bead show ddx-31f745cd` already contains `ddx-f339c399` under EVIDENCE as partial Path B-vs-C data.
+
+Why I am not making a code or tracker edit:
+- There is no missing repository file to fix for AC 1-3; the bead store and the two linked beads already reflect the evidence.
+- AC 4 depends on a later retrofit/re-dispatch result for `ddx-29058e2a`, which is outside the scope of this attempt and not yet satisfied here.
