@@ -308,20 +308,6 @@ func FormatSessionLogLines(lines []string) string {
 			if attempts > 0 {
 				fmt.Fprintf(&sb, "\nloop done: %.0f attempted, %.0f succeeded, %.0f failed\n", attempts, successes, failures)
 			}
-		case "compaction.start":
-			// Suppress: we'll show a single line on compaction.end only if it succeeded.
-		case "compaction.end":
-			data, _ := entry["data"].(map[string]any)
-			success, _ := data["success"].(bool)
-			if success {
-				tokensBefore, _ := data["tokens_before"].(float64)
-				tokensAfter, _ := data["tokens_after"].(float64)
-				if tokensBefore > 0 && tokensAfter > 0 {
-					fmt.Fprintf(&sb, "  ⚡ compacted context (%.0f → %.0f tokens)\n", tokensBefore, tokensAfter)
-				} else {
-					fmt.Fprintf(&sb, "  ⚡ compacted context\n")
-				}
-			}
 		}
 	}
 	return sb.String()

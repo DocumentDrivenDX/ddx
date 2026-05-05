@@ -277,7 +277,7 @@ func TestLoadSessionBodiesFromBundle(t *testing.T) {
 func TestRunViaServiceWithAppendsOneSessionIndexRow(t *testing.T) {
 	workDir := t.TempDir()
 	embeddedLogDir := filepath.Join(workDir, ExecuteBeadArtifactDir, "attempt-1", "embedded")
-	svc := &noopCompactionFizeauService{interval: time.Millisecond, total: 0}
+	svc := &passthroughTestService{}
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 		Harness: "agent",
 		Model:   "fake-model",

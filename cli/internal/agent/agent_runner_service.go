@@ -20,15 +20,7 @@ const (
 	serviceEventTextDelta       = "text_delta"
 	serviceEventToolCall        = "tool_call"
 	serviceEventToolResult      = "tool_result"
-	serviceEventStall           = "stall"
 	serviceEventFinal           = "final"
-	serviceEventCompaction      = "compaction"
-	serviceEventCompactionEnd   = "compaction.end"
-)
-
-const (
-	serviceNoopCompactionWallClockLimit  = 15 * time.Minute
-	serviceNoopCompactionWallClockReason = "compaction_stuck_wall_clock_timeout"
 )
 
 // ServiceEvent payload types are now aliases to the upstream v0.8.0 public
@@ -244,211 +236,77 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 // the accumulated tool-call log, the routing decision (when present in the
 // routing_decision start event), and the power of the selected model (0 when
 // the routing_decision event does not include candidate power components).
-// A sustained run of no-op compaction telemetry is converted into a synthetic
-// stalled final so execute-bead result details identify the time-based
-// breaker instead of waiting for the outer wall clock.
 func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData, []ToolCallEntry, *serviceRoutingActual, int) {
 	var final *serviceFinalData
 	var routing *serviceRoutingActual
 	var routingPower int
 	var toolCalls []ToolCallEntry
 	pending := make(map[string]*ToolCallEntry) // call_id -> entry awaiting result
-	var noopCompactions serviceNoopCompactionStreak
-	var noopTimer *time.Timer
-	var noopTimerC <-chan time.Time
-	defer func() { stopNoopCompactionTimer(noopTimer) }()
 
-	for {
-		select {
-		case <-noopTimerC:
-			detail := noopCompactions.detail(serviceNoopCompactionWallClockLimit, serviceNoopCompactionWallClockLimit)
-			return &serviceFinalData{
-				Status: "stalled",
-				Error:  detail,
-			}, toolCallsWithPending(toolCalls, pending), routing, routingPower
-		case ev, ok := <-events:
-			if !ok {
-				// Any tool_call without a matching tool_result still gets recorded.
-				return final, toolCallsWithPending(toolCalls, pending), routing, routingPower
+	for ev := range events {
+		switch string(ev.Type) {
+		case serviceEventRoutingDecision:
+			var payload struct {
+				Harness    string `json:"harness"`
+				Provider   string `json:"provider"`
+				Model      string `json:"model"`
+				Candidates []struct {
+					Model              string  `json:"model"`
+					Eligible           bool    `json:"eligible"`
+					CostUSDPer1kTokens float64 `json:"cost_usd_per_1k_tokens"`
+					CostSource         string  `json:"cost_source"`
+					Components         struct {
+						Power    int     `json:"power"`
+						SpeedTPS float64 `json:"speed_tps"`
+					} `json:"components"`
+				} `json:"candidates"`
 			}
-			if isNoopCompactionEvent(ev) {
-				detail, started := noopCompactions.record(eventTimestamp(ev), serviceNoopCompactionWallClockLimit)
-				if started {
-					noopTimer, noopTimerC = resetNoopCompactionTimer(noopTimer, serviceNoopCompactionWallClockLimit)
+			if err := json.Unmarshal(ev.Data, &payload); err == nil {
+				routing = &serviceRoutingActual{
+					Harness:  payload.Harness,
+					Provider: payload.Provider,
+					Model:    payload.Model,
 				}
-				if detail != "" {
-					return &serviceFinalData{
-						Status: "stalled",
-						Error:  detail,
-					}, toolCallsWithPending(toolCalls, pending), routing, routingPower
+				for _, c := range payload.Candidates {
+					if c.Eligible && c.Model == payload.Model {
+						routingPower = c.Components.Power
+						routing.PredictedPower = c.Components.Power
+						routing.PredictedSpeedTPS = c.Components.SpeedTPS
+						routing.PredictedCostUSDPer1kTokens = c.CostUSDPer1kTokens
+						routing.PredictedCostSource = c.CostSource
+						break
+					}
 				}
-				continue
 			}
-			if isServiceProgressEvent(ev) {
-				noopCompactions.reset()
-				stopNoopCompactionTimer(noopTimer)
-				noopTimerC = nil
+		case serviceEventToolCall:
+			var data serviceToolCallData
+			if err := json.Unmarshal(ev.Data, &data); err == nil {
+				entry := &ToolCallEntry{
+					Tool:  data.Name,
+					Input: string(data.Input),
+				}
+				pending[data.ID] = entry
 			}
-
-			switch string(ev.Type) {
-			case serviceEventRoutingDecision:
-				var payload struct {
-					Harness    string `json:"harness"`
-					Provider   string `json:"provider"`
-					Model      string `json:"model"`
-					Candidates []struct {
-						Model              string  `json:"model"`
-						Eligible           bool    `json:"eligible"`
-						CostUSDPer1kTokens float64 `json:"cost_usd_per_1k_tokens"`
-						CostSource         string  `json:"cost_source"`
-						Components         struct {
-							Power    int     `json:"power"`
-							SpeedTPS float64 `json:"speed_tps"`
-						} `json:"components"`
-					} `json:"candidates"`
+		case serviceEventToolResult:
+			var data serviceToolResultData
+			if err := json.Unmarshal(ev.Data, &data); err == nil {
+				if entry, ok := pending[data.ID]; ok {
+					entry.Output = data.Output
+					entry.Error = data.Error
+					entry.Duration = int(data.DurationMS)
+					toolCalls = append(toolCalls, *entry)
+					delete(pending, data.ID)
 				}
-				if err := json.Unmarshal(ev.Data, &payload); err == nil {
-					routing = &serviceRoutingActual{
-						Harness:  payload.Harness,
-						Provider: payload.Provider,
-						Model:    payload.Model,
-					}
-					for _, c := range payload.Candidates {
-						if c.Eligible && c.Model == payload.Model {
-							routingPower = c.Components.Power
-							routing.PredictedPower = c.Components.Power
-							routing.PredictedSpeedTPS = c.Components.SpeedTPS
-							routing.PredictedCostUSDPer1kTokens = c.CostUSDPer1kTokens
-							routing.PredictedCostSource = c.CostSource
-							break
-						}
-					}
-				}
-			case serviceEventToolCall:
-				var data serviceToolCallData
-				if err := json.Unmarshal(ev.Data, &data); err == nil {
-					entry := &ToolCallEntry{
-						Tool:  data.Name,
-						Input: string(data.Input),
-					}
-					pending[data.ID] = entry
-				}
-			case serviceEventToolResult:
-				var data serviceToolResultData
-				if err := json.Unmarshal(ev.Data, &data); err == nil {
-					if entry, ok := pending[data.ID]; ok {
-						entry.Output = data.Output
-						entry.Error = data.Error
-						entry.Duration = int(data.DurationMS)
-						toolCalls = append(toolCalls, *entry)
-						delete(pending, data.ID)
-					}
-				}
-			case serviceEventFinal:
-				var data serviceFinalData
-				if err := json.Unmarshal(ev.Data, &data); err == nil {
-					final = &data
-				}
+			}
+		case serviceEventFinal:
+			var data serviceFinalData
+			if err := json.Unmarshal(ev.Data, &data); err == nil {
+				final = &data
 			}
 		}
 	}
-}
-
-func resetNoopCompactionTimer(timer *time.Timer, limit time.Duration) (*time.Timer, <-chan time.Time) {
-	if limit <= 0 {
-		return timer, nil
-	}
-	if timer == nil {
-		timer = time.NewTimer(limit)
-		return timer, timer.C
-	}
-	stopNoopCompactionTimer(timer)
-	timer.Reset(limit)
-	return timer, timer.C
-}
-
-func stopNoopCompactionTimer(timer *time.Timer) {
-	if timer == nil {
-		return
-	}
-	if !timer.Stop() {
-		select {
-		case <-timer.C:
-		default:
-		}
-	}
-}
-
-type serviceNoopCompactionStreak struct {
-	start time.Time
-	count int
-}
-
-func (s *serviceNoopCompactionStreak) record(ts time.Time, limit time.Duration) (string, bool) {
-	if limit <= 0 {
-		return "", false
-	}
-	if ts.IsZero() {
-		ts = time.Now().UTC()
-	}
-	started := false
-	if s.count == 0 {
-		s.start = ts
-		started = true
-	}
-	s.count++
-	elapsed := ts.Sub(s.start)
-	if elapsed < limit {
-		return "", started
-	}
-	return s.detail(elapsed, limit), started
-}
-
-func (s *serviceNoopCompactionStreak) detail(elapsed, limit time.Duration) string {
-	if elapsed < limit {
-		elapsed = limit
-	}
-	return fmt.Sprintf("%s: time-based breaker fired after %s of consecutive no-op compaction events (limit %s, count %d)",
-		serviceNoopCompactionWallClockReason,
-		elapsed.Round(time.Second),
-		limit.Round(time.Second),
-		s.count)
-}
-
-func (s *serviceNoopCompactionStreak) reset() {
-	s.start = time.Time{}
-	s.count = 0
-}
-
-func eventTimestamp(ev agentlib.ServiceEvent) time.Time {
-	if !ev.Time.IsZero() {
-		return ev.Time
-	}
-	return time.Now().UTC()
-}
-
-func isNoopCompactionEvent(ev agentlib.ServiceEvent) bool {
-	switch string(ev.Type) {
-	case serviceEventCompaction, serviceEventCompactionEnd:
-	default:
-		return false
-	}
-	var payload struct {
-		NoCompaction bool `json:"no_compaction"`
-	}
-	if err := json.Unmarshal(ev.Data, &payload); err != nil {
-		return false
-	}
-	return payload.NoCompaction
-}
-
-func isServiceProgressEvent(ev agentlib.ServiceEvent) bool {
-	switch string(ev.Type) {
-	case serviceEventProgress, serviceEventTextDelta, serviceEventToolCall, serviceEventToolResult, serviceEventCompaction, serviceEventCompactionEnd:
-		return true
-	default:
-		return false
-	}
+	// Any tool_call without a matching tool_result still gets recorded.
+	return final, toolCallsWithPending(toolCalls, pending), routing, routingPower
 }
 
 func toolCallsWithPending(toolCalls []ToolCallEntry, pending map[string]*ToolCallEntry) []ToolCallEntry {
