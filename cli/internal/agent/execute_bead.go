@@ -783,6 +783,8 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		},
 		SessionLogDirOverride: embeddedStateDir,
 		PermissionsOverride:   "unrestricted", // isolated worktree; writes must not require approval
+		Role:                  "implementer",
+		CorrelationID:         beadID + ":" + attemptID,
 	}
 
 	// Operator-cancel mid-attempt poll (ADR-022 §Cancel SLA). The poll

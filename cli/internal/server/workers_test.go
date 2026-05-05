@@ -591,10 +591,10 @@ func TestFormatSessionLogLines(t *testing.T) {
 	result := agent.FormatSessionLogLines(lines)
 
 	assert.Contains(t, result, "session started (model: qwen/qwen3.6-plus)")
-	assert.Contains(t, result, "→ llm request (attempt 1) [find .rs files]")
+	assert.Contains(t, result, "→ llm request (attempt 1, req=44B) [find .rs files]")
 	assert.Contains(t, result, "← llm response (8408 tokens, 5.5s) qwen/qwen3.6-plus-04-02 → read")
-	assert.Contains(t, result, "🔧 read docs/FEAT-006.md (0.1s)")
-	assert.Contains(t, result, "🔧 write docs/new.md (0.1s) ❌ permission denied")
+	assert.Contains(t, result, "🔧 read docs/FEAT-006.md in=27B (0.1s)")
+	assert.Contains(t, result, "🔧 write docs/new.md in=22B (0.1s) ❌ permission denied")
 	assert.NotContains(t, result, "compacting context...") // no-op compactions are suppressed
 	assert.Contains(t, result, "⚡ compacted context (10000 → 3000 tokens)")
 	assert.NotContains(t, result, "llm.delta") // deltas should be suppressed

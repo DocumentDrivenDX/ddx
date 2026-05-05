@@ -25,6 +25,8 @@ func (r *Runner) runInternal(args RunArgs) (*Result, error) {
 	opts.PromptFile = args.PromptFile
 	opts.PromptSource = args.PromptSource
 	opts.Correlation = args.Correlation
+	opts.Role = args.Role
+	opts.CorrelationID = args.CorrelationID
 	opts.Model = args.Model
 	opts.Provider = args.Provider
 	opts.ModelRef = args.ModelRef

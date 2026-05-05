@@ -53,6 +53,8 @@ type RunArgs struct {
 	WorkDir       string
 	Permissions   string // permission level override: safe, supervised, unrestricted
 	SessionLogDir string // per-run override for session log dir; used by execute-bead to redirect embedded-agent runtime state out of the worktree root
+	Role          string
+	CorrelationID string
 }
 
 // AgentRunRuntime is the SD-024 successor to RunArgs for the agent
@@ -83,6 +85,8 @@ type AgentRunRuntime struct {
 	HarnessOverride     string
 	ModelOverride       string
 	PermissionsOverride string
+	Role                string
+	CorrelationID       string
 	// MinPowerOverride, when > 0, overrides rcfg.MinPower() for this single
 	// invocation. Used by the post-merge reviewer to pin MinPower above the
 	// implementer's actual selected power, biasing routing toward a stronger

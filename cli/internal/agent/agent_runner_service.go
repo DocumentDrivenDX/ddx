@@ -128,6 +128,8 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		ProviderTimeout: providerTimeout,
 		SessionLogDir:   logDir,
 		Metadata:        opts.Correlation,
+		Role:            opts.Role,
+		CorrelationID:   opts.CorrelationID,
 	}
 
 	parentCtx := opts.Context

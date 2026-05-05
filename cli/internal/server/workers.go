@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -16,9 +17,10 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	tierescalation "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	"github.com/DocumentDrivenDX/ddx/internal/escalation"
+	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
 	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
@@ -655,11 +657,71 @@ func sendProgress(ch chan<- agent.ProgressEvent, evt agent.ProgressEvent) {
 	}
 }
 
+func isBudgetExhaustedFailure(report agent.ExecuteBeadReport) bool {
+	return strings.Contains(report.Detail, agent.RateLimitBudgetExhaustedReason)
+}
+
+func nextEscalationFloor(l *tierescalation.Ladder, actualPower int) (int, error) {
+	if l == nil {
+		return 0, tierescalation.ErrLadderExhausted
+	}
+	floor := actualPower
+	for {
+		next, err := l.Next(floor)
+		if err == nil {
+			return next, nil
+		}
+		var nvp *tierescalation.NoViableProviderError
+		if errors.As(err, &nvp) {
+			floor = nvp.Floor
+			continue
+		}
+		return 0, err
+	}
+}
+
+func runEscalatingSingleTierAttempts(
+	ctx context.Context,
+	initialMinPower int,
+	ladder *tierescalation.Ladder,
+	attempt func(context.Context, int) (agent.ExecuteBeadReport, error),
+) (agent.ExecuteBeadReport, error) {
+	minPower := initialMinPower
+	for {
+		report, err := attempt(ctx, minPower)
+		if err != nil {
+			return report, err
+		}
+		if report.Disrupted || isBudgetExhaustedFailure(report) || !policyescalation.ShouldEscalate(report.Status) || policyescalation.IsInfrastructureFailure(report.Status, report.Detail) {
+			return report, nil
+		}
+		basis := minPower
+		if report.ActualPower > 0 {
+			basis = report.ActualPower
+		}
+		nextPower, nextErr := nextEscalationFloor(ladder, basis)
+		if nextErr != nil {
+			return report, nil
+		}
+		minPower = nextPower
+	}
+}
+
 func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec ExecuteLoopWorkerSpec, projectRoot string, handle *workerHandle, log io.Writer, eventSink io.WriteCloser, progressCh chan agent.ProgressEvent) {
 	if eventSink != nil {
 		defer eventSink.Close() //nolint:errcheck
 	}
 	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	rcfg, _ := config.LoadAndResolve(projectRoot, config.CLIOverrides{
+		Assignee:          "ddx",
+		Harness:           spec.Harness,
+		Model:             spec.Model,
+		Provider:          spec.Provider,
+		ModelRef:          spec.ModelRef,
+		Profile:           agent.NormalizeRoutingProfile(spec.Profile),
+		Effort:            spec.Effort,
+		OpaquePassthrough: spec.OpaquePassthrough,
+	})
 
 	var worker *agent.ExecuteBeadWorker
 	if m.BeadWorkerFactory != nil {
@@ -676,7 +738,9 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		coordinator := m.LandCoordinators.Get(projectRoot)
 
 		// singleTierAttempt runs one execution at a specific harness/model.
-		singleTierAttempt := func(ctx context.Context, beadID string, tier escalation.ModelTier, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
+		// The caller controls MinPower per rung; this helper keeps the
+		// profile stable and only advances the power floor.
+		singleTierAttempt := func(ctx context.Context, beadID string, requestedMinPower int, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
 			gitOps := &agent.RealGitOps{}
 			attemptProvider := spec.Provider
 			if resolvedProvider != "" {
@@ -687,7 +751,9 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				Model:             resolvedModel,
 				Provider:          attemptProvider,
 				ModelRef:          spec.ModelRef,
+				Profile:           rcfg.Profile(),
 				Effort:            spec.Effort,
+				MinPower:          requestedMinPower,
 				OpaquePassthrough: spec.OpaquePassthrough,
 			})
 			beadStore := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
@@ -721,10 +787,6 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
 			}
-			tierStr := ""
-			if tier != "" {
-				tierStr = string(tier)
-			}
 			return agent.ExecuteBeadReport{
 				BeadID:             res.BeadID,
 				AttemptID:          res.AttemptID,
@@ -733,7 +795,6 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				Provider:           res.Provider,
 				Model:              res.Model,
 				ActualPower:        res.ActualPower,
-				Tier:               tierStr,
 				Status:             res.Status,
 				Detail:             res.Detail,
 				SessionID:          res.SessionID,
@@ -750,7 +811,26 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		// not contribute (see escalation.CountsTowardCostCap).
 		// TODO(ddx-785d02f7): expose maxCostUSD as a worker spec field
 		// once the spec config knob lands.
-		costCap := escalation.NewCostCapTracker(escalation.DefaultMaxCostUSD, func(harnessName string) bool {
+		var ladderOnce sync.Once
+		var ladder *tierescalation.Ladder
+		loadLadder := func() *tierescalation.Ladder {
+			ladderOnce.Do(func() {
+				ladder = tierescalation.NewLadder(nil)
+				if svc, svcErr := agent.NewServiceFromWorkDir(projectRoot); svcErr == nil {
+					modelFilter := agentlib.ModelFilter{}
+					if harness := rcfg.Harness(); harness != "" {
+						modelFilter.Harness = harness
+					}
+					modelCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+					defer cancel()
+					if models, listErr := svc.ListModels(modelCtx, modelFilter); listErr == nil {
+						ladder = tierescalation.NewLadder(models)
+					}
+				}
+			})
+			return ladder
+		}
+		costCap := policyescalation.NewCostCapTracker(policyescalation.DefaultMaxCostUSD, func(harnessName string) bool {
 			svc, svcErr := agent.NewServiceFromWorkDir(projectRoot)
 			if svcErr != nil {
 				return true
@@ -761,7 +841,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			}
 			for _, h := range infos {
 				if h.Name == harnessName {
-					return escalation.CountsTowardCostCap(h.IsLocal, h.IsSubscription, h.CostClass)
+					return policyescalation.CountsTowardCostCap(h.IsLocal, h.IsSubscription, h.CostClass)
 				}
 			}
 			return true
@@ -779,13 +859,12 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				Detail: detail,
 			}, true
 		}
-
-		executor := agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+		attemptWithCostCap := func(ctx context.Context, beadID string, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 			if cappedReport, capped := costCapTripped(); capped {
 				cappedReport.BeadID = beadID
 				return cappedReport, nil
 			}
-			report, err := singleTierAttempt(ctx, beadID, "", spec.Harness, spec.Provider, spec.Model)
+			report, err := singleTierAttempt(ctx, beadID, requestedMinPower, spec.Harness, spec.Provider, spec.Model)
 			if err == nil {
 				accumulateBilledCost(report)
 				if cappedReport, capped := costCapTripped(); capped {
@@ -794,6 +873,12 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				}
 			}
 			return report, err
+		}
+
+		executor := agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+			return runEscalatingSingleTierAttempts(ctx, rcfg.MinPower(), loadLadder(), func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+				return attemptWithCostCap(ctx, beadID, requestedMinPower)
+			})
 		})
 
 		// Build post-merge reviewer. On-by-default unless NoReview is set in spec.
@@ -814,25 +899,6 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			Reviewer: reviewer,
 		}
 	}
-
-	// SD-024 Stage 1: server dispatch flows through LoadAndResolve +
-	// RunWithConfig so .ddx/config.yaml's durable knobs (review_max_retries,
-	// no_progress_cooldown, max_no_changes_before_close, heartbeat_interval,
-	// agent.harness/model/permissions) reach the running loop without
-	// per-knob plumbing. Spec fields layer onto config as overrides via
-	// CLIOverrides — when set they win over the on-disk config. Each
-	// request reloads the target project's config fresh (no cache).
-	overrides := config.CLIOverrides{
-		Assignee:          "ddx",
-		Harness:           spec.Harness,
-		Model:             spec.Model,
-		Provider:          spec.Provider,
-		ModelRef:          spec.ModelRef,
-		Profile:           agent.NormalizeRoutingProfile(spec.Profile),
-		Effort:            spec.Effort,
-		OpaquePassthrough: spec.OpaquePassthrough,
-	}
-	rcfg, _ := config.LoadAndResolve(projectRoot, overrides)
 
 	landingOps := agent.RealLandingGitOps{}
 	routePreflight := buildRoutePreflight(projectRoot, spec, m.BeadWorkerFactory != nil)

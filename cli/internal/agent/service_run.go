@@ -197,6 +197,8 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		ProviderTimeout: providerTimeout,
 		SessionLogDir:   sessionLogDir,
 		Metadata:        runtime.Correlation,
+		Role:            runtime.Role,
+		CorrelationID:   runtime.CorrelationID,
 		MinPower:        minPower,
 		MaxPower:        rcfg.MaxPower(),
 	}

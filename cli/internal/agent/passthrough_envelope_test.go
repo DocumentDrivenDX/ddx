@@ -16,6 +16,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	agentlib "github.com/DocumentDrivenDX/fizeau"
+	"github.com/stretchr/testify/require"
 )
 
 // passthroughTestService is a minimal FizeauService stub that records the most
@@ -204,6 +205,27 @@ func TestExecuteOnService_PassthroughReachesServiceRequest(t *testing.T) {
 	}
 	if svc.lastReq.Model != "claude-3-7-sonnet" {
 		t.Errorf("ServiceExecuteRequest.Model = %q, want %q", svc.lastReq.Model, "claude-3-7-sonnet")
+	}
+}
+
+// TestExecuteOnService_RoleAndCorrelationIDReachServiceRequest verifies the
+// new top-level ExecuteRequest fields used by execute-bead land in the public
+// service request unchanged.
+func TestExecuteOnService_RoleAndCorrelationIDReachServiceRequest(t *testing.T) {
+	svc := &passthroughTestService{}
+	rcfg := resolvedWithPassthrough("claude", "anthropic", "claude-3-7-sonnet", 0, 0)
+
+	_, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt:        "hello",
+		Role:          "implementer",
+		CorrelationID: "ddx-bead-1:attempt-2",
+	})
+	require.NoError(t, err)
+	if svc.lastReq.Role != "implementer" {
+		t.Fatalf("ServiceExecuteRequest.Role = %q, want implementer", svc.lastReq.Role)
+	}
+	if svc.lastReq.CorrelationID != "ddx-bead-1:attempt-2" {
+		t.Fatalf("ServiceExecuteRequest.CorrelationID = %q, want ddx-bead-1:attempt-2", svc.lastReq.CorrelationID)
 	}
 }
 

@@ -93,6 +93,8 @@ func buildRunArgsFromConfig(ctx context.Context, rcfg config.ResolvedConfig, run
 	opts.PromptFile = runtime.PromptFile
 	opts.PromptSource = runtime.PromptSource
 	opts.Correlation = runtime.Correlation
+	opts.Role = runtime.Role
+	opts.CorrelationID = runtime.CorrelationID
 	opts.Model = model
 	opts.Provider = rcfg.Provider()
 	opts.ModelRef = rcfg.ModelRef()
