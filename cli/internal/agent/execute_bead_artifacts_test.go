@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -665,6 +666,18 @@ func TestExecuteBead_DeterministicPromptContent(t *testing.T) {
 			if !containsSubstring(s, want) {
 				t.Errorf("prompt[%d] missing expected content %q", i, want)
 			}
+		}
+		instructionsIdx := strings.Index(s, "<instructions>")
+		beadIdx := strings.Index(s, "<bead ")
+		governingIdx := strings.Index(s, "<governing>")
+		if instructionsIdx == -1 || beadIdx == -1 || governingIdx == -1 {
+			t.Fatalf("prompt[%d] missing one or more structural sections", i)
+		}
+		if instructionsIdx > beadIdx {
+			t.Errorf("prompt[%d] instructions must appear before bead metadata", i)
+		}
+		if instructionsIdx > governingIdx {
+			t.Errorf("prompt[%d] instructions must appear before governing refs", i)
 		}
 	}
 }

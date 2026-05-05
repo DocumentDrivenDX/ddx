@@ -1570,6 +1570,11 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 	var sb strings.Builder
 	sb.WriteString("<execute-bead>\n")
 
+	instructions := strings.ReplaceAll(executeBeadInstructionsText(harness), "{{.AttemptDir}}", artifacts.DirRel)
+	// Put the largely static instructions first so prefix caches can reuse as
+	// much of the prompt as possible before the bead-specific XML starts.
+	fmt.Fprintf(&sb, "  <instructions>\n%s\n  </instructions>\n", xmlEscape(instructions))
+
 	fmt.Fprintf(&sb, "  <bead id=\"%s\">\n", xmlAttrEscape(b.ID))
 	fmt.Fprintf(&sb, "    <title>%s</title>\n", xmlEscape(strings.TrimSpace(b.Title)))
 
@@ -1634,9 +1639,6 @@ func buildPrompt(workDir string, b *bead.Bead, refs []executeBeadGoverningRef, a
 			sb.WriteString("  </governing>\n")
 		}
 	}
-
-	instructions := strings.ReplaceAll(executeBeadInstructionsText(harness), "{{.AttemptDir}}", artifacts.DirRel)
-	fmt.Fprintf(&sb, "  <instructions>\n%s\n  </instructions>\n", xmlEscape(instructions))
 
 	sb.WriteString("</execute-bead>\n")
 
