@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260505T152806-9d9de558",
+  "bead_id": "ddx-296019fe",
+  "base_rev": "b0ed49825be9b52a5d0c602bd15b43c05eda1b88",
+  "created_at": "2026-05-05T15:28:08.819959165Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-296019fe",
+    "title": "metric: integration round-trip test + mixed-unit refusal",
+    "description": "End-to-end: define MET → exec.run → metric history populated → ddx metric show reads back. Compare/Trend refuse mixed units; History groups by unit.",
+    "acceptance": "1. Integration test covers full round-trip. 2. Compare/Trend refuse mixed units with clear error. 3. History grouping correct.",
+    "parent": "ddx-921616ea",
+    "labels": [
+      "phase:2",
+      "story:13",
+      "area:tests",
+      "kind:test"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-05T15:28:05Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2464742",
+      "execute-loop-heartbeat-at": "2026-05-05T15:28:05.986569001Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260505T152806-9d9de558",
+    "prompt": ".ddx/executions/20260505T152806-9d9de558/prompt.md",
+    "manifest": ".ddx/executions/20260505T152806-9d9de558/manifest.json",
+    "result": ".ddx/executions/20260505T152806-9d9de558/result.json",
+    "checks": ".ddx/executions/20260505T152806-9d9de558/checks.json",
+    "usage": ".ddx/executions/20260505T152806-9d9de558/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-296019fe-20260505T152806-9d9de558"
+  },
+  "prompt_sha": "3106020ff44d73318ee00aff8282a18c70b90f1c9d42f420b54b90fe97f49823"
+}
