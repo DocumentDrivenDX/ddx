@@ -1,0 +1,2 @@
+verification_command: cd cli/internal/server/frontend && bun run test:e2e -- e2e/operator-prompts.spec.ts
+reason: The operator-prompts page, preview, recent-bead pane, approve flow, and XSS escaping are already implemented in the current tree; the requested acceptance was verified by the focused Playwright run, so no code edits were needed.
