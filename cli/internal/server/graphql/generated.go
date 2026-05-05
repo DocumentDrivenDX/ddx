@@ -155,16 +155,17 @@ type ComplexityRoot struct {
 	}
 
 	Artifact struct {
-		Content        func(childComplexity int) int
-		DdxFrontmatter func(childComplexity int) int
-		Description    func(childComplexity int) int
-		GeneratedBy    func(childComplexity int) int
-		ID             func(childComplexity int) int
-		MediaType      func(childComplexity int) int
-		Path           func(childComplexity int) int
-		Staleness      func(childComplexity int) int
-		Title          func(childComplexity int) int
-		UpdatedAt      func(childComplexity int) int
+		Content         func(childComplexity int) int
+		DdxFrontmatter  func(childComplexity int) int
+		Description     func(childComplexity int) int
+		GeneratedBy     func(childComplexity int) int
+		ID              func(childComplexity int) int
+		MediaType       func(childComplexity int) int
+		Path            func(childComplexity int) int
+		Staleness       func(childComplexity int) int
+		Title           func(childComplexity int) int
+		TypeDefinitions func(childComplexity int) int
+		UpdatedAt       func(childComplexity int) int
 	}
 
 	ArtifactConnection struct {
@@ -188,6 +189,35 @@ type ComplexityRoot struct {
 	ArtifactRegenerateResult struct {
 		RunID  func(childComplexity int) int
 		Status func(childComplexity int) int
+	}
+
+	ArtifactTypeDefinition struct {
+		Description    func(childComplexity int) int
+		Examples       func(childComplexity int) int
+		Name           func(childComplexity int) int
+		Pattern        func(childComplexity int) int
+		Phase          func(childComplexity int) int
+		Plugin         func(childComplexity int) int
+		Prefix         func(childComplexity int) int
+		Prompt         func(childComplexity int) int
+		SourceMetaPath func(childComplexity int) int
+		Template       func(childComplexity int) int
+		TypeID         func(childComplexity int) int
+	}
+
+	ArtifactTypeDefinitionExample struct {
+		Content     func(childComplexity int) int
+		Description func(childComplexity int) int
+		IsTruncated func(childComplexity int) int
+		Path        func(childComplexity int) int
+		SizeBytes   func(childComplexity int) int
+	}
+
+	ArtifactTypeDefinitionFile struct {
+		Content     func(childComplexity int) int
+		IsTruncated func(childComplexity int) int
+		Path        func(childComplexity int) int
+		SizeBytes   func(childComplexity int) int
 	}
 
 	Bead struct {
@@ -2107,6 +2137,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Artifact.Title(childComplexity), true
+	case "Artifact.typeDefinitions":
+		if e.ComplexityRoot.Artifact.TypeDefinitions == nil {
+			break
+		}
+
+		return e.ComplexityRoot.Artifact.TypeDefinitions(childComplexity), true
 	case "Artifact.updatedAt":
 		if e.ComplexityRoot.Artifact.UpdatedAt == nil {
 			break
@@ -2183,6 +2219,129 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.ArtifactRegenerateResult.Status(childComplexity), true
+
+	case "ArtifactTypeDefinition.description":
+		if e.ComplexityRoot.ArtifactTypeDefinition.Description == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinition.Description(childComplexity), true
+	case "ArtifactTypeDefinition.examples":
+		if e.ComplexityRoot.ArtifactTypeDefinition.Examples == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinition.Examples(childComplexity), true
+	case "ArtifactTypeDefinition.name":
+		if e.ComplexityRoot.ArtifactTypeDefinition.Name == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinition.Name(childComplexity), true
+	case "ArtifactTypeDefinition.pattern":
+		if e.ComplexityRoot.ArtifactTypeDefinition.Pattern == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinition.Pattern(childComplexity), true
+	case "ArtifactTypeDefinition.phase":
+		if e.ComplexityRoot.ArtifactTypeDefinition.Phase == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinition.Phase(childComplexity), true
+	case "ArtifactTypeDefinition.plugin":
+		if e.ComplexityRoot.ArtifactTypeDefinition.Plugin == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinition.Plugin(childComplexity), true
+	case "ArtifactTypeDefinition.prefix":
+		if e.ComplexityRoot.ArtifactTypeDefinition.Prefix == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinition.Prefix(childComplexity), true
+	case "ArtifactTypeDefinition.prompt":
+		if e.ComplexityRoot.ArtifactTypeDefinition.Prompt == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinition.Prompt(childComplexity), true
+	case "ArtifactTypeDefinition.sourceMetaPath":
+		if e.ComplexityRoot.ArtifactTypeDefinition.SourceMetaPath == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinition.SourceMetaPath(childComplexity), true
+	case "ArtifactTypeDefinition.template":
+		if e.ComplexityRoot.ArtifactTypeDefinition.Template == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinition.Template(childComplexity), true
+	case "ArtifactTypeDefinition.typeId":
+		if e.ComplexityRoot.ArtifactTypeDefinition.TypeID == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinition.TypeID(childComplexity), true
+
+	case "ArtifactTypeDefinitionExample.content":
+		if e.ComplexityRoot.ArtifactTypeDefinitionExample.Content == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinitionExample.Content(childComplexity), true
+	case "ArtifactTypeDefinitionExample.description":
+		if e.ComplexityRoot.ArtifactTypeDefinitionExample.Description == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinitionExample.Description(childComplexity), true
+	case "ArtifactTypeDefinitionExample.isTruncated":
+		if e.ComplexityRoot.ArtifactTypeDefinitionExample.IsTruncated == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinitionExample.IsTruncated(childComplexity), true
+	case "ArtifactTypeDefinitionExample.path":
+		if e.ComplexityRoot.ArtifactTypeDefinitionExample.Path == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinitionExample.Path(childComplexity), true
+	case "ArtifactTypeDefinitionExample.sizeBytes":
+		if e.ComplexityRoot.ArtifactTypeDefinitionExample.SizeBytes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinitionExample.SizeBytes(childComplexity), true
+
+	case "ArtifactTypeDefinitionFile.content":
+		if e.ComplexityRoot.ArtifactTypeDefinitionFile.Content == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinitionFile.Content(childComplexity), true
+	case "ArtifactTypeDefinitionFile.isTruncated":
+		if e.ComplexityRoot.ArtifactTypeDefinitionFile.IsTruncated == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinitionFile.IsTruncated(childComplexity), true
+	case "ArtifactTypeDefinitionFile.path":
+		if e.ComplexityRoot.ArtifactTypeDefinitionFile.Path == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinitionFile.Path(childComplexity), true
+	case "ArtifactTypeDefinitionFile.sizeBytes":
+		if e.ComplexityRoot.ArtifactTypeDefinitionFile.SizeBytes == nil {
+			break
+		}
+
+		return e.ComplexityRoot.ArtifactTypeDefinitionFile.SizeBytes(childComplexity), true
 
 	case "Bead.acceptance":
 		if e.ComplexityRoot.Bead.Acceptance == nil {
@@ -12468,6 +12627,59 @@ func (ec *executionContext) fieldContext_Artifact_content(_ context.Context, fie
 	return fc, nil
 }
 
+func (ec *executionContext) _Artifact_typeDefinitions(ctx context.Context, field graphql.CollectedField, obj *Artifact) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Artifact_typeDefinitions,
+		func(ctx context.Context) (any, error) {
+			return obj.TypeDefinitions, nil
+		},
+		nil,
+		ec.marshalNArtifactTypeDefinition2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactTypeDefinitionᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Artifact_typeDefinitions(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Artifact",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "plugin":
+				return ec.fieldContext_ArtifactTypeDefinition_plugin(ctx, field)
+			case "typeId":
+				return ec.fieldContext_ArtifactTypeDefinition_typeId(ctx, field)
+			case "name":
+				return ec.fieldContext_ArtifactTypeDefinition_name(ctx, field)
+			case "description":
+				return ec.fieldContext_ArtifactTypeDefinition_description(ctx, field)
+			case "prefix":
+				return ec.fieldContext_ArtifactTypeDefinition_prefix(ctx, field)
+			case "pattern":
+				return ec.fieldContext_ArtifactTypeDefinition_pattern(ctx, field)
+			case "phase":
+				return ec.fieldContext_ArtifactTypeDefinition_phase(ctx, field)
+			case "sourceMetaPath":
+				return ec.fieldContext_ArtifactTypeDefinition_sourceMetaPath(ctx, field)
+			case "template":
+				return ec.fieldContext_ArtifactTypeDefinition_template(ctx, field)
+			case "prompt":
+				return ec.fieldContext_ArtifactTypeDefinition_prompt(ctx, field)
+			case "examples":
+				return ec.fieldContext_ArtifactTypeDefinition_examples(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ArtifactTypeDefinition", field.Name)
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _ArtifactConnection_edges(ctx context.Context, field graphql.CollectedField, obj *ArtifactConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -12617,6 +12829,8 @@ func (ec *executionContext) fieldContext_ArtifactEdge_node(_ context.Context, fi
 				return ec.fieldContext_Artifact_updatedAt(ctx, field)
 			case "content":
 				return ec.fieldContext_Artifact_content(ctx, field)
+			case "typeDefinitions":
+				return ec.fieldContext_Artifact_typeDefinitions(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Artifact", field.Name)
 		},
@@ -12822,6 +13036,618 @@ func (ec *executionContext) fieldContext_ArtifactRegenerateResult_status(_ conte
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinition_plugin(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinition_plugin,
+		func(ctx context.Context) (any, error) {
+			return obj.Plugin, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinition_plugin(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinition_typeId(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinition_typeId,
+		func(ctx context.Context) (any, error) {
+			return obj.TypeID, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinition_typeId(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinition_name(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinition_name,
+		func(ctx context.Context) (any, error) {
+			return obj.Name, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinition_name(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinition_description(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinition_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinition_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinition_prefix(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinition_prefix,
+		func(ctx context.Context) (any, error) {
+			return obj.Prefix, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinition_prefix(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinition_pattern(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinition_pattern,
+		func(ctx context.Context) (any, error) {
+			return obj.Pattern, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinition_pattern(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinition_phase(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinition_phase,
+		func(ctx context.Context) (any, error) {
+			return obj.Phase, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinition_phase(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinition_sourceMetaPath(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinition_sourceMetaPath,
+		func(ctx context.Context) (any, error) {
+			return obj.SourceMetaPath, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinition_sourceMetaPath(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinition_template(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinition_template,
+		func(ctx context.Context) (any, error) {
+			return obj.Template, nil
+		},
+		nil,
+		ec.marshalNArtifactTypeDefinitionFile2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactTypeDefinitionFile,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinition_template(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "path":
+				return ec.fieldContext_ArtifactTypeDefinitionFile_path(ctx, field)
+			case "content":
+				return ec.fieldContext_ArtifactTypeDefinitionFile_content(ctx, field)
+			case "isTruncated":
+				return ec.fieldContext_ArtifactTypeDefinitionFile_isTruncated(ctx, field)
+			case "sizeBytes":
+				return ec.fieldContext_ArtifactTypeDefinitionFile_sizeBytes(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ArtifactTypeDefinitionFile", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinition_prompt(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinition_prompt,
+		func(ctx context.Context) (any, error) {
+			return obj.Prompt, nil
+		},
+		nil,
+		ec.marshalNArtifactTypeDefinitionFile2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactTypeDefinitionFile,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinition_prompt(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "path":
+				return ec.fieldContext_ArtifactTypeDefinitionFile_path(ctx, field)
+			case "content":
+				return ec.fieldContext_ArtifactTypeDefinitionFile_content(ctx, field)
+			case "isTruncated":
+				return ec.fieldContext_ArtifactTypeDefinitionFile_isTruncated(ctx, field)
+			case "sizeBytes":
+				return ec.fieldContext_ArtifactTypeDefinitionFile_sizeBytes(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ArtifactTypeDefinitionFile", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinition_examples(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinition) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinition_examples,
+		func(ctx context.Context) (any, error) {
+			return obj.Examples, nil
+		},
+		nil,
+		ec.marshalNArtifactTypeDefinitionExample2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactTypeDefinitionExampleᚄ,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinition_examples(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinition",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "path":
+				return ec.fieldContext_ArtifactTypeDefinitionExample_path(ctx, field)
+			case "description":
+				return ec.fieldContext_ArtifactTypeDefinitionExample_description(ctx, field)
+			case "content":
+				return ec.fieldContext_ArtifactTypeDefinitionExample_content(ctx, field)
+			case "isTruncated":
+				return ec.fieldContext_ArtifactTypeDefinitionExample_isTruncated(ctx, field)
+			case "sizeBytes":
+				return ec.fieldContext_ArtifactTypeDefinitionExample_sizeBytes(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type ArtifactTypeDefinitionExample", field.Name)
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinitionExample_path(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinitionExample) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinitionExample_path,
+		func(ctx context.Context) (any, error) {
+			return obj.Path, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinitionExample_path(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinitionExample",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinitionExample_description(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinitionExample) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinitionExample_description,
+		func(ctx context.Context) (any, error) {
+			return obj.Description, nil
+		},
+		nil,
+		ec.marshalOString2ᚖstring,
+		true,
+		false,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinitionExample_description(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinitionExample",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinitionExample_content(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinitionExample) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinitionExample_content,
+		func(ctx context.Context) (any, error) {
+			return obj.Content, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinitionExample_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinitionExample",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinitionExample_isTruncated(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinitionExample) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinitionExample_isTruncated,
+		func(ctx context.Context) (any, error) {
+			return obj.IsTruncated, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinitionExample_isTruncated(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinitionExample",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinitionExample_sizeBytes(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinitionExample) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinitionExample_sizeBytes,
+		func(ctx context.Context) (any, error) {
+			return obj.SizeBytes, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinitionExample_sizeBytes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinitionExample",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinitionFile_path(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinitionFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinitionFile_path,
+		func(ctx context.Context) (any, error) {
+			return obj.Path, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinitionFile_path(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinitionFile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinitionFile_content(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinitionFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinitionFile_content,
+		func(ctx context.Context) (any, error) {
+			return obj.Content, nil
+		},
+		nil,
+		ec.marshalNString2string,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinitionFile_content(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinitionFile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type String does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinitionFile_isTruncated(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinitionFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinitionFile_isTruncated,
+		func(ctx context.Context) (any, error) {
+			return obj.IsTruncated, nil
+		},
+		nil,
+		ec.marshalNBoolean2bool,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinitionFile_isTruncated(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinitionFile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Boolean does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _ArtifactTypeDefinitionFile_sizeBytes(ctx context.Context, field graphql.CollectedField, obj *ArtifactTypeDefinitionFile) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_ArtifactTypeDefinitionFile_sizeBytes,
+		func(ctx context.Context) (any, error) {
+			return obj.SizeBytes, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_ArtifactTypeDefinitionFile_sizeBytes(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "ArtifactTypeDefinitionFile",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
 		},
 	}
 	return fc, nil
@@ -30978,6 +31804,8 @@ func (ec *executionContext) fieldContext_Query_artifact(ctx context.Context, fie
 				return ec.fieldContext_Artifact_updatedAt(ctx, field)
 			case "content":
 				return ec.fieldContext_Artifact_content(ctx, field)
+			case "typeDefinitions":
+				return ec.fieldContext_Artifact_typeDefinitions(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Artifact", field.Name)
 		},
@@ -43717,6 +44545,11 @@ func (ec *executionContext) _Artifact(ctx context.Context, sel ast.SelectionSet,
 			out.Values[i] = ec._Artifact_updatedAt(ctx, field, obj)
 		case "content":
 			out.Values[i] = ec._Artifact_content(ctx, field, obj)
+		case "typeDefinitions":
+			out.Values[i] = ec._Artifact_typeDefinitions(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -43902,6 +44735,205 @@ func (ec *executionContext) _ArtifactRegenerateResult(ctx context.Context, sel a
 			}
 		case "status":
 			out.Values[i] = ec._ArtifactRegenerateResult_status(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var artifactTypeDefinitionImplementors = []string{"ArtifactTypeDefinition"}
+
+func (ec *executionContext) _ArtifactTypeDefinition(ctx context.Context, sel ast.SelectionSet, obj *ArtifactTypeDefinition) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, artifactTypeDefinitionImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ArtifactTypeDefinition")
+		case "plugin":
+			out.Values[i] = ec._ArtifactTypeDefinition_plugin(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "typeId":
+			out.Values[i] = ec._ArtifactTypeDefinition_typeId(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "name":
+			out.Values[i] = ec._ArtifactTypeDefinition_name(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "description":
+			out.Values[i] = ec._ArtifactTypeDefinition_description(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "prefix":
+			out.Values[i] = ec._ArtifactTypeDefinition_prefix(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "pattern":
+			out.Values[i] = ec._ArtifactTypeDefinition_pattern(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "phase":
+			out.Values[i] = ec._ArtifactTypeDefinition_phase(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sourceMetaPath":
+			out.Values[i] = ec._ArtifactTypeDefinition_sourceMetaPath(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "template":
+			out.Values[i] = ec._ArtifactTypeDefinition_template(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "prompt":
+			out.Values[i] = ec._ArtifactTypeDefinition_prompt(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "examples":
+			out.Values[i] = ec._ArtifactTypeDefinition_examples(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var artifactTypeDefinitionExampleImplementors = []string{"ArtifactTypeDefinitionExample"}
+
+func (ec *executionContext) _ArtifactTypeDefinitionExample(ctx context.Context, sel ast.SelectionSet, obj *ArtifactTypeDefinitionExample) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, artifactTypeDefinitionExampleImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ArtifactTypeDefinitionExample")
+		case "path":
+			out.Values[i] = ec._ArtifactTypeDefinitionExample_path(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "description":
+			out.Values[i] = ec._ArtifactTypeDefinitionExample_description(ctx, field, obj)
+		case "content":
+			out.Values[i] = ec._ArtifactTypeDefinitionExample_content(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isTruncated":
+			out.Values[i] = ec._ArtifactTypeDefinitionExample_isTruncated(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sizeBytes":
+			out.Values[i] = ec._ArtifactTypeDefinitionExample_sizeBytes(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		default:
+			panic("unknown field " + strconv.Quote(field.Name))
+		}
+	}
+	out.Dispatch(ctx)
+	if out.Invalids > 0 {
+		return graphql.Null
+	}
+
+	atomic.AddInt32(&ec.Deferred, int32(len(deferred)))
+
+	for label, dfs := range deferred {
+		ec.ProcessDeferredGroup(graphql.DeferredGroup{
+			Label:    label,
+			Path:     graphql.GetPath(ctx),
+			FieldSet: dfs,
+			Context:  ctx,
+		})
+	}
+
+	return out
+}
+
+var artifactTypeDefinitionFileImplementors = []string{"ArtifactTypeDefinitionFile"}
+
+func (ec *executionContext) _ArtifactTypeDefinitionFile(ctx context.Context, sel ast.SelectionSet, obj *ArtifactTypeDefinitionFile) graphql.Marshaler {
+	fields := graphql.CollectFields(ec.OperationContext, sel, artifactTypeDefinitionFileImplementors)
+
+	out := graphql.NewFieldSet(fields)
+	deferred := make(map[string]*graphql.FieldSet)
+	for i, field := range fields {
+		switch field.Name {
+		case "__typename":
+			out.Values[i] = graphql.MarshalString("ArtifactTypeDefinitionFile")
+		case "path":
+			out.Values[i] = ec._ArtifactTypeDefinitionFile_path(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "content":
+			out.Values[i] = ec._ArtifactTypeDefinitionFile_content(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "isTruncated":
+			out.Values[i] = ec._ArtifactTypeDefinitionFile_isTruncated(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "sizeBytes":
+			out.Values[i] = ec._ArtifactTypeDefinitionFile_sizeBytes(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -53580,6 +54612,68 @@ func (ec *executionContext) marshalNArtifactRegenerateResult2ᚖgithubᚗcomᚋD
 		return graphql.Null
 	}
 	return ec._ArtifactRegenerateResult(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNArtifactTypeDefinition2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactTypeDefinitionᚄ(ctx context.Context, sel ast.SelectionSet, v []*ArtifactTypeDefinition) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNArtifactTypeDefinition2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactTypeDefinition(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNArtifactTypeDefinition2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactTypeDefinition(ctx context.Context, sel ast.SelectionSet, v *ArtifactTypeDefinition) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ArtifactTypeDefinition(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNArtifactTypeDefinitionExample2ᚕᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactTypeDefinitionExampleᚄ(ctx context.Context, sel ast.SelectionSet, v []*ArtifactTypeDefinitionExample) graphql.Marshaler {
+	ret := graphql.MarshalSliceConcurrently(ctx, len(v), 0, false, func(ctx context.Context, i int) graphql.Marshaler {
+		fc := graphql.GetFieldContext(ctx)
+		fc.Result = &v[i]
+		return ec.marshalNArtifactTypeDefinitionExample2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactTypeDefinitionExample(ctx, sel, v[i])
+	})
+
+	for _, e := range ret {
+		if e == graphql.Null {
+			return graphql.Null
+		}
+	}
+
+	return ret
+}
+
+func (ec *executionContext) marshalNArtifactTypeDefinitionExample2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactTypeDefinitionExample(ctx context.Context, sel ast.SelectionSet, v *ArtifactTypeDefinitionExample) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ArtifactTypeDefinitionExample(ctx, sel, v)
+}
+
+func (ec *executionContext) marshalNArtifactTypeDefinitionFile2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐArtifactTypeDefinitionFile(ctx context.Context, sel ast.SelectionSet, v *ArtifactTypeDefinitionFile) graphql.Marshaler {
+	if v == nil {
+		if !graphql.HasFieldError(ctx, graphql.GetFieldContext(ctx)) {
+			graphql.AddErrorf(ctx, "the requested element is null which the schema does not allow")
+		}
+		return graphql.Null
+	}
+	return ec._ArtifactTypeDefinitionFile(ctx, sel, v)
 }
 
 func (ec *executionContext) marshalNBead2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐBead(ctx context.Context, sel ast.SelectionSet, v Bead) graphql.Marshaler {

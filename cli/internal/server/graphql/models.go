@@ -257,6 +257,8 @@ type Artifact struct {
 	UpdatedAt *string `json:"updatedAt,omitempty"`
 	// Raw file content (text-based artifacts only; null for binary types)
 	Content *string `json:"content,omitempty"`
+	// Matched artifact type definitions for the artifact's path prefix.
+	TypeDefinitions []*ArtifactTypeDefinition `json:"typeDefinitions"`
 }
 
 func (Artifact) IsNode() {}
@@ -303,6 +305,58 @@ type ArtifactRegenerateResult struct {
 	RunID string `json:"runId"`
 	// Worker dispatch state (e.g. queued, running)
 	Status string `json:"status"`
+}
+
+// ArtifactTypeDefinition describes a plugin artifact type entry.
+type ArtifactTypeDefinition struct {
+	// Plugin package that owns the definition.
+	Plugin string `json:"plugin"`
+	// Canonical type identifier from the plugin tree.
+	TypeID string `json:"typeId"`
+	// Human-readable type name.
+	Name string `json:"name"`
+	// Type description from meta.yml.
+	Description string `json:"description"`
+	// Path prefix claimed by the type.
+	Prefix string `json:"prefix"`
+	// Output naming pattern for the type.
+	Pattern string `json:"pattern"`
+	// Optional phase grouping.
+	Phase string `json:"phase"`
+	// Path to the meta.yml file relative to the plugin root.
+	SourceMetaPath string `json:"sourceMetaPath"`
+	// On-demand loaded template file.
+	Template *ArtifactTypeDefinitionFile `json:"template"`
+	// On-demand loaded prompt file.
+	Prompt *ArtifactTypeDefinitionFile `json:"prompt"`
+	// On-demand loaded examples.
+	Examples []*ArtifactTypeDefinitionExample `json:"examples"`
+}
+
+// ArtifactTypeDefinitionExample holds one worked example for a type.
+type ArtifactTypeDefinitionExample struct {
+	// Filesystem path relative to the plugin root.
+	Path string `json:"path"`
+	// Optional example description.
+	Description *string `json:"description,omitempty"`
+	// Inline file content loaded on demand.
+	Content string `json:"content"`
+	// Whether the file was truncated to fit the size cap.
+	IsTruncated bool `json:"isTruncated"`
+	// Total size of the underlying file in bytes.
+	SizeBytes int `json:"sizeBytes"`
+}
+
+// ArtifactTypeDefinitionFile holds inline content for one definition file.
+type ArtifactTypeDefinitionFile struct {
+	// Filesystem path relative to the plugin root.
+	Path string `json:"path"`
+	// Inline file content loaded on demand.
+	Content string `json:"content"`
+	// Whether the file was truncated to fit the size cap.
+	IsTruncated bool `json:"isTruncated"`
+	// Total size of the underlying file in bytes.
+	SizeBytes int `json:"sizeBytes"`
 }
 
 // Bead is a portable work item with lifecycle metadata

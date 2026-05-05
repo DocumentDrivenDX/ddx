@@ -181,6 +181,10 @@ func (r *queryResolver) Artifacts(ctx context.Context, projectID string, first *
 		artifacts = filtered
 	}
 
+	if err := attachArtifactTypeDefinitionsToArtifacts(root, artifacts); err != nil {
+		return nil, fmt.Errorf("loading artifact type definitions: %w", err)
+	}
+
 	// Sort with (sortKey, id) tie-breaker for stable cursor pagination.
 	sortArtifacts(artifacts, sortKey)
 
@@ -723,6 +727,9 @@ func (r *queryResolver) Artifact(ctx context.Context, projectID string, id strin
 		if a.ID == id {
 			if isTextMediaType(a.MediaType) {
 				a.Content = loadArtifactContent(root, a.Path)
+			}
+			if err := attachArtifactTypeDefinitions(root, a); err != nil {
+				return nil, fmt.Errorf("loading artifact type definitions: %w", err)
 			}
 			return a, nil
 		}
