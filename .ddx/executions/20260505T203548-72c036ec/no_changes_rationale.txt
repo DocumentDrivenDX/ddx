@@ -1,0 +1,9 @@
+verification_command: cd cli && go test ./cmd -run 'TestTry_NoReviewRequiresAckFlag' && go test ./internal/agent -run 'TestExecuteBeadWorkerNoReviewSkipsReviewer|TestExecuteBeadWorkerReviewSkipLabelWithoutReasonIsIgnored|TestExecuteBeadWorkerReviewSkipLabelWithReasonSkipsReviewer'
+
+The requested guardrails are already implemented in the current tree:
+- `cli/cmd/try.go` rejects `--no-review` unless `--no-review-i-know-what-im-doing` is set and documents both flags in help.
+- `cli/cmd/work.go` and `cli/cmd/agent_cmd.go` carry the same break-glass wording for the queue-drain surfaces.
+- `cli/internal/agent/execute_bead_post_review.go` ignores `review:skip` unless a sibling `review:skip-reason:*` label is present.
+- `cli/cmd/try_test.go` and `cli/internal/agent/execute_bead_review_test.go` already cover the ack-flag and label-rationale behaviors.
+
+No implementation changes were needed for this bead.
