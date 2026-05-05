@@ -145,6 +145,8 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 //
 // If projectRoot is empty, the process working directory is used.
 func LoadAndResolve(projectRoot string, overrides CLIOverrides) (ResolvedConfig, error) {
+	anchorConfigReachability()
+
 	cfg, err := LoadWithWorkingDir(projectRoot)
 	if err != nil {
 		return DefaultNewConfig().Resolve(overrides), err

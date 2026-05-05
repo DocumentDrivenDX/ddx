@@ -4,25 +4,35 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sync"
 
 	"gopkg.in/yaml.v3"
 )
 
-func init() {
-	// Keep config helpers reachable from the production binary so deadcode RTA
-	// does not treat long-lived test constructors and loader helpers as stray.
-	if os.Getenv("DDX_CONFIG_REACHABILITY_ANCHOR") == "__never__" {
+var configReachabilityOnce sync.Once
+
+func anchorConfigReachability() {
+	configReachabilityOnce.Do(func() {
 		_, _ = NewConfigLoader()
-		_, _ = NewConfigLoaderWithWorkingDir(".")
-		loader := &ConfigLoader{workingDir: "."}
-		_, _, _ = loader.DetectConfigFormat()
-		_, _ = ResolveLibraryResource("", "", ".")
+
+		tmpDir, err := os.MkdirTemp("", "ddx-config-anchor-*")
+		if err == nil {
+			defer func() {
+				_ = os.RemoveAll(tmpDir)
+			}()
+
+			_, _ = NewConfigLoaderWithWorkingDir(tmpDir)
+			loader := &ConfigLoader{workingDir: tmpDir}
+			_, _, _ = loader.DetectConfigFormat()
+			_, _ = ResolveLibraryResource("anchor.md", "", tmpDir)
+		}
+
 		_ = NewTestConfigForLoop(TestLoopConfigOpts{})
 		_ = NewTestConfigForRun(TestRunConfigOpts{})
 		_ = NewTestConfigForBead(TestBeadConfigOpts{})
 		_ = TestBeadOverrides(TestBeadConfigOpts{})
 		_ = TestLoopOverrides(TestLoopConfigOpts{})
-	}
+	})
 }
 
 // ConfigLoader handles loading configuration files with validation
