@@ -1,0 +1,20 @@
+{
+  "bead_id": "ddx-c8f79963",
+  "attempt_id": "20260505T125425-9fb9dfd7",
+  "base_rev": "b86c0e8d867c4ac13cb9de78370b8a343089720f",
+  "result_rev": "b86c0e8d867c4ac13cb9de78370b8a343089720f",
+  "outcome": "task_failed",
+  "status": "execution_failed",
+  "detail": "ResolveRoute: no live endpoint offers a match for default",
+  "session_id": "eb-19a53cde",
+  "duration_ms": 4081,
+  "exit_code": 1,
+  "error": "ResolveRoute: no live endpoint offers a match for default",
+  "failure_mode": "unknown",
+  "execution_dir": ".ddx/executions/20260505T125425-9fb9dfd7",
+  "prompt_file": ".ddx/executions/20260505T125425-9fb9dfd7/prompt.md",
+  "manifest_file": ".ddx/executions/20260505T125425-9fb9dfd7/manifest.json",
+  "result_file": ".ddx/executions/20260505T125425-9fb9dfd7/result.json",
+  "started_at": "2026-05-05T12:54:32.089539947Z",
+  "finished_at": "2026-05-05T12:54:36.171098886Z"
+}
