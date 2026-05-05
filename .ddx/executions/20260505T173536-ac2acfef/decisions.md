@@ -1,0 +1,1 @@
+WIRE internal/metaprompt/injector.go:44 NewMetaPromptInjectorWithPaths via cli/cmd/init.go:705-723 and cli/cmd/doctor.go:916-940; deadcode RTA from cli/ reports no remaining internal/metaprompt symbols.
