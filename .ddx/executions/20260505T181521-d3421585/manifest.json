@@ -1,0 +1,58 @@
+{
+  "harness": "claude",
+  "model": "claude-opus-4-6",
+  "base_rev": "1d0975fa23087af892bb49b87164bc13a5a38001",
+  "result_rev": "13d19bda04e92616bd4537abe8a6f7480c298a9c",
+  "verdict": "BLOCK",
+  "bead_id": "ddx-b20bdc55",
+  "execution_dir": ".ddx/executions/20260505T181521-d3421585",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2481,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 274,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260505T180431-93d6720e/checks/production-reachability.json",
+          ".ddx/executions/20260505T180431-93d6720e/manifest.json",
+          ".ddx/executions/20260505T180431-93d6720e/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:SD-011",
+        "bytes_included": 5787,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/02-design/solution-designs/SD-011-agent-skills.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 8198,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 18508,
+    "output_bytes": 0,
+    "elapsed_ms": 4181,
+    "harness": "claude",
+    "model": "claude-opus-4-6"
+  }
+}
