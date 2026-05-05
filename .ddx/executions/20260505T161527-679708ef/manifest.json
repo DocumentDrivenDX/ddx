@@ -1,0 +1,58 @@
+{
+  "harness": "claude",
+  "model": "claude-opus-4-6",
+  "base_rev": "bc7ae29a9bc939f5b030f2f869d53f3a1e258c8e",
+  "result_rev": "27c43c160575431f888125450a54b9f38858ae19",
+  "verdict": "BLOCK",
+  "bead_id": "ddx-354d7930",
+  "execution_dir": ".ddx/executions/20260505T161527-679708ef",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1294,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 274,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260505T161041-83eb7d8a/checks/production-reachability.json",
+          ".ddx/executions/20260505T161041-83eb7d8a/manifest.json",
+          ".ddx/executions/20260505T161041-83eb7d8a/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:FEAT-006",
+        "bytes_included": 28321,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/01-frame/features/FEAT-006-agent-service.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 4638,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 36247,
+    "output_bytes": 0,
+    "elapsed_ms": 4098,
+    "harness": "claude",
+    "model": "claude-opus-4-6"
+  }
+}
