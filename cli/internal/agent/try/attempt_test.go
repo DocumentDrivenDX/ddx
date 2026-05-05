@@ -25,6 +25,61 @@ func TestAttempt_WrapsLegacyExecutor(t *testing.T) {
 	assert.Equal(t, "abc123", out.Report.ResultRev)
 }
 
+func TestAttempt_NoChanges_StaysCanonical_NotNeedsInvestigation(t *testing.T) {
+	store := &attemptStore{}
+
+	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
+		Store: store,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{
+				BeadID:             beadID,
+				Status:             StatusNoChanges,
+				NoChangesRationale: "status: needs_investigation\nreason: provider quota unknown",
+			}, nil
+		}),
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, OutcomeReported, out.Disposition)
+	assert.Equal(t, StatusNoChanges, out.Report.Status)
+	require.NotNil(t, out.NoChanges)
+	assert.False(t, out.NoChanges.Satisfied)
+	assert.Equal(t, NoChangesEventNeedsInvestigation, out.NoChanges.EventKind)
+	assert.Equal(t, NoChangesLabelNeedsInvestigation, out.NoChanges.Label)
+	assert.Contains(t, out.NoChanges.EventBody, "provider quota unknown")
+	assert.Equal(t, 1, store.noChangesCountCalls)
+}
+
+func TestAttempt_NoChanges_WiresAdjudicateNoChangesContract(t *testing.T) {
+	store := &attemptStore{}
+	runnerCalls := 0
+
+	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
+		Store: store,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{
+				BeadID:             beadID,
+				Status:             StatusNoChanges,
+				NoChangesRationale: "verification_command: true\noutput: passes",
+			}, nil
+		}),
+		VerificationRunner: func(ctx context.Context, projectRoot, command string) (int, string, error) {
+			runnerCalls++
+			assert.Equal(t, "true", command)
+			return 0, "ok", nil
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, OutcomeReported, out.Disposition)
+	assert.Equal(t, StatusAlreadySatisfied, out.Report.Status)
+	require.NotNil(t, out.NoChanges)
+	assert.True(t, out.NoChanges.Satisfied)
+	assert.Equal(t, NoChangesEventVerified, out.NoChanges.EventKind)
+	assert.Empty(t, out.NoChanges.Label)
+	assert.Equal(t, 1, runnerCalls)
+}
+
 func TestAttempt_ConflictRecovered_ReturnsMergedOutcome(t *testing.T) {
 	store := &attemptStore{}
 	target := bead.Bead{ID: "ddx-test"}
@@ -99,10 +154,11 @@ func TestAttempt_ConflictUnresolvable_ReturnsPark(t *testing.T) {
 }
 
 type attemptStore struct {
-	events         []bead.BeadEvent
-	closedSHA      string
-	unclaimed      bool
-	cooldownStatus string
+	events              []bead.BeadEvent
+	closedSHA           string
+	unclaimed           bool
+	cooldownStatus      string
+	noChangesCountCalls int
 }
 
 func (s *attemptStore) AppendEvent(beadID string, ev bead.BeadEvent) error {
@@ -123,4 +179,9 @@ func (s *attemptStore) Unclaim(beadID string) error {
 func (s *attemptStore) SetExecutionCooldown(beadID string, until time.Time, status, detail string) error {
 	s.cooldownStatus = status
 	return nil
+}
+
+func (s *attemptStore) IncrNoChangesCount(beadID string) (int, error) {
+	s.noChangesCountCalls++
+	return s.noChangesCountCalls, nil
 }

@@ -313,18 +313,6 @@ func (f ExecuteBeadExecutorFunc) Execute(ctx context.Context, beadID string) (Ex
 	return f(ctx, beadID)
 }
 
-// SatisfactionChecker evaluates whether a bead that returned no_changes is
-// already satisfied and should be closed, or is still unresolved and should
-// receive retry suppression. noChangesCount is the cumulative count including
-// the current attempt.
-//
-// When satisfied is true the caller closes the bead with the returned evidence
-// string as the detail. When false the caller applies a retry cooldown and
-// leaves the bead open.
-type SatisfactionChecker interface {
-	CheckSatisfied(ctx context.Context, beadID string, noChangesCount int) (satisfied bool, evidence string, err error)
-}
-
 type ExecuteBeadLoopStore interface {
 	ReadyExecution() ([]bead.Bead, error)
 	Claim(id, assignee string) error
@@ -404,11 +392,11 @@ type ExecuteBeadLoopResult struct {
 type ExecuteBeadWorker struct {
 	Store               ExecuteBeadLoopStore
 	Executor            ExecuteBeadExecutor
-	SatisfactionChecker SatisfactionChecker // nil → NoChangesContract default
+	SatisfactionChecker agenttry.SatisfactionChecker // nil → NoChangesContract default
 	// VerificationRunner runs a verification_command parsed out of a
 	// no_changes_rationale.txt under NoChangesContract (TD-031 §8.1). When
 	// nil, DefaultVerificationCommandRunner is used.
-	VerificationRunner VerificationCommandRunner
+	VerificationRunner agenttry.VerificationCommandRunner
 	Now                func() time.Time
 	// Reviewer, when non-nil, is called after every successful merge to
 	// validate the commit against the bead's acceptance criteria. When nil,
@@ -482,10 +470,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	noProgressCooldown := rcfg.NoProgressCooldown()
 	if noProgressCooldown <= 0 {
 		noProgressCooldown = 6 * time.Hour
-	}
-	maxNoChangesBeforeClose := rcfg.MaxNoChangesBeforeClose()
-	if maxNoChangesBeforeClose <= 0 {
-		maxNoChangesBeforeClose = 3
 	}
 	heartbeatInterval := rcfg.HeartbeatInterval()
 	if heartbeatInterval <= 0 {
@@ -848,15 +832,17 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		// tryExecutor preserves the legacy w.Executor.Execute(ctx, candidate.ID)
 		// invocation while letting try.Attempt own conflict recovery.
 		attemptOut, err := agenttry.Attempt(ctx, w.Store, candidate.ID, agenttry.AttemptOpts{
-			Bead:             candidate,
-			Executor:         tryExecutor(w.Executor),
-			Store:            w.Store,
-			ProjectRoot:      runtime.ProjectRoot,
-			AutoRecover:      tryAutoRecover(w.conflictAutoRecoverFn),
-			ConflictResolver: w.ConflictResolver,
-			Assignee:         assignee,
-			Now:              now,
-			Cooldown:         LandConflictCooldown,
+			Bead:                candidate,
+			Executor:            tryExecutor(w.Executor),
+			Store:               w.Store,
+			ProjectRoot:         runtime.ProjectRoot,
+			SatisfactionChecker: w.SatisfactionChecker,
+			VerificationRunner:  w.VerificationRunner,
+			AutoRecover:         tryAutoRecover(w.conflictAutoRecoverFn),
+			ConflictResolver:    w.ConflictResolver,
+			Assignee:            assignee,
+			Now:                 now,
+			Cooldown:            LandConflictCooldown,
 		})
 		hbCancel()
 		hbWG.Wait()
@@ -961,6 +947,72 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		} else if attemptOut.Disposition == agenttry.OutcomePark {
 			result.Failures++
 			result.LastFailureStatus = report.Status
+		} else if attemptOut.NoChanges != nil {
+			noChanges := attemptOut.NoChanges
+			if err := w.Store.Unclaim(candidate.ID); err != nil {
+				if w.handleOutcomeStoreError(ctx, candidate.ID, "Unclaim", err, assignee, result, runtime, now) {
+					continue
+				}
+				return result, ctx.Err()
+			}
+			if noChanges.EventKind != "" {
+				_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+					Kind:      noChanges.EventKind,
+					Summary:   noChanges.EventKind,
+					Body:      noChanges.EventBody,
+					Actor:     assignee,
+					Source:    "ddx agent execute-loop",
+					CreatedAt: now().UTC(),
+				})
+			}
+			if noChanges.Label != "" {
+				if lerr := addBeadLabel(w.Store, candidate.ID, noChanges.Label); lerr != nil {
+					if w.handleOutcomeStoreError(ctx, candidate.ID, "addBeadLabel", lerr, assignee, result, runtime, now) {
+						continue
+					}
+					return result, ctx.Err()
+				}
+			}
+			if noChanges.Satisfied {
+				// Adjudication confirmed bead is already satisfied.
+				// Set the terminal status BEFORE the close so the late
+				// executeBeadLoopEvent append captures "already_satisfied"
+				// (not "no_changes"), and emit an early execute-bead
+				// evidence event so the closure gate accepts even when
+				// BaseRev is empty (test fixtures and genuinely-no-commit
+				// satisfied beads).
+				report.Status = ExecuteBeadStatusAlreadySatisfied
+				if noChanges.Evidence != "" {
+					// Checker evidence explains why the bead is being closed;
+					// it takes precedence over the executor's attempt detail.
+					report.Detail = noChanges.Evidence
+				}
+				_ = w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC()))
+				if cerr := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.BaseRev); cerr != nil {
+					if w.handleOutcomeStoreError(ctx, candidate.ID, "CloseWithEvidence", cerr, assignee, result, runtime, now) {
+						continue
+					}
+					return result, ctx.Err()
+				}
+				result.Successes++
+				result.LastSuccessAt = now().UTC()
+			} else {
+				// Unresolved: suppress immediate retry so the queue can
+				// move on to other beads.
+				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
+				if shouldSuppressNoProgress(report) {
+					retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
+					if cerr := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); cerr != nil {
+						if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", cerr, assignee, result, runtime, now) {
+							continue
+						}
+						return result, ctx.Err()
+					}
+					report.RetryAfter = retryAfter.Format(time.RFC3339)
+				}
+				result.Failures++
+				result.LastFailureStatus = report.Status
+			}
 		} else {
 			if err := w.Store.Unclaim(candidate.ID); err != nil {
 				if w.handleOutcomeStoreError(ctx, candidate.ID, "Unclaim", err, assignee, result, runtime, now) {
@@ -975,88 +1027,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					}
 					return result, ctx.Err()
 				}
-			}
-			if report.Status == ExecuteBeadStatusNoChanges {
-				count, cerr := w.Store.IncrNoChangesCount(candidate.ID)
-				if cerr != nil {
-					if w.handleOutcomeStoreError(ctx, candidate.ID, "IncrNoChangesCount", cerr, assignee, result, runtime, now) {
-						continue
-					}
-					return result, ctx.Err()
-				}
-				satisfied, evidence, ncEvent, ncLabel, ncBody, aerr := w.adjudicateNoChangesContract(ctx, candidate, count, maxNoChangesBeforeClose, report, runtime)
-				if aerr != nil {
-					if w.handleOutcomeStoreError(ctx, candidate.ID, "adjudicateNoChanges", aerr, assignee, result, runtime, now) {
-						continue
-					}
-					return result, ctx.Err()
-				}
-				if !satisfied && ncEvent != "" {
-					if lerr := addBeadLabel(w.Store, candidate.ID, ncLabel); lerr != nil {
-						if w.handleOutcomeStoreError(ctx, candidate.ID, "addBeadLabel", lerr, assignee, result, runtime, now) {
-							continue
-						}
-						return result, ctx.Err()
-					}
-					_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-						Kind:      ncEvent,
-						Summary:   ncEvent,
-						Body:      ncBody,
-						Actor:     assignee,
-						Source:    "ddx agent execute-loop",
-						CreatedAt: now().UTC(),
-					})
-				}
-				if satisfied {
-					if ncEvent != "" {
-						_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
-							Kind:      ncEvent,
-							Summary:   ncEvent,
-							Body:      ncBody,
-							Actor:     assignee,
-							Source:    "ddx agent execute-loop",
-							CreatedAt: now().UTC(),
-						})
-					}
-					// Adjudication confirmed bead is already satisfied.
-					// Set the terminal status BEFORE the close so the late
-					// executeBeadLoopEvent append captures "already_satisfied"
-					// (not "no_changes"), and emit an early execute-bead
-					// evidence event so the closure gate accepts even when
-					// BaseRev is empty (test fixtures and genuinely-no-commit
-					// satisfied beads).
-					report.Status = ExecuteBeadStatusAlreadySatisfied
-					if evidence != "" {
-						// Checker evidence explains why the bead is being closed;
-						// it takes precedence over the executor's attempt detail.
-						report.Detail = evidence
-					}
-					_ = w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC()))
-					if cerr := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.BaseRev); cerr != nil {
-						if w.handleOutcomeStoreError(ctx, candidate.ID, "CloseWithEvidence", cerr, assignee, result, runtime, now) {
-							continue
-						}
-						return result, ctx.Err()
-					}
-					result.Successes++
-					result.LastSuccessAt = now().UTC()
-				} else {
-					// Unresolved: suppress immediate retry so the queue can
-					// move on to other beads.
-					report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
-					if shouldSuppressNoProgress(report) {
-						retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
-						if cerr := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); cerr != nil {
-							if w.handleOutcomeStoreError(ctx, candidate.ID, "SetExecutionCooldown", cerr, assignee, result, runtime, now) {
-								continue
-							}
-							return result, ctx.Err()
-						}
-						report.RetryAfter = retryAfter.Format(time.RFC3339)
-					}
-					result.Failures++
-					result.LastFailureStatus = report.Status
-				}
+				result.Failures++
+				result.LastFailureStatus = report.Status
 			} else if report.Status == ExecuteBeadStatusDeclinedNeedsDecomposition {
 				// Executor declined the bead because it is too large to
 				// deliver in one pass. Record a structured
@@ -1590,68 +1562,6 @@ func formatLoopResult(report ExecuteBeadReport) string {
 			return fmt.Sprintf("preserved: %s", detail)
 		}
 		return fmt.Sprintf("error: %s", detail)
-	}
-}
-
-// adjudicateNoChangesContract is the NoChangesContract (TD-031 §8.1)
-// adjudication path. It returns whether the bead should be closed as
-// already_satisfied, the evidence string for the close, and the contract
-// event/label/body to record on the bead's event stream.
-//
-// Resolution order:
-//   - When SatisfactionChecker is configured it is consulted first and its
-//     result wins; ncEvent/ncLabel are empty (legacy escape valve, used by
-//     tests and integrations that pre-date the contract).
-//   - Otherwise the rationale is parsed for NoChangesContract markers:
-//   - verification_command: run it; exit 0 → already_satisfied with the
-//     no_changes_verified event recorded; non-zero → bead stays open with
-//     triage:no-changes-unverified label and no_changes_unverified event.
-//   - status: needs_investigation → bead stays open with
-//     triage:needs-investigation label and no_changes_needs_investigation
-//     event capturing the agent's reason.
-//   - neither marker present → bead stays open with
-//     triage:no-changes-unjustified label and no_changes_unjustified event.
-//
-// satisfied is the only signal the loop uses to decide close vs stay-open;
-// ncEvent/ncLabel/ncBody are recorded by the caller. Status is NEVER mutated
-// here to a non-canonical value (bd/br compatibility, ADR-004).
-func (w *ExecuteBeadWorker) adjudicateNoChangesContract(ctx context.Context, candidate bead.Bead, noChangesCount, maxNoChangesBeforeClose int, report ExecuteBeadReport, runtime ExecuteBeadLoopRuntime) (satisfied bool, evidence, ncEvent, ncLabel, ncBody string, err error) {
-	if w.SatisfactionChecker != nil {
-		s, ev, cerr := w.SatisfactionChecker.CheckSatisfied(ctx, candidate.ID, noChangesCount)
-		return s, ev, "", "", "", cerr
-	}
-	parsed := ParseNoChangesRationale(report.NoChangesRationale)
-	switch parsed.Kind {
-	case NoChangesKindVerified:
-		runner := w.VerificationRunner
-		if runner == nil {
-			runner = DefaultVerificationCommandRunner
-		}
-		exitCode, output, runErr := runner(ctx, runtime.ProjectRoot, parsed.VerificationCommand)
-		body := fmt.Sprintf("verification_command=%s\nexit_code=%d", parsed.VerificationCommand, exitCode)
-		if output != "" {
-			body += "\noutput:\n" + output
-		}
-		if runErr != nil {
-			body += "\nrun_error: " + runErr.Error()
-		}
-		if runErr == nil && exitCode == 0 {
-			ev := fmt.Sprintf("verification_command passed: %s", parsed.VerificationCommand)
-			return true, ev, NoChangesEventVerified, "", body, nil
-		}
-		return false, "", NoChangesEventUnverified, NoChangesLabelUnverified, body, nil
-	case NoChangesKindNeedsInvestigation:
-		body := parsed.NeedsInvestigationReason
-		if body == "" {
-			body = "(no reason provided)"
-		}
-		return false, "", NoChangesEventNeedsInvestigation, NoChangesLabelNeedsInvestigation, body, nil
-	default: // NoChangesKindUnjustified
-		body := strings.TrimSpace(report.NoChangesRationale)
-		if body == "" {
-			body = "(rationale absent)"
-		}
-		return false, "", NoChangesEventUnjustified, NoChangesLabelUnjustified, body, nil
 	}
 }
 

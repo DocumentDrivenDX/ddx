@@ -9,9 +9,11 @@ import (
 )
 
 const (
-	StatusExecutionFailed = "execution_failed"
-	StatusLandConflict    = "land_conflict"
-	StatusSuccess         = "success"
+	StatusExecutionFailed  = "execution_failed"
+	StatusLandConflict     = "land_conflict"
+	StatusSuccess          = "success"
+	StatusNoChanges        = "no_changes"
+	StatusAlreadySatisfied = "already_satisfied"
 )
 
 type Report struct {
@@ -63,6 +65,7 @@ type Store interface {
 	CloseWithEvidence(beadID, sessionID, sha string) error
 	Unclaim(beadID string) error
 	SetExecutionCooldown(beadID string, until time.Time, status, detail string) error
+	IncrNoChangesCount(beadID string) (int, error)
 }
 
 type ConflictAutoRecoverFn func(wd, preserveRef string) (string, error)
@@ -70,15 +73,17 @@ type ConflictAutoRecoverFn func(wd, preserveRef string) (string, error)
 type ConflictResolverFn func(ctx context.Context, beadID, preserveRef, projectRoot string) (newTip string, isBlocking bool, err error)
 
 type AttemptOpts struct {
-	Bead             bead.Bead
-	Executor         Executor
-	Store            Store
-	ProjectRoot      string
-	AutoRecover      ConflictAutoRecoverFn
-	ConflictResolver ConflictResolverFn
-	Assignee         string
-	Now              func() time.Time
-	Cooldown         time.Duration
+	Bead                bead.Bead
+	Executor            Executor
+	Store               Store
+	ProjectRoot         string
+	SatisfactionChecker SatisfactionChecker
+	VerificationRunner  VerificationCommandRunner
+	AutoRecover         ConflictAutoRecoverFn
+	ConflictResolver    ConflictResolverFn
+	Assignee            string
+	Now                 func() time.Time
+	Cooldown            time.Duration
 }
 
 type Disposition string
@@ -92,6 +97,7 @@ const (
 type Outcome struct {
 	Report      Report
 	Disposition Disposition
+	NoChanges   *NoChangesOutcome
 	StoreErrOp  string
 	StoreErr    error
 }
@@ -130,6 +136,28 @@ func Attempt(ctx context.Context, store Store, beadID string, opts AttemptOpts) 
 			Now:              opts.Now,
 			Cooldown:         opts.Cooldown,
 		}), err
+	}
+
+	if report.Status == StatusNoChanges {
+		if opts.Store == nil {
+			opts.Store = store
+		}
+		if opts.Store == nil {
+			return Outcome{Report: report, StoreErrOp: "IncrNoChangesCount", StoreErr: fmt.Errorf("try attempt: no_changes store is required")}, nil
+		}
+		noChangesCount, countErr := opts.Store.IncrNoChangesCount(beadID)
+		if countErr != nil {
+			return Outcome{Report: report, StoreErrOp: "IncrNoChangesCount", StoreErr: countErr}, nil
+		}
+		noChangesOut, adjudicatedReport, adjErr := adjudicateNoChangesContract(ctx, beadID, report, opts.ProjectRoot, noChangesCount, opts.SatisfactionChecker, opts.VerificationRunner)
+		if adjErr != nil {
+			return Outcome{Report: report, StoreErrOp: "adjudicateNoChanges", StoreErr: adjErr}, nil
+		}
+		return Outcome{
+			Report:      adjudicatedReport,
+			Disposition: OutcomeReported,
+			NoChanges:   &noChangesOut,
+		}, nil
 	}
 
 	return Outcome{Report: report, Disposition: OutcomeReported}, err
