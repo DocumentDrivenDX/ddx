@@ -429,17 +429,24 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 The artifact browser list view carries a provisional performance contract for
 design work. These budgets shape the current implementation, but the gating
 numbers stay provisional until the B7-C1 baseline measurement is recorded and
-published in the perf docs.
+published in the perf docs. Treat the values below as design-time budgets, not
+final thresholds.
 
 | Budget | Provisional contract | Revisit when |
 |---|---|---|
 | Initial load | First usable content within 2s on the reference fixture | Baseline measurement lands with different gating numbers |
 | Search/filter latency | Interactions settle within 200ms once the current list data is already loaded | Search becomes data-loading bound instead of DOM-bound |
-| Steady-state DOM rows | Default list view stays flat and non-virtualized at 500 visible artifact rows | The list needs 500-1000 visible rows, or more than 1000 visible rows, in the default state |
+| Steady-state DOM rows | Default list view stays flat and non-virtualized at 500 visible artifact rows | The default state needs 500-1000 visible rows, or more than 1000 visible rows |
 
+- Revisit the contract before shipping if the artifact browser design adds any
+  of the following:
+  - infinite scroll
+  - auto-prefetch
+  - 500-1000 visible DOM rows in the default list state
+  - sticky group headers
 - The default list view assumes a flat, non-virtualized DOM. If the design
-  needs infinite scroll, auto-prefetch, or sticky group headers, the contract
-  must be revisited before shipping that change.
+  changes that assumption, update this section and the TP-002 measurement
+  methodology together.
 - Story 5 grouping is page-local by default: the browser groups only the
   loaded artifact edges. Story 5 owners should treat any requirement for
   cross-page or corpus-wide grouping accuracy as the trigger to move `groupBy`

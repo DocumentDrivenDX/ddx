@@ -69,11 +69,13 @@ one run.
 Artifact-listing performance is measured as a browser/UI contract, not as a
 general benchmark suite. The intent is to lock the FEAT-008 gating numbers only
 after the B7-C1 baseline run has been captured in `docs/helix/06-iterate/perf/`.
+The baseline run publishes the locked gating numbers; until then, the FEAT-008
+budgets remain provisional design targets.
 
 | Metric | What to record | Where it lives |
 |--------|----------------|----------------|
-| First usable content | Time from navigation start to the artifact list becoming visible and interactive | `cli/internal/server/frontend/e2e/artifacts.spec.ts` |
-| Search/filter latency | Time from a category filter or search input change to the updated list settling | `cli/internal/server/frontend/e2e/artifacts.spec.ts` |
+| First usable content | Time from navigation start to the artifact list becoming visible and interactive on the reference fixture | `cli/internal/server/frontend/e2e/artifacts.spec.ts` |
+| Search/filter latency | Time from a category filter or search input change to the updated list settling while the list is already loaded | `cli/internal/server/frontend/e2e/artifacts.spec.ts` |
 | Steady-state DOM rows | Maximum visible artifact rows in the default list state before the contract needs to be revisited | FEAT-008 contract + perf baseline report |
 
 Method:
