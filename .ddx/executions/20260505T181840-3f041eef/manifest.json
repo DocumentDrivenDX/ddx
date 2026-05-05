@@ -1,0 +1,81 @@
+{
+  "attempt_id": "20260505T181840-3f041eef",
+  "bead_id": "ddx-e36d7959",
+  "base_rev": "6ceb1f81a4e0e775443756a546be5cee1c88a2c6",
+  "created_at": "2026-05-05T18:18:43.191913164Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e36d7959",
+    "title": "try.Attempt: relocate rate-limit retry policy",
+    "description": "PROBLEM\\nThe per-bead HTTP 429 retry policy still lives in execute_bead.go, so the attempt path does not own Retry-After parsing, exponential backoff selection, or the per-bead retry budget. That makes rate-limit behavior depend on loop wiring instead of the attempt boundary that actually issues the dispatch.\\n\\nROOT CAUSE\\n- cli/internal/agent/execute_bead.go:800-851 builds RateLimitRetryConfig, installs the RecordRouteAttempt / bead-event hooks, and wraps dispatchAgentRun in RunWithRateLimitRetry.\\n- cli/internal/agent/try/attempt.go:99-137 still delegates only to legacy conflict recovery and never classifies or retries rate-limited attempts itself.\\n\\nPROPOSED FIX\\n- Move the Retry-After / exponential-backoff / budget-cap decision into cli/internal/agent/try/attempt.go on the rate-limit detection path.\\n- Keep the per-bead retry budget, per-wait cap, and routing-engine transparency hooks intact, but make them part of the attempt outcome contract rather than loop-local policy.\\n- Preserve the existing stable backoff schedule and budget-exhausted reason string.\\n- Reduce execute_bead.go to a generic caller of the structured attempt result.\\n\\nNON-SCOPE\\n- No_changes adjudication.\\n- Decomposition, push_failed, or push_conflict routing.\\n- Any change to the published backoff schedule or budget constants.\\n\\nINTERSECTIONS\\n- Absorbs ddx-c6e3db02 behavior.\\n",
+    "acceptance": "1. TestAttempt_RateLimit_Retry_HonorsRetryAfter verifies the attempt layer honors Retry-After exactly when present.\\n2. TestAttempt_RateLimit_Retry_UsesExponentialBackoff verifies the attempt layer falls back to the published backoff schedule when Retry-After is absent.\\n3. TestAttempt_RateLimit_WiresEvaluateRateLimitWait proves the rate-limit detection path calls EvaluateRateLimitWait from try.Attempt rather than only defining it.\\n4. TestRunWithRateLimitRetry_RetryAfterRespected and TestRunWithRateLimitRetry_ExponentialBackoffWhenRetryAfterAbsent remain green after the move.\\n5. cd cli \u0026\u0026 go test ./internal/agent/... green.\\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-c8f79963",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "kind:refactor",
+      "story:10",
+      "observed-failure"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-05T18:18:40Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3918937",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-05T17:03:55.738873Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T165234-0c0b5dec\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":11022494,\"output_tokens\":40818,\"total_tokens\":11063312,\"cost_usd\":0,\"duration_ms\":678687,\"exit_code\":0}",
+          "created_at": "2026-05-05T17:03:55.971942105Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=11063312 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-05T17:04:03.949997995Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=05da24bcba900e17fb5b52969dc199268db0fae4\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T13:09:08-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=9685\noutput_bytes=0\nelapsed_ms=4191",
+          "created_at": "2026-05-05T17:04:08.678609285Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=05da24bcba900e17fb5b52969dc199268db0fae4\nbase_rev=0bf19d753f954388fe4ed5a973330afee0af0b0d",
+          "created_at": "2026-05-05T17:04:08.902730938Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-05T18:18:40.513678355Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260505T181840-3f041eef",
+    "prompt": ".ddx/executions/20260505T181840-3f041eef/prompt.md",
+    "manifest": ".ddx/executions/20260505T181840-3f041eef/manifest.json",
+    "result": ".ddx/executions/20260505T181840-3f041eef/result.json",
+    "checks": ".ddx/executions/20260505T181840-3f041eef/checks.json",
+    "usage": ".ddx/executions/20260505T181840-3f041eef/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e36d7959-20260505T181840-3f041eef"
+  },
+  "prompt_sha": "fa2ccf2f1a0a3327167faab1e78104b4e60d2e601b93303164a2f0d7cdb4fd55"
+}
