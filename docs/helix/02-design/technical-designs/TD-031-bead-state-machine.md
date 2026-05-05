@@ -163,12 +163,20 @@ Lifecycle events:
 
 Drain-outcome events (no_changes family — NoChangesContract):
 
+- `no_changes_verified` — the attempt produced no commit, but supplied a
+  `verification_command` that passed; the bead is already satisfied.
+- `no_changes_unverified` — the attempt produced no commit and supplied a
+  `verification_command`, but the command failed or could not run.
+- `no_changes_unjustified` — the attempt produced no commit without enough
+  structured rationale to prove either satisfaction or a durable blocker.
+- `no_changes_needs_investigation` — the attempt explicitly asked for operator
+  triage with `status: needs_investigation`.
 - `no_changes_decomposed` — agent decomposed the bead instead of changing
-  files
-- `no_changes_blocked` — agent declared no_changes with a justified blocker
-- `no_changes_no_evidence` — agent exited without commit and without a
-  rationale file
-- `no_changes_recoverable` — transient cause, will retry
+  files.
+- `no_changes_blocked` — agent declared no_changes with a justified external
+  blocker.
+- `no_changes_recoverable` — transient cause; retrying the same bead after
+  time passes can plausibly succeed.
 
 Drain-control events:
 
@@ -194,18 +202,39 @@ field.
 ## 5. Outcome → Label / Event / Extra Mapping
 
 When a drain attempt finishes, `execute-bead` returns one of a fixed set of
-outcomes. The mapping below is normative.
+outcomes plus optional no_changes lifecycle evidence. The mapping below is the
+canonical queue-management contract.
 
-| Outcome | Status transition | Label changes | Events appended | Extra updates |
+Lifecycle reliability invariants:
+
+- Raw `no_changes` is attempt evidence, not a durable bead queue state. The
+  drain loop MUST translate it into one of the rows below before mutating the
+  bead.
+- `execute-loop-retry-after` may be set only when retrying the same bead after
+  time passes could plausibly succeed without human/spec/dependency changes.
+- Every bead excluded from ordinary `ddx work` execution MUST have an
+  explainable durable reason using existing mechanisms: dependency edge,
+  `blocked` status, `needs_human`/triage labels, `execution-eligible=false`,
+  `superseded-by`, epic/parent queue mode, or an active retry cooldown.
+- Latest terminal events and close evidence beat stale `execute-loop-*` Extra
+  metadata. Reconciliation may clear stale management fields, but MUST preserve
+  append-only events and evidence.
+
+| Outcome or lifecycle action | Status transition | Label changes | Events appended | Extra updates |
 |---|---|---|---|---|
-| `merged` | `in_progress → closed` | remove `claimed`, add `last-merged-rev:<sha>` (optional) | `closed-merged` | `Extra["last-run"]` updated with run-id |
-| `already_satisfied` | `in_progress → closed` | (none) | `closed-already-satisfied` | `Extra["last-run"]` |
-| `review_block` | `in_progress → blocked` | add `needs_human` (label) | `review-block` | `Extra["last-review"]` carries findings ref |
+| `merged` | `in_progress → closed` | remove `claimed`, add `last-merged-rev:<sha>` (optional) | `closed-merged` | `Extra["last-run"]` updated with run-id; clear stale `execute-loop-*` management fields |
+| `already_satisfied` | `in_progress → closed` | (none) | `closed-already-satisfied` | `Extra["last-run"]`; clear stale `execute-loop-*` management fields |
+| `review_block` | `in_progress → blocked` | add `needs_human` | `review-block` | `Extra["last-review"]` carries findings ref |
 | `execution_failed` | `in_progress → open` (claim released) | (none) | `unclaimed` + a structured failure event | `Extra["last-run"]` |
-| `no_changes_decomposed` | `in_progress → closed` | add `decomposed` | `no_changes_decomposed` | `Extra["children"]` lists child IDs |
-| `no_changes_blocked` | `in_progress → blocked` | add `needs_human` | `no_changes_blocked` | `Extra["last-rationale"]` |
-| `no_changes_no_evidence` | `in_progress → open` | add `triage` | `no_changes_no_evidence` | (none) |
-| `no_changes_recoverable` | `in_progress → open` | (none) | `no_changes_recoverable` | (none) |
+| verified no_changes already satisfied | `in_progress → closed` | remove no_changes triage labels if present | `no_changes_verified` + `closed-already-satisfied` | `Extra["last-run"]`; clear `execute-loop-retry-after`, `execute-loop-last-status`, and `execute-loop-last-detail` |
+| unverified no_changes | `in_progress → open` (claim released) | add `triage:no-changes-unverified` | `no_changes_unverified` | record verification command/result; do not set retry cooldown by default |
+| unjustified no_changes / no rationale | `in_progress → open` (claim released) | add `triage:no-changes-unjustified` | `no_changes_unjustified` | record rationale absence/detail; do not set retry cooldown by default |
+| no_changes needs investigation | `in_progress → open` (claim released) | add `triage:needs-investigation`; add `needs_human` when operator action is required before retry | `no_changes_needs_investigation` | `Extra["last-rationale"]`; do not set retry cooldown by default |
+| parent/epic/decomposed container | `in_progress → closed` when children were created; otherwise `in_progress → open` with `execution-eligible=false` | add `decomposed` when children exist | `no_changes_decomposed` | `Extra["children"]` lists child IDs, or `Extra["execution-eligible"]=false` explains container-only work |
+| external blocker | `in_progress → blocked` for hard blockers, or `in_progress → open` with a `blocked-on-upstream:<id>` label for visible soft blockers | add `needs_human` or `blocked-on-upstream:<id>` | `no_changes_blocked` | `Extra["last-rationale"]` names the external blocker |
+| superseded work | no terminal success; leave open only if visible history is needed | add no triage labels | structured superseded event if appended by caller | `Extra["superseded-by"]` names the replacement and makes ordinary execution ineligible |
+| transient infra/quota/transport | `in_progress → open` (claim released) | (none) | `no_changes_recoverable`, `drain-paused-quota`, `rate-limit-retry`, or structured transport event | may set `execute-loop-retry-after` only for the retryable time-based condition |
+| stale no_changes tracker metadata | no status change unless latest terminal evidence closes the bead | remove stale no_changes triage labels only when contradicted by terminal evidence | preserve historical events; append reconciliation event if performed | clear stale `execute-loop-*` management fields when latest terminal event or close evidence proves they are obsolete |
 
 `needs_human` is a **label**, not a status. It is the standard signal that
 a human operator should look at the bead before drain re-attempts it.
@@ -300,32 +329,18 @@ contract here is out of scope for that bead.
 
 ### 8.1 NoChangesContract (ddx-b24e9630)
 
-Status transitions used:
+NoChangesContract outcomes use the canonical mapping in section 5. This section
+exists only to bind the hygiene bead to that mapping; it does not define a
+second disposition table.
 
-- `in_progress → closed` for `no_changes_decomposed` (terminal: children
-  filed).
-- `in_progress → blocked` for `no_changes_blocked` (operator follow-up
-  expected).
-- `in_progress → open` for `no_changes_no_evidence` and
-  `no_changes_recoverable` (claim released, bead returns to the queue).
+Claim behavior: the claim is released for every no_changes action that leaves
+the bead `open`. It is not released separately when the same mutation moves the
+bead directly to terminal `closed` or hard `blocked`.
 
-Labels added:
-
-- `decomposed` (on `no_changes_decomposed`).
-- `needs_human` (on `no_changes_blocked`).
-- `triage` (on `no_changes_no_evidence`).
-
-Labels removed: none.
-
-Events fired: one of the four `no_changes_*` event kinds from section 4.
-
-Claim behavior: the claim is released on every outcome except
-`no_changes_decomposed` and `no_changes_blocked`, where the bead leaves
-`in_progress` directly to a terminal/blocked status.
-
-Loop interaction: the drain loop reads the outcome, applies the mapping
-in section 5, and appends the matching event. It does not invent new
-event kinds.
+Loop interaction: the try package parses and verifies no_changes rationale,
+then returns the lifecycle action. The drain loop applies section 5 exactly and
+appends one of the no_changes event kinds from section 4; it does not invent
+new event kinds or use cooldown as a generic parking lot.
 
 ### 8.2 TriageContract (ddx-3c154349)
 
