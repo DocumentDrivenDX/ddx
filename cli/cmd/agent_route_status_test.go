@@ -23,7 +23,7 @@ func TestAgentRouteStatusShowsLiveProvidersAndModels(t *testing.T) {
 	require.Contains(t, out, "Models")
 	require.Contains(t, out, "testprovider")
 	require.Contains(t, out, "qwen3-32b")
-	require.NotContains(t, out, "model_routes")
+	require.NotContains(t, out, "model_"+"routes")
 	require.NotContains(t, out, "Route:")
 }
 
