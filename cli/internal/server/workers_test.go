@@ -596,8 +596,17 @@ func TestFormatSessionLogLines(t *testing.T) {
 }
 
 func TestWorkerProgressUsesCanonicalFizeauProgressEvents(t *testing.T) {
-	lines := []string{
+	root := t.TempDir()
+	logDir := filepath.Join(root, ".ddx", "agent-logs")
+	require.NoError(t, os.MkdirAll(logDir, 0o755))
+
+	legacyPath := filepath.Join(logDir, "agent-legacy.jsonl")
+	canonicalPath := filepath.Join(logDir, "svc-canonical.jsonl")
+
+	require.NoError(t, os.WriteFile(legacyPath, []byte(strings.Join([]string{
 		`{"type":"llm.response","data":{"model":"claude-sonnet-4-6","latency_ms":10,"attempt":{"cost":{"raw":{"total_tokens":12}}},"tool_calls":[{"name":"Bash"}],"finish_reason":"tool_use"}}`,
+	}, "\n")+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(canonicalPath, []byte(strings.Join([]string{
 		mustProgressLine(t, agentlib.ServiceProgressData{
 			Phase:         "tool",
 			State:         "complete",
@@ -606,15 +615,26 @@ func TestWorkerProgressUsesCanonicalFizeauProgressEvents(t *testing.T) {
 			ToolName:      "apply_patch",
 			Action:        "add test implementation",
 			Target:        "cli/internal/file.go",
-			OutputSummary: "out=312B 12 lines \"Success. Updated the following files:\"",
+			OutputBytes:   312,
+			OutputLines:   12,
+			OutputExcerpt: "Success. Updated the following files:",
 			DurationMS:    35,
+			TokPerSec:     float64Ptr(18.4),
 		}),
-	}
+	}, "\n")+"\n"), 0o644))
 
-	result := formatActiveSessionLogLines(lines)
+	// Make the canonical service log the newest file so the worker log picker
+	// prefers it over the stale legacy agent log.
+	now := time.Now()
+	require.NoError(t, os.Chtimes(legacyPath, now.Add(-2*time.Minute), now.Add(-2*time.Minute)))
+	require.NoError(t, os.Chtimes(canonicalPath, now, now))
+
+	m := &WorkerManager{projectRoot: root}
+	result := m.readActiveSessionLog(&workerHandle{})
 
 	assert.Contains(t, result, "ok ddx-1234 7 add test implementation to cli/internal/file.go")
 	assert.Contains(t, result, "< out=312B 12 lines")
+	assert.Contains(t, result, "18.4 tok/s")
 	assert.NotContains(t, result, "llm response")
 }
 
@@ -628,6 +648,10 @@ func mustProgressLine(t *testing.T, data agentlib.ServiceProgressData) string {
 	})
 	require.NoError(t, err)
 	return string(line)
+}
+
+func float64Ptr(v float64) *float64 {
+	return &v
 }
 
 // TC-013.4 — A worker started for project A writes worker records and execution

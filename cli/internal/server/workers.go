@@ -1614,12 +1614,14 @@ func (m *WorkerManager) readActiveSessionLog(handle *workerHandle) string {
 		return ""
 	}
 
-	// Find the most recent agent-*.jsonl file that was modified in the last 30 minutes
+	// Find the most recent session-log JSONL file that was modified in the last 30 minutes.
+	// Canonical service output is written as svc-*.jsonl; legacy agent-*.jsonl remains
+	// supported for older harness paths.
 	var newest string
 	var newestMod time.Time
 	cutoff := time.Now().Add(-30 * time.Minute)
 	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasPrefix(entry.Name(), "agent-") || !strings.HasSuffix(entry.Name(), ".jsonl") {
+		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
 			continue
 		}
 		// Skip loop event files — they contain loop milestones, not agent session

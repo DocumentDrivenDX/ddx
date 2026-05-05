@@ -82,8 +82,7 @@ func TestDrainServiceEvents_ForwardsCanonicalProgressPayload(t *testing.T) {
 		"tool_name":       "apply_patch",
 		"action":          "add test implementation",
 		"target":          "cli/internal/file.go",
-		"output_summary":  "out=312B 12 lines \"Success. Updated the following files:\"",
-		"output_excerpt":  "12 lines \"Success. Updated the following files:\"",
+		"output_excerpt":  "Success. Updated the following files:",
 		"output_bytes":    312,
 		"output_lines":    12,
 		"duration_ms":     35,
@@ -112,6 +111,11 @@ func TestDrainServiceEvents_ForwardsCanonicalProgressPayload(t *testing.T) {
 	assert.Equal(t, 7, progress[0].TurnIndex)
 	assert.Equal(t, "add test implementation", progress[0].Action)
 	assert.Equal(t, "cli/internal/file.go", progress[0].Target)
+	assert.Equal(t, 312, progress[0].OutputBytes)
+	assert.Equal(t, 12, progress[0].OutputLines)
+	require.NotNil(t, progress[0].TokPerSec)
+	assert.InDelta(t, 18.4, *progress[0].TokPerSec, 0.0001)
 	assert.Contains(t, FormatServiceProgressEntries(progress), "ok ddx-1234 7 add test implementation to cli/internal/file.go")
 	assert.Contains(t, FormatServiceProgressEntries(progress), "< out=312B 12 lines")
+	assert.Contains(t, FormatServiceProgressEntries(progress), "18.4 tok/s")
 }

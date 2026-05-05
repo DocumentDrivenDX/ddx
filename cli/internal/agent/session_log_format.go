@@ -476,7 +476,7 @@ func formatToolProgressLine(state string, data map[string]any) string {
 	case "complete":
 		tokens := progressTokenCount(data, "total_tokens", "output_tokens", "input_tokens")
 		duration := progressDurationString(data)
-		outputSummary, _ := data["output_summary"].(string)
+		outputSummary := progressOutputSummary(data)
 		if outputSummary != "" {
 			display = compactProgressToolDisplay(data, toolName, command, 80)
 		}
@@ -485,16 +485,21 @@ func formatToolProgressLine(state string, data map[string]any) string {
 			line += " " + display
 		}
 		if outputSummary != "" {
-			line += " < " + compactOutputSummaryLimit(outputSummary, 56)
+			line += " < " + outputSummary
 		}
 		suffix := ""
-		switch {
-		case duration != "" && tokens > 0:
-			suffix = fmt.Sprintf(" %s %dtok", duration, tokens)
-		case duration != "":
+		if duration != "" {
 			suffix = " " + duration
-		case tokens > 0:
-			suffix = fmt.Sprintf(" %dtok", tokens)
+		}
+		if tokens > 0 {
+			suffix += fmt.Sprintf(" %dtok", tokens)
+		}
+		if throughput := progressThroughputText(data, tokens); throughput != "" {
+			if suffix != "" {
+				suffix += ", " + throughput
+			} else {
+				suffix = " " + throughput
+			}
 		}
 		return truncateStr(line, maxInt(1, 120-len(suffix))) + suffix
 	default:
@@ -510,11 +515,41 @@ func formatTokenThroughput(tokens int, durationMS int) string {
 }
 
 func progressThroughputSuffix(data map[string]any, tokens int) string {
-	throughput := formatTokenThroughput(tokens, progressInt(data, "duration_ms"))
+	throughput := progressThroughputText(data, tokens)
 	if throughput == "" {
 		return ""
 	}
 	return ", " + throughput
+}
+
+func progressThroughputText(data map[string]any, tokens int) string {
+	if throughput := progressFloat(data, "tok_per_sec"); throughput > 0 {
+		return fmt.Sprintf("%s tok/s", strconv.FormatFloat(throughput, 'f', 1, 64))
+	}
+	return formatTokenThroughput(tokens, progressInt(data, "duration_ms"))
+}
+
+func progressOutputSummary(data map[string]any) string {
+	if data == nil {
+		return ""
+	}
+	if summary, _ := data["output_summary"].(string); strings.TrimSpace(summary) != "" {
+		return compactOutputSummaryLimit(summary, 56)
+	}
+	parts := make([]string, 0, 3)
+	if bytes := progressInt(data, "output_bytes"); bytes > 0 {
+		parts = append(parts, "out="+formatByteSize(bytes))
+	}
+	if lines := progressInt(data, "output_lines"); lines > 0 {
+		parts = append(parts, fmt.Sprintf("%d lines", lines))
+	}
+	if excerpt, _ := data["output_excerpt"].(string); strings.TrimSpace(excerpt) != "" {
+		parts = append(parts, compactOutputSummaryLimit(excerpt, 56))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return compactOutputSummary(strings.Join(parts, " "))
 }
 
 func compactProgressToolDisplay(data map[string]any, toolName, command string, limit int) string {
@@ -944,6 +979,20 @@ func progressInt(data map[string]any, key string) int {
 		return int(v)
 	case int:
 		return v
+	default:
+		return 0
+	}
+}
+
+func progressFloat(data map[string]any, key string) float64 {
+	if data == nil {
+		return 0
+	}
+	switch v := data[key].(type) {
+	case float64:
+		return v
+	case int:
+		return float64(v)
 	default:
 		return 0
 	}

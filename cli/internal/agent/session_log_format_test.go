@@ -90,7 +90,7 @@ func TestFormatSessionLogLines_ProgressTool(t *testing.T) {
 	assert.Contains(t, got, "  > ls -al\n")
 	assert.Contains(t, got, "  ok ls -al …/output")
 	assert.Contains(t, got, " < out=57B 3 lines \"README.md\"")
-	assert.Contains(t, got, " 3s 100tok\n")
+	assert.Contains(t, got, " 3s 100tok, 33.3 tok/s\n")
 	assert.NotContains(t, got, "operators/do/not/need/full/output")
 }
 
@@ -333,14 +333,18 @@ func TestFormatSessionLogLines_SourceShapeSamplesStayUseful(t *testing.T) {
 					"action":         "add test implementation",
 					"target":         "cli/internal/file.go",
 					"command":        "apply_patch",
-					"output_summary": "out=312B 12 lines \"Success. Updated the following files:\"",
+					"output_bytes":   312,
+					"output_lines":   12,
+					"output_excerpt": "Success. Updated the following files:",
 					"duration_ms":    35,
+					"tok_per_sec":    18.4,
 				}),
 			},
 			want: []string{
 				"ok ddx-1234 22 add test implementation to cli/internal/file.go",
 				"< out=312B 12 lines",
 				"35ms",
+				"18.4 tok/s",
 			},
 		},
 		{
