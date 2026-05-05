@@ -68,7 +68,7 @@ func TestSpokeRegistersOnStart(t *testing.T) {
 }
 
 // AC: Re-start with same node_id is idempotent (replaces, not duplicates).
-func TestSpokeReregisterIsIdempotent(t *testing.T) {
+func TestSpokeLifecycle_Register_Idempotent(t *testing.T) {
 	hub := newHubServer(t, false)
 	hubURL, _ := hubFromServer(t, hub)
 	statePath := spokeStatePath(t)
@@ -95,7 +95,7 @@ func TestSpokeReregisterIsIdempotent(t *testing.T) {
 }
 
 // AC: URL change between restarts triggers re-registration with new URL.
-func TestSpokeReregistersOnURLChange(t *testing.T) {
+func TestSpokeLifecycle_URLChange_Triggers_Reregister(t *testing.T) {
 	hub := newHubServer(t, false)
 	hubURL, _ := hubFromServer(t, hub)
 	statePath := spokeStatePath(t)
@@ -140,34 +140,32 @@ func TestSpokeReregistersOnURLChange(t *testing.T) {
 	}
 }
 
-// AC: Heartbeat interval 30s ± jitter. We can't directly assert 30s in a
-// test (it would be slow), but we verify (a) the default is 30s, (b) the
-// jitter window is non-zero and bounded by the configured fraction, and
-// (c) heartbeats actually fire and flip the spoke status to "active".
-func TestSpokeHeartbeatJitterBounds(t *testing.T) {
+// AC: Heartbeat interval 30s ± jitter. We can't directly assert the
+// wall-clock 30s cadence, but we can verify the default delay stays within
+// the ADR-007 [25s, 35s] window and that the delay is actually jittered.
+func TestSpokeLifecycle_Heartbeat_30sJitter(t *testing.T) {
 	if got := federation.DefaultHeartbeatInterval; got != 30*time.Second {
 		t.Errorf("DefaultHeartbeatInterval drift: %v want 30s", got)
 	}
 	cfg := federation.SpokeConfig{
-		NodeID:                  "n1",
-		URL:                     "https://x",
-		HubURL:                  "https://hub",
-		HeartbeatInterval:       1 * time.Second,
-		HeartbeatJitterFraction: 0.25,
-		StatePath:               filepath.Join(t.TempDir(), "spoke.json"),
+		NodeID:            "n1",
+		URL:               "https://x",
+		HubURL:            "https://hub",
+		HeartbeatInterval: federation.DefaultHeartbeatInterval,
+		StatePath:         filepath.Join(t.TempDir(), "spoke.json"),
 	}
 	sp, err := federation.NewSpoke(cfg)
 	if err != nil {
 		t.Fatalf("NewSpoke: %v", err)
 	}
-	// Sample many delays — none should fall outside ±25% of the base interval.
-	low := time.Duration(float64(cfg.HeartbeatInterval) * 0.75)
-	high := time.Duration(float64(cfg.HeartbeatInterval) * 1.25)
+	// Sample many delays — none should fall outside the 30s ± 5s window.
+	low := 25 * time.Second
+	high := 35 * time.Second
 	sawJitter := false
 	for i := 0; i < 200; i++ {
 		d := sp.NextHeartbeatDelay()
 		if d < low || d > high {
-			t.Fatalf("delay %v outside ±25%% bounds [%v,%v]", d, low, high)
+			t.Fatalf("delay %v outside ADR-007 bounds [%v,%v]", d, low, high)
 		}
 		if d != cfg.HeartbeatInterval {
 			sawJitter = true

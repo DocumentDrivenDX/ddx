@@ -25,8 +25,9 @@ import (
 const DefaultHeartbeatInterval = 30 * time.Second
 
 // DefaultHeartbeatJitterFraction is applied to the interval as ±jitter so
-// independent spokes do not synchronize their beats against one hub.
-const DefaultHeartbeatJitterFraction = 0.25
+// independent spokes do not synchronize their beats against one hub. On the
+// default 30s cadence this yields a ±5s window, matching ADR-007.
+const DefaultHeartbeatJitterFraction = 5.0 / 30.0
 
 // DefaultDeregisterTimeout caps the best-effort deregister request on shutdown.
 const DefaultDeregisterTimeout = 2 * time.Second

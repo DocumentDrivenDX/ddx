@@ -136,7 +136,7 @@ func TestFederationRegisterIdempotentByNodeID(t *testing.T) {
 }
 
 // AC: Duplicate node_id from different identity returns 409 + log.
-func TestFederationRegisterDuplicateNodeIDDifferentIdentity(t *testing.T) {
+func TestSpokeLifecycle_DuplicateNodeID_Rejected(t *testing.T) {
 	s := newHubServer(t, false)
 
 	resp := federationDoRequest(t, s, "POST", "/api/federation/register", goodRegisterPayload("n1"), "loopback")
