@@ -1,0 +1,11 @@
+verification_command: cd cli/internal/server/frontend && bun run test:e2e -- e2e/workers.spec.ts e2e/providers.spec.ts
+
+No code changes were needed in this execution worktree.
+
+Evidence already present in the tree:
+- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/workers/+layout.svelte` links each worker's harness name to the provider detail page via `providerHref(edge.node.harness)`.
+- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/providers/+page.svelte` renders `recentWorkerCount` in the provider list as `X recent worker(s)`.
+- `cli/internal/server/frontend/e2e/workers.spec.ts` already asserts the worker-to-provider link href in `TC-043`.
+- `cli/internal/server/frontend/e2e/providers.spec.ts` already asserts the provider worker-count badge in `TC-062`.
+
+The targeted Playwright run passed after installing the frontend dependencies in this workspace.
