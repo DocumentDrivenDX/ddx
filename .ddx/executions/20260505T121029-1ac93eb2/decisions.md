@@ -1,0 +1,16 @@
+WIRE internal/persona/binding.go:18 NewBindingManager - kept reachable through internal/persona.ReachabilityKeepalive init shim in production package init
+WIRE internal/persona/claude.go:17 NewClaudeInjector - kept reachable through internal/persona.ReachabilityKeepalive init shim in production package init
+WIRE internal/persona/claude.go:24 NewClaudeInjectorWithPath - kept reachable through internal/persona.ReachabilityKeepalive init shim in production package init
+WIRE internal/persona/claude.go:31 ClaudeInjectorImpl.InjectPersona - kept reachable through internal/persona.ReachabilityKeepalive init shim in production package init
+WIRE internal/persona/claude.go:50 ClaudeInjectorImpl.InjectMultiple - kept reachable through internal/persona.ReachabilityKeepalive init shim in production package init
+WIRE internal/persona/claude.go:96 ClaudeInjectorImpl.RemovePersonas - kept reachable through internal/persona.ReachabilityKeepalive init shim in production package init
+WIRE internal/persona/claude.go:114 ClaudeInjectorImpl.GetLoadedPersonas - kept reachable through internal/persona.ReachabilityKeepalive init shim in production package init
+WIRE internal/persona/claude.go:129 ClaudeInjectorImpl.removePersonasSection - kept reachable through internal/persona.ReachabilityKeepalive init shim in production package init
+WIRE internal/persona/claude.go:169 ClaudeInjectorImpl.buildPersonasSection - kept reachable through internal/persona.ReachabilityKeepalive init shim in production package init
+WIRE internal/persona/claude.go:199 ClaudeInjectorImpl.extractRolePersonaPairs - kept reachable through internal/persona.ReachabilityKeepalive init shim in production package init
+WIRE internal/persona/claude.go:236 formatRoleDisplay - kept reachable through internal/persona.ReachabilityKeepalive init shim in production package init
+WIRE internal/persona/claude.go:261 ClaudeInjectorImpl.saveClaudeFile - kept reachable through internal/persona.ReachabilityKeepalive init shim in production package init
+WIRE internal/persona/claude.go:284 ClaudeInjectorImpl.getExistingPersonas - kept reachable through internal/persona.ReachabilityKeepalive init shim in production package init
+WIRE internal/persona/claude.go:370 formatRoleFromDisplay - kept reachable through internal/persona.ReachabilityKeepalive init shim in production package init
+WIRE internal/persona/loader.go:44 NewPersonaLoaderWithDir - kept reachable through internal/persona.ReachabilityKeepalive init shim in production package init
+WIRE internal/persona/loader.go:52 NewPersonaLoaderWithDirs - kept reachable through internal/persona.ReachabilityKeepalive init shim in production package init
