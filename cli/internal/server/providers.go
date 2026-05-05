@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
@@ -113,8 +114,7 @@ func (s *Server) handleListProviders(w http.ResponseWriter, r *http.Request) {
 
 	result := make([]ProviderSummary, 0, len(infos))
 	for _, info := range infos {
-		signal := signalFromHarnessInfo(info, now)
-		result = append(result, buildProviderSummary(info, signal, report, now))
+		result = append(result, buildProviderSummary(info, report, now))
 	}
 	writeJSON(w, http.StatusOK, result)
 }
@@ -139,10 +139,9 @@ func (s *Server) handleShowProvider(w http.ResponseWriter, r *http.Request) {
 	}
 
 	now := time.Now().UTC()
-	signal := signalFromHarnessInfo(info, now)
 	report := liveRouteStatusReport(r.Context(), s.WorkingDir)
 
-	detail := buildProviderDetail(info, signal, report, now)
+	detail := buildProviderDetail(info, report, now)
 	writeJSON(w, http.StatusOK, detail)
 }
 
@@ -159,8 +158,7 @@ func (s *Server) mcpProviderList() mcpToolResult {
 
 	result := make([]ProviderSummary, 0, len(infos))
 	for _, info := range infos {
-		signal := signalFromHarnessInfo(info, now)
-		result = append(result, buildProviderSummary(info, signal, report, now))
+		result = append(result, buildProviderSummary(info, report, now))
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
@@ -183,10 +181,9 @@ func (s *Server) mcpProviderShow(harnessName string) mcpToolResult {
 	}
 
 	now := time.Now().UTC()
-	signal := signalFromHarnessInfo(info, now)
 	report := liveRouteStatusReport(context.Background(), s.WorkingDir)
 
-	detail := buildProviderDetail(info, signal, report, now)
+	detail := buildProviderDetail(info, report, now)
 	data, err := json.Marshal(detail)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText("{}")}}
@@ -196,133 +193,16 @@ func (s *Server) mcpProviderShow(harnessName string) mcpToolResult {
 
 // ---- Build helpers ----
 
-// signalFromHarnessInfo translates upstream HarnessInfo into the
-// ddx-local RoutingSignalSnapshot shape used by buildProviderSummary /
-// buildProviderDetail. This is the vocabulary translation shim introduced
-// when the DDx-side provider-native parsers were retired (ddx-7bc0c8d5):
-// upstream quota.Status values "ok|stale|unavailable" map to the existing
-// "fresh|stale|unknown" vocabulary that the GraphQL/REST surface exposes so
-// the SvelteKit frontend renders identically.
-func signalFromHarnessInfo(info agentlib.HarnessInfo, now time.Time) agent.RoutingSignalSnapshot {
-	snap := agent.RoutingSignalSnapshot{Provider: info.Name}
-
-	if info.Account != nil && (info.Account.Email != "" || info.Account.PlanType != "" || info.Account.OrgName != "") {
-		snap.Account = &agent.AccountInfo{
-			Email:    info.Account.Email,
-			PlanType: info.Account.PlanType,
-			OrgName:  info.Account.OrgName,
-		}
-	}
-
-	if info.Quota == nil {
-		snap.CurrentQuota = agent.QuotaSignal{
-			Source: agent.SignalSourceMetadata{
-				Provider:  info.Name,
-				Kind:      "docs-only",
-				Freshness: "unknown",
-			},
-			State: "unknown",
-		}
-		snap.Source = snap.CurrentQuota.Source
-		return snap
-	}
-
-	// Translate upstream quota.Status (ok|stale|unavailable|unauthenticated|unknown)
-	// into the existing ddx vocabulary.
-	state := "unknown"
-	switch info.Quota.Status {
-	case "ok":
-		state = "ok"
-	case "stale":
-		state = "ok" // stale-but-present data still counts as headroom.
-	case "unavailable", "unauthenticated":
-		state = "unknown"
-	}
-
-	// Promote worst non-extra window to "blocked" if any window is blocked.
-	var usedPercent int
-	var windowMinutes int
-	var resetsAt string
-	var translatedWindows []agent.QuotaWindow
-	for _, w := range info.Quota.Windows {
-		qw := agent.QuotaWindow{
-			Name:          w.Name,
-			LimitID:       w.LimitID,
-			WindowMinutes: w.WindowMinutes,
-			UsedPercent:   w.UsedPercent,
-			ResetsAt:      w.ResetsAt,
-			ResetsAtUnix:  w.ResetsAtUnix,
-			State:         w.State,
-		}
-		translatedWindows = append(translatedWindows, qw)
-		if w.LimitID == "extra" {
-			continue
-		}
-		if w.State == "blocked" {
-			state = "blocked"
-			resetsAt = w.ResetsAt
-		}
-		if w.UsedPercent > float64(usedPercent) {
-			usedPercent = int(w.UsedPercent + 0.5)
-			windowMinutes = w.WindowMinutes
-		}
-	}
-	snap.QuotaWindows = translatedWindows
-
-	freshness := "fresh"
-	if !info.Quota.Fresh {
-		freshness = "stale"
-	}
-	if info.Quota.Status == "unavailable" || info.Quota.Status == "unauthenticated" {
-		freshness = "unknown"
-	}
-
-	kind := agent.NormalizeSignalSourceKind(info.Quota.Source)
-
-	var ageSeconds int64
-	if !info.Quota.CapturedAt.IsZero() {
-		if age := now.UTC().Sub(info.Quota.CapturedAt.UTC()); age > 0 {
-			ageSeconds = int64(age.Seconds())
-		}
-	}
-
-	meta := agent.SignalSourceMetadata{
-		Provider:   info.Name,
-		Kind:       kind,
-		ObservedAt: info.Quota.CapturedAt.UTC(),
-		Freshness:  freshness,
-		AgeSeconds: ageSeconds,
-	}
-	snap.Source = meta
-	snap.CurrentQuota = agent.QuotaSignal{
-		Source:        meta,
-		State:         state,
-		UsedPercent:   usedPercent,
-		WindowMinutes: windowMinutes,
-		ResetsAt:      resetsAt,
-	}
-
-	for _, u := range info.UsageWindows {
-		snap.HistoricalUsage.InputTokens += u.InputTokens
-		snap.HistoricalUsage.OutputTokens += u.OutputTokens
-		snap.HistoricalUsage.TotalTokens += u.TotalTokens
-	}
-	snap.HistoricalUsage.Source = meta
-
-	return snap
-}
-
 func buildProviderSummary(
 	info agentlib.HarnessInfo,
-	signal agent.RoutingSignalSnapshot,
 	report *agentlib.RouteStatusReport,
 	now time.Time,
 ) ProviderSummary {
 	perf := providerPerformanceFromRouteStatus(report, info.Name)
-	sources := collectProviderSignalSources(signal)
+	sources := collectHarnessSignalSources(info)
 
 	var freshnessTS string
-	if ts := providerFreshnessTS(signal); !ts.IsZero() {
+	if ts := providerFreshnessTS(info); !ts.IsZero() {
 		freshnessTS = ts.UTC().Format(time.RFC3339)
 	}
 
@@ -330,47 +210,46 @@ func buildProviderSummary(
 		Harness:            info.Name,
 		DisplayName:        harnessDisplayName(info.Name),
 		Status:             providerStatusStrInfo(info),
-		AuthState:          providerAuthStateStr(signal),
-		QuotaHeadroom:      providerQuotaHeadroomStr(signal),
+		AuthState:          harnessAuthStateStr(info),
+		QuotaHeadroom:      harnessQuotaHeadroomStr(info),
 		SignalSources:      sources,
 		FreshnessTS:        freshnessTS,
 		LastCheckedTS:      now.UTC().Format(time.RFC3339),
 		RecentSuccessRate:  perf.SuccessRate,
 		RecentLatencyP50MS: perf.P50LatencyMS,
-		CostClass:          harnessCosCostClassStr(info),
+		CostClass:          info.CostClass,
 	}
 }
 
 func buildProviderDetail(
 	info agentlib.HarnessInfo,
-	signal agent.RoutingSignalSnapshot,
 	report *agentlib.RouteStatusReport,
 	now time.Time,
 ) ProviderDetail {
 	perf := providerPerformanceFromRouteStatus(report, info.Name)
-	sources := collectProviderSignalSources(signal)
+	sources := collectHarnessSignalSources(info)
 
 	var freshnessTS string
-	if ts := providerFreshnessTS(signal); !ts.IsZero() {
+	if ts := providerFreshnessTS(info); !ts.IsZero() {
 		freshnessTS = ts.UTC().Format(time.RFC3339)
 	}
 
-	models := buildModelQuotaList(info, signal)
-	historicalUsage := computeProviderHistoricalUsage(info, signal)
-	burnEstimate := computeProviderBurnEstimate(info, historicalUsage, signal)
+	models := buildModelQuotaList(info)
+	historicalUsage := computeProviderHistoricalUsage(info)
+	burnEstimate := computeProviderBurnEstimate(info, historicalUsage)
 
 	statusStr := providerStatusStrInfo(info)
 	return ProviderDetail{
 		Harness:         info.Name,
 		DisplayName:     harnessDisplayName(info.Name),
 		Status:          statusStr,
-		AuthState:       providerAuthStateStr(signal),
+		AuthState:       harnessAuthStateStr(info),
 		Models:          models,
 		HistoricalUsage: historicalUsage,
 		BurnEstimate:    burnEstimate,
 		RoutingSignals: ProviderRoutingSignals{
 			Availability: statusStr,
-			RequestFit:   providerRequestFitStrInfo(info),
+			RequestFit:   harnessRequestFitStr(info),
 			CostEstimate: "unknown",
 			Performance:  perf,
 		},
@@ -379,45 +258,28 @@ func buildProviderDetail(
 	}
 }
 
-func buildModelQuotaList(info agentlib.HarnessInfo, signal agent.RoutingSignalSnapshot) []ProviderModelQuota {
-	models := harnessDefaultModels(info.Name)
-	if len(models) == 0 {
+func buildModelQuotaList(info agentlib.HarnessInfo) []ProviderModelQuota {
+	if info.DefaultModel == "" {
 		return []ProviderModelQuota{}
 	}
 
-	quotaState := providerQuotaHeadroomStr(signal)
-	sourceEnum := signalSourceAPIEnum(signal.Source.Kind)
-	var sourceNote string
-	if quotaState == "unknown" && info.Name == "claude" {
-		sourceNote = "no stable non-PTY quota source confirmed"
+	source := ""
+	if info.Quota != nil {
+		source = strings.TrimSpace(info.Quota.Source)
 	}
 
-	result := make([]ProviderModelQuota, 0, len(models))
-	for _, m := range models {
-		result = append(result, ProviderModelQuota{
-			Model:         m,
-			QuotaHeadroom: quotaState,
-			Source:        sourceEnum,
-			SourceNote:    sourceNote,
-		})
-	}
-	return result
+	return []ProviderModelQuota{{
+		Model:         info.DefaultModel,
+		QuotaHeadroom: harnessQuotaHeadroomStr(info),
+		Source:        source,
+	}}
 }
 
-func computeProviderHistoricalUsage(
-	info agentlib.HarnessInfo,
-	signal agent.RoutingSignalSnapshot,
-) *ProviderHistoricalUsage {
+func computeProviderHistoricalUsage(info agentlib.HarnessInfo) *ProviderHistoricalUsage {
 	window7d := usageWindowFromLiveWindows(info, "7d")
 	window30d := usageWindowFromLiveWindows(info, "30d")
-	if window7d == nil && window30d == nil && signal.HistoricalUsage.TotalTokens == 0 && signal.HistoricalUsage.InputTokens == 0 && signal.HistoricalUsage.OutputTokens == 0 {
+	if window7d == nil && window30d == nil {
 		return nil
-	}
-	if window7d == nil {
-		window7d = usageWindowFromSignal(info, signal)
-	}
-	if window30d == nil {
-		window30d = usageWindowFromSignal(info, signal)
 	}
 	return &ProviderHistoricalUsage{
 		Window7D:  window7d,
@@ -449,30 +311,30 @@ func usageWindowFromLiveWindows(info agentlib.HarnessInfo, windowName string) *P
 	return nil
 }
 
-func usageWindowFromSignal(info agentlib.HarnessInfo, signal agent.RoutingSignalSnapshot) *ProviderUsageWindow {
-	if signal.HistoricalUsage.TotalTokens == 0 && signal.HistoricalUsage.InputTokens == 0 && signal.HistoricalUsage.OutputTokens == 0 {
-		return nil
-	}
-	w := &ProviderUsageWindow{
-		InputTokens:  signal.HistoricalUsage.InputTokens,
-		OutputTokens: signal.HistoricalUsage.OutputTokens,
-		TotalTokens:  signal.HistoricalUsage.TotalTokens,
-	}
-	if info.IsSubscription || info.IsLocal {
-		w.CostUSD = 0
-		if info.IsSubscription {
-			w.CostNote = "subscription plan; per-token cost not billed"
+func latestHarnessUsageSource(info agentlib.HarnessInfo) string {
+	var latest time.Time
+	var source string
+	for _, window := range info.UsageWindows {
+		if strings.TrimSpace(window.Source) == "" {
+			continue
 		}
-	} else {
-		w.CostUSD = -1
+		if window.CapturedAt.IsZero() {
+			if source == "" {
+				source = strings.TrimSpace(window.Source)
+			}
+			continue
+		}
+		if source == "" || window.CapturedAt.After(latest) {
+			latest = window.CapturedAt.UTC()
+			source = strings.TrimSpace(window.Source)
+		}
 	}
-	return w
+	return source
 }
 
 func computeProviderBurnEstimate(
 	info agentlib.HarnessInfo,
 	usage *ProviderHistoricalUsage,
-	signal agent.RoutingSignalSnapshot,
 ) *ProviderBurnEstimate {
 	if !info.IsSubscription {
 		return nil
@@ -499,13 +361,13 @@ func computeProviderBurnEstimate(
 	case dailyTokenRate >= 1000:
 		confidence = "medium"
 	}
-	sourceStr := signalSourceAPIEnum(signal.Source.Kind)
+	sourceStr := latestHarnessUsageSource(info)
 	if sourceStr == "" {
 		sourceStr = "none"
 	}
 	freshnessTS := ""
-	if !signal.Source.ObservedAt.IsZero() {
-		freshnessTS = signal.Source.ObservedAt.UTC().Format(time.RFC3339)
+	if ts := providerFreshnessTS(info); !ts.IsZero() {
+		freshnessTS = ts.UTC().Format(time.RFC3339)
 	}
 
 	return &ProviderBurnEstimate{
@@ -540,22 +402,6 @@ func findHarnessInfo(infos []agentlib.HarnessInfo, name string) (agentlib.Harnes
 		}
 	}
 	return agentlib.HarnessInfo{}, false
-}
-
-// harnessDefaultModels returns the well-known default model(s) for a harness.
-// Mirrors the historical in-package default model fields used by
-// the provider detail endpoint. Empty slice means "no default model published".
-func harnessDefaultModels(name string) []string {
-	switch name {
-	case "codex":
-		return []string{"gpt-5.4"}
-	case "claude":
-		return []string{"claude-sonnet-4-6"}
-	case "virtual":
-		return []string{"recorded"}
-	default:
-		return nil
-	}
 }
 
 // liveRouteStatusReport loads the current live route-status report from the
@@ -655,19 +501,58 @@ func providerPerformanceFromRouteStatus(report *agentlib.RouteStatusReport, prov
 	return perf
 }
 
-// collectProviderSignalSources builds the signal_sources array from the live
-// snapshot. Non-live DDx cache labels are normalized away before this point.
-func collectProviderSignalSources(signal agent.RoutingSignalSnapshot) []string {
-	if enum := signalSourceAPIEnum(signal.Source.Kind); enum != "none" {
-		return []string{enum}
+// collectHarnessSignalSources builds the signal_sources array from the direct
+// HarnessInfo fields.
+func collectHarnessSignalSources(info agentlib.HarnessInfo) []string {
+	seen := make(map[string]struct{})
+	add := func(value string) {
+		if value = strings.TrimSpace(value); value != "" {
+			seen[value] = struct{}{}
+		}
 	}
-	return []string{"none"}
+	if info.Account != nil {
+		add(info.Account.Source)
+	}
+	if info.Quota != nil {
+		add(info.Quota.Source)
+	}
+	for _, window := range info.UsageWindows {
+		add(window.Source)
+	}
+	if len(seen) == 0 {
+		return []string{"none"}
+	}
+	sources := make([]string, 0, len(seen))
+	for source := range seen {
+		sources = append(sources, source)
+	}
+	sort.Strings(sources)
+	return sources
 }
 
-// providerFreshnessTS returns the contributing signal timestamp.
-// Returns zero time when no signals exist (caller omits the field per FEAT-014).
-func providerFreshnessTS(signal agent.RoutingSignalSnapshot) time.Time {
-	return signal.Source.ObservedAt
+// providerFreshnessTS returns the latest direct capture timestamp available on
+// the HarnessInfo.
+func providerFreshnessTS(info agentlib.HarnessInfo) time.Time {
+	var latest time.Time
+	update := func(ts time.Time) {
+		if ts.IsZero() {
+			return
+		}
+		ts = ts.UTC()
+		if ts.After(latest) {
+			latest = ts
+		}
+	}
+	if info.Account != nil {
+		update(info.Account.CapturedAt)
+	}
+	if info.Quota != nil {
+		update(info.Quota.CapturedAt)
+	}
+	for _, window := range info.UsageWindows {
+		update(window.CapturedAt)
+	}
+	return latest
 }
 
 // providerStatusStrInfo maps a HarnessInfo to the API status string.
@@ -681,55 +566,40 @@ func providerStatusStrInfo(info agentlib.HarnessInfo) string {
 	return "unavailable"
 }
 
-// providerRequestFitStrInfo returns request_fit from harness availability.
-func providerRequestFitStrInfo(info agentlib.HarnessInfo) string {
-	if info.Available {
+// harnessAuthStateStr maps the direct HarnessInfo account fields to the API auth state string.
+func harnessAuthStateStr(info agentlib.HarnessInfo) string {
+	if info.Account != nil {
+		if info.Account.Authenticated {
+			return "authenticated"
+		}
+		if info.Account.Unauthenticated {
+			return "unauthenticated"
+		}
+	}
+	return "unknown"
+}
+
+// harnessRequestFitStr returns request_fit from the direct auto-routing flag.
+func harnessRequestFitStr(info agentlib.HarnessInfo) string {
+	if info.AutoRoutingEligible {
 		return "capable"
 	}
 	return "unknown"
 }
 
-// providerAuthStateStr infers auth state from signal source and quota data.
-// Per FEAT-014: probe fails or is not implemented → "unknown".
-func providerAuthStateStr(signal agent.RoutingSignalSnapshot) string {
-	// A non-trivial quota state means the harness responded with real data → authenticated.
-	state := signal.CurrentQuota.State
-	if state == "ok" || state == "blocked" {
-		return "authenticated"
+// harnessQuotaHeadroomStr maps the direct HarnessInfo quota state to the API enum.
+func harnessQuotaHeadroomStr(info agentlib.HarnessInfo) string {
+	if info.Quota == nil {
+		return "unknown"
 	}
-	// A live signal from a native source (not docs-only/unknown) → authenticated.
-	kind := signal.Source.Kind
-	if kind != "" && kind != "docs-only" && kind != "unknown" && signal.Source.Freshness != "unknown" {
-		return "authenticated"
-	}
-	return "unknown"
-}
-
-// providerQuotaHeadroomStr maps CurrentQuota.State to the API enum.
-// Returns "unknown" when no trustworthy live source exists per FEAT-014.
-func providerQuotaHeadroomStr(signal agent.RoutingSignalSnapshot) string {
-	switch signal.CurrentQuota.State {
-	case "ok":
+	switch strings.ToLower(strings.TrimSpace(info.Quota.Status)) {
+	case "ok", "stale":
 		return "ok"
 	case "blocked":
 		return "blocked"
 	default:
 		return "unknown"
 	}
-}
-
-// harnessCosCostClassStr maps a HarnessInfo to the API cost_class string.
-func harnessCosCostClassStr(info agentlib.HarnessInfo) string {
-	if info.IsSubscription {
-		return "subscription"
-	}
-	if info.IsLocal {
-		return "local"
-	}
-	if info.CostClass != "" {
-		return info.CostClass
-	}
-	return "unknown"
 }
 
 // harnessDisplayName returns a human-readable display name for a harness.
@@ -756,13 +626,4 @@ func harnessDisplayName(name string) string {
 	default:
 		return name
 	}
-}
-
-// signalSourceAPIEnum maps an internal source kind to the FEAT-014 API enum value.
-// Non-live DDx-local cache labels are normalized away by the shared agent helper.
-func signalSourceAPIEnum(kind string) string {
-	if normalized := agent.NormalizeSignalSourceKind(kind); normalized != "" {
-		return normalized
-	}
-	return "none"
 }

@@ -215,14 +215,14 @@ func TestProviderUnknownStateContract(t *testing.T) {
 			t.Logf("%s: auth_state=unauthenticated (unexpected in test env)", harnessName)
 		}
 
-		// Verify signal_sources contains valid values only.
-		validSources := map[string]bool{
-			"native-session-jsonl": true,
-			"none":                 true,
+		// signal_sources now comes directly from upstream DTO fields, so the
+		// contract is simply that it is populated and non-empty.
+		if len(detail.SignalSources) == 0 {
+			t.Errorf("%s: signal_sources must not be empty", harnessName)
 		}
 		for _, src := range detail.SignalSources {
-			if !validSources[src] {
-				t.Errorf("%s: invalid signal_source value %q", harnessName, src)
+			if strings.TrimSpace(src) == "" {
+				t.Errorf("%s: signal_source must not be blank", harnessName)
 			}
 		}
 
@@ -236,75 +236,108 @@ func TestProviderUnknownStateContract(t *testing.T) {
 	}
 }
 
-func TestProviderQuotaStatusTranslationFromHarnessInfo(t *testing.T) {
+func TestProviderFieldsComeFromHarnessInfoDirectly(t *testing.T) {
 	now := time.Date(2026, 4, 21, 1, 0, 0, 0, time.UTC)
-
-	cases := []struct {
-		name          string
-		status        string
-		fresh         bool
-		wantHeadroom  string
-		wantAuthState string
-		wantFreshness string
-	}{
-		{
-			name:          "ok fresh",
-			status:        "ok",
-			fresh:         true,
-			wantHeadroom:  "ok",
-			wantAuthState: "authenticated",
-			wantFreshness: "fresh",
+	info := agentlib.HarnessInfo{
+		Name:                "codex",
+		Available:           true,
+		AutoRoutingEligible: true,
+		DefaultModel:        "gpt-5.4-custom",
+		CostClass:           "expensive",
+		IsSubscription:      true,
+		Account: &agentlib.AccountStatus{
+			Authenticated: true,
+			Source:        "account-source",
+			CapturedAt:    now.Add(-5 * time.Minute),
 		},
-		{
-			name:          "stale but usable",
-			status:        "stale",
-			fresh:         false,
-			wantHeadroom:  "ok",
-			wantAuthState: "authenticated",
-			wantFreshness: "stale",
+		Quota: &agentlib.QuotaState{
+			Status:     "stale",
+			Fresh:      false,
+			Source:     "quota-source",
+			CapturedAt: now.Add(-3 * time.Minute),
 		},
-		{
-			name:          "unavailable",
-			status:        "unavailable",
-			fresh:         false,
-			wantHeadroom:  "unknown",
-			wantAuthState: "unknown",
-			wantFreshness: "unknown",
+		UsageWindows: []agentlib.UsageWindow{
+			{
+				Name:         "7d",
+				Source:       "usage-7d",
+				CapturedAt:   now.Add(-2 * time.Minute),
+				InputTokens:  12,
+				OutputTokens: 8,
+				TotalTokens:  20,
+				CostUSD:      0.75,
+			},
+			{
+				Name:         "30d",
+				Source:       "usage-30d",
+				CapturedAt:   now.Add(-1 * time.Minute),
+				InputTokens:  42,
+				OutputTokens: 18,
+				TotalTokens:  60,
+				CostUSD:      1.25,
+			},
 		},
 	}
 
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			info := agentlib.HarnessInfo{
-				Name:      "claude",
-				Available: true,
-				Quota: &agentlib.QuotaState{
-					Status:     tc.status,
-					Fresh:      tc.fresh,
-					Source:     "stats-cache",
-					CapturedAt: now.Add(-1 * time.Minute),
-				},
-			}
-			signal := signalFromHarnessInfo(info, now)
-			summary := buildProviderSummary(info, signal, nil, now)
-			detail := buildProviderDetail(info, signal, nil, now)
+	summary := buildProviderSummary(info, nil, now)
+	detail := buildProviderDetail(info, nil, now)
 
-			if summary.QuotaHeadroom != tc.wantHeadroom {
-				t.Fatalf("summary quota_headroom = %q, want %q", summary.QuotaHeadroom, tc.wantHeadroom)
-			}
-			if detail.AuthState != tc.wantAuthState {
-				t.Fatalf("detail auth_state = %q, want %q", detail.AuthState, tc.wantAuthState)
-			}
-			if signal.Source.Freshness != tc.wantFreshness {
-				t.Fatalf("signal freshness = %q, want %q", signal.Source.Freshness, tc.wantFreshness)
-			}
-			if signal.Source.Kind != "" {
-				t.Fatalf("signal kind = %q, want empty after normalization", signal.Source.Kind)
-			}
-			if detail.SignalSources[0] != "none" {
-				t.Fatalf("detail signal source = %q, want none", detail.SignalSources[0])
-			}
-		})
+	if summary.AuthState != "authenticated" {
+		t.Fatalf("summary auth_state = %q, want authenticated", summary.AuthState)
+	}
+	if summary.QuotaHeadroom != "ok" {
+		t.Fatalf("summary quota_headroom = %q, want ok", summary.QuotaHeadroom)
+	}
+	if summary.CostClass != "expensive" {
+		t.Fatalf("summary cost_class = %q, want expensive", summary.CostClass)
+	}
+	if summary.FreshnessTS != "2026-04-21T00:59:00Z" {
+		t.Fatalf("summary freshness_ts = %q, want latest captured timestamp", summary.FreshnessTS)
+	}
+
+	wantSources := map[string]bool{
+		"account-source": true,
+		"quota-source":   true,
+		"usage-7d":       true,
+		"usage-30d":      true,
+	}
+	if len(summary.SignalSources) != len(wantSources) {
+		t.Fatalf("summary signal_sources = %v, want %d entries", summary.SignalSources, len(wantSources))
+	}
+	for _, source := range summary.SignalSources {
+		if !wantSources[source] {
+			t.Fatalf("unexpected signal source %q in %v", source, summary.SignalSources)
+		}
+	}
+
+	if detail.AuthState != "authenticated" {
+		t.Fatalf("detail auth_state = %q, want authenticated", detail.AuthState)
+	}
+	if detail.RoutingSignals.RequestFit != "capable" {
+		t.Fatalf("detail request_fit = %q, want capable", detail.RoutingSignals.RequestFit)
+	}
+	if len(detail.Models) != 1 {
+		t.Fatalf("detail models = %v, want one direct default-model entry", detail.Models)
+	}
+	if detail.Models[0].Model != "gpt-5.4-custom" {
+		t.Fatalf("detail model = %q, want direct default model", detail.Models[0].Model)
+	}
+	if detail.Models[0].QuotaHeadroom != "ok" {
+		t.Fatalf("detail model quota_headroom = %q, want ok", detail.Models[0].QuotaHeadroom)
+	}
+	if detail.HistoricalUsage == nil || detail.HistoricalUsage.Window7D == nil || detail.HistoricalUsage.Window30D == nil {
+		t.Fatalf("detail historical_usage = %+v, want both direct usage windows", detail.HistoricalUsage)
+	}
+	if got := detail.HistoricalUsage.Window7D.TotalTokens; got != 20 {
+		t.Fatalf("detail window7d total_tokens = %d, want 20", got)
+	}
+	if got := detail.HistoricalUsage.Window30D.TotalTokens; got != 60 {
+		t.Fatalf("detail window30d total_tokens = %d, want 60", got)
+	}
+	if detail.BurnEstimate == nil {
+		t.Fatal("detail burn_estimate must be populated for subscription harnesses with 7d usage")
+	}
+	if detail.BurnEstimate.Source != "usage-7d" && detail.BurnEstimate.Source != "usage-30d" {
+		t.Fatalf("detail burn_estimate source = %q, want direct usage source", detail.BurnEstimate.Source)
 	}
 }
 
@@ -382,31 +415,6 @@ func TestProviderPerformanceTooFewSamples(t *testing.T) {
 	}
 	if perf.P50LatencyMS != -1 {
 		t.Errorf("p50 should be -1 for <3 samples, got %v", perf.P50LatencyMS)
-	}
-}
-
-// TestSignalSourceAPIEnum verifies the mapping from internal source kinds to API enum.
-func TestSignalSourceAPIEnum(t *testing.T) {
-	cases := []struct {
-		kind string
-		want string
-	}{
-		{"native-session-jsonl", "native-session-jsonl"},
-		{"stats-cache", "none"},
-		{"quota-snapshot", "none"},
-		{"http-balance", "none"},
-		{"http-models", "none"},
-		{"recent-session-log", "none"},
-		{"docs-only", "none"},
-		{"unknown", "none"},
-		{"", "none"},
-		{"some-future-kind", "none"},
-	}
-	for _, tc := range cases {
-		got := signalSourceAPIEnum(tc.kind)
-		if got != tc.want {
-			t.Errorf("signalSourceAPIEnum(%q) = %q, want %q", tc.kind, got, tc.want)
-		}
 	}
 }
 

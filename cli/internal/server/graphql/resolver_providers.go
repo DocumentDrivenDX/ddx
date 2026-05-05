@@ -78,7 +78,7 @@ func (r *queryResolver) ProviderStatuses(ctx context.Context) ([]*ProviderStatus
 // HarnessStatuses is the resolver for the harnessStatuses field.
 // It returns one row per subprocess harness (kind=HARNESS). Reachability is
 // taken from HarnessInfo.Available, rolling usage from the sessions index,
-// and quota from the harness-reported rate-limit data when available.
+// and quota/auth/model data directly from the upstream HarnessInfo DTO.
 func (r *queryResolver) HarnessStatuses(ctx context.Context) ([]*ProviderStatus, error) {
 	svc, err := agentlib.New(agentlib.ServiceOptions{})
 	if err != nil {
@@ -91,32 +91,7 @@ func (r *queryResolver) HarnessStatuses(ctx context.Context) ([]*ProviderStatus,
 
 	now := time.Now().UTC()
 	entries := r.sessionIndexEntries(ctx)
-	lastChecked := now.Format(time.RFC3339)
-
-	results := make([]*ProviderStatus, 0, len(infos))
-	for _, info := range infos {
-		ps := &ProviderStatus{
-			Name:              info.Name,
-			Kind:              ProviderKindHarness,
-			ProviderType:      harnessTypeLabel(info),
-			BaseURL:           "(subprocess)",
-			Model:             info.DefaultModel,
-			Status:            harnessStatusLine(info),
-			Reachable:         info.Available,
-			Detail:            harnessDetail(info),
-			ModelCount:        harnessModelCount(info),
-			IsDefault:         false,
-			LastCheckedAt:     strPtr(lastChecked),
-			DefaultForProfile: []string{},
-		}
-		ps.Usage = buildUsage(entries, info.Name, agent.MatchHarness, now)
-		ps.RecentWorkerCount = recentWorkerCount(entries, info.Name, agent.MatchHarness, now)
-		ps.Quota = quotaFromHarnessInfo(info)
-		ps.Sparkline = buildSparkline(entries, info.Name, agent.MatchHarness, now)
-		results = append(results, ps)
-	}
-
-	return results, nil
+	return harnessStatusesFromInfos(infos, entries, now), nil
 }
 
 // DefaultRouteStatus is the resolver for the defaultRouteStatus field.
@@ -386,6 +361,33 @@ func providerStatusesFromInfos(providers []agentlib.ProviderInfo, entries []agen
 		ps.RecentWorkerCount = recentWorkerCount(entries, p.Name, agent.MatchProvider, now)
 		ps.Quota = quotaFromProviderInfo(p)
 		ps.Sparkline = buildSparkline(entries, p.Name, agent.MatchProvider, now)
+		results = append(results, ps)
+	}
+	return results
+}
+
+func harnessStatusesFromInfos(infos []agentlib.HarnessInfo, entries []agent.SessionIndexEntry, now time.Time) []*ProviderStatus {
+	lastChecked := now.UTC().Format(time.RFC3339)
+	results := make([]*ProviderStatus, 0, len(infos))
+	for _, info := range infos {
+		ps := &ProviderStatus{
+			Name:              info.Name,
+			Kind:              ProviderKindHarness,
+			ProviderType:      harnessTypeLabel(info),
+			BaseURL:           "(subprocess)",
+			Model:             info.DefaultModel,
+			Status:            harnessStatusLine(info),
+			Reachable:         info.Available,
+			Detail:            harnessDetail(info),
+			ModelCount:        harnessModelCount(info),
+			IsDefault:         false,
+			LastCheckedAt:     strPtr(lastChecked),
+			DefaultForProfile: []string{},
+		}
+		ps.Usage = buildUsage(entries, info.Name, agent.MatchHarness, now)
+		ps.RecentWorkerCount = recentWorkerCount(entries, info.Name, agent.MatchHarness, now)
+		ps.Quota = quotaFromState(info.Quota)
+		ps.Sparkline = buildSparkline(entries, info.Name, agent.MatchHarness, now)
 		results = append(results, ps)
 	}
 	return results

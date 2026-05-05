@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
 // writeMinimalConfig creates the minimum .ddx/config.yaml a queryResolver needs
@@ -314,54 +315,73 @@ func TestBuildUsageReturnsNilWhenNoEntries(t *testing.T) {
 	}
 }
 
-// TestHarnessQuotaFromCapturedRateLimitSignal asserts the bridge from captured
-// rate-limit headers (via RecordHarnessRateLimit) into the HarnessStatuses row.
-// Covers AC 2: "For subprocess harnesses that expose rate-limit headers
-// (claude, codex), parsed headers populate quota.{ceilingTokens, ...}."
-func TestHarnessQuotaFromCapturedRateLimitSignal(t *testing.T) {
-	t.Cleanup(resetHarnessRateLimitCache)
-	resetHarnessRateLimitCache()
+// TestHarnessStatusesFromInfosUsesDirectDTOFields verifies the harness row is
+// now populated directly from HarnessInfo instead of the rate-limit cache.
+func TestHarnessStatusesFromInfosUsesDirectDTOFields(t *testing.T) {
+	now := time.Date(2026, 4, 24, 5, 0, 0, 0, time.UTC)
+	infos := []agentlib.HarnessInfo{{
+		Name:                "claude",
+		Type:                "subprocess",
+		Available:           true,
+		AutoRoutingEligible: true,
+		DefaultModel:        "claude-sonnet-4-6",
+		CostClass:           "subscription",
+		Account: &agentlib.AccountStatus{
+			Authenticated: true,
+			Source:        "account-source",
+			CapturedAt:    now.Add(-5 * time.Minute),
+		},
+		Quota: &agentlib.QuotaState{
+			Status:     "stale",
+			Fresh:      false,
+			Source:     "quota-source",
+			CapturedAt: now.Add(-4 * time.Minute),
+		},
+		UsageWindows: []agentlib.UsageWindow{
+			{
+				Name:         "7d",
+				Source:       "usage-7d",
+				CapturedAt:   now.Add(-3 * time.Minute),
+				InputTokens:  11,
+				OutputTokens: 7,
+				TotalTokens:  18,
+			},
+			{
+				Name:         "30d",
+				Source:       "usage-30d",
+				CapturedAt:   now.Add(-2 * time.Minute),
+				InputTokens:  31,
+				OutputTokens: 19,
+				TotalTokens:  50,
+			},
+		},
+	}}
 
-	resetAt, _ := time.Parse(time.RFC3339, "2026-04-24T05:00:00Z")
-	sig := agent.RateLimitSignal{
-		CeilingTokens:        80000,
-		CeilingWindowSeconds: 60,
-		Remaining:            60000,
-		ResetAt:              resetAt,
+	rows := harnessStatusesFromInfos(infos, nil, now)
+	if len(rows) != 1 {
+		t.Fatalf("expected one harness row, got %d", len(rows))
 	}
-	if !sig.HasAny() {
-		t.Fatal("expected signal to have fields")
+	row := rows[0]
+	if row.Model != "claude-sonnet-4-6" {
+		t.Fatalf("model = %q, want direct default model", row.Model)
 	}
-	RecordHarnessRateLimit("claude", sig)
-
-	workDir := t.TempDir()
-	writeMinimalConfig(t, workDir)
-	r := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
-	statuses, err := r.HarnessStatuses(context.Background())
-	if err != nil {
-		t.Fatalf("HarnessStatuses: %v", err)
+	if row.Quota != nil {
+		t.Fatalf("quota should stay nil without direct HarnessInfo quota windows, got %+v", row.Quota)
 	}
-	var claude *ProviderStatus
-	for _, s := range statuses {
-		if s.Name == "claude" {
-			claude = s
-			break
-		}
+	if row.Status != "available" || !row.Reachable {
+		t.Fatalf("status/reachable = %q/%v, want available/true", row.Status, row.Reachable)
 	}
-	if claude == nil {
-		t.Fatalf("claude harness not in statuses")
+	if row.Detail == "" {
+		t.Fatal("detail must be populated from HarnessInfo")
 	}
-	if claude.Quota == nil {
-		t.Fatalf("expected quota populated from captured signal")
+	if row.LastCheckedAt == nil || *row.LastCheckedAt != "2026-04-24T05:00:00Z" {
+		t.Fatalf("lastCheckedAt = %v, want direct timestamp", row.LastCheckedAt)
 	}
-	if claude.Quota.CeilingTokens == nil || *claude.Quota.CeilingTokens != 80000 {
-		t.Errorf("ceilingTokens: %+v", claude.Quota.CeilingTokens)
+	if row.RecentWorkerCount != 0 {
+		t.Fatalf("recentWorkerCount = %d, want 0 with no sessions", row.RecentWorkerCount)
 	}
-	if claude.Quota.Remaining == nil || *claude.Quota.Remaining != 60000 {
-		t.Errorf("remaining: %+v", claude.Quota.Remaining)
-	}
-	if claude.Quota.CeilingWindowSeconds == nil || *claude.Quota.CeilingWindowSeconds != 60 {
-		t.Errorf("window seconds: %+v", claude.Quota.CeilingWindowSeconds)
+	if row.Usage != nil {
+		t.Fatalf("usage should be nil without matching session rows, got %+v", row.Usage)
 	}
 }
 
