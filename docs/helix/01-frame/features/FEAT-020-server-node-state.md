@@ -4,7 +4,6 @@ ddx:
   depends_on:
     - helix.prd
     - FEAT-002
-    - SD-019
 ---
 # Feature: Server Node State and Project Registry
 

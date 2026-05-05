@@ -7,7 +7,6 @@ ddx:
     - FEAT-010
     - FEAT-007
     - FEAT-012
-    - FEAT-020
 ---
 # Feature: DDx Server
 

@@ -580,7 +580,8 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
   checks", then that definition is dispatched as project checks and displayed
   separately from bead re-run history
 - Given I want to run an agent review, when I click "Agent review", then
-  an agent session is dispatched with the bead's context as the prompt
+  an agent session is dispatched in no-tool reviewer mode with the bead's
+  context assembled per FEAT-022 / TD-033
 
 **E2E Test:** `beads.spec.ts` — full workflow: open bead detail → click Re-run → verify worker appears in Workers view → verify pending try record in run list → wait for completion → verify try + child run records appear → click try record → verify layer-aware detail
 

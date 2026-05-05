@@ -5,7 +5,6 @@ ddx:
     - helix.prd
     - FEAT-006
     - FEAT-002
-    - FEAT-008
 ---
 # Feature: Agent Usage Awareness and Routing Signals
 

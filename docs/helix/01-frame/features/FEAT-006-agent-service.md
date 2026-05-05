@@ -49,6 +49,11 @@ DDx owns:
   result landing (merge / preserve / no-changes), gate evaluation, evidence
   bundle capture. The agent provides the LLM execution; DDx provides the
   git-aware orchestration.
+- **Structured prompt handoff.** Review, grading, and other prompt-bearing
+  invocations use the bounded assembly invariants from FEAT-022 and the
+  caller-facing envelope described in TD-033. Review-mode sessions are
+  launched in no-tool reviewer mode so the agent reasons over the supplied
+  evidence instead of discovering new context at runtime.
 - **Evidence and session capture.** DDx writes `.ddx/executions/<id>/`
   bundles with prompts, manifests, and result artifacts. The agent's session
   log path (returned in `ExecuteResponse.SessionLogPath`) is captured into
@@ -110,6 +115,8 @@ artifact or operation being performed:
 - timeout and effort/reasoning intent
 - metadata such as `produces_artifact`, artifact id, execution definition id,
   and governing document ids
+- review-mode prompt envelopes that are explicitly no-tool and assembled per
+  TD-033 / FEAT-022
 
 These are DDx-owned work facts, not routing decisions. DDx must not translate an
 artifact key, media type, generator name, or execution definition into a concrete

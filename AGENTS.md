@@ -108,6 +108,14 @@ is to keep the commits intact and use `--ff-only` or a `--no-ff` merge.
 - Run `ddx skills check [path ...]` for reusable validation across repo skills and plugin skills.
 - Run `make skill-schema` after editing any file under `skills/*/SKILL.md` or `cli/internal/skills/*/SKILL.md`.
 
+## Reviewer Mode
+
+- When a task explicitly calls for no-tool reviewer mode, keep the pass
+  read-only and evidence-based.
+- Prefer the supplied artifacts and repo files over exploratory tool use.
+- If you need a factual citation, point to the smallest relevant file:line
+  span and avoid broad re-reading of unrelated context.
+
 <!-- DDX-AGENTS:START -->
 <!-- Managed by ddx init / ddx update. Edit outside these markers. -->
 

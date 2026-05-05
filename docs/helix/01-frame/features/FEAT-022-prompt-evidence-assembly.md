@@ -254,6 +254,12 @@ byte accounting on every review and grading attempt.
     this data are inherited from FEAT-006 and FEAT-014; FEAT-022 adds
     fields, not new commands.
 
+18. **Structured assembly topology.** The multi-turn structured-evidence
+    assembly architecture is specified in TD-033. FEAT-022 owns the
+    bounded prompt invariants, section ordering, and failure semantics;
+    TD-033 owns the caller-facing assembly envelope and no-tool
+    reviewer-mode convention.
+
 ### Non-Functional
 
 - **Lint (structural sink coverage).** A vet/lint rule, scoped
@@ -441,6 +447,9 @@ execute-loop review path
   session capture are owned here. FEAT-022 adds requirements on how
   the evidence these paths carry is assembled without re-owning the
   paths themselves.
+- **TD-033** (Multi-Turn Structured Evidence Assembly) — documents the
+  caller-facing assembly envelope and the no-tool reviewer-mode
+  convention used by FEAT-006 and FEAT-008.
 - **FEAT-014** (Token Awareness) — owns the `result.json` runtime
   metrics schema (§19/§20 of FEAT-014). FEAT-022 §15 is additive to
   that schema; FEAT-022 does not redefine the runtime metrics fields
