@@ -60,7 +60,8 @@ management, run lifecycle, or dispatch mechanics.
 
 When an evaluation record links into a preserved `try` or `run`, the shared
 project-scoped run-detail surface from FEAT-008/FEAT-010 is the canonical
-drill-down view. FEAT-019 does not own a parallel detail page for those links.
+drill-down view, and the canonical access audit semantics stay on that
+surface. FEAT-019 does not own a parallel detail page for those links.
 
 ### Relationship to manual re-queue (FEAT-010 `runRequeue`)
 

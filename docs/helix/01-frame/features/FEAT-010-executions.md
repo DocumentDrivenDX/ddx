@@ -532,8 +532,8 @@ bead and (b) this event entry.
 
 ### Run-detail access audit events
 
-The first time a project-scoped run detail is resolved for a run record
-that is visible through project membership, DDx appends a
+The first time the canonical project-scoped run detail is resolved for a
+run record that is visible through project membership, DDx appends a
 `run_detail_view` event to the originating bead's audit log. This is the
 canonical record that a human inspected the run-detail surface.
 

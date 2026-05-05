@@ -3,9 +3,11 @@ package graphql_test
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
 )
 
@@ -110,11 +112,18 @@ func TestIntegration_Query_Runs(t *testing.T) {
 	workDir, store := setupIntegrationDir(t)
 	base := newTestStateProvider(workDir, store)
 	projID := base.projects[0].ID
+	if err := store.Create(&bead.Bead{ID: "ddx-001", Title: "Run detail audit target", Status: bead.StatusOpen}); err != nil {
+		t.Fatalf("seed audit bead: %v", err)
+	}
 
 	workRun := makeRun("work-001", ddxgraphql.RunLayerWork, "success")
 	tryRun := makeRun("try-001", ddxgraphql.RunLayerTry, "success")
 	runRun := makeRun("run-001", ddxgraphql.RunLayerRun, "success")
 	runFail := makeRunWithHarness("run-002", ddxgraphql.RunLayerRun, "failure", "codex")
+	workRun.ProjectID = &projID
+	tryRun.ProjectID = &projID
+	runRun.ProjectID = &projID
+	runFail.ProjectID = &projID
 
 	provider := &runsTestProvider{
 		testStateProvider: base,
@@ -318,6 +327,38 @@ func TestIntegration_Query_Runs(t *testing.T) {
 	}
 	if len(runDetailOut.Run.EvidenceLinks) != 1 {
 		t.Fatalf("expected 1 evidence link, got %d", len(runDetailOut.Run.EvidenceLinks))
+	}
+
+	events, err := store.Events("ddx-001")
+	if err != nil {
+		t.Fatalf("get audit events: %v", err)
+	}
+	seen := map[string]bool{
+		"run_id=try-001": false,
+		"run_id=run-001": false,
+	}
+	count := 0
+	for _, ev := range events {
+		if ev.Kind != "run_detail_view" {
+			continue
+		}
+		count++
+		for token := range seen {
+			if strings.Contains(ev.Body, token) {
+				seen[token] = true
+			}
+		}
+		if !strings.Contains(ev.Body, "visibility=project_membership") {
+			t.Fatalf("expected visibility marker in audit body, got %q", ev.Body)
+		}
+	}
+	if count != 2 {
+		t.Fatalf("expected 2 run_detail_view events, got %d", count)
+	}
+	for token, ok := range seen {
+		if !ok {
+			t.Fatalf("missing audit event body token %q", token)
+		}
 	}
 
 	// ─── missing id returns nil (not error) ──────────────────────────────

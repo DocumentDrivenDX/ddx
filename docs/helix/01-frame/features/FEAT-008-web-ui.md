@@ -766,7 +766,7 @@ provider logs
 - Given I open the Evidence tab on a `try` or `run` detail, then whitelisted
   bundle files render inline and each file exposes a Download link to
   `/api/runs/:id/bundle?path=...`
-- Given I open a project-scoped run detail, then DDx records a
+- Given I open a canonical project-scoped run detail, then DDx records a
   `run_detail_view` audit event on the originating bead when the run is
   visible through project membership; the event body captures the run id,
   layer, and project id

@@ -2,7 +2,11 @@ package graphql
 
 import (
 	"context"
+	"fmt"
+	"path/filepath"
 	"strings"
+
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
 
 // RunsStateProvider is the optional sub-interface a StateProvider may
@@ -21,6 +25,8 @@ type RunDetailStateProvider interface {
 	GetRunToolCallsGraphQL(id string) []*RunToolCall
 	GetRunBundleFileGraphQL(id, path string) (*RunBundleFileContent, bool)
 }
+
+const runDetailViewEventKind = "run_detail_view"
 
 // RunFilter holds the optional filter args for Query.runs.
 type RunFilter struct {
@@ -60,11 +66,82 @@ func (r *queryResolver) Run(ctx context.Context, id string) (*Run, error) {
 	if !ok {
 		return nil, nil
 	}
+	wd := r.workingDir(ctx)
+	if wd == "" {
+		return nil, nil
+	}
+	projectID, ok := r.projectIDForWorkingDir(wd)
+	if !ok {
+		return nil, nil
+	}
 	run, ok := provider.GetRunGraphQL(id)
 	if !ok {
 		return nil, nil
 	}
+	if run.ProjectID == nil || strings.TrimSpace(*run.ProjectID) != projectID {
+		return nil, nil
+	}
+	r.recordRunDetailView(ctx, run)
 	return run, nil
+}
+
+func (r *queryResolver) projectIDForWorkingDir(workingDir string) (string, bool) {
+	if r.State == nil || workingDir == "" {
+		return "", false
+	}
+	for _, proj := range r.State.GetProjectSnapshots(false) {
+		if proj.Path == workingDir {
+			return proj.ID, true
+		}
+	}
+	return "", false
+}
+
+// recordRunDetailView appends the canonical run_detail_view bead audit event
+// the first time a project-scoped run detail is resolved for a specific run.
+// Duplicate loads of the same run id are ignored, but distinct runs on the
+// same bead remain auditable.
+func (r *queryResolver) recordRunDetailView(ctx context.Context, run *Run) {
+	if run == nil || run.BeadID == nil || strings.TrimSpace(*run.BeadID) == "" {
+		return
+	}
+	if run.ProjectID == nil || strings.TrimSpace(*run.ProjectID) == "" {
+		return
+	}
+	wd := r.workingDir(ctx)
+	if wd == "" {
+		return
+	}
+	if projectID, ok := r.projectIDForWorkingDir(wd); !ok || projectID != strings.TrimSpace(*run.ProjectID) {
+		return
+	}
+
+	store := bead.NewStore(filepath.Join(wd, ".ddx"))
+	if existing, err := store.EventsByKind(*run.BeadID, runDetailViewEventKind); err == nil {
+		for _, ev := range existing {
+			if strings.Contains(ev.Body, "run_id="+run.ID) {
+				return
+			}
+		}
+	}
+
+	identity := operatorPromptIdentityInfo{kind: "unknown", actor: "anonymous"}
+	if httpReq := httpRequestFromContext(ctx); httpReq != nil {
+		identity = operatorPromptIdentity(httpReq)
+	}
+	body := fmt.Sprintf(
+		"project_id=%s run_id=%s layer=%s visibility=project_membership",
+		*run.ProjectID,
+		run.ID,
+		run.Layer,
+	)
+	_ = store.AppendEvent(*run.BeadID, bead.BeadEvent{
+		Kind:    runDetailViewEventKind,
+		Summary: "run detail viewed",
+		Body:    body,
+		Actor:   identity.actor,
+		Source:  "graphql:run",
+	})
 }
 
 // RunToolCalls is the resolver for the runToolCalls field. Returns the
