@@ -1,0 +1,1 @@
+verification_command: cd cli && go test ./... >/dev/null && out=$(go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./... 2>&1 || true); ! printf "%s" "$out" | rg -q "^internal/registry/"
