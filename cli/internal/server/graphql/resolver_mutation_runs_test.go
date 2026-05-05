@@ -17,10 +17,7 @@ func newRunRequeueResolver(t *testing.T, runs []*ddxgraphql.Run) (*ddxgraphql.Re
 	workDir, store := setupIntegrationDir(t)
 	base := newTestStateProvider(workDir, store)
 	provider := &runsTestProvider{testStateProvider: base, all: runs}
-	r, err := ddxgraphql.NewResolver(provider, workDir)
-	if err != nil {
-		t.Fatalf("NewResolver: %v", err)
-	}
+	r := &ddxgraphql.Resolver{State: provider, WorkingDir: workDir}
 	r.RunRequeueIdempotency = ddxgraphql.NewMemoryIdempotencyCache()
 	return r, store, workDir
 }

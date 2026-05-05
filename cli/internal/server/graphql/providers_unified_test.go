@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -390,8 +391,14 @@ func TestHarnessStatusesFromInfosUsesDirectDTOFields(t *testing.T) {
 // positive ProjectedRunOutHours. Covers AC 3 "projection renders only when
 // ceiling is known and last-24h slope is positive."
 func TestProviderTrendProjectionFromSeededUsageAndCeiling(t *testing.T) {
-	t.Cleanup(resetHarnessRateLimitCache)
-	resetHarnessRateLimitCache()
+	harnessRateLimitCache.Lock()
+	harnessRateLimitCache.byName = make(map[string]agent.RateLimitSignal)
+	harnessRateLimitCache.Unlock()
+	t.Cleanup(func() {
+		harnessRateLimitCache.Lock()
+		harnessRateLimitCache.byName = make(map[string]agent.RateLimitSignal)
+		harnessRateLimitCache.Unlock()
+	})
 
 	workDir := t.TempDir()
 	writeMinimalConfig(t, workDir)
@@ -412,7 +419,12 @@ func TestProviderTrendProjectionFromSeededUsageAndCeiling(t *testing.T) {
 		Remaining:            10000,
 		ResetAt:              time.Time{},
 	}
-	RecordHarnessRateLimit("claude", sig)
+	name := strings.TrimSpace("claude")
+	if name != "" && sig.HasAny() {
+		harnessRateLimitCache.Lock()
+		harnessRateLimitCache.byName[name] = sig
+		harnessRateLimitCache.Unlock()
+	}
 
 	r := &queryResolver{Resolver: &Resolver{WorkingDir: workDir}}
 	trend, err := r.ProviderTrend(context.Background(), "claude", 7)
