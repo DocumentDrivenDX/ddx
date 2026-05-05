@@ -37,24 +37,6 @@ func DefaultStatePath() (string, error) {
 	return filepath.Join(home, ".local", "share", "ddx", stateFileName), nil
 }
 
-// LoadState reads the registry from the default path.
-func LoadState() (*FederationRegistry, error) {
-	path, err := DefaultStatePath()
-	if err != nil {
-		return nil, err
-	}
-	return LoadStateFrom(path)
-}
-
-// SaveState writes the registry to the default path.
-func SaveState(r *FederationRegistry) error {
-	path, err := DefaultStatePath()
-	if err != nil {
-		return err
-	}
-	return SaveStateTo(path, r)
-}
-
 // LoadStateFrom reads the registry from path. Behavior:
 //
 //   - Missing file       → fresh empty registry stamped with CurrentSchemaVersion.
