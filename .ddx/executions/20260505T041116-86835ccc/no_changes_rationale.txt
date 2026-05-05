@@ -1,0 +1,27 @@
+status: needs_investigation
+reason: |
+  ddx-d7aca866 is a rollup epic, not a bounded implementation slice. The
+  ADR-022 rev 5 roadmap already has its 10 child beads filed under this epic,
+  so there is nothing actionable to implement inside the epic itself in a
+  single execute-bead attempt.
+
+  Current child inventory:
+    - closed: ddx-2892f2cf  step 1: server ingestion endpoints
+    - closed: ddx-98257c6a  step 2: worker server-probe goroutine + best-effort mirror
+    - closed: ddx-2e54b560  step 3: operator-cancel via bead-store marker + mid-attempt poll
+    - closed: ddx-85165814  step 4: deprecate --local flag
+    - closed: ddx-7b753655  step 5: derived-view GraphQL schema + UI workers panel migration
+    - closed: ddx-a418a1c1  step 6: ddx agent doctor reads from server runtime registry
+    - open:   ddx-eccc6efb  step 7: server-spawn path migration
+    - closed: ddx-b6ab9c0b  step 8: FEAT-006 amendment
+    - open:   ddx-eafaa75d  step 9: acceptance + 1-week soak using clean fixture repo
+    - open:   ddx-71603225  step 10: coordinate C7 with rev 5 worker
+
+  The epic acceptance criteria cannot be satisfied in this attempt because they
+  require all child beads to close, the C7 coordination bead to resolve, FEAT-006
+  and CHANGELOG work to be merged, and the acceptance soak to pass for at least
+  one week. The soak gate is calendar-time bound and cannot be compressed by an
+  agent.
+
+  Next step is to execute the remaining open child beads, then revisit the epic
+  after the soak window has elapsed.
