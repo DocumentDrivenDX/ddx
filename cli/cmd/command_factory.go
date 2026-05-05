@@ -11,6 +11,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/fatih/color"
@@ -456,6 +457,7 @@ func (f *CommandFactory) registerSubcommands(rootCmd *cobra.Command) {
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "DDx %s\n", version)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Commit: %s\n", f.Commit)
 			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Built: %s\n", f.Date)
+			f.warnIfInstalledBinaryBehindSource(cmd)
 
 			// Check for --no-check flag
 			noCheck, _ := cmd.Flags().GetBool("no-check")
@@ -543,6 +545,63 @@ PowerShell:
 	promptsCmd.AddCommand(f.newPromptsListCommand())
 	promptsCmd.AddCommand(f.newPromptsShowCommand())
 	rootCmd.AddCommand(promptsCmd)
+}
+
+func (f *CommandFactory) warnIfInstalledBinaryBehindSource(cmd *cobra.Command) {
+	if f.Version == "" || f.Version == "dev" {
+		return
+	}
+	if f.Commit == "" || f.Commit == "unknown" {
+		return
+	}
+
+	repoRoot := gitpkg.FindProjectRoot(f.WorkingDir)
+	if repoRoot == "" || !gitpkg.IsRepository(repoRoot) {
+		return
+	}
+
+	originURL, err := gitCommandOutput(repoRoot, "remote", "get-url", "origin")
+	if err != nil || !isDDXOriginURL(originURL) {
+		return
+	}
+
+	buildSHA, err := gitResolveCommit(repoRoot, f.Commit)
+	if err != nil {
+		return
+	}
+	headSHA, err := gitCommandOutput(repoRoot, "rev-parse", "HEAD")
+	if err != nil {
+		return
+	}
+
+	if err := gitpkg.Command(context.Background(), repoRoot, "merge-base", "--is-ancestor", buildSHA, headSHA).Run(); err != nil {
+		return
+	}
+
+	aheadCount, err := gitCommandOutput(repoRoot, "rev-list", "--count", buildSHA+".."+headSHA)
+	if err != nil || aheadCount == "0" {
+		return
+	}
+
+	_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+		"WARNING: installed ddx is built from %s; source tree HEAD is %s (%s commits ahead). Run \"make install\" to refresh.\n",
+		buildSHA, headSHA, aheadCount)
+}
+
+func gitCommandOutput(dir string, args ...string) (string, error) {
+	out, err := gitpkg.Command(context.Background(), dir, args...).Output()
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func gitResolveCommit(dir, commit string) (string, error) {
+	return gitCommandOutput(dir, "rev-parse", "--verify", commit+"^{commit}")
+}
+
+func isDDXOriginURL(url string) bool {
+	return strings.Contains(strings.ToLower(url), "documentdrivendx/ddx")
 }
 
 // resolveAgentSession looks up a session by ID from the agent session log.
