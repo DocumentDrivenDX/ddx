@@ -1,0 +1,11 @@
+verification_command: ddx bead show ddx-8d747049 >/dev/null
+reason: The requested Axon backend bead is too large for one execution pass and has been decomposed into focused child beads instead of partial implementation.
+
+Child beads:
+- .execute-bead-wt-ddx-8d747049-20260505T023636-7669921a-b6bc9398: scaffold cli/internal/bead/axon genqlient client and subscriptions
+- .execute-bead-wt-ddx-8d747049-20260505T023636-7669921a-26f338ad: implement cli/internal/bead Axon backend operations on the generated GraphQL client
+- .execute-bead-wt-ddx-8d747049-20260505T023636-7669921a-3fa0f047: wire cli/internal/bead backend selection and .ddx config for Axon
+- .execute-bead-wt-ddx-8d747049-20260505T023636-7669921a-1a576b9d: parameterize cli/internal/bead conformance suites across jsonl and axon
+- .execute-bead-wt-ddx-8d747049-20260505T023636-7669921a-4fa37db2: add cli/internal/bead/axon WebSocket subscription integration smoke test
+
+No implementation code was changed in this attempt.
