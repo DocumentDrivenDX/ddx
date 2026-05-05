@@ -130,7 +130,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		return nil, fmt.Errorf("agent: execute: %w", err)
 	}
 
-	final, routing, actualPower := drainServiceEvents(events)
+	final, routing, actualPower, _ := drainServiceEvents(events)
 	elapsed := time.Since(start)
 
 	result := &Result{
@@ -203,13 +203,15 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 }
 
 // drainServiceEvents reads service events and returns the final-event payload,
-// the routing decision (when present in the routing_decision start event), and
-// the power of the selected model (0 when the routing_decision event does not
-// include candidate power components).
-func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData, *serviceRoutingActual, int) {
+// the routing decision (when present in the routing_decision start event), the
+// power of the selected model (0 when the routing_decision event does not
+// include candidate power components), and any canonical progress payloads
+// emitted by the service.
+func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData, *serviceRoutingActual, int, []agentlib.ServiceProgressData) {
 	var final *serviceFinalData
 	var routing *serviceRoutingActual
 	var routingPower int
+	var progress []agentlib.ServiceProgressData
 
 	for ev := range events {
 		switch string(ev.Type) {
@@ -246,6 +248,11 @@ func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData,
 					}
 				}
 			}
+		case agentlib.ServiceEventTypeProgress:
+			var data agentlib.ServiceProgressData
+			if err := json.Unmarshal(ev.Data, &data); err == nil {
+				progress = append(progress, data)
+			}
 		case serviceEventFinal:
 			var data serviceFinalData
 			if err := json.Unmarshal(ev.Data, &data); err == nil {
@@ -253,5 +260,5 @@ func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData,
 			}
 		}
 	}
-	return final, routing, routingPower
+	return final, routing, routingPower, progress
 }

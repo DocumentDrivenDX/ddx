@@ -16,6 +16,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -581,10 +582,6 @@ func TestFormatSessionLogLines(t *testing.T) {
 		`{"type":"llm.response","data":{"model":"qwen/qwen3.6-plus-04-02","latency_ms":5491,"attempt":{"cost":{"raw":{"total_tokens":8408,"prompt_tokens":8204,"completion_tokens":204}}},"tool_calls":[{"name":"read","arguments":{"path":"docs/FEAT-006.md"}}],"finish_reason":"tool_calls"}}`,
 		`{"type":"tool.call","data":{"tool":"read","input":{"path":"docs/FEAT-006.md"},"duration_ms":120,"error":""}}`,
 		`{"type":"tool.call","data":{"tool":"write","input":{"path":"docs/new.md"},"duration_ms":50,"error":"permission denied"}}`,
-		`{"type":"compaction.start","data":{}}`,
-		`{"type":"compaction.end","data":{}}`,
-		`{"type":"compaction.start","data":{}}`,
-		`{"type":"compaction.end","data":{"success":true,"tokens_before":10000,"tokens_after":3000}}`,
 		`{"type":"llm.delta","data":{}}`,
 	}
 
@@ -595,9 +592,42 @@ func TestFormatSessionLogLines(t *testing.T) {
 	assert.Contains(t, result, "← llm response (8408 tokens, 5.5s, 1531.2 tok/s) qwen/qwen3.6-plus-04-02 → read")
 	assert.Contains(t, result, "🔧 read docs/FEAT-006.md in=27B (0.1s)")
 	assert.Contains(t, result, "🔧 write docs/new.md in=22B (0.1s) ❌ permission denied")
-	assert.NotContains(t, result, "compacting context...") // no-op compactions are suppressed
-	assert.Contains(t, result, "⚡ compacted context (10000 → 3000 tokens)")
 	assert.NotContains(t, result, "llm.delta") // deltas should be suppressed
+}
+
+func TestWorkerProgressUsesCanonicalFizeauProgressEvents(t *testing.T) {
+	lines := []string{
+		`{"type":"llm.response","data":{"model":"claude-sonnet-4-6","latency_ms":10,"attempt":{"cost":{"raw":{"total_tokens":12}}},"tool_calls":[{"name":"Bash"}],"finish_reason":"tool_use"}}`,
+		mustProgressLine(t, agentlib.ServiceProgressData{
+			Phase:         "tool",
+			State:         "complete",
+			TaskID:        "ddx-1234",
+			TurnIndex:     7,
+			ToolName:      "apply_patch",
+			Action:        "add test implementation",
+			Target:        "cli/internal/file.go",
+			OutputSummary: "out=312B 12 lines \"Success. Updated the following files:\"",
+			DurationMS:    35,
+		}),
+	}
+
+	result := formatActiveSessionLogLines(lines)
+
+	assert.Contains(t, result, "ok ddx-1234 7 add test implementation to cli/internal/file.go")
+	assert.Contains(t, result, "< out=312B 12 lines")
+	assert.NotContains(t, result, "llm response")
+}
+
+func mustProgressLine(t *testing.T, data agentlib.ServiceProgressData) string {
+	t.Helper()
+	raw, err := json.Marshal(data)
+	require.NoError(t, err)
+	line, err := json.Marshal(map[string]any{
+		"type": "progress",
+		"data": json.RawMessage(raw),
+	})
+	require.NoError(t, err)
+	return string(line)
 }
 
 // TC-013.4 — A worker started for project A writes worker records and execution

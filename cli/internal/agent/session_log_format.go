@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
 // Session log JSONL schema reference.
@@ -308,6 +310,30 @@ func FormatSessionLogLines(lines []string) string {
 			if attempts > 0 {
 				fmt.Fprintf(&sb, "\nloop done: %.0f attempted, %.0f succeeded, %.0f failed\n", attempts, successes, failures)
 			}
+		}
+	}
+	return sb.String()
+}
+
+// FormatServiceProgressEntries formats canonical Fizeau progress payloads
+// directly. It is used by callers that already have structured ServiceEvent
+// data and should not round-trip through session-log JSONL line parsing.
+func FormatServiceProgressEntries(entries []agentlib.ServiceProgressData) string {
+	var sb strings.Builder
+	for _, entry := range entries {
+		raw, err := json.Marshal(entry)
+		if err != nil {
+			continue
+		}
+		var data map[string]any
+		if err := json.Unmarshal(raw, &data); err != nil {
+			continue
+		}
+		if line := formatProgressLogEntry(map[string]any{
+			"type": "progress",
+			"data": data,
+		}); line != "" {
+			sb.WriteString(line)
 		}
 	}
 	return sb.String()
