@@ -1,0 +1,2 @@
+verification_command: cd cli && go test ./internal/agent/... && lefthook run pre-commit
+reason: No code changes were needed. buildPrompt already writes <instructions> immediately after <execute-bead> and before <bead> / <governing> at cli/internal/agent/execute_bead.go:1570-1625. TestExecuteBead_DeterministicPromptContent in cli/internal/agent/execute_bead_artifacts_test.go:644-681 already asserts instructionsIdx < beadIdx and instructionsIdx < governingIdx for the rendered prompt. The targeted package tests and pre-commit gate both pass.
