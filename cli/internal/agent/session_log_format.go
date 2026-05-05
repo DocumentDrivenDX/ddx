@@ -450,7 +450,7 @@ func formatThinkingProgressLine(state string, data map[string]any) string {
 func formatToolProgressLine(state string, data map[string]any) string {
 	toolName, _ := data["tool_name"].(string)
 	command, _ := data["command"].(string)
-	display := compactToolDisplay(toolName, command)
+	display := compactProgressToolDisplay(data, toolName, command, 96)
 	switch state {
 	case "start":
 		if display != "" {
@@ -462,7 +462,7 @@ func formatToolProgressLine(state string, data map[string]any) string {
 		duration := progressDurationString(data)
 		outputSummary, _ := data["output_summary"].(string)
 		if outputSummary != "" {
-			display = compactToolDisplayLimit(toolName, command, 48)
+			display = compactProgressToolDisplay(data, toolName, command, 80)
 		}
 		line := "ok"
 		if display != "" {
@@ -483,6 +483,164 @@ func formatToolProgressLine(state string, data map[string]any) string {
 	default:
 		return ""
 	}
+}
+
+func compactProgressToolDisplay(data map[string]any, toolName, command string, limit int) string {
+	action := progressActionFromData(data)
+	if action == "" {
+		action = describeToolCommand(toolName, command)
+	}
+	if action == "" {
+		action = compactToolDisplayLimit(toolName, command, limit)
+	}
+	prefix := compactProgressEventIdentity(data)
+	if prefix != "" {
+		action = prefix + " " + action
+	}
+	return truncateStr(action, limit)
+}
+
+func progressActionFromData(data map[string]any) string {
+	if data == nil {
+		return ""
+	}
+	for _, key := range []string{"description", "action"} {
+		if value, ok := data[key].(string); ok && strings.TrimSpace(value) != "" {
+			return compactTargetedAction(value, data)
+		}
+	}
+	return ""
+}
+
+func compactTargetedAction(action string, data map[string]any) string {
+	action = strings.Join(strings.Fields(strings.TrimSpace(action)), " ")
+	target := progressTargetFromData(data)
+	if target == "" || strings.Contains(action, target) || strings.Contains(action, compactPathToken(target, 64)) {
+		return action
+	}
+	return action + " to " + compactPathToken(target, 64)
+}
+
+func progressTargetFromData(data map[string]any) string {
+	for _, key := range []string{"target", "path", "file"} {
+		if value, ok := data[key].(string); ok && strings.TrimSpace(value) != "" {
+			return strings.TrimSpace(value)
+		}
+	}
+	return ""
+}
+
+func compactProgressEventIdentity(data map[string]any) string {
+	if data == nil {
+		return ""
+	}
+	taskID, _ := data["task_id"].(string)
+	taskID = strings.TrimSpace(taskID)
+	turn := progressTurnNumber(data)
+	switch {
+	case taskID != "" && turn > 0:
+		return fmt.Sprintf("%s %d", taskID, turn)
+	case taskID != "":
+		return taskID
+	case turn > 0:
+		return fmt.Sprintf("%d", turn)
+	default:
+		return ""
+	}
+}
+
+func progressTurnNumber(data map[string]any) int {
+	if turn := progressInt(data, "turn_index"); turn > 0 {
+		return turn
+	}
+	return progressInt(data, "round")
+}
+
+func describeToolCommand(toolName, command string) string {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return strings.TrimSpace(toolName)
+	}
+	command = unwrapToolCommandSummary(command)
+	command = stripShellLoginWrapper(command)
+	command = firstShellCommandSegment(command)
+	command = strings.Join(strings.Fields(command), " ")
+	fields := strings.Fields(command)
+	if len(fields) == 0 {
+		return ""
+	}
+	switch fields[0] {
+	case "sed":
+		if len(fields) >= 4 && fields[1] == "-n" {
+			return "inspect " + strings.Trim(fields[2], "'\"") + " in " + compactPathToken(fields[3], 64)
+		}
+	case "cat":
+		if len(fields) >= 2 {
+			return "inspect " + compactPathToken(fields[len(fields)-1], 64)
+		}
+	case "rg":
+		return describeRipgrepCommand(fields)
+	case "go":
+		if len(fields) >= 2 && fields[1] == "test" {
+			return "test " + strings.Join(compactPathTokens(fields[2:], 64), " ")
+		}
+	case "git":
+		return describeGitCommand(fields)
+	}
+	return compactToolDisplayLimit(toolName, command, 96)
+}
+
+func describeRipgrepCommand(fields []string) string {
+	target := ""
+	pattern := ""
+	for _, field := range fields[1:] {
+		if strings.HasPrefix(field, "-") {
+			continue
+		}
+		if pattern == "" {
+			pattern = strings.Trim(field, "'\"")
+			continue
+		}
+		target = field
+	}
+	if target != "" && pattern != "" {
+		return "search " + strconv.Quote(truncateStr(pattern, 32)) + " in " + compactPathToken(target, 64)
+	}
+	if pattern != "" {
+		return "search " + strconv.Quote(truncateStr(pattern, 32))
+	}
+	return "search"
+}
+
+func describeGitCommand(fields []string) string {
+	if len(fields) < 2 {
+		return "git"
+	}
+	switch fields[1] {
+	case "add":
+		if len(fields) > 2 {
+			return "stage " + strings.Join(compactPathTokens(fields[2:], 64), " ")
+		}
+		return "stage changes"
+	case "commit":
+		return "commit changes"
+	case "diff":
+		return "inspect diff"
+	case "status":
+		return "inspect git status"
+	case "log":
+		return "inspect git log"
+	default:
+		return "git " + fields[1]
+	}
+}
+
+func compactPathTokens(tokens []string, limit int) []string {
+	out := make([]string, 0, len(tokens))
+	for _, token := range tokens {
+		out = append(out, compactPathToken(token, limit))
+	}
+	return out
 }
 
 func compactOutputExcerpt(data map[string]any) string {

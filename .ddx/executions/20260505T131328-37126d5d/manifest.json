@@ -1,0 +1,80 @@
+{
+  "attempt_id": "20260505T131328-37126d5d",
+  "bead_id": "ddx-0e5c3005",
+  "base_rev": "05392ed84aa4fbd032f0b34e1c72193333938dd6",
+  "created_at": "2026-05-05T13:13:39.763662217Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0e5c3005",
+    "title": "review: structured prompt assembly + FEAT-022 telemetry + injection delimiters",
+    "description": "Structured prompt assembly per turn (NOT naive verbatim+oldest-first truncation). Pinned: system rubric, artifact identity (path/sha/git_rev), Story 17 template+prompt, first-user-intent + explicit user decisions. Rolling: session memory summary, last K verbatim turns, unresolved findings. FEAT-022 byte accounting. Refuses with PROMPT_BUDGET_EXCEEDED if minimum pinned set won't fit. Untrusted-data delimiters (artifact body wrapped) for prompt-injection boundary.",
+    "acceptance": "1. Assembly function exists with structured pinned + summary + recent + unresolved. 2. FEAT-022 byte accounting per assembly. 3. PROMPT_BUDGET_EXCEEDED refusal with clear error. 4. Untrusted-data delimiters wrap artifact body. 5. Tests cover all four.",
+    "parent": "ddx-42b917fe",
+    "labels": [
+      "phase:2",
+      "story:18",
+      "area:server",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-05T13:13:28Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2464742",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-05T11:38:08.346731509Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T113434-3317d134\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":2862758,\"output_tokens\":18998,\"total_tokens\":2881756,\"cost_usd\":0,\"duration_ms\":211007,\"exit_code\":0}",
+          "created_at": "2026-05-05T11:38:08.568932941Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=2881756 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-05T11:38:14.36377008Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=b1a8133af2994880807c9bac40893cb16352bb25\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T07:43:18-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=6634\noutput_bytes=0\nelapsed_ms=4184",
+          "created_at": "2026-05-05T11:38:19.029511019Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=b1a8133af2994880807c9bac40893cb16352bb25\nbase_rev=bd7ab90c9db971dff5453d7d4cb67bb254cec26f",
+          "created_at": "2026-05-05T11:38:19.238086825Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-05T13:13:28.43363259Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260505T131328-37126d5d",
+    "prompt": ".ddx/executions/20260505T131328-37126d5d/prompt.md",
+    "manifest": ".ddx/executions/20260505T131328-37126d5d/manifest.json",
+    "result": ".ddx/executions/20260505T131328-37126d5d/result.json",
+    "checks": ".ddx/executions/20260505T131328-37126d5d/checks.json",
+    "usage": ".ddx/executions/20260505T131328-37126d5d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-0e5c3005-20260505T131328-37126d5d"
+  },
+  "prompt_sha": "5a9826f7b9f8fbcdbe3a70366cf0e865fb6c2d0e46251619e43e08e352faf44e"
+}

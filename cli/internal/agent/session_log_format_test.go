@@ -286,6 +286,154 @@ func TestFormatSessionLogLines_MixedSessionCorpusKeepsContextAndTrim(t *testing.
 	}
 }
 
+func TestFormatSessionLogLines_SourceShapeSamplesStayUseful(t *testing.T) {
+	longTail := strings.Repeat("verbose-output-", 80)
+	cases := []struct {
+		name    string
+		lines   []string
+		want    []string
+		notWant []string
+	}{
+		{
+			name: "claude stream tool call and result",
+			lines: []string{
+				mustSessionLogLine(t, "session.start", map[string]any{
+					"model":   "claude-sonnet-4-6",
+					"harness": "claude",
+				}),
+				mustSessionLogLine(t, "tool.call", map[string]any{
+					"tool":        "Bash",
+					"input":       map[string]any{"command": `/bin/zsh -lc "sed -n '240,320p' cli/internal/agent/session_log_format.go"`},
+					"input_bytes": 95,
+				}),
+				mustSessionLogLine(t, "tool.result", map[string]any{
+					"tool":           "Bash",
+					"output_bytes":   6400,
+					"output_excerpt": "74 lines \"func formatToolProgressLine(state string, data map[string]any) string\"",
+					"duration_ms":    92,
+				}),
+			},
+			want: []string{
+				"▶ session started (model: claude-sonnet-4-6)",
+				"🔧 Bash sed -n '240,320p' …/session_log_format.go",
+				"< Bash out=6.2KB 74 lines",
+				"92ms",
+			},
+		},
+		{
+			name: "codex progress has task round action and target",
+			lines: []string{
+				mustSessionLogLine(t, "progress", map[string]any{
+					"phase":          "tool",
+					"state":          "complete",
+					"task_id":        "ddx-1234",
+					"turn_index":     22,
+					"tool_name":      "apply_patch",
+					"action":         "add test implementation",
+					"target":         "cli/internal/file.go",
+					"command":        "apply_patch",
+					"output_summary": "out=312B 12 lines \"Success. Updated the following files:\"",
+					"duration_ms":    35,
+				}),
+			},
+			want: []string{
+				"ok ddx-1234 22 add test implementation to cli/internal/file.go",
+				"< out=312B 12 lines",
+				"35ms",
+			},
+		},
+		{
+			name: "native agent raw progress summarizes output and keeps filename",
+			lines: []string{
+				mustSessionLogLine(t, "progress", map[string]any{
+					"phase":          "tool",
+					"state":          "complete",
+					"task_id":        "ddx-native",
+					"turn_index":     3,
+					"tool_name":      "bash",
+					"command":        "rg -n \"FormatSessionLogLines\" cli/internal/agent/session_log_format_test.go",
+					"output_summary": "out=1.5KB 18 lines \"13:func TestFormatSessionLogLines_ProgressThinking(t *testing.T)\"",
+					"duration_ms":    11,
+				}),
+			},
+			want: []string{
+				"ok ddx-native 3 search \"FormatSessionLogLines\" in …/session_log_format_test.go",
+				"< out=1.5KB 18 lines",
+				"11ms",
+			},
+		},
+		{
+			name: "native tool result with verbose raw output trims body",
+			lines: []string{
+				mustSessionLogLine(t, "tool.result", map[string]any{
+					"tool":         "bash",
+					"output":       "ok github.com/DocumentDrivenDX/ddx/internal/agent 0.014s\n" + longTail,
+					"output_bytes": 4096,
+					"duration_ms":  1400,
+				}),
+			},
+			want: []string{
+				"< bash out=4.0KB 2 lines \"ok github.com/DocumentDrivenDX/ddx/internal/agent",
+				"1.4s",
+			},
+			notWant: []string{strings.Repeat("verbose-output-", 10)},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := FormatSessionLogLines(tc.lines)
+			require.NotEmpty(t, got)
+			for _, want := range tc.want {
+				assert.Contains(t, got, want)
+			}
+			for _, notWant := range tc.notWant {
+				assert.NotContains(t, got, notWant)
+			}
+			assertFormattedLinesBounded(t, got, 122)
+		})
+	}
+}
+
+func TestFormatSessionLogLines_ProgressTurnsCountUp(t *testing.T) {
+	lines := []string{
+		mustSessionLogLine(t, "progress", map[string]any{
+			"phase":      "tool",
+			"state":      "complete",
+			"task_id":    "ddx-1234",
+			"turn_index": 21,
+			"tool_name":  "bash",
+			"command":    "sed -n '1,80p' cli/internal/agent/session_log_format.go",
+		}),
+		mustSessionLogLine(t, "progress", map[string]any{
+			"phase":          "tool",
+			"state":          "complete",
+			"task_id":        "ddx-1234",
+			"turn_index":     22,
+			"tool_name":      "apply_patch",
+			"action":         "add test implementation",
+			"target":         "cli/internal/agent/session_log_format_test.go",
+			"output_summary": "out=288B 9 lines \"Success. Updated the following files:\"",
+		}),
+		mustSessionLogLine(t, "progress", map[string]any{
+			"phase":      "tool",
+			"state":      "complete",
+			"task_id":    "ddx-1234",
+			"turn_index": 23,
+			"tool_name":  "bash",
+			"command":    "go test ./internal/agent -run TestFormatSessionLogLines",
+		}),
+	}
+
+	got := FormatSessionLogLines(lines)
+	assert.Contains(t, got, "ok ddx-1234 21 inspect 1,80p in …/session_log_format.go")
+	assert.Contains(t, got, "ok ddx-1234 22 add test implementation to …/session_log_format_test.go")
+	assert.Contains(t, got, "ok ddx-1234 23 test ./internal/agent -run TestFormatSessionLogLines")
+	assert.Less(t, strings.Index(got, "ddx-1234 21"), strings.Index(got, "ddx-1234 22"))
+	assert.Less(t, strings.Index(got, "ddx-1234 22"), strings.Index(got, "ddx-1234 23"))
+	assertFormattedLinesBounded(t, got, 122)
+}
+
 func TestFormatSessionLogLines_ProgressResponseAndContext(t *testing.T) {
 	lines := []string{
 		mustSessionLogLine(t, "progress", map[string]any{
