@@ -191,6 +191,54 @@ func TestRunPostMergeReviewChargesReviewCostAndDefersWhenCapTrips(t *testing.T) 
 	}
 }
 
+func TestRunPostMergeReviewChargesReviewCostOnReviewerError(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	tracker := escalation.NewCostCapTracker(5.0, func(string) bool { return true })
+	tracker.Add("openrouter", 4.0)
+
+	reviewer := beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+		return &ReviewResult{
+			Verdict:         VerdictBlock,
+			Rationale:       "transport failed",
+			ReviewerHarness: "claude",
+			ReviewerModel:   "claude-opus-4-6",
+			CostUSD:         1.5,
+		}, context.DeadlineExceeded
+	})
+
+	out := RunPostMergeReview(context.Background(), PostMergeReviewInput{
+		Bead: *first,
+		Report: ExecuteBeadReport{
+			BeadID:    first.ID,
+			Status:    ExecuteBeadStatusSuccess,
+			SessionID: "sess-review-error",
+			ResultRev: "feedface",
+			CostUSD:   4.0,
+		},
+		Reviewer:      reviewer,
+		Store:         store,
+		ProjectRoot:   t.TempDir(),
+		Rcfg:          config.NewTestConfigForLoop(config.TestLoopConfigOpts{Assignee: "worker"}).Resolve(config.TestLoopOverrides(config.TestLoopConfigOpts{Assignee: "worker"})),
+		Now:           time.Now,
+		Assignee:      "worker",
+		ReviewCostCap: tracker,
+	})
+
+	require.False(t, out.Approved, "review error should not approve the bead")
+	assert.InDelta(t, 5.5, tracker.Spent(), 1e-9)
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	foundDeferred := false
+	for _, ev := range events {
+		if ev.Kind == "review-cost-deferred" {
+			foundDeferred = true
+			assert.Contains(t, ev.Body, "result_rev=feedface")
+		}
+	}
+	assert.True(t, foundDeferred, "expected review cost to be charged and deferred on reviewer error")
+}
+
 func TestExecuteBeadWorkerReviewRequestChangesReopensAndCountsFailure(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	worker := &ExecuteBeadWorker{

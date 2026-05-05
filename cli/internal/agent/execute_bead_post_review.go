@@ -108,6 +108,24 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 		},
 	}
 	reviewRes, reviewErr := in.Reviewer.ReviewBead(ctx, in.Bead.ID, report.ResultRev, implRouting)
+	chargeReviewCost := func() {
+		if capTracker := in.ReviewCostCap; capTracker != nil && reviewRes != nil {
+			capTracker.Add(reviewRes.ReviewerHarness, reviewRes.CostUSD)
+			if detail, capped := capTracker.Tripped(); capped {
+				_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
+					Kind:      "review-cost-deferred",
+					Summary:   "review-cost-deferred",
+					Body:      ReviewCostDeferredEventBody(report.ResultRev, reviewRes.CostUSD, capTracker.Spent(), capTracker.MaxUSD),
+					Actor:     in.Assignee,
+					Source:    "ddx agent execute-loop",
+					CreatedAt: now().UTC(),
+				})
+				if in.Log != nil {
+					_, _ = fmt.Fprintf(in.Log, "review cost cap deferred (%s %s): %s\n", in.Bead.ID, report.ResultRev, detail)
+				}
+			}
+		}
+	}
 	if reviewErr != nil {
 		// FEAT-022 §12+§14: classify the failure into the four-class
 		// taxonomy and count prior review-error events scoped to the
@@ -164,6 +182,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 		}
 		out.Report = report
 		out.Approved = false
+		chargeReviewCost()
 		return out
 	}
 
@@ -187,22 +206,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 		OutputBytes: reviewRes.OutputBytes,
 		ElapsedMS:   reviewRes.DurationMS,
 	}
-	if capTracker := in.ReviewCostCap; capTracker != nil {
-		capTracker.Add(reviewRes.ReviewerHarness, reviewRes.CostUSD)
-		if detail, capped := capTracker.Tripped(); capped {
-			_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
-				Kind:      "review-cost-deferred",
-				Summary:   "review-cost-deferred",
-				Body:      ReviewCostDeferredEventBody(report.ResultRev, reviewRes.CostUSD, capTracker.Spent(), capTracker.MaxUSD),
-				Actor:     in.Assignee,
-				Source:    "ddx agent execute-loop",
-				CreatedAt: now().UTC(),
-			})
-			if in.Log != nil {
-				_, _ = fmt.Fprintf(in.Log, "review cost cap deferred (%s %s): %s\n", in.Bead.ID, report.ResultRev, detail)
-			}
-		}
-	}
+	chargeReviewCost()
 	switch reviewRes.Verdict {
 	case VerdictApprove:
 		// Approved: record the verdict event and then close.
