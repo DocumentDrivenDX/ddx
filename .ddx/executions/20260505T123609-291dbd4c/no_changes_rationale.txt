@@ -1,0 +1,3 @@
+status: completed
+reason: The requested lint hook implementation is already present in this checkout and passes the agent package tests plus the repo pre-commit gate without additional edits.
+verification_command: cd cli && go test ./internal/agent/... && lefthook run pre-commit
