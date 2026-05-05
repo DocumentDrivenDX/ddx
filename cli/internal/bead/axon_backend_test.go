@@ -174,8 +174,11 @@ func TestAxonBackend_AppendEventSplitsIntoEventsCollection(t *testing.T) {
 	require.Len(t, beadLines, 1)
 	var env axonEntityEnvelope
 	require.NoError(t, json.Unmarshal(beadLines[0], &env))
-	assert.NotContains(t, string(env.Data), `"events"`,
-		"bead row in ddx_beads must not carry inline events array")
+	if env.Data.Extra != nil {
+		_, hasEvents := env.Data.Extra["events"]
+		assert.False(t, hasEvents,
+			"bead row in ddx_beads must not carry inline events array")
+	}
 }
 
 func TestAxonBackend_ListReadyBlocked(t *testing.T) {

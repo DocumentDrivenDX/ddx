@@ -137,17 +137,24 @@ func (a *AxonBackend) ReadAll() ([]Bead, error) {
 	for i := range beads {
 		byID[beads[i].ID] = &beads[i]
 	}
-	// Group events by bead id, preserving insertion order on disk.
-	grouped := make(map[string][]BeadEvent, len(events))
-	order := make(map[string]int, len(events))
+	// Group events by bead id with exact per-bead capacity so the read path
+	// does not repeatedly grow slices while rebuilding the inline shape.
+	counts := make(map[string]int, len(events))
 	for _, ev := range events {
 		if _, ok := byID[ev.beadID]; !ok {
 			continue // orphan
 		}
-		grouped[ev.beadID] = append(grouped[ev.beadID], ev.event)
-		if _, seen := order[ev.beadID]; !seen {
-			order[ev.beadID] = len(order)
+		counts[ev.beadID]++
+	}
+	grouped := make(map[string][]BeadEvent, len(counts))
+	for id, count := range counts {
+		grouped[id] = make([]BeadEvent, 0, count)
+	}
+	for _, ev := range events {
+		if _, ok := byID[ev.beadID]; !ok {
+			continue
 		}
+		grouped[ev.beadID] = append(grouped[ev.beadID], ev.event)
 	}
 	for id, evs := range grouped {
 		b := byID[id]
@@ -257,15 +264,10 @@ func beadWithoutInlineEvents(b Bead) Bead {
 // JSON the JSONL backend writes, so import/export round-trip continues to
 // share marshalBead.
 func axonEncodeBead(b Bead) ([]byte, error) {
-	data, err := marshalBead(b)
-	if err != nil {
-		return nil, err
-	}
-	var raw json.RawMessage = data
 	envelope := axonEntityEnvelope{
 		Collection:    AxonBeadsCollection,
 		SchemaVersion: axonSchemaVersion,
-		Data:          raw,
+		Data:          axonBeadData{Bead: b},
 	}
 	return json.Marshal(envelope)
 }
@@ -286,9 +288,26 @@ func axonEncodeEvent(beadID string, index int, ev BeadEvent) ([]byte, error) {
 }
 
 type axonEntityEnvelope struct {
-	Collection    string          `json:"_collection"`
-	SchemaVersion int             `json:"schema_version"`
-	Data          json.RawMessage `json:"data"`
+	Collection    string       `json:"_collection"`
+	SchemaVersion int          `json:"schema_version"`
+	Data          axonBeadData `json:"data"`
+}
+
+type axonBeadData struct {
+	Bead
+}
+
+func (d axonBeadData) MarshalJSON() ([]byte, error) {
+	return marshalBead(d.Bead)
+}
+
+func (d *axonBeadData) UnmarshalJSON(data []byte) error {
+	b, err := unmarshalBead(data)
+	if err != nil {
+		return err
+	}
+	d.Bead = b
+	return nil
 }
 
 type axonEventEnvelope struct {
@@ -309,7 +328,7 @@ func (a *AxonBackend) readBeadRows() ([]Bead, error) {
 	}
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
-	var out []Bead
+	out := make([]Bead, 0, bytes.Count(data, []byte{'\n'}))
 	for scanner.Scan() {
 		line := bytes.TrimSpace(scanner.Bytes())
 		if len(line) == 0 {
@@ -319,14 +338,10 @@ func (a *AxonBackend) readBeadRows() ([]Bead, error) {
 		if err := json.Unmarshal(line, &env); err != nil {
 			return nil, fmt.Errorf("bead: axon parse bead row: %w", err)
 		}
-		if env.Collection != AxonBeadsCollection || len(env.Data) == 0 {
+		if env.Collection != AxonBeadsCollection || env.Data.ID == "" {
 			continue
 		}
-		b, err := unmarshalBead(env.Data)
-		if err != nil {
-			return nil, fmt.Errorf("bead: axon parse bead data: %w", err)
-		}
-		out = append(out, b)
+		out = append(out, env.Data.Bead)
 	}
 	if err := scanner.Err(); err != nil {
 		return nil, fmt.Errorf("bead: axon scan beads: %w", err)
@@ -350,7 +365,7 @@ func (a *AxonBackend) readEventEntities() ([]axonEventRecord, error) {
 	}
 	scanner := bufio.NewScanner(bytes.NewReader(data))
 	scanner.Buffer(make([]byte, 0, 64*1024), 16*1024*1024)
-	var out []axonEventRecord
+	out := make([]axonEventRecord, 0, bytes.Count(data, []byte{'\n'}))
 	for scanner.Scan() {
 		line := bytes.TrimSpace(scanner.Bytes())
 		if len(line) == 0 {

@@ -3,53 +3,95 @@ package bead
 import (
 	"fmt"
 	"path/filepath"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
 // benchFixtureSize matches the live `.ddx/beads-archive.jsonl` scale at the
-// time this benchmark was written (~1100 closed beads + active queue). The
-// fixture loader builds a synthesized corpus matching that shape so the
-// benchmark is portable across machines and reproducible across runs.
+// time this benchmark was written (~1100 beads across active + archive). The
+// fixture loader builds a synthesized corpus with open, closed, and archived
+// records so the benchmark is portable across machines and reproducible across
+// runs.
 const benchFixtureSize = 1100
 
-// makeBenchBeads synthesizes an n-bead corpus matching the live archive shape:
-// ~70% closed; the remaining ~30% open, partitioned across no-deps (ready),
-// closed-dep (ready), and open-dep (blocked) so Ready/Blocked exercise both
-// the fast-path and the dep-walk.
+func benchEvents(beadID, prefix string, n int, bodyScale int, start time.Time) []map[string]any {
+	events := make([]BeadEvent, 0, n)
+	for i := 0; i < n; i++ {
+		events = append(events, BeadEvent{
+			Kind:      prefix,
+			Summary:   fmt.Sprintf("%s-%s-%d", prefix, beadID, i),
+			Body:      strings.Repeat(fmt.Sprintf("%s-%s-%d|", prefix, beadID, i), bodyScale),
+			Actor:     "bench",
+			CreatedAt: start.Add(time.Duration(i) * time.Minute),
+			Source:    "benchmark",
+		})
+	}
+	return encodeEventsForExtra(events)
+}
+
+// makeBenchBeads synthesizes an n-bead corpus with a mix of open, closed, and
+// archived candidates. The first third are open beads split across ready and
+// blocked dependency shapes, the second third are recent closed beads that
+// stay in the active collection, and the final third are old closed beads that
+// Archive(policy) will move to the archive partner. The closed rows carry
+// inline event history so the axon backend can exercise its split event store.
 func makeBenchBeads(n int) []Bead {
-	closedCutoff := (n * 7) / 10
+	archivedCutoff := n / 3
+	activeClosedCutoff := archivedCutoff * 2
+	now := time.Now().UTC()
+	recentBase := now.Add(-24 * time.Hour)
+	archiveBase := now.Add(-90 * 24 * time.Hour)
+
 	beads := make([]Bead, n)
 	for i := 0; i < n; i++ {
-		b := Bead{
-			ID:       fmt.Sprintf("bench-%04d", i),
-			Title:    fmt.Sprintf("bench bead %d", i),
-			Priority: i % 5,
+		ts := recentBase.Add(-time.Duration(i) * time.Minute)
+		if i >= activeClosedCutoff {
+			ts = archiveBase.Add(-time.Duration(i-activeClosedCutoff) * time.Minute)
 		}
-		if i < closedCutoff {
-			b.Status = StatusClosed
-		} else {
+		b := Bead{
+			ID:        fmt.Sprintf("bench-%04d", i),
+			Title:     fmt.Sprintf("bench bead %d", i),
+			Priority:  i % 5,
+			IssueType: DefaultType,
+			CreatedAt: ts,
+			UpdatedAt: ts,
+		}
+		switch {
+		case i < archivedCutoff:
 			b.Status = StatusOpen
+			b.Extra = map[string]any{
+				"events": benchEvents(b.ID, "open", 1, 64, ts.Add(-2*time.Hour)),
+			}
 			switch i % 3 {
 			case 1:
-				// Dep on a closed bead → ready.
+				// Dep on a recent closed bead -> ready.
+				target := archivedCutoff + (i % archivedCutoff)
 				b.Dependencies = []Dependency{{
 					IssueID:     b.ID,
-					DependsOnID: fmt.Sprintf("bench-%04d", 50),
+					DependsOnID: fmt.Sprintf("bench-%04d", target),
 					Type:        "blocks",
 				}}
 			case 2:
-				// Dep on an open bead → blocked.
-				openTarget := closedCutoff + 1
-				if openTarget == i {
-					openTarget = closedCutoff + 2
-				}
+				// Dep on a different open bead -> blocked.
+				openTarget := (i + 1) % archivedCutoff
 				b.Dependencies = []Dependency{{
 					IssueID:     b.ID,
 					DependsOnID: fmt.Sprintf("bench-%04d", openTarget),
 					Type:        "blocks",
 				}}
+			}
+		case i < activeClosedCutoff:
+			b.Status = StatusClosed
+			b.Extra = map[string]any{
+				"events": benchEvents(b.ID, "closed", 2, 128, ts.Add(-4*time.Hour)),
+			}
+		default:
+			b.Status = StatusClosed
+			b.Extra = map[string]any{
+				"events": benchEvents(b.ID, "archived", 4, 192, ts.Add(-8*time.Hour)),
 			}
 		}
 		beads[i] = b
@@ -85,54 +127,5 @@ func benchBackends() []benchBackendCtor {
 	return []benchBackendCtor{
 		{name: "jsonl", make: newJSONLBenchStore},
 		{name: "axon", make: newAxonBenchStore},
-	}
-}
-
-func BenchmarkQueueOps_Ready(b *testing.B) {
-	beads := makeBenchBeads(benchFixtureSize)
-	for _, bk := range benchBackends() {
-		bk := bk
-		b.Run(bk.name, func(b *testing.B) {
-			s := bk.make(b, beads)
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				if _, err := s.Ready(); err != nil {
-					b.Fatal(err)
-				}
-			}
-		})
-	}
-}
-
-func BenchmarkQueueOps_Blocked(b *testing.B) {
-	beads := makeBenchBeads(benchFixtureSize)
-	for _, bk := range benchBackends() {
-		bk := bk
-		b.Run(bk.name, func(b *testing.B) {
-			s := bk.make(b, beads)
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				if _, err := s.Blocked(); err != nil {
-					b.Fatal(err)
-				}
-			}
-		})
-	}
-}
-
-func BenchmarkQueueOps_Show(b *testing.B) {
-	beads := makeBenchBeads(benchFixtureSize)
-	for _, bk := range benchBackends() {
-		bk := bk
-		b.Run(bk.name, func(b *testing.B) {
-			s := bk.make(b, beads)
-			b.ResetTimer()
-			for i := 0; i < b.N; i++ {
-				id := fmt.Sprintf("bench-%04d", i%benchFixtureSize)
-				if _, err := s.Get(id); err != nil {
-					b.Fatal(err)
-				}
-			}
-		})
 	}
 }
