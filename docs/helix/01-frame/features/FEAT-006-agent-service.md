@@ -73,10 +73,11 @@ DDx owns:
   and prior run metadata. On retry, DDx may raise `MinPower`. The agent owns
   how those power bounds map to a concrete model/provider.
 
-Fizeau owns the agent's transcript/progress/session rendering surface. DDx may
+Fizeau owns the agent's transcript/progress/session rendering surface. DDx is
+a pass-through/marshalling consumer for Fizeau transcript events: it may
 forward Fizeau `ServiceEvent`s and link or copy Fizeau artifacts into the
 execution evidence bundle, but DDx does not interpret transcript semantics or
-render the inner Fizeau session log.
+inspect the Fizeau session log body.
 
 ## Power Intent
 

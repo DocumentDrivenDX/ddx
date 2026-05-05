@@ -85,13 +85,14 @@ Legacy unscoped `/api/...` and `/mcp/...` forms remain only as compatibility ali
 
 `ddx-server` hosts an in-process `WorkerManager` that supervises `ddx work`
 workers as goroutines. Each worker drains exactly one registered project
-context; it never crosses project boundaries. Worker lifecycle (start, live
-logs, stop, record on disk) is owned by the server, so the host+user daemon is
-the single point of coordination for all long-running agent activity on the
-machine. The supervisor exposes worker state through the same project-scoped API
-surface used for beads and executions, and worker records persist under the
-project's own `.ddx/workers/` directory so preservation and cleanup stay scoped
-per project.
+context; it never crosses project boundaries. Worker lifecycle state
+(start, live progress, stop, record on disk) is DDx-owned and distinct from any
+agent transcript data. The host+user daemon is the single point of
+coordination for all long-running DDx worker activity on the machine. The
+supervisor exposes worker state through the same project-scoped API surface
+used for beads and executions, and worker records persist under the project's
+own `.ddx/workers/` directory so preservation and cleanup stay scoped per
+project.
 
 When multiple machines each run `ddx-server` against the same project, each
 machine runs its own land coordinator against its local clone. The shared git
@@ -145,10 +146,10 @@ resolve exactly one project context.
 
 **Agent Activity (FEAT-006)**
 19. `GET /api/projects/:project/agent/sessions` — list recent DDx agent invocations
-20. `GET /api/projects/:project/agent/sessions/:id` — invocation detail, including native
-    session/trace references and any forwarded Fizeau event/transcript envelope
-    data; these payloads are opaque to DDx and are distinct from worker
-    lifecycle events
+20. `GET /api/projects/:project/agent/sessions/:id` — invocation detail,
+    including native session/trace references and any forwarded Fizeau
+    event/transcript envelope data; these payloads are opaque to DDx, owned by
+    Fizeau, and are distinct from worker lifecycle events
 21. MCP tool: `ddx_agent_sessions` (project selector required unless singleton compatibility mode applies)
 
 **Worker Progress (FEAT-006 embedded-agent progress contract)**
@@ -160,7 +161,8 @@ authoritative source for historical phase summaries.
 
 Worker lifecycle events are DDx-owned. Forwarded Fizeau agent events are
 opaque payloads attached to agent-session records, not worker lifecycle state,
-and the server surfaces them without interpreting transcript semantics.
+and the server surfaces them without interpreting transcript semantics. Fizeau
+owns transcript rendering and session-log presentation.
 
 22. `GET /api/projects/:project/workers` — list active and recently completed
     workers for a project; each entry includes worker identity, current status
