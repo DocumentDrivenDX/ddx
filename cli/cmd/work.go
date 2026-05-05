@@ -71,6 +71,7 @@ work runs inline in the current process; per ADR-022 there is no separate
 	cmd.Flags().Bool("local", false, "Deprecated: no-op; ddx work always runs inline (ADR-022)")
 	_ = cmd.Flags().MarkDeprecated("local", "ddx work always runs inline; the flag is a no-op (ADR-022)")
 	cmd.Flags().Bool("no-review", false, "Skip post-merge review")
+	cmd.Flags().Bool("no-review-i-know-what-im-doing", false, "Break-glass acknowledgement required when using --no-review")
 	cmd.Flags().String("review-harness", "", "Harness for the post-merge reviewer (default: same as implementation harness)")
 	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart tier)")
 	cmd.Flags().Float64("max-cost", escalation.DefaultMaxCostUSD, "Stop when accumulated billed cost exceeds USD; 0 = unlimited")

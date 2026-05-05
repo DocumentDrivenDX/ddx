@@ -123,6 +123,16 @@ func HasBeadLabel(labels []string, label string) bool {
 	return false
 }
 
+// HasBeadLabelPrefix reports whether any label starts with the provided prefix.
+func HasBeadLabelPrefix(labels []string, prefix string) bool {
+	for _, l := range labels {
+		if strings.HasPrefix(l, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
 // BeadReader can fetch a bead by ID. Implemented by *bead.Store.
 type BeadReader interface {
 	Get(id string) (*bead.Bead, error)

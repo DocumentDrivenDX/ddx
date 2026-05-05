@@ -123,7 +123,7 @@ func TestTry_HappyPath_ClaimsAndExecutes(t *testing.T) {
 	factory.tryExecutorOverride = stubExecutor
 	root := factory.NewRootCommand()
 
-	out, err := executeCommand(root, "try", "happy-bead-001", "--no-review")
+	out, err := executeCommand(root, "try", "happy-bead-001", "--no-review", "--no-review-i-know-what-im-doing")
 	require.NoError(t, err, "ddx try with a successful stub executor must exit zero: %s", out)
 	assert.True(t, executorCalled, "executor must have been called")
 
@@ -162,7 +162,7 @@ func TestTry_FlagsPlumbThrough(t *testing.T) {
 	// we assert the flags are accepted without error (no flag-parsing failure)
 	// and the executor is invoked with the correct bead ID.
 	out, err := executeCommand(root, "try", "flag-bead-001",
-		"--harness=codex", "--model=gpt-5.4-mini", "--no-review")
+		"--harness=codex", "--model=gpt-5.4-mini", "--no-review", "--no-review-i-know-what-im-doing")
 	require.NoError(t, err, "ddx try with routing flags must not fail on flag parsing: %s", out)
 	assert.Equal(t, "flag-bead-001", capturedBeadID,
 		"executor must receive the correct bead ID regardless of routing flags")
@@ -174,8 +174,33 @@ func TestTry_FlagsPlumbThrough(t *testing.T) {
 	assert.NotNil(t, tryCmd.Flags().Lookup("profile"), "try must expose --profile flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("provider"), "try must expose --provider flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("no-review"), "try must expose --no-review flag")
+	assert.NotNil(t, tryCmd.Flags().Lookup("no-review-i-know-what-im-doing"), "try must expose the break-glass acknowledgement flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("review-harness"), "try must expose --review-harness flag")
 	assert.NotNil(t, tryCmd.Flags().Lookup("review-model"), "try must expose --review-model flag")
+}
+
+// TestTry_NoReviewRequiresAckFlag verifies the break-glass guardrail: the
+// command must reject --no-review unless the explicit acknowledgement flag is
+// also present.
+func TestTry_NoReviewRequiresAckFlag(t *testing.T) {
+	env := NewTestEnvironment(t)
+	store := bead.NewStore(env.Dir + "/.ddx")
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:    "guardrail-bead-001",
+		Title: "Guardrail bead",
+	}))
+
+	factory := NewCommandFactory(env.Dir)
+	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+		t.Fatalf("executor should not be called when --no-review ack is missing")
+		return agent.ExecuteBeadReport{}, nil
+	})
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "try", "guardrail-bead-001", "--no-review")
+	require.Error(t, err)
+	assert.Contains(t, out, "--no-review requires --no-review-i-know-what-im-doing")
 }
 
 // TestTry_CommandRegistered verifies AC #7: "ddx try" is wired into the root
@@ -194,4 +219,5 @@ func TestTry_CommandRegistered(t *testing.T) {
 		require.NoError(t, err, "ddx try --help must not return an error")
 	}
 	assert.Contains(t, out, "bead-id", "help must mention bead-id")
+	assert.Contains(t, out, "--no-review-i-know-what-im-doing", "help must document the break-glass acknowledgement flag")
 }

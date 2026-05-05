@@ -47,6 +47,12 @@ func TestHasBeadLabel(t *testing.T) {
 	assert.False(t, HasBeadLabel(nil, "review:skip"))
 }
 
+func TestHasBeadLabelPrefix(t *testing.T) {
+	assert.True(t, HasBeadLabelPrefix([]string{"review:skip-reason:doc-only"}, "review:skip-reason:"))
+	assert.False(t, HasBeadLabelPrefix([]string{"review:skip"}, "review:skip-reason:"))
+	assert.False(t, HasBeadLabelPrefix(nil, "review:skip-reason:"))
+}
+
 // ---------------------------------------------------------------------------
 // ExecuteBeadWorker with reviewer — loop integration tests
 // ---------------------------------------------------------------------------
@@ -415,10 +421,10 @@ func TestExecuteBeadWorkerNoReviewSkipsReviewer(t *testing.T) {
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
 
-func TestExecuteBeadWorkerReviewSkipLabelSkipsReviewer(t *testing.T) {
+func TestExecuteBeadWorkerReviewSkipLabelWithReasonSkipsReviewer(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
-	labeled := &bead.Bead{ID: "ddx-skip-1", Title: "Skip review", Labels: []string{"review:skip"}}
+	labeled := &bead.Bead{ID: "ddx-skip-1", Title: "Skip review", Labels: []string{"review:skip", "review:skip-reason:doc-only"}}
 	require.NoError(t, store.Create(labeled))
 
 	reviewerCalled := false
@@ -446,6 +452,43 @@ func TestExecuteBeadWorkerReviewSkipLabelSkipsReviewer(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, reviewerCalled, "reviewer must not be called when bead has review:skip label")
 	assert.Equal(t, 1, result.Successes)
+}
+
+func TestExecuteBeadWorkerReviewSkipLabelWithoutReasonIsIgnored(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+	labeled := &bead.Bead{ID: "ddx-skip-2", Title: "Skip review", Labels: []string{"review:skip"}}
+	require.NoError(t, store.Create(labeled))
+
+	reviewerCalled := false
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-label-ignore",
+				ResultRev: "feedface",
+			}, nil
+		}),
+		Reviewer: beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+			reviewerCalled = true
+			return &ReviewResult{Verdict: VerdictRequestChanges}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	assert.True(t, reviewerCalled, "reviewer must be called when review:skip lacks a review:skip-reason label")
+	assert.Equal(t, 0, result.Successes)
+	assert.Equal(t, 1, result.Failures)
+	assert.Equal(t, ExecuteBeadStatusReviewRequestChanges, result.LastFailureStatus)
+
+	got, err := store.Get(labeled.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status, "label-only skip should be ignored")
 }
 
 func TestExecuteBeadWorkerNilReviewerSkipsReview(t *testing.T) {

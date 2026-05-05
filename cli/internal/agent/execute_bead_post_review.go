@@ -51,10 +51,12 @@ type PostMergeReviewOutput struct {
 }
 
 // RunPostMergeReview executes the post-merge review state machine for a
-// successful bead attempt. When review is skipped (no reviewer, --no-review,
-// or the review:skip label) the bead is closed and the function returns
-// Approved=true. Otherwise the reviewer is invoked, its verdict (or error)
-// drives the canonical event emissions (review / review-error /
+// successful bead attempt. When review is skipped (no reviewer or --no-review)
+// the bead is closed and the function returns Approved=true. The
+// review:skip label only skips when it carries a sibling
+// review:skip-reason:* label; otherwise it is ignored. When review is not
+// skipped, the reviewer is invoked and its verdict (or error) drives the
+// canonical event emissions (review / review-error /
 // review-manual-required / review-malfunction), and on a non-APPROVE verdict
 // the bead is reopened and the triage policy is consulted via the private
 // applyReviewTriageDecision callout that previously lived as a method on
@@ -78,7 +80,10 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 		now = time.Now
 	}
 
-	reviewSkipped := in.Reviewer == nil || in.NoReview || HasBeadLabel(in.Bead.Labels, "review:skip")
+	reviewSkipped := in.Reviewer == nil || in.NoReview
+	if !reviewSkipped && HasBeadLabel(in.Bead.Labels, "review:skip") {
+		reviewSkipped = HasBeadLabelPrefix(in.Bead.Labels, "review:skip-reason:")
+	}
 
 	if reviewSkipped {
 		if err := in.Store.CloseWithEvidence(in.Bead.ID, report.SessionID, report.ResultRev); err != nil {

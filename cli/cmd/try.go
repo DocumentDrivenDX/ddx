@@ -67,7 +67,7 @@ Exit codes:
   ddx try ddx-abc12345 --harness codex --model gpt-5.4-mini
 
   # Execute without the post-merge review step
-  ddx try ddx-abc12345 --no-review`,
+  ddx try ddx-abc12345 --no-review --no-review-i-know-what-im-doing`,
 		Args: cobra.ExactArgs(1),
 		RunE: f.runTry,
 	}
@@ -82,6 +82,7 @@ Exit codes:
 	cmd.Flags().String("model-ref", "", "Model catalog reference (e.g. code-medium); resolved via the model catalog")
 	cmd.Flags().String("effort", "", "Effort level")
 	cmd.Flags().Bool("no-review", false, "Skip post-merge review")
+	cmd.Flags().Bool("no-review-i-know-what-im-doing", false, "Break-glass acknowledgement required when using --no-review")
 	cmd.Flags().String("review-harness", "", "Harness for the post-merge reviewer (default: same as implementation harness)")
 	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart tier)")
 	cmd.Flags().Duration("request-timeout", 0, "Per-request provider wall-clock timeout; overrides project config and model-class defaults")
@@ -105,11 +106,16 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	modelRef, _ := cmd.Flags().GetString("model-ref")
 	effort, _ := cmd.Flags().GetString("effort")
 	noReview, _ := cmd.Flags().GetBool("no-review")
+	noReviewAck, _ := cmd.Flags().GetBool("no-review-i-know-what-im-doing")
 	reviewHarness, _ := cmd.Flags().GetString("review-harness")
 	reviewModel, _ := cmd.Flags().GetString("review-model")
 	requestTimeout, _ := cmd.Flags().GetDuration("request-timeout")
 	minPower, _ := cmd.Flags().GetInt("min-power")
 	maxPower, _ := cmd.Flags().GetInt("max-power")
+
+	if noReview && !noReviewAck {
+		return fmt.Errorf("--no-review requires --no-review-i-know-what-im-doing (break-glass acknowledgement)")
+	}
 
 	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
 

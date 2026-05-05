@@ -1549,6 +1549,7 @@ is registered with the server (run "ddx server" from that directory, or use
 	cmd.Flags().Bool("local", false, "Deprecated: no-op; execute-loop always runs inline (ADR-022)")
 	_ = cmd.Flags().MarkDeprecated("local", "execute-loop always runs inline; the flag is a no-op (ADR-022)")
 	cmd.Flags().Bool("no-review", false, "Skip post-merge review (e.g. for doc-only beads or tight iteration loops)")
+	cmd.Flags().Bool("no-review-i-know-what-im-doing", false, "Break-glass acknowledgement required when using --no-review")
 	cmd.Flags().String("review-harness", "", "Harness to use for the post-merge reviewer (default: same as implementation harness)")
 	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart tier)")
 	cmd.Flags().Float64("max-cost", escalation.DefaultMaxCostUSD, "Stop the loop when accumulated billed cost exceeds USD; 0 = unlimited; subscription and local providers do not count")
@@ -1598,12 +1599,17 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	}
 	asJSON, _ := cmd.Flags().GetBool("json")
 	noReview, _ := cmd.Flags().GetBool("no-review")
+	noReviewAck, _ := cmd.Flags().GetBool("no-review-i-know-what-im-doing")
 	reviewHarness, _ := cmd.Flags().GetString("review-harness")
 	reviewModel, _ := cmd.Flags().GetString("review-model")
 	maxCostUSD, _ := cmd.Flags().GetFloat64("max-cost")
 	requestTimeout, _ := cmd.Flags().GetDuration("request-timeout")
 	minPower, _ := cmd.Flags().GetInt("min-power")
 	maxPower, _ := cmd.Flags().GetInt("max-power")
+
+	if noReview && !noReviewAck {
+		return fmt.Errorf("--no-review requires --no-review-i-know-what-im-doing (break-glass acknowledgement)")
+	}
 
 	// Zero-config auto-route: when the operator passes no routing flags and
 	// the project has no .ddx/config.yaml routing block, dispatch flows

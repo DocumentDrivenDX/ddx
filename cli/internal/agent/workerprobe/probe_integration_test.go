@@ -72,11 +72,12 @@ func TestWorker_RealAttemptEvents_FlowToServer(t *testing.T) {
 		t.Fatalf("write server.addr: %v", err)
 	}
 
-	// Spawn `ddx work --once`. We deliberately pass --no-review and
-	// a bogus harness so the worker exits quickly after emitting loop.start
-	// + bead.claimed; the harness failure is irrelevant to this test, which
-	// asserts only that events flowed through the probe.
-	cmd := exec.Command(bin, "work", "--once", "--no-review",
+	// Spawn `ddx work --once`. We deliberately pass --no-review with the
+	// required acknowledgement flag and a bogus harness so the worker exits
+	// quickly after emitting loop.start + bead.claimed; the harness failure is
+	// irrelevant to this test, which asserts only that events flowed through the
+	// probe.
+	cmd := exec.Command(bin, "work", "--once", "--no-review", "--no-review-i-know-what-im-doing",
 		"--harness", "noop", "--poll-interval", "0", "--project", proj)
 	cmd.Env = append(os.Environ(),
 		"XDG_DATA_HOME="+xdg,
