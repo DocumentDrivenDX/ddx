@@ -72,6 +72,20 @@
             "nif",
             "bx"
           ]
+        },
+        "backend": {
+          "type": "string",
+          "enum": [
+            "jsonl",
+            "bd",
+            "br",
+            "axon"
+          ],
+          "description": "Select the bead storage backend",
+          "examples": [
+            "jsonl",
+            "axon"
+          ]
         }
       },
       "additionalProperties": false
