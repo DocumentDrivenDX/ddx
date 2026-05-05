@@ -226,6 +226,6 @@ ACCEPTANCE
 
 ## 7. References
 
-- `docs/helix/06-iterate/reliability-principles.md` (planned via `ddx-06b77652`) — P7 source.
+- `docs/helix/06-iterate/reliability-principles.md` — P7 source.
 - `.ddx/executions/20260503T155638-bead57f0cb9e/bead-quality-audit-2026-05-03.md` — the audit that produced this template.
 - `.agents/skills/ddx/reference/beads.md` and `.claude/skills/ddx/reference/beads.md` — operational guidance on creating beads via `ddx bead create`.
