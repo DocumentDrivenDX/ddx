@@ -1,0 +1,54 @@
+{
+  "verdict": "BLOCK",
+  "rationale": "agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T19:58:40-04:00)",
+  "error": "review-error: transport",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2481,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 274,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260505T234506-21cbb503/checks/production-reachability.json",
+          ".ddx/executions/20260505T234506-21cbb503/manifest.json",
+          ".ddx/executions/20260505T234506-21cbb503/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:SD-011",
+        "bytes_included": 5787,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/02-design/solution-designs/SD-011-agent-skills.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 10502,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 20812,
+    "output_bytes": 0,
+    "elapsed_ms": 4147,
+    "harness": "claude",
+    "model": "claude-opus-4-6"
+  }
+}
