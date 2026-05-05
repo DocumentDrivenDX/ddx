@@ -153,6 +153,96 @@ func TestAttempt_ConflictUnresolvable_ReturnsPark(t *testing.T) {
 	assert.Equal(t, "land-conflict-unresolvable", store.events[0].Kind)
 }
 
+func TestAttempt_RateLimit_Retry_HonorsRetryAfter(t *testing.T) {
+	var sleepCalls []time.Duration
+	calls := 0
+
+	out, err := Attempt(context.Background(), nil, "ddx-test", AttemptOpts{
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			calls++
+			if calls == 1 {
+				return Report{
+					BeadID: beadID,
+					Status: StatusExecutionFailed,
+					Error:  "cancelled: auth/rate-limit detected",
+					Stderr: "HTTP 429\nRetry-After: 7\n",
+					Detail: "rate limit",
+				}, nil
+			}
+			return Report{BeadID: beadID, Status: StatusSuccess}, nil
+		}),
+		RateLimitBudget:     5 * time.Minute,
+		RateLimitPerWaitCap: 60 * time.Second,
+		RateLimitSleep: func(_ context.Context, d time.Duration) error {
+			sleepCalls = append(sleepCalls, d)
+			return nil
+		},
+		RateLimitNow: func() time.Time {
+			return time.Date(2026, 5, 3, 12, 0, 0, 0, time.UTC)
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, OutcomeReported, out.Disposition)
+	assert.Equal(t, StatusSuccess, out.Report.Status)
+	assert.Equal(t, 2, calls)
+	require.Len(t, sleepCalls, 1)
+	assert.Equal(t, 7*time.Second, sleepCalls[0])
+}
+
+func TestAttempt_RateLimit_Retry_UsesExponentialBackoff(t *testing.T) {
+	var sleepCalls []time.Duration
+	calls := 0
+
+	out, err := Attempt(context.Background(), nil, "ddx-test", AttemptOpts{
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			calls++
+			if calls < 3 {
+				return Report{
+					BeadID: beadID,
+					Status: StatusExecutionFailed,
+					Error:  "rate limit exceeded",
+					Detail: "rate limit",
+				}, nil
+			}
+			return Report{BeadID: beadID, Status: StatusSuccess}, nil
+		}),
+		RateLimitBudget:     5 * time.Minute,
+		RateLimitPerWaitCap: 60 * time.Second,
+		RateLimitSleep: func(_ context.Context, d time.Duration) error {
+			sleepCalls = append(sleepCalls, d)
+			return nil
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, OutcomeReported, out.Disposition)
+	assert.Equal(t, StatusSuccess, out.Report.Status)
+	assert.Equal(t, 3, calls)
+	require.Equal(t, []time.Duration{1 * time.Second, 5 * time.Second}, sleepCalls)
+}
+
+func TestAttempt_RateLimit_WiresEvaluateRateLimitWait(t *testing.T) {
+	evaluatorCalls := 0
+	out, err := Attempt(context.Background(), nil, "ddx-test", AttemptOpts{
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{
+				BeadID: beadID,
+				Status: StatusExecutionFailed,
+				Error:  "429 rate limit exceeded",
+			}, nil
+		}),
+		RateLimitWaitEvaluator: func(retryAfter time.Duration, attempt int, elapsed, budget, perWaitCap time.Duration) RateLimitWaitDecision {
+			evaluatorCalls++
+			return RateLimitWaitDecision{ShouldRetry: false, Reason: RateLimitBudgetExhaustedReason}
+		},
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, 1, evaluatorCalls)
+	assert.Equal(t, RateLimitBudgetExhaustedReason, out.Report.Error)
+}
+
 type attemptStore struct {
 	events              []bead.BeadEvent
 	closedSHA           string

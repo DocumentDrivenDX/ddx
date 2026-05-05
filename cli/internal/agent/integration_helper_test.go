@@ -228,6 +228,9 @@ func executeBeadResultToReport(res *ExecuteBeadResult) ExecuteBeadReport {
 		ResultRev:          res.ResultRev,
 		PreserveRef:        res.PreserveRef,
 		NoChangesRationale: res.NoChangesRationale,
+		Error:              res.Error,
+		Stderr:             res.Stderr,
+		RateLimitBudget:    res.RateLimitBudget,
 	}
 }
 

@@ -86,11 +86,13 @@ type ExecuteBeadResult struct {
 	// the FailureMode* constants in execute_bead_status.go.
 	FailureMode string `json:"failure_mode,omitempty"`
 
-	ExecutionDir string `json:"execution_dir,omitempty"`
-	PromptFile   string `json:"prompt_file,omitempty"`
-	ManifestFile string `json:"manifest_file,omitempty"`
-	ResultFile   string `json:"result_file,omitempty"`
-	UsageFile    string `json:"usage_file,omitempty"`
+	ExecutionDir    string        `json:"execution_dir,omitempty"`
+	PromptFile      string        `json:"prompt_file,omitempty"`
+	ManifestFile    string        `json:"manifest_file,omitempty"`
+	ResultFile      string        `json:"result_file,omitempty"`
+	UsageFile       string        `json:"usage_file,omitempty"`
+	Stderr          string        `json:"stderr,omitempty"`
+	RateLimitBudget time.Duration `json:"rate_limit_budget,omitempty"`
 
 	StartedAt  time.Time `json:"started_at"`
 	FinishedAt time.Time `json:"finished_at"`
@@ -796,32 +798,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	defer dispatchCancel()
 	cancelHonored := startCancelPoll(dispatchCtx, dispatchCancel, beadID, runtime.BeadCancel)
 
-	// Wrap dispatch with the per-bead rate-limit retry policy
-	// (ddx-c6e3db02 / TD-031 §8.4 RateLimitRetryContract). On HTTP 429 from
-	// the harness, the wrapper waits per Retry-After (or exponential
-	// backoff), invokes RecordRouteAttempt for routing-engine transparency
-	// without flipping provider availability, and retries the same bead
-	// with the same provider until either a non-rate-limit result lands or
-	// the per-bead total wait budget is exhausted.
-	rateLimitCfg := RateLimitRetryConfig{
-		Budget: runtime.RateLimitMaxWait,
-	}
-	if runtime.Service != nil {
-		rateLimitCfg.OnRetry = func(ctx context.Context, info RateLimitRetryInfo) {
-			// Best-effort; the routing engine has its own error handling.
-			_ = runtime.Service.RecordRouteAttempt(ctx, BuildRateLimitRouteAttempt(info))
-			if runtime.BeadEvents != nil {
-				appendRateLimitRetryEvent(runtime.BeadEvents, beadID, info)
-			}
-		}
-	} else if runtime.BeadEvents != nil {
-		rateLimitCfg.OnRetry = func(_ context.Context, info RateLimitRetryInfo) {
-			appendRateLimitRetryEvent(runtime.BeadEvents, beadID, info)
-		}
-	}
-	agentResult, agentErr := RunWithRateLimitRetry(dispatchCtx, rateLimitCfg, func(ctx context.Context) (*Result, error) {
-		return dispatchAgentRun(ctx, projectRoot, runtime.Service, runtime.AgentRunner, rcfg, runRuntime)
-	})
+	agentResult, agentErr := dispatchAgentRun(dispatchCtx, projectRoot, runtime.Service, runtime.AgentRunner, rcfg, runRuntime)
 	finishedAt := time.Now().UTC()
 
 	exitCode := 0
@@ -838,6 +815,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	predictedCostUSDPer1kTokens := 0.0
 	predictedCostSource := ""
 	agentErrMsg := ""
+	agentStderr := ""
 	if agentResult != nil {
 		exitCode = agentResult.ExitCode
 		tokens = agentResult.Tokens
@@ -846,6 +824,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		costUSD = agentResult.CostUSD
 		if agentResult.Error != "" {
 			agentErrMsg = agentResult.Error
+		}
+		if agentResult.Stderr != "" {
+			agentStderr = agentResult.Stderr
 		}
 		if agentResult.Model != "" {
 			resultModel = agentResult.Model
@@ -903,6 +884,8 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			CostUSD:                     costUSD,
 			ExitCode:                    1,
 			Error:                       agentErrMsg,
+			Stderr:                      agentStderr,
+			RateLimitBudget:             runtime.RateLimitMaxWait,
 			Reason:                      revErr.Error(), // HeadRev failure; orchestrator prefers this over Error for Reason
 			ExecutionDir:                artifacts.DirRel,
 			PromptFile:                  artifacts.PromptRel,
@@ -975,6 +958,8 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 				CostUSD:                     costUSD,
 				ExitCode:                    exitCode,
 				Error:                       agentErrMsg,
+				Stderr:                      agentStderr,
+				RateLimitBudget:             runtime.RateLimitMaxWait,
 				ExecutionDir:                artifacts.DirRel,
 				PromptFile:                  artifacts.PromptRel,
 				ManifestFile:                artifacts.ManifestRel,
@@ -1021,6 +1006,8 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		CostUSD:                     costUSD,
 		ExitCode:                    exitCode,
 		Error:                       agentErrMsg,
+		Stderr:                      agentStderr,
+		RateLimitBudget:             runtime.RateLimitMaxWait,
 		ExecutionDir:                artifacts.DirRel,
 		PromptFile:                  artifacts.PromptRel,
 		ManifestFile:                artifacts.ManifestRel,

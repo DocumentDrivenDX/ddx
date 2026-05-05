@@ -39,6 +39,9 @@ func toTryReport(report ExecuteBeadReport) agenttry.Report {
 		Disrupted:                   report.Disrupted,
 		DisruptionReason:            report.DisruptionReason,
 		OutcomeReason:               report.OutcomeReason,
+		Error:                       report.Error,
+		Stderr:                      report.Stderr,
+		RateLimitBudget:             report.RateLimitBudget,
 	}
 }
 
@@ -75,6 +78,9 @@ func fromTryReport(report agenttry.Report) ExecuteBeadReport {
 		Disrupted:                   report.Disrupted,
 		DisruptionReason:            report.DisruptionReason,
 		OutcomeReason:               report.OutcomeReason,
+		Error:                       report.Error,
+		Stderr:                      report.Stderr,
+		RateLimitBudget:             report.RateLimitBudget,
 	}
 }
 

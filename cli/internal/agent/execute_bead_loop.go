@@ -236,18 +236,21 @@ type ExecuteBeadReport struct {
 	// served the implementer's call. Forwarded to the post-merge reviewer so
 	// it can request MinPower=actualPower+1 and bias routing toward a
 	// stronger reviewer (R4 pairing).
-	ActualPower                 int     `json:"actual_power,omitempty"`
-	PredictedPower              int     `json:"predicted_power,omitempty"`
-	PredictedSpeedTPS           float64 `json:"predicted_speed_tps,omitempty"`
-	PredictedCostUSDPer1kTokens float64 `json:"predicted_cost_usd_per_1k_tokens,omitempty"`
-	PredictedCostSource         string  `json:"predicted_cost_source,omitempty"`
-	Status                      string  `json:"status"`
-	Detail                      string  `json:"detail,omitempty"`
-	SessionID                   string  `json:"session_id,omitempty"`
-	BaseRev                     string  `json:"base_rev,omitempty"`
-	ResultRev                   string  `json:"result_rev,omitempty"`
-	PreserveRef                 string  `json:"preserve_ref,omitempty"`
-	RetryAfter                  string  `json:"retry_after,omitempty"`
+	ActualPower                 int           `json:"actual_power,omitempty"`
+	PredictedPower              int           `json:"predicted_power,omitempty"`
+	PredictedSpeedTPS           float64       `json:"predicted_speed_tps,omitempty"`
+	PredictedCostUSDPer1kTokens float64       `json:"predicted_cost_usd_per_1k_tokens,omitempty"`
+	PredictedCostSource         string        `json:"predicted_cost_source,omitempty"`
+	Status                      string        `json:"status"`
+	Detail                      string        `json:"detail,omitempty"`
+	Error                       string        `json:"error,omitempty"`
+	Stderr                      string        `json:"stderr,omitempty"`
+	RateLimitBudget             time.Duration `json:"rate_limit_budget,omitempty"`
+	SessionID                   string        `json:"session_id,omitempty"`
+	BaseRev                     string        `json:"base_rev,omitempty"`
+	ResultRev                   string        `json:"result_rev,omitempty"`
+	PreserveRef                 string        `json:"preserve_ref,omitempty"`
+	RetryAfter                  string        `json:"retry_after,omitempty"`
 	// NoChangesRationale carries the agent's explanation when status == no_changes.
 	NoChangesRationale string `json:"no_changes_rationale,omitempty"`
 	// ReviewVerdict is the post-merge review verdict (APPROVE, REQUEST_CHANGES,

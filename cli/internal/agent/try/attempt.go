@@ -3,6 +3,9 @@ package try
 import (
 	"context"
 	"fmt"
+	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -48,6 +51,9 @@ type Report struct {
 	Disrupted                   bool
 	DisruptionReason            string
 	OutcomeReason               string
+	Error                       string
+	Stderr                      string
+	RateLimitBudget             time.Duration
 }
 
 type Executor interface {
@@ -73,17 +79,23 @@ type ConflictAutoRecoverFn func(wd, preserveRef string) (string, error)
 type ConflictResolverFn func(ctx context.Context, beadID, preserveRef, projectRoot string) (newTip string, isBlocking bool, err error)
 
 type AttemptOpts struct {
-	Bead                bead.Bead
-	Executor            Executor
-	Store               Store
-	ProjectRoot         string
-	SatisfactionChecker SatisfactionChecker
-	VerificationRunner  VerificationCommandRunner
-	AutoRecover         ConflictAutoRecoverFn
-	ConflictResolver    ConflictResolverFn
-	Assignee            string
-	Now                 func() time.Time
-	Cooldown            time.Duration
+	Bead                   bead.Bead
+	Executor               Executor
+	Store                  Store
+	ProjectRoot            string
+	SatisfactionChecker    SatisfactionChecker
+	VerificationRunner     VerificationCommandRunner
+	AutoRecover            ConflictAutoRecoverFn
+	ConflictResolver       ConflictResolverFn
+	Assignee               string
+	Now                    func() time.Time
+	Cooldown               time.Duration
+	RateLimitBudget        time.Duration
+	RateLimitPerWaitCap    time.Duration
+	RateLimitWaitEvaluator func(retryAfter time.Duration, attempt int, elapsed, budget, perWaitCap time.Duration) RateLimitWaitDecision
+	RateLimitSleep         func(ctx context.Context, d time.Duration) error
+	RateLimitNow           func() time.Time
+	RateLimitOnRetry       func(ctx context.Context, info RateLimitRetryInfo)
 }
 
 type Disposition string
@@ -106,19 +118,67 @@ func Attempt(ctx context.Context, store Store, beadID string, opts AttemptOpts) 
 	if opts.Executor == nil {
 		return Outcome{}, fmt.Errorf("try attempt: executor is required")
 	}
-	report, err := opts.Executor.Execute(ctx, beadID)
-	if err != nil {
-		report = Report{
-			BeadID: beadID,
-			Status: StatusExecutionFailed,
-			Detail: err.Error(),
+	rateCfg := resolveRateLimitRetryConfig(opts)
+	var (
+		report Report
+		err    error
+	)
+	for retryCount, elapsed := 0, time.Duration(0); ; {
+		report, err = opts.Executor.Execute(ctx, beadID)
+		if err != nil {
+			report = Report{
+				BeadID: beadID,
+				Status: StatusExecutionFailed,
+				Detail: err.Error(),
+				Error:  err.Error(),
+			}
 		}
-	}
-	if report.BeadID == "" {
-		report.BeadID = beadID
-	}
-	if report.Status == "" {
-		report.Status = StatusExecutionFailed
+		if report.BeadID == "" {
+			report.BeadID = beadID
+		}
+		if report.Status == "" {
+			report.Status = StatusExecutionFailed
+		}
+
+		rateLimited := IsRateLimitReport(&report)
+		effectiveBudget := rateCfg.Budget
+		if opts.RateLimitBudget == 0 && report.RateLimitBudget != 0 {
+			effectiveBudget = report.RateLimitBudget
+		}
+		decision, retryAfter := evaluateRateLimitAttempt(report, rateCfg, retryCount+1, elapsed, effectiveBudget)
+		if !decision.ShouldRetry {
+			if decision.Reason != "" {
+				report.Error = decision.Reason
+			}
+			if rateLimited && decision.Reason != "" && rateCfg.OnRetry != nil {
+				rateCfg.OnRetry(ctx, RateLimitRetryInfo{
+					Attempt:    retryCount + 1,
+					Source:     decision.Source,
+					Report:     &report,
+					Elapsed:    elapsed,
+					RetryAfter: retryAfter,
+					OverBudget: true,
+				})
+			}
+			break
+		}
+
+		retryCount++
+		info := RateLimitRetryInfo{
+			Attempt:    retryCount,
+			Wait:       decision.Wait,
+			Source:     decision.Source,
+			Report:     &report,
+			Elapsed:    elapsed,
+			RetryAfter: retryAfter,
+		}
+		if rateCfg.OnRetry != nil {
+			rateCfg.OnRetry(ctx, info)
+		}
+		if err := rateCfg.Sleep(ctx, decision.Wait); err != nil {
+			return Outcome{}, err
+		}
+		elapsed += decision.Wait
 	}
 
 	if ShouldAttemptConflictRecovery(report, opts.ProjectRoot) {
@@ -161,6 +221,228 @@ func Attempt(ctx context.Context, store Store, beadID string, opts AttemptOpts) 
 	}
 
 	return Outcome{Report: report, Disposition: OutcomeReported}, err
+}
+
+type RateLimitRetryConfig struct {
+	Budget     time.Duration
+	PerWaitCap time.Duration
+	Sleep      func(ctx context.Context, d time.Duration) error
+	Now        func() time.Time
+	Evaluator  func(retryAfter time.Duration, attempt int, elapsed, budget, perWaitCap time.Duration) RateLimitWaitDecision
+	OnRetry    func(ctx context.Context, info RateLimitRetryInfo)
+}
+
+const (
+	RateLimitRetryDefaultBudget     = 5 * time.Minute
+	RateLimitRetryDefaultPerWaitCap = 60 * time.Second
+	RateLimitBudgetExhaustedReason  = "rate-limited beyond budget"
+)
+
+var rateLimitBackoffSchedule = []time.Duration{
+	1 * time.Second,
+	5 * time.Second,
+	15 * time.Second,
+	30 * time.Second,
+	60 * time.Second,
+}
+
+type RateLimitWaitDecision struct {
+	ShouldRetry bool
+	Wait        time.Duration
+	Source      string
+	Reason      string
+}
+
+type RateLimitRetryInfo struct {
+	Attempt    int
+	Wait       time.Duration
+	Source     string
+	Report     *Report
+	Elapsed    time.Duration
+	RetryAfter time.Duration
+	OverBudget bool
+}
+
+func resolveRateLimitRetryConfig(opts AttemptOpts) RateLimitRetryConfig {
+	cfg := RateLimitRetryConfig{
+		Budget:     opts.RateLimitBudget,
+		PerWaitCap: opts.RateLimitPerWaitCap,
+		Evaluator:  opts.RateLimitWaitEvaluator,
+		Sleep:      opts.RateLimitSleep,
+		Now:        opts.RateLimitNow,
+		OnRetry:    opts.RateLimitOnRetry,
+	}
+	if cfg.Budget == 0 {
+		cfg.Budget = RateLimitRetryDefaultBudget
+	}
+	if cfg.PerWaitCap == 0 {
+		cfg.PerWaitCap = RateLimitRetryDefaultPerWaitCap
+	}
+	if cfg.Sleep == nil {
+		cfg.Sleep = ctxSleep
+	}
+	if cfg.Now == nil {
+		cfg.Now = time.Now
+	}
+	if cfg.Evaluator == nil {
+		cfg.Evaluator = EvaluateRateLimitWait
+	}
+	return cfg
+}
+
+func ctxSleep(ctx context.Context, d time.Duration) error {
+	if d <= 0 {
+		return nil
+	}
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-t.C:
+		return nil
+	}
+}
+
+func evaluateRateLimitAttempt(report Report, cfg RateLimitRetryConfig, attempt int, elapsed, budget time.Duration) (RateLimitWaitDecision, time.Duration) {
+	if cfg.Budget < 0 || budget < 0 {
+		return RateLimitWaitDecision{ShouldRetry: false}, 0
+	}
+	if !IsRateLimitReport(&report) {
+		return RateLimitWaitDecision{ShouldRetry: false}, 0
+	}
+
+	retryAfter := ExtractRetryAfterFromStderr(report.Stderr, cfg.Now())
+	decision := cfg.Evaluator(retryAfter, attempt, elapsed, budget, cfg.PerWaitCap)
+	if !decision.ShouldRetry {
+		decision.Reason = RateLimitBudgetExhaustedReason
+	}
+	return decision, retryAfter
+}
+
+func EvaluateRateLimitWait(retryAfter time.Duration, attempt int, elapsed, budget, perWaitCap time.Duration) RateLimitWaitDecision {
+	if budget > 0 && elapsed >= budget {
+		return RateLimitWaitDecision{ShouldRetry: false, Reason: RateLimitBudgetExhaustedReason}
+	}
+
+	var wait time.Duration
+	var source string
+	if retryAfter > 0 {
+		wait = retryAfter
+		source = "retry-after"
+	} else {
+		idx := attempt - 1
+		if idx < 0 {
+			idx = 0
+		}
+		if idx >= len(rateLimitBackoffSchedule) {
+			idx = len(rateLimitBackoffSchedule) - 1
+		}
+		wait = rateLimitBackoffSchedule[idx]
+		source = "exponential-backoff"
+	}
+
+	if perWaitCap > 0 && wait > perWaitCap {
+		wait = perWaitCap
+	}
+
+	if budget > 0 && elapsed+wait > budget {
+		remaining := budget - elapsed
+		if remaining <= 0 {
+			return RateLimitWaitDecision{ShouldRetry: false, Reason: RateLimitBudgetExhaustedReason}
+		}
+		wait = remaining
+	}
+
+	return RateLimitWaitDecision{ShouldRetry: true, Wait: wait, Source: source}
+}
+
+func IsRateLimitReport(report *Report) bool {
+	if report == nil {
+		return false
+	}
+	combined := strings.ToLower(report.Error + "\n" + report.Stderr + "\n" + report.Detail)
+	if combined == "\n\n" {
+		return false
+	}
+	if strings.Contains(combined, "quota exceeded") ||
+		strings.Contains(combined, "insufficient quota") ||
+		strings.Contains(combined, "no viable provider") {
+		return false
+	}
+	if strings.Contains(combined, "rate limit") || strings.Contains(combined, "ratelimit") {
+		return true
+	}
+	return hasIsolated429(combined)
+}
+
+func hasIsolated429(s string) bool {
+	for i := 0; i+3 <= len(s); i++ {
+		if s[i:i+3] != "429" {
+			continue
+		}
+		if i > 0 {
+			c := s[i-1]
+			if c >= '0' && c <= '9' {
+				continue
+			}
+		}
+		if i+3 < len(s) {
+			c := s[i+3]
+			if c >= '0' && c <= '9' {
+				continue
+			}
+		}
+		return true
+	}
+	return false
+}
+
+func ParseRetryAfter(value string, now time.Time) time.Duration {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return 0
+	}
+	if secs, err := strconv.Atoi(value); err == nil {
+		if secs < 0 {
+			return 0
+		}
+		return time.Duration(secs) * time.Second
+	}
+	if t, err := http.ParseTime(value); err == nil {
+		d := t.Sub(now)
+		if d < 0 {
+			return 0
+		}
+		return d
+	}
+	if d, err := time.ParseDuration(value); err == nil && d >= 0 {
+		return d
+	}
+	return 0
+}
+
+func ExtractRetryAfterFromStderr(stderr string, now time.Time) time.Duration {
+	if stderr == "" {
+		return 0
+	}
+	lower := strings.ToLower(stderr)
+	for _, marker := range []string{"retry-after:", "retry_after=", "retry-after ", "retry after "} {
+		idx := strings.Index(lower, marker)
+		if idx < 0 {
+			continue
+		}
+		rest := stderr[idx+len(marker):]
+		if eol := strings.IndexAny(rest, "\r\n"); eol >= 0 {
+			rest = rest[:eol]
+		}
+		rest = strings.TrimSpace(rest)
+		rest = strings.Trim(rest, "\"',")
+		if d := ParseRetryAfter(rest, now); d > 0 {
+			return d
+		}
+	}
+	return 0
 }
 
 func ShouldAttemptConflictRecovery(report Report, projectRoot string) bool {
