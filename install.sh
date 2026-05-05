@@ -304,7 +304,7 @@ setup_completions() {
     case "$SHELL_NAME" in
         bash)
             COMPLETION_FILE="$HOME/.bash_completion"
-            if [ -f "$COMPLETION_FILE" ]; then
+            if [ -f "$COMPLETION_FILE" ] && ! grep -Fq 'ddx completion bash' "$COMPLETION_FILE"; then
                 echo "# DDx completions" >> "$COMPLETION_FILE"
                 echo "eval \"\$(ddx completion bash)\"" >> "$COMPLETION_FILE"
             fi
@@ -327,40 +327,59 @@ setup_completions() {
 # Add to PATH if needed
 update_path() {
     log "Checking PATH configuration..."
-    
-    # Local bin path
+
     LOCAL_BIN="${INSTALL_PREFIX}/bin"
-    
-    # Check if already in PATH
-    if [[ ":$PATH:" == *":$LOCAL_BIN:"* ]]; then
-        success "PATH is already configured"
-        return
-    fi
-    
+
     # Add to shell rc file
     SHELL_NAME=$(basename "$SHELL")
     case "$SHELL_NAME" in
         bash)
             RC_FILE="$HOME/.bashrc"
+            PATH_SNIPPET="case \":\$PATH:\" in *\":$LOCAL_BIN:\"*) ;; *) export PATH=\"$LOCAL_BIN:\$PATH\" ;; esac"
             ;;
         zsh)
             RC_FILE="$HOME/.zshrc"
+            PATH_SNIPPET="case \":\$PATH:\" in *\":$LOCAL_BIN:\"*) ;; *) export PATH=\"$LOCAL_BIN:\$PATH\" ;; esac"
             ;;
         fish)
             RC_FILE="$HOME/.config/fish/config.fish"
+            PATH_SNIPPET="contains \"$LOCAL_BIN\" \$PATH; or set -gx PATH \"$LOCAL_BIN\" \$PATH"
             ;;
         *)
             RC_FILE="$HOME/.profile"
+            PATH_SNIPPET="case \":\$PATH:\" in *\":$LOCAL_BIN:\"*) ;; *) export PATH=\"$LOCAL_BIN:\$PATH\" ;; esac"
             ;;
     esac
-    
-    if [ -f "$RC_FILE" ]; then
-        echo "" >> "$RC_FILE"
-        echo "# DDx CLI PATH" >> "$RC_FILE"
-        echo "export PATH=\"\$PATH:$LOCAL_BIN\"" >> "$RC_FILE"
-        success "Added DDx to PATH in $RC_FILE"
+
+    mkdir -p "$(dirname "$RC_FILE")"
+    touch "$RC_FILE"
+
+    TMP_RC=$(mktemp)
+    awk -v bin="$LOCAL_BIN" '
+        /^# DDx CLI PATH$/ { skip_legacy = 1; next }
+        /^# DDx CLI PATH:START$/ { skip_block = 1; next }
+        /^# DDx CLI PATH:END$/ { skip_block = 0; next }
+        skip_block { next }
+        skip_legacy && index($0, bin) > 0 && index($0, "PATH") > 0 { skip_legacy = 0; next }
+        $0 == "export PATH=\"" bin ":$PATH\"" { next }
+        $0 == "export PATH=\"$PATH:" bin "\"" { next }
+        $0 == "PATH=\"" bin ":$PATH\"" { next }
+        $0 == "PATH=\"$PATH:" bin "\"" { next }
+        { skip_legacy = 0; print }
+    ' "$RC_FILE" > "$TMP_RC"
+    mv "$TMP_RC" "$RC_FILE"
+
+    {
+        echo ""
+        echo "# DDx CLI PATH:START"
+        echo "$PATH_SNIPPET"
+        echo "# DDx CLI PATH:END"
+    } >> "$RC_FILE"
+
+    if [[ ":$PATH:" == *":$LOCAL_BIN:"* ]]; then
+        success "PATH already contains $LOCAL_BIN; ensured idempotent shell configuration in $RC_FILE"
     else
-        warn "Could not find shell config file. Please add $LOCAL_BIN to your PATH manually."
+        success "Added DDx to PATH in $RC_FILE"
     fi
 }
 
