@@ -1,0 +1,39 @@
+{
+  "attempt_id": "20260505T144757-99896da7",
+  "bead_id": "ddx-59459dd6",
+  "base_rev": "36e51e5761f52dca91c02652046bf0d35644b697",
+  "created_at": "2026-05-05T14:47:59.687919855Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-59459dd6",
+    "title": "artifacts: e2e for grouping + Story 6 composition check",
+    "description": "Playwright e2e for grouping behavior. Verify it composes with Story 6 search/filter (filter narrows; grouping organizes; both work together).",
+    "acceptance": "1. Playwright e2e covers Folder/Prefix/MediaType/WorkflowStage grouping. 2. Composition test: filter + group-by together produce expected output. 3. cd cli/internal/server/frontend \u0026\u0026 bun run test:e2e passes.",
+    "parent": "ddx-ffb678fc",
+    "labels": [
+      "phase:2",
+      "story:5",
+      "area:web",
+      "area:tests",
+      "kind:test"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-05T14:47:57Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2464742",
+      "execute-loop-heartbeat-at": "2026-05-05T14:47:57.034102528Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260505T144757-99896da7",
+    "prompt": ".ddx/executions/20260505T144757-99896da7/prompt.md",
+    "manifest": ".ddx/executions/20260505T144757-99896da7/manifest.json",
+    "result": ".ddx/executions/20260505T144757-99896da7/result.json",
+    "checks": ".ddx/executions/20260505T144757-99896da7/checks.json",
+    "usage": ".ddx/executions/20260505T144757-99896da7/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-59459dd6-20260505T144757-99896da7"
+  },
+  "prompt_sha": "c41fcf2af6915cb50e919583a59c11a63341e2a397b84013ec6e4ab66fd88d4b"
+}
