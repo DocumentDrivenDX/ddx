@@ -8,6 +8,8 @@ package graphql
 
 import (
 	"context"
+	"encoding/json"
+	"os"
 	"path/filepath"
 	"testing"
 	"time"
@@ -33,20 +35,45 @@ func seedExecRunProject(t *testing.T, root, runID, status string) {
 	t.Helper()
 	store := ddxexec.NewStore(root)
 	now := time.Date(2026, 5, 2, 22, 0, 0, 0, time.UTC)
-	rec := ddxexec.RunRecord{
-		RunManifest: ddxexec.RunManifest{
-			RunID:        runID,
-			DefinitionID: "exec-layer3-def@1",
-			ArtifactIDs:  []string{"ART-1"},
-			StartedAt:    now,
-			FinishedAt:   now.Add(time.Second),
-			Status:       status,
-			ExitCode:     0,
+	if err := store.SaveDefinition(ddxexec.Definition{
+		ID:          "exec-layer3-def@1",
+		ArtifactIDs: []string{"ART-1"},
+		Executor: ddxexec.ExecutorSpec{
+			Kind:    ddxexec.ExecutorKindCommand,
+			Command: []string{"true"},
 		},
-		Result: ddxexec.RunResult{Stdout: "ok\n"},
+		Active:    true,
+		CreatedAt: now,
+	}); err != nil {
+		t.Fatalf("save definition in %s: %v", root, err)
 	}
-	if err := store.SaveRunRecord(rec); err != nil {
-		t.Fatalf("save run in %s: %v", root, err)
+	bundleDir := filepath.Join(root, ".ddx", "exec", "runs", runID)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatalf("mkdir run bundle in %s: %v", root, err)
+	}
+	manifest := ddxexec.RunManifest{
+		RunID:        runID,
+		DefinitionID: "exec-layer3-def@1",
+		ArtifactIDs:  []string{"ART-1"},
+		StartedAt:    now,
+		FinishedAt:   now.Add(time.Second),
+		Status:       status,
+		ExitCode:     0,
+	}
+	result := ddxexec.RunResult{Stdout: "ok\n"}
+	manifestRaw, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal manifest in %s: %v", root, err)
+	}
+	resultRaw, err := json.MarshalIndent(result, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal result in %s: %v", root, err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "manifest.json"), manifestRaw, 0o644); err != nil {
+		t.Fatalf("write manifest in %s: %v", root, err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "result.json"), resultRaw, 0o644); err != nil {
+		t.Fatalf("write result in %s: %v", root, err)
 	}
 }
 

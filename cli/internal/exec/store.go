@@ -63,23 +63,6 @@ func NewStore(workingDir string) *Store {
 	}
 }
 
-func (s *Store) Init() error {
-	if s.DefinitionCollection != nil {
-		if err := s.DefinitionCollection.Init(); err != nil {
-			return err
-		}
-	}
-	if s.RunCollection != nil {
-		if err := s.RunCollection.Init(); err != nil {
-			return err
-		}
-	}
-	if err := os.MkdirAll(filepath.Join(s.WorkingDir, ".ddx", execRunAttachmentDir), 0o755); err != nil {
-		return err
-	}
-	return os.MkdirAll(s.RunsDir, 0o755)
-}
-
 func (s *Store) ListDefinitions(artifactID string) ([]Definition, error) {
 	defs, _, err := s.loadDefinitions()
 	if err != nil {
@@ -365,11 +348,6 @@ func (s *Store) RunWithOptions(ctx context.Context, definitionID string, opts Ru
 	return record, nil
 }
 
-// SaveRunRecord persists a run record without executing the underlying command.
-func (s *Store) SaveRunRecord(rec RunRecord) error {
-	return s.saveRunRecord(rec)
-}
-
 func (s *Store) History(artifactID, definitionID string) ([]RunRecord, error) {
 	entries, err := s.loadRuns()
 	if err != nil {
@@ -414,46 +392,6 @@ func (s *Store) SaveDefinition(def Definition) error {
 	return s.saveDefinitionBead(def)
 }
 
-func (s *Store) writeRunBundle(rec RunRecord) error {
-	if err := os.MkdirAll(s.RunsDir, 0o755); err != nil {
-		return err
-	}
-	tempDir, err := os.MkdirTemp(s.RunsDir, ".tmp-")
-	if err != nil {
-		return err
-	}
-	defer os.RemoveAll(tempDir)
-
-	manifestRaw, err := json.MarshalIndent(rec.RunManifest, "", "  ")
-	if err != nil {
-		return err
-	}
-	resultRaw, err := json.MarshalIndent(rec.Result, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(tempDir, "manifest.json"), manifestRaw, 0o644); err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(tempDir, "result.json"), resultRaw, 0o644); err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(tempDir, "stdout.log"), []byte(rec.Result.Stdout), 0o644); err != nil {
-		return err
-	}
-	if err := os.WriteFile(filepath.Join(tempDir, "stderr.log"), []byte(rec.Result.Stderr), 0o644); err != nil {
-		return err
-	}
-	if err := syncPath(tempDir); err != nil {
-		return err
-	}
-	finalDir := filepath.Join(s.RunsDir, rec.RunID)
-	if err := os.Rename(tempDir, finalDir); err != nil {
-		return err
-	}
-	return syncPath(s.RunsDir)
-}
-
 func (s *Store) readRunBundle(dir string) (RunRecord, error) {
 	manifestRaw, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
 	if err != nil {
@@ -472,46 +410,6 @@ func (s *Store) readRunBundle(dir string) (RunRecord, error) {
 		return RunRecord{}, err
 	}
 	return RunRecord{RunManifest: manifest, Result: result}, nil
-}
-
-func withPathLock(path string, fn func() error) error {
-	lockDir := path
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		err := os.Mkdir(lockDir, 0o755)
-		if err == nil {
-			defer os.RemoveAll(lockDir)
-			return fn()
-		}
-		if time.Now().After(deadline) {
-			return fmt.Errorf("exec lock timeout for %s", path)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-}
-
-func atomicWriteFile(path string, data []byte, perm os.FileMode) error {
-	tmp, err := os.CreateTemp(filepath.Dir(path), "."+filepath.Base(path)+".tmp-*")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	defer os.Remove(tmpPath)
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmpPath, perm); err != nil {
-		return err
-	}
-	return os.Rename(tmpPath, path)
 }
 
 func syncPath(path string) error {

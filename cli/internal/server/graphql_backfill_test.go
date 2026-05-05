@@ -9,6 +9,7 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -439,7 +440,7 @@ func TestGraphQLAgentSessions(t *testing.T) {
 // ─── TC-GQL-022: execDefinitions / execRuns / execDefinition(id) / execRun(id) ──
 
 // TC-GQL-022: execDefinitions, execDefinition(id), execRuns, and execRun(id)
-// return real data from the exec store after SaveDefinition / SaveRunRecord.
+// return real data from the exec store after SaveDefinition / Run.
 func TestGraphQLExecutions(t *testing.T) {
 	xdgDir := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", xdgDir)
@@ -447,6 +448,13 @@ func TestGraphQLExecutions(t *testing.T) {
 
 	workDir := setupTestDir(t)
 	now := time.Date(2026, 4, 15, 10, 0, 0, 0, time.UTC)
+	artifactDir := filepath.Join(workDir, "docs", "metrics")
+	if err := os.MkdirAll(artifactDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(artifactDir, "MET-TEST-001.md"), []byte("---\nddx:\n  id: MET-TEST-001\n---\n# MET-TEST-001\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
 
 	store := ddxexec.NewStore(workDir)
 	if err := store.SaveDefinition(ddxexec.Definition{
@@ -461,19 +469,9 @@ func TestGraphQLExecutions(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("SaveDefinition: %v", err)
 	}
-	if err := store.SaveRunRecord(ddxexec.RunRecord{
-		RunManifest: ddxexec.RunManifest{
-			RunID:        "run-test-001",
-			DefinitionID: "exec-test-def@1",
-			ArtifactIDs:  []string{"MET-TEST-001"},
-			StartedAt:    now,
-			FinishedAt:   now.Add(100 * time.Millisecond),
-			Status:       ddxexec.StatusSuccess,
-			ExitCode:     0,
-		},
-		Result: ddxexec.RunResult{Stdout: "ok\n"},
-	}); err != nil {
-		t.Fatalf("SaveRunRecord: %v", err)
+	rec, err := store.Run(context.Background(), "exec-test-def@1")
+	if err != nil {
+		t.Fatalf("Run: %v", err)
 	}
 
 	srv := New(":0", workDir)
@@ -566,15 +564,15 @@ func TestGraphQLExecutions(t *testing.T) {
 	if len(resp3.Data.ExecRuns.Edges) != 1 {
 		t.Fatalf("execRuns: expected 1 edge, got %d", len(resp3.Data.ExecRuns.Edges))
 	}
-	if resp3.Data.ExecRuns.Edges[0].Node.ID != "run-test-001" {
-		t.Errorf("execRuns: expected id=run-test-001, got %q", resp3.Data.ExecRuns.Edges[0].Node.ID)
+	if resp3.Data.ExecRuns.Edges[0].Node.ID != rec.RunID {
+		t.Errorf("execRuns: expected id=%s, got %q", rec.RunID, resp3.Data.ExecRuns.Edges[0].Node.ID)
 	}
 	if resp3.Data.ExecRuns.Edges[0].Node.Status != "success" {
 		t.Errorf("execRuns: expected status=success, got %q", resp3.Data.ExecRuns.Edges[0].Node.Status)
 	}
 
 	// Query.execRun(id) — fetch specific run by ID.
-	body4 := gqlPost(t, srv, `{ execRun(id: "run-test-001") { id status } }`)
+	body4 := gqlPost(t, srv, fmt.Sprintf(`{ execRun(id: %q) { id status } }`, rec.RunID))
 	if errs := gqlErrors(body4); len(errs) > 0 {
 		t.Fatalf("execRun(id) GraphQL errors: %v", errs)
 	}
@@ -589,8 +587,8 @@ func TestGraphQLExecutions(t *testing.T) {
 	if err := json.Unmarshal(body4, &resp4); err != nil {
 		t.Fatalf("execRun(id): invalid JSON: %v", err)
 	}
-	if resp4.Data.ExecRun.ID != "run-test-001" {
-		t.Errorf("execRun(id): expected id=run-test-001, got %q", resp4.Data.ExecRun.ID)
+	if resp4.Data.ExecRun.ID != rec.RunID {
+		t.Errorf("execRun(id): expected id=%s, got %q", rec.RunID, resp4.Data.ExecRun.ID)
 	}
 	if resp4.Data.ExecRun.Status != "success" {
 		t.Errorf("execRun(id): expected status=success, got %q", resp4.Data.ExecRun.Status)

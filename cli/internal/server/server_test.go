@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -440,35 +441,39 @@ func TestProcessMetricsEndpoints(t *testing.T) {
 func seedMetricHistory(t *testing.T, dir string) {
 	t.Helper()
 	store := metric.NewStore(dir)
-	t0, _ := time.Parse(time.RFC3339, "2026-04-04T15:00:00Z")
-	t1, _ := time.Parse(time.RFC3339, "2026-04-04T15:01:00Z")
-	for _, rec := range []metric.HistoryRecord{
-		{
-			RunID:        "MET-001@1",
-			MetricID:     "MET-001",
-			DefinitionID: "metric-startup-time@1",
-			ObservedAt:   t0,
-			Status:       metric.StatusPass,
-			Value:        20,
-			Unit:         "ms",
-			Comparison:   metric.ComparisonResult{Baseline: 20, Delta: 0, Direction: metric.ComparisonLowerIsBetter},
-			ArtifactID:   "MET-001",
-		},
-		{
-			RunID:        "MET-001@2",
-			MetricID:     "MET-001",
-			DefinitionID: "metric-startup-time@1",
-			ObservedAt:   t1,
-			Status:       metric.StatusPass,
-			Value:        10,
-			Unit:         "ms",
-			Comparison:   metric.ComparisonResult{Baseline: 20, Delta: -10, Direction: metric.ComparisonLowerIsBetter},
-			ArtifactID:   "MET-001",
-		},
-	} {
-		if err := store.AppendHistory(rec); err != nil {
-			t.Fatalf("AppendHistory: %v", err)
-		}
+	if err := os.MkdirAll(filepath.Join(dir, "docs", "metrics"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "docs", "metrics", "MET-001.md"), []byte("---\nddx:\n  id: MET-001\n---\n# MET-001\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.SaveDefinition(metric.Definition{
+		DefinitionID: "metric-startup-time@1",
+		MetricID:     "MET-001",
+		Command:      []string{"sh", "-c", "printf '20ms\\n'"},
+		Thresholds:   metric.Thresholds{Warn: 20, Ratchet: 30, Unit: "ms"},
+		Comparison:   metric.ComparisonLowerIsBetter,
+		Active:       true,
+		CreatedAt:    time.Date(2026, 4, 4, 15, 0, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Run(context.Background(), "MET-001"); err != nil {
+		t.Fatalf("Run: %v", err)
+	}
+	if err := store.SaveDefinition(metric.Definition{
+		DefinitionID: "metric-startup-time@1",
+		MetricID:     "MET-001",
+		Command:      []string{"sh", "-c", "printf '10ms\\n'"},
+		Thresholds:   metric.Thresholds{Warn: 20, Ratchet: 30, Unit: "ms"},
+		Comparison:   metric.ComparisonLowerIsBetter,
+		Active:       true,
+		CreatedAt:    time.Date(2026, 4, 4, 15, 1, 0, 0, time.UTC),
+	}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := store.Run(context.Background(), "MET-001"); err != nil {
+		t.Fatalf("Run: %v", err)
 	}
 }
 

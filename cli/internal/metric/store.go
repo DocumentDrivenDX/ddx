@@ -23,13 +23,6 @@ func NewStore(workingDir string) *Store {
 	}
 }
 
-func (s *Store) Init() error {
-	if s.execStore != nil {
-		return s.execStore.Init()
-	}
-	return nil
-}
-
 // ListArtifacts returns all MET-* artifacts in document ID order.
 func (s *Store) ListArtifacts() ([]docgraph.Document, error) {
 	graph, err := docgraph.BuildGraph(s.WorkingDir)
@@ -183,13 +176,6 @@ func (s *Store) SaveDefinition(def Definition) error {
 		return fmt.Errorf("metric store is not initialized")
 	}
 	return s.execStore.SaveDefinition(metricDefinitionToExec(def))
-}
-
-func (s *Store) AppendHistory(rec HistoryRecord) error {
-	if s.execStore == nil {
-		return fmt.Errorf("metric store is not initialized")
-	}
-	return s.execStore.SaveRunRecord(metricHistoryToRun(rec))
 }
 
 func (s *Store) History(metricID string) ([]HistoryRecord, error) {

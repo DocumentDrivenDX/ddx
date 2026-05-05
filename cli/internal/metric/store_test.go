@@ -3,7 +3,6 @@ package metric
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -66,7 +65,7 @@ func TestCompareAndTrend(t *testing.T) {
 	writeMetricDefinition(t, wd, Definition{
 		DefinitionID: "metric-startup-time@1",
 		MetricID:     "MET-001",
-		Command:      []string{"sh", "-c", "printf '10ms\\n'"},
+		Command:      []string{"sh", "-c", "printf '20ms\\n'"},
 		Thresholds:   Thresholds{Warn: 20, Ratchet: 30, Unit: "ms"},
 		Comparison:   ComparisonLowerIsBetter,
 		Active:       true,
@@ -74,32 +73,23 @@ func TestCompareAndTrend(t *testing.T) {
 	})
 
 	store := NewStore(wd)
-	require.NoError(t, store.AppendHistory(HistoryRecord{
-		RunID:        "MET-001@1",
-		MetricID:     "MET-001",
+	firstRec, err := store.Run(context.Background(), "MET-001")
+	require.NoError(t, err)
+	writeMetricDefinition(t, wd, Definition{
 		DefinitionID: "metric-startup-time@1",
-		ObservedAt:   mustTime(t, "2026-04-04T15:00:00Z"),
-		Status:       StatusPass,
-		Value:        20,
-		Unit:         "ms",
-		Comparison:   ComparisonResult{Baseline: 20, Delta: 0, Direction: ComparisonLowerIsBetter},
-		ArtifactID:   "MET-001",
-	}))
-	require.NoError(t, store.AppendHistory(HistoryRecord{
-		RunID:        "MET-001@2",
 		MetricID:     "MET-001",
-		DefinitionID: "metric-startup-time@1",
-		ObservedAt:   mustTime(t, "2026-04-04T15:01:00Z"),
-		Status:       StatusPass,
-		Value:        14.6,
-		Unit:         "ms",
-		Comparison:   ComparisonResult{Baseline: 20, Delta: -5.4, Direction: ComparisonLowerIsBetter},
-		ArtifactID:   "MET-001",
-	}))
+		Command:      []string{"sh", "-c", "printf '14.6ms\\n'"},
+		Thresholds:   Thresholds{Warn: 20, Ratchet: 30, Unit: "ms"},
+		Comparison:   ComparisonLowerIsBetter,
+		Active:       true,
+		CreatedAt:    mustTime(t, "2026-04-04T15:01:00Z"),
+	})
+	secondRec, err := store.Run(context.Background(), "MET-001")
+	require.NoError(t, err)
 
 	latest, result, err := store.Compare("MET-001", "baseline")
 	require.NoError(t, err)
-	assert.Equal(t, "MET-001@2", latest.RunID)
+	assert.Equal(t, secondRec.RunID, latest.RunID)
 	assert.Equal(t, 20.0, result.Baseline)
 	assert.InDelta(t, -5.4, result.Delta, 0.01)
 
@@ -108,6 +98,7 @@ func TestCompareAndTrend(t *testing.T) {
 	assert.Equal(t, 2, trend.Count)
 	assert.InDelta(t, 14.6, trend.Latest, 0.01)
 	assert.InDelta(t, 17.3, trend.Average, 0.01)
+	assert.NotEmpty(t, firstRec.RunID)
 }
 
 func TestConcurrentHistoryWrites(t *testing.T) {
@@ -125,24 +116,14 @@ func TestConcurrentHistoryWrites(t *testing.T) {
 
 	store := NewStore(wd)
 	const writers = 12
-	observedAt := mustTime(t, "2026-04-04T15:00:00Z")
 	var wg sync.WaitGroup
 	errCh := make(chan error, writers)
 	for i := 0; i < writers; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			errCh <- store.AppendHistory(HistoryRecord{
-				RunID:        fmt.Sprintf("MET-001@%d", i),
-				MetricID:     "MET-001",
-				DefinitionID: "metric-startup-time@1",
-				ObservedAt:   observedAt,
-				Status:       StatusPass,
-				Value:        14.6,
-				Unit:         "ms",
-				Comparison:   ComparisonResult{Baseline: 20, Delta: -5.4, Direction: ComparisonLowerIsBetter},
-				ArtifactID:   "MET-001",
-			})
+			_, err := store.Run(context.Background(), "MET-001")
+			errCh <- err
 		}(i)
 	}
 	wg.Wait()
@@ -192,7 +173,6 @@ func TestLegacyMetricsDirIgnored(t *testing.T) {
 
 	// The current store must not crash when .ddx/metrics/ exists.
 	store := NewStore(wd)
-	require.NoError(t, store.Init())
 
 	// History returns empty — legacy metrics/ data is not read.
 	history, err := store.History("MET-001")
