@@ -418,6 +418,25 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
    - See which roles each persona is bound to in project config
    - View full persona content rendered as markdown
 
+### Performance Contract: Artifact Browser
+
+The artifact browser list view carries a provisional performance contract
+for design work. These budgets shape the current implementation, but the
+gating numbers are not locked until the B7-C1 baseline measurement is
+recorded and published in the perf docs.
+
+- Initial artifact-browser load should show first usable content within 2s on
+  the reference fixture.
+- Search and filter interactions should settle within 200ms once the current
+  list data is already loaded.
+- The default list view assumes a flat, non-virtualized DOM. If the design
+  needs infinite scroll, auto-prefetch, or sticky group headers, the contract
+  must be revisited before shipping that change.
+- The current steady-state DOM budget is 500 visible artifact rows. A design
+  that needs 500-1000 visible rows must revisit this contract before landing;
+  a design that needs more than 1000 visible rows is out of the present
+  contract envelope.
+
 ### Non-Functional
 
 - **Performance:** Initial page load <2s. API calls <200ms. Graph renders smoothly for 100+ nodes.

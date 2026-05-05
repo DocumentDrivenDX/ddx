@@ -64,6 +64,34 @@ roots. That gives request routing, the UI project picker, host+user
 isolation, and concurrent-project behaviors a shared fixture to exercise in
 one run.
 
+## Measurement Methodology
+
+Artifact-listing performance is measured as a browser/UI contract, not as a
+general benchmark suite.
+
+| Metric | What to record | Where it lives |
+|--------|----------------|----------------|
+| First usable content | Time from navigation start to the artifact list becoming visible and interactive | `cli/internal/server/frontend/e2e/artifacts.spec.ts` |
+| Search/filter latency | Time from a category filter or search input change to the updated list settling | `cli/internal/server/frontend/e2e/artifacts.spec.ts` |
+| Steady-state DOM rows | Maximum visible artifact rows in the default list state before the contract needs to be revisited | FEAT-008 contract + perf baseline report |
+
+The baseline run for these numbers is the B7-C1 measurement. Until that run
+lands, the FEAT-008 budgets remain provisional and the gating values stay
+unlocked. Record the measured numbers in the perf docs under
+`docs/helix/06-iterate/perf/` and keep this plan aligned with that report.
+
+Revisit the contract before shipping if the artifact browser design adds any
+of the following:
+
+- infinite scroll
+- auto-prefetch
+- 500-1000 visible DOM rows in the default list state
+- sticky group headers
+
+The current implementation model assumes the artifact list remains flat and
+non-virtualized. If that assumption changes, update both the FEAT-008 section
+and this measurement methodology together.
+
 ## Test Cases
 
 ### TC-001: Dashboard
@@ -238,5 +266,5 @@ owned by `cli/internal/server/workers_test.go`.
 
 - MCP transport-level testing (covered by Go unit tests)
 - Authentication (not yet implemented)
-- Performance benchmarks
+- General performance benchmarks outside the artifact-listing measurement contract
 - Mobile/responsive layout testing
