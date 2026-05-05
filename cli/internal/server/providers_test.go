@@ -11,6 +11,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	agentlib "github.com/DocumentDrivenDX/fizeau"
+	"github.com/stretchr/testify/require"
 )
 
 // TestListProviders verifies GET /api/providers returns a JSON array containing
@@ -363,6 +364,56 @@ func TestCollectHarnessSignalSourcesFiltersStaleCacheLabels(t *testing.T) {
 	if got[0] != "native-session-jsonl" {
 		t.Fatalf("signal source = %q, want native-session-jsonl", got[0])
 	}
+}
+
+func TestProviderDetailSuppressesStaleQuotaAndUsageSources(t *testing.T) {
+	now := time.Date(2026, 4, 21, 1, 0, 0, 0, time.UTC)
+	info := agentlib.HarnessInfo{
+		Name:           "codex",
+		DefaultModel:   "gpt-5.4-custom",
+		IsSubscription: true,
+		Account: &agentlib.AccountStatus{
+			Authenticated: true,
+			Source:        "account-source",
+			CapturedAt:    now.Add(-5 * time.Minute),
+		},
+		Quota: &agentlib.QuotaState{
+			Status:     "ok",
+			Fresh:      true,
+			Source:     "quota-snapshot",
+			CapturedAt: now.Add(-3 * time.Minute),
+		},
+		UsageWindows: []agentlib.UsageWindow{
+			{
+				Name:         "7d",
+				Source:       "burn-summaries",
+				CapturedAt:   now.Add(-2 * time.Minute),
+				TotalTokens:  7000,
+				InputTokens:  5000,
+				OutputTokens: 2000,
+				CostUSD:      0.75,
+			},
+			{
+				Name:         "30d",
+				Source:       "ddx-metrics",
+				CapturedAt:   now.Add(-1 * time.Minute),
+				TotalTokens:  25000,
+				InputTokens:  18000,
+				OutputTokens: 7000,
+				CostUSD:      1.25,
+			},
+		},
+	}
+
+	summary := buildProviderSummary(info, nil, now)
+	detail := buildProviderDetail(info, nil, now)
+
+	require.Equal(t, []string{"account-source"}, summary.SignalSources)
+	require.Len(t, detail.Models, 1)
+	require.Empty(t, detail.Models[0].Source)
+	require.NotNil(t, detail.BurnEstimate)
+	require.Equal(t, "none", detail.BurnEstimate.Source)
+	require.Equal(t, "account-source", detail.SignalSources[0])
 }
 
 // TestProviderSummaryDisplayName verifies display names are set for all known harnesses.

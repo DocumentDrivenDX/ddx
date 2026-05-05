@@ -265,7 +265,7 @@ func buildModelQuotaList(info agentlib.HarnessInfo) []ProviderModelQuota {
 
 	source := ""
 	if info.Quota != nil {
-		source = strings.TrimSpace(info.Quota.Source)
+		source = normalizeHarnessSignalSource(info.Quota.Source)
 	}
 
 	return []ProviderModelQuota{{
@@ -315,18 +315,19 @@ func latestHarnessUsageSource(info agentlib.HarnessInfo) string {
 	var latest time.Time
 	var source string
 	for _, window := range info.UsageWindows {
-		if strings.TrimSpace(window.Source) == "" {
+		normalized := normalizeHarnessSignalSource(window.Source)
+		if normalized == "" {
 			continue
 		}
 		if window.CapturedAt.IsZero() {
 			if source == "" {
-				source = strings.TrimSpace(window.Source)
+				source = normalized
 			}
 			continue
 		}
 		if source == "" || window.CapturedAt.After(latest) {
 			latest = window.CapturedAt.UTC()
-			source = strings.TrimSpace(window.Source)
+			source = normalized
 		}
 	}
 	return source
@@ -546,16 +547,34 @@ func normalizeHarnessSignalSource(value string) string {
 	if value == "" {
 		return ""
 	}
-	lower := strings.ToLower(value)
-	if _, stale := staleHarnessSignalSources[lower]; stale {
+	if isStaleHarnessSignalSource(value) {
 		return ""
 	}
-	for stale := range staleHarnessSignalSources {
-		if strings.Contains(lower, stale) {
-			return ""
+	return value
+}
+
+func isStaleHarnessSignalSource(value string) bool {
+	lower := strings.ToLower(value)
+	if _, stale := staleHarnessSignalSources[lower]; stale {
+		return true
+	}
+	tokens := strings.FieldsFunc(lower, func(r rune) bool {
+		switch r {
+		case '+', '/', ',', ';', '|':
+			return true
+		default:
+			return false
+		}
+	})
+	if len(tokens) <= 1 {
+		return false
+	}
+	for _, token := range tokens {
+		if _, stale := staleHarnessSignalSources[token]; !stale {
+			return false
 		}
 	}
-	return value
+	return true
 }
 
 // providerFreshnessTS returns the latest direct capture timestamp available on
