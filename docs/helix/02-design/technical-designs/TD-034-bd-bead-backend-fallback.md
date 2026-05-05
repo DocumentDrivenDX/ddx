@@ -8,7 +8,7 @@ ddx:
     - TD-030
   status: draft
 ---
-# Technical Design: bd / Dolt Fallback Bead Backend
+# Technical Design: bd / DoltDB Fallback Bead Backend
 
 ## Status
 
@@ -38,7 +38,7 @@ implementer how to fall back to bd if Axon is not ready.
 ## Fallback Contract
 
 - bd remains an external dependency; DDx does not vendor or reimplement
-  Dolt.
+  DoltDB.
 - `ddx bead import` and `ddx bead export` stay the interchange boundary.
 - The fallback must preserve queue semantics, claim and unclaim
   metadata, and the existing `ddx bead list`, `show`, `ready`, and
@@ -105,7 +105,7 @@ The existing claim tests remain the behavioral anchors:
 ## Tradeoffs
 
 - External dependency: operators must install and maintain bd and its
-  Dolt runtime.
+  DoltDB runtime.
 - Git-for-data semantics: bd inherits Dolt commit and branch behavior,
   which is useful for collaboration but heavier than local JSONL.
 - Less native control: DDx cannot assume bd exposes every named
