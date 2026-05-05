@@ -67,6 +67,17 @@ func TestMetricCommandsValidateRunHistoryAndCompare(t *testing.T) {
 	factory := newMetricTestRoot(t, workingDir)
 	rootCmd := factory.NewRootCommand()
 
+	listOut, err := executeCommand(rootCmd, "metric", "list", "--json")
+	require.NoError(t, err)
+	var artifacts []struct {
+		ID    string `json:"id"`
+		Title string `json:"title"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(listOut), &artifacts))
+	require.Len(t, artifacts, 1)
+	assert.Equal(t, "MET-001", artifacts[0].ID)
+	assert.Equal(t, "Metric Startup Time", artifacts[0].Title)
+
 	validateOut, err := executeCommand(rootCmd, "metric", "validate", "MET-001")
 	require.NoError(t, err)
 	assert.Contains(t, validateOut, "validated")
@@ -82,6 +93,27 @@ func TestMetricCommandsValidateRunHistoryAndCompare(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(runOut), &run))
 	assert.Equal(t, "MET-001", run.MetricID)
 	assert.Equal(t, metric.StatusPass, run.Status)
+	assert.Equal(t, "exec-metric-startup-time@current", run.DefinitionID)
+	assert.InDelta(t, 14.6, run.Value, 0.01)
+
+	showOut, err := executeCommand(rootCmd, "metric", "show", "MET-001", "--json")
+	require.NoError(t, err)
+	var show struct {
+		Artifact struct {
+			ID    string `json:"id"`
+			Title string `json:"title"`
+		} `json:"artifact"`
+		Definition struct {
+			DefinitionID string `json:"definition_id"`
+		} `json:"definition"`
+		RecentHistory []metric.HistoryRecord `json:"recent_history"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(showOut), &show))
+	assert.Equal(t, "MET-001", show.Artifact.ID)
+	assert.Equal(t, "exec-metric-startup-time@current", show.Definition.DefinitionID)
+	require.Len(t, show.RecentHistory, 2)
+	assert.Equal(t, "exec-metric-startup-time@baseline", show.RecentHistory[0].DefinitionID)
+	assert.Equal(t, "exec-metric-startup-time@current", show.RecentHistory[1].DefinitionID)
 
 	historyOut, err := executeCommand(rootCmd, "metric", "history", "MET-001", "--json")
 	require.NoError(t, err)

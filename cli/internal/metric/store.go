@@ -30,6 +30,27 @@ func (s *Store) Init() error {
 	return nil
 }
 
+// ListArtifacts returns all MET-* artifacts in document ID order.
+func (s *Store) ListArtifacts() ([]docgraph.Document, error) {
+	graph, err := docgraph.BuildGraph(s.WorkingDir)
+	if err != nil {
+		return nil, err
+	}
+	ids := graph.All()
+	out := make([]docgraph.Document, 0, len(ids))
+	for _, id := range ids {
+		if !strings.HasPrefix(id, "MET-") {
+			continue
+		}
+		doc, ok := graph.Show(id)
+		if !ok {
+			continue
+		}
+		out = append(out, doc)
+	}
+	return out, nil
+}
+
 func (s *Store) Validate(metricID string) (*Definition, *docgraph.Document, error) {
 	doc, err := s.loadMetricArtifact(metricID)
 	if err != nil {

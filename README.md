@@ -86,7 +86,11 @@ ddx agent run --harness claude --prompt evolve-prompt.md
 ddx bead list          # all beads tracked
 ddx agent usage        # token consumption
 ddx doc history PRD-001  # spec evolution
+ddx metric list        # metric artifacts
+ddx metric show MET-001  # metric definition + recent history
 ```
+
+`ddx metric run <MET-id>` is a convenience wrapper over `ddx exec run <definition-id>` that resolves the latest active definition bound to the metric artifact.
 
 ## Key Commands
 
@@ -96,6 +100,7 @@ ddx doc history PRD-001  # spec evolution
 | `ddx install <name>` | Install a workflow plugin |
 | `ddx doctor` | Validate installation health |
 | `ddx bead create/list/ready` | Track work items |
+| `ddx metric list/show/validate/run/history/compare/trend` | Inspect metric artifacts and run history |
 | `ddx agent run` | Invoke an AI agent |
 | `ddx agent usage` | View token consumption |
 | `ddx persona bind` | Assign personas to roles |
