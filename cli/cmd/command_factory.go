@@ -12,6 +12,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/persona"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/fatih/color"
@@ -156,6 +157,11 @@ More information:
 
 	// Add all subcommands
 	f.registerSubcommands(rootCmd)
+
+	// Keep the persona APIs in the static production graph. Cobra dispatch
+	// does not always show up in deadcode RTA, so this explicit hook keeps the
+	// real CLI implementations visible without changing runtime behavior.
+	persona.KeepReachabilityForDeadcode()
 
 	return rootCmd
 }

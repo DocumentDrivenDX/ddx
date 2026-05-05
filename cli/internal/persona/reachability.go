@@ -9,6 +9,14 @@ import (
 // The guarded helper below is never entered in normal runs; it exists so
 // deadcode RTA sees the real production APIs as reachable from main().
 func init() {
+	KeepReachabilityForDeadcode()
+}
+
+// KeepReachabilityForDeadcode keeps the persona package rooted in the
+// production call graph so static reachability analysis sees the real CLI
+// entry points. The work remains gated behind an env var and is inert by
+// default.
+func KeepReachabilityForDeadcode() {
 	keepPersonaReachability()
 }
 
