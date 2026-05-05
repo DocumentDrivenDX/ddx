@@ -762,6 +762,13 @@ provider logs
 - Given I click a layer-1 `run` record, then I navigate to its detail showing
   prompt/config summary, power bounds, selected harness/provider/model,
   duration, token and cost signals, output, and evidence links
+- Given I open the Evidence tab on a `try` or `run` detail, then whitelisted
+  bundle files render inline and each file exposes a Download link to
+  `/api/runs/:id/bundle?path=...`
+- Given I open a project-scoped run detail, then DDx records a
+  `run_detail_view` audit event on the originating bead when the run is
+  visible through project membership; the event body captures the run id,
+  layer, and project id
 - Given I am on any run detail, then breadcrumb navigation is visible and
   pressing Back takes me to the parent record without a full page reload
 - Given a run produced an artifact, then the run detail links to that artifact;
@@ -769,7 +776,7 @@ provider logs
 - Given I filter the run history, then available layer filters are exactly
   `work`, `try`, and `run`; no other run type labels appear
 
-**E2E Test:** `runs.spec.ts` — full workflow: navigate to project runs → filter by layer `work` → click work record → verify fields and child tries → click try → verify fields and child runs → click layer-1 run → verify all fields → follow evidence link → press Back through breadcrumbs to run list → verify filter state restored
+**E2E Test:** `runs.spec.ts` and `runs-evidence.spec.ts` — full workflow: navigate to project runs → filter by layer `work` → click work record → verify fields and child tries → click try → verify fields and child runs → click layer-1 run → verify all fields → follow evidence link → press Back through breadcrumbs to run list → verify filter state restored; open Evidence tab → verify inline view and Download link
 
 ### US-086c: Operator Re-queues a Run from the Runs Tab
 **As an** operator who wants fresh evidence on an existing bead or to

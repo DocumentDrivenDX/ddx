@@ -58,6 +58,10 @@ extensions (`type: comparison`, `type: replay`, `type: benchmark`) and owns
 the web UI surfaces that display those records. It does not own worktree
 management, run lifecycle, or dispatch mechanics.
 
+When an evaluation record links into a preserved `try` or `run`, the shared
+project-scoped run-detail surface from FEAT-008/FEAT-010 is the canonical
+drill-down view. FEAT-019 does not own a parallel detail page for those links.
+
 ### Relationship to manual re-queue (FEAT-010 `runRequeue`)
 
 Re-queue, exposed in the web UI on layer=`try` and layer=`run` Runs rows
@@ -363,6 +367,10 @@ agent:
 - Given an evaluation record references a preserved try iteration, when
   provenance is inspected in the UI, then it traces back to the originating
   try session ID and hidden ref — no FEAT-019-owned duplicate provenance record exists.
+- Given an evaluation record links to a run detail, then opening that link
+  uses the shared project-scoped run-detail surface, including the Evidence
+  tab / download affordances and the same project-membership visibility rules
+  that drive the FEAT-008/FEAT-010 audit event.
 
 ## Dependencies
 

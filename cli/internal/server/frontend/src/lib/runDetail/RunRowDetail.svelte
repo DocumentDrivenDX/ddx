@@ -57,10 +57,12 @@
 	let toolCallsLoaded = $state(false);
 
 	let activeTab = $state<Tab>(initialTab);
+	let lastInitialTab = $state<Tab>(initialTab);
 
 	$effect(() => {
-		if (initialTab !== activeTab) {
+		if (initialTab !== lastInitialTab) {
 			activeTab = initialTab;
+			lastInitialTab = initialTab;
 			if (activeTab === 'tools' && !toolCallsLoaded) {
 				void fetchToolCalls(false);
 			}

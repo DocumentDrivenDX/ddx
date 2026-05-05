@@ -530,6 +530,29 @@ record that a re-queue happened: there is no separate persisted
 `requeue` record beyond (a) the new `open` status on the originating
 bead and (b) this event entry.
 
+### Run-detail access audit events
+
+The first time a project-scoped run detail is resolved for a run record
+that is visible through project membership, DDx appends a
+`run_detail_view` event to the originating bead's audit log. This is the
+canonical record that a human inspected the run-detail surface.
+
+The event is read-side only: it is emitted on the canonical detail load,
+not on in-page tab switches, evidence downloads, or breadcrumb/back
+navigation. If the caller cannot see the project, there is no run detail
+and therefore no audit event.
+
+The `body` line is structured for grep/jq parsing and includes the
+project-scoped identity of the inspection:
+
+| Field | Value |
+|---|---|
+| `kind` | `run_detail_view` |
+| `summary` | `run detail viewed` |
+| `actor` | Viewer identity derived from the authenticated project member |
+| `source` | `graphql:run` |
+| `body` | Single line: `project_id=<projectId> run_id=<runId> layer=<layer> visibility=project_membership` |
+
 ### Layer-to-substrate mapping for the Runs UI
 
 The web Runs view (FEAT-008 §5, FEAT-021) renders three layer chips
