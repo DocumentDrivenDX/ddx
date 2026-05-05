@@ -52,7 +52,7 @@ export const OPERATOR_PROMPT_CANCEL_MUTATION = gql`
 
 export const RECENT_OPERATOR_PROMPTS_QUERY = gql`
 	query RecentOperatorPrompts($projectID: String!) {
-		beadsByProject(projectID: $projectID, label: "kind:operator-prompt", first: 20) {
+		beadsByProject(projectID: $projectID, label: "kind:operator-prompt", first: 100) {
 			edges {
 				node {
 					id

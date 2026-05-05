@@ -24,13 +24,59 @@ async function getFixtureIds(
 	return { nodeId: nodeBody.data.nodeInfo.id, projectId: fixture.id };
 }
 
+const OPERATOR_PROMPT_SUBMIT_MUTATION = `mutation Submit($input: OperatorPromptSubmitInput!) {
+	operatorPromptSubmit(input: $input) {
+		bead { id }
+	}
+}`;
+
+async function submitOperatorPrompt(
+	request: APIRequestContext,
+	prompt: string,
+	idempotencyKey: string
+): Promise<string> {
+	const csrfResp = await request.get('/api/csrf-token');
+	const csrfBody = (await csrfResp.json()) as { token?: string };
+	const resp = await request.post('/graphql', {
+		headers: {
+			'Content-Type': 'application/json',
+			'X-CSRF-Token': csrfBody.token ?? ''
+		},
+		data: {
+			query: OPERATOR_PROMPT_SUBMIT_MUTATION,
+			variables: {
+				input: {
+					prompt,
+					idempotencyKey
+				}
+			}
+		}
+	});
+	const body = (await resp.json()) as {
+		data?: {
+			operatorPromptSubmit?: {
+				bead?: { id?: string };
+			};
+		};
+		errors?: Array<{ message: string }>;
+	};
+	if (body.errors?.length) {
+		throw new Error(body.errors.map((e) => e.message).join('; '));
+	}
+	const beadId = body.data?.operatorPromptSubmit?.bead?.id;
+	if (!beadId) {
+		throw new Error('expected operator prompt bead id');
+	}
+	return beadId;
+}
+
 test.describe('operator prompts (Story 15-6)', () => {
 	test('submit → preview → approve advances bead from proposed to open, link opens detail', async ({
 		page,
 		request
 	}) => {
-		const { nodeId, projectId } = await getFixtureIds(request);
-		await page.goto(`/nodes/${nodeId}/projects/${projectId}`);
+		await getFixtureIds(request);
+		await page.goto('/operator-prompts');
 
 		const panel = page.getByTestId('operator-prompt-panel');
 		await expect(panel).toBeVisible();
@@ -63,11 +109,34 @@ test.describe('operator prompts (Story 15-6)', () => {
 		await expect(page).toHaveURL(new RegExp(`/beads/${beadId}(\\?|$)`));
 	});
 
+	test('recent pane shows only the latest 10 operator-prompt beads', async ({ page, request }) => {
+		const { projectId } = await getFixtureIds(request);
+		const created: string[] = [];
+		for (let i = 1; i <= 11; i++) {
+			created.push(
+				await submitOperatorPrompt(
+					request,
+					`recent-limit-seed-${String(i).padStart(2, '0')}`,
+					`${projectId}-recent-limit-${i}`
+				)
+			);
+			if (i < 11) {
+				await page.waitForTimeout(1100);
+			}
+		}
+
+		await page.goto('/operator-prompts');
+		const recent = page.getByTestId('operator-prompt-recent');
+		await expect(recent.locator('li')).toHaveCount(10);
+		await expect(recent).toContainText(created[10]);
+		await expect(recent).not.toContainText(created[0]);
+	});
+
 	test('XSS payloads in prompt body and recent pane are escaped, never executed', async ({
 		page,
 		request
 	}) => {
-		const { nodeId, projectId } = await getFixtureIds(request);
+		await getFixtureIds(request);
 
 		// If the panel ever rendered prompt or evidence content via {@html} or
 		// innerHTML, this script would fire and the test would fail.
@@ -77,7 +146,7 @@ test.describe('operator prompts (Story 15-6)', () => {
 			await dlg.dismiss();
 		});
 
-		await page.goto(`/nodes/${nodeId}/projects/${projectId}`);
+		await page.goto('/operator-prompts');
 
 		const xssPrompt = `<img src=x onerror="alert('xss-prompt')"><script>alert('xss-script')</script>`;
 		await page.getByTestId('operator-prompt-textarea').fill(xssPrompt);
@@ -89,10 +158,7 @@ test.describe('operator prompts (Story 15-6)', () => {
 		// but innerHTML is escaped (no real <img> or <script> elements).
 		await expect(previewBody).toContainText('<img src=x');
 		await expect(previewBody).toContainText('<script>');
-		const imgCount = await page
-			.getByTestId('operator-prompt-preview-body')
-			.locator('img')
-			.count();
+		const imgCount = await page.getByTestId('operator-prompt-preview-body').locator('img').count();
 		expect(imgCount).toBe(0);
 		const scriptCount = await page
 			.getByTestId('operator-prompt-preview-body')

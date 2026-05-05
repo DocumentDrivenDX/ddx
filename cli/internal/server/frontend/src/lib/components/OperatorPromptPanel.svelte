@@ -69,7 +69,17 @@
 			const data = await gqlRequest<RecentOperatorPromptsResult>(RECENT_OPERATOR_PROMPTS_QUERY, {
 				projectID: projectId
 			});
-			recent = data.beadsByProject.edges.map((e) => e.node);
+			recent = data.beadsByProject.edges
+				.map((e) => e.node)
+				.sort((a, b) => {
+					const aTime = Date.parse(a.createdAt ?? a.updatedAt);
+					const bTime = Date.parse(b.createdAt ?? b.updatedAt);
+					if (Number.isNaN(aTime) || Number.isNaN(bTime)) {
+						return (b.updatedAt ?? '').localeCompare(a.updatedAt ?? '');
+					}
+					return bTime - aTime;
+				})
+				.slice(0, 10);
 		} catch (err) {
 			alertMessage = `Could not load recent prompts. ${errorText(err)}`;
 		}
@@ -85,17 +95,14 @@
 		}
 		submitting = true;
 		try {
-			const data = await gqlRequest<OperatorPromptSubmitResult>(
-				OPERATOR_PROMPT_SUBMIT_MUTATION,
-				{
-					input: {
-						prompt: trimmed,
-						tier,
-						idempotencyKey: newIdempotencyKey(),
-						autoApprove: false
-					}
+			const data = await gqlRequest<OperatorPromptSubmitResult>(OPERATOR_PROMPT_SUBMIT_MUTATION, {
+				input: {
+					prompt: trimmed,
+					tier,
+					idempotencyKey: newIdempotencyKey(),
+					autoApprove: false
 				}
-			);
+			});
 			pendingBead = data.operatorPromptSubmit.bead;
 			await loadRecent();
 		} catch (err) {
@@ -110,10 +117,9 @@
 		approving = true;
 		alertMessage = '';
 		try {
-			const data = await gqlRequest<OperatorPromptApproveResult>(
-				OPERATOR_PROMPT_APPROVE_MUTATION,
-				{ id: pendingBead.id }
-			);
+			const data = await gqlRequest<OperatorPromptApproveResult>(OPERATOR_PROMPT_APPROVE_MUTATION, {
+				id: pendingBead.id
+			});
 			pendingBead = data.operatorPromptApprove.bead;
 			promptText = '';
 			pendingBead = null;
@@ -205,13 +211,13 @@
 
 <section
 	data-testid="operator-prompt-panel"
-	class="space-y-4 rounded-md border border-border-line bg-bg-elevated p-4 dark:border-dark-border-line dark:bg-dark-bg-elevated"
+	class="border-border-line bg-bg-elevated dark:border-dark-border-line dark:bg-dark-bg-elevated space-y-4 rounded-md border p-4"
 >
 	<header>
-		<h2 class="text-headline-md font-semibold text-fg-ink dark:text-dark-fg-ink">
+		<h2 class="text-headline-md text-fg-ink dark:text-dark-fg-ink font-semibold">
 			Operator prompt
 		</h2>
-		<p class="mt-1 text-sm text-fg-muted dark:text-dark-fg-muted">
+		<p class="text-fg-muted dark:text-dark-fg-muted mt-1 text-sm">
 			Submit a prompt that becomes a proposed bead. Approve to queue it for the execute-loop.
 		</p>
 	</header>
@@ -220,7 +226,7 @@
 		<div
 			role="alert"
 			data-testid="operator-prompt-alert"
-			class="rounded-md border border-error/30 bg-error/10 px-3 py-2 text-sm text-error dark:border-dark-error/30 dark:bg-dark-error/10 dark:text-dark-error"
+			class="border-error/30 bg-error/10 text-error dark:border-dark-error/30 dark:bg-dark-error/10 dark:text-dark-error rounded-md border px-3 py-2 text-sm"
 		>
 			{alertMessage}
 		</div>
@@ -229,23 +235,23 @@
 	{#if !pendingBead}
 		<form data-testid="operator-prompt-form" onsubmit={handleSubmit} class="space-y-3">
 			<label class="block">
-				<span class="text-sm font-medium text-fg-ink dark:text-dark-fg-ink">Prompt</span>
+				<span class="text-fg-ink dark:text-dark-fg-ink text-sm font-medium">Prompt</span>
 				<textarea
 					data-testid="operator-prompt-textarea"
 					bind:value={promptText}
 					required
 					rows="5"
 					placeholder="Describe the change you want — this becomes the bead description."
-					class="mt-1 w-full rounded-md border border-border-line bg-bg-canvas px-3 py-2 text-sm text-fg-ink placeholder-fg-muted focus:border-accent-lever focus:ring-1 focus:ring-accent-lever focus:outline-none dark:border-dark-border-line dark:bg-dark-bg-canvas dark:text-dark-fg-ink dark:placeholder-dark-fg-muted"
+					class="border-border-line bg-bg-canvas text-fg-ink placeholder-fg-muted focus:border-accent-lever focus:ring-accent-lever dark:border-dark-border-line dark:bg-dark-bg-canvas dark:text-dark-fg-ink dark:placeholder-dark-fg-muted mt-1 w-full rounded-md border px-3 py-2 text-sm focus:ring-1 focus:outline-none"
 				></textarea>
 			</label>
 			<div class="flex flex-wrap items-center gap-3">
-				<label class="flex items-center gap-2 text-sm text-fg-ink dark:text-dark-fg-ink">
+				<label class="text-fg-ink dark:text-dark-fg-ink flex items-center gap-2 text-sm">
 					<span class="font-medium">Priority</span>
 					<select
 						data-testid="operator-prompt-tier"
 						bind:value={tier}
-						class="rounded-md border border-border-line bg-bg-canvas px-2 py-1 text-sm dark:border-dark-border-line dark:bg-dark-bg-canvas"
+						class="border-border-line bg-bg-canvas dark:border-dark-border-line dark:bg-dark-bg-canvas rounded-md border px-2 py-1 text-sm"
 					>
 						{#each PRIORITY_OPTIONS as p}
 							<option value={p}>P{p}</option>
@@ -256,7 +262,7 @@
 					type="submit"
 					data-testid="operator-prompt-submit"
 					disabled={submitting}
-					class="rounded-md bg-accent-lever px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+					class="bg-accent-lever rounded-md px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
 				>
 					{submitting ? 'Submitting…' : 'Submit prompt'}
 				</button>
@@ -264,20 +270,22 @@
 		</form>
 	{:else}
 		<div data-testid="operator-prompt-preview" class="space-y-3">
-			<div class="rounded-md border border-border-line bg-bg-surface p-3 dark:border-dark-border-line dark:bg-dark-bg-surface">
+			<div
+				class="border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface rounded-md border p-3"
+			>
 				<div class="flex items-center justify-between">
-					<h3 class="text-sm font-semibold text-fg-ink dark:text-dark-fg-ink">
+					<h3 class="text-fg-ink dark:text-dark-fg-ink text-sm font-semibold">
 						This is what we will send
 					</h3>
 					<a
 						data-testid="operator-prompt-preview-link"
 						href={beadHref(pendingBead.id)}
-						class="font-mono-code text-mono-code text-accent-lever hover:underline dark:text-dark-accent-lever"
+						class="font-mono-code text-mono-code text-accent-lever dark:text-dark-accent-lever hover:underline"
 					>
 						{pendingBead.id}
 					</a>
 				</div>
-				<dl class="mt-2 grid grid-cols-3 gap-3 text-xs text-fg-muted dark:text-dark-fg-muted">
+				<dl class="text-fg-muted dark:text-dark-fg-muted mt-2 grid grid-cols-3 gap-3 text-xs">
 					<div>
 						<dt>Status</dt>
 						<dd
@@ -291,31 +299,32 @@
 					</div>
 					<div>
 						<dt>Priority</dt>
-						<dd class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">
+						<dd class="font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink mt-1">
 							P{pendingBead.priority}
 						</dd>
 					</div>
 					<div>
 						<dt>Type</dt>
-						<dd class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">
+						<dd class="font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink mt-1">
 							{pendingBead.issueType}
 						</dd>
 					</div>
 				</dl>
 				<div class="mt-3">
-					<div class="text-xs font-medium text-fg-muted dark:text-dark-fg-muted">Title</div>
+					<div class="text-fg-muted dark:text-dark-fg-muted text-xs font-medium">Title</div>
 					<div
 						data-testid="operator-prompt-preview-title"
-						class="mt-1 text-sm text-fg-ink dark:text-dark-fg-ink"
+						class="text-fg-ink dark:text-dark-fg-ink mt-1 text-sm"
 					>
 						{pendingBead.title}
 					</div>
 				</div>
 				<div class="mt-3">
-					<div class="text-xs font-medium text-fg-muted dark:text-dark-fg-muted">Body</div>
+					<div class="text-fg-muted dark:text-dark-fg-muted text-xs font-medium">Body</div>
 					<pre
 						data-testid="operator-prompt-preview-body"
-						class="mt-1 max-h-60 overflow-auto whitespace-pre-wrap break-words rounded bg-bg-canvas p-2 font-mono-code text-mono-code text-fg-ink dark:bg-dark-bg-canvas dark:text-dark-fg-ink">{pendingBead.description ?? promptText}</pre>
+						class="bg-bg-canvas font-mono-code text-mono-code text-fg-ink dark:bg-dark-bg-canvas dark:text-dark-fg-ink mt-1 max-h-60 overflow-auto rounded p-2 break-words whitespace-pre-wrap">{pendingBead.description ??
+							promptText}</pre>
 				</div>
 			</div>
 			<div class="flex flex-wrap gap-2">
@@ -324,7 +333,7 @@
 					data-testid="operator-prompt-approve"
 					onclick={handleApprove}
 					disabled={approving}
-					class="rounded-md bg-accent-lever px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
+					class="bg-accent-lever rounded-md px-3 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-wait disabled:opacity-60"
 				>
 					{approving ? 'Approving…' : 'Approve & queue'}
 				</button>
@@ -333,7 +342,7 @@
 					data-testid="operator-prompt-cancel"
 					onclick={handleCancel}
 					disabled={approving}
-					class="rounded-md border border-border-line bg-bg-canvas px-3 py-2 text-sm font-medium text-fg-ink hover:bg-bg-surface disabled:cursor-wait dark:border-dark-border-line dark:bg-dark-bg-canvas dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
+					class="border-border-line bg-bg-canvas text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-canvas dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface rounded-md border px-3 py-2 text-sm font-medium disabled:cursor-wait"
 				>
 					Cancel proposal
 				</button>
@@ -341,7 +350,7 @@
 					type="button"
 					data-testid="operator-prompt-discard"
 					onclick={discardPreview}
-					class="rounded-md border border-border-line px-3 py-2 text-sm font-medium text-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface"
+					class="border-border-line text-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:text-dark-fg-muted dark:hover:bg-dark-bg-surface rounded-md border px-3 py-2 text-sm font-medium"
 				>
 					Edit another prompt
 				</button>
@@ -350,19 +359,24 @@
 	{/if}
 
 	<div data-testid="operator-prompt-recent" class="space-y-2">
-		<h3 class="text-sm font-semibold text-fg-ink dark:text-dark-fg-ink">Recent prompts</h3>
+		<h3 class="text-fg-ink dark:text-dark-fg-ink text-sm font-semibold">Recent prompts</h3>
 		{#if recent.length === 0}
-			<p class="text-xs text-fg-muted dark:text-dark-fg-muted">No operator prompts yet.</p>
+			<p class="text-fg-muted dark:text-dark-fg-muted text-xs">No operator prompts yet.</p>
 		{:else}
-			<ul class="divide-y divide-border-line rounded-md border border-border-line dark:divide-dark-border-line dark:border-dark-border-line">
+			<ul
+				class="divide-border-line border-border-line dark:divide-dark-border-line dark:border-dark-border-line divide-y rounded-md border"
+			>
 				{#each recent as bead (bead.id)}
 					<li class="flex items-center justify-between gap-3 px-3 py-2">
 						<a
 							data-testid="operator-prompt-recent-link"
 							href={beadHref(bead.id)}
-							class="min-w-0 flex-1 truncate text-sm text-fg-ink hover:underline dark:text-dark-fg-ink"
+							class="text-fg-ink dark:text-dark-fg-ink min-w-0 flex-1 truncate text-sm hover:underline"
 						>
-							<span class="font-mono-code text-mono-code text-accent-lever dark:text-dark-accent-lever">{bead.id}</span>
+							<span
+								class="font-mono-code text-mono-code text-accent-lever dark:text-dark-accent-lever"
+								>{bead.id}</span
+							>
 							<span class="ml-2">{bead.title}</span>
 						</a>
 						<span
