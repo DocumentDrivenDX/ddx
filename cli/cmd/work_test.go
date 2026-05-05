@@ -56,6 +56,21 @@ func TestWorkCommandHasAllExecuteLoopFlags(t *testing.T) {
 	}
 }
 
+// TestWorkHelpDocumentsReviewGuardrails verifies that the work help text
+// documents the break-glass review override and the review:skip rationale
+// requirement so operators can discover both guardrails from the CLI.
+func TestWorkHelpDocumentsReviewGuardrails(t *testing.T) {
+	dir := t.TempDir()
+	root := NewCommandFactory(dir).NewRootCommand()
+
+	out, err := executeCommand(root, "work", "--help")
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "--no-review-i-know-what-im-doing")
+	assert.Contains(t, out, "review:skip-reason:*")
+	assert.Contains(t, out, "break-glass")
+}
+
 // TestWorkPassthroughNotValidated is the primary AC test: ddx work must NOT
 // call ValidateForExecuteLoopViaService. When an unknown harness is provided
 // and no ready beads exist, work must succeed with no_ready_work rather than

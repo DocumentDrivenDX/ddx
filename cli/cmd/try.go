@@ -51,6 +51,11 @@ Pre-flight checks (run before any claim is issued):
   - bead not claimable (status=closed, cancelled, etc.) → non-zero exit
   - bead has unmet dependencies → non-zero exit listing the blockers
 
+Review is on by default. --no-review is a break-glass override and
+requires --no-review-i-know-what-im-doing. A bead label of review:skip
+is only honored when it also carries a sibling review:skip-reason:*
+label; otherwise the label is ignored.
+
 Flag plumbing is identical to "ddx work": --harness, --model, --provider,
 --profile, --effort are forwarded to the agent as opaque passthrough
 constraints. DDx does not validate or branch on their string values.
@@ -66,7 +71,7 @@ Exit codes:
   # Execute with an explicit harness and model
   ddx try ddx-abc12345 --harness codex --model gpt-5.4-mini
 
-  # Execute without the post-merge review step
+  # Execute without the post-merge review step (break-glass only)
   ddx try ddx-abc12345 --no-review --no-review-i-know-what-im-doing`,
 		Args: cobra.ExactArgs(1),
 		RunE: f.runTry,
@@ -81,7 +86,7 @@ Exit codes:
 	cmd.Flags().String("provider", "", "Provider constraint (passthrough; ddx try does not validate)")
 	cmd.Flags().String("model-ref", "", "Model catalog reference (e.g. code-medium); resolved via the model catalog")
 	cmd.Flags().String("effort", "", "Effort level")
-	cmd.Flags().Bool("no-review", false, "Skip post-merge review")
+	cmd.Flags().Bool("no-review", false, "Skip post-merge review (break-glass: requires --no-review-i-know-what-im-doing)")
 	cmd.Flags().Bool("no-review-i-know-what-im-doing", false, "Break-glass acknowledgement required when using --no-review")
 	cmd.Flags().String("review-harness", "", "Harness for the post-merge reviewer (default: same as implementation harness)")
 	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart tier)")

@@ -26,6 +26,11 @@ Unlike "ddx agent execute-loop", ddx work treats --harness, --provider, and
 DDx does not validate these values or branch on them; the agent owns routing
 within the requested power bounds.
 
+Review is on by default. --no-review is a break-glass override and
+requires --no-review-i-know-what-im-doing. A bead label of review:skip
+is only honored when it also carries a sibling review:skip-reason:*
+label; otherwise the label is ignored.
+
 Stop conditions (evaluated between attempts):
   drained     — no ready beads remain
   blocked     — every remaining bead has produced a terminal non-success outcome
@@ -49,6 +54,9 @@ work runs inline in the current process; per ADR-022 there is no separate
   # Forward harness/model as passthrough constraints (ddx does not validate these)
   ddx work --once --harness agent --model minimax/minimax-m2.7
 
+  # Skip review only with the break-glass acknowledgement flag
+  ddx work --once --no-review --no-review-i-know-what-im-doing
+
   # Constrain power tier (retry-power policy is owned by ddx work)
   ddx work --once --min-power 40 --max-power 90`,
 		Args: cobra.NoArgs,
@@ -70,7 +78,7 @@ work runs inline in the current process; per ADR-022 there is no separate
 	cmd.Flags().Bool("json", false, "Output loop result as JSON")
 	cmd.Flags().Bool("local", false, "Deprecated: no-op; ddx work always runs inline (ADR-022)")
 	_ = cmd.Flags().MarkDeprecated("local", "ddx work always runs inline; the flag is a no-op (ADR-022)")
-	cmd.Flags().Bool("no-review", false, "Skip post-merge review")
+	cmd.Flags().Bool("no-review", false, "Skip post-merge review (break-glass: requires --no-review-i-know-what-im-doing)")
 	cmd.Flags().Bool("no-review-i-know-what-im-doing", false, "Break-glass acknowledgement required when using --no-review")
 	cmd.Flags().String("review-harness", "", "Harness for the post-merge reviewer (default: same as implementation harness)")
 	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart tier)")

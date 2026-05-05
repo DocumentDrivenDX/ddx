@@ -301,4 +301,5 @@ func TestTry_CommandRegistered(t *testing.T) {
 	}
 	assert.Contains(t, out, "bead-id", "help must mention bead-id")
 	assert.Contains(t, out, "--no-review-i-know-what-im-doing", "help must document the break-glass acknowledgement flag")
+	assert.Contains(t, out, "review:skip-reason:*", "help must document the sibling rationale requirement")
 }

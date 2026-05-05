@@ -1513,6 +1513,11 @@ execute-loop runs inline in the current process; per ADR-022 there is no
 separate "submit to server" mode. The legacy --local flag is accepted but
 ignored (deprecation warning printed) and will be removed in a future release.
 
+Review is on by default. --no-review is a break-glass override and
+requires --no-review-i-know-what-im-doing. A bead label of review:skip
+is only honored when it also carries a sibling review:skip-reason:*
+label; otherwise the label is ignored.
+
 Project targeting (multi-project servers):
   --project <path>    target a specific project root (absolute path or name)
   DDX_PROJECT_ROOT    env var fallback; used when --project is not set
@@ -1533,7 +1538,10 @@ is registered with the server (run "ddx server" from that directory, or use
 
   # Force a specific harness/model for a debugging pass
   ddx agent execute-loop --once --harness codex
-  ddx agent execute-loop --once --harness agent --model minimax/minimax-m2.7`,
+  ddx agent execute-loop --once --harness agent --model minimax/minimax-m2.7
+
+  # Skip review only with the break-glass acknowledgement flag
+  ddx agent execute-loop --once --no-review --no-review-i-know-what-im-doing`,
 		Args: cobra.NoArgs,
 		RunE: f.runAgentExecuteLoop,
 	}
@@ -1550,7 +1558,7 @@ is registered with the server (run "ddx server" from that directory, or use
 	cmd.Flags().Bool("json", false, "Output loop result as JSON")
 	cmd.Flags().Bool("local", false, "Deprecated: no-op; execute-loop always runs inline (ADR-022)")
 	_ = cmd.Flags().MarkDeprecated("local", "execute-loop always runs inline; the flag is a no-op (ADR-022)")
-	cmd.Flags().Bool("no-review", false, "Skip post-merge review (e.g. for doc-only beads or tight iteration loops)")
+	cmd.Flags().Bool("no-review", false, "Skip post-merge review (break-glass: requires --no-review-i-know-what-im-doing; e.g. for doc-only beads or tight iteration loops)")
 	cmd.Flags().Bool("no-review-i-know-what-im-doing", false, "Break-glass acknowledgement required when using --no-review")
 	cmd.Flags().String("review-harness", "", "Harness to use for the post-merge reviewer (default: same as implementation harness)")
 	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart tier)")
