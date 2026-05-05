@@ -346,8 +346,8 @@ func (r *queryResolver) QueueAndWorkersSummary(ctx context.Context, projectID st
 }
 
 // EfficacyRows is the resolver for the efficacyRows field.
-func (r *queryResolver) EfficacyRows(ctx context.Context, since *string, until *string, projectID *string) ([]*EfficacyRow, error) {
-	snap, err := r.efficacySnapshot(ctx, since, until, projectID)
+func (r *queryResolver) EfficacyRows(ctx context.Context, since *string, until *string, projectID *string, promptSHA *string) ([]*EfficacyRow, error) {
+	snap, err := r.efficacySnapshot(ctx, since, until, projectID, promptSHA)
 	if err != nil {
 		return nil, err
 	}
@@ -355,8 +355,8 @@ func (r *queryResolver) EfficacyRows(ctx context.Context, since *string, until *
 }
 
 // EfficacyAttempts is the resolver for the efficacyAttempts field.
-func (r *queryResolver) EfficacyAttempts(ctx context.Context, rowKey string, since *string, until *string, projectID *string) (*EfficacyAttempts, error) {
-	snap, err := r.efficacySnapshot(ctx, since, until, projectID)
+func (r *queryResolver) EfficacyAttempts(ctx context.Context, rowKey string, since *string, until *string, projectID *string, promptSHA *string) (*EfficacyAttempts, error) {
+	snap, err := r.efficacySnapshot(ctx, since, until, projectID, promptSHA)
 	if err != nil {
 		return nil, err
 	}
@@ -802,7 +802,7 @@ var sessionEfficacyCache struct {
 	byQuery map[string]sessionEfficacyCacheEntry
 }
 
-func (r *queryResolver) efficacySnapshot(ctx context.Context, since, until, projectID *string) (efficacySnapshot, error) {
+func (r *queryResolver) efficacySnapshot(ctx context.Context, since, until, projectID, promptSHA *string) (efficacySnapshot, error) {
 	projectRoot := r.workingDir(ctx)
 	if projectID != nil && strings.TrimSpace(*projectID) != "" {
 		projectRoot = r.projectRoot(ctx, strings.TrimSpace(*projectID))
@@ -820,7 +820,10 @@ func (r *queryResolver) efficacySnapshot(ctx context.Context, since, until, proj
 		StartedAfter:  startedAfter,
 		StartedBefore: startedBefore,
 	}
-	cacheKey := sessionEfficacyCacheKey(logDir, startedAfter, startedBefore)
+	if promptSHA != nil {
+		query.PromptSHA = strings.TrimSpace(*promptSHA)
+	}
+	cacheKey := sessionEfficacyCacheKey(logDir, startedAfter, startedBefore, query.PromptSHA)
 	fingerprint, err := sessionEfficacyIndexFingerprint(logDir, query)
 	if err != nil {
 		return efficacySnapshot{}, err
@@ -846,8 +849,8 @@ func (r *queryResolver) efficacySnapshot(ctx context.Context, since, until, proj
 	return snap, nil
 }
 
-func sessionEfficacyCacheKey(logDir string, startedAfter, startedBefore *time.Time) string {
-	return strings.Join([]string{logDir, timeKey(startedAfter), timeKey(startedBefore)}, "|")
+func sessionEfficacyCacheKey(logDir string, startedAfter, startedBefore *time.Time, promptSHA string) string {
+	return strings.Join([]string{logDir, timeKey(startedAfter), timeKey(startedBefore), strings.TrimSpace(promptSHA)}, "|")
 }
 
 func timeKey(t *time.Time) string {

@@ -189,6 +189,7 @@ type executeBeadArtifacts struct {
 	ChecksRel   string
 	UsageAbs    string
 	UsageRel    string
+	PromptSHA   string
 }
 
 type executeBeadManifest struct {
@@ -782,6 +783,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			"worker_id":   runtime.WorkerID,
 			"bundle_path": artifacts.DirRel,
 			"prompt_file": artifacts.PromptRel,
+			"prompt_sha":  artifacts.PromptSHA,
 		},
 		SessionLogDirOverride: embeddedStateDir,
 		PermissionsOverride:   "unrestricted", // isolated worktree; writes must not require approval
@@ -1273,6 +1275,7 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 	if err := writeArtifactJSON(artifacts.ManifestAbs, manifest); err != nil {
 		return nil, fmt.Errorf("writing execute-bead manifest artifact: %w", err)
 	}
+	artifacts.PromptSHA = manifest.PromptSHA
 	return artifacts, nil
 }
 

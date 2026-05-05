@@ -32,6 +32,7 @@ type SessionIndexEntry struct {
 	BaseURL         string    `json:"baseURL,omitempty"`
 	BillingMode     string    `json:"billingMode"`
 	Model           string    `json:"model,omitempty"`
+	PromptSHA       string    `json:"promptSHA,omitempty"`
 	StartedAt       time.Time `json:"startedAt"`
 	EndedAt         time.Time `json:"endedAt,omitempty"`
 	DurationMS      int       `json:"durationMs,omitempty"`
@@ -62,6 +63,7 @@ type SessionIndexQuery struct {
 	StartedAfter  *time.Time
 	StartedBefore *time.Time
 	Provider      string
+	PromptSHA     string
 	DefaultRecent bool
 }
 
@@ -211,6 +213,7 @@ func SessionIndexEntryFromResult(projectRoot string, inputs SessionIndexInputs, 
 		BaseURL:         result.ResolvedBaseURL,
 		BillingMode:     billingModeFor(harness, "", result.ResolvedBaseURL),
 		Model:           model,
+		PromptSHA:       corr["prompt_sha"],
 		StartedAt:       startedAt.UTC(),
 		EndedAt:         endedAt.UTC(),
 		DurationMS:      int(endedAt.Sub(startedAt).Milliseconds()),
@@ -282,6 +285,7 @@ func SessionIndexEntryFromLegacy(projectRoot string, e SessionEntry) SessionInde
 		BaseURL:         baseURL,
 		BillingMode:     billingMode,
 		Model:           e.Model,
+		PromptSHA:       e.Correlation["prompt_sha"],
 		StartedAt:       e.Timestamp.UTC(),
 		EndedAt:         endedAt,
 		DurationMS:      e.Duration,
@@ -519,6 +523,9 @@ func SessionIndexEntryToLegacy(e SessionIndexEntry) SessionEntry {
 	if e.WorkerID != "" {
 		corr["worker_id"] = e.WorkerID
 	}
+	if e.PromptSHA != "" {
+		corr["prompt_sha"] = e.PromptSHA
+	}
 	if e.Effort != "" {
 		corr["effort"] = e.Effort
 	}
@@ -565,6 +572,9 @@ func sessionIndexEntryInRange(entry SessionIndexEntry, q SessionIndexQuery) bool
 		return false
 	}
 	if q.Provider != "" && !strings.EqualFold(strings.TrimSpace(entry.Provider), strings.TrimSpace(q.Provider)) {
+		return false
+	}
+	if q.PromptSHA != "" && !strings.EqualFold(strings.TrimSpace(entry.PromptSHA), strings.TrimSpace(q.PromptSHA)) {
 		return false
 	}
 	return true
