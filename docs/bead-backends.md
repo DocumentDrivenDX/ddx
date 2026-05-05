@@ -1,6 +1,6 @@
 # Bead Backend Fallback Path
 
-This document describes the bd fallback path for bead storage if the axon rollout stalls or is deferred. It is the practical wiring guide for preserving the `Backend` contract introduced in `ddx-bbdd7564` while contrasting that path with the axon backend from `ddx-95ec5ed5`.
+This document describes the bd/DoltDB fallback path for bead storage if the axon rollout stalls or is deferred. It is the practical wiring guide for preserving the `Backend` contract introduced in `ddx-bbdd7564` while contrasting that path with the Axon backend design in [TD-030](helix/02-design/technical-designs/TD-030-axon-bead-backend.md).
 
 ## Contract To Preserve
 
@@ -9,6 +9,7 @@ The high-level contract is `cli/internal/bead/backend.go:17-67`.
 - `Backend` is the interface callers should target.
 - It includes CRUD, claim, list/ready/blocked, dependency operations, event append, archive split, and JSONL import/export.
 - `RawBackend` remains the low-level read/write/lock primitive that concrete storage adapters implement underneath `Store`.
+- Claim and lock are split on purpose: `Claim` and `Unclaim` mutate bead records, while `WithLock` is the serialization boundary that protects the read-modify-write cycle.
 
 The important distinction is:
 
@@ -23,7 +24,7 @@ The bd/br path is wired today through `cli/internal/bead/store.go:88-137` and `c
 
 - `NewStore` reads `DDX_BEAD_BACKEND`, then `.ddx/config.yaml`, then falls back to `jsonl`.
 - When the backend type is `bd` or `br`, `Store` constructs `ExternalBackend`.
-- `ExternalBackend` shells out to the external binary and uses JSONL for interchange.
+- `ExternalBackend` is the adapter boundary: it shells out to the external binary and uses JSONL for interchange.
 - Non-default collections can fall back to `JSONLBackend` when the external tool cannot serve them directly.
 
 If a future implementation wants a more explicit bd adapter, it should live beside these files in `cli/internal/bead/`, for example as `backend_bd.go`, but it should still satisfy `RawBackend` and preserve the same `Backend` surface.
@@ -41,6 +42,7 @@ That makes axon a feature-flagged, repository-local implementation path. The bd 
 - bd is an external dependency.
 - bd is selected by backend configuration rather than an experiment flag.
 - bd uses the same JSONL interchange contract for import/export.
+- bd inherits DoltDB's git-for-data model, so the storage semantics are repository-backed and branch/commit oriented rather than purely local files.
 
 ## Future Wiring Steps For A bd Fallback
 
@@ -59,13 +61,14 @@ If axon adoption stalls and bd becomes the preferred backend, a future implement
 The bd path is attractive because it aligns with the upstream bead-format ecosystem, but it carries an external dependency:
 
 - the `bd` binary must be installed and available in `PATH`
+- the fallback depends on the bd codebase and its DoltDB runtime, not just on DDx's repository
 - import/export remains a shell-out boundary
 - operator environments need a clear fallback story when `bd` is missing
 
 That is the main difference from axon in this repository:
 
 - axon is self-contained inside DDx but is still experimental
-- bd is stable as a storage option but depends on an external tool
+- bd is stable as a storage option but depends on an external tool and DoltDB's git-for-data semantics
 
 ## Recommended Fallback Policy
 
