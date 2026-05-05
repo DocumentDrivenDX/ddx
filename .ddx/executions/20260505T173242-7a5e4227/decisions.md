@@ -1,0 +1,5 @@
+Store.Init | DELETE | No current `cli/internal/exec` symbol exists for `Init`; exec stores are constructed directly by `cli/cmd/exec.go:76` and used through the production command graph rooted at `cli/cmd/command_factory.go:519`.
+Store.SaveRunRecord | DELETE | The run persistence path is now `(*Store).RunWithOptions` in `cli/internal/exec/store.go:159` calling `saveRunRecord` in `cli/internal/exec/bead_runtime.go:403`, so the historical exported helper is gone.
+Store.writeRunBundle | DELETE | Run bundle writing is inlined into `saveRunRecord` at `cli/internal/exec/bead_runtime.go:403-479`; no separate legacy symbol remains to wire.
+withPathLock | DELETE | Locking is handled by `bead.Store.WithLock` in `cli/internal/exec/bead_runtime.go:382` and `:454`, so the historical helper is obsolete.
+atomicWriteFile | DELETE | Atomic file writing is no longer a separate helper in `cli/internal/exec`; the current implementation uses direct temp-dir bundle writes and `syncPath` in `cli/internal/exec/bead_runtime.go:420-460`.
