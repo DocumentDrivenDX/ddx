@@ -685,10 +685,14 @@ func runEscalatingSingleTierAttempts(
 	initialMinPower int,
 	ladder *tierescalation.Ladder,
 	attempt func(context.Context, int) (agent.ExecuteBeadReport, error),
+	recordAttempt func(agent.ExecuteBeadReport),
 ) (agent.ExecuteBeadReport, error) {
 	minPower := initialMinPower
 	for {
 		report, err := attempt(ctx, minPower)
+		if recordAttempt != nil && report.BeadID != "" {
+			recordAttempt(report)
+		}
 		if err != nil {
 			return report, err
 		}
@@ -705,6 +709,25 @@ func runEscalatingSingleTierAttempts(
 		}
 		minPower = nextPower
 	}
+}
+
+func appendTierAttemptEvent(store agent.BeadEventAppender, beadID string, report agent.ExecuteBeadReport, actor string, createdAt time.Time) {
+	if store == nil || beadID == "" {
+		return
+	}
+	body := policyescalation.FormatTierAttemptBody(report.Tier, report.Harness, report.Model, report.ProbeResult, report.Detail)
+	summary := report.Status
+	if report.Tier != "" {
+		summary = fmt.Sprintf("%s tier=%s", summary, report.Tier)
+	}
+	_ = store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "tier-attempt",
+		Summary:   summary,
+		Body:      body,
+		Actor:     actor,
+		Source:    "ddx agent execute-loop",
+		CreatedAt: createdAt,
+	})
 }
 
 func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec ExecuteLoopWorkerSpec, projectRoot string, handle *workerHandle, log io.Writer, eventSink io.WriteCloser, progressCh chan agent.ProgressEvent) {
@@ -850,13 +873,13 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			costCap.Add(report.Harness, report.CostUSD)
 		}
 		costCapTripped := func() (agent.ExecuteBeadReport, bool) {
-			detail, tripped := costCap.Tripped()
-			if !tripped {
+			if _, tripped := costCap.Tripped(); !tripped {
 				return agent.ExecuteBeadReport{}, false
 			}
+			spent := costCap.Spent()
 			return agent.ExecuteBeadReport{
 				Status: agent.ExecuteBeadStatusExecutionFailed,
-				Detail: detail,
+				Detail: fmt.Sprintf("cost cap reached: $%.2f billed >= $%.2f cap; raise the cap or set 0 to disable. Subscription and local providers do not count.", spent, policyescalation.DefaultMaxCostUSD),
 			}, true
 		}
 		attemptWithCostCap := func(ctx context.Context, beadID string, requestedMinPower int) (agent.ExecuteBeadReport, error) {
@@ -876,9 +899,32 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		}
 
 		executor := agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
-			return runEscalatingSingleTierAttempts(ctx, rcfg.MinPower(), loadLadder(), func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+			attempts := make([]policyescalation.TierAttemptRecord, 0, 3)
+			recordAttempt := func(report agent.ExecuteBeadReport) {
+				if report.Tier == "" && report.Harness == "" && report.Model == "" && report.ProbeResult == "" && report.CostUSD == 0 && report.DurationMS == 0 {
+					return
+				}
+				attempts = append(attempts, policyescalation.TierAttemptRecord{
+					Tier:       report.Tier,
+					Harness:    report.Harness,
+					Model:      report.Model,
+					Status:     report.Status,
+					CostUSD:    report.CostUSD,
+					DurationMS: report.DurationMS,
+				})
+				appendTierAttemptEvent(store, beadID, report, "ddx", time.Now().UTC())
+			}
+			report, err := runEscalatingSingleTierAttempts(ctx, rcfg.MinPower(), loadLadder(), func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 				return attemptWithCostCap(ctx, beadID, requestedMinPower)
-			})
+			}, recordAttempt)
+			if len(attempts) > 0 {
+				winningTier := ""
+				if report.Status == agent.ExecuteBeadStatusSuccess && report.Tier != "" {
+					winningTier = report.Tier
+				}
+				_ = policyescalation.AppendEscalationSummaryEvent(store, beadID, "ddx", attempts, winningTier, time.Now().UTC())
+			}
+			return report, err
 		})
 
 		// Build post-merge reviewer. On-by-default unless NoReview is set in spec.

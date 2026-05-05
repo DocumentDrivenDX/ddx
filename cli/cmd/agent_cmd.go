@@ -1731,13 +1731,13 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		costCap.Add(report.Harness, report.CostUSD)
 	}
 	costCapTripped := func() (agent.ExecuteBeadReport, bool) {
-		detail, tripped := costCap.Tripped()
-		if !tripped {
+		if _, tripped := costCap.Tripped(); !tripped {
 			return agent.ExecuteBeadReport{}, false
 		}
+		spent := costCap.Spent()
 		return agent.ExecuteBeadReport{
 			Status: agent.ExecuteBeadStatusExecutionFailed,
-			Detail: detail,
+			Detail: fmt.Sprintf("cost cap reached: $%.2f billed >= $%.2f cap; raise the cap or set 0 to disable. Subscription and local providers do not count.", spent, maxCostUSD),
 		}, true
 	}
 
