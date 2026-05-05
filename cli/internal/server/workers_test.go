@@ -597,11 +597,13 @@ func TestFormatSessionLogLines(t *testing.T) {
 
 func TestWorkerProgressUsesCanonicalFizeauProgressEvents(t *testing.T) {
 	root := t.TempDir()
-	logDir := filepath.Join(root, ".ddx", "agent-logs")
-	require.NoError(t, os.MkdirAll(logDir, 0o755))
+	legacyDir := filepath.Join(root, ".ddx", "agent-logs")
+	canonicalDir := filepath.Join(root, ".ddx", "executions", "attempt-1", "embedded")
+	require.NoError(t, os.MkdirAll(legacyDir, 0o755))
+	require.NoError(t, os.MkdirAll(canonicalDir, 0o755))
 
-	legacyPath := filepath.Join(logDir, "agent-legacy.jsonl")
-	canonicalPath := filepath.Join(logDir, "svc-canonical.jsonl")
+	legacyPath := filepath.Join(legacyDir, "agent-legacy.jsonl")
+	canonicalPath := filepath.Join(canonicalDir, "svc-canonical.jsonl")
 
 	require.NoError(t, os.WriteFile(legacyPath, []byte(strings.Join([]string{
 		`{"type":"llm.response","data":{"model":"claude-sonnet-4-6","latency_ms":10,"attempt":{"cost":{"raw":{"total_tokens":12}}},"tool_calls":[{"name":"Bash"}],"finish_reason":"tool_use"}}`,
@@ -623,11 +625,9 @@ func TestWorkerProgressUsesCanonicalFizeauProgressEvents(t *testing.T) {
 		}),
 	}, "\n")+"\n"), 0o644))
 
-	// Make the canonical service log the newest file so the worker log picker
-	// prefers it over the stale legacy agent log.
 	now := time.Now()
-	require.NoError(t, os.Chtimes(legacyPath, now.Add(-2*time.Minute), now.Add(-2*time.Minute)))
-	require.NoError(t, os.Chtimes(canonicalPath, now, now))
+	require.NoError(t, os.Chtimes(legacyPath, now, now))
+	require.NoError(t, os.Chtimes(canonicalPath, now.Add(-2*time.Minute), now.Add(-2*time.Minute)))
 
 	m := &WorkerManager{projectRoot: root}
 	result := m.readActiveSessionLog(&workerHandle{})

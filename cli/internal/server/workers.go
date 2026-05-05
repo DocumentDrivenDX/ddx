@@ -1605,45 +1605,22 @@ func (m *WorkerManager) SubscribeProgress(workerID string) (<-chan agent.Progres
 }
 
 // readActiveSessionLog reads the latest session log entries for an active worker.
-// The Fizeau library writes per-iteration entries to .ddx/agent-logs/agent-*.jsonl
-// in real-time, so this gives live visibility into what the model provider is doing.
+// Canonical service-event output is written as svc-*.jsonl inside the embedded
+// execution bundle; legacy agent-*.jsonl remains supported as a fallback.
 func (m *WorkerManager) readActiveSessionLog(handle *workerHandle) string {
-	logDir := filepath.Join(m.projectRoot, ".ddx", "agent-logs")
-	entries, err := os.ReadDir(logDir)
-	if err != nil {
+	candidates := m.activeSessionLogCandidates()
+	if len(candidates) == 0 {
 		return ""
 	}
+	sort.SliceStable(candidates, func(i, j int) bool {
+		if candidates[i].canonical != candidates[j].canonical {
+			return candidates[i].canonical
+		}
+		return candidates[i].modTime.After(candidates[j].modTime)
+	})
 
-	// Find the most recent session-log JSONL file that was modified in the last 30 minutes.
-	// Canonical service output is written as svc-*.jsonl; legacy agent-*.jsonl remains
-	// supported for older harness paths.
-	var newest string
-	var newestMod time.Time
-	cutoff := time.Now().Add(-30 * time.Minute)
-	for _, entry := range entries {
-		if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
-			continue
-		}
-		// Skip loop event files — they contain loop milestones, not agent session
-		// entries. Loop milestone progress is already captured in worker.log.
-		if strings.HasPrefix(entry.Name(), "agent-loop-") {
-			continue
-		}
-		info, err := entry.Info()
-		if err != nil {
-			continue
-		}
-		if info.ModTime().After(newestMod) && info.ModTime().After(cutoff) {
-			newest = filepath.Join(logDir, entry.Name())
-			newestMod = info.ModTime()
-		}
-	}
-	if newest == "" {
-		return ""
-	}
-
-	// Read the last N lines of the session log and format them as readable progress
-	data, err := os.ReadFile(newest)
+	// Read the last N lines of the preferred log and format them as readable progress.
+	data, err := os.ReadFile(candidates[0].path)
 	if err != nil {
 		return ""
 	}
@@ -1656,6 +1633,52 @@ func (m *WorkerManager) readActiveSessionLog(handle *workerHandle) string {
 	}
 
 	return formatActiveSessionLogLines(lines[start:])
+}
+
+type sessionLogCandidate struct {
+	path      string
+	canonical bool
+	modTime   time.Time
+}
+
+func (m *WorkerManager) activeSessionLogCandidates() []sessionLogCandidate {
+	var candidates []sessionLogCandidate
+	appendDir := func(dir string) {
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
+				continue
+			}
+			// Skip loop event files — they contain loop milestones, not agent session
+			// entries. Loop milestone progress is already captured in worker.log.
+			if strings.HasPrefix(entry.Name(), "agent-loop-") {
+				continue
+			}
+			canonical := strings.HasPrefix(entry.Name(), "svc-")
+			if !canonical && !strings.HasPrefix(entry.Name(), "agent-") {
+				continue
+			}
+			info, err := entry.Info()
+			if err != nil {
+				continue
+			}
+			candidates = append(candidates, sessionLogCandidate{
+				path:      filepath.Join(dir, entry.Name()),
+				canonical: canonical,
+				modTime:   info.ModTime(),
+			})
+		}
+	}
+
+	appendDir(filepath.Join(m.projectRoot, ".ddx", "agent-logs"))
+	embeddedDirs, _ := filepath.Glob(filepath.Join(m.projectRoot, ".ddx", "executions", "*", "embedded"))
+	for _, dir := range embeddedDirs {
+		appendDir(dir)
+	}
+	return candidates
 }
 
 func formatActiveSessionLogLines(lines []string) string {
