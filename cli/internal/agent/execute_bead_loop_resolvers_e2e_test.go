@@ -14,21 +14,15 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestNoProgressCooldownFromConfig is the SD-024 Stage 1 behavioral
-// proof that the workers.no_progress_cooldown knob in .ddx/config.yaml
-// reaches the running execute-bead loop and drives the cooldown applied
-// to a bead that returns no_changes with no commits (BaseRev ==
-// ResultRev). The path under test is the SetExecutionCooldown invocation
-// at execute_bead_loop.go ~ noProgressCooldown branch — the loop computes
-// retryAfter from the resolved value, not a hardcoded 6h default.
-//
-// Configured value: 47 minutes (intentionally non-default and unlikely
-// to collide with any baked-in constant).
-func TestNoProgressCooldownFromConfig(t *testing.T) {
+// TestNoChangesWithoutRationaleDoesNotUseNoProgressCooldown verifies TD-031's
+// no_changes rule: absent rationale is a bad attempt / triage signal, not a
+// retry-later condition. The configured no_progress_cooldown still resolves,
+// but no_changes does not consume it unless the try layer returns an explicit
+// retry-later lifecycle action.
+func TestNoChangesWithoutRationaleDoesNotUseNoProgressCooldown(t *testing.T) {
 	const (
 		cooldown = 47 * time.Minute
 		beadID   = "ddx-npc-001"
-		// fixedRev triggers shouldSuppressNoProgress -> SetExecutionCooldown.
 		fixedRev = "feedface00112233"
 	)
 
@@ -37,8 +31,8 @@ func TestNoProgressCooldownFromConfig(t *testing.T) {
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
 
 	// Real on-disk .ddx/config.yaml. max_no_changes_before_close is set
-	// high enough that adjudication never closes the bead — the test
-	// observes the cooldown branch, not the close branch.
+	// high enough that adjudication never closes the bead — the test proves
+	// the cooldown knob is not used for unjustified no_changes.
 	cfgYAML := `version: "1.0"
 library:
   path: ./library
@@ -73,39 +67,27 @@ workers:
 	require.Equal(t, cooldown, rcfg.NoProgressCooldown(),
 		"LoadAndResolve must surface workers.no_progress_cooldown from .ddx/config.yaml")
 
-	before := time.Now().UTC()
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once:        true,
 		ProjectRoot: t.TempDir(),
 	})
-	after := time.Now().UTC()
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	require.Equal(t, 1, result.Attempts)
 	require.Len(t, result.Results, 1)
 
-	// The loop stamps RetryAfter on the report from now()+noProgressCooldown.
-	// Parse it back and verify it sits in [before+cooldown, after+cooldown].
 	retryStr := result.Results[0].RetryAfter
-	require.NotEmpty(t, retryStr,
-		"loop must record RetryAfter on a no_changes report when shouldSuppressNoProgress is true")
-	retryAt, perr := time.Parse(time.RFC3339, retryStr)
-	require.NoError(t, perr)
-	assert.False(t, retryAt.Before(before.Add(cooldown).Truncate(time.Second)),
-		"retryAfter (%s) must be >= before+cooldown (%s)", retryAt, before.Add(cooldown))
-	assert.False(t, retryAt.After(after.Add(cooldown).Add(time.Second)),
-		"retryAfter (%s) must be <= after+cooldown (%s)", retryAt, after.Add(cooldown))
+	require.Empty(t, retryStr,
+		"loop must not record RetryAfter on unjustified no_changes by default")
 
-	// The store-level cooldown is also persisted via SetExecutionCooldown.
 	got, err := store.Get(beadID)
 	require.NoError(t, err)
 	require.NotNil(t, got.Extra)
-	persisted, _ := got.Extra["execute-loop-retry-after"].(string)
-	assert.Equal(t, retryStr, persisted,
-		"persisted execute-loop-retry-after must match the report's RetryAfter")
-	assert.Equal(t, "no_changes", got.Extra["execute-loop-last-status"])
+	_, hasRetry := got.Extra["execute-loop-retry-after"]
+	assert.False(t, hasRetry, "store must not persist execute-loop-retry-after for unjustified no_changes")
+	assert.Contains(t, got.Labels, NoChangesLabelUnjustified)
 	assert.Equal(t, "open", got.Status,
-		"bead must remain open after a single no_changes attempt under cooldown branch")
+		"bead must remain open after a single unjustified no_changes attempt")
 }
 
 // TestMaxNoChangesBeforeCloseFromConfig was originally the SD-024 Stage 1

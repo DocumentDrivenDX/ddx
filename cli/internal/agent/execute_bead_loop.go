@@ -896,9 +896,25 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 
 		if attemptOut.Disposition == agenttry.OutcomeSuccess {
+			if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, clearExecuteLoopNoChangesMetadata(w.Store, candidate.ID))
+			}) {
+				if ctx.Err() != nil {
+					return result, ctx.Err()
+				}
+				continue
+			}
 			result.Successes++
 			result.LastSuccessAt = now().UTC()
 		} else if report.Status == ExecuteBeadStatusSuccess {
+			if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, clearExecuteLoopNoChangesMetadata(w.Store, candidate.ID))
+			}) {
+				if ctx.Err() != nil {
+					return result, ctx.Err()
+				}
+				continue
+			}
 			appendLoopRoutingEvidence(w.Store, candidate.ID, report, now().UTC())
 			// Story 15: when an operator-prompt bead succeeds, scan
 			// base..result for affected beads and artifacts, and append
@@ -989,7 +1005,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					continue
 				}
 			}
-			if noChanges.Satisfied {
+			switch noChanges.Action {
+			case agenttry.NoChangesActionCloseAlreadySatisfied:
 				// Adjudication confirmed bead is already satisfied.
 				// Set the terminal status BEFORE the close so the late
 				// executeBeadLoopEvent append captures "already_satisfied"
@@ -1005,6 +1022,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				_ = w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC()))
 				if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, clearExecuteLoopNoChangesMetadata(w.Store, candidate.ID))
+				}) {
+					if ctx.Err() != nil {
+						return result, ctx.Err()
+					}
+					continue
+				}
+				if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("CloseWithEvidence", assignee, result, w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.BaseRev))
 				}) {
 					if ctx.Err() != nil {
@@ -1014,11 +1039,11 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				result.Successes++
 				result.LastSuccessAt = now().UTC()
-			} else {
+			case agenttry.NoChangesActionRetryLaterCooldown:
 				// Unresolved: suppress immediate retry so the queue can
 				// move on to other beads.
 				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
-				if shouldSuppressNoProgress(report) {
+				if noChanges.CooldownEligible && shouldSuppressNoProgress(report) {
 					retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
 					if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
 						return commitOutcomeError("SetExecutionCooldown", assignee, result, w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail))
@@ -1030,6 +1055,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					}
 					report.RetryAfter = retryAfter.Format(time.RFC3339)
 				}
+				result.Failures++
+				result.LastFailureStatus = report.Status
+			default:
+				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
 				result.Failures++
 				result.LastFailureStatus = report.Status
 			}
@@ -1509,6 +1538,17 @@ func addBeadLabel(store ExecuteBeadLoopStore, beadID, label string) error {
 			}
 		}
 		b.Labels = append(b.Labels, label)
+	})
+}
+
+func clearExecuteLoopNoChangesMetadata(store ExecuteBeadLoopStore, beadID string) error {
+	return store.Update(beadID, func(b *bead.Bead) {
+		if b.Extra == nil {
+			return
+		}
+		delete(b.Extra, "execute-loop-retry-after")
+		delete(b.Extra, "execute-loop-last-status")
+		delete(b.Extra, "execute-loop-last-detail")
 	})
 }
 

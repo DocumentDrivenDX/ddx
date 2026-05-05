@@ -351,7 +351,7 @@ func TestExecuteBeadWorkerNoChangesStaysOpenAndContinues(t *testing.T) {
 	assert.True(t, sawTriage, "no_changes_unjustified triage event must be appended")
 }
 
-func TestExecuteBeadWorkerNoChangesSuppressesImmediateRetryAcrossRuns(t *testing.T) {
+func TestExecuteBeadWorkerNoChangesLabelsWithoutCooldownAcrossRuns(t *testing.T) {
 	store, first, second := newExecuteLoopTestStore(t)
 	callCount := 0
 	now := time.Now().UTC().Truncate(time.Second)
@@ -389,25 +389,26 @@ func TestExecuteBeadWorkerNoChangesSuppressesImmediateRetryAcrossRuns(t *testing
 	assert.Equal(t, 1, firstRun.Attempts)
 	assert.Equal(t, ExecuteBeadStatusNoChanges, firstRun.LastFailureStatus)
 	require.Len(t, firstRun.Results, 1)
-	assert.NotEmpty(t, firstRun.Results[0].RetryAfter)
+	assert.Empty(t, firstRun.Results[0].RetryAfter)
 
 	gotFirst, err := store.Get(first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
-	assert.Equal(t, ExecuteBeadStatusNoChanges, gotFirst.Extra["execute-loop-last-status"])
-	assert.Equal(t, "agent made no commits", gotFirst.Extra["execute-loop-last-detail"])
-	assert.NotEmpty(t, gotFirst.Extra["execute-loop-retry-after"])
+	assert.Contains(t, gotFirst.Labels, NoChangesLabelUnjustified)
+	assert.NotContains(t, gotFirst.Extra, "execute-loop-last-status")
+	assert.NotContains(t, gotFirst.Extra, "execute-loop-last-detail")
+	assert.NotContains(t, gotFirst.Extra, "execute-loop-retry-after")
 
 	secondRun, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, secondRun)
 	assert.Equal(t, 1, secondRun.Attempts)
 	require.Len(t, secondRun.Results, 1)
-	assert.Equal(t, second.ID, secondRun.Results[0].BeadID)
+	assert.Equal(t, first.ID, secondRun.Results[0].BeadID)
 
 	gotSecond, err := store.Get(second.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, gotSecond.Status)
+	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
 	assert.Equal(t, 2, callCount)
 }
 
@@ -885,7 +886,7 @@ func TestExecuteBeadWorkerCustomSatisfactionCheckerClosesBeadWhenSatisfied(t *te
 
 // TestExecuteBeadWorkerCustomSatisfactionCheckerLeavesBeadOpenWhenUnresolved
 // verifies that when the SatisfactionChecker reports the bead is not yet
-// satisfied, the bead remains open and retry suppression is applied.
+// satisfied, the bead remains open without default retry cooldown.
 func TestExecuteBeadWorkerCustomSatisfactionCheckerLeavesBeadOpenWhenUnresolved(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
@@ -922,12 +923,12 @@ func TestExecuteBeadWorkerCustomSatisfactionCheckerLeavesBeadOpenWhenUnresolved(
 	assert.Equal(t, 1, result.Failures)
 	assert.Equal(t, ExecuteBeadStatusNoChanges, result.LastFailureStatus)
 	require.Len(t, result.Results, 1)
-	assert.NotEmpty(t, result.Results[0].RetryAfter, "retry suppression must be recorded")
+	assert.Empty(t, result.Results[0].RetryAfter, "retry cooldown must not be recorded by default")
 
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
-	assert.NotEmpty(t, got.Extra["execute-loop-retry-after"])
+	assert.NotContains(t, got.Extra, "execute-loop-retry-after")
 }
 
 // TestExecuteBeadWorkerNoChangesDoesNotStarveQueue verifies that a bead with
@@ -1157,6 +1158,8 @@ func TestExecuteBeadWorkerNoChangesNeedsInvestigationKeepsBeadOpen(t *testing.T)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "needs_investigation must NOT close the bead")
 	assert.Contains(t, got.Labels, NoChangesLabelNeedsInvestigation)
+	_, hasRetry := got.Extra["execute-loop-retry-after"]
+	assert.False(t, hasRetry, "needs_investigation no_changes must not set execute-loop-retry-after by default")
 
 	events, err := store.Events(b.ID)
 	require.NoError(t, err)
@@ -1168,6 +1171,98 @@ func TestExecuteBeadWorkerNoChangesNeedsInvestigationKeepsBeadOpen(t *testing.T)
 		}
 	}
 	assert.True(t, sawNeedsInv, "no_changes_needs_investigation event must be emitted")
+}
+
+func TestExecuteBeadWorkerNoChangesUnjustifiedKeepsOpenWithoutLongCooldown(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{ID: "ddx-unj01", Title: "Bead with absent no_changes rationale"}
+	require.NoError(t, store.Create(b))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusNoChanges,
+				BaseRev:   "same",
+				ResultRev: "same",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	r, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	assert.Equal(t, 0, r.Successes)
+	assert.Equal(t, 1, r.Failures)
+	require.Len(t, r.Results, 1)
+	assert.Empty(t, r.Results[0].RetryAfter)
+
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Contains(t, got.Labels, NoChangesLabelUnjustified)
+	_, hasRetry := got.Extra["execute-loop-retry-after"]
+	assert.False(t, hasRetry, "unjustified no_changes must not set execute-loop-retry-after by default")
+
+	events, err := store.Events(b.ID)
+	require.NoError(t, err)
+	var sawUnjustified bool
+	for _, ev := range events {
+		if ev.Kind == NoChangesEventUnjustified {
+			sawUnjustified = true
+			assert.Contains(t, ev.Body, "rationale absent")
+		}
+	}
+	assert.True(t, sawUnjustified, "no_changes_unjustified event must be emitted")
+}
+
+func TestExecuteBeadWorkerSuccessClearsStaleNoChangesMetadata(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{
+		ID:    "ddx-stale01",
+		Title: "Success after stale no_changes",
+		Extra: map[string]any{
+			"execute-loop-retry-after": "2020-01-01T00:00:00Z",
+			"execute-loop-last-status": "no_changes",
+			"execute-loop-last-detail": "agent made no commits",
+		},
+	}
+	require.NoError(t, store.Create(b))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-success",
+				ResultRev: "abc123",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	r, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	assert.Equal(t, 1, r.Successes)
+
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+	assert.NotContains(t, got.Extra, "execute-loop-retry-after")
+	assert.NotContains(t, got.Extra, "execute-loop-last-status")
+	assert.NotContains(t, got.Extra, "execute-loop-last-detail")
+
+	events, err := store.Events(b.ID)
+	require.NoError(t, err)
+	assert.NotEmpty(t, events, "success must preserve/append events while clearing only management Extra fields")
 }
 
 // TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead verifies that when
@@ -1490,14 +1585,6 @@ func TestExecuteBeadWorkerStoreErrorContinuesLoop(t *testing.T) {
 				s.onCloseWithEvidence = func(id, sessionID, commitSHA string) error { return injectedErr }
 			},
 			wantOp: "CloseWithEvidence",
-		},
-		{
-			name:           "SetExecutionCooldown fails on no_changes no-progress path",
-			executorStatus: ExecuteBeadStatusNoChanges,
-			injectErr: func(s *errorInjectingStore) {
-				s.onSetCooldown = func(id string, until time.Time, status, detail string) error { return injectedErr }
-			},
-			wantOp: "SetExecutionCooldown",
 		},
 		{
 			name:           "SetExecutionCooldown fails on execution_failed path",

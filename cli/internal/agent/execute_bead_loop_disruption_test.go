@@ -97,9 +97,9 @@ func TestLoop_DisruptedExecution_NoCooldown(t *testing.T) {
 // TestLoop_GenuineNoProgress_StillCooldowns asserts ddx-5b3e57f4 AC #4: a
 // model that returns clean (no error) with BaseRev == ResultRev and no
 // Disrupted marker still hits the noProgressCooldown branch. This proves the
-// disruption fix is targeted to disrupted attempts and does NOT defang the
-// genuine no-progress path.
-func TestLoop_GenuineNoProgress_StillCooldowns(t *testing.T) {
+// disruption fix is targeted to disrupted attempts; TD-031 further narrows
+// no_changes so unjustified no_changes remains open without a retry cooldown.
+func TestLoop_GenuineNoProgress_NoDefaultCooldown(t *testing.T) {
 	store, candidate, _ := newExecuteLoopTestStore(t)
 
 	worker := &ExecuteBeadWorker{
@@ -125,16 +125,17 @@ func TestLoop_GenuineNoProgress_StillCooldowns(t *testing.T) {
 
 	report := result.Results[0]
 	assert.False(t, report.Disrupted,
-		"clean no_changes return is not disrupted — must keep current cooldown semantics")
-	require.NotEmpty(t, report.RetryAfter,
-		"genuine no-progress must still be parked under noProgressCooldown")
+		"clean no_changes return is not disrupted")
+	require.Empty(t, report.RetryAfter,
+		"unjustified no_changes must not be parked under noProgressCooldown by default")
 
 	got, err := store.Get(candidate.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got.Extra)
 	_, hasRetry := got.Extra["execute-loop-retry-after"]
-	assert.True(t, hasRetry,
-		"non-disrupted no_changes bead must have execute-loop-retry-after persisted")
+	assert.False(t, hasRetry,
+		"unjustified no_changes bead must not have execute-loop-retry-after persisted")
+	assert.Contains(t, got.Labels, NoChangesLabelUnjustified)
 }
 
 // TestLoop_PreflightRejection_NoCooldown asserts ddx-5b3e57f4 AC #1: a

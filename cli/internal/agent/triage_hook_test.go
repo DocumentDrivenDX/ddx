@@ -200,7 +200,7 @@ func TestLoop_TriageHook_FiresPostOutcome(t *testing.T) {
 	assert.True(t, triageCalled)
 	assert.Equal(t, ExecuteBeadStatusNoChanges, result.Results[0].Status)
 	assert.Empty(t, result.Results[0].OutcomeReason)
-	assert.NotEmpty(t, result.Results[0].RetryAfter)
+	assert.Empty(t, result.Results[0].RetryAfter)
 }
 
 func TestTriageHook_RecordsButDoesNotMutateOutcome(t *testing.T) {
@@ -253,7 +253,7 @@ func TestTriageHook_RecordsButDoesNotMutateOutcome(t *testing.T) {
 	assert.True(t, found, "triage event must be recorded when classification is valid")
 }
 
-func TestTriageHook_HookError_FallsThroughToLegacyCooldown(t *testing.T) {
+func TestTriageHook_HookError_DoesNotCreateDefaultCooldown(t *testing.T) {
 	store, candidate, _ := newExecuteLoopTestStore(t)
 
 	worker := &ExecuteBeadWorker{
@@ -282,11 +282,11 @@ func TestTriageHook_HookError_FallsThroughToLegacyCooldown(t *testing.T) {
 	report := result.Results[0]
 	assert.Equal(t, ExecuteBeadStatusNoChanges, report.Status)
 	assert.Empty(t, report.OutcomeReason)
-	assert.NotEmpty(t, report.RetryAfter, "hook failure must preserve legacy cooldown behavior")
+	assert.Empty(t, report.RetryAfter, "hook failure must not create default no_changes cooldown")
 
 	got, err := store.Get(candidate.ID)
 	require.NoError(t, err)
 	require.NotNil(t, got.Extra)
 	_, ok := got.Extra["execute-loop-retry-after"]
-	assert.True(t, ok)
+	assert.False(t, ok)
 }
