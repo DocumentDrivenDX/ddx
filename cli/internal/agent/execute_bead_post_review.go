@@ -24,16 +24,17 @@ const triageDecisionEventKind = "triage-decision"
 // the inlined block read from the worker, the candidate bead, the report,
 // and the loop runtime.
 type PostMergeReviewInput struct {
-	Bead        bead.Bead
-	Report      ExecuteBeadReport
-	Reviewer    BeadReviewer
-	Store       ExecuteBeadLoopStore
-	ProjectRoot string
-	Rcfg        config.ResolvedConfig
-	NoReview    bool
-	Log         io.Writer
-	Assignee    string
-	Now         func() time.Time
+	Bead          bead.Bead
+	Report        ExecuteBeadReport
+	Reviewer      BeadReviewer
+	Store         ExecuteBeadLoopStore
+	ProjectRoot   string
+	Rcfg          config.ResolvedConfig
+	NoReview      bool
+	Log           io.Writer
+	Assignee      string
+	Now           func() time.Time
+	ReviewCostCap *escalation.CostCapTracker
 }
 
 // PostMergeReviewOutput carries the review state machine's decision back to
@@ -180,6 +181,22 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 		InputBytes:  reviewRes.InputBytes,
 		OutputBytes: reviewRes.OutputBytes,
 		ElapsedMS:   reviewRes.DurationMS,
+	}
+	if capTracker := in.ReviewCostCap; capTracker != nil {
+		capTracker.Add(reviewRes.ReviewerHarness, reviewRes.CostUSD)
+		if detail, capped := capTracker.Tripped(); capped {
+			_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
+				Kind:      "review-cost-deferred",
+				Summary:   "review-cost-deferred",
+				Body:      ReviewCostDeferredEventBody(report.ResultRev, reviewRes.CostUSD, capTracker.Spent(), capTracker.MaxUSD),
+				Actor:     in.Assignee,
+				Source:    "ddx agent execute-loop",
+				CreatedAt: now().UTC(),
+			})
+			if in.Log != nil {
+				_, _ = fmt.Fprintf(in.Log, "review cost cap deferred (%s %s): %s\n", in.Bead.ID, report.ResultRev, detail)
+			}
+		}
 	}
 	switch reviewRes.Verdict {
 	case VerdictApprove:

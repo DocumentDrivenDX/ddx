@@ -749,6 +749,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	})
 
 	var worker *agent.ExecuteBeadWorker
+	var costCap *policyescalation.CostCapTracker
 	if m.BeadWorkerFactory != nil {
 		worker = m.BeadWorkerFactory(store)
 	} else {
@@ -855,7 +856,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			})
 			return ladder
 		}
-		costCap := policyescalation.NewCostCapTracker(policyescalation.DefaultMaxCostUSD, func(harnessName string) bool {
+		costCap = policyescalation.NewCostCapTracker(policyescalation.DefaultMaxCostUSD, func(harnessName string) bool {
 			svc, svcErr := agent.NewServiceFromWorkDir(projectRoot)
 			if svcErr != nil {
 				return true
@@ -962,6 +963,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		ProgressCh:     progressCh,
 		PreClaimHook:   buildPreClaimHook(projectRoot, landingOps),
 		NoReview:       spec.NoReview,
+		ReviewCostCap:  costCap,
 		RoutePreflight: routePreflight,
 		WakeCh:         handle.wakeCh,
 	})

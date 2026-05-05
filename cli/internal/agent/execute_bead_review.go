@@ -69,6 +69,7 @@ type ReviewResult struct {
 	ExecutionDir     string     `json:"execution_dir,omitempty"`
 	DurationMS       int        `json:"duration_ms,omitempty"`
 	Error            string     `json:"error,omitempty"`
+	CostUSD          float64    `json:"cost_usd,omitempty"`
 	// InputBytes and OutputBytes are the FEAT-022 §16 byte counters used to
 	// populate the compact summary appended to review and review-error event
 	// bodies. InputBytes is the assembled prompt size; OutputBytes is the
@@ -572,6 +573,7 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev 
 			BaseRev:         baseRev,
 			ResultRev:       resultRev,
 			ExecutionDir:    artifacts.DirRel,
+			CostUSD:         0,
 			InputBytes:      overflowTelemetry.InputBytes,
 			OutputBytes:     overflowTelemetry.OutputBytes,
 		}
@@ -636,6 +638,7 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev 
 			ResultRev:       resultRev,
 			ExecutionDir:    artifacts.DirRel,
 			DurationMS:      durationMS,
+			CostUSD:         resultCost(result),
 			InputBytes:      transportTelemetry.InputBytes,
 			OutputBytes:     transportTelemetry.OutputBytes,
 		}
@@ -728,6 +731,7 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev 
 		ResultRev:        resultRev,
 		ExecutionDir:     artifacts.DirRel,
 		DurationMS:       durationMS,
+		CostUSD:          resultCost(result),
 		InputBytes:       telemetry.InputBytes,
 		OutputBytes:      telemetry.OutputBytes,
 	}
@@ -825,4 +829,11 @@ func writeReviewArtifacts(artifacts *executeBeadArtifacts, manifest reviewArtifa
 		return err
 	}
 	return writeArtifactJSON(artifacts.ResultAbs, result)
+}
+
+func resultCost(result *Result) float64 {
+	if result == nil {
+		return 0
+	}
+	return result.CostUSD
 }

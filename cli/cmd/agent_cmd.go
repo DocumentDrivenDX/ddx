@@ -1901,16 +1901,17 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 
 	cliLandingOps := agent.RealLandingGitOps{}
 	result, err := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
-		Once:         once,
-		PollInterval: pollInterval,
-		Log:          cmd.OutOrStdout(),
-		EventSink:    loopSink,
-		WorkerID:     resolveClaimAssignee(),
-		ProjectRoot:  projectRoot,
-		SessionID:    loopSessionID,
-		PreClaimHook: buildCLIPreClaimHook(projectRoot, cliLandingOps),
-		NoReview:     noReview,
-		TargetBeadID: tryTargetBeadID,
+		Once:          once,
+		PollInterval:  pollInterval,
+		Log:           cmd.OutOrStdout(),
+		EventSink:     loopSink,
+		WorkerID:      resolveClaimAssignee(),
+		ProjectRoot:   projectRoot,
+		SessionID:     loopSessionID,
+		PreClaimHook:  buildCLIPreClaimHook(projectRoot, cliLandingOps),
+		NoReview:      noReview,
+		TargetBeadID:  tryTargetBeadID,
+		ReviewCostCap: costCap,
 	})
 	tailCancel() // stop session log tailer
 	if err != nil {

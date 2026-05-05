@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -62,6 +63,18 @@ func makeReviewer(verdict Verdict, output string) beadReviewerFunc {
 	})
 }
 
+func makeReviewerWithCost(verdict Verdict, output string, costUSD float64) beadReviewerFunc {
+	return beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+		return &ReviewResult{
+			Verdict:         verdict,
+			RawOutput:       output,
+			ReviewerHarness: "claude",
+			ReviewerModel:   "claude-opus-4-6",
+			CostUSD:         costUSD,
+		}, nil
+	})
+}
+
 func TestExecuteBeadWorkerReviewApproveClosesBead(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	worker := &ExecuteBeadWorker{
@@ -105,6 +118,71 @@ func TestExecuteBeadWorkerReviewApproveClosesBead(t *testing.T) {
 	require.Len(t, result.Results, 1)
 	assert.Equal(t, "APPROVE", result.Results[0].ReviewVerdict)
 	assert.Equal(t, ExecuteBeadStatusSuccess, result.Results[0].Status)
+}
+
+func TestRunPostMergeReviewChargesReviewCostAndDefersWhenCapTrips(t *testing.T) {
+	cases := []struct {
+		name         string
+		maxCost      float64
+		preCost      float64
+		reviewCost   float64
+		wantDeferred bool
+	}{
+		{
+			name:         "normal fit",
+			maxCost:      10.0,
+			preCost:      4.0,
+			reviewCost:   1.5,
+			wantDeferred: false,
+		},
+		{
+			name:         "review tips over budget",
+			maxCost:      5.0,
+			preCost:      4.0,
+			reviewCost:   1.5,
+			wantDeferred: true,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			store, first, _ := newExecuteLoopTestStore(t)
+			tracker := escalation.NewCostCapTracker(tc.maxCost, func(string) bool { return true })
+			tracker.Add("openrouter", tc.preCost)
+
+			reviewer := makeReviewerWithCost(VerdictApprove, "### Verdict: APPROVE\n\nAll good.", tc.reviewCost)
+			out := RunPostMergeReview(context.Background(), PostMergeReviewInput{
+				Bead: *first,
+				Report: ExecuteBeadReport{
+					BeadID:    first.ID,
+					Status:    ExecuteBeadStatusSuccess,
+					SessionID: "sess-review-cost",
+					ResultRev: "cafebabe",
+					CostUSD:   tc.preCost,
+				},
+				Reviewer:      reviewer,
+				Store:         store,
+				ProjectRoot:   t.TempDir(),
+				Rcfg:          config.NewTestConfigForLoop(config.TestLoopConfigOpts{Assignee: "worker"}).Resolve(config.TestLoopOverrides(config.TestLoopConfigOpts{Assignee: "worker"})),
+				Now:           time.Now,
+				Assignee:      "worker",
+				ReviewCostCap: tracker,
+			})
+			require.True(t, out.Approved, "APPROVE review should stay approved even when cost tracking trips")
+			require.NoError(t, out.StoreErr)
+			assert.InDelta(t, tc.preCost+tc.reviewCost, tracker.Spent(), 1e-9)
+
+			events, err := store.Events(first.ID)
+			require.NoError(t, err)
+			foundDeferred := false
+			for _, ev := range events {
+				if ev.Kind == "review-cost-deferred" {
+					foundDeferred = true
+					assert.Contains(t, ev.Body, "result_rev=cafebabe")
+				}
+			}
+			assert.Equal(t, tc.wantDeferred, foundDeferred)
+		})
+	}
 }
 
 func TestExecuteBeadWorkerReviewRequestChangesReopensAndCountsFailure(t *testing.T) {
@@ -267,6 +345,7 @@ func TestDefaultBeadReviewerWritesReviewArtifacts(t *testing.T) {
 			Model:          "claude-opus-4-6",
 			Output:         "```json\n{\"schema_version\":1,\"verdict\":\"BLOCK\",\"summary\":\"AC#3 regression test missing\",\"findings\":[{\"severity\":\"block\",\"summary\":\"regression test missing\",\"location\":\"file.go:42\"}]}\n```",
 			DurationMS:     42,
+			CostUSD:        0.0314,
 			AgentSessionID: "native-review-1",
 		}},
 	}
@@ -276,6 +355,7 @@ func TestDefaultBeadReviewerWritesReviewArtifacts(t *testing.T) {
 	require.NotNil(t, res)
 	assert.Equal(t, VerdictBlock, res.Verdict)
 	assert.Equal(t, "AC#3 regression test missing", res.Rationale)
+	assert.InDelta(t, 0.0314, res.CostUSD, 1e-9)
 	require.NotEmpty(t, res.ExecutionDir)
 
 	promptPath := filepath.Join(projectRoot, filepath.FromSlash(res.ExecutionDir), "prompt.md")

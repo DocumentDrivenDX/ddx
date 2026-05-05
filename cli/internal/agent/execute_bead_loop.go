@@ -14,6 +14,7 @@ import (
 	agenttry "github.com/DocumentDrivenDX/ddx/internal/agent/try"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 )
 
@@ -28,6 +29,9 @@ type ExecuteBeadLoopRuntime struct {
 	PreClaimHook          func(ctx context.Context) error
 	PreDispatchLintHook   func(ctx context.Context, beadID string) (LintResult, error)
 	PostAttemptTriageHook func(ctx context.Context, beadID string, report ExecuteBeadReport) (TriageResult, error)
+	// ReviewCostCap, when non-nil, accumulates reviewer cost on the same
+	// loop budget tracker used by the implementer attempts.
+	ReviewCostCap *escalation.CostCapTracker
 	// RoutePreflight, when non-nil, is invoked between nextCandidate and
 	// Claim. It is expected to call upstream ResolveRoute against the
 	// loop's resolved (harness, model) and return whatever typed routing
@@ -926,16 +930,17 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			// surfaced via StoreErrOp/StoreErr so this loop continues to drive
 			// handleOutcomeStoreError unchanged.
 			reviewOut := RunPostMergeReview(ctx, PostMergeReviewInput{
-				Bead:        candidate,
-				Report:      report,
-				Reviewer:    w.Reviewer,
-				Store:       w.Store,
-				ProjectRoot: runtime.ProjectRoot,
-				Rcfg:        rcfg,
-				NoReview:    runtime.NoReview,
-				Log:         runtime.Log,
-				Assignee:    assignee,
-				Now:         now,
+				Bead:          candidate,
+				Report:        report,
+				Reviewer:      w.Reviewer,
+				Store:         w.Store,
+				ProjectRoot:   runtime.ProjectRoot,
+				Rcfg:          rcfg,
+				NoReview:      runtime.NoReview,
+				Log:           runtime.Log,
+				Assignee:      assignee,
+				Now:           now,
+				ReviewCostCap: runtime.ReviewCostCap,
 			})
 			report = reviewOut.Report
 			reviewApproved := reviewOut.Approved
@@ -1874,6 +1879,13 @@ func ReviewErrorEventBody(class string, attemptCount int, resultRev, message str
 		b.WriteString(message)
 	}
 	return b.String()
+}
+
+// ReviewCostDeferredEventBody records that review would have exceeded the
+// configured cost cap after charging the reviewer cost against the shared
+// loop accumulator.
+func ReviewCostDeferredEventBody(resultRev string, reviewCostUSD, spentUSD, maxCostUSD float64) string {
+	return fmt.Sprintf("result_rev=%s\nreview_cost_usd=%.4f\nspent_usd=%.4f\nmax_cost_usd=%.4f", resultRev, reviewCostUSD, spentUSD, maxCostUSD)
 }
 
 func sleepWithContext(ctx context.Context, d time.Duration) error {
