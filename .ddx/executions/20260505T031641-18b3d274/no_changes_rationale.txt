@@ -1,0 +1,2 @@
+verification_command: cd cli && go test ./internal/bead/axon/... && lefthook run pre-commit
+reason: The websocket subscription transport, SubscribeChangeEvents helper, and TestAxonSubscription_ChangeEventsStream are already present in cli/internal/bead/axon/. The required gates pass without additional code changes, so no implementation edits were necessary in this worktree.
