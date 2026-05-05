@@ -1,0 +1,1809 @@
+<bead-review>
+  <bead id="ddx-25069ce4" iter=1>
+    <title>agentmetrics: rollup-engine TD (filed only)</title>
+    <description>
+Author TD for rollup engine; built when scale (~5k attempts) forces it. v1 ships ad-hoc scan with revision-keyed cache.
+    </description>
+    <acceptance>
+1. docs/helix/02-design/technical-designs/TD-&lt;NNN&gt;-agentmetrics-rollup.md exists. 2. Defines trigger threshold, schema, invalidation strategy. 3. ddx doc audit clean.
+    </acceptance>
+    <labels>phase:2, story:11, area:specs, kind:design</labels>
+  </bead>
+
+  <changed-files>
+    <file>.ddx/executions/20260505T005237-5b6d9d1e/manifest.json</file>
+    <file>.ddx/executions/20260505T005237-5b6d9d1e/result.json</file>
+  </changed-files>
+
+  <governing>
+    <note>No governing documents found. Evaluate the diff against the acceptance criteria alone.</note>
+  </governing>
+
+  <diff rev="ef81b9f66df6404534e13a02978e1137a5914917">
+diff --git a/.ddx/executions/20260505T005237-5b6d9d1e/manifest.json b/.ddx/executions/20260505T005237-5b6d9d1e/manifest.json
+new file mode 100644
+index 00000000..495025b8
+--- /dev/null
++++ b/.ddx/executions/20260505T005237-5b6d9d1e/manifest.json
+@@ -0,0 +1,1715 @@
++{
++  "attempt_id": "20260505T005237-5b6d9d1e",
++  "bead_id": "ddx-25069ce4",
++  "base_rev": "60e24a50c0812baef2d5773326bfce844dd2dd7f",
++  "created_at": "2026-05-05T00:52:39.712567523Z",
++  "requested": {
++    "prompt": "synthesized"
++  },
++  "bead": {
++    "id": "ddx-25069ce4",
++    "title": "agentmetrics: rollup-engine TD (filed only)",
++    "description": "Author TD for rollup engine; built when scale (~5k attempts) forces it. v1 ships ad-hoc scan with revision-keyed cache.",
++    "acceptance": "1. docs/helix/02-design/technical-designs/TD-\u003cNNN\u003e-agentmetrics-rollup.md exists. 2. Defines trigger threshold, schema, invalidation strategy. 3. ddx doc audit clean.",
++    "parent": "ddx-64b9a198",
++    "labels": [
++      "phase:2",
++      "story:11",
++      "area:specs",
++      "kind:design"
++    ],
++    "metadata": {
++      "claimed-at": "2026-05-05T00:52:37Z",
++      "claimed-machine": "eitri",
++      "claimed-pid": "4040159",
++      "events": [
++        {
++          "actor": "ddx",
++          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[],\"requested_harness\":\"claude\"}",
++          "created_at": "2026-05-02T14:57:16.333858184Z",
++          "kind": "routing",
++          "source": "ddx agent execute-bead",
++          "summary": "provider=claude"
++        },
++        {
++          "actor": "erik",
++          "body": "exit status 1\nresult_rev=3735a97dad0e086e27045580f197f4a5495c5d85\nbase_rev=3735a97dad0e086e27045580f197f4a5495c5d85\nretry_after=2026-05-02T20:57:16Z",
++          "created_at": "2026-05-02T14:57:16.421873497Z",
++          "kind": "execute-bead",
++          "source": "ddx agent execute-loop",
++          "summary": "execution_failed"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"resolved_provider\":\"claude\",\"fallback_chain\":[]}",
++          "created_at": "2026-05-03T03:16:24.796440961Z",
++          "kind": "routing",
++          "source": "ddx agent execute-bead",
++          "summary": "provider=claude"
++        },
++        {
++          "actor": "erik",
++          "body": "exit status 1\nresult_rev=5bda42440f897771a24e3b394eb6c9f6947ef22f\nbase_rev=5bda42440f897771a24e3b394eb6c9f6947ef22f\nretry_after=2026-05-03T09:16:24Z",
++          "created_at": "2026-05-03T03:16:24.919595276Z",
++          "kind": "execute-bead",
++          "source": "ddx agent execute-loop",
++          "summary": "execution_failed"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:16:57.300961534Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:18:33.552501796Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:20:28.11466459Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:22:24.954131073Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:24:21.687076209Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:26:18.812639307Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:28:15.769797772Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:30:12.893658047Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:32:09.932901849Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:34:06.697259158Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:36:03.624584644Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:38:00.378369711Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:39:57.32054917Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:41:54.216911617Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:43:50.904958058Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:45:47.635804939Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:47:44.626159887Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:49:41.49491296Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:51:38.699399406Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:53:35.79688947Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:55:32.83522468Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:57:29.687759017Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T09:59:27.051820293Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:01:24.348983752Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:03:21.394689864Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:05:18.320275686Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:07:15.370155088Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:09:12.645732124Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:11:09.67100841Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:13:06.726950764Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:15:04.111607394Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:17:00.969025835Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:18:58.090897762Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:20:55.074699052Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:22:52.475411448Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:24:49.559420334Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:26:46.859209434Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:28:43.865158414Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:30:41.147611222Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:32:38.210194967Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:34:35.533916524Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:36:32.804923948Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:38:30.420216688Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:40:27.774895294Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:42:25.19871545Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:44:22.58741976Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:46:19.728587517Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:48:17.096695458Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:50:14.637733909Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:52:11.952298747Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:54:07.321467531Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:56:04.78072467Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:58:01.960726282Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T10:59:59.159167038Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:01:59.127408751Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:03:58.749733452Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:06:00.469427789Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:07:59.307651978Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:09:58.877801006Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:11:56.234751987Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:13:53.446553828Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:15:50.202549345Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:17:51.245431602Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:19:50.95905911Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:21:53.014601063Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:23:50.625586637Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:25:48.115856159Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:27:45.570452858Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:29:44.061837112Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:31:41.801409874Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:33:38.984474814Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:35:36.534689167Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:37:34.430403443Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:39:34.104052426Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:41:31.574876375Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:43:29.262679017Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:45:26.957980712Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:47:25.255022065Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:49:23.843454631Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:51:21.821392858Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:53:19.240377357Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:55:16.426457189Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:57:13.554905503Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T11:59:11.640184897Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:01:09.923685803Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:03:08.188636728Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:05:06.237635103Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:07:04.34613992Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:09:02.290137303Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:11:01.654085812Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:13:00.091575083Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:14:58.443517535Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:16:56.256616165Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:18:54.551748641Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:20:52.628383697Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:22:50.619621869Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:24:49.489314963Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:26:47.547809235Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:28:45.489722008Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:30:43.677358205Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:32:44.048929573Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:34:42.290240852Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:36:41.148406867Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:38:39.94910915Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:40:38.509293838Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:42:37.526696485Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:44:36.352917768Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:46:37.189225752Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:48:35.952636972Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:51:25.82192236Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:54:14.93888734Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:57:01.27773703Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T12:59:48.705497993Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:02:45.230523529Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:05:40.19329614Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:08:34.865456903Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:11:26.743420468Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:14:18.972066109Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:17:11.141868846Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:20:03.712994367Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:22:55.987911623Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:25:49.00058996Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:28:41.160201504Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:31:33.927183637Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:34:26.327424693Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:37:19.173674641Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:40:12.697983383Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:43:05.615533629Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:45:58.684976241Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:48:51.514925333Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:51:46.45191728Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:54:43.70401757Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T13:57:40.992533941Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:00:38.29295857Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:03:36.188495405Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:06:33.832601462Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:09:31.926512378Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:12:30.082327977Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:15:28.180487591Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:18:26.154083243Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:21:24.26890204Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:24:22.076085961Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:27:20.704298178Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:30:18.759954538Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:33:16.558652273Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:36:15.426868087Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:39:13.902133115Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:42:11.762580273Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:45:10.700635808Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:48:08.745691646Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:51:06.596487932Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:54:04.405166325Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T14:57:26.001582348Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T15:02:26.853734535Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T15:07:27.946756284Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T15:12:28.737804251Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T15:17:29.923326098Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T15:22:30.95952861Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T15:27:32.017649422Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T15:32:33.107709713Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T15:37:34.020630739Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T15:42:34.689693474Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T15:47:35.842551875Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T15:52:36.531372623Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T15:57:37.667707902Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T16:02:38.737271754Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T16:07:39.749172093Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T16:12:45.281879657Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T16:17:51.99185686Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T16:22:53.591176009Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T16:28:08.173103847Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T16:33:26.722718224Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T16:38:41.433923118Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T16:43:55.96171285Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T16:49:10.754521966Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T16:54:25.493220017Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T16:59:40.090816825Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T17:04:54.591723585Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T17:10:13.8006482Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T17:15:32.931008531Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T17:20:51.857687593Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T17:26:10.786369408Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T17:31:29.661846579Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T17:36:48.49845094Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T17:42:08.026253381Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T17:47:26.947053191Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T17:52:46.085901215Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T17:58:05.204784539Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T18:03:24.954444618Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T18:08:44.554650011Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T18:14:04.13780874Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T18:19:24.23006471Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T18:24:43.880442132Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T18:30:03.811023727Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T18:35:23.37881167Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T18:40:43.191595201Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T18:46:03.002648982Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T18:51:22.780359081Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T18:56:42.52144162Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T19:02:02.688155432Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T19:07:22.323671151Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T19:12:42.341876824Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T19:18:01.893119338Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T19:23:21.953515521Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"detail\":\"routing preflight rejected (harness=codex model=): no viable routing candidate for pins harness=codex: 1 candidates rejected\",\"harness\":\"codex\",\"model\":\"\",\"reason\":\"preflight_rejected\"}",
++          "created_at": "2026-05-03T19:28:41.93769387Z",
++          "kind": "disruption_detected",
++          "source": "ddx agent execute-loop",
++          "summary": "preflight_rejected"
++        }
++      ],
++      "execute-loop-heartbeat-at": "2026-05-05T00:52:37.657713859Z",
++      "execute-loop-last-detail": "exit status 1",
++      "execute-loop-last-status": "execution_failed",
++      "execute-loop-retry-after": "2026-05-03T09:16:24Z"
++    }
++  },
++  "paths": {
++    "dir": ".ddx/executions/20260505T005237-5b6d9d1e",
++    "prompt": ".ddx/executions/20260505T005237-5b6d9d1e/prompt.md",
++    "manifest": ".ddx/executions/20260505T005237-5b6d9d1e/manifest.json",
++    "result": ".ddx/executions/20260505T005237-5b6d9d1e/result.json",
++    "checks": ".ddx/executions/20260505T005237-5b6d9d1e/checks.json",
++    "usage": ".ddx/executions/20260505T005237-5b6d9d1e/usage.json",
++    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-25069ce4-20260505T005237-5b6d9d1e"
++  },
++  "prompt_sha": "5eef4c74be382dab15f03c8c418bbe4b665161cee2abeef607529b92761e3923"
++}
+\ No newline at end of file
+diff --git a/.ddx/executions/20260505T005237-5b6d9d1e/result.json b/.ddx/executions/20260505T005237-5b6d9d1e/result.json
+new file mode 100644
+index 00000000..8ff3f047
+--- /dev/null
++++ b/.ddx/executions/20260505T005237-5b6d9d1e/result.json
+@@ -0,0 +1,25 @@
++{
++  "bead_id": "ddx-25069ce4",
++  "attempt_id": "20260505T005237-5b6d9d1e",
++  "base_rev": "60e24a50c0812baef2d5773326bfce844dd2dd7f",
++  "result_rev": "b0e4e30e1c7d997f5687eebe3b60d14f50f2256e",
++  "outcome": "task_succeeded",
++  "status": "success",
++  "detail": "success",
++  "harness": "codex",
++  "model": "gpt-5.4-mini",
++  "actual_power": 8,
++  "predicted_power": 8,
++  "predicted_cost_source": "subscription",
++  "session_id": "eb-5f042459",
++  "duration_ms": 152752,
++  "tokens": 1110605,
++  "exit_code": 0,
++  "execution_dir": ".ddx/executions/20260505T005237-5b6d9d1e",
++  "prompt_file": ".ddx/executions/20260505T005237-5b6d9d1e/prompt.md",
++  "manifest_file": ".ddx/executions/20260505T005237-5b6d9d1e/manifest.json",
++  "result_file": ".ddx/executions/20260505T005237-5b6d9d1e/result.json",
++  "usage_file": ".ddx/executions/20260505T005237-5b6d9d1e/usage.json",
++  "started_at": "2026-05-05T00:52:39.713807272Z",
++  "finished_at": "2026-05-05T00:55:12.466096167Z"
++}
+\ No newline at end of file
+  </diff>
+
+  <instructions>
+You are reviewing a bead implementation against its acceptance criteria.
+
+For each acceptance-criteria (AC) item, decide whether it is implemented correctly, then assign one overall verdict:
+
+- APPROVE — every AC item is fully and correctly implemented.
+- REQUEST_CHANGES — some AC items are partial or have fixable minor issues.
+- BLOCK — at least one AC item is not implemented or incorrectly implemented; or the diff is insufficient to evaluate.
+
+## Required output format (schema_version: 1)
+
+Respond with EXACTLY one JSON object as your final response, fenced as a single ```json … ``` code block. Do not include any prose outside the fenced block. The JSON must match this schema:
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "≤300 char human-readable verdict justification",
+  "findings": [
+    { "severity": "info", "summary": "what is wrong or notable", "location": "path/to/file.go:42" }
+  ]
+}
+```
+
+Rules:
+- "verdict" must be exactly one of "APPROVE", "REQUEST_CHANGES", "BLOCK".
+- "severity" must be exactly one of "info", "warn", "block".
+- Output the JSON object inside ONE fenced ```json … ``` block. No additional prose, no extra fences, no markdown headings.
+- Do not echo this template back. Do not write the words APPROVE, REQUEST_CHANGES, or BLOCK anywhere except as the JSON value of the verdict field.
+  </instructions>
+</bead-review>
