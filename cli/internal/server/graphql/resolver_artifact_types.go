@@ -1,7 +1,6 @@
 package graphql
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -16,16 +15,6 @@ import (
 const artifactTypeFileCapBytes = 64 * 1024
 
 var artifactTypeLoader = artifacttypes.NewLoader()
-
-// TypeDefinitions resolves the artifact type definitions for the artifact's
-// path prefix. The resolver fans out across installed plugin roots so prefix
-// collisions across plugins return every matching definition.
-func (r *artifactResolver) TypeDefinitions(ctx context.Context, obj *Artifact) ([]*ArtifactTypeDefinition, error) {
-	if obj == nil {
-		return nil, nil
-	}
-	return artifactTypeDefinitionsForPath(r.workingDir(ctx), obj.Path)
-}
 
 func artifactTypeDefinitionsForPath(workingDir, artifactPath string) ([]*ArtifactTypeDefinition, error) {
 	prefix := prefixOf(artifactPath)
