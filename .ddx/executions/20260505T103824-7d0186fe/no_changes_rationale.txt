@@ -1,0 +1,8 @@
+verification_command: cd cli && go test ./internal/bead/axon/... && lefthook run pre-commit
+
+The requested Axon subscription transport is already present in
+cli/internal/bead/axon/subscription.go via WebSocketSubscriptionTransport
+and Client.SubscribeChangeEvents, and the required ordered-stream test
+already exists as TestAxonSubscription_ChangeEventsStream in
+cli/internal/bead/axon/subscription_test.go. No repo changes were needed
+to satisfy the bead contract.
