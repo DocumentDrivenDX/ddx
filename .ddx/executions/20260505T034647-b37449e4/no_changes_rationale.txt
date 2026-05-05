@@ -1,0 +1,8 @@
+status: needs_investigation
+reason: The parent axon backend bead is a multi-slice feature and has already been decomposed into focused child beads. This pass intentionally made no implementation changes; follow-up work should proceed in the child beads listed below.
+
+children:
+- .execute-bead-wt-ddx-8d747049-20260505T023636-7669921a-26f338ad: implement cli/internal/bead Axon backend operations on the generated GraphQL client
+- .execute-bead-wt-ddx-8d747049-20260505T023636-7669921a-3fa0f047: wire cli/internal/bead backend selection and .ddx config for Axon
+- .execute-bead-wt-ddx-8d747049-20260505T023636-7669921a-1a576b9d: parameterize cli/internal/bead conformance suites across jsonl and axon
+- .execute-bead-wt-ddx-8d747049-20260505T023636-7669921a-4fa37db2: add cli/internal/bead/axon WebSocket subscription integration smoke test
