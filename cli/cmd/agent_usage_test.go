@@ -36,7 +36,7 @@ func writeSessionIndex(t *testing.T, projectRoot, logDir string, entries ...agen
 	}
 }
 
-func TestAgentUsageIncludesLegacySessionsAndRoutingOutcomes(t *testing.T) {
+func TestAgentUsageAggregatesSessionIndexRows(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
 	dir := t.TempDir()
@@ -79,25 +79,9 @@ agent:
 		Duration:     1000,
 		ExitCode:     0,
 	}
-	routingOutcome := agent.RoutingOutcome{
-		Harness:         "claude",
-		Surface:         "claude",
-		CanonicalTarget: "claude-sonnet-4-6",
-		Model:           "claude-sonnet-4-6",
-		ObservedAt:      time.Date(2026, 4, 9, 10, 0, 0, 0, time.UTC),
-		Success:         true,
-		LatencyMS:       2000,
-		InputTokens:     200,
-		OutputTokens:    20,
-		CostUSD:         2.50,
-		NativeSessionID: "native-current",
-		TraceID:         "trace-current",
-	}
-
 	writeSessionIndex(t, dir, logDir, legacySession, mirroredSession)
-	writeJSONL(t, filepath.Join(logDir, "routing-outcomes.jsonl"), routingOutcome)
 
-	rows, err := aggregateUsageFromRoutingMetrics(logDir, "", time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
+	rows, err := aggregateUsageFromSessionIndex(logDir, "", time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
 	require.NoError(t, err)
 	require.Len(t, rows, 1)
 
@@ -116,7 +100,7 @@ agent:
 	assert.InDelta(t, 1500.0, byHarness["claude"].AvgDurationMS, 0.0001)
 }
 
-func TestAgentUsageSkipsUnkeyedCurrentSessionsWrittenBeforeRoutingOutcome(t *testing.T) {
+func TestAgentUsageIgnoresRoutingOutcomeCacheInCommandOutput(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
 	dir := t.TempDir()
@@ -173,18 +157,14 @@ agent:
 	writeSessionIndex(t, dir, logDir, legacySession, currentSession)
 	writeJSONL(t, filepath.Join(logDir, "routing-outcomes.jsonl"), outcome)
 
-	rows, err := aggregateUsageFromRoutingMetrics(logDir, "", time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
+	out, err := executeCommand(
+		NewCommandFactory(dir).NewRootCommand(),
+		"agent", "usage",
+	)
 	require.NoError(t, err)
-	require.Len(t, rows, 1)
-
-	row := rows[0]
-	assert.Equal(t, "codex", row.Harness)
-	assert.Equal(t, 2, row.Sessions)
-	assert.Equal(t, 320, row.InputTokens)
-	assert.Equal(t, 32, row.OutputTokens)
-	assert.InDelta(t, 3.75, row.CostUSD, 0.0001)
-	assert.Equal(t, usageCostBasisEstimatedValue, row.CostBasis)
-	assert.InDelta(t, 1500.0, row.AvgDurationMS, 0.0001)
+	assert.Contains(t, out, "codex")
+	assert.NotContains(t, out, "claude")
+	assert.Contains(t, out, "TOTAL")
 }
 
 func TestUsageCostBasis(t *testing.T) {

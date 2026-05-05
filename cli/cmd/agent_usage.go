@@ -47,7 +47,6 @@ type usageAgg struct {
 
 type usageSessionRecord struct {
 	entry agent.SessionEntry
-	key   string
 }
 
 func (a *usageAgg) addSession(entry agent.SessionEntry) {
@@ -189,13 +188,7 @@ func (f *CommandFactory) newAgentUsageCommand() *cobra.Command {
 			}
 
 			logDir := agent.SessionLogDirForWorkDir(f.WorkingDir)
-			rows, err := aggregateUsageFromRoutingMetrics(logDir, harness, sinceTime)
-			if err != nil {
-				return err
-			}
-			if len(rows) == 0 {
-				rows, err = aggregateUsageFromSessionIndex(logDir, harness, sinceTime, nil)
-			}
+			rows, err := aggregateUsageFromSessionIndex(logDir, harness, sinceTime)
 			if err != nil {
 				return err
 			}
@@ -242,7 +235,7 @@ func parseSince(s string) (time.Time, error) {
 	return t, nil
 }
 
-func aggregateUsageFromSessionIndex(logDir, harnessFilter string, since time.Time, mirrored map[string]struct{}) ([]usageRow, error) {
+func aggregateUsageFromSessionIndex(logDir, harnessFilter string, since time.Time) ([]usageRow, error) {
 	records, err := readUsageSessionIndexRecords(logDir, harnessFilter, since)
 	if err != nil {
 		return nil, err
@@ -250,11 +243,6 @@ func aggregateUsageFromSessionIndex(logDir, harnessFilter string, since time.Tim
 	byHarness := map[string]*usageAgg{}
 	order := []string{}
 	for _, record := range records {
-		if mirrored != nil && record.key != "" {
-			if _, ok := mirrored[record.key]; ok {
-				continue
-			}
-		}
 		a, exists := byHarness[record.entry.Harness]
 		if !exists {
 			a = &usageAgg{}
@@ -263,101 +251,6 @@ func aggregateUsageFromSessionIndex(logDir, harnessFilter string, since time.Tim
 		}
 		a.addSession(record.entry)
 	}
-	rows := make([]usageRow, 0, len(order))
-	for _, h := range order {
-		rows = append(rows, byHarness[h].toRow(h))
-	}
-	return rows, nil
-}
-
-// aggregateUsageFromRoutingMetrics prefers the minimal routing-outcome store
-// and supplements it with legacy session rows that predate the first mirrored
-// routing sample for each harness so mixed stores remain backward compatible
-// without double counting current runs.
-func aggregateUsageFromRoutingMetrics(logDir, harnessFilter string, since time.Time) ([]usageRow, error) {
-	store := agent.NewRoutingMetricsStore(logDir)
-	outcomes, err := store.ReadOutcomes()
-	if err != nil {
-		return nil, err
-	}
-	if len(outcomes) == 0 {
-		return nil, nil
-	}
-
-	byHarness := map[string]*usageAgg{}
-	order := []string{}
-	mirrored := map[string]struct{}{}
-	cutoffByHarness := map[string]time.Time{}
-
-	for _, outcome := range outcomes {
-		if key := usageMirrorKey(outcome.NativeSessionID, outcome.TraceID, outcome.SpanID); key != "" {
-			mirrored[key] = struct{}{}
-		}
-		if cutoff, ok := cutoffByHarness[outcome.Harness]; !ok || outcome.ObservedAt.Before(cutoff) {
-			cutoffByHarness[outcome.Harness] = outcome.ObservedAt
-		}
-		if outcome.ObservedAt.Before(since) {
-			continue
-		}
-		if harnessFilter != "" && outcome.Harness != harnessFilter {
-			continue
-		}
-
-		a, exists := byHarness[outcome.Harness]
-		if !exists {
-			a = &usageAgg{}
-			byHarness[outcome.Harness] = a
-			order = append(order, outcome.Harness)
-		}
-		a.addOutcome(outcome)
-	}
-
-	if len(order) == 0 {
-		return nil, nil
-	}
-
-	sessionRecords, err := readUsageSessionIndexRecords(logDir, harnessFilter, since)
-	if err != nil {
-		return nil, err
-	}
-
-	lastIndexByHarness := map[string]int{}
-	for i, record := range sessionRecords {
-		lastIndexByHarness[record.entry.Harness] = i
-	}
-
-	skipCurrentRun := map[int]struct{}{}
-	for harness, idx := range lastIndexByHarness {
-		if _, ok := byHarness[harness]; !ok {
-			continue
-		}
-		if sessionRecords[idx].key == "" {
-			skipCurrentRun[idx] = struct{}{}
-		}
-	}
-
-	for i, record := range sessionRecords {
-		if _, ok := skipCurrentRun[i]; ok {
-			continue
-		}
-		if record.key != "" {
-			if _, ok := mirrored[record.key]; ok {
-				continue
-			}
-		}
-		if cutoff, ok := cutoffByHarness[record.entry.Harness]; ok && !cutoff.IsZero() && !record.entry.Timestamp.Before(cutoff) {
-			continue
-		}
-
-		a, exists := byHarness[record.entry.Harness]
-		if !exists {
-			a = &usageAgg{}
-			byHarness[record.entry.Harness] = a
-			order = append(order, record.entry.Harness)
-		}
-		a.addSession(record.entry)
-	}
-
 	rows := make([]usageRow, 0, len(order))
 	for _, h := range order {
 		rows = append(rows, byHarness[h].toRow(h))
@@ -367,8 +260,7 @@ func aggregateUsageFromRoutingMetrics(logDir, harnessFilter string, since time.T
 
 // enrichUsageRowsWithRoutingSignals annotates usage rows with per-harness
 // routing signals from the upstream agent service. When the service is
-// unavailable the rows are returned unchanged. Legacy DDx-managed file
-// parsers were retired in ddx-7bc0c8d5.
+// unavailable the rows are returned unchanged.
 func enrichUsageRowsWithRoutingSignals(workDir string, rows []usageRow) []usageRow {
 	svc, err := agent.NewServiceFromWorkDir(workDir)
 	if err != nil || svc == nil {
@@ -408,19 +300,6 @@ func enrichUsageRowsWithRoutingSignals(workDir string, rows []usageRow) []usageR
 	return rows
 }
 
-func usageMirrorKey(nativeSessionID, traceID, spanID string) string {
-	switch {
-	case nativeSessionID != "":
-		return "native:" + nativeSessionID
-	case traceID != "":
-		return "trace:" + traceID
-	case spanID != "":
-		return "span:" + spanID
-	default:
-		return ""
-	}
-}
-
 func readUsageSessionIndexRecords(logDir, harnessFilter string, since time.Time) ([]usageSessionRecord, error) {
 	entries, err := agent.ReadSessionIndex(logDir, agent.SessionIndexQuery{StartedAfter: &since})
 	if err != nil {
@@ -434,7 +313,6 @@ func readUsageSessionIndexRecords(logDir, harnessFilter string, since time.Time)
 		}
 		records = append(records, usageSessionRecord{
 			entry: entry,
-			key:   usageMirrorKey(entry.NativeSessionID, entry.TraceID, entry.SpanID),
 		})
 	}
 	sort.Slice(records, func(i, j int) bool {

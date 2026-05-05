@@ -97,6 +97,7 @@ func TestAgentRouteStatusBeadEvidence(t *testing.T) {
 	require.Contains(t, out, "Recent Routing Decisions")
 	require.Contains(t, out, "bead-evidence")
 	require.Contains(t, out, "testprovider")
+	require.NotContains(t, out, "routing-outcomes.jsonl")
 	require.NotContains(t, out, "metrics-store")
 }
 

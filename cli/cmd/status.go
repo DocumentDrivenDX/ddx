@@ -172,13 +172,7 @@ func collectStatusUsage(workingDir string) []usageRow {
 	}
 
 	logDir := agent.SessionLogDirForWorkDir(workingDir)
-	rows, err := aggregateUsageFromRoutingMetrics(logDir, "", since)
-	if err != nil {
-		return nil
-	}
-	if len(rows) == 0 {
-		rows, err = aggregateUsageFromSessionIndex(logDir, "", since, nil)
-	}
+	rows, err := aggregateUsageFromSessionIndex(logDir, "", since)
 	if err != nil || len(rows) == 0 {
 		return nil
 	}

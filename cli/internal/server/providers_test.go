@@ -341,6 +341,30 @@ func TestProviderFieldsComeFromHarnessInfoDirectly(t *testing.T) {
 	}
 }
 
+func TestCollectHarnessSignalSourcesFiltersStaleCacheLabels(t *testing.T) {
+	info := agentlib.HarnessInfo{
+		Account: &agentlib.AccountStatus{
+			Source: "stats-cache",
+		},
+		Quota: &agentlib.QuotaState{
+			Source: "quota-snapshot",
+		},
+		UsageWindows: []agentlib.UsageWindow{
+			{Name: "7d", Source: "native-session-jsonl"},
+			{Name: "30d", Source: "ddx-metrics"},
+			{Name: "90d", Source: "stats-cache+ddx-metrics"},
+		},
+	}
+
+	got := collectHarnessSignalSources(info)
+	if len(got) != 1 {
+		t.Fatalf("signal sources = %v, want only direct live sources", got)
+	}
+	if got[0] != "native-session-jsonl" {
+		t.Fatalf("signal source = %q, want native-session-jsonl", got[0])
+	}
+}
+
 // TestProviderSummaryDisplayName verifies display names are set for all known harnesses.
 func TestProviderSummaryDisplayName(t *testing.T) {
 	cases := []struct {

@@ -506,7 +506,7 @@ func providerPerformanceFromRouteStatus(report *agentlib.RouteStatusReport, prov
 func collectHarnessSignalSources(info agentlib.HarnessInfo) []string {
 	seen := make(map[string]struct{})
 	add := func(value string) {
-		if value = strings.TrimSpace(value); value != "" {
+		if value = normalizeHarnessSignalSource(value); value != "" {
 			seen[value] = struct{}{}
 		}
 	}
@@ -528,6 +528,34 @@ func collectHarnessSignalSources(info agentlib.HarnessInfo) []string {
 	}
 	sort.Strings(sources)
 	return sources
+}
+
+var staleHarnessSignalSources = map[string]struct{}{
+	"stats-cache":        {},
+	"quota-snapshot":     {},
+	"http-balance":       {},
+	"http-models":        {},
+	"recent-session-log": {},
+	"ddx-metrics":        {},
+	"routing-outcomes":   {},
+	"burn-summaries":     {},
+}
+
+func normalizeHarnessSignalSource(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	lower := strings.ToLower(value)
+	if _, stale := staleHarnessSignalSources[lower]; stale {
+		return ""
+	}
+	for stale := range staleHarnessSignalSources {
+		if strings.Contains(lower, stale) {
+			return ""
+		}
+	}
+	return value
 }
 
 // providerFreshnessTS returns the latest direct capture timestamp available on
