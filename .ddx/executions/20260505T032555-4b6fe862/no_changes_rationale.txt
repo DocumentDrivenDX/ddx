@@ -1,0 +1,2 @@
+verification_command: cd cli && go test ./internal/agent/... -count=1
+reason: buildPrompt in cli/internal/agent/execute_bead.go already emits <instructions> before <bead>, and the targeted plus broad internal/agent test suites pass without modification.
