@@ -1,0 +1,7 @@
+verification_command: cd cli && go test ./internal/agent/... ./internal/agent/try/... && lefthook run pre-commit
+
+Outcome:
+- `cli/internal/agent/try/attempt.go` already owns conflict recovery through `ConflictRecoveryOutcome`.
+- `cli/internal/agent/execute_bead_loop.go` already delegates to `agenttry.Attempt` and contains no direct `RunConflictRecovery` call.
+- `cli/internal/agent/try/attempt_test.go` already contains `TestAttempt_ConflictRecovered_ReturnsMergedOutcome`, `TestAttempt_ConflictUnresolvable_ReturnsPark`, and `TestAttempt_WrapsLegacyExecutor`.
+- Verified green with the command above.
