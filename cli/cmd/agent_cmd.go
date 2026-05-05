@@ -762,7 +762,11 @@ func (f *CommandFactory) newAgentDoctorCommand() *cobra.Command {
 					}
 					if st.RoutingSignal != nil {
 						signal := st.RoutingSignal
-						line += fmt.Sprintf("  source: %s/%s", signal.Source.Provider, signal.Source.Kind)
+						if signal.Source.Kind != "" {
+							line += fmt.Sprintf("  source: %s/%s", signal.Source.Provider, signal.Source.Kind)
+						} else if signal.Source.Provider != "" {
+							line += fmt.Sprintf("  source: %s", signal.Source.Provider)
+						}
 						if signal.Source.Freshness != "" {
 							line += fmt.Sprintf("  freshness: %s", signal.Source.Freshness)
 						}
@@ -876,10 +880,7 @@ func harnessInfoToRoutingSignal(info agentlib.HarnessInfo, now time.Time) agent.
 		if info.Quota.Status == "unavailable" || info.Quota.Status == "unauthenticated" {
 			freshness = "unknown"
 		}
-		kind := info.Quota.Source
-		if kind == "" {
-			kind = "stats-cache"
-		}
+		kind := agent.NormalizeSignalSourceKind(info.Quota.Source)
 		var ageSeconds int64
 		if !info.Quota.CapturedAt.IsZero() {
 			if age := now.UTC().Sub(info.Quota.CapturedAt.UTC()); age > 0 {

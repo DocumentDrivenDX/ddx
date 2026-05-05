@@ -80,6 +80,11 @@ func TestAgentRouteStatusBeadEvidence(t *testing.T) {
 	srv := newOAIModelsStub(t, []string{"evidence-model"})
 	dir := makeProviderTestDir(t, oaiAgentConfig(srv.URL+"/v1", "evidence-model"))
 
+	logDir := filepath.Join(dir, ".ddx", "agent-logs")
+	require.NoError(t, os.MkdirAll(logDir, 0o755))
+	routingOutcome := `{"harness":"claude","canonical_target":"stale-model","model":"stale-model","observed_at":"2026-04-15T00:00:00Z","success":true,"latency_ms":12}` + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(logDir, "routing-outcomes.jsonl"), []byte(routingOutcome), 0o644))
+
 	beadLine := `{"id":"bead-001","title":"Test bead","status":"open","priority":2,"issue_type":"task","created_at":"2026-04-15T00:00:00Z","updated_at":"2026-04-15T00:00:00Z","events":[{"kind":"routing","summary":"routed to testprovider","body":"{\"resolved_provider\":\"testprovider\",\"resolved_model\":\"evidence-model\",\"route_reason\":\"first-available\"}","created_at":"2026-04-15T00:01:00Z"}]}` + "\n"
 	ddxDir := filepath.Join(dir, ".ddx")
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(beadLine), 0o644))
@@ -92,6 +97,7 @@ func TestAgentRouteStatusBeadEvidence(t *testing.T) {
 	require.Contains(t, out, "Recent Routing Decisions")
 	require.Contains(t, out, "bead-evidence")
 	require.Contains(t, out, "testprovider")
+	require.NotContains(t, out, "metrics-store")
 }
 
 func TestAgentRouteStatusConfigError(t *testing.T) {

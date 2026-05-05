@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
-	"path/filepath"
 	"sort"
 	"time"
 
@@ -110,14 +109,12 @@ func (s *Server) handleListProviders(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
-
-	metricsStore := metricsStoreForWorkDir(s.WorkingDir)
-	outcomes, _ := metricsStore.ReadOutcomes()
+	report := liveRouteStatusReport(r.Context(), s.WorkingDir)
 
 	result := make([]ProviderSummary, 0, len(infos))
 	for _, info := range infos {
 		signal := signalFromHarnessInfo(info, now)
-		result = append(result, buildProviderSummary(info, signal, outcomes, now))
+		result = append(result, buildProviderSummary(info, signal, report, now))
 	}
 	writeJSON(w, http.StatusOK, result)
 }
@@ -143,11 +140,9 @@ func (s *Server) handleShowProvider(w http.ResponseWriter, r *http.Request) {
 
 	now := time.Now().UTC()
 	signal := signalFromHarnessInfo(info, now)
-	metricsStore := metricsStoreForWorkDir(s.WorkingDir)
-	outcomes, _ := metricsStore.ReadOutcomes()
-	burnSummaries, _ := metricsStore.ReadBurnSummaries()
+	report := liveRouteStatusReport(r.Context(), s.WorkingDir)
 
-	detail := buildProviderDetail(info, signal, outcomes, burnSummaries, now)
+	detail := buildProviderDetail(info, signal, report, now)
 	writeJSON(w, http.StatusOK, detail)
 }
 
@@ -160,13 +155,12 @@ func (s *Server) mcpProviderList() mcpToolResult {
 		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
 
-	metricsStore := metricsStoreForWorkDir(s.WorkingDir)
-	outcomes, _ := metricsStore.ReadOutcomes()
+	report := liveRouteStatusReport(context.Background(), s.WorkingDir)
 
 	result := make([]ProviderSummary, 0, len(infos))
 	for _, info := range infos {
 		signal := signalFromHarnessInfo(info, now)
-		result = append(result, buildProviderSummary(info, signal, outcomes, now))
+		result = append(result, buildProviderSummary(info, signal, report, now))
 	}
 	data, err := json.Marshal(result)
 	if err != nil {
@@ -190,11 +184,9 @@ func (s *Server) mcpProviderShow(harnessName string) mcpToolResult {
 
 	now := time.Now().UTC()
 	signal := signalFromHarnessInfo(info, now)
-	metricsStore := metricsStoreForWorkDir(s.WorkingDir)
-	outcomes, _ := metricsStore.ReadOutcomes()
-	burnSummaries, _ := metricsStore.ReadBurnSummaries()
+	report := liveRouteStatusReport(context.Background(), s.WorkingDir)
 
-	detail := buildProviderDetail(info, signal, outcomes, burnSummaries, now)
+	detail := buildProviderDetail(info, signal, report, now)
 	data, err := json.Marshal(detail)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText("{}")}}
@@ -285,10 +277,7 @@ func signalFromHarnessInfo(info agentlib.HarnessInfo, now time.Time) agent.Routi
 		freshness = "unknown"
 	}
 
-	kind := info.Quota.Source
-	if kind == "" {
-		kind = "stats-cache"
-	}
+	kind := agent.NormalizeSignalSourceKind(info.Quota.Source)
 
 	var ageSeconds int64
 	if !info.Quota.CapturedAt.IsZero() {
@@ -326,15 +315,14 @@ func signalFromHarnessInfo(info agentlib.HarnessInfo, now time.Time) agent.Routi
 func buildProviderSummary(
 	info agentlib.HarnessInfo,
 	signal agent.RoutingSignalSnapshot,
-	outcomes []agent.RoutingOutcome,
+	report *agentlib.RouteStatusReport,
 	now time.Time,
 ) ProviderSummary {
-	harnessOutcomes := filterProviderOutcomes(outcomes, info.Name, now, 7)
-	perf := computeProviderPerformance(harnessOutcomes)
-	sources := collectProviderSignalSources(signal, len(harnessOutcomes) > 0)
+	perf := providerPerformanceFromRouteStatus(report, info.Name)
+	sources := collectProviderSignalSources(signal)
 
 	var freshnessTS string
-	if ts := providerFreshnessTS(signal, harnessOutcomes); !ts.IsZero() {
+	if ts := providerFreshnessTS(signal); !ts.IsZero() {
 		freshnessTS = ts.UTC().Format(time.RFC3339)
 	}
 
@@ -356,23 +344,20 @@ func buildProviderSummary(
 func buildProviderDetail(
 	info agentlib.HarnessInfo,
 	signal agent.RoutingSignalSnapshot,
-	outcomes []agent.RoutingOutcome,
-	burnSummaries []agent.BurnSummary,
+	report *agentlib.RouteStatusReport,
 	now time.Time,
 ) ProviderDetail {
-	outcomes7d := filterProviderOutcomes(outcomes, info.Name, now, 7)
-	outcomes30d := filterProviderOutcomes(outcomes, info.Name, now, 30)
-	perf := computeProviderPerformance(outcomes7d)
-	sources := collectProviderSignalSources(signal, len(outcomes7d) > 0)
+	perf := providerPerformanceFromRouteStatus(report, info.Name)
+	sources := collectProviderSignalSources(signal)
 
 	var freshnessTS string
-	if ts := providerFreshnessTS(signal, outcomes7d); !ts.IsZero() {
+	if ts := providerFreshnessTS(signal); !ts.IsZero() {
 		freshnessTS = ts.UTC().Format(time.RFC3339)
 	}
 
 	models := buildModelQuotaList(info, signal)
-	historicalUsage := computeProviderHistoricalUsage(info, signal, outcomes7d, outcomes30d)
-	burnEstimate := computeProviderBurnEstimate(info, burnSummaries, historicalUsage, signal)
+	historicalUsage := computeProviderHistoricalUsage(info, signal)
+	burnEstimate := computeProviderBurnEstimate(info, historicalUsage, signal)
 
 	statusStr := providerStatusStrInfo(info)
 	return ProviderDetail{
@@ -422,13 +407,17 @@ func buildModelQuotaList(info agentlib.HarnessInfo, signal agent.RoutingSignalSn
 func computeProviderHistoricalUsage(
 	info agentlib.HarnessInfo,
 	signal agent.RoutingSignalSnapshot,
-	outcomes7d []agent.RoutingOutcome,
-	outcomes30d []agent.RoutingOutcome,
 ) *ProviderHistoricalUsage {
-	window7d := usageWindowFromSignalOrOutcomes(info, signal, outcomes7d)
-	window30d := usageWindowFromOutcomes(info, outcomes30d)
-	if window7d == nil && window30d == nil {
+	window7d := usageWindowFromLiveWindows(info, "7d")
+	window30d := usageWindowFromLiveWindows(info, "30d")
+	if window7d == nil && window30d == nil && signal.HistoricalUsage.TotalTokens == 0 && signal.HistoricalUsage.InputTokens == 0 && signal.HistoricalUsage.OutputTokens == 0 {
 		return nil
+	}
+	if window7d == nil {
+		window7d = usageWindowFromSignal(info, signal)
+	}
+	if window30d == nil {
+		window30d = usageWindowFromSignal(info, signal)
 	}
 	return &ProviderHistoricalUsage{
 		Window7D:  window7d,
@@ -436,61 +425,44 @@ func computeProviderHistoricalUsage(
 	}
 }
 
-func usageWindowFromSignalOrOutcomes(
-	info agentlib.HarnessInfo,
-	signal agent.RoutingSignalSnapshot,
-	outcomes []agent.RoutingOutcome,
-) *ProviderUsageWindow {
-	// Prefer provider-native signal if it has token data.
-	if signal.HistoricalUsage.TotalTokens > 0 || signal.HistoricalUsage.InputTokens > 0 {
-		w := &ProviderUsageWindow{
-			InputTokens:  signal.HistoricalUsage.InputTokens,
-			OutputTokens: signal.HistoricalUsage.OutputTokens,
-			TotalTokens:  signal.HistoricalUsage.TotalTokens,
+func usageWindowFromLiveWindows(info agentlib.HarnessInfo, windowName string) *ProviderUsageWindow {
+	for _, w := range info.UsageWindows {
+		if w.Name != windowName {
+			continue
 		}
-		if info.IsSubscription || info.IsLocal {
-			w.CostUSD = 0
-			if info.IsSubscription {
-				w.CostNote = "subscription plan; per-token cost not billed"
-			}
-		} else {
-			w.CostUSD = -1
+		result := &ProviderUsageWindow{
+			InputTokens:  w.InputTokens,
+			OutputTokens: w.OutputTokens,
+			TotalTokens:  w.TotalTokens,
+			CostUSD:      w.CostUSD,
 		}
-		return w
+		if info.IsSubscription {
+			result.CostUSD = 0
+			result.CostNote = "subscription plan; per-token cost not billed"
+		} else if info.IsLocal {
+			result.CostUSD = 0
+		} else if result.CostUSD == 0 {
+			result.CostUSD = -1
+		}
+		return result
 	}
-	return usageWindowFromOutcomes(info, outcomes)
+	return nil
 }
 
-func usageWindowFromOutcomes(info agentlib.HarnessInfo, outcomes []agent.RoutingOutcome) *ProviderUsageWindow {
-	if len(outcomes) == 0 {
-		return nil
-	}
-	var inTok, outTok int
-	var costUSD float64
-	hasCost := false
-	for _, o := range outcomes {
-		inTok += o.InputTokens
-		outTok += o.OutputTokens
-		if o.CostUSD > 0 {
-			costUSD += o.CostUSD
-			hasCost = true
-		}
-	}
-	if inTok == 0 && outTok == 0 {
+func usageWindowFromSignal(info agentlib.HarnessInfo, signal agent.RoutingSignalSnapshot) *ProviderUsageWindow {
+	if signal.HistoricalUsage.TotalTokens == 0 && signal.HistoricalUsage.InputTokens == 0 && signal.HistoricalUsage.OutputTokens == 0 {
 		return nil
 	}
 	w := &ProviderUsageWindow{
-		InputTokens:  inTok,
-		OutputTokens: outTok,
-		TotalTokens:  inTok + outTok,
+		InputTokens:  signal.HistoricalUsage.InputTokens,
+		OutputTokens: signal.HistoricalUsage.OutputTokens,
+		TotalTokens:  signal.HistoricalUsage.TotalTokens,
 	}
 	if info.IsSubscription || info.IsLocal {
 		w.CostUSD = 0
 		if info.IsSubscription {
 			w.CostNote = "subscription plan; per-token cost not billed"
 		}
-	} else if hasCost {
-		w.CostUSD = costUSD
 	} else {
 		w.CostUSD = -1
 	}
@@ -499,7 +471,6 @@ func usageWindowFromOutcomes(info agentlib.HarnessInfo, outcomes []agent.Routing
 
 func computeProviderBurnEstimate(
 	info agentlib.HarnessInfo,
-	burnSummaries []agent.BurnSummary,
 	usage *ProviderHistoricalUsage,
 	signal agent.RoutingSignalSnapshot,
 ) *ProviderBurnEstimate {
@@ -507,68 +478,34 @@ func computeProviderBurnEstimate(
 		return nil
 	}
 
-	// Find the most recent burn summary for this harness.
-	var latestBurn *agent.BurnSummary
-	for i := range burnSummaries {
-		if burnSummaries[i].Harness == info.Name {
-			if latestBurn == nil || burnSummaries[i].ObservedAt.After(latestBurn.ObservedAt) {
-				latestBurn = &burnSummaries[i]
-			}
-		}
-	}
-
-	// Derive daily token rate from 7d window (DDx-observed or provider-native).
-	dailyTokenRate := -1.0
-	if usage != nil && usage.Window7D != nil && usage.Window7D.TotalTokens > 0 {
-		dailyTokenRate = float64(usage.Window7D.TotalTokens) / 7.0
-	}
-
-	// Require at least one data source before emitting a burn estimate.
-	if latestBurn == nil && dailyTokenRate < 0 {
+	if usage == nil || usage.Window7D == nil || usage.Window7D.TotalTokens <= 0 {
 		return nil
 	}
 
-	// Determine source attribution.
-	sourceEnum := signalSourceAPIEnum(signal.Source.Kind)
-	var sourceStr string
-	if latestBurn != nil && dailyTokenRate >= 0 {
-		if sourceEnum != "none" {
-			sourceStr = sourceEnum + "+ddx-metrics"
-		} else {
-			sourceStr = "ddx-metrics"
-		}
-	} else if latestBurn != nil {
-		if sourceEnum != "none" {
-			sourceStr = sourceEnum
-		} else {
-			sourceStr = "ddx-metrics"
-		}
-	} else {
-		sourceStr = "ddx-metrics"
-	}
-
+	dailyTokenRate := float64(usage.Window7D.TotalTokens) / 7.0
 	subscriptionBurn := "unknown"
+	switch {
+	case dailyTokenRate >= 10000:
+		subscriptionBurn = "high"
+	case dailyTokenRate >= 1000:
+		subscriptionBurn = "moderate"
+	case dailyTokenRate > 0:
+		subscriptionBurn = "low"
+	}
 	confidence := "low"
-	var freshnessTS string
-
-	if latestBurn != nil {
-		switch {
-		case latestBurn.BurnIndex >= 0.8:
-			subscriptionBurn = "high"
-		case latestBurn.BurnIndex >= 0.5:
-			subscriptionBurn = "moderate"
-		case latestBurn.BurnIndex >= 0.1:
-			subscriptionBurn = "low"
-		}
-		switch {
-		case latestBurn.Confidence >= 0.8:
-			confidence = "high"
-		case latestBurn.Confidence >= 0.5:
-			confidence = "medium"
-		}
-		if !latestBurn.ObservedAt.IsZero() {
-			freshnessTS = latestBurn.ObservedAt.UTC().Format(time.RFC3339)
-		}
+	switch {
+	case dailyTokenRate >= 10000:
+		confidence = "high"
+	case dailyTokenRate >= 1000:
+		confidence = "medium"
+	}
+	sourceStr := signalSourceAPIEnum(signal.Source.Kind)
+	if sourceStr == "" {
+		sourceStr = "none"
+	}
+	freshnessTS := ""
+	if !signal.Source.ObservedAt.IsZero() {
+		freshnessTS = signal.Source.ObservedAt.UTC().Format(time.RFC3339)
 	}
 
 	return &ProviderBurnEstimate{
@@ -621,17 +558,18 @@ func harnessDefaultModels(name string) []string {
 	}
 }
 
-// metricsStoreForWorkDir returns a RoutingMetricsStore using the project's
-// configured session log dir resolved against workingDir.
-func metricsStoreForWorkDir(workingDir string) *agent.RoutingMetricsStore {
-	logDir := agent.SessionLogDirForWorkDir(workingDir)
-	if logDir == "" {
-		logDir = agent.DefaultLogDir
+// liveRouteStatusReport loads the current live route-status report from the
+// Fizeau service for the current worktree.
+func liveRouteStatusReport(ctx context.Context, workDir string) *agentlib.RouteStatusReport {
+	svc, err := agent.NewServiceFromWorkDir(workDir)
+	if err != nil {
+		return nil
 	}
-	if !filepath.IsAbs(logDir) {
-		logDir = filepath.Join(workingDir, logDir)
+	report, err := svc.RouteStatus(ctx)
+	if err != nil {
+		return nil
 	}
-	return agent.NewRoutingMetricsStore(logDir)
+	return report
 }
 
 // filterProviderOutcomes returns outcomes for a given harness within the last windowDays days.
@@ -675,40 +613,61 @@ func computeProviderPerformance(outcomes []agent.RoutingOutcome) ProviderPerform
 	return perf
 }
 
-// collectProviderSignalSources builds the signal_sources array from the snapshot and metrics presence.
-// Defined values per FEAT-014: native-session-jsonl, stats-cache, ddx-metrics, none.
-func collectProviderSignalSources(signal agent.RoutingSignalSnapshot, hasMetrics bool) []string {
-	seen := map[string]bool{}
-	result := []string{}
-	if signal.Source.Kind != "" {
-		if enum := signalSourceAPIEnum(signal.Source.Kind); enum != "none" {
-			seen[enum] = true
-			result = append(result, enum)
+// providerPerformanceFromRouteStatus derives recent provider performance from
+// the live Fizeau route-status report, which replaces the old DDx metrics-store
+// read model for current routing semantics.
+func providerPerformanceFromRouteStatus(report *agentlib.RouteStatusReport, providerName string) ProviderPerformance {
+	perf := ProviderPerformance{
+		P50LatencyMS: -1,
+		P95LatencyMS: -1,
+		SuccessRate:  -1,
+		SampleCount:  0,
+		Window:       "7d",
+	}
+	if report == nil {
+		return perf
+	}
+	var latencies []int
+	var reliabilityTotal float64
+	for _, route := range report.Routes {
+		for _, candidate := range route.Candidates {
+			if candidate.Provider != providerName {
+				continue
+			}
+			perf.SampleCount++
+			reliabilityTotal += candidate.ProviderReliabilityRate
+			if candidate.RecentLatencyMS > 0 {
+				latencies = append(latencies, int(candidate.RecentLatencyMS+0.5))
+			}
 		}
 	}
-	if hasMetrics && !seen["ddx-metrics"] {
-		result = append(result, "ddx-metrics")
-		seen["ddx-metrics"] = true
+	if perf.SampleCount < 3 {
+		return perf
 	}
-	if len(result) == 0 {
-		result = []string{"none"}
+	perf.SuccessRate = reliabilityTotal / float64(perf.SampleCount)
+	if len(latencies) == 0 {
+		return perf
 	}
-	return result
+	sort.Ints(latencies)
+	perf.P50LatencyMS = latencies[len(latencies)/2]
+	p95Idx := int(float64(len(latencies)-1) * 0.95)
+	perf.P95LatencyMS = latencies[p95Idx]
+	return perf
 }
 
-// providerFreshnessTS returns the oldest contributing signal timestamp.
+// collectProviderSignalSources builds the signal_sources array from the live
+// snapshot. Non-live DDx cache labels are normalized away before this point.
+func collectProviderSignalSources(signal agent.RoutingSignalSnapshot) []string {
+	if enum := signalSourceAPIEnum(signal.Source.Kind); enum != "none" {
+		return []string{enum}
+	}
+	return []string{"none"}
+}
+
+// providerFreshnessTS returns the contributing signal timestamp.
 // Returns zero time when no signals exist (caller omits the field per FEAT-014).
-func providerFreshnessTS(signal agent.RoutingSignalSnapshot, outcomes []agent.RoutingOutcome) time.Time {
-	var oldest time.Time
-	if !signal.Source.ObservedAt.IsZero() {
-		oldest = signal.Source.ObservedAt
-	}
-	for _, o := range outcomes {
-		if oldest.IsZero() || o.ObservedAt.Before(oldest) {
-			oldest = o.ObservedAt
-		}
-	}
-	return oldest
+func providerFreshnessTS(signal agent.RoutingSignalSnapshot) time.Time {
+	return signal.Source.ObservedAt
 }
 
 // providerStatusStrInfo maps a HarnessInfo to the API status string.
@@ -800,18 +759,10 @@ func harnessDisplayName(name string) string {
 }
 
 // signalSourceAPIEnum maps an internal source kind to the FEAT-014 API enum value.
-// Defined values: native-session-jsonl, stats-cache, ddx-metrics, none.
+// Non-live DDx-local cache labels are normalized away by the shared agent helper.
 func signalSourceAPIEnum(kind string) string {
-	switch kind {
-	case "native-session-jsonl":
-		return "native-session-jsonl"
-	case "stats-cache", "quota-snapshot":
-		return "stats-cache"
-	case "http-balance", "http-models":
-		return "stats-cache" // provider-reported via live HTTP API
-	case "recent-session-log":
-		return "ddx-metrics"
-	default:
-		return "none"
+	if normalized := agent.NormalizeSignalSourceKind(kind); normalized != "" {
+		return normalized
 	}
+	return "none"
 }

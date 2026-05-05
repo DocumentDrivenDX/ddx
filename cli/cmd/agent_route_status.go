@@ -60,24 +60,21 @@ type routeStatusModelJSON struct {
 }
 
 // recentRoutingDecision is a merged view of a single routing decision sourced from
-// either the RoutingMetricsStore or a kind:routing bead evidence event.
+// either the live Fizeau RouteStatus report or a kind:routing bead evidence event.
 //
-// Both RoutingMetricsStore and kind:routing bead events are intentionally kept:
-//   - RoutingMetricsStore (.ddx/agent-logs/routing-outcomes.jsonl) records
-//     harness-level analytics (latency, success rate) for every agent run.
-//   - kind:routing bead evidence records execution provenance per bead: which
-//     provider/model was selected and why, tied to a specific bead ID.
+// The live report carries current route decisions and cooldowns. kind:routing bead
+// events remain for audit-only provenance.
 type recentRoutingDecision struct {
 	ObservedAt   time.Time
-	Source       string // "bead-evidence" or "metrics-store"
+	Source       string // "bead-evidence" or "route-status"
 	BeadID       string // populated for bead-evidence entries
-	Harness      string // populated for metrics-store entries
-	Provider     string // resolved_provider (bead-evidence) or CanonicalTarget (metrics-store)
+	Harness      string // populated for route-status entries
+	Provider     string // route-status decision provider or bead-evidence resolved_provider
 	Model        string
 	RouteReason  string // populated for bead-evidence entries
-	Success      bool   // populated for metrics-store entries
+	Success      bool   // populated for route-status entries
 	SuccessKnown bool   // false for bead-evidence entries (success not recorded)
-	LatencyMS    int    // populated for metrics-store entries
+	LatencyMS    int    // populated for route-status entries
 }
 
 // beadRoutingDecisionsFromStore reads kind:routing evidence events from all beads
@@ -111,6 +108,30 @@ func beadRoutingDecisionsFromStore(workDir string) []recentRoutingDecision {
 			}
 			out = append(out, d)
 		}
+	}
+	return out
+}
+
+// recentRoutingDecisionsFromReport converts the live RouteStatus report into
+// recentRoutingDecision rows.
+func recentRoutingDecisionsFromReport(report *agentlib.RouteStatusReport) []recentRoutingDecision {
+	if report == nil {
+		return nil
+	}
+	var out []recentRoutingDecision
+	for _, route := range report.Routes {
+		if route.LastDecision == nil || route.LastDecisionAt.IsZero() {
+			continue
+		}
+		out = append(out, recentRoutingDecision{
+			ObservedAt:   route.LastDecisionAt,
+			Source:       "route-status",
+			Harness:      route.LastDecision.Harness,
+			Provider:     route.LastDecision.Provider,
+			Model:        route.LastDecision.Model,
+			RouteReason:  route.LastDecision.Reason,
+			SuccessKnown: false,
+		})
 	}
 	return out
 }
@@ -164,14 +185,14 @@ func routingEventsFromBeadExtra(extra map[string]any) []bead.BeadEvent {
 }
 
 // routeStatusDecisionJSON is the JSON-serialisable form of one routing decision
-// from either the RoutingMetricsStore ("metrics-store") or kind:routing bead
+// from either the live RouteStatus report ("route-status") or kind:routing bead
 // evidence ("bead-evidence").
 type routeStatusDecisionJSON struct {
 	ObservedAt      string `json:"observed_at"`
-	Source          string `json:"source"`                     // "bead-evidence" or "metrics-store"
+	Source          string `json:"source"`                     // "bead-evidence" or "route-status"
 	BeadID          string `json:"bead_id,omitempty"`          // bead-evidence only
-	Harness         string `json:"harness,omitempty"`          // metrics-store only
-	CanonicalTarget string `json:"canonical_target,omitempty"` // metrics-store only
+	Harness         string `json:"harness,omitempty"`          // route-status only
+	CanonicalTarget string `json:"canonical_target,omitempty"` // route-status only
 	Provider        string `json:"provider,omitempty"`         // bead-evidence only
 	Model           string `json:"model,omitempty"`
 	RouteReason     string `json:"route_reason,omitempty"` // bead-evidence only
@@ -421,30 +442,19 @@ and active cooldowns.
 				}
 			}
 
+			report, err := svc.RouteStatus(ctx)
+			if err != nil {
+				return fmt.Errorf("route status: %w", err)
+			}
+
 			// Load recent routing decisions from two complementary sources:
 			//
-			//  1. RoutingMetricsStore — harness-level analytics (latency, success
-			//     rate) for every agent run, stored in routing-outcomes.jsonl.
+			//  1. Live RouteStatus report — current route decisions and cooldowns.
 			//  2. kind:routing bead events — execution provenance per bead (which
 			//     provider/model was selected and why), tied to a specific bead ID.
 			var recentDecisions []recentRoutingDecision
 
-			if logDir := agent.SessionLogDirForWorkDir(f.WorkingDir); logDir != "" {
-				store := agent.NewRoutingMetricsStore(logDir)
-				outcomes, _ := store.ReadOutcomes()
-				for _, o := range outcomes {
-					recentDecisions = append(recentDecisions, recentRoutingDecision{
-						ObservedAt:   o.ObservedAt,
-						Source:       "metrics-store",
-						Harness:      o.Harness,
-						Provider:     o.CanonicalTarget,
-						Model:        o.Model,
-						Success:      o.Success,
-						SuccessKnown: true,
-						LatencyMS:    o.LatencyMS,
-					})
-				}
-			}
+			recentDecisions = append(recentDecisions, recentRoutingDecisionsFromReport(report)...)
 
 			// Merge kind:routing bead evidence entries.
 			recentDecisions = append(recentDecisions, beadRoutingDecisionsFromStore(f.WorkingDir)...)
@@ -474,7 +484,7 @@ and active cooldowns.
 						Model:       d.Model,
 						RouteReason: d.RouteReason,
 					}
-					if d.Source == "metrics-store" {
+					if d.Source == "route-status" {
 						jd.CanonicalTarget = d.Provider
 						jd.Success = d.Success
 						jd.LatencyMs = d.LatencyMS

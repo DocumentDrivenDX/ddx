@@ -136,7 +136,7 @@ func TestShowProvider(t *testing.T) {
 	default:
 		t.Errorf("invalid status %q", detail.Status)
 	}
-	// AuthState — in test env with no stats-cache, should be "unknown".
+	// AuthState — in test env with no live quota signal, should be "unknown".
 	switch detail.AuthState {
 	case "authenticated", "unauthenticated", "unknown":
 	default:
@@ -218,8 +218,6 @@ func TestProviderUnknownStateContract(t *testing.T) {
 		// Verify signal_sources contains valid values only.
 		validSources := map[string]bool{
 			"native-session-jsonl": true,
-			"stats-cache":          true,
-			"ddx-metrics":          true,
 			"none":                 true,
 		}
 		for _, src := range detail.SignalSources {
@@ -289,7 +287,7 @@ func TestProviderQuotaStatusTranslationFromHarnessInfo(t *testing.T) {
 			}
 			signal := signalFromHarnessInfo(info, now)
 			summary := buildProviderSummary(info, signal, nil, now)
-			detail := buildProviderDetail(info, signal, nil, nil, now)
+			detail := buildProviderDetail(info, signal, nil, now)
 
 			if summary.QuotaHeadroom != tc.wantHeadroom {
 				t.Fatalf("summary quota_headroom = %q, want %q", summary.QuotaHeadroom, tc.wantHeadroom)
@@ -300,8 +298,11 @@ func TestProviderQuotaStatusTranslationFromHarnessInfo(t *testing.T) {
 			if signal.Source.Freshness != tc.wantFreshness {
 				t.Fatalf("signal freshness = %q, want %q", signal.Source.Freshness, tc.wantFreshness)
 			}
-			if detail.SignalSources[0] != "stats-cache" {
-				t.Fatalf("detail signal source = %q, want stats-cache", detail.SignalSources[0])
+			if signal.Source.Kind != "" {
+				t.Fatalf("signal kind = %q, want empty after normalization", signal.Source.Kind)
+			}
+			if detail.SignalSources[0] != "none" {
+				t.Fatalf("detail signal source = %q, want none", detail.SignalSources[0])
 			}
 		})
 	}
@@ -391,11 +392,11 @@ func TestSignalSourceAPIEnum(t *testing.T) {
 		want string
 	}{
 		{"native-session-jsonl", "native-session-jsonl"},
-		{"stats-cache", "stats-cache"},
-		{"quota-snapshot", "stats-cache"},
-		{"http-balance", "stats-cache"},
-		{"http-models", "stats-cache"},
-		{"recent-session-log", "ddx-metrics"},
+		{"stats-cache", "none"},
+		{"quota-snapshot", "none"},
+		{"http-balance", "none"},
+		{"http-models", "none"},
+		{"recent-session-log", "none"},
 		{"docs-only", "none"},
 		{"unknown", "none"},
 		{"", "none"},
