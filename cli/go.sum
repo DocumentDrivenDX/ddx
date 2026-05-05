@@ -14,6 +14,8 @@ github.com/DocumentDrivenDX/fizeau v0.10.5 h1:K1J6QMom371FapYDWorag6htx6emMdbpx1
 github.com/DocumentDrivenDX/fizeau v0.10.5/go.mod h1:Ag/g+Fd3FneaMUHD0kUAyzKdRDgUL21DV2s45Fy0M+4=
 github.com/DocumentDrivenDX/fizeau v0.10.6 h1:1seXB2nJEpbyO1LMYdOf9Lb+JHjEDzmN1E3tQUGx0IA=
 github.com/DocumentDrivenDX/fizeau v0.10.6/go.mod h1:Ag/g+Fd3FneaMUHD0kUAyzKdRDgUL21DV2s45Fy0M+4=
+github.com/DocumentDrivenDX/fizeau v0.10.7 h1:zh/ZhsP9ziPaarqpHdn8Yljc/VOZT5ibP8vluoxX59U=
+github.com/DocumentDrivenDX/fizeau v0.10.7/go.mod h1:Ag/g+Fd3FneaMUHD0kUAyzKdRDgUL21DV2s45Fy0M+4=
 github.com/agnivade/levenshtein v1.2.1 h1:EHBY3UOn1gwdy/VbFwgo4cxecRznFk7fKWN1KOX7eoM=
 github.com/agnivade/levenshtein v1.2.1/go.mod h1:QVVI16kDrtSuwcpd0p1+xMC6Z/VfhtCyDIjcwga4/DU=
 github.com/akutz/memconn v0.1.0 h1:NawI0TORU4hcOMsMr11g7vwlCdkYeLKXBcxWu2W/P8A=
