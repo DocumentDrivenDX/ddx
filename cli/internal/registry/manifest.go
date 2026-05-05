@@ -101,8 +101,7 @@ func LoadPackageManifest(root string) (*Package, []ValidationIssue, error) {
 }
 
 // extraManifestKeys returns manifest keys that are not part of the current
-// typed schema. Values are preserved as-is so callers can re-emit them via
-// MarshalPackage.
+// typed schema. Values are preserved as-is so callers can inspect them later.
 func extraManifestKeys(full map[string]any) map[string]any {
 	if len(full) == 0 {
 		return nil
@@ -118,39 +117,6 @@ func extraManifestKeys(full map[string]any) map[string]any {
 		extra[k] = v
 	}
 	return extra
-}
-
-// MarshalPackage serializes pkg back to YAML, including any unknown keys
-// captured in Extra. Unknown keys round-trip at the document's top level,
-// next to the typed fields.
-func MarshalPackage(pkg *Package) ([]byte, error) {
-	if pkg == nil {
-		return nil, fmt.Errorf("MarshalPackage: nil package")
-	}
-	// Marshal the typed struct first so known fields retain their ordering
-	// and tags. Then splice Extra keys into the resulting map-form document.
-	typed, err := yaml.Marshal(pkg)
-	if err != nil {
-		return nil, err
-	}
-	if len(pkg.Extra) == 0 {
-		return typed, nil
-	}
-	var doc map[string]any
-	if err := yaml.Unmarshal(typed, &doc); err != nil {
-		return nil, err
-	}
-	if doc == nil {
-		doc = make(map[string]any, len(pkg.Extra))
-	}
-	for k, v := range pkg.Extra {
-		if _, known := knownManifestKeys[k]; known {
-			// Defensive: never let Extra overwrite typed fields.
-			continue
-		}
-		doc[k] = v
-	}
-	return yaml.Marshal(doc)
 }
 
 // LoadPackageManifestWithFallback reads package.yaml and falls back to the

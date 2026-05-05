@@ -131,20 +131,6 @@ future_flag: true
 		t.Fatalf("expected hooks to be map[string]any, got %T", pkg.Extra["hooks"])
 	}
 
-	// Round-trip: MarshalPackage emits a document that contains the unknown
-	// keys. Re-loading reproduces them.
-	out, err := MarshalPackage(pkg)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.yaml"), out, 0o644))
-
-	reloaded, issues, err := LoadPackageManifest(dir)
-	require.NoError(t, err)
-	require.Empty(t, issues)
-	require.NotNil(t, reloaded)
-	require.NotNil(t, reloaded.Extra)
-	assert.Contains(t, reloaded.Extra, "hooks")
-	assert.Contains(t, reloaded.Extra, "signatures")
-	assert.Contains(t, reloaded.Extra, "future_flag")
 }
 
 func TestLoadPackageManifestNoUnknownKeysYieldsNilExtra(t *testing.T) {
@@ -162,26 +148,4 @@ api_version: 1
 	require.Empty(t, issues)
 	require.NotNil(t, pkg)
 	assert.Nil(t, pkg.Extra, "no unknown keys should leave Extra nil")
-}
-
-func TestMarshalPackageExtraNeverOverwritesTypedFields(t *testing.T) {
-	pkg := &Package{
-		Name:        "guard",
-		Version:     "1.0.0",
-		Description: "Typed fields must win",
-		Type:        PackageTypePlugin,
-		Source:      "https://example.com/guard",
-		APIVersion:  "1",
-		Extra: map[string]any{
-			// Defensive: even if a caller stashed a known key in Extra,
-			// MarshalPackage must not let it overwrite the typed field.
-			"name":       "shadow",
-			"future_key": "kept",
-		},
-	}
-	out, err := MarshalPackage(pkg)
-	require.NoError(t, err)
-	assert.Contains(t, string(out), "name: guard")
-	assert.Contains(t, string(out), "future_key: kept")
-	assert.NotContains(t, string(out), "name: shadow")
 }

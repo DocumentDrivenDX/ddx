@@ -48,9 +48,9 @@ type Package struct {
 	Install     PackageInstall `yaml:"install"`
 	Keywords    []string       `yaml:"keywords,omitempty"`
 	// Extra captures top-level keys not recognized by this DDx version so
-	// newer manifests round-trip without silently dropping fields. See
-	// SD-018 "Manifest Versioning". Not marshaled via `yaml:"-"`; use
-	// MarshalPackage for round-trip serialization.
+	// newer manifests can keep their unknown fields in memory without
+	// silently dropping them. See SD-018 "Manifest Versioning". Not
+	// marshaled via `yaml:"-"` so callers must preserve it explicitly.
 	Extra map[string]any `yaml:"-"`
 }
 
