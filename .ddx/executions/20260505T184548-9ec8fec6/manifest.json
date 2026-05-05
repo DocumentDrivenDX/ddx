@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260505T184548-9ec8fec6",
+  "bead_id": "ddx-9b36485a",
+  "base_rev": "23d4479848abf9ccc521fed73b16726ddc8fc08e",
+  "created_at": "2026-05-05T18:45:51.339963924Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9b36485a",
+    "title": "bead: add real execute-worktree CLI regression for canonical child IDs",
+    "description": "PROBLEM\nThe queue contained multiple generated child beads whose IDs started with .execute-bead-wt-..., for example .execute-bead-wt-ddx-8d747049-20260505T023636-7669921a-b6bc9398 and .execute-bead-wt-ddx-c8f79963-20260505T104148-6e54f8ef-8083652e. Those IDs are not valid execute-bead git ref path components and one attempt already failed while preserving refs for such an ID.\n\nROOT CAUSE\n- cli/internal/bead/worktree_prefix_test.go:13-27 and cli/cmd/bead_workspace_test.go:42-84 cover in-process store/command factory paths, but the observed failure came from autonomous decomposition running ddx bead create inside an actual execute-bead linked worktree.\n- cli/internal/bead/store.go:1818-1841 derives prefixes from the store working directory and git root, but the real installed-binary/worktree path is not covered by an end-to-end test that creates a linked worktree and runs ddx bead create as a subprocess.\n\nPROPOSED FIX\nAdd a real integration regression test that builds or invokes the current ddx test binary from inside an execute-bead-shaped linked worktree with DDX_BEAD_DIR=.ddx, creates a child bead, and verifies the child ID and storage location use the origin workspace naming convention. If the test fails, fix the command/store workspace resolution path so child beads are created as ddx-* IDs in the primary workspace store.\n\nNON-SCOPE\n- Cleaning historical malformed tracker entries; the queue-quality review already superseded the open queued copies.\n- Changing the execute-bead worktree naming convention itself.",
+    "acceptance": "1. TestBeadCreate_ExecuteWorktreeRealBinaryUsesOriginPrefix or equivalent creates a real git repo, commits .ddx/config.yaml and .ddx/beads.jsonl, creates an execute-bead-shaped linked worktree, runs ddx bead create as a subprocess from that worktree with DDX_BEAD_DIR=.ddx, and asserts the new ID matches ^ddx-[0-9a-f]{8}$ or the origin config prefix.\n2. The same test asserts the bead row is written to the primary workspace .ddx/beads.jsonl, not the isolated worktree copy.\n3. The regression test fails if the ID begins with .execute-bead-wt-.\n4. If current code fails the test, fix workspace/store prefix resolution so the test passes for real subprocess execution.\n5. cd cli \u0026\u0026 go test ./cmd ./internal/bead -run 'TestBeadCreate_ExecuteWorktreeRealBinaryUsesOriginPrefix|TestBeadCreate_RelativeEnvInsideLinkedWorktreeUsesPrimaryNamingAndStore|TestGenID_WorktreePrefix' -count=1 passes.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-a9d130d0",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:agent",
+      "kind:fix",
+      "observed-failure",
+      "bead-quality",
+      "triage:needs-investigation"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-05T18:45:48Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3918937",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-05T17:15:45.369950657Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T171206-e055ef01\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":2778042,\"output_tokens\":12892,\"total_tokens\":2790934,\"cost_usd\":0,\"duration_ms\":213777,\"exit_code\":0}",
+          "created_at": "2026-05-05T17:15:45.602357744Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=2790934 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "The requested regression test and subprocess helper were added, but the required repository gate cannot be satisfied in this attempt because `lefthook run pre-commit` fails on an unrelated existing cmd test: `TestAgentRunProfileNoViableHarness` in `cli/cmd/agent_run_profile_test.go:206-215` reproduces with `CGO_ENABLED=1 go test ./cmd -run 'TestAgentRunProfileNoViableHarness' -count=1` and fails with \"An error is expected but got nil.\" This is outside the bead's worktree-prefix scope and would need a separate investigation/fix bead before a compliant commit can land.",
+          "created_at": "2026-05-05T17:15:46.321485339Z",
+          "kind": "no_changes_needs_investigation",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes_needs_investigation"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: needs_investigation\nreason: The requested regression test and subprocess helper were added, but the required repository gate cannot be satisfied in this attempt because `lefthook run pre-commit` fails on an unrelated existing cmd test: `TestAgentRunProfileNoViableHarness` in `cli/cmd/agent_run_profile_test.go:206-215` reproduces with `CGO_ENABLED=1 go test ./cmd -run 'TestAgentRunProfileNoViableHarness' -count=1` and fails with \"An error is expected but got nil.\" This is outside the bead's worktree-prefix scope and would need a separate investigation/fix bead before a compliant commit can land.\nresult_rev=ad1bac78a8db4ca02629588aaefad8ff45cd6151\nbase_rev=ad1bac78a8db4ca02629588aaefad8ff45cd6151\nretry_after=2026-05-05T23:15:46Z",
+          "created_at": "2026-05-05T17:15:46.955743515Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-05T18:45:48.655740029Z",
+      "execute-loop-last-detail": "no_changes",
+      "execute-loop-last-status": "no_changes",
+      "execute-loop-no-changes-count": 1,
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service (consumer of ddx-agent contract)"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260505T184548-9ec8fec6",
+    "prompt": ".ddx/executions/20260505T184548-9ec8fec6/prompt.md",
+    "manifest": ".ddx/executions/20260505T184548-9ec8fec6/manifest.json",
+    "result": ".ddx/executions/20260505T184548-9ec8fec6/result.json",
+    "checks": ".ddx/executions/20260505T184548-9ec8fec6/checks.json",
+    "usage": ".ddx/executions/20260505T184548-9ec8fec6/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-9b36485a-20260505T184548-9ec8fec6"
+  },
+  "prompt_sha": "29d894e1f592022ca957bf375a0e0a0746f930f55a4c229c3fd7958f0325741a"
+}
