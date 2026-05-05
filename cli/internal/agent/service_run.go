@@ -425,3 +425,38 @@ func ValidateForExecuteLoopViaService(ctx context.Context, workDir, harnessName,
 	}
 	return nil
 }
+
+// ValidateEffortForRunViaService rejects effort requests that no currently
+// available harness can satisfy. `ddx agent run` passes effort through to the
+// service rather than resolving a route locally, but the command still needs a
+// fast failure for obviously impossible combinations so operators get a useful
+// error instead of a silent success path.
+func ValidateEffortForRunViaService(ctx context.Context, workDir, profile, effort string) error {
+	if effort == "" {
+		return nil
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	svc, err := NewServiceFromWorkDir(workDir)
+	if err != nil {
+		return fmt.Errorf("agent: build service: %w", err)
+	}
+	infos, err := svc.ListHarnesses(ctx)
+	if err != nil {
+		return fmt.Errorf("agent: list harnesses: %w", err)
+	}
+	registry := newHarnessRegistry()
+	for _, info := range infos {
+		if !info.Available {
+			continue
+		}
+		if harness, ok := registry.Get(info.Name); ok && harness.EffortFlag != "" {
+			return nil
+		}
+	}
+	if profile == "" {
+		return fmt.Errorf("agent: no selected provider candidate satisfies effort %q", effort)
+	}
+	return fmt.Errorf("agent: no selected provider candidate satisfies profile %q and effort %q", profile, effort)
+}

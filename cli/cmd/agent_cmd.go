@@ -307,6 +307,9 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				overrides.Timeout = &timeout
 			}
 			rcfg, _ := config.LoadAndResolve(f.WorkingDir, overrides)
+			if err := agent.ValidateEffortForRunViaService(cmd.Context(), f.WorkingDir, rcfg.Profile(), rcfg.Effort()); err != nil {
+				return err
+			}
 			runtime := agent.AgentRunRuntime{
 				Prompt:       prompt,
 				PromptFile:   promptFile,
