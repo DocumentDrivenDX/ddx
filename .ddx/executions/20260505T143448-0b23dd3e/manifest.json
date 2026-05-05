@@ -1,0 +1,58 @@
+{
+  "harness": "claude",
+  "model": "claude-opus-4-6",
+  "base_rev": "68064cdf24d336cd7a9446621de68f3705d2782f",
+  "result_rev": "66a777e669d83b43dcfd479a17e83a58baa0ef52",
+  "verdict": "BLOCK",
+  "bead_id": ".execute-bead-wt-ddx-0e5c3005-20260505T113434-3317d134-f25a64d9",
+  "execution_dir": ".ddx/executions/20260505T143448-0b23dd3e",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 3267,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 274,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260505T142253-f8474e12/checks/production-reachability.json",
+          ".ddx/executions/20260505T142253-f8474e12/manifest.json",
+          ".ddx/executions/20260505T142253-f8474e12/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:FEAT-022",
+        "bytes_included": 25543,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 6793,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 37602,
+    "output_bytes": 0,
+    "elapsed_ms": 4247,
+    "harness": "claude",
+    "model": "claude-opus-4-6"
+  }
+}
