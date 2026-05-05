@@ -197,6 +197,14 @@ func isReviewCloseBead(b *bead.Bead) bool {
 func (f *CommandFactory) beadWorkspaceRoot() string {
 	dir := os.Getenv("DDX_BEAD_DIR")
 	if dir != "" {
+		if !filepath.IsAbs(dir) {
+			if f.WorkingDir != "" {
+				if workspaceRoot := gitpkg.FindNearestDDxWorkspace(f.WorkingDir); workspaceRoot != "" {
+					return workspaceRoot
+				}
+				dir = filepath.Join(f.WorkingDir, dir)
+			}
+		}
 		if filepath.Base(dir) == ".ddx" {
 			return filepath.Dir(dir)
 		}
