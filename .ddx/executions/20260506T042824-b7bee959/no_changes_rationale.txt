@@ -1,0 +1,2 @@
+verification_command: cd cli && go test ./internal/server/... ./internal/agent/... && lefthook run pre-commit
+reason: The requested delimiter fix is already present in this branch. The reusable helper lives in cli/internal/evidence/untrusted.go, the review prompt assembly uses it in cli/internal/agent/execute_bead_review.go, and TestArtifactBodyDelimitedAsUntrusted in cli/internal/agent/execute_bead_review_evidence_test.go proves the contract and payload preservation. No additional source edits were required for this attempt.
