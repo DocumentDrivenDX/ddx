@@ -8,27 +8,31 @@ voice.
 ## What It Does
 
 Prose Quality Support evaluates text with named rules and returns structural
-findings. Typical findings call out vague claims, filler transitions, uncoupled
-abstractions, or voice drift that hides the concrete subject.
+findings. A useful finding should explain how the prose became harder to
+execute, review, or trust. Typical findings call out unsupported broad claims,
+filler transitions, repeated text, or wording that hides the concrete subject.
 
 It is useful when you want:
 
 - a repeatable check over changed prose
 - line-specific findings with rule IDs and suggested edits
 - guidance that respects technical terminology, headings, tables, and lists
-- project vocabulary to be preserved when it is the right term, not flattened
-  into generic language
+- project vocabulary, paths, commands, headings, tables, and legitimate
+  technical lists to be preserved when they are the clearest form
 
 ## What It Does Not Do
 
 - It is not an AI detector.
 - It is not a detector bypass tool.
 - It does not rewrite prose automatically.
-- It does not blanket-suppress technical lists, headings, or project terms.
+- It does not treat individual words as wrong by default.
+- It does not blanket-suppress technical lists, headings, paths, tables, or
+  project terms.
 
-Legitimate technical lists, headings, and project terminology are allowed and
-often desirable. When they look dense, that is usually a signal to configure
-the rule or vocabulary list, not to remove the structure wholesale.
+Legitimate technical lists, headings, paths, tables, and project terminology
+are allowed and often desirable. Dense prose is not automatically bad; the
+question is whether the text gives a maintainer or agent enough concrete
+detail to act.
 
 ## Run Changed-Prose Checks
 
@@ -62,8 +66,12 @@ The exact formatting may vary by runner, but each finding should include:
 
 ## Configuration
 
+The default DDx behavior is intentionally small: docs live under `docs/`, and
+`ddx doc prose --changed` checks changed Markdown with the embedded rules.
+Configuration is optional.
+
 The prose-quality config supports mode selection, severity, policy, scope
-filters, and vocabulary controls.
+filters, and vocabulary controls when a project needs custom behavior.
 
 ```yaml
 prose:
@@ -83,9 +91,7 @@ prose:
       - execution
       - governance
     reject:
-      - system
-      - solution
-      - seamless
+      - placeholder term
 ```
 
 ### Modes
@@ -116,8 +122,10 @@ findings as advisory unless an explicit policy says otherwise.
 ### Vocabulary
 
 Use `vocabulary.accept` for DDx terms, product names, and domain-specific
-language that should survive intact. Use `vocabulary.reject` for generic
-substitutes that should be flagged when they replace project terminology.
+language that should survive intact. Use `vocabulary.reject` sparingly for
+project-local substitute terms that are known to hide the intended concept.
+The default checker does not reject common words such as "system", "process",
+or "solution".
 
 ### Scope Filters
 
