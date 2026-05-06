@@ -52,20 +52,24 @@ type PostMergeReviewOutput struct {
 
 // RunPostMergeReview executes the post-merge review state machine for a
 // successful bead attempt. When review is skipped (no reviewer or --no-review)
-// the bead is closed and the function returns Approved=true. The
-// review:skip label only skips when it carries a sibling
+// the bead is closed and the function returns Approved=true. When review is
+// active, the execute-loop asks the review coordinator to evaluate the
+// close-eligible result before CloseWithEvidence runs; close only proceeds on
+// unanimous evidence-backed APPROVE. REQUEST_CHANGES and BLOCK record their
+// review events without reopening the bead.
+//
+// The review:skip label only skips when it carries a sibling
 // review:skip-reason:* label; otherwise it is ignored. When review is not
-// skipped, the reviewer is invoked and its verdict (or error) drives the
-// canonical event emissions (review / review-error /
-// review-manual-required / review-malfunction), and on a non-APPROVE verdict
-// the bead is reopened and the triage policy is consulted via the private
-// applyReviewTriageDecision callout that previously lived as a method on
-// ExecuteBeadWorker.
+// skipped, the review coordinator's verdict(s) or error drive the canonical
+// event emissions (review / review-error / review-manual-required /
+// review-malfunction), and on a non-APPROVE verdict the triage policy is
+// still consulted without reopening the bead.
 //
 // Returns Approved=true on the APPROVE path and on the skip path; returns
-// Approved=false on REQUEST_CHANGES, BLOCK, malformed BLOCK, or reviewer
-// transport error. Store errors are surfaced via StoreErrOp + StoreErr so
-// callers can keep the existing handleOutcomeStoreError pattern unchanged.
+// Approved=false on REQUEST_CHANGES, BLOCK, malformed APPROVE/BLOCK, or
+// reviewer transport error. Store errors are surfaced via StoreErrOp +
+// StoreErr so callers can keep the existing handleOutcomeStoreError pattern
+// unchanged.
 //
 // This is the C3 (ddx-a921ff01) extraction of the 180-line review block
 // previously inline in execute_bead_loop.go; the loop now sees a structured
@@ -107,32 +111,37 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			"result_rev": report.ResultRev,
 		},
 	}
-	reviewRes, reviewErr := in.Reviewer.ReviewBead(ctx, in.Bead.ID, report.ResultRev, implRouting)
+	reviewGroup, reviewErr := runPreCloseReviewGroup(ctx, in.Reviewer, in.Bead.ID, report.ResultRev, implRouting)
+	reviewRes, reviewGroupErr := reducePreCloseReviewGroup(reviewGroup)
 	chargeReviewCost := func() {
-		if capTracker := in.ReviewCostCap; capTracker != nil && reviewRes != nil {
-			capTracker.Add(reviewRes.ReviewerHarness, reviewRes.CostUSD)
-			if detail, capped := capTracker.Tripped(); capped {
-				_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
-					Kind:      "review-cost-deferred",
-					Summary:   "review-cost-deferred",
-					Body:      ReviewCostDeferredEventBody(report.ResultRev, reviewRes.CostUSD, capTracker.Spent(), capTracker.MaxUSD),
-					Actor:     in.Assignee,
-					Source:    "ddx agent execute-loop",
-					CreatedAt: now().UTC(),
-				})
-				if in.Log != nil {
-					_, _ = fmt.Fprintf(in.Log, "review cost cap deferred (%s %s): %s\n", in.Bead.ID, report.ResultRev, detail)
+		if capTracker := in.ReviewCostCap; capTracker != nil && reviewGroup != nil {
+			deferred := false
+			for _, slot := range reviewGroup.Slots {
+				if slot.Result == nil {
+					continue
+				}
+				capTracker.Add(slot.Result.ReviewerHarness, slot.Result.CostUSD)
+				if detail, capped := capTracker.Tripped(); capped && !deferred {
+					_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
+						Kind:      "review-cost-deferred",
+						Summary:   "review-cost-deferred",
+						Body:      ReviewCostDeferredEventBody(report.ResultRev, slot.Result.CostUSD, capTracker.Spent(), capTracker.MaxUSD),
+						Actor:     in.Assignee,
+						Source:    "ddx agent execute-loop",
+						CreatedAt: now().UTC(),
+					})
+					if in.Log != nil {
+						_, _ = fmt.Fprintf(in.Log, "review cost cap deferred (%s %s): %s\n", in.Bead.ID, report.ResultRev, detail)
+					}
+					deferred = true
 				}
 			}
 		}
 	}
+	if reviewGroupErr != nil {
+		reviewErr = reviewGroupErr
+	}
 	if reviewErr != nil {
-		// FEAT-022 §12+§14: classify the failure into the four-class
-		// taxonomy and count prior review-error events scoped to the
-		// current result_rev. On the Nth failure emit a terminal
-		// review-manual-required event instead of yet another
-		// review-error, parking the bead so a subsequent loop
-		// iteration does NOT re-execute primary.
 		class := ClassifyReviewError(reviewErr, reviewRes)
 		prior := CountPriorReviewErrors(in.Store, in.Bead.ID, report.ResultRev)
 		attemptCount := prior + 1
@@ -163,10 +172,6 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 				Source:    "ddx agent execute-loop",
 				CreatedAt: now().UTC(),
 			})
-			// Park the bead with a long cooldown so subsequent
-			// loop iterations do NOT re-pick it for primary
-			// re-execution. Reviewer-failure invariant (§13) is
-			// preserved: the bead is NOT closed.
 			parkUntil := now().UTC().Add(CapLoopCooldown(MaxLoopCooldown))
 			_ = in.Store.SetExecutionCooldown(in.Bead.ID, parkUntil, "review-manual-required", class)
 		} else {
@@ -180,6 +185,12 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 				CreatedAt: now().UTC(),
 			})
 		}
+		if reviewRes != nil {
+			report.ReviewVerdict = string(reviewRes.Verdict)
+			report.ReviewRationale = reviewRes.Rationale
+		}
+		report.Status = ExecuteBeadStatusReviewMalfunction
+		report.Detail = "pre-close review: " + class
 		out.Report = report
 		out.Approved = false
 		chargeReviewCost()
@@ -188,12 +199,6 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 
 	report.ReviewVerdict = string(reviewRes.Verdict)
 	report.ReviewRationale = reviewRes.Rationale
-	// Persist the full reviewer stream as an artifact so the
-	// event body never carries the raw stream (ddx-f8a11202).
-	// On error the artifact path is empty and the event body
-	// still contains the short verdict summary; callers of this
-	// loop can recover the full text from the reviewer session
-	// log if the artifact write failed.
 	artifactPath, artifactErr := PersistReviewerStream(in.ProjectRoot, in.Bead.ID, report.AttemptID, reviewRes.RawOutput)
 	if artifactErr != nil && in.Log != nil {
 		_, _ = fmt.Fprintf(in.Log, "reviewer stream artifact: %v\n", artifactErr)
@@ -209,9 +214,8 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 	chargeReviewCost()
 	switch reviewRes.Verdict {
 	case VerdictApprove:
-		// Approved: record the verdict event and then close.
-		// Closure must land AFTER the review event so the
-		// gate (ddx-e30e60a9) sees the terminal verdict.
+		// Approved: record the verdict event and then close. The close must
+		// land AFTER the review event so the gate sees the terminal verdict.
 		_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
 			Kind:      "review",
 			Summary:   "APPROVE",
@@ -227,10 +231,6 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			return out
 		}
 	case VerdictRequestChanges:
-		// Needs fixes: record the review verdict, then reopen
-		// with findings in notes. The review event must land
-		// even on non-approve paths so review-outcomes can
-		// attribute the rejection to the originating tier.
 		_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
 			Kind:      "review",
 			Summary:   "REQUEST_CHANGES",
@@ -239,18 +239,8 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			Source:    "ddx agent execute-loop",
 			CreatedAt: now().UTC(),
 		})
-		reopenNotes := reviewRes.Rationale
-		if reopenNotes == "" {
-			reopenNotes = reviewRes.RawOutput
-		}
-		if reopenErr := in.Store.Reopen(in.Bead.ID, "review: REQUEST_CHANGES", reopenNotes); reopenErr != nil {
-			out.Report = report
-			out.StoreErrOp = "Reopen"
-			out.StoreErr = reopenErr
-			return out
-		}
 		report.Status = ExecuteBeadStatusReviewRequestChanges
-		report.Detail = "post-merge review: REQUEST_CHANGES"
+		report.Detail = "pre-close review: REQUEST_CHANGES"
 		out.Approved = false
 	case VerdictBlock:
 		rationale := strings.TrimSpace(reviewRes.Rationale)
@@ -264,14 +254,12 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 				CreatedAt: now().UTC(),
 			})
 			report.Status = ExecuteBeadStatusReviewMalfunction
-			report.Detail = "post-merge review: malformed BLOCK verdict (missing rationale)"
+			report.Detail = "pre-close review: malformed BLOCK verdict (missing rationale)"
 			report.ReviewRationale = ""
 			out.Report = report
 			out.Approved = false
 			return out
 		}
-		// Cannot proceed: record the verdict, then reopen and
-		// flag for human with BLOCK marker plus actionable rationale.
 		_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
 			Kind:      "review",
 			Summary:   "BLOCK",
@@ -280,27 +268,103 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			Source:    "ddx agent execute-loop",
 			CreatedAt: now().UTC(),
 		})
-		blockNotes := "REVIEW:BLOCK\n\n" + rationale
-		if reopenErr := in.Store.Reopen(in.Bead.ID, "review: BLOCK", blockNotes); reopenErr != nil {
-			out.Report = report
-			out.StoreErrOp = "Reopen"
-			out.StoreErr = reopenErr
-			return out
-		}
 		report.Status = ExecuteBeadStatusReviewBlock
-		report.Detail = "post-merge review: BLOCK (flagged for human)"
+		report.Detail = "pre-close review: BLOCK (flagged for human)"
 		out.Approved = false
 	}
-	// After the BLOCK / REQUEST_CHANGES branches have recorded
-	// their verdict event and reopened the bead, consult the
-	// triage policy for the next action (re-attempt, escalate
-	// tier, or needs_human).
 	if reviewRes.Verdict == VerdictBlock || reviewRes.Verdict == VerdictRequestChanges {
 		_ = applyReviewTriageDecision(in.Store, in.Bead.ID, in.Assignee, now().UTC(), report.Tier)
 	}
 
 	out.Report = report
 	return out
+}
+
+func runPreCloseReviewGroup(ctx context.Context, reviewer BeadReviewer, beadID, resultRev string, impl ImplementerRouting) (*ReviewGroupResult, error) {
+	if reviewer == nil {
+		return nil, fmt.Errorf("review-group: reviewer required")
+	}
+	if groupReviewer, ok := reviewer.(reviewGroupReviewer); ok {
+		return groupReviewer.ReviewGroup(ctx, beadID, resultRev, impl)
+	}
+	result, err := reviewer.ReviewBead(ctx, beadID, resultRev, impl)
+	group := &ReviewGroupResult{
+		BeadID:    beadID,
+		ResultRev: resultRev,
+		Slots: []ReviewGroupSlotResult{
+			{
+				ReviewerIndex: 0,
+				Result:        result,
+			},
+		},
+	}
+	if err != nil {
+		group.Slots[0].Error = err.Error()
+	}
+	return group, err
+}
+
+func reducePreCloseReviewGroup(group *ReviewGroupResult) (*ReviewResult, error) {
+	if group == nil || len(group.Slots) == 0 {
+		return nil, fmt.Errorf("review-group: no review slots")
+	}
+	var firstApprove *ReviewResult
+	var firstNonApprove *ReviewResult
+	var firstResult *ReviewResult
+	for _, slot := range group.Slots {
+		if slot.Result != nil && firstResult == nil {
+			firstResult = slot.Result
+		}
+		if slot.Error != "" && slot.Result == nil {
+			if firstResult != nil {
+				return firstResult, fmt.Errorf("review-group slot %d: %s", slot.ReviewerIndex, slot.Error)
+			}
+			return nil, fmt.Errorf("review-group slot %d: %s", slot.ReviewerIndex, slot.Error)
+		}
+		if slot.Result == nil {
+			if firstResult != nil {
+				return firstResult, fmt.Errorf("review-group slot %d: missing review result", slot.ReviewerIndex)
+			}
+			return nil, fmt.Errorf("review-group slot %d: missing review result", slot.ReviewerIndex)
+		}
+		res := slot.Result
+		switch res.Verdict {
+		case VerdictApprove:
+			if !reviewResultHasACEvidence(res) {
+				return res, fmt.Errorf("%w: approve verdict without per-AC evidence", ErrReviewVerdictUnparseable)
+			}
+			if firstApprove == nil {
+				firstApprove = res
+			}
+		case VerdictRequestChanges, VerdictBlock:
+			if firstNonApprove == nil {
+				firstNonApprove = res
+			}
+		default:
+			if firstNonApprove == nil {
+				firstNonApprove = res
+			}
+		}
+	}
+	if firstNonApprove != nil {
+		return firstNonApprove, nil
+	}
+	return firstApprove, nil
+}
+
+func reviewResultHasACEvidence(res *ReviewResult) bool {
+	if res == nil || res.Verdict != VerdictApprove {
+		return false
+	}
+	if len(res.PerAC) == 0 {
+		return false
+	}
+	for _, ac := range res.PerAC {
+		if strings.TrimSpace(ac.Evidence) == "" {
+			return false
+		}
+	}
+	return true
 }
 
 // applyReviewTriageDecision runs the triage policy after a BLOCK or
@@ -311,8 +375,9 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 // metadata, labels, and a kind:triage-decision event.
 //
 // Errors from the underlying store are best-effort: callers continue
-// regardless so a triage-side failure cannot strand a reopened bead. This
-// callout previously lived as a method on ExecuteBeadWorker; the C3
+// regardless so a triage-side failure cannot strand a bead in an
+// inconsistent review state. This callout previously lived as a method on
+// ExecuteBeadWorker; the C3
 // extraction (ddx-a921ff01) moves it inside the post-merge-review pipeline
 // driven by RunPostMergeReview / try.Attempt.
 func applyReviewTriageDecision(store ExecuteBeadLoopStore, beadID, actor string, now time.Time, currentTier string) error {

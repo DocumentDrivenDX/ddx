@@ -14,6 +14,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
+	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -60,24 +61,44 @@ func TestHasBeadLabelPrefix(t *testing.T) {
 // makeReviewer builds a beadReviewerFunc that always returns the given verdict.
 func makeReviewer(verdict Verdict, output string) beadReviewerFunc {
 	return beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
-		return &ReviewResult{
+		res := &ReviewResult{
 			Verdict:         verdict,
 			RawOutput:       output,
 			ReviewerHarness: "claude",
 			ReviewerModel:   "claude-opus-4-6",
-		}, nil
+		}
+		if verdict == VerdictApprove {
+			res.PerAC = []ReviewAC{
+				{
+					Number:   1,
+					Item:     "AC#1",
+					Evidence: "evidence-backed approval",
+				},
+			}
+		}
+		return res, nil
 	})
 }
 
 func makeReviewerWithCost(verdict Verdict, output string, costUSD float64) beadReviewerFunc {
 	return beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
-		return &ReviewResult{
+		res := &ReviewResult{
 			Verdict:         verdict,
 			RawOutput:       output,
 			ReviewerHarness: "claude",
 			ReviewerModel:   "claude-opus-4-6",
 			CostUSD:         costUSD,
-		}, nil
+		}
+		if verdict == VerdictApprove {
+			res.PerAC = []ReviewAC{
+				{
+					Number:   1,
+					Item:     "AC#1",
+					Evidence: "evidence-backed approval",
+				},
+			}
+		}
+		return res, nil
 	})
 }
 
@@ -239,7 +260,7 @@ func TestRunPostMergeReviewChargesReviewCostOnReviewerError(t *testing.T) {
 	assert.True(t, foundDeferred, "expected review cost to be charged and deferred on reviewer error")
 }
 
-func TestExecuteBeadWorkerReviewRequestChangesReopensAndCountsFailure(t *testing.T) {
+func TestPreCloseReview_RequestChangesPreventsClose(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -263,20 +284,28 @@ func TestExecuteBeadWorkerReviewRequestChangesReopensAndCountsFailure(t *testing
 	assert.Equal(t, 1, result.Failures)
 	assert.Equal(t, ExecuteBeadStatusReviewRequestChanges, result.LastFailureStatus)
 
-	// Bead must be re-opened.
+	// Bead stays open because the pre-close gate blocks without reopening.
 	got, err := store.Get(first.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, got.Status, "bead should be reopened after REQUEST_CHANGES")
+	assert.Equal(t, bead.StatusInProgress, got.Status, "REQUEST_CHANGES should not close the bead")
 
-	// Review findings must appear in bead notes.
-	assert.Contains(t, got.Notes, "REQUEST_CHANGES")
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	foundReview := false
+	for _, ev := range events {
+		assert.NotEqual(t, "reopen", ev.Kind, "pre-close REQUEST_CHANGES must not invoke Reopen")
+		if ev.Kind == "review" && ev.Summary == "REQUEST_CHANGES" {
+			foundReview = true
+		}
+	}
+	assert.True(t, foundReview, "REQUEST_CHANGES should record a review event")
 
 	require.Len(t, result.Results, 1)
 	assert.Equal(t, "REQUEST_CHANGES", result.Results[0].ReviewVerdict)
 	assert.Equal(t, ExecuteBeadStatusReviewRequestChanges, result.Results[0].Status)
 }
 
-func TestExecuteBeadWorkerReviewBlockReopensAndFlagsHuman(t *testing.T) {
+func TestPreCloseReview_BlockPreventsClose(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	worker := &ExecuteBeadWorker{
 		Store: store,
@@ -308,15 +337,24 @@ func TestExecuteBeadWorkerReviewBlockReopensAndFlagsHuman(t *testing.T) {
 
 	got, err := store.Get(first.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, got.Status)
-	assert.Contains(t, got.Notes, "REVIEW:BLOCK")
-	assert.Contains(t, got.Notes, "AC#3 regression test missing")
+	assert.Equal(t, bead.StatusInProgress, got.Status)
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	foundReview := false
+	for _, ev := range events {
+		assert.NotEqual(t, "reopen", ev.Kind, "pre-close BLOCK must not invoke Reopen")
+		if ev.Kind == "review" && ev.Summary == "BLOCK" {
+			foundReview = true
+			assert.Contains(t, ev.Body, "AC#3 regression test missing")
+		}
+	}
+	assert.True(t, foundReview, "BLOCK should record a review event")
 
 	require.Len(t, result.Results, 1)
 	assert.Equal(t, "BLOCK", result.Results[0].ReviewVerdict)
 	assert.Equal(t, ExecuteBeadStatusReviewBlock, result.Results[0].Status)
 
-	events, err := store.Events(first.ID)
+	events, err = store.Events(first.ID)
 	require.NoError(t, err)
 	found := false
 	for _, ev := range events {
@@ -326,6 +364,149 @@ func TestExecuteBeadWorkerReviewBlockReopensAndFlagsHuman(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "expected execute-bead review_block event with rationale")
+}
+
+func TestPreCloseReview_UnanimousApproveCloses(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-review-preclose-approve",
+				ResultRev: "aa11bb22",
+			}, nil
+		}),
+		Reviewer: beadReviewGroupFunc(func(_ context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewGroupResult, error) {
+			slot := func(index int) ReviewGroupSlotResult {
+				return ReviewGroupSlotResult{
+					ReviewerIndex: index,
+					Result: &ReviewResult{
+						Verdict:         VerdictApprove,
+						RawOutput:       "```json\n{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}\n```",
+						ReviewerHarness: "claude",
+						ReviewerModel:   "claude-opus-4-6",
+						ResultRev:       resultRev,
+						PerAC: []ReviewAC{
+							{
+								Number:   1,
+								Item:     "AC#1",
+								Evidence: fmt.Sprintf("bead=%s reviewer=%d", beadID, index),
+							},
+						},
+					},
+				}
+			}
+			return &ReviewGroupResult{
+				BeadID:    beadID,
+				ResultRev: resultRev,
+				Slots: []ReviewGroupSlotResult{
+					slot(0),
+					slot(1),
+				},
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 1, result.Successes)
+	assert.Equal(t, 0, result.Failures)
+
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	approveCount := 0
+	for _, ev := range events {
+		if ev.Kind == "review" && ev.Summary == "APPROVE" {
+			approveCount++
+		}
+		assert.NotEqual(t, "reopen", ev.Kind, "APPROVE should not reopen the bead")
+	}
+	assert.Equal(t, 1, approveCount, "approved pre-close review should record one terminal review event before closing")
+}
+
+func TestPreCloseReview_ApproveWithoutEvidenceIsReviewError(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-review-preclose-unparseable",
+				ResultRev: "cc33dd44",
+			}, nil
+		}),
+		Reviewer: beadReviewGroupFunc(func(_ context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewGroupResult, error) {
+			return &ReviewGroupResult{
+				BeadID:    beadID,
+				ResultRev: resultRev,
+				Slots: []ReviewGroupSlotResult{
+					{
+						ReviewerIndex: 0,
+						Result: &ReviewResult{
+							Verdict:         VerdictApprove,
+							RawOutput:       "```json\n{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}\n```",
+							ReviewerHarness: "claude",
+							ReviewerModel:   "claude-opus-4-6",
+							ResultRev:       resultRev,
+						},
+					},
+					{
+						ReviewerIndex: 1,
+						Result: &ReviewResult{
+							Verdict:         VerdictApprove,
+							RawOutput:       "```json\n{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}\n```",
+							ReviewerHarness: "claude",
+							ReviewerModel:   "claude-opus-4-6",
+							ResultRev:       resultRev,
+							PerAC: []ReviewAC{
+								{
+									Number:   1,
+									Item:     "AC#1",
+									Evidence: "evidence-backed approval",
+								},
+							},
+						},
+					},
+				},
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 0, result.Successes)
+	assert.Equal(t, 1, result.Failures)
+	assert.Equal(t, ExecuteBeadStatusReviewMalfunction, result.LastFailureStatus)
+
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.NotEqual(t, bead.StatusClosed, got.Status)
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	foundError := false
+	for _, ev := range events {
+		if ev.Kind == "review-error" {
+			foundError = true
+			assert.Contains(t, ev.Summary, "unparseable")
+			assert.Contains(t, ev.Body, "failure_class="+evidence.OutcomeReviewUnparseable)
+		}
+		assert.NotEqual(t, "reopen", ev.Kind, "pre-close review-error must not invoke Reopen")
+	}
+	assert.True(t, foundError, "expected evidence-free APPROVE to record review-error: unparseable")
 }
 
 func TestExecuteBeadWorkerReviewBlockWithoutRationaleIsMalfunction(t *testing.T) {
@@ -536,7 +717,7 @@ func TestExecuteBeadWorkerReviewSkipLabelWithoutReasonIsIgnored(t *testing.T) {
 
 	got, err := store.Get(labeled.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, got.Status, "label-only skip should be ignored")
+	assert.Equal(t, bead.StatusInProgress, got.Status, "label-only skip should be ignored")
 }
 
 func TestExecuteBeadWorkerNilReviewerSkipsReview(t *testing.T) {
@@ -600,15 +781,15 @@ func TestExecuteBeadWorkerReviewBoundedByMaxTier(t *testing.T) {
 	require.NoError(t, err)
 
 	// The executor should have been called exactly once; the attempted map
-	// prevents revisiting even after the bead is reopened by the reviewer.
+	// prevents revisiting while the bead remains in_progress after review.
 	assert.Equal(t, 1, executorCalls, "bead should be attempted exactly once within a single worker.Run call")
 	assert.Equal(t, 0, result.Successes)
-	assert.Equal(t, 1, result.Failures, "reopened bead counts as a failure in this run")
+	assert.Equal(t, 1, result.Failures, "pre-close review block counts as a failure in this run")
 
-	// Bead is open again — available for the next worker.Run call.
+	// Bead remains claimed/in_progress after the blocked review.
 	got, err := store.Get(only.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Equal(t, bead.StatusInProgress, got.Status)
 }
 
 // ---------------------------------------------------------------------------

@@ -48,9 +48,11 @@ type Verdict string
 const (
 	// VerdictApprove means all AC items passed; the bead stays closed.
 	VerdictApprove Verdict = "APPROVE"
-	// VerdictRequestChanges means some AC items need fixing; the bead is reopened.
+	// VerdictRequestChanges means some AC items need fixing; the bead stays open
+	// and the pre-close gate records the verdict without closing.
 	VerdictRequestChanges Verdict = "REQUEST_CHANGES"
-	// VerdictBlock means escalation should stop; the bead is flagged for human review.
+	// VerdictBlock means escalation should stop; the bead is flagged for human
+	// review while remaining open.
 	VerdictBlock Verdict = "BLOCK"
 )
 
@@ -175,6 +177,13 @@ type BeadReader interface {
 // BeadReviewer runs a post-merge review for a completed bead.
 type BeadReviewer interface {
 	ReviewBead(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewResult, error)
+}
+
+// reviewGroupReviewer is the optional pre-close gate used by execute-loop.
+// DefaultBeadReviewer implements it; test doubles can opt in when they need
+// to exercise the unanimous-two-slot path explicitly.
+type reviewGroupReviewer interface {
+	ReviewGroup(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewGroupResult, error)
 }
 
 // beadReviewInstructions is the review contract embedded in the prompt.
@@ -767,7 +776,7 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev 
 	// Strict JSON parse: replaces the legacy markdown extractor that silently
 	// pulled "BLOCK" from the prompt's options-header line whenever the model
 	// echoed it back (the upstream-report regression). On parse error we emit
-	// a typed review-error class — the execute-loop reopens the bead for
+	// a typed review-error class — the execute-loop leaves the bead open for
 	// retry rather than mis-recording a BLOCK verdict.
 	parsed, parseErr := ParseReviewVerdict([]byte(output))
 	var strictVerdict Verdict

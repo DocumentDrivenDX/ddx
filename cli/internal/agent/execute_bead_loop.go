@@ -305,8 +305,8 @@ type ExecuteBeadLoopStore interface {
 	AppendNotes(id string, notes string) error
 	IncrNoChangesCount(id string) (int, error)
 	// Reopen sets a closed bead back to open, appending notes to the bead's
-	// Notes field and recording a reopen event. Used by the post-merge review
-	// step when the reviewer returns REQUEST_CHANGES or BLOCK.
+	// Notes field and recording a reopen event. Used by review workflows that
+	// intentionally transition a bead back into open state.
 	Reopen(id, reason, notes string) error
 	// Update mutates a bead in place. Used by the post-merge triage step to
 	// add labels (e.g. "needs_human") and metadata hints (e.g. tier-pin) when
@@ -986,8 +986,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					}
 				}
 			}
-			// Post-merge review state machine (C3 ddx-a921ff01): the close /
-			// reopen / event-emission / triage logic now lives in
+			// Post-merge review state machine (C3 ddx-a921ff01): the pre-close
+			// review / event-emission / triage logic now lives in
 			// try.RunPostMergeReview so the loop only sees a structured outcome
 			// (updated report + approved bool / Disposition). Store errors are
 			// surfaced via StoreErrOp/StoreErr so this loop continues to drive

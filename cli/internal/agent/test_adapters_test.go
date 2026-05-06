@@ -17,6 +17,25 @@ func (f beadReviewerFunc) ReviewBead(ctx context.Context, beadID, resultRev stri
 	return f(ctx, beadID, resultRev, impl)
 }
 
+type beadReviewGroupFunc func(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewGroupResult, error)
+
+func (f beadReviewGroupFunc) ReviewBead(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewResult, error) {
+	group, err := f(ctx, beadID, resultRev, impl)
+	if err != nil || group == nil {
+		return nil, err
+	}
+	for _, slot := range group.Slots {
+		if slot.Result != nil {
+			return slot.Result, nil
+		}
+	}
+	return nil, fmt.Errorf("review group did not return a slot result")
+}
+
+func (f beadReviewGroupFunc) ReviewGroup(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewGroupResult, error) {
+	return f(ctx, beadID, resultRev, impl)
+}
+
 // catalogKnownOnAnySurface reports whether ref has a mapping on at least one
 // surface of the catalog. Test-only helper: production callers use Resolve.
 func catalogKnownOnAnySurface(c *Catalog, ref string) bool {
