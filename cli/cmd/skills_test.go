@@ -25,6 +25,29 @@ description: Valid test skill.
 	assert.Contains(t, output, "validated 1 skill files")
 }
 
+func TestSkillsCheckDefaultPathsIncludesShippedPluginSkills(t *testing.T) {
+	dir := t.TempDir()
+	writeSkillFile(t, filepath.Join(dir, "skills", "plugin-foo", "SKILL.md"), `---
+name: plugin-foo
+description: Valid test skill.
+---
+
+# Plugin Foo
+`)
+	writeSkillFile(t, filepath.Join(dir, ".ddx", "plugins", "ddx", ".agents", "skills", "human-writing-support", "SKILL.md"), `---
+name: human-writing-support
+description: Valid shipped skill.
+---
+
+# Human Writing Support
+`)
+
+	rootCmd := NewCommandFactory(dir).NewRootCommand()
+	output, err := executeCommand(rootCmd, "skills", "check")
+	require.NoError(t, err)
+	assert.Contains(t, output, "validated 2 skill files")
+}
+
 func TestSkillsCheckExplicitPath(t *testing.T) {
 	dir := t.TempDir()
 	writeSkillFile(t, filepath.Join(dir, "plugin", "skills", "plugin-bar", "SKILL.md"), `---

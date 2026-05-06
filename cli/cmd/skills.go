@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/skills"
 	"github.com/spf13/cobra"
 )
@@ -26,6 +27,7 @@ Examples:
   ddx skills check
   ddx skills check skills
   ddx skills check .agents/skills
+  ddx skills check .ddx/plugins/ddx
   ddx skills check .ddx/plugins/helix/skills`,
 		Run: func(cmd *cobra.Command, args []string) {
 			_ = cmd.Help()
@@ -66,11 +68,17 @@ func (f *CommandFactory) runSkillsCheck(cmd *cobra.Command, args []string) error
 }
 
 func (f *CommandFactory) defaultSkillCheckPaths() []string {
+	projectRoot := gitpkg.FindProjectRoot(f.WorkingDir)
+	if projectRoot == "" {
+		projectRoot = f.WorkingDir
+	}
+
 	candidates := []string{
-		filepath.Join(f.WorkingDir, "skills"),
-		filepath.Join(f.WorkingDir, ".agents", "skills"),
-		filepath.Join(f.WorkingDir, ".claude", "skills"),
-		filepath.Join(f.WorkingDir, "cli", "internal", "skills"),
+		filepath.Join(projectRoot, "skills"),
+		filepath.Join(projectRoot, ".agents", "skills"),
+		filepath.Join(projectRoot, ".claude", "skills"),
+		filepath.Join(projectRoot, ".ddx", "plugins", "ddx"),
+		filepath.Join(projectRoot, "cli", "internal", "skills"),
 	}
 
 	var paths []string

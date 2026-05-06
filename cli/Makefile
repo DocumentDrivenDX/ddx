@@ -128,7 +128,7 @@ bead-schema:
 # Validate bundled skill metadata
 skill-schema:
 	@echo "Validating bundled skill metadata..."
-	go run . skills check ../skills internal/skills
+	go run . skills check
 
 # Run linter
 lint:

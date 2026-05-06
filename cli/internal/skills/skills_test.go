@@ -46,6 +46,10 @@ func TestRepoSkillsHaveValidMetadata(t *testing.T) {
 	skillGlobs := []string{
 		filepath.Join(repoRoot, "skills", "*", "SKILL.md"),
 		filepath.Join(repoRoot, "cli", "internal", "skills", "*", "SKILL.md"),
+		filepath.Join(repoRoot, "library", ".agents", "skills", "*", "SKILL.md"),
+		filepath.Join(repoRoot, ".agents", "skills", "library", ".agents", "skills", "*", "SKILL.md"),
+		filepath.Join(repoRoot, ".claude", "skills", "library", ".agents", "skills", "*", "SKILL.md"),
+		filepath.Join(repoRoot, ".ddx", "plugins", "ddx", ".agents", "skills", "*", "SKILL.md"),
 	}
 
 	var matches []string
