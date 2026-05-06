@@ -82,10 +82,11 @@ bd/br statuses, labels, dependency edges, append-only events, and preserved
 `Extra` fields. FEAT-004 does not introduce additional status vocabulary for
 no_changes, cooldown, superseded, or execution-readiness cases.
 
-Bead readiness assessment and related lint/triage flows use those existing
-metadata carriers. They do not add dedicated readiness fields to the schema;
-readiness is derived from the bead record's existing title, description,
-acceptance, labels, parent, dependencies, claim metadata, and preserved extras.
+Bead readiness assessment, lint/rubric scoring, and post-attempt triage use
+those existing metadata carriers. They do not add dedicated readiness fields to
+the schema; readiness is derived from the bead record's existing title,
+description, acceptance, labels, parent, dependencies, claim metadata, and
+preserved extras.
 
 ### Queue Semantics For Epics
 
@@ -205,12 +206,16 @@ This matches how bd derives its prefix, ensuring beads created by DDx and bd in 
 
 **Workflow validation hooks:** An executable at `.ddx/hooks/validate-bead-create` (and `validate-bead-update`) receives the bead JSON on stdin. Exit codes: 0 = ok, 1 = hard error (stderr = message, creation blocked), 2 = warning (stderr = message, creation proceeds).
 
-### Authoring quality lint
+### Bead Readiness And Authoring Quality
 
-ADR-023 adds lifecycle-quality lint on top of the existing validation-hook
-surface. Base validation still protects the reusable bead schema; authoring
-quality lint protects the "bead as prompt" contract needed by `ddx try`,
-`ddx work`, and autonomous sub-agent execution.
+ADR-023 adds lifecycle-quality hooks on top of the existing validation-hook
+surface. The canonical product concept is bead readiness assessment: the
+pre-claim decision about whether a bead is tractable and actionable. The same
+policy surface also includes lint/rubric scoring, which measures prompt
+quality, and post-attempt triage, which classifies evidence after execution.
+Base validation still protects the reusable bead schema; authoring quality
+checks protect the "bead as prompt" contract needed by `ddx try`, `ddx work`,
+and autonomous sub-agent execution.
 
 The lint rubric is the 8-criterion template in
 `docs/helix/06-iterate/bead-authoring-template.md`:
@@ -228,13 +233,14 @@ The lint rubric is the 8-criterion template in
 - the bead body is sufficient for a competent sub-agent to execute without
   asking for operator context
 
-Lint is implemented as a workflow quality hook that invokes the nested
-bead-lifecycle skill under the `ddx` skill tree. DDx owns passing bead JSON,
-mode, waiver labels, and evidence paths into the hook; the skill owns producing
-human-readable criterion findings. Hook output is ephemeral execution evidence,
-not durable bead schema. For `ddx try` and `ddx work`, the lint report is stored
-under the attempt evidence directory alongside the prompt, result, checks, and
-triage records. `beads.jsonl` is not extended with lint-score fields.
+Bead readiness assessment, lint/rubric scoring, and post-attempt triage all
+invoke the nested bead-lifecycle skill under the `ddx` skill tree. DDx owns
+passing bead JSON, mode, waiver labels, and evidence paths into the hook; the
+skill owns producing human-readable criterion findings. Hook output is
+ephemeral execution evidence, not durable bead schema. For `ddx try` and
+`ddx work`, the readiness and lint reports are stored under the attempt
+evidence directory alongside the prompt, result, checks, and triage records.
+`beads.jsonl` is not extended with lint-score fields.
 
 Waiver storage uses existing labels. The durable form is
 `lint-waiver:<criterion>`, such as `lint-waiver:c` for the concrete-test-name

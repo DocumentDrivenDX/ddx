@@ -141,9 +141,11 @@ workflow has enough procedure to deserve its own reusable instructions. Current
 examples include `bead-breakdown/`, `replay-bead/`, `compare-prompts/`,
 `benchmark-suite/`, `effort-estimate/`, and `adversarial-review/`. ADR-023
 (`../../02-design/adr/ADR-023-bead-lifecycle-quality-policy.md`) adds the same
-model for bead-lifecycle quality: bead readiness assessment, lint/rubric
-scoring, and post-attempt triage invoke a nested workflow skill while keeping
-routing through the root `ddx` skill.
+model for bead-lifecycle quality: bead readiness assessment is the canonical
+pre-claim decision, lint/rubric scoring is the rubric pass inside that
+decision, and post-attempt triage is the after-evidence classification. Those
+steps invoke a nested workflow skill while keeping routing through the root
+`ddx` skill.
 
 Nested workflow skills are compositions over FEAT-010's three layers. They may
 tell the harness to run `ddx run`, `ddx try`, or `ddx work`, but they do not

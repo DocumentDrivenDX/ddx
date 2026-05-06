@@ -111,8 +111,11 @@ layers and not new bead-schema fields.
 `BeadReadinessHook` is the product concept: it runs after the worker has
 selected a dependency-ready candidate but before DDx claims the bead or
 creates the implementation worktree. The implementation may still call the
-compatibility entrypoint `PreClaimIntakeHook` and record `MODE: intake`, but
-the decision being made is bead readiness assessment. The hook has enough
+compatibility entrypoint `PreClaimIntakeHook` and record `MODE: intake` for
+legacy compatibility, but the decision being made is bead readiness
+assessment. Within that assessment, the nested bead-lifecycle workflow skill
+performs lint/rubric scoring to support the decision, and the score is
+diagnostic evidence rather than a separate queue action. The hook has enough
 context to evaluate title, description, acceptance criteria, labels, parent,
 deps, bead type, spec-id, prior attempt history, and whether the bead is
 atomic enough to execute. The hook invokes the nested bead-lifecycle workflow
@@ -128,7 +131,7 @@ passthrough constraints. If those constraints cannot satisfy the strong floor,
 DDx records `agent_power_unsatisfied` and blocks instead of running weak
 decomposition.
 
-The readiness result is one of:
+The readiness assessment result is one of:
 
 - `actionable_atomic` — claim and execute normally.
 - `actionable_but_rewritten` — DDx applied safe, intent-preserving bead updates
@@ -157,9 +160,10 @@ checks, adversarial review verdict, merge/preserve result, and the readiness
 report.
 It uses the same bead-lifecycle skill to classify whether the outcome is a
 normal attempt result, a quality-policy failure, a missing-evidence failure, or
-an infrastructure failure. The hook must never rewrite the attempt result or
-erase artifacts; it only adds triage evidence and feeds retry/stop
-classification.
+an infrastructure failure. This is distinct from readiness assessment and from
+the lint/rubric scoring used inside readiness. The hook must never rewrite the
+attempt result or erase artifacts; it only adds triage evidence and feeds
+retry/stop classification.
 
 If post-attempt triage finds that an implementation attempt stopped because the
 bead was too large or the worker could not legally decompose inside its
