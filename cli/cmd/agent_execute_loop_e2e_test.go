@@ -56,6 +56,9 @@ func (r *reviewFailureRunner) Reviewer() agent.BeadReviewer {
 		return &agent.ReviewResult{
 			Verdict:   agent.VerdictApprove,
 			Rationale: "review-failure-runner: APPROVE",
+			PerAC: []agent.ReviewAC{
+				{Number: 1, Item: "retry threshold", Grade: "pass", Evidence: "APPROVE after FailUntilCall"},
+			},
 			ResultRev: resultRev,
 		}, nil
 	})

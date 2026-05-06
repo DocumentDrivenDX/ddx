@@ -44,7 +44,13 @@ func TestReviewEvidenceApproveAttributesToTier(t *testing.T) {
 			}, nil
 		}),
 		Reviewer: reviewerFunc(func(_ context.Context, _, _ string, _ agent.ImplementerRouting) (*agent.ReviewResult, error) {
-			return &agent.ReviewResult{Verdict: agent.VerdictApprove, RawOutput: "### Verdict: APPROVE"}, nil
+			return &agent.ReviewResult{
+				Verdict:   agent.VerdictApprove,
+				RawOutput: "### Verdict: APPROVE",
+				PerAC: []agent.ReviewAC{
+					{Number: 1, Item: "routing", Grade: "pass", Evidence: "approve evidence"},
+				},
+			}, nil
 		}),
 	}
 
