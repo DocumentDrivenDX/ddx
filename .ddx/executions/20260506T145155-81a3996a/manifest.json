@@ -1,0 +1,306 @@
+{
+  "attempt_id": "20260506T145155-81a3996a",
+  "bead_id": "ddx-5ca2b0af",
+  "base_rev": "b22685e0eca8d7bbb84656d03c3ee5d32ae28451",
+  "created_at": "2026-05-06T14:51:58.247673624Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-5ca2b0af",
+    "title": "beads: sort ready queues by queue-rank within priority",
+    "description": "PROBLEM\nFEAT-004 and SD-004 now require `queue-rank` to order ready beads within a priority bucket, but the store still ignores queue-rank. Operators currently have to change `priority` to force a bead to the top, which changes urgency semantics and can reorder unrelated work.\n\nROOT CAUSE WITH FILE:LINE\n- docs/helix/01-frame/features/FEAT-004-beads.md:104-119 defines canonical ready-queue ordering as priority, queue-rank, created_at, id, and says queue-rank must not cross priority or bypass execution filters.\n- docs/helix/02-design/solution-designs/SD-004-beads-tracker.md:196-209 defines the same deterministic queue derivation and numeric compatibility rules.\n- cli/internal/bead/store.go:1346-1355 exposes Ready and ReadyExecution, but both delegate to readyFiltered without queue-rank-specific behavior.\n- cli/internal/bead/store.go:1702-1711 sorts only by Priority, CreatedAt, and ID.\n\nPROPOSED FIX\n- Add a small queue-rank parser/helper in cli/internal/bead (acceptable names: QueueRank, queueRank, or parseQueueRank) that accepts integer values and numeric strings from Bead.Extra[\"queue-rank\"].\n- Update sortBeadsForQueue to sort by priority asc, explicit queue-rank asc with missing rank after explicit rank inside the same priority, created_at asc, then id asc.\n- Keep ReadyExecution filtering unchanged: blocked, cooldown, superseded, execution-eligible=false, and epic-only beads must be excluded before sorting.\n- Add focused store tests in cli/internal/bead/gaps_test.go or queue-specific test file.\n\nNON-SCOPE\n- Do not add queue-rank as a Bead struct field or known schema field.\n- Do not implement `ddx bead queue` CLI commands in this bead.\n- Do not change priority validation, dependency semantics, or claim semantics.",
+    "acceptance": "1. TestReadySortsByQueueRankWithinPriority verifies an explicit lower `queue-rank` sorts before unranked and higher-ranked beads of the same priority.\n2. TestReadyExecutionSortsByQueueRankWithinPriority verifies ReadyExecution uses the same queue-rank order after execution-ready filtering.\n3. TestQueueRankDoesNotCrossPriorityBoundary verifies a ranked P1 bead never sorts before an unranked P0 bead.\n4. TestQueueRankMissingSortsAfterExplicitRankWithinPriority verifies missing queue-rank sorts after explicit ranks in the same priority bucket.\n5. TestQueueRankNumericStringCompatibility verifies numeric-string queue-rank values are read compatibly.\n6. WIRED-IN: sortBeadsForQueue, used by Ready and ReadyExecution, calls the queue-rank helper before created_at/id tie-breakers.\n7. cd cli \u0026\u0026 go test ./internal/bead/... -run \"TestReady.*QueueRank|TestQueueRank\" -count=1 passes.\n8. cd cli \u0026\u0026 go test ./internal/bead/... passes.\n9. lefthook run pre-commit passes.",
+    "parent": "ddx-0a47840f",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "kind:feature",
+      "spec:FEAT-004",
+      "triage:no-changes-unverified"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T14:51:55Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "759146",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T13:39:27.800718075Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T133547-af606d56\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":2651939,\"output_tokens\":10389,\"total_tokens\":2662328,\"cost_usd\":0,\"duration_ms\":218208,\"exit_code\":0}",
+          "created_at": "2026-05-06T13:39:28.041338247Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=2662328 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T13:39:35.982362509Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=872966d23dcbaa1925f7dae4a883dfe7bf0522df\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T09:44:41-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=37150\noutput_bytes=0\nelapsed_ms=4117",
+          "created_at": "2026-05-06T13:39:41.816335751Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=872966d23dcbaa1925f7dae4a883dfe7bf0522df\nbase_rev=74060212ac5681895023c2df2d37ae7c4dd6fb7f",
+          "created_at": "2026-05-06T13:39:42.048796347Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-06T13:46:50.129741443Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-06T13:46:50.395495845Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-06T13:46:50.66592795Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"cheap\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-05-06T13:46:50.885376057Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=3 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-05-06T13:46:51.319993358Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-06T13:49:43.092753266Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-06T13:49:43.341214307Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-06T13:49:43.583823728Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"cheap\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-05-06T13:49:43.79041622Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=3 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-05-06T13:49:44.203656956Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T14:01:21.72103249Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T140000-ef4e0ae8\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":485313,\"output_tokens\":6442,\"total_tokens\":491755,\"cost_usd\":0,\"duration_ms\":78979,\"exit_code\":0}",
+          "created_at": "2026-05-06T14:01:21.95610465Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=491755 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T14:01:28.52556408Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=95dcac993e40ff2860cacc750ed4918693b6b36c\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T10:06:33-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=42819\noutput_bytes=0\nelapsed_ms=4114",
+          "created_at": "2026-05-06T14:01:33.717765879Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=95dcac993e40ff2860cacc750ed4918693b6b36c\nbase_rev=8c348cc07cb3cd68ba3fb16f84bc28ed9ae973e9",
+          "created_at": "2026-05-06T14:01:33.93842835Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T14:23:02.641864093Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T142155-81d34838\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":362671,\"output_tokens\":4008,\"total_tokens\":366679,\"cost_usd\":0,\"duration_ms\":64455,\"exit_code\":0}",
+          "created_at": "2026-05-06T14:23:02.8797882Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=366679 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T14:23:11.890216432Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: unparseable\nattempt_count=1\nresult_rev=a1fff44b08dc02e04a42dc296e0bbc991987b3a9\n\nreviewer: review-error: unparseable: reviewer output: unparseable JSON verdict: no JSON object found (raw output 59 bytes; see .ddx/executions/20260506T142313-527fbd79)\nharness=claude\nmodel=opus\ninput_bytes=45115\noutput_bytes=59\nelapsed_ms=48979",
+          "created_at": "2026-05-06T14:24:04.23827049Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: unparseable"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=a1fff44b08dc02e04a42dc296e0bbc991987b3a9\nbase_rev=84725322620609b543d05b8ebcb16887f5eb0148",
+          "created_at": "2026-05-06T14:24:04.47531914Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T14:50:35.96424863Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-06T14:51:28.512122202Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T145038-f5564f67\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":306411,\"output_tokens\":3042,\"total_tokens\":309453,\"cost_usd\":0,\"duration_ms\":47618,\"exit_code\":0}",
+          "created_at": "2026-05-06T14:51:28.725221654Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=309453 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "verification_command=cd cli \u0026\u0026 go test ./internal/bead/... -run \"TestReady.*QueueRank|TestQueueRank\" -count=1 \u0026\u0026 cd cli \u0026\u0026 go test ./internal/bead/... \u0026\u0026 lefthook run pre-commit\nexit_code=2\noutput:\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/bead\t0.021s\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/bead/axon\t0.004s [no tests to run]\n/bin/sh: 1: cd: can't cd to cli\n",
+          "created_at": "2026-05-06T14:51:30.169068128Z",
+          "kind": "no_changes_unverified",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes_unverified"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"613e4e1967f2c83a673d6103fe9c9b2a5b907b96\",\"classification\":\"success\",\"detail\":\"no_changes\",\"rationale\":\"The attempt made no code changes because the bead contract already appears satisfied in the current worktree: `sortBeadsForQueue` already orders by queue-rank before created_at/id, Ready and ReadyExecution already use that path, and the acceptance tests exist. Verification was not fully clean because `cd cli` failed in this workspace, so the result is effectively a no-op success with an environment-path mismatch in the gate command.\",\"recommended_action\":\"close\",\"result_rev\":\"613e4e1967f2c83a673d6103fe9c9b2a5b907b96\",\"session_id\":\"eb-9191f059\",\"status\":\"no_changes\",\"suggested_amendments\":\"none for code; if anything, update the verification command to match the actual repo layout instead of `cd cli`.\",\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-06T14:51:44.5069465Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx agent execute-loop",
+          "summary": "success: close"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: verification_command: cd cli \u0026\u0026 go test ./internal/bead/... -run \"TestReady.*QueueRank|TestQueueRank\" -count=1 \u0026\u0026 cd cli \u0026\u0026 go test ./internal/bead/... \u0026\u0026 lefthook run pre-commit\nreason: The bead contract is already satisfied in the current worktree. sortBeadsForQueue reads queue-rank before created_at/id tie-breakers, Ready and ReadyExecution both flow through that sorter, and the queue-rank acceptance tests are present and passing.\nresult_rev=613e4e1967f2c83a673d6103fe9c9b2a5b907b96\nbase_rev=613e4e1967f2c83a673d6103fe9c9b2a5b907b96\noutcome_reason=success",
+          "created_at": "2026-05-06T14:51:44.866497557Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T14:51:55.424977648Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T14:51:55.82662552Z",
+      "execute-loop-no-changes-count": 1,
+      "spec-id": "FEAT-004"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-004",
+      "path": "docs/helix/01-frame/features/FEAT-004-beads.md",
+      "title": "Feature: Beads (Work Item Tracker)"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T145155-81a3996a",
+    "prompt": ".ddx/executions/20260506T145155-81a3996a/prompt.md",
+    "manifest": ".ddx/executions/20260506T145155-81a3996a/manifest.json",
+    "result": ".ddx/executions/20260506T145155-81a3996a/result.json",
+    "checks": ".ddx/executions/20260506T145155-81a3996a/checks.json",
+    "usage": ".ddx/executions/20260506T145155-81a3996a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-5ca2b0af-20260506T145155-81a3996a"
+  },
+  "prompt_sha": "8e4f5f8827b94f2979cbd984ffc135653b95485b843364c89ecad7d63566f0ef"
+}
