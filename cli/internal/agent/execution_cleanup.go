@@ -214,15 +214,22 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 		path := filepath.Join(summary.TempRoot, entry.Name())
 
 		meta, metaErr := ReadExecutionCleanupMetadata(path)
+		missingMetadata := false
 		if metaErr != nil {
-			if !errors.Is(metaErr, os.ErrNotExist) {
+			if errors.Is(metaErr, os.ErrNotExist) {
+				missingMetadata = true
+				meta = ExecutionCleanupMetadata{
+					ProjectRoot:  m.ProjectRoot,
+					WorktreePath: path,
+				}
+			} else {
 				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
 					Path:    path,
 					Class:   "metadata_read",
 					Message: metaErr.Error(),
 				})
+				continue
 			}
-			continue
 		}
 		if meta.ProjectRoot != "" && filepath.Clean(meta.ProjectRoot) != filepath.Clean(m.ProjectRoot) {
 			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
@@ -252,6 +259,19 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 		}
 
 		if _, ok := registered[filepath.Clean(path)]; ok {
+			if missingMetadata {
+				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+					Path:    path,
+					Class:   "registered_missing_metadata",
+					Message: "registered DDx worktree has no cleanup metadata; preserving",
+				})
+				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+					Path:    path,
+					Class:   "preserved_registered_missing_metadata",
+					Message: "registered worktree without cleanup metadata",
+				})
+				continue
+			}
 			if m.GitOps == nil {
 				summary.Issues = append(summary.Issues, ExecutionCleanupIssue{
 					Path:     path,

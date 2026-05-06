@@ -350,7 +350,7 @@ func (r *RealGitOps) DeleteRef(dir, ref string) error {
 
 // IsDirty reports whether dir has any uncommitted changes (tracked modifications or untracked files).
 func (r *RealGitOps) IsDirty(dir string) (bool, error) {
-	out, _ := internalgit.Command(context.Background(), dir, "status", "--porcelain").Output()
+	out, _ := internalgit.Command(context.Background(), dir, "status", "--porcelain", "--", ".", ":(exclude)"+ExecutionCleanupMetadataFileName).Output()
 	return len(bytes.TrimSpace(out)) > 0, nil
 }
 
@@ -471,6 +471,10 @@ func synthesizeCommitExcludePathspecs(dir string) []string {
 		{
 			pathspec:    ":(exclude).agents/skills",
 			ignoreProbe: ".agents/skills",
+		},
+		{
+			pathspec:    ":(exclude)" + ExecutionCleanupMetadataFileName,
+			ignoreProbe: ExecutionCleanupMetadataFileName,
 		},
 	}
 
@@ -742,6 +746,21 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	if err := gitOps.WorktreeAdd(projectRoot, wtPath, baseRev); err != nil {
 		_ = os.RemoveAll(wtPath)
 		return nil, fmt.Errorf("creating isolated worktree: %w", err)
+	}
+	if err := excludeCleanupMetadataFromWorktreeGit(wtPath); err != nil {
+		_ = gitOps.WorktreeRemove(projectRoot, wtPath)
+		return nil, fmt.Errorf("excluding execute-bead cleanup metadata: %w", err)
+	}
+	if err := WriteExecutionCleanupMetadata(wtPath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       beadID,
+		AttemptID:    attemptID,
+		WorktreePath: wtPath,
+		Registered:   true,
+		CreatedAt:    time.Now().UTC(),
+	}); err != nil {
+		_ = gitOps.WorktreeRemove(projectRoot, wtPath)
+		return nil, fmt.Errorf("writing execute-bead cleanup metadata: %w", err)
 	}
 	defer func() {
 		_ = gitOps.WorktreeRemove(projectRoot, wtPath)
@@ -1800,6 +1819,42 @@ func VerifyCleanWorktree(projectRoot, attemptID string) error {
 		return fmt.Errorf("committing leftover evidence: %s: %w", strings.TrimSpace(string(commitOut)), commitErr)
 	}
 	return nil
+}
+
+func excludeCleanupMetadataFromWorktreeGit(wtPath string) error {
+	out, err := internalgit.Command(context.Background(), wtPath, "rev-parse", "--git-path", "info/exclude").Output()
+	if err != nil {
+		return err
+	}
+	excludePath := strings.TrimSpace(string(out))
+	if excludePath == "" {
+		return fmt.Errorf("git exclude path is empty")
+	}
+	if !filepath.IsAbs(excludePath) {
+		excludePath = filepath.Join(wtPath, excludePath)
+	}
+	if err := os.MkdirAll(filepath.Dir(excludePath), 0o755); err != nil {
+		return err
+	}
+	existing, err := os.ReadFile(excludePath)
+	if err == nil && strings.Contains(string(existing), "/"+ExecutionCleanupMetadataFileName) {
+		return nil
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	f, err := os.OpenFile(excludePath, os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	if len(existing) > 0 && !strings.HasSuffix(string(existing), "\n") {
+		if _, err := f.WriteString("\n"); err != nil {
+			return err
+		}
+	}
+	_, err = f.WriteString("/" + ExecutionCleanupMetadataFileName + "\n")
+	return err
 }
 
 func writeArtifactJSON(path string, payload any) error {

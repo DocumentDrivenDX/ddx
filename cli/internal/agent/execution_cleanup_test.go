@@ -85,6 +85,14 @@ func writeExecutionCleanupCandidate(t *testing.T, dir string, meta ExecutionClea
 	}
 }
 
+func writeExecutionCleanupCandidateWithoutMetadata(t *testing.T, dir string, files map[string]string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	for name, contents := range files {
+		require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(contents), 0o644))
+	}
+}
+
 func setupExecutionCleanupProjectRoot(t *testing.T) string {
 	t.Helper()
 	root := t.TempDir()
@@ -134,6 +142,59 @@ func TestExecutionCleanup_RemovesStaleUnregisteredDDXTempDirs(t *testing.T) {
 	assert.NotZero(t, summary.InodesReclaimed)
 	require.NotEmpty(t, summary.Observations)
 	assert.True(t, hasObservationClass(summary.Observations, "removed_unregistered_temp_dir"))
+}
+
+func TestExecutionCleanup_RemovesMetadataLessUnregisteredDDXTempDirs(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+
+	stalePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-metadata-less-20260506T154739-deadbeef")
+	activePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-active-no-meta-20260506T154739-feedface")
+	writeExecutionCleanupCandidateWithoutMetadata(t, stalePath, map[string]string{"scratch.txt": "stale\n"})
+	writeExecutionCleanupCandidateWithoutMetadata(t, activePath, map[string]string{"scratch.txt": "active\n"})
+	require.NoError(t, WriteRunState(projectRoot, RunState{
+		BeadID:       "ddx-active-no-meta",
+		AttemptID:    "20260506T154739-feedface",
+		StartedAt:    time.Now().UTC(),
+		WorktreePath: activePath,
+	}))
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, stalePath)
+	assert.DirExists(t, activePath)
+	assert.Equal(t, int64(1), summary.RemovedUnregisteredTempDirs)
+	assert.True(t, hasObservationClass(summary.Observations, "removed_unregistered_temp_dir"))
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_temp_dir"))
+}
+
+func TestExecutionCleanup_PreservesRegisteredMetadataLessWorktree(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+
+	worktreePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-registered-no-meta-20260506T154739-c001d00d")
+	writeExecutionCleanupCandidateWithoutMetadata(t, worktreePath, map[string]string{"scratch.txt": "registered\n"})
+
+	gitOps := &executionCleanupTestGitOps{
+		worktrees: []string{worktreePath},
+	}
+	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
+	mgr.TempRoot = tempRoot
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, worktreePath)
+	assert.Empty(t, gitOps.removed)
+	assert.Equal(t, 0, gitOps.pruneCalls)
+	assert.Equal(t, int64(0), summary.RemovedRegisteredWorktrees)
+	require.NotEmpty(t, summary.Warnings)
+	assert.Equal(t, "registered_missing_metadata", summary.Warnings[0].Class)
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_registered_missing_metadata"))
 }
 
 func TestExecutionCleanup_RemovesRegisteredStaleWorktree(t *testing.T) {
