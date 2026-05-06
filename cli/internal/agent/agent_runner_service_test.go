@@ -1,10 +1,12 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -118,4 +120,46 @@ func TestDrainServiceEvents_ForwardsCanonicalProgressPayload(t *testing.T) {
 	assert.Contains(t, FormatServiceProgressEntries(progress), "ok ddx-1234 7 add test implementation to cli/internal/file.go")
 	assert.Contains(t, FormatServiceProgressEntries(progress), "< out=312B 12 lines")
 	assert.Contains(t, FormatServiceProgressEntries(progress), "18.4 tok/s")
+}
+
+// TestAgentExecution_UsesFizeauServicePathOnly proves transcript-producing
+// agent execution is bound to the Fizeau service adapter, with the service
+// factory as the only execution seam used here.
+func TestAgentExecution_UsesFizeauServicePathOnly(t *testing.T) {
+	stub := &passthroughTestService{
+		executeEvents: []agentlib.ServiceEvent{
+			{
+				Type: "progress",
+				Time: time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
+				Data: json.RawMessage(`{"task_id":"ddx-1234","turn_index":1,"tool_name":"Bash","action":"run","target":"cli/internal/file.go","output_excerpt":"ok","output_bytes":2,"output_lines":1,"duration_ms":3}`),
+			},
+			{
+				Type: "final",
+				Time: time.Date(2026, 4, 30, 12, 0, 1, 0, time.UTC),
+				Data: json.RawMessage(`{"status":"success","exit_code":0,"final_text":"done"}`),
+			},
+		},
+	}
+	SetServiceRunFactory(func(string) (agentlib.FizeauService, error) {
+		return stub, nil
+	})
+	t.Cleanup(func() {
+		SetServiceRunFactory(nil)
+	})
+
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
+		Harness: "agent",
+		Model:   "claude-sonnet-4-6",
+	}).Resolve(config.CLIOverrides{})
+
+	result, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "hello",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, stub.executeCalled, "RunWithConfigViaService must use the Fizeau service adapter")
+	assert.Equal(t, "agent", stub.lastReq.Harness)
+	assert.Equal(t, "hello", stub.lastReq.Prompt)
+	assert.Equal(t, "done", result.Output)
+	assert.Equal(t, 0, result.ExitCode)
 }
