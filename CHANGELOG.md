@@ -4,6 +4,15 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### Added: Fizeau v0.10.9 point release
+
+DDx now consumes `github.com/DocumentDrivenDX/fizeau v0.10.9`.
+
+This release carries the sticky route and endpoint utilization evidence
+surfaces that DDx agent routing and observability already consume, including
+route status and session evidence plumbing. No DDx-side contract changes were
+needed beyond the dependency pin refresh.
+
 ### Added: MinPower/MaxPower passthrough contract (agent v0.9.25)
 
 DDx now consumes the upstream `github.com/DocumentDrivenDX/agent` power-bounds
