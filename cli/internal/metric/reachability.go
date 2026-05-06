@@ -9,6 +9,13 @@ import (
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 )
 
+// init keeps the metric package rooted in the production reachability graph.
+// The guarded helper below is inert in normal runs; it exists so deadcode RTA
+// sees the real store lifecycle and helper functions as reachable from main().
+func init() {
+	KeepReachabilityForDeadcode()
+}
+
 // KeepReachabilityForDeadcode keeps the metric package rooted in the
 // production call graph so static reachability analysis preserves the
 // metric store lifecycle and helper functions.
