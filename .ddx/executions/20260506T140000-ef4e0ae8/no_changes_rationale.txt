@@ -1,0 +1,2 @@
+verification_command: cd cli && go test ./internal/bead/... && lefthook run pre-commit
+reason: The checkout already contains the queue-rank-aware queue sort in cli/internal/bead/store.go and the required coverage in cli/internal/bead/gaps_test.go. No code edits were needed in this attempt.
