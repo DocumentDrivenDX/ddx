@@ -241,8 +241,9 @@ const FEATURE_CLIPS: readonly FeatureClip[] = [
 	}
 ] as const;
 
+test.use({ video: 'on' });
+
 test.describe('DDx feature-area demo videos', () => {
-	test.use({ video: 'on' });
 
 	for (const clip of FEATURE_CLIPS) {
 		test(`feature: ${clip.id}`, async ({ page, request }, testInfo) => {
