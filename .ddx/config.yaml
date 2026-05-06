@@ -27,7 +27,6 @@ update_check:
     enabled: true
     frequency: 24h
 agent:
-    harness: claude
     endpoints:
         - type: lmstudio
           host: vidar

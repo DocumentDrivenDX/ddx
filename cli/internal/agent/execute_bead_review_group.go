@@ -46,10 +46,10 @@ func (r *DefaultBeadReviewer) ReviewGroup(ctx context.Context, beadID, resultRev
 
 	reviewHarness := r.Harness
 	if reviewHarness == "" {
-		reviewHarness = "claude"
+		reviewHarness = impl.Harness
 	}
 	reviewModel := r.Model
-	if reviewModel == "" {
+	if reviewModel == "" && reviewHarness != "" {
 		reviewModel = ResolveModelTier(reviewHarness, SelectReviewerTier(escalation.TierSmart))
 	}
 

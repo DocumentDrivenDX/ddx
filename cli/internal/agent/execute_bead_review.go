@@ -605,8 +605,8 @@ type DefaultBeadReviewer struct {
 	// service. Takes precedence over Service.
 	Runner AgentRunner
 	// Harness and Model override the reviewer harness/model.
-	// When empty, Harness defaults to "claude" and Model is resolved
-	// from TierSmart for the chosen harness.
+	// When Harness is empty, the reviewer follows the implementation harness;
+	// when both are empty, dispatch is left to the agent service.
 	Harness string
 	Model   string
 	// Caps configures the per-section evidence caps used when assembling
@@ -792,17 +792,16 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev 
 			len(prompt), caps.MaxPromptBytes, artifacts.DirRel)
 	}
 
-	// Resolve reviewer harness and model. The implementer's harness is
-	// intentionally NOT used as a fallback — defaulting to it would directly
-	// violate R4 (different reviewer). When the configured reviewer harness
-	// is empty we fall through to a fixed default ("claude") regardless of
-	// what harness ran the implementer.
+	// Resolve reviewer harness and model. An explicit reviewer harness wins;
+	// otherwise the reviewer follows the implementation harness. If both are
+	// empty, leave routing unconstrained and let the agent service choose within
+	// the MinPower bound.
 	reviewHarness := r.Harness
 	if reviewHarness == "" {
-		reviewHarness = "claude"
+		reviewHarness = impl.Harness
 	}
 	reviewModel := r.Model
-	if reviewModel == "" {
+	if reviewModel == "" && reviewHarness != "" {
 		reviewModel = ResolveModelTier(reviewHarness, SelectReviewerTier(escalation.TierSmart))
 	}
 

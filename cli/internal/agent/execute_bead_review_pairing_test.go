@@ -185,11 +185,10 @@ func TestReviewBead_DegradedPath_SameProvider_EmitsEvent(t *testing.T) {
 	assert.Contains(t, body, "min_power_requested=71")
 }
 
-// TestReviewBead_NoLongerDefaultsToImplementerHarness is the AC1 regression
-// guard: the reviewer must NOT fall back to the implementer's harness when
-// its own Harness is unset. With Harness="" and impl.Harness="codex", the
-// resolved review harness must default to "claude".
-func TestReviewBead_NoLongerDefaultsToImplementerHarness(t *testing.T) {
+// TestReviewBead_DefaultsToImplementerHarness verifies the CLI contract:
+// an unset reviewer harness follows the implementation harness instead of
+// forcing a project-specific default.
+func TestReviewBead_DefaultsToImplementerHarness(t *testing.T) {
 	projectRoot, head, store := reviewPairingTestSetup(t)
 
 	stub := &reviewRunnerStub{result: &Result{
@@ -204,12 +203,10 @@ func TestReviewBead_NoLongerDefaultsToImplementerHarness(t *testing.T) {
 	}
 
 	res, err := reviewer.ReviewBead(context.Background(), "ddx-pairing", head, ImplementerRouting{
-		Harness:  "codex", // implementer harness — must NOT be used as reviewer fallback
+		Harness:  "codex",
 		Provider: "openai",
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	assert.Equal(t, "claude", res.ReviewerHarness,
-		"reviewer must default to claude — implementer harness fallback violates R4 (different reviewer)")
-	assert.NotEqual(t, "codex", res.ReviewerHarness)
+	assert.Equal(t, "codex", res.ReviewerHarness)
 }
