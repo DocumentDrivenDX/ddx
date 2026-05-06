@@ -4,9 +4,7 @@ let NODE_INFO: { id: string; name: string };
 let PROJECT_ID: string;
 let PROJECTS: Array<{ id: string; name: string; path: string }>;
 
-async function getFixtureIds(
-	request: import('@playwright/test').APIRequestContext
-): Promise<{
+async function getFixtureIds(request: import('@playwright/test').APIRequestContext): Promise<{
 	nodeId: string;
 	projectId: string;
 	nodeName: string;
@@ -719,6 +717,147 @@ test('runs page virtualizes after 1000 rows and keeps live worker phases updatin
 
 	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs?layer=work`);
 
+	await expect(page.getByTestId('runs-table')).toHaveAttribute('data-virtualized', 'true');
+	await expect(page.getByRole('row')).toHaveCount(1002);
+	await expect.poll(() => ws.hasSubscription(liveWorkerID)).toBe(true);
+
+	await expect(page.getByTestId(`live-phase-${liveWorkerID}`)).toHaveCount(0);
+	ws.send(liveWorkerID, 'queueing');
+	await expect(page.getByTestId(`live-phase-${liveWorkerID}`)).toHaveText('queueing');
+	ws.send(liveWorkerID, 'running');
+	await expect(page.getByTestId(`live-phase-${liveWorkerID}`)).toHaveText('running');
+});
+
+test('node runs page uses shared chips, virtualizes after 1000 rows, and keeps live worker phases updating', async ({
+	page
+}) => {
+	const liveWorkerID = 'node-run-work-live-001';
+	const ws = await mockWorkerProgress(page);
+	const manyRows = Array.from({ length: 1001 }, (_, index) => {
+		const isLive = index === 0;
+		return {
+			id: isLive ? liveWorkerID : `node-run-work-${index + 1}`,
+			layer: 'work',
+			status: isLive ? 'running' : 'success',
+			projectID: PROJECT_ID,
+			beadId: isLive ? BEAD_ID : null,
+			startedAt: `2026-04-30T11:${String(index % 60).padStart(2, '0')}:00Z`,
+			durationMs: isLive ? 1500 : 700,
+			harness: null
+		};
+	});
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, unknown>;
+		};
+
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+			return;
+		}
+		if (body.query.includes('ProjectsForLayout') || body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((node) => ({ node })) } } })
+			});
+			return;
+		}
+		if (body.query.includes('NodeRuns')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						runs: {
+							edges: manyRows.map((node) => ({ node, cursor: node.id })),
+							pageInfo: { hasNextPage: false, endCursor: null },
+							totalCount: manyRows.length
+						},
+						projects: { edges: PROJECTS.map((node) => ({ node })) }
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('FederatedRuns')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						federatedRuns: [],
+						projects: { edges: PROJECTS.map((node) => ({ node })) }
+					}
+				})
+			});
+			return;
+		}
+		if (
+			body.query.includes('RunHeader') ||
+			body.query.includes('RunDetailExpand') ||
+			body.query.includes('RunDetail') ||
+			body.query.includes('RunExists')
+		) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { run: null } })
+			});
+			return;
+		}
+		if (body.query.includes('RunExecutionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { execution: null } })
+			});
+			return;
+		}
+		if (body.query.includes('RunSessionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { agentSession: null } })
+			});
+			return;
+		}
+		if (body.query.includes('RunToolCallsExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						executionToolCalls: {
+							edges: [],
+							pageInfo: { hasNextPage: false, endCursor: null },
+							totalCount: 0
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('ProducedArtifact')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { artifact: null } })
+			});
+			return;
+		}
+		await route.continue();
+	});
+
+	await page.goto(`/nodes/${NODE_INFO.id}/runs?layer=work`);
+
+	await expect(page.getByRole('button', { name: 'work', exact: true })).toBeVisible();
 	await expect(page.getByTestId('runs-table')).toHaveAttribute('data-virtualized', 'true');
 	await expect(page.getByRole('row')).toHaveCount(1002);
 	await expect.poll(() => ws.hasSubscription(liveWorkerID)).toBe(true);

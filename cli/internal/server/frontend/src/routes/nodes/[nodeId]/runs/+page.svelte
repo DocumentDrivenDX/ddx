@@ -1,167 +1,223 @@
 <script lang="ts">
-	import type { PageData } from './$types'
-	import { page } from '$app/stores'
-	import { goto } from '$app/navigation'
-	import { createClient } from '$lib/gql/client'
-	import { RUNS_QUERY, PAGE_SIZE } from './+page'
-	import type { RunEdge, RunConnection, PageInfo } from './+page'
-	import { federationBadgeClass } from '$lib/federationStatus'
+	import type { PageData } from './$types';
+	import { page } from '$app/stores';
+	import { goto } from '$app/navigation';
+	import { createClient } from '$lib/gql/client';
+	import { subscribeWorkerProgress } from '$lib/gql/subscriptions';
+	import { RUNS_QUERY, PAGE_SIZE } from './+page';
+	import type { RunEdge, RunConnection, PageInfo } from './+page';
+	import { federationBadgeClass } from '$lib/federationStatus';
+	import FilterChip from '$lib/components/FilterChip.svelte';
 
-	let { data }: { data: PageData } = $props()
+	// Threshold above which the runs table opts into browser-native row
+	// windowing via `content-visibility: auto`. Keeps DOM semantics, table
+	// layout, and live worker phase updates intact.
+	const VIRTUALIZE_THRESHOLD = 1000;
+	const VIRTUAL_ROW_HEIGHT_PX = 49;
 
-	let appendedEdges = $state<RunEdge[]>([])
-	let appendedPageInfo = $state<PageInfo | null>(null)
-	let loadingMore = $state(false)
+	let { data }: { data: PageData } = $props();
 
-	let filterKey = $derived(`${data.scope}::${data.activeLayer}::${data.activeStatus}`)
-	let prevFilterKey = $state('')
+	let appendedEdges = $state<RunEdge[]>([]);
+	let appendedPageInfo = $state<PageInfo | null>(null);
+	let loadingMore = $state(false);
+	let livePhaseByRunId = $state<Map<string, string>>(new Map());
+
+	let filterKey = $derived(`${data.scope}::${data.activeLayer}::${data.activeStatus}`);
+	let prevFilterKey = $state('');
 	$effect(() => {
 		if (filterKey !== prevFilterKey) {
-			prevFilterKey = filterKey
-			appendedEdges = []
-			appendedPageInfo = null
+			prevFilterKey = filterKey;
+			appendedEdges = [];
+			appendedPageInfo = null;
 		}
-	})
+	});
 
-	let edges = $derived([...data.runs.edges, ...appendedEdges])
-	let pageInfo = $derived<PageInfo>(appendedPageInfo ?? data.runs.pageInfo)
+	let edges = $derived([...data.runs.edges, ...appendedEdges]);
+	let pageInfo = $derived<PageInfo>(appendedPageInfo ?? data.runs.pageInfo);
+	let virtualized = $derived(edges.length > VIRTUALIZE_THRESHOLD);
+	let rowStyle = $derived(
+		virtualized
+			? `content-visibility: auto; contain-intrinsic-size: 0 ${VIRTUAL_ROW_HEIGHT_PX}px;`
+			: ''
+	);
+	let liveWorkRunIds = $derived(
+		edges
+			.filter((edge) => edge.node.layer === 'work' && edge.node.status === 'running')
+			.map((edge) => edge.node.id)
+	);
 
-	const LAYER_OPTIONS = ['work', 'try', 'run']
-	const STATUS_OPTIONS = ['pending', 'running', 'success', 'failure', 'preserved']
+	$effect(() => {
+		const runningIds = liveWorkRunIds;
+		if (runningIds.length === 0) {
+			livePhaseByRunId = new Map();
+			return;
+		}
+
+		const disposers = runningIds.map((runId) =>
+			subscribeWorkerProgress(runId, (evt) => {
+				const next = new Map(livePhaseByRunId);
+				next.set(evt.workerID, evt.phase);
+				livePhaseByRunId = next;
+			})
+		);
+
+		return () => disposers.forEach((dispose) => dispose());
+	});
+
+	const LAYER_OPTIONS = ['work', 'try', 'run'];
+	const STATUS_OPTIONS = ['pending', 'running', 'success', 'failure', 'preserved'];
 
 	function setFilter(key: 'layer' | 'status' | 'scope', value: string | null) {
-		const params = new URLSearchParams($page.url.searchParams)
+		const params = new URLSearchParams($page.url.searchParams);
 		if (value === null) {
-			params.delete(key)
+			params.delete(key);
 		} else {
-			params.set(key, value)
+			params.set(key, value);
 		}
-		const search = params.toString()
-		goto(search ? `?${search}` : $page.url.pathname, { replaceState: false })
+		const search = params.toString();
+		goto(search ? `?${search}` : $page.url.pathname, { replaceState: false });
 	}
 
 	function toggleLayer(layer: string) {
-		setFilter('layer', data.activeLayer === layer ? null : layer)
+		setFilter('layer', data.activeLayer === layer ? null : layer);
 	}
 
 	function toggleStatus(status: string) {
-		setFilter('status', data.activeStatus === status ? null : status)
+		setFilter('status', data.activeStatus === status ? null : status);
 	}
 
 	function toggleScope() {
-		setFilter('scope', data.scope === 'federation' ? null : 'federation')
+		setFilter('scope', data.scope === 'federation' ? null : 'federation');
 	}
 
 	async function loadMore() {
-		if (data.scope === 'federation') return
-		if (!pageInfo.hasNextPage || loadingMore) return
-		loadingMore = true
+		if (data.scope === 'federation') return;
+		if (!pageInfo.hasNextPage || loadingMore) return;
+		loadingMore = true;
 		try {
-			const client = createClient()
+			const client = createClient();
 			const result = await client.request<{ runs: RunConnection }>(RUNS_QUERY, {
 				first: PAGE_SIZE,
 				after: pageInfo.endCursor,
 				layer: data.activeLayer ?? undefined,
 				status: data.activeStatus ?? undefined
-			})
-			appendedEdges = [...appendedEdges, ...result.runs.edges]
-			appendedPageInfo = result.runs.pageInfo
+			});
+			appendedEdges = [...appendedEdges, ...result.runs.edges];
+			appendedPageInfo = result.runs.pageInfo;
 		} finally {
-			loadingMore = false
+			loadingMore = false;
 		}
 	}
 
 	function runDetailHref(run: { id: string; projectID: string | null }): string {
-		if (!run.projectID) return '#'
+		if (!run.projectID) return '#';
 		if (data.scope === 'federation') {
-			const fed = data.federationByRunId[run.id]
+			const fed = data.federationByRunId[run.id];
 			if (fed) {
-				const base = fed.projectUrl.replace(/\/$/, '')
-				return `${base}/nodes/${fed.nodeId}/projects/${run.projectID}/runs/${run.id}`
+				const base = fed.projectUrl.replace(/\/$/, '');
+				return `${base}/nodes/${fed.nodeId}/projects/${run.projectID}/runs/${run.id}`;
 			}
 		}
-		return `/nodes/${data.nodeId}/projects/${run.projectID}/runs/${run.id}`
+		return `/nodes/${data.nodeId}/projects/${run.projectID}/runs/${run.id}`;
 	}
 
 	function beadHref(projectID: string | null, beadId: string): string {
-		if (!projectID) return '#'
-		return `/nodes/${data.nodeId}/projects/${projectID}/beads/${beadId}`
+		if (!projectID) return '#';
+		return `/nodes/${data.nodeId}/projects/${projectID}/beads/${beadId}`;
 	}
 
 	function projectName(projectID: string | null): string {
-		if (!projectID) return '—'
-		return data.projectNames[projectID] ?? projectID
+		if (!projectID) return '—';
+		return data.projectNames[projectID] ?? projectID;
 	}
 
 	function fmtDate(iso: string | null): string {
-		if (!iso) return '—'
-		return new Date(iso).toLocaleString()
+		if (!iso) return '—';
+		return new Date(iso).toLocaleString();
 	}
 
 	function fmtDuration(ms: number | null): string {
-		if (ms == null) return '—'
-		if (ms < 1000) return `${ms}ms`
-		if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
-		const m = Math.floor(ms / 60_000)
-		const s = Math.floor((ms % 60_000) / 1000)
-		return `${m}m ${s}s`
+		if (ms == null) return '—';
+		if (ms < 1000) return `${ms}ms`;
+		if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
+		const m = Math.floor(ms / 60_000);
+		const s = Math.floor((ms % 60_000) / 1000);
+		return `${m}m ${s}s`;
 	}
 
 	function layerBadgeClass(layer: string): string {
 		switch (layer) {
 			case 'work':
-				return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300'
+				return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300';
 			case 'try':
-				return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
+				return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
 			case 'run':
-				return 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300'
+				return 'bg-teal-100 text-teal-800 dark:bg-teal-900/30 dark:text-teal-300';
 			default:
-				return 'bg-bg-surface text-fg-muted dark:bg-dark-bg-surface dark:text-dark-fg-muted'
+				return 'bg-bg-surface text-fg-muted dark:bg-dark-bg-surface dark:text-dark-fg-muted';
 		}
 	}
 
 	function statusBadgeClass(status: string): string {
 		switch (status) {
 			case 'success':
-				return 'badge-status-closed'
+				return 'badge-status-closed';
 			case 'failure':
-				return 'badge-status-failed'
+				return 'badge-status-failed';
 			case 'running':
-				return 'badge-status-running'
+				return 'badge-status-running';
 			case 'preserved':
-				return 'badge-status-in-progress'
+				return 'badge-status-in-progress';
 			default:
-				return 'badge-status-open'
+				return 'badge-status-open';
 		}
 	}
 
-	function chipClass(active: boolean): string {
-		return active
-			? 'rounded-sm border px-3 py-1 text-xs font-medium border-accent-lever bg-accent-lever/10 text-accent-lever dark:border-dark-accent-lever dark:bg-dark-accent-lever/20 dark:text-dark-accent-lever'
-			: 'rounded-sm border px-3 py-1 text-xs font-medium border-border-line bg-bg-elevated text-fg-ink hover:border-fg-muted hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface'
+	function phaseBadgeClass(phase: string): string {
+		switch (phase) {
+			case 'queueing':
+				return 'border-gray-300 bg-gray-100 text-gray-700 dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-muted';
+			case 'running':
+				return 'border-status-running bg-status-running/10 text-status-running';
+			case 'launching':
+				return 'border-status-open bg-status-open/10 text-status-open';
+			case 'post_checks':
+				return 'border-yellow-300 bg-yellow-100 text-yellow-800 dark:border-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300';
+			case 'landing':
+				return 'border-purple-300 bg-purple-100 text-purple-800 dark:border-purple-700 dark:bg-purple-900/30 dark:text-purple-300';
+			case 'done':
+				return 'border-teal-300 bg-teal-100 text-teal-800 dark:border-teal-700 dark:bg-teal-900/30 dark:text-teal-300';
+			case 'preserved':
+				return 'badge-status-in-progress';
+			case 'failed':
+				return 'badge-status-failed';
+			default:
+				return 'badge-status-open';
+		}
 	}
 </script>
 
 <div class="space-y-4">
 	<div class="flex items-center justify-between">
-		<h1 class="text-xl font-semibold text-fg-ink dark:text-dark-fg-ink">
+		<h1 class="text-fg-ink dark:text-dark-fg-ink text-xl font-semibold">
 			All Runs
 			{#if data.scope === 'federation'}
 				<span
 					data-testid="scope-indicator"
-					class="ml-2 inline-block border px-1.5 py-0.5 align-middle font-mono-code text-[10px] uppercase badge-status-in-progress"
-				>federation</span>
+					class="font-mono-code badge-status-in-progress ml-2 inline-block border px-1.5 py-0.5 align-middle text-[10px] uppercase"
+					>federation</span
+				>
 			{/if}
 		</h1>
 		<div class="flex items-center gap-3">
-			<button
-				data-testid="scope-toggle"
+			<FilterChip
+				testid="scope-toggle"
 				onclick={toggleScope}
-				class={chipClass(data.scope === 'federation')}
-			>
-				{data.scope === 'federation' ? 'scope: federation' : 'scope: local'}
-			</button>
-			<span class="text-sm text-fg-muted dark:text-dark-fg-muted">
+				label={data.scope === 'federation' ? 'scope: federation' : 'scope: local'}
+				active={data.scope === 'federation'}
+				ariaPressed={data.scope === 'federation'}
+			/>
+			<span class="text-fg-muted dark:text-dark-fg-muted text-sm">
 				{edges.length} of {data.runs.totalCount}
 			</span>
 		</div>
@@ -170,68 +226,112 @@
 	{#if data.federationError}
 		<div
 			data-testid="federation-error"
-			class="border border-accent-load/40 bg-accent-load/10 px-4 py-2 font-label-caps text-label-caps text-accent-load dark:border-dark-accent-load/40 dark:bg-dark-accent-load/10 dark:text-dark-accent-load"
+			class="border-accent-load/40 bg-accent-load/10 font-label-caps text-label-caps text-accent-load dark:border-dark-accent-load/40 dark:bg-dark-accent-load/10 dark:text-dark-accent-load border px-4 py-2"
 		>
 			Federated query failed: {data.federationError}
 		</div>
 	{/if}
 
 	<!-- Layer filter chips -->
-	<div class="flex flex-wrap gap-2">
-		<span class="self-center text-xs text-fg-muted dark:text-dark-fg-muted">Layer:</span>
+	<div class="flex flex-wrap gap-2" data-testid="layer-chips">
+		<span
+			class="font-label-caps text-label-caps text-fg-muted dark:text-dark-fg-muted self-center uppercase"
+			>Layer</span
+		>
 		{#each LAYER_OPTIONS as layer}
-			<button class={chipClass(data.activeLayer === layer)} onclick={() => toggleLayer(layer)}>
-				{layer}
-			</button>
+			<FilterChip
+				label={layer}
+				testid="layer-chip-{layer}"
+				active={data.activeLayer === layer}
+				ariaPressed={data.activeLayer === layer}
+				onclick={() => toggleLayer(layer)}
+			/>
 		{/each}
 		{#if data.activeLayer}
-			<button
-				class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1 text-xs text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
-				onclick={() => setFilter('layer', null)}
-			>
+			<FilterChip
+				label="Clear"
+				testid="layer-chip-clear"
 				clear
-			</button>
+				onclick={() => setFilter('layer', null)}
+			/>
 		{/if}
 	</div>
 
 	<!-- Status filter chips -->
-	<div class="flex flex-wrap gap-2">
-		<span class="self-center text-xs text-fg-muted dark:text-dark-fg-muted">Status:</span>
+	<div class="flex flex-wrap gap-2" data-testid="status-chips">
+		<span
+			class="font-label-caps text-label-caps text-fg-muted dark:text-dark-fg-muted self-center uppercase"
+			>Status</span
+		>
 		{#each STATUS_OPTIONS as status}
-			<button class={chipClass(data.activeStatus === status)} onclick={() => toggleStatus(status)}>
-				{status}
-			</button>
+			<FilterChip
+				label={status}
+				testid="status-chip-{status}"
+				active={data.activeStatus === status}
+				ariaPressed={data.activeStatus === status}
+				onclick={() => toggleStatus(status)}
+			/>
 		{/each}
 		{#if data.activeStatus}
-			<button
-				class="rounded-sm border border-border-line bg-bg-elevated px-3 py-1 text-xs text-fg-ink hover:bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-elevated dark:text-dark-fg-ink dark:hover:bg-dark-bg-surface"
-				onclick={() => setFilter('status', null)}
-			>
+			<FilterChip
+				label="Clear"
+				testid="status-chip-clear"
 				clear
-			</button>
+				onclick={() => setFilter('status', null)}
+			/>
 		{/if}
 	</div>
 
-	<div class="overflow-hidden border border-border-line dark:border-dark-border-line">
+	<div
+		class="border-border-line dark:border-dark-border-line overflow-hidden border"
+		data-testid="runs-table"
+		data-virtualized={virtualized ? 'true' : 'false'}
+	>
 		<table class="w-full text-sm">
 			<thead>
-				<tr class="border-b border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface">
+				<tr
+					class="border-border-line bg-bg-surface dark:border-dark-border-line dark:bg-dark-bg-surface border-b"
+				>
 					{#if data.scope === 'federation'}
-						<th class="px-4 py-3 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Node</th>
+						<th
+							class="font-label-caps text-label-caps text-fg-muted dark:text-dark-fg-muted px-4 py-3 text-left tracking-wide uppercase"
+							>Node</th
+						>
 					{/if}
-					<th class="px-4 py-3 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Project</th>
-					<th class="px-4 py-3 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Layer</th>
-					<th class="px-4 py-3 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Status</th>
-					<th class="px-4 py-3 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Bead</th>
-					<th class="px-4 py-3 text-left font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Started</th>
-					<th class="px-4 py-3 text-right font-label-caps text-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Duration</th>
+					<th
+						class="font-label-caps text-label-caps text-fg-muted dark:text-dark-fg-muted px-4 py-3 text-left tracking-wide uppercase"
+						>Project</th
+					>
+					<th
+						class="font-label-caps text-label-caps text-fg-muted dark:text-dark-fg-muted px-4 py-3 text-left tracking-wide uppercase"
+						>Layer</th
+					>
+					<th
+						class="font-label-caps text-label-caps text-fg-muted dark:text-dark-fg-muted px-4 py-3 text-left tracking-wide uppercase"
+						>Status</th
+					>
+					<th
+						class="font-label-caps text-label-caps text-fg-muted dark:text-dark-fg-muted px-4 py-3 text-left tracking-wide uppercase"
+						>Bead</th
+					>
+					<th
+						class="font-label-caps text-label-caps text-fg-muted dark:text-dark-fg-muted px-4 py-3 text-left tracking-wide uppercase"
+						>Started</th
+					>
+					<th
+						class="font-label-caps text-label-caps text-fg-muted dark:text-dark-fg-muted px-4 py-3 text-right tracking-wide uppercase"
+						>Duration</th
+					>
 				</tr>
 			</thead>
 			<tbody>
 				{#each edges as edge (edge.cursor)}
+					{@const livePhase = livePhaseByRunId.get(edge.node.id)}
 					<tr
-						class="cursor-pointer border-b border-border-line last:border-0 hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface"
+						class="border-border-line hover:bg-bg-surface dark:border-dark-border-line dark:hover:bg-dark-bg-surface cursor-pointer border-b last:border-0"
 						onclick={() => goto(runDetailHref(edge.node))}
+						data-run-row={edge.node.id}
+						style={rowStyle}
 					>
 						{#if data.scope === 'federation'}
 							{@const fed = data.federationByRunId[edge.node.id]}
@@ -241,7 +341,7 @@
 										<span
 											data-testid="row-node-badge"
 											data-status={fed.status}
-											class="inline-block border px-1.5 py-0.5 font-mono-code text-[10px] uppercase {federationBadgeClass(
+											class="font-mono-code inline-block border px-1.5 py-0.5 text-[10px] uppercase {federationBadgeClass(
 												fed.status
 											)}"
 										>
@@ -253,7 +353,7 @@
 											target="_blank"
 											rel="noopener noreferrer"
 											onclick={(e) => e.stopPropagation()}
-											class="font-mono-code text-[10px] text-accent-lever hover:underline dark:text-dark-accent-lever"
+											class="font-mono-code text-accent-lever dark:text-dark-accent-lever text-[10px] hover:underline"
 										>
 											spoke ↗
 										</a>
@@ -264,26 +364,48 @@
 							</td>
 						{/if}
 						<td class="px-4 py-3">
-							<span class="inline-flex items-center border border-border-line px-2 py-0.5 text-xs font-medium text-fg-muted dark:border-dark-border-line dark:text-dark-fg-muted">
+							<span
+								class="border-border-line text-fg-muted dark:border-dark-border-line dark:text-dark-fg-muted inline-flex items-center border px-2 py-0.5 text-xs font-medium"
+							>
 								{projectName(edge.node.projectID)}
 							</span>
 						</td>
 						<td class="px-4 py-3">
-							<span class="inline-block rounded-full px-2 py-0.5 font-label-caps text-label-caps uppercase {layerBadgeClass(edge.node.layer)}">
+							<span
+								class="font-label-caps text-label-caps inline-block rounded-full px-2 py-0.5 uppercase {layerBadgeClass(
+									edge.node.layer
+								)}"
+							>
 								{edge.node.layer}
 							</span>
 						</td>
 						<td class="px-4 py-3">
-							<span class="inline-block border px-1.5 py-0.5 font-mono-code text-mono-code uppercase {statusBadgeClass(edge.node.status)}">
+							<span
+								class="font-mono-code text-mono-code inline-block border px-1.5 py-0.5 uppercase {statusBadgeClass(
+									edge.node.status
+								)}"
+							>
 								{edge.node.status}
 							</span>
+							{#if livePhase}
+								<div class="mt-1">
+									<span
+										data-testid="live-phase-{edge.node.id}"
+										class="font-label-caps inline-block rounded-full border px-2 py-0.5 text-[10px] tracking-wide uppercase {phaseBadgeClass(
+											livePhase ?? ''
+										)}"
+									>
+										{livePhase}
+									</span>
+								</div>
+							{/if}
 						</td>
 						<td class="px-4 py-3">
 							{#if edge.node.beadId}
 								<a
 									href={beadHref(edge.node.projectID, edge.node.beadId)}
 									onclick={(e) => e.stopPropagation()}
-									class="font-mono-code text-mono-code text-accent-lever hover:underline dark:text-dark-accent-lever"
+									class="font-mono-code text-mono-code text-accent-lever dark:text-dark-accent-lever hover:underline"
 								>
 									{edge.node.beadId}
 								</a>
@@ -291,10 +413,14 @@
 								<span class="text-fg-muted dark:text-dark-fg-muted">—</span>
 							{/if}
 						</td>
-						<td class="px-4 py-3 font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
+						<td
+							class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted px-4 py-3"
+						>
 							{fmtDate(edge.node.startedAt)}
 						</td>
-						<td class="px-4 py-3 text-right font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted">
+						<td
+							class="font-mono-code text-mono-code text-fg-muted dark:text-dark-fg-muted px-4 py-3 text-right"
+						>
 							{fmtDuration(edge.node.durationMs)}
 						</td>
 					</tr>
@@ -303,7 +429,7 @@
 					<tr>
 						<td
 							colspan={data.scope === 'federation' ? 7 : 6}
-							class="px-4 py-8 text-center text-body-sm text-fg-muted dark:text-dark-fg-muted"
+							class="text-body-sm text-fg-muted dark:text-dark-fg-muted px-4 py-8 text-center"
 						>
 							No runs found.
 						</td>
@@ -318,7 +444,7 @@
 			<button
 				onclick={loadMore}
 				disabled={loadingMore}
-				class="rounded border border-border-line bg-bg-surface px-4 py-2 text-body-sm text-fg-muted hover:bg-bg-elevated hover:text-fg-ink disabled:opacity-50 dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink"
+				class="border-border-line bg-bg-surface text-body-sm text-fg-muted hover:bg-bg-elevated hover:text-fg-ink dark:border-dark-border-line dark:bg-dark-bg-surface dark:text-dark-fg-muted dark:hover:bg-dark-bg-elevated dark:hover:text-dark-fg-ink rounded border px-4 py-2 disabled:opacity-50"
 			>
 				{loadingMore ? 'Loading…' : 'Load more'}
 			</button>
