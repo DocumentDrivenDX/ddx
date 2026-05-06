@@ -1,0 +1,1 @@
+WIRE `internal/metaprompt/injector.go:44 NewMetaPromptInjectorWithPaths` — already reachable from `main()` via `cmd.Execute` -> `NewCommandFactory` -> `NewRootCommand` -> `metaprompt.KeepReachabilityForDeadcode`, and used by production callers in `cli/cmd/init.go:715` and `cli/cmd/doctor.go:930`.
