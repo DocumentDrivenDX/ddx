@@ -103,7 +103,8 @@ The landscape of AI agent frameworks in 2025 has evolved to support sophisticate
 
 **Best For**: Enhancing enterprise applications with AI capabilities
 
-**Unique Strength**: Designed to integrate seamlessly with Microsoft tools and existing enterprise infrastructure
+**Unique Strength**: Uses Microsoft-native connectors, identity integration,
+and plugin abstractions to fit existing enterprise infrastructure
 
 ### 5. Microsoft AutoGen
 
@@ -174,7 +175,8 @@ The landscape of AI agent frameworks in 2025 has evolved to support sophisticate
 ## Common Patterns Across Frameworks
 
 ### Core Components
-1. **LLM Integration**: All frameworks provide seamless integration with various language models
+1. **LLM Integration**: All frameworks expose model adapter layers for connecting
+   OpenAI, Anthropic, and open-source model providers
 2. **Tool/API Connectivity**: Standard interfaces for connecting to external tools and services
 3. **Memory Management**: Systems for maintaining context and state across interactions
 4. **Task Planning**: Mechanisms for breaking down complex goals into executable steps
@@ -209,7 +211,8 @@ When choosing an AI agent framework, consider:
 - **Stateful Workflows**: Maintaining complex state across interactions
 - **Role-Based Architectures**: Specialized agents for different tasks
 - **Memory Systems**: Long-term and short-term memory management
-- **Tool Integration**: Seamless connection to APIs and services
+- **Tool Integration**: Typed connectors or plugin interfaces for APIs and
+  external services
 - **Observability**: Monitoring, debugging, and performance tracking
 
 ## Recommendations for HELIX Workflow Integration
