@@ -1,0 +1,129 @@
+{
+  "attempt_id": "20260506T103645-e9a534e0",
+  "bead_id": "ddx-f546d275",
+  "base_rev": "ddb1f1ff8a69777cdbf0fcb5195f209e038286ff",
+  "created_at": "2026-05-06T10:36:48.230569023Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f546d275",
+    "title": "Ship human-writing-support skill in the default DDx plugin",
+    "description": "CONTEXT\nDDx should guide agents while they write or edit prose, separate from deterministic post-write checks. This bead ships a default-plugin skill named human-writing-support that adapts the stronger advisory guidance from human-writing-style approaches to DDx: preserve voice, prefer specific detail, avoid generic AI-like tropes, and do not trade away technical precision.\n\nIN-SCOPE FILES\n- library/.agents/skills/ddx/human-writing-support/SKILL.md or the default-plugin skill path established by FEAT-011/TD-036\n- skills/ddx/human-writing-support/SKILL.md and .agents/.claude materialized copies only if this repo maintains generated checked-in mirrors\n- skill validation/eval fixtures under the existing skills validation surface\n\nREQUIRED SKILL BEHAVIOR\n- Trigger for writing, rewriting, editing, or reviewing DDx prose, specs, ADRs, beads, docs, website copy, and public prose.\n- Explicitly says it is not an AI detector or detector-bypass tool.\n- Preserves user voice and technical precision.\n- Applies different expectations for technical, planning, and public prose.\n- Encourages concrete/checkable detail over generic importance language.\n- Directs agents to run deterministic prose checks when available.\n\nOUT-OF-SCOPE\n- CLI checker implementation.\n- Rule pack implementation.\n- Bead review integration.",
+    "acceptance": "1. The default DDx plugin includes a human-writing-support skill with valid agentskills.io frontmatter and a trigger description under the project convention limit.\n2. `rg -n \"not an AI detector|detector bypass|specific|voice|technical|planning|public|ddx doc prose\"` against the skill file returns matches for required guidance.\n3. Existing skill validation command passes, or if this repo uses EXEC-011, the focused validation for shipped skills passes.\n4. The skill does not require agents to remove legitimate technical lists, headings, or DDx terminology.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-ccda7a32",
+    "labels": [
+      "phase:2",
+      "area:skills",
+      "area:plugins",
+      "kind:feature",
+      "prose-quality"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T10:36:45Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T09:18:24.239934545Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T091604-645ceb67\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":1793187,\"output_tokens\":15613,\"total_tokens\":1808800,\"cost_usd\":0,\"duration_ms\":136455,\"exit_code\":0}",
+          "created_at": "2026-05-06T09:18:24.486204657Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=1808800 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T09:18:30.607852644Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: unparseable\nattempt_count=1\nresult_rev=ebfc9c3174ad37054a5e561ccad3ab613fccb43b\n\nreviewer: review-error: unparseable: reviewer output: unparseable JSON verdict: no JSON object found (raw output 59 bytes; see .ddx/executions/20260506T091831-6acddd6d)\nharness=claude\nmodel=opus\ninput_bytes=18241\noutput_bytes=59\nelapsed_ms=49594",
+          "created_at": "2026-05-06T09:19:23.356512772Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: unparseable"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=ebfc9c3174ad37054a5e561ccad3ab613fccb43b\nbase_rev=09a70357e1364a9f9908799b9d4ecb42b6b7c6f7",
+          "created_at": "2026-05-06T09:19:23.571094866Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T10:05:26.130908616Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T095839-9b2751c7\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":5767558,\"output_tokens\":27928,\"total_tokens\":5795486,\"cost_usd\":0,\"duration_ms\":404055,\"exit_code\":0}",
+          "created_at": "2026-05-06T10:05:26.335520793Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=5795486 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T10:05:34.397484643Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=1dc6cd33f08bfe1bc4b0b39a15f488b5f2f726fe\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T06:10:39-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=21131\noutput_bytes=0\nelapsed_ms=4133",
+          "created_at": "2026-05-06T10:05:39.84722801Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=1dc6cd33f08bfe1bc4b0b39a15f488b5f2f726fe\nbase_rev=95911c55703fa4fc5ffcc4a85fbe40a01940c7c0",
+          "created_at": "2026-05-06T10:05:40.07093704Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T10:36:45.764815312Z",
+      "spec-id": "TD-036"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-036",
+      "path": "docs/helix/02-design/technical-designs/TD-036-prose-quality-pipeline.md",
+      "title": "Technical Design: Prose Quality Pipeline"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T103645-e9a534e0",
+    "prompt": ".ddx/executions/20260506T103645-e9a534e0/prompt.md",
+    "manifest": ".ddx/executions/20260506T103645-e9a534e0/manifest.json",
+    "result": ".ddx/executions/20260506T103645-e9a534e0/result.json",
+    "checks": ".ddx/executions/20260506T103645-e9a534e0/checks.json",
+    "usage": ".ddx/executions/20260506T103645-e9a534e0/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-f546d275-20260506T103645-e9a534e0"
+  },
+  "prompt_sha": "abaf22790aca4812ed4716d8fa3e8e4dbb460840bce967df7e2bc311b8bc082b"
+}
