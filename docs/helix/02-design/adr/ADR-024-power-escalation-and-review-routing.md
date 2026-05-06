@@ -23,7 +23,7 @@ DDx now has three overlapping concerns in the bead execution path:
 - enforcing cost visibility and budget stops without taking ownership of
   provider/model routing
 
-The upstream agent service owns harness/provider/model routing. DDx owns bead
+Fizeau owns harness/provider/model routing. DDx owns bead
 state, worktree isolation, evidence, gates, review verdicts, cooldowns, and
 the queue-drain loop. The escalation policy therefore has to be expressed in
 terms of DDx-owned evidence and abstract power bounds, not concrete model names.
@@ -60,10 +60,10 @@ and any failure where retry would require DDx to inspect or mutate
 `--harness`, `--provider`, or `--model`.
 
 When a higher-power retry is allowed, DDx computes the next `MinPower` floor
-from the agent's catalog power numbers. It may skip catalog power floors that
-have no viable auto-routable model, but it still sends only a new `MinPower`
-bound to the agent. The agent chooses the concrete route and reports actual
-model, provider, and power.
+from Fizeau's catalog power numbers. It may skip catalog power floors that have
+no viable auto-routable model, but it still sends only a new `MinPower` bound
+to Fizeau. Fizeau chooses the concrete route and reports actual model,
+provider, and power.
 
 ### Passthrough Stickiness
 

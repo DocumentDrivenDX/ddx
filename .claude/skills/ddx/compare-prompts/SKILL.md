@@ -23,7 +23,8 @@ aggregate their outputs, render a verdict.
   task to decide which one ships.
 - **Model comparison** — same prompt across `claude` / `codex` /
   `gemini` (or different models within one harness) to see where
-  outputs diverge.
+  outputs diverge. Raw model strings such as `qwen36` are forwarded
+  unchanged by DDx; Fizeau owns matching.
 - **Consensus checks (quorum)** — run a review prompt across N
   harnesses and require majority/unanimous agreement before acting.
 - **Persona comparison** — same prompt under different personas to
@@ -97,6 +98,11 @@ ddx run --harness codex  --min-power 10 --prompt "$PROMPT" > "$OUT/codex.md"  2>
 ddx run --harness gemini --min-power 10 --prompt "$PROMPT" > "$OUT/gemini.md" 2> "$OUT/gemini.err" &
 wait
 ```
+
+If you compare model strings directly, use the same raw value in the arm
+invocations. For example, `ddx run --model qwen36 --prompt prompt.md` is an
+opaque passthrough value at DDx; Fizeau decides whether `qwen36` resolves to a
+catalog entry.
 
 Per-arm conventions:
 

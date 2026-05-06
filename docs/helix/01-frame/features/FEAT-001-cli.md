@@ -52,10 +52,10 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 19. Backend abstraction (jsonl/bd/br)
 
 **Task Execution (top-level — FEAT-006/FEAT-010)**
-20. `ddx run --min-power <n> [--max-power <n>] --prompt <file>` — layer-1: invoke an AI agent with requested abstract power bounds; agent owns model/provider routing
-20b. `ddx run --top-power --prompt <file>` — request a `MinPower` threshold derived from the agent's available model/power catalog
-20c. `ddx run --effort <level>` — pass non-routing reasoning/effort intent to the agent
-20c-1. `ddx run --harness <name> --provider <name> --model <name>` — optional passthrough constraints sent unchanged to the agent; DDx does not validate, resolve, fallback, branch on, or widen them
+20. `ddx run --min-power <n> [--max-power <n>] --prompt <file>` — layer-1: invoke an AI agent with requested abstract power bounds; Fizeau owns model/provider routing
+20b. `ddx run --top-power --prompt <file>` — request a `MinPower` threshold derived from Fizeau's available model/power catalog
+20c. `ddx run --effort <level>` — pass non-routing reasoning/effort intent to Fizeau
+20c-1. `ddx run --harness <name> --provider <name> --model <name>` — optional passthrough constraints sent unchanged to Fizeau; DDx does not validate, resolve, fallback, branch on, or widen them
 20d. `ddx try <bead> [--from <rev>] [--no-merge]` — layer-2: bead attempt in isolated worktree with merge-or-preserve semantics
 20e. `ddx work` — layer-3: drain the bead execution queue (mechanical drain; supervisory decisions stay in plugins/HELIX)
 21. ~~`--quorum=majority --harnesses=a,b`~~ — **removed**. Multi-agent consensus moves to the `compare-prompts` skill (FEAT-011); no `--quorum` flag in core.
@@ -65,15 +65,19 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 21b. `ddx tries <subcommand>` — layer-2 specifically (worktree start/end records, merge or preserve outcomes)
 21c. `ddx work workers <subcommand>` — layer-3 worker management
 
-**Agent Passthrough — Structural Mount (FEAT-006)**
+**Task Execution Boundary (FEAT-006/FEAT-010)**
 
-`ddx agent` mounts the upstream `ddx-agent` Cobra root structurally per CONTRACT-003. DDx imports the upstream agent module's Cobra root and grafts it under `ddx agent`; notionally `cli(ddx).agent(load_cli(agent))`. The entire upstream subcommand tree is the source of truth — DDx does not enumerate per-subcommand wrappers (no DDx reimplementations of `list`, `doctor`, `capabilities`, `models`, `providers`, etc.).
+DDx owns the public workflow verbs `ddx run`, `ddx try`, and `ddx work`. Fizeau
+owns routing, provider/model discovery, and concrete route selection. DDx does
+not mount `ddx agent`, does not provide aliases for it, and does not keep any
+legacy workflow verbs under that namespace.
 
-22. `ddx agent <upstream-subcommand>` — every subcommand defined by the upstream agent CLI is reachable here without DDx-side enumeration
-23. DDx-side overrides on the mounted subtree:
-    - **Hard-deprecation handlers** for `ddx agent run`, `ddx agent execute-bead`, `ddx agent execute-loop` — exit non-zero with a bare redirect message pointing to `ddx run` / `ddx try` / `ddx work` respectively. No aliases, no grace period, no shims.
-    - `ddx agent condense` — DDx-specific output filter (override or upstream during impl pass)
-24. `ddx agent log` and related run-evidence surfaces are no longer DDx-defined under `agent` — they live under `ddx runs` (see 21a). Token/cost/usage surfaces likewise consolidate under `ddx runs metrics` (FEAT-014).
+22. Fizeau diagnostics, if exposed, remain read-only and separate from the
+    workflow verbs; DDx may surface them only as Fizeau-owned observability, not
+    as workflow aliases.
+23. Run-evidence surfaces are no longer DDx-defined under the old agent
+    namespace — they live under `ddx runs` (see 21a). Token/cost/usage surfaces
+    likewise consolidate under `ddx runs metrics` (FEAT-014).
 
 **Execution Service (in progress — FEAT-010)**
 26. `ddx exec list [--artifact ID]` — list execution definitions
@@ -140,4 +144,4 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 - `docs/helix/02-design/solution-designs/SD-018-plugin-api-stability.md` — plugin manifest and extension surfaces
 - `docs/helix/03-test/test-plans/TP-007-e2e-smoke-tests.md` — end-to-end CLI journey
 - `docs/helix/03-test/test-plans/TP-015-onboarding-journey.md` — first-run onboarding
-- `docs/helix/03-test/test-plans/TP-020-agent-routing-and-catalog-resolution.md` — agent routing behaviour consumed by the CLI
+- `docs/helix/03-test/test-plans/TP-020-fizeau-boundary-and-pass-through.md` — DDx boundary behavior for raw routing constraint passthrough

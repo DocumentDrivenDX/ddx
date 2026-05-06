@@ -4,25 +4,24 @@ ddx:
   depends_on:
     - helix.prd
 ---
-# Feature: DDx Agent Service (consumer of ddx-agent contract)
+# Feature: DDx Consumer of the Fizeau Execution Contract
 
 **ID:** FEAT-006
-**Status:** In Progress (migrating to ddx-agent CONTRACT-003)
+**Status:** In Progress (migrating to CONTRACT-003 Fizeau execution contract)
 **Priority:** P0
 **Owner:** DDx Team
 
 ## Overview
 
-DDx invokes LLMs through the `ddx-agent` module, defined by
-**CONTRACT-003-ddx-agent-service** in the `~/Projects/agent` repo
-(`docs/helix/02-design/contracts/CONTRACT-003-ddx-agent-service.md`).
+DDx invokes LLMs through the upstream Fizeau execution contract,
+**CONTRACT-003**, in the `~/Projects/agent` repo
+(`docs/helix/02-design/contracts/CONTRACT-003-fizeau-service.md`).
 
 That contract is the entire execution boundary. DDx exposes the public
-`ddx run` / `ddx try` / `ddx work` layers and calls the upstream
-`agentlib.DdxAgent` interface for the actual agent invocation. Upstream
-diagnostic/status commands may remain mounted under `ddx agent`, but
-`ddx agent run`, `ddx agent execute-bead`, and `ddx agent execute-loop` are not
-public workflow commands.
+`ddx run` / `ddx try` / `ddx work` layers and sends requests to Fizeau for the
+actual invocation. Upstream diagnostic/status commands may remain as
+Fizeau-owned observability, but the old `ddx agent` workflow namespace is not
+a public workflow surface.
 
 ## DDx-side responsibilities
 
@@ -34,7 +33,7 @@ DDx owns the bead-driven workflow surface. It does NOT own:
 - Tool registration
 - Session-log shape
 
-Those all live inside ddx-agent per CONTRACT-003.
+Those all live inside Fizeau per CONTRACT-003.
 
 DDx owns:
 
@@ -59,14 +58,14 @@ DDx owns:
   bundles with prompts, manifests, and result artifacts. The agent's session
   log path (returned in `ExecuteResponse.SessionLogPath`) is captured into
   the bundle.
-- **Power policy at the request level.** DDx selects requested agent power
-  bounds, effort, and permissions per bead attempt based on bead metadata, user
-  input, and prior attempt outcomes. The agent receives `MinPower` and
-  optionally `MaxPower` on `ExecuteRequest` and performs the routing.
+- **Power policy at the request level.** DDx selects requested power bounds,
+  effort, and permissions per bead attempt based on bead metadata, user input,
+  and prior attempt outcomes. DDx sends `MinPower` and optionally `MaxPower`
+  to Fizeau and leaves the concrete route to Fizeau.
 - **Agent passthrough constraints.** DDx may accept explicit `--harness`,
   `--provider`, and `--model` values from the operator and pass them unchanged
-  to the agent. DDx does not validate, rank, fallback, rewrite, or reason about
-  these fields; they are opaque constraints for the agent to interpret.
+  to Fizeau. DDx does not validate, rank, fallback, rewrite, or reason about
+  these fields; they are opaque constraints for Fizeau to interpret.
 - **Retry policy.** DDx owns the bead retry loop because DDx owns the evidence
   needed to decide whether an attempt succeeded: commits, merge/preserve
   result, no-changes rationale, post-run gates, review verdicts, cooldowns,
@@ -81,36 +80,35 @@ DDx owns:
   metadata, not a DDx-side routing algorithm. See ADR-024.
 
 DDx owns bead/worker lifecycle progress and execution evidence capture. Fizeau
-owns the agent transcript, progress, and session rendering surface. DDx is a
-pass-through/marshalling consumer for Fizeau transcript events: it may forward
-Fizeau `ServiceEvent`s unchanged and link or copy Fizeau artifacts into the
-execution evidence bundle, but DDx treats those payloads as opaque evidence
-only. DDx carries the event stream and attachments as evidence, but it does
-not render, rehydrate, parse, or semantically interpret the inner Fizeau
-transcript or session-log content. Those payloads never become DDx worker
-state. The session log payload remains opaque to DDx; DDx only carries the
-envelope around it.
+owns the transcript, progress, provider/model discovery, and session rendering
+surface. DDx is a pass-through/marshalling consumer for Fizeau transcript
+events: it may forward Fizeau `ServiceEvent`s unchanged and link or copy
+Fizeau artifacts into the execution evidence bundle, but DDx treats those
+payloads as opaque evidence only. DDx carries the event stream and attachments
+as evidence, but it does not render, rehydrate, parse, or semantically
+interpret the inner Fizeau transcript or session-log content. Those payloads
+never become DDx worker state. The session log payload remains opaque to DDx;
+DDx only carries the envelope around it.
 
 ## Power Intent
 
 DDx does not route. DDx chooses request-level power bounds and sends them to
-`agentlib.DdxAgent.Execute` as `MinPower` and optional `MaxPower`; the agent
-resolves harness, provider, endpoint, model, health, quota, fallback, and route
-errors.
+Fizeau as `MinPower` and optional `MaxPower`; Fizeau resolves harness,
+provider, endpoint, model, health, quota, fallback, and route errors.
 
-Power is an abstract integer scale owned by the agent contract. DDx treats
+Power is an abstract integer scale owned by the Fizeau contract. DDx treats
 `MinPower`/`MaxPower` as bounds on that scale, not as model identities. For
-example, the agent may report:
+example, Fizeau may report:
 
 ```text
 running with qwen 3.6-27b (power 10)
 ```
 
 DDx records requested `MinPower`/`MaxPower` and the actual model/power returned
-by the agent. DDx can use that evidence on a later retry to raise `MinPower`,
-but it still does not choose the next model.
+by Fizeau. DDx can use that evidence on a later retry to raise `MinPower`, but
+it still does not choose the next model.
 
-The agent also exposes its available model/power catalog. DDx may read that
+Fizeau also exposes its available model/power catalog. DDx may read that
 catalog to choose a `MinPower` threshold for "top model only" retries, for
 example by requesting a lower bound at or above the lowest power among the
 current top models. DDx must not use the catalog to pin a concrete
@@ -147,7 +145,16 @@ envelope described below.
 
 `--harness`, `--provider`, and `--model` are permitted on `ddx run`, `ddx try`,
 and `ddx work` only as passthrough fields. DDx carries them in one narrow
-request envelope and sends them to `agentlib.DdxAgent.Execute` unchanged.
+request envelope and sends them to Fizeau unchanged.
+
+For example:
+
+```bash
+ddx run --min-power 10 --model qwen36 --prompt task.md
+```
+
+DDx forwards `qwen36` verbatim. Fizeau owns any fuzzy matching, alias
+resolution, provider fallback, or typed error returned for that raw string.
 
 These fields must not leak into DDx routing policy:
 
@@ -167,7 +174,7 @@ passthrough values for audit, but it does not use them to select a route.
 When hard passthrough pins make the requested power bounds unsatisfiable, DDx
 must stop with a typed terminal classification such as
 `blocked_by_passthrough_constraint` or `agent_power_unsatisfied`. DDx records
-the requested `MinPower`/`MaxPower`, passthrough envelope, and agent-supplied
+the requested `MinPower`/`MaxPower`, passthrough envelope, and Fizeau-supplied
 evidence, then reports operator action required. DDx must not remove pins,
 choose alternatives, call `ResolveRoute` to work around the conflict, or loop on
 higher `MinPower` values.
@@ -238,7 +245,7 @@ formed; it does not own worktree, queue, or CLI namespace design.
 
 | Area | Owner after migration |
 | --- | --- |
-| CONTRACT-003 `agentlib.DdxAgent` boundary, `ExecuteRequest` / `ExecuteResponse` consumption, `MinPower` / `MaxPower`, actual model/power recording | Stays in FEAT-006 |
+| CONTRACT-003 Fizeau execution boundary, `ExecuteRequest` / `ExecuteResponse` consumption, `MinPower` / `MaxPower`, actual model/power recording | Stays in FEAT-006 |
 | Opaque passthrough envelope for `--harness`, `--provider`, `--model` and the rule that DDx must not route on those fields | Stays in FEAT-006 |
 | Non-bead layer-1 invocation intent: artifact-keyed power bounds, permissions, timeout, effort, and metadata | Stays in FEAT-006 |
 | Session-log envelope and pointer/copy capture around the agent-owned inner log | Stays in FEAT-006 |
@@ -400,11 +407,11 @@ No automated bulk remediation is performed. The 22 beads are left open pending
 operator triage. A future `ddx bead validate` command (not yet implemented) can
 flag structurally invalid bead IDs to aid discovery.
 
-## Asking ddx-agent for changes
+## Asking Fizeau for changes
 
-When DDx needs new behavior from the agent — a new method, a new field on
+When DDx needs new behavior from the service — a new method, a new field on
 `ExecuteRequest`, a new event type, a new policy knob — file a PR against
-CONTRACT-003 in the agent repo. Maintainers decide whether the surface grows.
+CONTRACT-003 in the Fizeau repo. Maintainers decide whether the surface grows.
 
 Do not import agent internal packages. They live under `internal/` and the
 Go compiler blocks external imports after agent v0.5.0 ships.
@@ -537,7 +544,7 @@ a server.
 ### Compatibility writers
 
 `.ddx/workers/` (spec.json + status.json) is preserved as a fallback
-source of truth for `ddx agent doctor` for one alpha release lag, then
+source of truth for `ddx agent doctor` / Fizeau observability for one alpha release lag, then
 deprecated once the doctor migrates to the server's derived view. The
 server's append-only event log lives at `.ddx/server/worker-events.jsonl`.
 
@@ -570,7 +577,7 @@ that have since moved upstream.
 - `docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md` — current thin-consumer migration plan
 - `docs/helix/03-test/test-plans/TP-006-agent-session-capture.md` — session capture test coverage
 - `docs/helix/03-test/test-plans/TP-014-token-awareness.md` — token-awareness coverage
-- `docs/helix/03-test/test-plans/TP-020-agent-routing-and-catalog-resolution.md` — routing and catalog resolution coverage
+- `docs/helix/03-test/test-plans/TP-020-fizeau-boundary-and-pass-through.md` — DDx boundary coverage for raw passthrough and no-local-routing behavior
 - `docs/helix/02-design/adr/ADR-021-operator-prompt-beads-web-write-path.md` — operator-prompt beads as the web write path (Story 15)
 - `docs/helix/02-design/adr/ADR-022-worker-client-server-architecture.md` — workers as long-lived API clients; server-restart preserves in-flight work
 - `docs/helix/02-design/adr/ADR-024-power-escalation-and-review-routing.md` — DDx power escalation, review routing, and cost-cap policy boundary

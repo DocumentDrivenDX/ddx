@@ -4,10 +4,11 @@
 > 2026-04-18 service-boundary investigation. Do not use this file as current
 > routing-contract guidance. The current boundary is the top-level
 > `ddx run` / `ddx try` / `ddx work` stack: DDx owns bead orchestration,
-> success classification, evidence, and retry escalation; the agent owns
-> concrete model/provider routing behind `Execute` and operator/debug status
-> surfaces. Pre-resolved route injection and DDx-side route decisions described
-> below are obsolete.
+> success classification, evidence, and retry escalation; Fizeau owns
+> concrete model/provider routing, provider/model discovery, transcript
+> rendering, and operator/debug status surfaces behind `Execute`.
+> Pre-resolved route injection and DDx-side route decisions described below are
+> obsolete.
 
 ## Problem
 
@@ -27,7 +28,8 @@ DDx imports **150+ symbols across 11 packages** of `github.com/DocumentDrivenDX/
 | `modelcatalog` | 3 | catalog lookup |
 | `provider/anthropic` | 2 | provider construction |
 
-DDx has reimplemented the agent loop using ddx-agent as a parts catalog. Concrete consequences:
+DDx has reimplemented the task-execution loop using the upstream service as a
+parts catalog. Concrete consequences:
 
 - `cli/internal/agent/agent_runner.go:148` — DDx constructs the compactor with hardcoded 131K, ignoring the model's actual 256K context (bragi qwen3.6-35b-a3b case).
 - DDx orchestrates prompt construction, tool registration, session logging, compaction, observability — every concern the agent should own.
@@ -35,7 +37,8 @@ DDx has reimplemented the agent loop using ddx-agent as a parts catalog. Concret
 
 ## Proposal
 
-Expose **one** interface from ddx-agent. All other types are either inputs/outputs of its methods or move internal.
+Expose **one** interface from Fizeau. All other types are either inputs/outputs
+of its methods or move internal.
 
 ```go
 package agentlib
@@ -170,7 +173,11 @@ func New(opts Options) (DdxAgent, error)
 
 Six methods. `Execute` is the primary verb (mirrors the harness invocation); the other five are the "extras" only ddx-agent has — model catalog, discovery, route inspection.
 
-DDx's `agentHarness` implementation of the `Harness` interface delegates `Run` → `Service.ExecuteStream`. DDx commands that need the extras (`ddx agent route-status`, `ddx agent providers`, `ddx agent models`, `ddx agent check`) call the corresponding `Service` method directly — they don't go through the harness abstraction since they're not invocations.
+DDx's `taskexec` implementation of the `Harness` interface delegates `Run` →
+`Service.ExecuteStream`. DDx commands that need the extras (`ddx fizeau
+route-status`, `ddx fizeau providers`, `ddx fizeau models`, `ddx fizeau
+check`) call the corresponding `Service` method directly — they don't go
+through the harness abstraction since they're not invocations.
 
 ## Internal-package enforcement
 
@@ -270,7 +277,8 @@ Only **10 non-test files** import `github.com/DocumentDrivenDX/agent`. The 113 s
 
 ### Specs that encode the current boundary
 - **PLAN-2026-04-08-AGENT-ROUTING-AND-CATALOG-RESOLUTION** [superseded] — original two-layer design.
-- **FEAT-006 — Agent Service** — DDx owns harness orchestration + cross-harness routing; embedded agent owns provider/backend selection.
+- **FEAT-006 — Fizeau consumer contract** — DDx owns harness orchestration +
+  cross-harness pass-through; embedded Fizeau owns provider/backend selection.
 - **SD-015 — Resolution path** — 5-mode precedence (harness override → explicit model → profile → default → provider targeting), candidate-ranking rules, and fuzzy match with shortest-suffix tiebreak.
 - **SD-023 — Routing visibility** — explicit DDx/agent boundary; DDx accesses agent state via Go package APIs, not shellout. Eight visibility beads block on this boundary.
 - **agent-side: plan-2026-04-10-model-first-routing.md, SD-005 (provider config), SD-002 (standalone CLI)** — model-first routing, ModelRouteCandidateConfig, RoutingConfig (weight tuning), CandidateScorer interface for DDx quota overlay.
@@ -327,7 +335,7 @@ The existing spec landscape **biases toward Option B** (finish the existing two-
 
 ## Decision: Option C — consolidate harnesses down into ddx-agent
 
-### What ddx-agent becomes
+### What Fizeau becomes
 
 Two roles, one module:
 
@@ -335,13 +343,21 @@ Two roles, one module:
 
 2. **A wrapper around other agents.** Subprocess harness layer for claude, codex, opencode, pi, gemini — used when their interactive features, vendor billing, or specific capabilities matter, OR when comparison/fallback routing wants them in the candidate pool.
 
-**The product:** ddx-agent is the one stop shop for optimally routed one-shot noninteractive agentic prompts. DDx is one consumer (the bead-driven workflow); HELIX and standalone CLI users are others.
+**The product:** Fizeau is the one stop shop for optimally routed one-shot
+noninteractive prompts. DDx is one consumer (the bead-driven workflow); HELIX
+and standalone CLI users are others.
 
 ### Why C is right (overriding the existing spec landscape)
 
 1. **Testability of the service boundary.** Under C, every harness — native and subprocess — is reachable through the same `DdxAgent` Service interface, with the same input/output contract. The boundary is **one surface to test**. Under B, the boundary is N+1 surfaces (one Service interface plus N harness binaries DDx invokes directly), and parity testing requires bridging two modules. The "comparison suite" argument from earlier rounds was a weaker version of this point — testability is the actual reason.
 
-2. **Two-role coherence.** ddx-agent's value prop ("optimally routed one-shot noninteractive prompts") only makes sense if it owns the routing **across** harnesses, not just within in-process providers. A consumer that wants "give me the best harness/provider/model for this prompt under cost constraint X" needs one entrypoint that knows about all options. Under B, that consumer has to glue DDx's harness routing to ddx-agent's provider routing themselves.
+2. **Two-role coherence.** Fizeau's value prop ("optimally routed one-shot
+   noninteractive prompts") only makes sense if it owns the routing **across**
+   harnesses, not just within in-process providers. A consumer that wants
+   "give me the best harness/provider/model for this prompt under cost
+   constraint X" needs one entrypoint that knows about all options. Under B,
+   that consumer has to glue DDx's harness routing to Fizeau's provider
+   routing themselves.
 
 3. **The six "badly implemented" smells are structural duplication.** Codex's review (round 3) was right that under B you can patch each side. But "patch each side" is exactly how the duplication arose — and exactly what produced the smells. C eliminates the possibility of recurrence by deleting one of the two homes.
 

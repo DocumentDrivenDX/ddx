@@ -11,9 +11,9 @@ ddx work
 ```
 
 `ddx work` drains the queue by picking ready beads and invoking `ddx try`.
-`ddx try` wraps `ddx run`, which is the single agent invocation primitive. DDx
-owns queue iteration, attempt evidence, and retry policy; the upstream agent
-owns provider/model routing.
+`ddx try` wraps `ddx run`, which is the single task-invocation primitive. DDx
+owns queue iteration, attempt evidence, and retry policy; Fizeau owns
+provider/model routing.
 
 Flags worth knowing:
 
@@ -23,7 +23,9 @@ Flags worth knowing:
 - `--min-power <n>` / `--max-power <n>` — requested agent power bounds.
 - `--top-power` — choose a `MinPower` threshold from the agent catalog.
 - `--harness <name>` / `--provider <name>` / `--model <ref>` — passthrough
-  constraints only. DDx sends them unchanged and does not route on them.
+  constraints only. DDx sends them unchanged and does not route on them. For
+  example, `ddx run --model qwen36 --prompt task.md` forwards `qwen36`
+  verbatim; Fizeau decides whether that raw string matches a catalog entry.
 
 ## Primitive: `ddx try`
 
