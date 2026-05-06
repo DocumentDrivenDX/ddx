@@ -422,7 +422,7 @@ When DDx needs new contract behavior, it files an issue/bead against ddx-agent r
 | `cli/internal/agent/compare.go`, `benchmark.go`, `quorum.go`, `condense.go` | **Move to ddx-agent** — these ARE the comparison suite the user wants in one module |
 | `cli/internal/agent/providerstatus/probe.go` | **Moves to ddx-agent** |
 | `cli/internal/agent/claude_stream.go`, `claude_quota_cache.go` | **Move to ddx-agent** as part of the claude harness implementation |
-| `cli/internal/agent/jsonl.go`, `format.go`, `session_log_format.go`, `session_log_tailer.go` | **Mostly move** to ddx-agent (event/format primitives); DDx keeps only copied/linkable evidence-envelope rendering and attachment pointers, while Fizeau owns the session-log rendering surface |
+| `cli/internal/agent/jsonl.go`, `format.go`, `session_log_format.go`, `session_log_tailer.go` | **Mostly move** to ddx-agent (event/format primitives); DDx keeps only copied/linkable evidence-envelope metadata, attachment pointers, and any outer envelope rendering, while Fizeau owns the session-log rendering surface |
 | `cli/internal/agent/state.go`, `executions_mirror.go`, `executor.go`, `script.go` | **Stay** in DDx — these are execute-bead orchestration (DDx-specific concern) |
 | `cli/internal/agent/grade.go`, `pricing.go`, `models.go`, `catalog.go`, `model_catalog_yaml.go`, `agent_catalog_shared.go`, `worktree_skills.go` | Mixed — likely most move; some DDx-specific glue stays |
 | `cli/cmd/agent_*.go` | **Stay** in DDx as commands, but become thin Service.* callers |
