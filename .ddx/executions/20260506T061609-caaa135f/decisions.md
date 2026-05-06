@@ -1,0 +1,5 @@
+DELETE internal/server/graphql/resolver.go:21 NewResolver - current tree has no constructor; server.go:4869 wires &ddxgraphql.Resolver{} directly, so the stale symbol is already removed from production reachability.
+DELETE internal/server/graphql/resolver_meta.go:90 personaConnectionFrom - no definition remains in the current tree; gqlgen-generated PersonaConnection wiring is handled through the generated resolver path, not this helper.
+DELETE internal/server/graphql/resolver_provider_models.go:292 resetProviderModelsCacheForTest - no definition remains in the current tree; provider-model cache tests reset package globals inline instead of calling a helper.
+DELETE internal/server/graphql/resolver_providers.go:35 RecordHarnessRateLimit - no definition remains in the current tree; harness quota lookup now reads only the cached signal path exposed by LookupHarnessRateLimit.
+DELETE internal/server/graphql/resolver_providers.go:55 resetHarnessRateLimitCache - no definition remains in the current tree; rate-limit cache reset is handled directly by tests when needed.
