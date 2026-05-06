@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260506T014718-e4871f66",
+  "bead_id": "ddx-208a5bee",
+  "base_rev": "2c004949e5276b49d1b3d67a37d66a729120c3cf",
+  "created_at": "2026-05-06T01:47:21.475366645Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-208a5bee",
+    "title": "bead/axon: add GraphQL client boundary and row mapping",
+    "description": "PROBLEM\nAxonBackend is still a local JSONL emulation instead of a GraphQL-backed RawBackend. Before mutations can be implemented safely, the backend needs a real client boundary and bead/event row mapping that uses the generated Axon client types.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/bead/axon_backend.go:20 explicitly says the implementation serializes collections to JSONL files under \u003cdir\u003e/axon/.\n- cli/internal/bead/axon_backend.go:71 defines AxonBackend around BeadsFile, EventsFile, and LockDir instead of a GraphQL client/session.\n- cli/internal/bead/axon/generated.go exists, but axon_backend.go does not use the generated client path.\n\nPROPOSED FIX\n- Introduce the GraphQL client dependency boundary for AxonBackend using cli/internal/bead/axon generated types.\n- Implement bead row and event entity encode/decode helpers against the generated GraphQL shapes, preserving the two-collection model ddx_beads and ddx_bead_events.\n- Keep JSONL as the default backend and keep the existing experimental gate behavior unchanged.\n- Add unit tests for client construction/mapping that do not require a live Axon server.\n\nNON-SCOPE\n- Full CRUD mutation implementation; child bead handles write operations.\n- Backend selection config plumbing; existing follow-up handles selection.\n- Broad conformance matrix; child bead handles it after operations exist.",
+    "acceptance": "1. AxonBackend has an injectable GraphQL client boundary instead of hard-coding only BeadsFile/EventsFile local snapshots.\n2. Mapping helpers cover bead rows and event entities for ddx_beads and ddx_bead_events while preserving event_of linkage and schema version fields.\n3. Existing JSONL default backend behavior and DDX_AXON_EXPERIMENTAL gating remain unchanged.\n4. TestAxonBackend_GraphQLClientBoundary and TestAxonBackend_GraphQLMapping_BeadsAndEvents verify the client boundary and mapping without a live Axon server.\n5. cd cli \u0026\u0026 go test ./internal/bead/... -run \"TestAxonBackend_GraphQLClientBoundary|TestAxonBackend_GraphQLMapping_BeadsAndEvents|TestAxonExperimental\" -count=1 passes.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-9c5bca8f",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:storage",
+      "kind:feature",
+      "axon",
+      "from:ddx-9c5bca8f"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T01:47:18Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "execute-loop-heartbeat-at": "2026-05-06T01:47:18.643091905Z",
+      "spec_id": "TD-030"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260506T014718-e4871f66",
+    "prompt": ".ddx/executions/20260506T014718-e4871f66/prompt.md",
+    "manifest": ".ddx/executions/20260506T014718-e4871f66/manifest.json",
+    "result": ".ddx/executions/20260506T014718-e4871f66/result.json",
+    "checks": ".ddx/executions/20260506T014718-e4871f66/checks.json",
+    "usage": ".ddx/executions/20260506T014718-e4871f66/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-208a5bee-20260506T014718-e4871f66"
+  },
+  "prompt_sha": "8920b30a71c8fa0c4403beebd113605fa4c51cdab5313dd244bc12fb23817397"
+}
