@@ -41,10 +41,11 @@ ddx version         # CLI version
 - Shell integration (where applicable) is set up.
 - Plugins declared in config are actually installed.
 
-`ddx agent doctor` goes further into the agent service: which
+`ddx agent doctor` goes further into the Fizeau service: which
 harnesses are discoverable (`claude`, `codex`, `gemini`, embedded
 `agent`), whether provider credentials are present, whether the
-model catalog loads.
+model catalog loads. DDx forwards raw model strings unchanged; Fizeau
+does the matching.
 
 ## Is the project drifted from upstream?
 

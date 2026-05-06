@@ -21,12 +21,16 @@ the layer beneath it. There are no other run kinds beyond those named layers.
 
 | Layer | CLI | Inputs | Outputs / side effects | Owns |
 |---|---|---|---|---|
-| 1 | `ddx run` | prompt + agent config | structured output, side effects, run metadata (tokens, model, duration, exit) | invocation atom; consumes upstream `ddx-agent` per CONTRACT-003 |
-| 2 | `ddx try <bead>` | bead id, base revision | new worktree state + agent-run evidence; merge or preserve | worktree start/end capture; bead → prompt resolution; side-effect bundling |
+| 1 | `ddx run` | prompt + execution config | structured output, side effects, run metadata (tokens, model, duration, exit) | invocation atom; consumes upstream Fizeau execution contract |
+| 2 | `ddx try <bead>` | bead id, base revision | new worktree state + run evidence; merge or preserve | worktree start/end capture; bead → prompt resolution; side-effect bundling |
 | 3 | `ddx work` | bead queue, stop conditions | sequence of `ddx try` records + loop-level record (drained / blocked / deferred) | mechanical queue drain; no-progress detection |
 
 `ddx try` wraps `ddx run`. `ddx work` iterates `ddx try`. One on-disk
 substrate; layer metadata distinguishes records.
+
+Implementation code for this boundary should follow the task-execution
+vocabulary (`taskexec` for core layer logic, `fizeauadapter` for the service
+bridge) rather than `internal/agent`.
 
 `ddx artifact regenerate <id>` is sugar over layer 1 (or layer 2 when the
 generator edits the repo) with `produces_artifact: <id>` metadata. It is
@@ -59,16 +63,15 @@ narrow read-only HTTP/MCP write surface limited to artifact regeneration.
 
 ### Layer 1 — `ddx run` (invocation atom)
 
-A layer-1 run is one agent invocation. Inputs are a prompt, requested
-`MinPower` and optional `MaxPower`, optional agent passthrough constraints, and
-non-routing execution config;
-outputs are the structured response (text or bytes), any side-effects the agent
-performed via tools, and run metadata (tokens, model, actual power, duration,
-exit status, session pointer).
+A layer-1 run is one AI invocation. Inputs are a prompt, requested
+`MinPower` and optional `MaxPower`, optional operator passthrough constraints,
+and non-routing execution config; outputs are the structured response (text or
+bytes), any side-effects the service performed via tools, and run metadata
+(tokens, model, actual power, duration, exit status, session pointer).
 
-Layer 1 calls the upstream `ddx-agent` service contract directly. DDx does not
-reimplement agent routing or the invocation loop; it wraps one `Execute` call
-with provenance capture.
+Layer 1 calls the upstream Fizeau execution contract directly. DDx does not
+reimplement routing or the invocation loop; it wraps one `Execute` call with
+provenance capture.
 
 `ddx artifact regenerate <id>` is layer 1 when the generator returns
 bytes/text and DDx writes the file; it is layer 2 when the generator
@@ -120,7 +123,7 @@ run record.
 paths. Decomposition decisions run with a strong `MinPower` floor, defaulting to
 the smart/top-power tier floor when no project-specific splitter override is
 configured. DDx does not choose the concrete model; it passes the raised power
-floor to the agent and preserves any operator-supplied harness/provider/model
+floor to Fizeau and preserves any operator-supplied harness/provider/model
 passthrough constraints. If those constraints cannot satisfy the strong floor,
 DDx records `agent_power_unsatisfied` and blocks instead of running weak
 decomposition.
@@ -502,8 +505,8 @@ Resource exhaustion after cleanup is a hard visible stop message and a layer-3
 
 ### Long-running default (`--poll-interval`)
 
-Per ddx-dc157075, the default `--poll-interval` for both `ddx work` and
-`ddx agent execute-loop` is **30s**. With a positive poll interval the
+Per ddx-dc157075, the default `--poll-interval` for `ddx work` is **30s**.
+With a positive poll interval the
 worker stays alive across empty polls (`drained` becomes a transient
 "running (idle)" substate, not a terminal exit). The loop exits only on
 the conditions enumerated above plus `signal`, fatal config errors, or
@@ -513,7 +516,7 @@ the explicit operator opt-outs:
 - `--poll-interval=0` — legacy "drain-and-exit" semantics: when the
   queue empties, return immediately without polling.
 
-Server-managed workers spawned via `POST /api/agent/workers/execute-loop`
+Server-managed workers spawned via `POST /api/workers/execute-loop`
 inherit the same 30s default when the request omits `poll_interval`. The
 worker record exposes a `substate` field set to `"idle"` while the loop
 is sleeping between empty polls; it is cleared as soon as a candidate is
@@ -617,8 +620,8 @@ new workflow cannot be expressed as a composition over `run` / `try` /
 2. **Layer metadata** — every run record carries `layer`,
    `parent_run_id`, and the layer-appropriate extension subobject.
 3. **Layer-1 invocation** — `ddx run` produces exactly one layer-1
-   record per invocation; consumes upstream `ddx-agent` per
-   CONTRACT-003.
+   record per invocation; consumes upstream Fizeau execution contract
+   per CONTRACT-003.
 4. **Layer-2 attempt** — `ddx try <bead>` produces exactly one layer-2
    record, references its child layer-1 records, and finalizes the
    worktree as `merge` or `preserve`.
@@ -677,7 +680,7 @@ new workflow cannot be expressed as a composition over `run` / `try` /
 The three top-level verbs map 1:1 onto the layers:
 
 ```bash
-ddx run --prompt <file> [--agent <name>]                # layer 1
+ddx run --prompt <file> [--harness <name>] [--provider <name>] [--model <name>]  # layer 1
 ddx try <bead-id> [--from <rev>] [--no-merge]           # layer 2
 ddx work [--workers N] [--budget <duration>]            # layer 3
 ```
@@ -916,10 +919,10 @@ records to remain inspectable during the migration window
 
 This feature requires two narrow read-only-amendment-adjacent changes
 to CONTRACT-003: write surfaces for `artifactRegenerate` (HTTP/MCP) and
-`runRequeue` (GraphQL). `runRequeue` does not invoke an agent — it
-reopens the originating bead so the existing `ddx agent execute-loop`
-can claim it again — but it is still a write because it mutates bead
-state and appends an audit event (see "Re-queue audit event schema" above).
+`runRequeue` (GraphQL). `runRequeue` does not invoke the execution service —
+it reopens the originating bead so the existing `ddx work` loop can claim it
+again — but it is still a write because it mutates bead state and appends an
+audit event (see "Re-queue audit event schema" above).
 No other write surfaces are added; in particular, layer-1, layer-2,
 and layer-3 invocation remain CLI-only.
 
@@ -930,7 +933,7 @@ FEAT-006 and not to this feature.
 ## Dependencies
 
 - FEAT-005 (Artifacts) — `produces_artifact` references artifact IDs
-- FEAT-006 (Agent Service) — provides the layer-1 consumer-side wrapper
+- FEAT-006 (Fizeau consumer contract) — provides the layer-1 consumer-side wrapper
   and CONTRACT-003 boundary
 - FEAT-007 (Doc Graph) — `generated_by` edges read `produces_artifact`
   from run records
