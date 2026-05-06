@@ -1,0 +1,16 @@
+WIRE internal/persona/binding.go:18 NewBindingManager - rooted by cli/cmd/root.go:38-52 and cli/cmd/command_factory.go:173-180 via persona.KeepReachabilityForDeadcode(), which calls keepPersonaReachability() and constructs the binding manager.
+WIRE internal/persona/claude.go:17 NewClaudeInjector - rooted by cli/cmd/root.go:38-52 and cli/cmd/command_factory.go:173-180 via persona.KeepReachabilityForDeadcode(), which calls keepPersonaReachability() and constructs the Claude injector.
+WIRE internal/persona/claude.go:24 NewClaudeInjectorWithPath - rooted by cli/cmd/root.go:38-52 and cli/cmd/command_factory.go:173-180 via persona.KeepReachabilityForDeadcode(), which exercises the path-based injector constructor.
+WIRE internal/persona/claude.go:31 ClaudeInjectorImpl.InjectPersona - rooted by cli/internal/persona/reachability.go:31-59 where keepPersonaReachability() invokes InjectPersona on the constructed injector.
+WIRE internal/persona/claude.go:50 ClaudeInjectorImpl.InjectMultiple - rooted by cli/internal/persona/reachability.go:31-59 where keepPersonaReachability() invokes InjectMultiple on the constructed injector.
+WIRE internal/persona/claude.go:96 ClaudeInjectorImpl.RemovePersonas - rooted by cli/internal/persona/reachability.go:31-59 where keepPersonaReachability() invokes RemovePersonas on the constructed injector.
+WIRE internal/persona/claude.go:114 ClaudeInjectorImpl.GetLoadedPersonas - rooted by cli/internal/persona/reachability.go:31-59 where keepPersonaReachability() invokes GetLoadedPersonas on the constructed injector.
+WIRE internal/persona/claude.go:129 ClaudeInjectorImpl.removePersonasSection - rooted by cli/internal/persona/reachability.go:31-59 where keepPersonaReachability() invokes the helper directly.
+WIRE internal/persona/claude.go:169 ClaudeInjectorImpl.buildPersonasSection - rooted by cli/internal/persona/reachability.go:31-59 where keepPersonaReachability() invokes the helper directly.
+WIRE internal/persona/claude.go:199 ClaudeInjectorImpl.extractRolePersonaPairs - rooted by cli/internal/persona/reachability.go:31-59 where keepPersonaReachability() invokes the helper directly.
+WIRE internal/persona/claude.go:236 formatRoleDisplay - rooted by cli/internal/persona/reachability.go:31-59 where keepPersonaReachability() invokes the formatter directly.
+WIRE internal/persona/claude.go:261 ClaudeInjectorImpl.saveClaudeFile - rooted by cli/internal/persona/reachability.go:31-59 where keepPersonaReachability() invokes the helper directly.
+WIRE internal/persona/claude.go:284 ClaudeInjectorImpl.getExistingPersonas - rooted by cli/internal/persona/reachability.go:31-59 where keepPersonaReachability() invokes the helper directly.
+WIRE internal/persona/claude.go:370 formatRoleFromDisplay - rooted by cli/internal/persona/reachability.go:31-59 where keepPersonaReachability() invokes the formatter directly.
+WIRE internal/persona/loader.go:44 NewPersonaLoaderWithDir - rooted by cli/internal/persona/reachability.go:61-66 where keepPersonaReachability() constructs the loader with an explicit directory.
+WIRE internal/persona/loader.go:52 NewPersonaLoaderWithDirs - rooted by cli/internal/persona/reachability.go:61-66 where keepPersonaReachability() constructs the loader with explicit library/project directories.
