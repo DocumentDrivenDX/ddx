@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 	"text/tabwriter"
 	"time"
 
@@ -93,11 +94,19 @@ func (f *CommandFactory) runWorkPlan(cmd *cobra.Command, _ []string) error {
 	if err != nil {
 		return fmt.Errorf("work plan: %w", err)
 	}
+	var breakdown *bead.ReadyExecutionBreakdown
+	if diag, ok := any(store).(interface {
+		ReadyExecutionBreakdown() (bead.ReadyExecutionBreakdown, error)
+	}); ok {
+		if b, derr := diag.ReadyExecutionBreakdown(); derr == nil {
+			breakdown = &b
+		}
+	}
 
 	if asJSON {
 		return printWorkPlanJSON(cmd, entries)
 	}
-	return printWorkPlanText(cmd, entries, limit)
+	return printWorkPlanText(cmd, entries, breakdown, limit)
 }
 
 func printWorkPlanJSON(cmd *cobra.Command, entries []agent.QueueEntry) error {
@@ -106,11 +115,10 @@ func printWorkPlanJSON(cmd *cobra.Command, entries []agent.QueueEntry) error {
 	return enc.Encode(entries)
 }
 
-func printWorkPlanText(cmd *cobra.Command, entries []agent.QueueEntry, limit int) error {
+func printWorkPlanText(cmd *cobra.Command, entries []agent.QueueEntry, breakdown *bead.ReadyExecutionBreakdown, limit int) error {
 	out := cmd.OutOrStdout()
 	if len(entries) == 0 {
 		fmt.Fprintln(out, "No execution-eligible beads in the queue.")
-		return nil
 	}
 
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
@@ -129,6 +137,17 @@ func printWorkPlanText(cmd *cobra.Command, entries []agent.QueueEntry, limit int
 			e.Position, e.BeadID, e.Priority, rank, updated, e.Status, e.FilterDecision, e.Why)
 	}
 	_ = w.Flush()
+
+	if breakdown != nil {
+		if len(breakdown.SkippedEpics) > 0 {
+			fmt.Fprintf(out, "  skipped %d ready epic(s) with open children (epics are structural containers; decompose into tasks): %s\n",
+				len(breakdown.SkippedEpics), strings.Join(breakdown.SkippedEpics, ", "))
+		}
+		if len(breakdown.SkippedEpicClosureCandidates) > 0 {
+			fmt.Fprintf(out, "  completed epic closure candidate(s) (all direct children closed; surfaced for closure evaluation): %s\n",
+				strings.Join(breakdown.SkippedEpicClosureCandidates, ", "))
+		}
+	}
 
 	if limit > 0 {
 		fmt.Fprintf(out, "\n(showing up to %d entries; use --limit=0 for full queue)\n", limit)

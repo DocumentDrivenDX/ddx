@@ -1361,13 +1361,14 @@ func (s *Store) ReadyExecution() ([]Bead, error) {
 // the diagnostic the work loop emits when the execution queue is empty but
 // `ddx bead ready` is not.
 type ReadyExecutionBreakdown struct {
-	SkippedEpics              []string
-	SkippedOnCooldown         []string
-	SkippedNeedsInvestigation []string
-	SkippedBlocked            []string
-	SkippedNotEligible        []string
-	SkippedSuperseded         []string
-	NextRetryAfter            string
+	SkippedEpics                 []string
+	SkippedEpicClosureCandidates []string
+	SkippedOnCooldown            []string
+	SkippedNeedsInvestigation    []string
+	SkippedBlocked               []string
+	SkippedNotEligible           []string
+	SkippedSuperseded            []string
+	NextRetryAfter               string
 }
 
 func (s *Store) ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error) {
@@ -1378,10 +1379,14 @@ func (s *Store) ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error) {
 	}
 	statusMap := make(map[string]string)
 	childCount := make(map[string]int)
+	openChildCount := make(map[string]int)
 	for _, b := range beads {
 		statusMap[b.ID] = b.Status
 		if b.Parent != "" {
 			childCount[b.Parent]++
+			if b.Status != StatusClosed {
+				openChildCount[b.Parent]++
+			}
 		}
 	}
 	now := time.Now().UTC()
@@ -1414,7 +1419,11 @@ func (s *Store) ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error) {
 			}
 		}
 		if isOrdinaryEpicContainer(b, childCount[b.ID]) {
-			out.SkippedEpics = append(out.SkippedEpics, b.ID)
+			if isEpicClosureCandidate(b, childCount[b.ID], openChildCount[b.ID]) {
+				out.SkippedEpicClosureCandidates = append(out.SkippedEpicClosureCandidates, b.ID)
+			} else {
+				out.SkippedEpics = append(out.SkippedEpics, b.ID)
+			}
 			continue
 		}
 		if hasLabel(b, LabelNeedsInvestigation) || hasLabel(b, LabelNeedsHuman) {
@@ -1697,6 +1706,13 @@ func isOrdinaryEpicContainer(b Bead, childCount int) bool {
 	issueType := strings.ToLower(strings.TrimSpace(b.IssueType))
 	title := strings.ToLower(strings.TrimSpace(b.Title))
 	return issueType == "epic" || strings.HasPrefix(title, "epic:") || (childCount > 0 && strings.HasPrefix(title, "epic "))
+}
+
+func isEpicClosureCandidate(b Bead, childCount, openChildCount int) bool {
+	if childCount == 0 {
+		return false
+	}
+	return isOrdinaryEpicContainer(b, childCount) && openChildCount == 0
 }
 
 func sortBeadsForQueue(beads []Bead) {
