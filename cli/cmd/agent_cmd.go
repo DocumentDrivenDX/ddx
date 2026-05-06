@@ -1938,8 +1938,12 @@ func writeExecuteLoopResult(w io.Writer, projectRoot string, result *agent.Execu
 		fmt.Fprintln(w, "No execution-ready beads.")
 		d := result.NoReadyWorkDetail
 		if len(d.SkippedEpics) > 0 {
-			fmt.Fprintf(w, "  skipped %d ready epic(s) (epics are structural containers; decompose into tasks): %s\n",
+			fmt.Fprintf(w, "  skipped %d ready epic(s) with open children (epics are structural containers; decompose into tasks): %s\n",
 				len(d.SkippedEpics), strings.Join(d.SkippedEpics, ", "))
+		}
+		if len(d.SkippedEpicClosureCandidates) > 0 {
+			fmt.Fprintf(w, "  completed epic closure candidate(s) (all direct children closed; surfaced for closure evaluation): %s\n",
+				strings.Join(d.SkippedEpicClosureCandidates, ", "))
 		}
 		if len(d.SkippedOnCooldown) > 0 {
 			retryHint := ""

@@ -111,6 +111,28 @@ func TestWorkPlan_LabelFilter(t *testing.T) {
 	}
 }
 
+// TestWorkPlan_ShowsCompletedEpicClosureCandidate verifies that the text
+// output distinguishes closure-ready epics from structural epics that still
+// have open direct children.
+func TestWorkPlan_ShowsCompletedEpicClosureCandidate(t *testing.T) {
+	task := &bead.Bead{ID: "ddx-work-task", Title: "Task work", Priority: 0}
+	completedEpic := &bead.Bead{ID: "ddx-work-epic-closed", Title: "Completed epic", IssueType: "epic", Priority: 1}
+	activeEpic := &bead.Bead{ID: "ddx-work-epic-open", Title: "Active epic", IssueType: "epic", Priority: 2}
+	closedChildOne := &bead.Bead{ID: "ddx-work-epic-closed-child-1", Title: "Closed child one", Parent: completedEpic.ID, Status: bead.StatusClosed}
+	closedChildTwo := &bead.Bead{ID: "ddx-work-epic-closed-child-2", Title: "Closed child two", Parent: completedEpic.ID, Status: bead.StatusClosed}
+	openChild := &bead.Bead{ID: "ddx-work-epic-open-child", Title: "Open child", Parent: activeEpic.ID, Status: bead.StatusBlocked}
+	env := setupWorkPlanEnv(t, task, completedEpic, activeEpic, closedChildOne, closedChildTwo, openChild)
+	root := NewCommandFactory(env.Dir).NewRootCommand()
+
+	out, err := executeCommand(root, "work", "plan")
+	require.NoError(t, err)
+	assert.Contains(t, out, "ddx-work-task")
+	assert.Contains(t, out, "completed epic closure candidate(s)")
+	assert.Contains(t, out, completedEpic.ID)
+	assert.Contains(t, out, "skipped 1 ready epic(s) with open children")
+	assert.Contains(t, out, activeEpic.ID)
+}
+
 // TestWorkPlan_Limit verifies that --limit caps the number of returned entries.
 func TestWorkPlan_Limit(t *testing.T) {
 	now := time.Now().UTC()

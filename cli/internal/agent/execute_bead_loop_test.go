@@ -511,6 +511,38 @@ func TestExecuteBeadWorkerEpicIsNotOrdinaryWork(t *testing.T) {
 	assert.Equal(t, []string{"ddx-task-002"}, result.NoReadyWorkDetail.SkippedOnCooldown)
 }
 
+func TestExecuteBeadWorkerEvaluatesCompletedEpicForClosure(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	completedEpic := &bead.Bead{ID: "ddx-epic-closed", Title: "Completed epic", IssueType: "epic", Priority: 0}
+	activeEpic := &bead.Bead{ID: "ddx-epic-open", Title: "Active epic", IssueType: "epic", Priority: 1}
+	closedChild := &bead.Bead{ID: "ddx-epic-closed-child", Title: "Closed child", Parent: completedEpic.ID, Status: bead.StatusClosed}
+	openChild := &bead.Bead{ID: "ddx-epic-open-child", Title: "Open child", Parent: activeEpic.ID, Status: bead.StatusBlocked}
+	require.NoError(t, store.Create(completedEpic))
+	require.NoError(t, store.Create(activeEpic))
+	require.NoError(t, store.Create(closedChild))
+	require.NoError(t, store.Create(openChild))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatalf("unexpected execution for %s", beadID)
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.True(t, result.NoReadyWork)
+	assert.Empty(t, result.Results)
+	assert.Equal(t, []string{"ddx-epic-open"}, result.NoReadyWorkDetail.SkippedEpics)
+	assert.Equal(t, []string{"ddx-epic-closed"}, result.NoReadyWorkDetail.SkippedEpicClosureCandidates)
+}
+
 func TestExecuteBeadWorkerConcurrentWorkersDoNotDoubleExecuteSameBead(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())

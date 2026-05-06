@@ -325,13 +325,14 @@ type readyDiagnoser interface {
 // dependency-ready beads exist. Populated on an ExecuteBeadLoopResult when
 // NoReadyWork fires and the store exposes ReadyExecutionBreakdown.
 type NoReadyWorkBreakdown struct {
-	SkippedEpics              []string `json:"skipped_epics,omitempty"`
-	SkippedOnCooldown         []string `json:"skipped_on_cooldown,omitempty"`
-	SkippedNeedsInvestigation []string `json:"skipped_needs_investigation,omitempty"`
-	SkippedBlocked            []string `json:"skipped_blocked,omitempty"`
-	SkippedNotEligible        []string `json:"skipped_not_eligible,omitempty"`
-	SkippedSuperseded         []string `json:"skipped_superseded,omitempty"`
-	NextRetryAfter            string   `json:"next_retry_after,omitempty"`
+	SkippedEpics                 []string `json:"skipped_epics,omitempty"`
+	SkippedEpicClosureCandidates []string `json:"skipped_epic_closure_candidates,omitempty"`
+	SkippedOnCooldown            []string `json:"skipped_on_cooldown,omitempty"`
+	SkippedNeedsInvestigation    []string `json:"skipped_needs_investigation,omitempty"`
+	SkippedBlocked               []string `json:"skipped_blocked,omitempty"`
+	SkippedNotEligible           []string `json:"skipped_not_eligible,omitempty"`
+	SkippedSuperseded            []string `json:"skipped_superseded,omitempty"`
+	NextRetryAfter               string   `json:"next_retry_after,omitempty"`
 }
 
 // ProgressEvent is the FEAT-006 structured progress event. It is defined
@@ -572,13 +573,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				if diag, ok := w.Store.(readyDiagnoser); ok {
 					if breakdown, bErr := diag.ReadyExecutionBreakdown(); bErr == nil {
 						result.NoReadyWorkDetail = NoReadyWorkBreakdown{
-							SkippedEpics:              breakdown.SkippedEpics,
-							SkippedOnCooldown:         breakdown.SkippedOnCooldown,
-							SkippedNeedsInvestigation: breakdown.SkippedNeedsInvestigation,
-							SkippedBlocked:            breakdown.SkippedBlocked,
-							SkippedNotEligible:        breakdown.SkippedNotEligible,
-							SkippedSuperseded:         breakdown.SkippedSuperseded,
-							NextRetryAfter:            breakdown.NextRetryAfter,
+							SkippedEpics:                 breakdown.SkippedEpics,
+							SkippedEpicClosureCandidates: breakdown.SkippedEpicClosureCandidates,
+							SkippedOnCooldown:            breakdown.SkippedOnCooldown,
+							SkippedNeedsInvestigation:    breakdown.SkippedNeedsInvestigation,
+							SkippedBlocked:               breakdown.SkippedBlocked,
+							SkippedNotEligible:           breakdown.SkippedNotEligible,
+							SkippedSuperseded:            breakdown.SkippedSuperseded,
+							NextRetryAfter:               breakdown.NextRetryAfter,
 						}
 					}
 				}

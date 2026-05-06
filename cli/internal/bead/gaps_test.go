@@ -223,6 +223,33 @@ func TestReadyExecution_ExcludesOrdinaryEpics(t *testing.T) {
 	assert.Equal(t, []string{epic.ID}, breakdown.SkippedEpics)
 }
 
+func TestReadyExecutionBreakdown_ClassifiesEpicClosureCandidates(t *testing.T) {
+	s := newTestStore(t)
+
+	task := &Bead{ID: "ddx-task", Title: "Task work", IssueType: "task", Priority: 0}
+	completedEpic := &Bead{ID: "ddx-epic-closed", Title: "Closed child epic", IssueType: "epic", Priority: 1}
+	activeEpic := &Bead{ID: "ddx-epic-open", Title: "Open child epic", IssueType: "epic", Priority: 2}
+	closedChildOne := &Bead{ID: "ddx-epic-closed-child-1", Title: "Closed child one", Parent: completedEpic.ID, Status: StatusClosed}
+	closedChildTwo := &Bead{ID: "ddx-epic-closed-child-2", Title: "Closed child two", Parent: completedEpic.ID, Status: StatusClosed}
+	openChild := &Bead{ID: "ddx-epic-open-child", Title: "Open child", Parent: activeEpic.ID, Status: StatusBlocked}
+	require.NoError(t, s.Create(task))
+	require.NoError(t, s.Create(completedEpic))
+	require.NoError(t, s.Create(activeEpic))
+	require.NoError(t, s.Create(closedChildOne))
+	require.NoError(t, s.Create(closedChildTwo))
+	require.NoError(t, s.Create(openChild))
+
+	ready, err := s.ReadyExecution()
+	require.NoError(t, err)
+	require.Len(t, ready, 1)
+	assert.Equal(t, task.ID, ready[0].ID)
+
+	breakdown, err := s.ReadyExecutionBreakdown()
+	require.NoError(t, err)
+	assert.Equal(t, []string{activeEpic.ID}, breakdown.SkippedEpics)
+	assert.Equal(t, []string{completedEpic.ID}, breakdown.SkippedEpicClosureCandidates)
+}
+
 func TestBlockedAllClassifiesDepAndRetryCooldown(t *testing.T) {
 	s := newTestStore(t)
 
