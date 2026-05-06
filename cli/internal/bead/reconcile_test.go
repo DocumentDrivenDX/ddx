@@ -243,5 +243,5 @@ func TestLifecycle_ParentEpicNotOrdinaryExecutionReady(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, blocked, 1)
 	assert.Equal(t, parent.ID, blocked[0].ID)
-	assert.Equal(t, BlockerKindNotEligible, blocked[0].Blocker.Kind)
+	assert.Equal(t, BlockerKindEpicOnly, blocked[0].Blocker.Kind)
 }
