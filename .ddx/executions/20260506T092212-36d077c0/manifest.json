@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260506T092212-36d077c0",
+  "bead_id": "ddx-29f02cf4",
+  "base_rev": "521e1c806a51bb800d0baeba067aa49417f912c7",
+  "created_at": "2026-05-06T09:22:15.008991787Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-29f02cf4",
+    "title": "bead/axon: wire backend selection through .ddx config",
+    "description": "PROBLEM\nThe store factory still treats Axon as an experimental special case and only enables it behind an environment gate. The relevant branch is cli/internal/bead/store.go:117-137, which falls back to JSONL unless DDX_AXON_EXPERIMENTAL is truthy, even when config has backend: axon. The checked-in sample config also does not document the bead_tracker backend block yet (.ddx/config.yaml:1-17).\n\nROOT CAUSE\ncli/internal/bead/store.go:117-137 and .ddx/config.yaml:1-17 do not present Axon as a normal selectable backend. The config type already has a Backend field, but the factory still requires an env override and emits a warning instead of honoring configuration directly.\n\nPROPOSED FIX\n- Update the store factory so bead_tracker.backend=axon selects the Axon backend from config without requiring the experimental env var.\n- Update the checked-in .ddx/config.yaml example to show the backend and Axon connection block.\n- Keep the default backend unchanged when backend is unset.\n- Preserve bd/br behavior for the existing external backend path.\n\nNON-SCOPE\n- GraphQL client generation.\n- Axon backend CRUD internals.\n- Subscription transport.",
+    "acceptance": "1. .ddx/config.yaml documents bead_tracker.backend: axon plus the Axon connection block.\n2. TestNewStore_DefaultsToJSONL, TestNewStore_SelectsAxonFromConfig, and TestNewStore_PreservesExternalBackends are added or updated.\n3. config selection honors axon without requiring DDX_AXON_EXPERIMENTAL, while jsonl remains the default.\n4. cd cli \u0026\u0026 go test ./internal/bead/... passes.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-8d747049",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:storage",
+      "kind:feature",
+      "blocked-on-upstream:axon-05c1019d",
+      "blocked-on-upstream:axon-82b6f7b2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T09:22:12Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "execute-loop-heartbeat-at": "2026-05-06T09:22:12.206789376Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260506T092212-36d077c0",
+    "prompt": ".ddx/executions/20260506T092212-36d077c0/prompt.md",
+    "manifest": ".ddx/executions/20260506T092212-36d077c0/manifest.json",
+    "result": ".ddx/executions/20260506T092212-36d077c0/result.json",
+    "checks": ".ddx/executions/20260506T092212-36d077c0/checks.json",
+    "usage": ".ddx/executions/20260506T092212-36d077c0/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-29f02cf4-20260506T092212-36d077c0"
+  },
+  "prompt_sha": "cb6ca51c5579fdd770a7842edc0dbe6c57e4136c077ee0f3f60ca581e6b0b0f9"
+}
