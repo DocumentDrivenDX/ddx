@@ -1,0 +1,89 @@
+{
+  "attempt_id": "20260506T024218-5c94accb",
+  "bead_id": "ddx-638a3b87",
+  "base_rev": "7ddfa872f18a5008f3601b9bb5e9e5c03a9328a3",
+  "created_at": "2026-05-06T02:42:20.742707837Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-638a3b87",
+    "title": "Forward Fizeau events opaquely and keep only final-result adapter",
+    "description": "PROBLEM\nDDx service-run code still understands too much of Fizeau's inner event stream. It should forward/store Fizeau ServiceEvents opaquely and adapt only the final data needed for DDx Result bookkeeping.\n\nROOT CAUSE\n- cli/internal/agent/agent_runner_service.go:243-355 switches on raw service-event names and reconstructs transcript/progress/tool-call records.\n- cli/internal/agent/agent_runner_service.go also owns DDx-specific fallback policy for internal Fizeau events that should not drive DDx runtime outcomes.\n- cli/internal/agent/service_run.go still exposes service event handling surfaces that make it easy for DDx callers to couple to Fizeau internals.\n\nPROPOSED FIX\nCollapse DDx's Fizeau service consumption to two responsibilities: store/forward opaque ServiceEvents unchanged, and decode only final-result/routing/session artifact fields required to populate DDx Result and indexes. Prefer Fizeau typed decoders such as agentlib.DecodeServiceEvent where decoding is necessary; remove local stringly-typed event constants and custom partial structs that duplicate Fizeau schema.\n\nNON-SCOPE\n- Fizeau event schema changes.\n- Deleting the legacy direct Claude parser; ddx-64c24626 handles that after opaque forwarding is in place.\n- Deleting session-log tailing; ddx-f948b7a4 handles that after opaque forwarding is in place.",
+    "acceptance": "1. DDx stores or forwards Fizeau ServiceEvents without mutating their payloads; TestServiceRun_ForwardsOpaqueFizeauEvents covers this with an unknown future event payload.\n2. DDx final adapter decodes only final status, output, token/cost, actual route, and session artifact fields needed for DDx Result/indexes; TestServiceRun_FinalResultProjectionOnly covers the allowed fields.\n3. Local DDx copies of Fizeau service-event names/partial schemas are removed or restricted to tests; production uses Fizeau-provided typed decoders when decoding is required.\n4. DDx does not reconstruct tool-call transcripts from Fizeau events for policy decisions.\n5. cd cli \u0026\u0026 go test ./internal/agent ./internal/server -run 'Test.*Service|Test.*Run|Test.*Worker|Test.*ToolCall|Test.*Opaque' -count=1 passes.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-dda48755",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:server",
+      "kind:cleanup",
+      "upstream-fizeau"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T02:42:18Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-05T16:22:00.609586605Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T161532-2ddc2a3a\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":7202780,\"output_tokens\":21273,\"total_tokens\":7224053,\"cost_usd\":0,\"duration_ms\":385639,\"exit_code\":0}",
+          "created_at": "2026-05-05T16:22:00.825696327Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=7224053 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-05T16:22:08.881695992Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=341f9322e20f232d3962107a9b75bdd095dc6688\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T12:27:14-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=37347\noutput_bytes=0\nelapsed_ms=4188",
+          "created_at": "2026-05-05T16:22:14.281504991Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=341f9322e20f232d3962107a9b75bdd095dc6688\nbase_rev=004fb6109ffbd924764ebbf88b5153eb9105caec",
+          "created_at": "2026-05-05T16:22:14.50391268Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T02:42:18.388969834Z",
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service (consumer of ddx-agent contract)"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T024218-5c94accb",
+    "prompt": ".ddx/executions/20260506T024218-5c94accb/prompt.md",
+    "manifest": ".ddx/executions/20260506T024218-5c94accb/manifest.json",
+    "result": ".ddx/executions/20260506T024218-5c94accb/result.json",
+    "checks": ".ddx/executions/20260506T024218-5c94accb/checks.json",
+    "usage": ".ddx/executions/20260506T024218-5c94accb/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-638a3b87-20260506T024218-5c94accb"
+  },
+  "prompt_sha": "e9d00e8c37717870b67efd072a3f486d8a004f68ff095398a0eb21f0718aede9"
+}
