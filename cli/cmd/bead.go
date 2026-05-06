@@ -54,6 +54,7 @@ Examples:
 	cmd.AddCommand(f.newBeadBlockedCommand())
 	cmd.AddCommand(f.newBeadStatusCommand())
 	cmd.AddCommand(f.newBeadDepCommand())
+	cmd.AddCommand(f.newBeadQueueCommand())
 	cmd.AddCommand(f.newBeadEvidenceCommand())
 	cmd.AddCommand(f.newBeadRoutingCommand())
 	cmd.AddCommand(f.newBeadImportCommand())
