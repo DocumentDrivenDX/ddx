@@ -174,7 +174,7 @@ from inside the attempted execution.
 signal. `Disrupted` remains the mechanical indicator that normal completion was
 interrupted. `OutcomeReason` is the stable classification string that explains
 why the attempt ended, such as `lint_warn`, `lint_blocked`,
-`lint_hook_error_fail_open`, `intake_ambiguous`, `intake_decomposed`,
+`lint_hook_error_fail_open`, `readiness_ambiguous`, `readiness_decomposed`,
 `triage_missing_evidence`, `review_fixable_gap`, `review_spec_gap`,
 `review_too_large`, `post_run_check_failed`, or `success`. Layer-3 `ddx work`
 records aggregate these reasons when evaluating retry eligibility, no-progress,
@@ -579,10 +579,10 @@ by lifecycle classification, for example:
 
 - `bead_lint_warn`
 - `bead_lint_blocked`
-- `intake_actionable_atomic`
-- `intake_rewritten`
-- `intake_decomposed`
-- `intake_needs_human`
+- `readiness_actionable_atomic`
+- `readiness_rewritten`
+- `readiness_decomposed`
+- `readiness_needs_human`
 - `forced_with_reason`
 - `triage_prompt_quality`
 - `triage_task_quality`
