@@ -33,9 +33,9 @@ when set), and the last-known server URL is written to
 project roots concurrently; each request is resolved against one explicit
 project context before adapters run. DDx-owned worker lifecycle state remains
 separate from the opaque Fizeau transcript/session payloads that may travel
-through agent-session records. DDx manages the worker lifecycle, while those
-forwarded Fizeau events remain opaque attachments owned by Fizeau rather than
-worker state.
+through agent-session records. DDx manages worker lifecycle events and worker
+records, while forwarded Fizeau events remain opaque attachments owned by
+Fizeau rather than worker state.
 
 ## Architecture
 
