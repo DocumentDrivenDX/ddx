@@ -1,0 +1,12 @@
+verification_command: cd cli && go test ./cmd/... ./internal/agent/... ./internal/bead/... -run "TestWorkInterrupt|TestTryInterrupt|TestInterrupted|TestCancel|TestClaim" -count=1 && lefthook run pre-commit
+
+The current worktree already satisfies the bead contract for ddx-259bb4e2.
+
+Evidence:
+- `cli/internal/agent/execute_bead_loop_disruption_test.go` contains `TestWorkInterrupt_InFlightAttemptUnclaimsBead`, `TestWorkInterrupt_DoesNotSetNoProgressCooldown`, `TestWorkInterrupt_RemovesClaimLiveness`, and `TestInterruptedAfterTerminalMutation_DoesNotUndoClose`.
+- `cli/cmd/try_test.go` contains `TestTryInterrupt_InFlightAttemptUnclaimsTarget` and `TestTryInterrupt_DoesNotReportOperatorCancel`.
+- `cli/cmd/agent_run_overrides_e2e_test.go` contains `TestWorkInterrupt_InFlightAttemptUnclaimsBead`, which exercises the command-level `ddx work` cancellation path.
+- `cli/internal/agent/execute_bead_loop.go` explicitly classifies `context.Canceled` as `context_canceled` and skips `execute-loop-retry-after`.
+- `cli/internal/agent/execute_bead.go` preserves plain context cancellation as a signal/mechanical disruption path and keeps operator cancel semantics separate.
+
+The required focused Go test gate passed, `rg -n "context.Canceled|context_canceled|signal|operator_cancel|execute-loop-retry-after" cli/internal/agent cli/cmd` shows explicit cancellation-path handling, and `lefthook run pre-commit` passed with a clean worktree.
