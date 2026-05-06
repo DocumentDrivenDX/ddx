@@ -33,7 +33,8 @@ when set), and the last-known server URL is written to
 project roots concurrently; each request is resolved against one explicit
 project context before adapters run. DDx-owned worker lifecycle state remains
 separate from the opaque Fizeau transcript/session payloads that may travel
-through agent-session records.
+through agent-session records, and those forwarded Fizeau events are attached
+as evidence rather than reinterpreted as worker state.
 
 ## Architecture
 
