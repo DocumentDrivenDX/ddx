@@ -1,0 +1,88 @@
+{
+  "attempt_id": "20260506T030847-d857bfae",
+  "bead_id": "ddx-b74e66f3",
+  "base_rev": "4de60a8534463f8b0b088816070619e50396fbd4",
+  "created_at": "2026-05-06T03:08:49.543919015Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b74e66f3",
+    "title": "Design TD-036 prose quality pipeline",
+    "description": "CONTEXT\nThis bead creates the technical design for the Prose Quality Support pipeline authorized by FEAT-027. The design should decide the implementation boundary for deterministic prose checks, including whether DDx shells out to Vale, embeds a small checker, or wraps a pluggable runner. The design must keep the first executable surface advisory and must define behavior when optional tooling is missing.\n\nIN-SCOPE FILES\n- docs/helix/02-design/technical-designs/TD-036-prose-quality-pipeline.md\n- docs/helix/01-frame/features/FEAT-027-prose-quality-support.md only for depends_on/status updates if the local convention requires it\n\nREQUIRED DESIGN CONTENT\n- Checker boundary: Vale vs embedded checker vs wrapper, with install/runtime behavior and missing-tool behavior.\n- Rule/vocabulary asset layout in the default DDx plugin.\n- Config schema sketch for mode, severity, vocabulary accept/reject, includes/excludes, and advisory/blocking policy.\n- CLI shape for ddx doc prose --changed and future ddx doc prose \u003cpaths\u003e.\n- Finding schema: file, line, rule id, severity, rationale, suggested edit.\n- Fixture/golden test approach.\n- Sequencing: skill/rules/doc command first; bead review integration later.\n\nOUT-OF-SCOPE\n- Implementing CLI code.\n- Adding rule files.\n- Wiring bead review.",
+    "acceptance": "1. `test -f docs/helix/02-design/technical-designs/TD-036-prose-quality-pipeline.md` passes.\n2. `rg -n \"FEAT-027|checker boundary|Vale|embedded checker|missing|mode|severity|vocabulary|ddx doc prose --changed|file.*line.*rule|advisory|bead review\" docs/helix/02-design/technical-designs/TD-036-prose-quality-pipeline.md` returns matches for the required design concepts.\n3. The TD explicitly states findings are advisory by default and defines what happens when external checker dependencies are unavailable.\n4. The TD includes a concrete fixture/golden test plan that can guide implementation beads.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-ccda7a32",
+    "labels": [
+      "phase:2",
+      "area:docs",
+      "kind:design",
+      "prose-quality"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T03:08:46Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T01:17:48.789598653Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T011623-d4bc3a9a\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":643863,\"output_tokens\":9834,\"total_tokens\":653697,\"cost_usd\":0,\"duration_ms\":83149,\"exit_code\":0}",
+          "created_at": "2026-05-06T01:17:49.012390298Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=653697 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T01:17:54.867016395Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=67b84e89484c7006d568faa16f473bc548d7a70e\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T21:23:00-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=16327\noutput_bytes=0\nelapsed_ms=4174",
+          "created_at": "2026-05-06T01:18:00.157408093Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=67b84e89484c7006d568faa16f473bc548d7a70e\nbase_rev=22065f8767f822ba4d06978919c222746cb4ca7d",
+          "created_at": "2026-05-06T01:18:00.365274578Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T03:08:46.969082691Z",
+      "spec-id": "FEAT-027"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-027",
+      "path": "docs/helix/01-frame/features/FEAT-027-prose-quality-support.md",
+      "title": "Feature: Prose Quality Support"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T030847-d857bfae",
+    "prompt": ".ddx/executions/20260506T030847-d857bfae/prompt.md",
+    "manifest": ".ddx/executions/20260506T030847-d857bfae/manifest.json",
+    "result": ".ddx/executions/20260506T030847-d857bfae/result.json",
+    "checks": ".ddx/executions/20260506T030847-d857bfae/checks.json",
+    "usage": ".ddx/executions/20260506T030847-d857bfae/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b74e66f3-20260506T030847-d857bfae"
+  },
+  "prompt_sha": "e0ff6880d61788aeafd539f587b6692808e594f7e412133c8e5413ab10e3d4e0"
+}
