@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260506T091604-645ceb67",
+  "bead_id": "ddx-f546d275",
+  "base_rev": "09a70357e1364a9f9908799b9d4ecb42b6b7c6f7",
+  "created_at": "2026-05-06T09:16:07.782012852Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f546d275",
+    "title": "Ship human-writing-support skill in the default DDx plugin",
+    "description": "CONTEXT\nDDx should guide agents while they write or edit prose, separate from deterministic post-write checks. This bead ships a default-plugin skill named human-writing-support that adapts the stronger advisory guidance from human-writing-style approaches to DDx: preserve voice, prefer specific detail, avoid generic AI-like tropes, and do not trade away technical precision.\n\nIN-SCOPE FILES\n- library/.agents/skills/ddx/human-writing-support/SKILL.md or the default-plugin skill path established by FEAT-011/TD-036\n- skills/ddx/human-writing-support/SKILL.md and .agents/.claude materialized copies only if this repo maintains generated checked-in mirrors\n- skill validation/eval fixtures under the existing skills validation surface\n\nREQUIRED SKILL BEHAVIOR\n- Trigger for writing, rewriting, editing, or reviewing DDx prose, specs, ADRs, beads, docs, website copy, and public prose.\n- Explicitly says it is not an AI detector or detector-bypass tool.\n- Preserves user voice and technical precision.\n- Applies different expectations for technical, planning, and public prose.\n- Encourages concrete/checkable detail over generic importance language.\n- Directs agents to run deterministic prose checks when available.\n\nOUT-OF-SCOPE\n- CLI checker implementation.\n- Rule pack implementation.\n- Bead review integration.",
+    "acceptance": "1. The default DDx plugin includes a human-writing-support skill with valid agentskills.io frontmatter and a trigger description under the project convention limit.\n2. `rg -n \"not an AI detector|detector bypass|specific|voice|technical|planning|public|ddx doc prose\"` against the skill file returns matches for required guidance.\n3. Existing skill validation command passes, or if this repo uses EXEC-011, the focused validation for shipped skills passes.\n4. The skill does not require agents to remove legitimate technical lists, headings, or DDx terminology.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-ccda7a32",
+    "labels": [
+      "phase:2",
+      "area:skills",
+      "area:plugins",
+      "kind:feature",
+      "prose-quality"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T09:16:04Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "execute-loop-heartbeat-at": "2026-05-06T09:16:04.916189786Z",
+      "spec-id": "TD-036"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-036",
+      "path": "docs/helix/02-design/technical-designs/TD-036-prose-quality-pipeline.md",
+      "title": "Technical Design: Prose Quality Pipeline"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T091604-645ceb67",
+    "prompt": ".ddx/executions/20260506T091604-645ceb67/prompt.md",
+    "manifest": ".ddx/executions/20260506T091604-645ceb67/manifest.json",
+    "result": ".ddx/executions/20260506T091604-645ceb67/result.json",
+    "checks": ".ddx/executions/20260506T091604-645ceb67/checks.json",
+    "usage": ".ddx/executions/20260506T091604-645ceb67/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-f546d275-20260506T091604-645ceb67"
+  },
+  "prompt_sha": "398138cf8a6ede4f3666cac6e09c30c1a1dd39a7c0478f6d16bc8b98edbc6f5b"
+}
