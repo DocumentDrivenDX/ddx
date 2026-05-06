@@ -1807,6 +1807,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		attemptRcfg, _ := config.LoadAndResolve(projectRoot, loopOverrides)
 		res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, agent.ExecuteBeadRuntime{
 			FromRev:     fromRev,
+			Output:      cmd.OutOrStdout(),
 			BeadEvents:  bead.NewStore(filepath.Join(projectRoot, ".ddx")),
 			AgentRunner: f.AgentRunnerOverride,
 		}, gitOps)

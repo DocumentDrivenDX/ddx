@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"encoding/xml"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -130,6 +131,7 @@ var CancelPollInterval = 10 * time.Second
 type ExecuteBeadRuntime struct {
 	FromRev     string // base git revision (default: HEAD)
 	PromptFile  string // override prompt file (auto-generated if empty)
+	Output      io.Writer
 	WorkerID    string // from DDX_WORKER_ID env or caller
 	BeadEvents  BeadEventAppender
 	BeadCancel  BeadCancelStore // optional: enables operator-cancel mid-attempt poll

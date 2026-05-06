@@ -247,6 +247,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 			gitOps := &agent.RealGitOps{}
 			res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, execBeadID, attemptRcfg, agent.ExecuteBeadRuntime{
 				FromRev:    fromRev,
+				Output:     cmd.OutOrStdout(),
 				BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
 			}, gitOps)
 			if execErr != nil && res == nil {
