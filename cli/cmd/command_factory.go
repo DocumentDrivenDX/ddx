@@ -12,6 +12,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
+	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
 	"github.com/DocumentDrivenDX/ddx/internal/persona"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/DocumentDrivenDX/ddx/internal/update"
@@ -174,6 +175,7 @@ More information:
 	// does not always show up in deadcode RTA, so this explicit hook keeps the
 	// real CLI implementations visible without changing runtime behavior.
 	persona.KeepReachabilityForDeadcode()
+	metaprompt.KeepReachabilityForDeadcode()
 
 	return rootCmd
 }
