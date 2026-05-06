@@ -543,15 +543,19 @@ adds two quality hooks to the layer-2/layer-3 lifecycle. The hooks are
 implemented in `ExecuteBeadLoopRuntime` at the same boundary that already
 owns bead selection, attempt finalization, and retry classification.
 
-`PreClaimIntakeHook` runs after a bead has been selected and verified as
+`BeadReadinessHook` runs after a bead has been selected and verified as
 dependency-eligible, but before DDx claims it or creates the implementation
-worktree. It receives the bead record, current execution policy, hook mode
+worktree. It is the canonical pre-claim bead readiness assessment. The legacy
+compatibility name `PreClaimIntakeHook` and `MODE: intake` may still appear in
+migration code or notes, but they are not the product concept.
+
+The hook receives the bead record, current execution policy, hook mode
 (`WARN-ONLY` or `BLOCK`), and the layer-3 evidence directory. It invokes the
-bead-lifecycle workflow skill from FEAT-011 and writes an actionability,
+bead-lifecycle workflow skill from FEAT-011 and writes a bead readiness,
 scope, and decomposition report. In WARN-ONLY mode, the report is diagnostic
-unless the hook can safely improve or decompose the bead. In BLOCK/factory mode,
-a valid low actionability score, unsafe ambiguity, or too-large classification
-stops implementation before claim.
+unless the hook can safely improve or decompose the bead. In BLOCK/factory
+mode, a valid low readiness score, unsafe ambiguity, or too-large
+classification stops implementation before claim.
 
 `PostAttemptTriageHook` runs after the attempt has produced its owned
 evidence: commits or no-changes rationale, command results, review verdicts,
