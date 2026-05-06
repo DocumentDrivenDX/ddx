@@ -1,0 +1,2 @@
+verification_command: cd cli && go test ./internal/bead/... && lefthook run pre-commit
+result: queue-rank ordering for Ready and ReadyExecution is already implemented in cli/internal/bead/store.go, and the required acceptance tests already exist in cli/internal/bead/gaps_test.go.
