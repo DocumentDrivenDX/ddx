@@ -1,0 +1,124 @@
+{
+  "attempt_id": "20260506T074122-298ef08b",
+  "bead_id": "ddx-d6730314",
+  "base_rev": "8fc323f79cd3299182944e03830591706716bdea",
+  "created_at": "2026-05-06T07:41:24.709076882Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d6730314",
+    "title": "agent: wrap artifact bodies with untrusted-data delimiters",
+    "description": "PROBLEM\nPrompt-injection boundary markers are not yet explicit around artifact bodies that later flow into prompt assembly. The current server-side artifact readers in `cli/internal/server/state_executions.go:205-217` clamp text for transport, but they do not wrap the body in an explicit untrusted-data envelope for downstream prompt renderers. The review prompt path in `cli/internal/agent/execute_bead.go:1561-1630` only uses XML tags for the bead envelope; it does not mark artifact content with a dedicated boundary contract.\n\nROOT CAUSE\nThere is no shared delimiter helper for untrusted artifact bodies. The current prompt builders rely on ad hoc XML wrappers and transport clamping, which are not the same thing as a prompt-injection boundary that clearly distinguishes trusted instructions from untrusted artifact text.\n\nPROPOSED FIX\n- Add a small helper (likely in `cli/internal/evidence` or the prompt-rendering package that owns the assembler) that wraps artifact bodies in a canonical untrusted-data delimiter pair.\n- Update the prompt-rendering call sites that inline artifact bodies to use the wrapper before interpolation.\n- Add a regression test named `TestArtifactBodyDelimitedAsUntrusted` that asserts the delimiter pair appears around the artifact payload and that the raw body is still preserved inside the wrapper.\n\nNON-SCOPE\n- Do not alter the transport-level clamp behavior or its `truncated` metadata.\n- Do not change review verdict parsing or the FEAT-022 telemetry schema in this slice.\n- Do not rewrite unrelated server text egress paths.",
+    "acceptance": "1. A reusable delimiter helper exists for untrusted artifact bodies.\n2. Prompt assembly uses the helper at every artifact-body interpolation site in scope.\n3. `TestArtifactBodyDelimitedAsUntrusted` proves the delimiter contract and payload preservation.\n4. `cd cli \u0026\u0026 go test ./internal/server/... ./internal/agent/...` passes.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-42b917fe",
+    "labels": [
+      "phase:2",
+      "story:18",
+      "area:server",
+      "area:agent",
+      "kind:feature",
+      "security",
+      "from:ddx-0e5c3005"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T07:41:22Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T04:33:24.451530973Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T042824-b7bee959\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":6060430,\"output_tokens\":14745,\"total_tokens\":6075175,\"cost_usd\":0,\"duration_ms\":297896,\"exit_code\":0}",
+          "created_at": "2026-05-06T04:33:24.65114092Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=6075175 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T04:33:31.798270402Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=d7ddc21d832f8fd13ee82714e7be0b0b405a9842\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T00:38:36-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=9115\noutput_bytes=0\nelapsed_ms=4188",
+          "created_at": "2026-05-06T04:33:36.520389652Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=d7ddc21d832f8fd13ee82714e7be0b0b405a9842\nbase_rev=72e242521b65997d89d9b0eb9bc854953c681989",
+          "created_at": "2026-05-06T04:33:36.716595058Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T06:25:55.106381031Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T062353-771ea315\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":1098317,\"output_tokens\":5812,\"total_tokens\":1104129,\"cost_usd\":0,\"duration_ms\":119406,\"exit_code\":0}",
+          "created_at": "2026-05-06T06:25:55.315564097Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=1104129 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T06:26:01.486644734Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=2f96326e781529325cf0546d31a0a8845e1fae6d\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T02:31:06-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=11445\noutput_bytes=0\nelapsed_ms=4163",
+          "created_at": "2026-05-06T06:26:06.148475537Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=2f96326e781529325cf0546d31a0a8845e1fae6d\nbase_rev=49c2d093664d2dde0a4668e421109ad957537469",
+          "created_at": "2026-05-06T06:26:06.365877887Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T07:41:22.223018344Z",
+      "replaces": ".execute-bead-wt-ddx-0e5c3005-20260505T113434-3317d134-7fb75345"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260506T074122-298ef08b",
+    "prompt": ".ddx/executions/20260506T074122-298ef08b/prompt.md",
+    "manifest": ".ddx/executions/20260506T074122-298ef08b/manifest.json",
+    "result": ".ddx/executions/20260506T074122-298ef08b/result.json",
+    "checks": ".ddx/executions/20260506T074122-298ef08b/checks.json",
+    "usage": ".ddx/executions/20260506T074122-298ef08b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d6730314-20260506T074122-298ef08b"
+  },
+  "prompt_sha": "5e06f3d016925d2e03529583faa31ab7264189fd1b8936119daebe5f86f543ae"
+}
