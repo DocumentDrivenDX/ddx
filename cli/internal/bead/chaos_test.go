@@ -17,7 +17,7 @@ import (
 // (per ddx-bbdd7564 AC §5) rather than through *Store directly.
 func newTestBackend(t *testing.T) Backend {
 	t.Helper()
-	return newTestStore(t)
+	return newJSONLStore(t)
 }
 
 // chaosBackend names a backend constructor for the parameterized chaos suite.
@@ -31,7 +31,7 @@ type chaosBackend struct {
 
 func chaosBackends() []chaosBackend {
 	return []chaosBackend{
-		{name: "jsonl", make: func(t *testing.T) Backend { return newTestStore(t) }},
+		{name: "jsonl", make: func(t *testing.T) Backend { return newJSONLStore(t) }},
 		{name: "axon", make: func(t *testing.T) Backend { return newAxonStore(t) }},
 	}
 }

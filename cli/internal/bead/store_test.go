@@ -38,6 +38,22 @@ func newTestStore(t *testing.T) *Store {
 	return s
 }
 
+func newConfiguredStore(t *testing.T, backend string) *Store {
+	t.Helper()
+	dir := t.TempDir()
+	if backend != "" {
+		writeStoreConfig(t, dir, backend)
+	}
+	s := NewStore(filepath.Join(dir, ".ddx"))
+	require.NoError(t, s.Init())
+	return s
+}
+
+func newJSONLStore(t *testing.T) *Store {
+	t.Helper()
+	return newConfiguredStore(t, BackendJSONL)
+}
+
 func writeStoreConfig(t *testing.T, dir string, backend string) {
 	t.Helper()
 	ddxDir := filepath.Join(dir, ".ddx")

@@ -15,7 +15,7 @@ type backendConformanceCase struct {
 
 func backendConformanceCases() []backendConformanceCase {
 	return []backendConformanceCase{
-		{name: "jsonl", make: newTestStore},
+		{name: "jsonl", make: newJSONLStore},
 		{name: "axon", make: newAxonStore},
 	}
 }
