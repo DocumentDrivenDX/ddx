@@ -1,0 +1,7 @@
+verification_command: cd cli && go test ./cmd/... && lefthook run pre-commit
+
+Rationale:
+The stale-binary warning implementation is already present in the current worktree
+(`cli/cmd/command_factory.go`), and the required tests in
+`cli/cmd/version_staleness_test.go` already pass. The repo-level pre-commit gate
+also passes. No additional code changes were required in this execution worktree.
