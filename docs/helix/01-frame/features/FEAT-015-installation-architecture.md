@@ -107,6 +107,11 @@ section describes how DDx heals or ignores each.
   as real files. DDx does **not** delete files outside the project
   root; users may `rm -rf ~/.agents/skills/ddx-*
   ~/.claude/skills/ddx-*` themselves if they want a clean home tree.
+  Long-running runtime entrypoints such as `ddx work`, `ddx try`, and
+  `ddx server` must detect this project-local legacy layout during
+  their lightweight startup preflight and print the same remediation
+  path before doing work: run `ddx update --force`, then run `ddx
+  doctor` to confirm the project-local skills are real files.
 
 - **Stale `~/.ddx/installed.yaml` entries** from a prior global
   install. These are treated as **no-op uninstalls**: `ddx

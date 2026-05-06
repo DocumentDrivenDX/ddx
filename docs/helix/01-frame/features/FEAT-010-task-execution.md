@@ -588,6 +588,36 @@ successfully computed readiness/lint result can block dispatch as an authoring
 or scope failure. `--force --reason <text>` records an event with the actor,
 reason, hook mode, and overridden criteria before proceeding.
 
+Long-running entrypoints perform a lightweight DDx runtime preflight before
+starting work. This is not a full `ddx doctor` run: it avoids network checks,
+package-manager checks, route probing, stale-document scans, and other broad
+diagnostics. The preflight is limited to conditions that can predictably degrade
+the command about to run:
+
+- project root resolution;
+- `.ddx/config.yaml` parseability;
+- `.ddx/beads.jsonl` parseability for bead-execution commands;
+- the root `ddx` project skill under `.agents/skills/ddx/SKILL.md` or
+  `.claude/skills/ddx/SKILL.md`;
+- the nested `bead-lifecycle` skill when readiness/lint/triage hooks are wired;
+- legacy project-local skill symlinks from the pre-FEAT-015 install model.
+
+Passing preflight checks are silent. Failed checks are observable and
+actionable. `ddx work`, `ddx try`, and compatibility `ddx agent execute-loop`
+fail on missing required project/tracker state, but warn once per process and
+continue for optional lifecycle-hook degradation in WARN-ONLY mode. `ddx server`
+fails on missing required server project state, but missing lifecycle skills or
+legacy skill layout are surfaced as degraded startup diagnostics and health
+metadata rather than blocking the HTTP server. When the lifecycle skill is
+missing, both startup preflight and hook-time errors must include the project
+root, the exact checked paths, and remediation:
+
+```text
+Run:
+  ddx update --force
+  ddx doctor
+```
+
 `ExecuteBeadReport` gains an `OutcomeReason` field beside the existing
 `Disrupted` flag. `Disrupted` remains the coarse boolean that the attempt did
 not complete normally. `OutcomeReason` is the machine-readable reason selected
