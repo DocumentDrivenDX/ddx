@@ -75,7 +75,7 @@ budgets remain provisional design targets.
 | Metric | What to record | Where it lives |
 |--------|----------------|----------------|
 | First usable content | Time from navigation start to the artifact list becoming visible and interactive on the reference fixture | `cli/internal/server/frontend/e2e/artifacts.spec.ts` |
-| Search/filter latency | Time from a category filter or search input change to the updated list settling while the list is already loaded | `cli/internal/server/frontend/e2e/artifacts.spec.ts` |
+| Search/filter latency | Time from a category filter change or a search input change, measured separately, to the updated list settling while the list is already loaded | `cli/internal/server/frontend/e2e/artifacts.spec.ts` |
 | Steady-state DOM rows | Maximum visible artifact rows in the default list state before the contract needs to be revisited | FEAT-008 contract + perf baseline report |
 
 Method:
@@ -89,6 +89,9 @@ Method:
    as the steady-state DOM ceiling for the current contract.
 4. Publish the measured numbers in `docs/helix/06-iterate/perf/` and keep this
    plan aligned with the same report.
+5. Use the B7-C1 baseline report as the source of truth for the locked gating
+   numbers. Until that baseline exists, the FEAT-008 budgets remain provisional
+   design targets rather than pass/fail thresholds.
 
 Revisit the contract before shipping if the artifact browser design adds any
 of the following:
@@ -96,6 +99,7 @@ of the following:
 - infinite scroll
 - auto-prefetch
 - 500-1000 visible DOM rows in the default list state
+- more than 1000 visible DOM rows in the default list state
 - sticky group headers
 
 The current implementation model assumes the artifact list remains flat and

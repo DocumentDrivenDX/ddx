@@ -429,25 +429,26 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
    - See which roles each persona is bound to in project config
    - View full persona content rendered as markdown
 
-### Performance Contract: Artifact Browser
+### Performance Contract: Artifact Listing
 
-The artifact browser list view carries a provisional performance contract for
-design work. These budgets shape the current implementation, but the gating
-numbers stay provisional until the B7-C1 baseline measurement is recorded and
-published in the perf docs. Treat the values below as design-time budgets, not
-final thresholds.
+The artifact listing view carries a provisional performance contract for design
+work. These budgets shape the current implementation, but the gating numbers
+stay provisional until the B7-C1 baseline measurement is recorded and published
+in the perf docs. Treat the values below as design-time budgets, not final
+thresholds.
 
 | Budget | Provisional contract | Revisit when |
 |---|---|---|
 | Initial load | First usable content within 2s on the reference fixture | Baseline measurement lands with different gating numbers |
 | Search/filter latency | Interactions settle within 200ms once the current list data is already loaded | Search becomes data-loading bound instead of DOM-bound |
-| Steady-state DOM rows | Default list view stays flat and non-virtualized at 500 visible artifact rows | The default state needs 500-1000 visible rows, or more than 1000 visible rows |
+| Steady-state DOM rows | Default list view stays flat and non-virtualized at up to 500 visible artifact rows | The default state needs 500-1000 visible rows, more than 1000 visible rows, or sticky group headers |
 
-- Revisit the contract before shipping if the artifact browser design adds any
+- Revisit the contract before shipping if the artifact listing design adds any
   of the following:
   - infinite scroll
   - auto-prefetch
   - 500-1000 visible DOM rows in the default list state
+  - more than 1000 visible DOM rows in the default list state
   - sticky group headers
 - The default list view assumes a flat, non-virtualized DOM. If the design
   changes that assumption, update this section and the TP-002 measurement
