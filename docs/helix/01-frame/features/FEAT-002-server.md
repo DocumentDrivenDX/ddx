@@ -31,11 +31,11 @@ at `~/.local/share/ddx/server-state.json` (`$XDG_DATA_HOME/ddx/server-state.json
 when set), and the last-known server URL is written to
 `~/.local/share/ddx/server.addr` (see FEAT-020). The server binds multiple
 project roots concurrently; each request is resolved against one explicit
-project context before adapters run. DDx-owned worker lifecycle state is
+project context before adapters run. DDx-owned worker lifecycle progress is
 separate from the opaque Fizeau agent transcript/session payloads that may
 travel through agent-session records. DDx manages worker lifecycle events and
-worker records; forwarded Fizeau events remain opaque attachments owned by
-Fizeau and never become worker state or lifecycle state.
+worker records; forwarded Fizeau agent events remain opaque attachments owned
+by Fizeau and never become worker state or lifecycle state.
 
 ## Architecture
 
@@ -90,13 +90,15 @@ Legacy unscoped `/api/...` and `/mcp/...` forms remain only as compatibility ali
 `ddx-server` hosts an in-process `WorkerManager` that supervises `ddx work`
 workers as goroutines. Each worker drains exactly one registered project
 context; it never crosses project boundaries. Worker lifecycle state
-(start, live progress, stop, record on disk) is DDx-owned and distinct from any
-agent transcript data. The host+user daemon is the single point of
-coordination for all long-running DDx worker activity on the machine. The
-supervisor exposes worker state through the same project-scoped API surface
-used for beads and executions, and worker records persist under the project's
-own `.ddx/workers/` directory so preservation and cleanup stay scoped per
-project.
+(start, live progress, stop, record on disk) is DDx-owned and distinct from
+any agent transcript data. Fizeau owns transcript/progress/session rendering
+for its agent events; DDx only surfaces its own worker state and any opaque
+forwarded Fizeau payloads alongside it. The host+user daemon is the single
+point of coordination for all long-running DDx worker activity on the
+machine. The supervisor exposes worker state through the same project-scoped
+API surface used for beads and executions, and worker records persist under
+the project's own `.ddx/workers/` directory so preservation and cleanup stay
+scoped per project.
 
 When multiple machines each run `ddx-server` against the same project, each
 machine runs its own land coordinator against its local clone. The shared git
