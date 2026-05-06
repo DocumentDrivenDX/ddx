@@ -125,3 +125,35 @@ func TestCleanupCommand_JSONShape(t *testing.T) {
 	assert.Greater(t, report.BytesReclaimed, int64(0))
 	assert.Greater(t, report.InodesReclaimed, int64(0))
 }
+
+func TestCleanupCommand_DoesNotRemovePreservedEvidence(t *testing.T) {
+	projectRoot, tempRoot := setupCleanupCommandProject(t)
+	stalePath := writeCleanupCommandCandidate(t, tempRoot, agent.ExecuteBeadWtPrefix+"ddx-cleanup-preserved-20260506T154739-abcdef12", projectRoot, "20260506T154739-abcdef12")
+	preservedPath := writeCleanupCommandCandidate(t, tempRoot, agent.ExecuteBeadWtPrefix+"ddx-cleanup-preserved-20260506T154739-34567890", projectRoot, "20260506T154739-34567890")
+	require.NoError(t, agent.WriteExecutionCleanupMetadata(preservedPath, agent.ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-cleanup",
+		AttemptID:    "20260506T154739-34567890",
+		WorktreePath: preservedPath,
+		Preserved:    true,
+	}))
+	evidenceDir := filepath.Join(projectRoot, ".ddx", "executions", "attempt-complete")
+	require.NoError(t, os.MkdirAll(evidenceDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(evidenceDir, "manifest.json"), []byte(`{"attempt_id":"attempt-complete"}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(evidenceDir, "result.json"), []byte(`{"status":"success"}`), 0o644))
+	runsDir := filepath.Join(projectRoot, ".ddx", "runs", "run-complete")
+	require.NoError(t, os.MkdirAll(runsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(runsDir, "record.json"), []byte(`{"run_id":"run-complete"}`), 0o644))
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	out, err := executeCommand(root, "cleanup", "--apply")
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "cleanup: removed 1 stale temp dir(s), 0 registered worktree(s), 0 run-state file(s)")
+	assert.Contains(t, out, "cleanup: preserved 2 complete evidence bundle(s)")
+	assert.NoFileExists(t, stalePath)
+	assert.DirExists(t, preservedPath)
+	assert.FileExists(t, filepath.Join(evidenceDir, "manifest.json"))
+	assert.FileExists(t, filepath.Join(evidenceDir, "result.json"))
+	assert.FileExists(t, filepath.Join(runsDir, "record.json"))
+}
