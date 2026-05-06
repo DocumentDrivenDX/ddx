@@ -80,10 +80,10 @@ DDx owns:
   metadata, not a DDx-side routing algorithm. See ADR-024.
 
 DDx owns bead/worker lifecycle progress and execution evidence capture. Fizeau
-owns the transcript, progress, provider/model discovery, and session rendering
-surface. DDx is a pass-through/marshalling consumer for Fizeau transcript
-events: it may forward Fizeau `ServiceEvent`s unchanged and link or copy
-Fizeau artifacts into the execution evidence bundle, but DDx treats those
+owns transcript/progress rendering, provider/model discovery, and session
+presentation. DDx is a pass-through/marshalling consumer for Fizeau
+transcript events: it may forward Fizeau `ServiceEvent`s unchanged and link or
+copy Fizeau artifacts into the execution evidence bundle, but DDx treats those
 payloads as opaque evidence only. DDx carries the event stream and attachments
 as evidence, but it does not render, rehydrate, parse, or semantically
 interpret the inner Fizeau transcript or session-log content. Those payloads
