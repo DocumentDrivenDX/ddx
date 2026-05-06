@@ -1,0 +1,5 @@
+NewResolver: DELETE - the server builds the GraphQL resolver inline in `cli/internal/server/server.go:4868-4890`, and no production call site references a constructor.
+personaConnectionFrom: DELETE - the current GraphQL persona surface is implemented by `Personas`, `Persona`, and `PersonaByRole` in `cli/internal/server/graphql/resolver_meta.go:10-52`; no connection helper exists in the active tree.
+resetProviderModelsCacheForTest: DELETE - tests reset `providerModelsCache` directly in `cli/internal/server/graphql/resolver_provider_models_test.go:31-231`; no separate reset helper is present in the production package.
+RecordHarnessRateLimit: DELETE - harness quota lookup currently flows through `LookupHarnessRateLimit` and `quotaFromHarnessInfo` in `cli/internal/server/graphql/resolver_providers.go:23-39,499-516`; tests seed `harnessRateLimitCache` directly in `cli/internal/server/graphql/providers_unified_test.go:394-426`.
+resetHarnessRateLimitCache: DELETE - the harness rate-limit cache is cleared inline by tests in `cli/internal/server/graphql/providers_unified_test.go:394-400`; no production reset helper remains.
