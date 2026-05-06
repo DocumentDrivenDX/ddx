@@ -109,6 +109,66 @@
       },
       "additionalProperties": false
     },
+    "prose": {
+      "type": "object",
+      "description": "Deterministic prose-quality workflow settings",
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["technical", "planning", "public"],
+          "description": "Rule pack to apply to prose checks"
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["advisory", "warning", "blocking"],
+          "description": "Severity attached to emitted prose findings"
+        },
+        "policy": {
+          "type": "string",
+          "enum": ["advisory", "blocking"],
+          "description": "Exit-policy for prose findings"
+        },
+        "runner": {
+          "type": "string",
+          "enum": ["embedded", "vale", "auto"],
+          "description": "Optional runner selection for prose checks"
+        },
+        "includes": {
+          "type": "array",
+          "description": "Markdown path globs to include",
+          "items": {
+            "type": "string"
+          }
+        },
+        "excludes": {
+          "type": "array",
+          "description": "Markdown path globs to exclude",
+          "items": {
+            "type": "string"
+          }
+        },
+        "vocabulary": {
+          "type": "object",
+          "description": "Project terminology to preserve or reject",
+          "properties": {
+            "accept": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "reject": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
     "persona_bindings": {
       "type": "object",
       "description": "Bindings between roles and persona names",

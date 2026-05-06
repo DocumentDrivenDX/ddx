@@ -42,6 +42,27 @@ func TestProseCheckerVocabularyOverrides(t *testing.T) {
 	}
 }
 
+func TestProseCheckerVocabularyPreservation(t *testing.T) {
+	checker, err := NewChecker(ModeTechnical, Vocabulary{
+		Accept: []string{"Quartz"},
+		Reject: []string{"system"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	findings := checker.Findings("input.md", "Quartz keeps the system honest.\n")
+	if len(findings) != 1 {
+		t.Fatalf("expected one reject finding, got %+v", findings)
+	}
+	if findings[0].RuleID != "prose.vocabulary.reject" {
+		t.Fatalf("unexpected rule id: %+v", findings[0])
+	}
+	if strings.Contains(findings[0].Rationale, "Quartz") {
+		t.Fatalf("accepted term should not be flagged, got %+v", findings[0])
+	}
+}
+
 func TestDefaultAssetLayout(t *testing.T) {
 	root, err := defaultAssetRoot()
 	if err != nil {

@@ -56,6 +56,7 @@ Examples:
 	cmd.AddCommand(f.newDocHistoryCommand())
 	cmd.AddCommand(f.newDocDiffCommand())
 	cmd.AddCommand(f.newDocChangedCommand())
+	cmd.AddCommand(f.newDocProseCommand())
 	cmd.AddCommand(f.newDocAuditCommand())
 
 	return cmd

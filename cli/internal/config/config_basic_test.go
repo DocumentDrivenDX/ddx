@@ -111,6 +111,52 @@ func TestLoadLocal_Basic(t *testing.T) {
 	assert.Equal(t, "test_value", config.PersonaBindings["test_var"])
 }
 
+func TestLoadWithWorkingDir_ProseConfig(t *testing.T) {
+	tempDir := t.TempDir()
+
+	configData := []byte(`version: "1.0"
+library:
+  path: .ddx/plugins/ddx
+  repository:
+    url: https://github.com/test/repo
+    branch: main
+persona_bindings: {}
+prose:
+  mode: planning
+  severity: advisory
+  policy: blocking
+  runner: vale
+  includes:
+    - docs/helix/**
+  excludes:
+    - "**/*.generated.md"
+  vocabulary:
+    accept:
+      - Quartz
+    reject:
+      - system
+`)
+
+	ddxDir := filepath.Join(tempDir, ".ddx")
+	require.NoError(t, os.MkdirAll(ddxDir, 0755))
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), configData, 0644))
+
+	cfg, err := LoadWithWorkingDir(tempDir)
+	require.NoError(t, err)
+	if cfg.Prose == nil {
+		t.Fatal("expected prose config to load")
+	}
+	assert.Equal(t, "planning", cfg.Prose.Mode)
+	assert.Equal(t, "advisory", cfg.Prose.Severity)
+	assert.Equal(t, "blocking", cfg.Prose.Policy)
+	assert.Equal(t, "vale", cfg.Prose.Runner)
+	assert.Equal(t, []string{"docs/helix/**"}, cfg.Prose.Includes)
+	assert.Equal(t, []string{"**/*.generated.md"}, cfg.Prose.Excludes)
+	require.NotNil(t, cfg.Prose.Vocabulary)
+	assert.Contains(t, cfg.Prose.Vocabulary.Accept, "Quartz")
+	assert.Contains(t, cfg.Prose.Vocabulary.Reject, "system")
+}
+
 // TestSaveLocal tests SaveLocal function
 func TestSaveLocal_Basic(t *testing.T) {
 	tempDir := t.TempDir()

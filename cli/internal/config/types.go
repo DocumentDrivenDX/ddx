@@ -23,6 +23,7 @@ type NewConfig struct {
 	Cost            *CostConfig         `yaml:"cost,omitempty" json:"cost,omitempty"`
 	Workers         *WorkersConfig      `yaml:"workers,omitempty" json:"workers,omitempty"`
 	EvidenceCaps    *EvidenceCapsConfig `yaml:"evidence_caps,omitempty" json:"evidence_caps,omitempty"`
+	Prose           *ProseConfig        `yaml:"prose,omitempty" json:"prose,omitempty"`
 	// ReviewMaxRetries caps reviewer attempts per committed result_rev before
 	// the execute-loop emits a terminal `review-manual-required` event and
 	// parks the bead (FEAT-022 §14). Zero or unset uses the binary default
@@ -53,6 +54,23 @@ type BeadQualityLintConfig struct {
 	// results whose score falls below the threshold. Zero or unset keeps the
 	// default warn-only behavior.
 	BlockThresholdScore *int `yaml:"block_threshold_score,omitempty" json:"block_threshold_score,omitempty"`
+}
+
+// ProseConfig controls the deterministic prose-quality workflow.
+type ProseConfig struct {
+	Mode       string                 `yaml:"mode,omitempty" json:"mode,omitempty"`
+	Severity   string                 `yaml:"severity,omitempty" json:"severity,omitempty"`
+	Policy     string                 `yaml:"policy,omitempty" json:"policy,omitempty"`
+	Runner     string                 `yaml:"runner,omitempty" json:"runner,omitempty"`
+	Includes   []string               `yaml:"includes,omitempty" json:"includes,omitempty"`
+	Excludes   []string               `yaml:"excludes,omitempty" json:"excludes,omitempty"`
+	Vocabulary *ProseVocabularyConfig `yaml:"vocabulary,omitempty" json:"vocabulary,omitempty"`
+}
+
+// ProseVocabularyConfig configures project terms to preserve or reject.
+type ProseVocabularyConfig struct {
+	Accept []string `yaml:"accept,omitempty" json:"accept,omitempty"`
+	Reject []string `yaml:"reject,omitempty" json:"reject,omitempty"`
 }
 
 // ResolveTriagePolicy returns the effective triage policy for this config,
