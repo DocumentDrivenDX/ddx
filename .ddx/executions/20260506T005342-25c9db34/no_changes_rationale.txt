@@ -1,0 +1,2 @@
+verification_command: cd cli && go test ./internal/bead/axon/... && lefthook run pre-commit
+reason: The bead is already satisfied in the current tree. cli/internal/bead/axon/subscription_smoke_test.go defines TestAxonSubscription_ReceivesBeadMutations, which opens the subscription path with NewWebSocketSubscriptionTransport(ts.URL + "/graphql"), subscribes via the generated Axon client, and asserts ordered change events from bead mutations. The package test suite and pre-commit gate both passed without modifications.
