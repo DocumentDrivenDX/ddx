@@ -1,6 +1,6 @@
 ---
 name: human-writing-support
-description: Support DDx prose work by preserving voice, preferring specific checkable detail, adapting guidance for technical, planning, and public prose, and keeping DDx terminology, headings, and legitimate lists intact.
+description: Support DDx prose work by preserving voice, improving execution-useful clarity, applying deterministic prose findings with judgment, and keeping DDx terminology, headings, tables, paths, commands, and legitimate lists intact.
 ---
 
 # Human Writing Support
@@ -11,21 +11,36 @@ specs, ADRs, beads, docs, website copy, release notes, and other public text.
 ## What This Is
 
 This is guidance for better human writing, not an AI detector and not a
-detector bypass tool. The goal is to make prose clearer, truer, and more useful
-without sanding off the author's voice or the project vocabulary.
+detector bypass tool. The goal is prose that helps a maintainer or agent
+execute, review, or trust a DDx document.
 
 ## Core Guidance
 
-- Apply different expectations to technical, planning, and public prose.
 - Preserve the user's voice unless the text is explicitly asking for a new tone.
 - Prefer specific, checkable detail over generic importance language.
 - Keep technical precision intact; do not collapse names, commands, paths,
   numbers, or constraints into vague summaries.
 - Keep legitimate headings, lists, tables, code blocks, and DDx terminology when
   they improve clarity.
-- If a deterministic prose check is available, run it after editing. Use
-  `ddx doc prose` when the project provides it, or the repo's equivalent
-  deterministic prose command. Do not treat detector bypass as a goal.
+- If a deterministic prose check is available, treat it as advisory evidence,
+  not as a banned-word oracle. Fix findings that make the doc less executable
+  or reviewable; leave correct technical wording intact.
+
+## Using `ddx doc prose`
+
+Run `ddx doc prose --changed` after editing Markdown under `docs/`.
+
+Use a finding when it identifies one of these problems:
+
+- The sentence makes a broad claim but gives no concrete behavior, boundary,
+  command, artifact, measurement, or acceptance evidence.
+- The prose hides the actor, action, consequence, or review target.
+- The wording replaces a DDx concept with a vague substitute.
+- Repeated or filler text makes the document harder to execute.
+
+Do not "fix" a finding by weakening correct technical prose. Paths, headings,
+tables, commands, API names, quoted contract language, and precise terms are
+often supposed to be dense.
 
 ## By Prose Type
 
@@ -50,8 +65,10 @@ without sanding off the author's voice or the project vocabulary.
 
 ## Editing Checks
 
-- Ask whether each sentence adds a specific fact, decision, or constraint.
-- Replace broad claims with evidence, examples, or concrete outcomes.
+- Ask whether each sentence adds a specific fact, decision, constraint, or
+  reviewable implication.
+- Replace broad claims with evidence, examples, concrete outcomes, or named
+  artifacts.
 - Keep a writer's intent unless the text is internally inconsistent or plainly
   wrong.
 - Prefer small, local edits over full rewrites when the original already has a
