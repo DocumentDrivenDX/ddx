@@ -212,7 +212,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		return nil, fmt.Errorf("agent: execute: %w", err)
 	}
 
-	final, routing, actualPower, _ := drainServiceEvents(events)
+	final, routing, _ := drainServiceEvents(events)
 	finishedAt := time.Now().UTC()
 	elapsed := finishedAt.Sub(start)
 
@@ -229,13 +229,12 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		if routing.Harness != "" {
 			result.Harness = routing.Harness
 		}
-		result.PredictedPower = routing.PredictedPower
-		result.PredictedSpeedTPS = routing.PredictedSpeedTPS
-		result.PredictedCostUSDPer1kTokens = routing.PredictedCostUSDPer1kTokens
-		result.PredictedCostSource = routing.PredictedCostSource
-	}
-	if actualPower > 0 {
-		result.ActualPower = actualPower
+		if power, speed, cost, source := selectedRoutingCandidateMetrics(routing); power > 0 || speed > 0 || cost > 0 || source != "" {
+			result.PredictedPower = power
+			result.PredictedSpeedTPS = speed
+			result.PredictedCostUSDPer1kTokens = cost
+			result.PredictedCostSource = source
+		}
 	}
 	if final != nil {
 		// Normalized final text from the upstream harness (agent-32e8ff5e);
@@ -265,6 +264,12 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 			}
 			if final.RoutingActual.Model != "" {
 				result.Model = final.RoutingActual.Model
+			}
+			if final.RoutingActual.Harness != "" {
+				result.Harness = final.RoutingActual.Harness
+			}
+			if final.RoutingActual.Power > 0 {
+				result.ActualPower = final.RoutingActual.Power
 			}
 		}
 		if final.SessionLogPath != "" {

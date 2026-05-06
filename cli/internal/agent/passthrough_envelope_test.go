@@ -272,6 +272,114 @@ func TestExecuteOnService_IgnoresToolCallTranscriptProjection(t *testing.T) {
 	}
 }
 
+// TestServiceRun_ForwardsOpaqueFizeauEvents verifies that a future/unknown
+// service event type does not disturb the final projection path. DDx should
+// pass through the event stream without trying to interpret or rewrite the
+// opaque payload.
+func TestServiceRun_ForwardsOpaqueFizeauEvents(t *testing.T) {
+	opaque := []byte(`{"future_field":"keep-me","nested":{"count":3}}`)
+	svc := &passthroughTestService{
+		executeEvents: []agentlib.ServiceEvent{
+			{Type: "future.event", Data: opaque},
+			{Type: "final", Data: []byte(`{"status":"success","exit_code":0,"final_text":"done"}`)},
+		},
+	}
+	rcfg := resolvedWithPassthrough("claude", "anthropic", "claude-3-7-sonnet", 0, 0)
+
+	result, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "hello",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	if result.Output != "done" {
+		t.Fatalf("Result.Output = %q, want done", result.Output)
+	}
+	if len(result.ToolCalls) != 0 {
+		t.Fatalf("expected no reconstructed tool transcript, got %+v", result.ToolCalls)
+	}
+}
+
+// TestServiceRun_FinalResultProjectionOnly verifies the service adapter reads
+// only the final projection fields needed for DDx Result and run indexing.
+func TestServiceRun_FinalResultProjectionOnly(t *testing.T) {
+	routingPayload, err := json.Marshal(map[string]any{
+		"harness":  "agent",
+		"provider": "anthropic",
+		"model":    "claude-3-5-sonnet",
+		"candidates": []map[string]any{
+			{
+				"model":                  "claude-3-5-sonnet",
+				"eligible":               true,
+				"cost_usd_per_1k_tokens": 0.0125,
+				"cost_source":            "catalog",
+				"components": map[string]any{
+					"power":     65,
+					"speed_tps": 42.5,
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+
+	finalPayload, err := json.Marshal(map[string]any{
+		"status":           "success",
+		"exit_code":        0,
+		"final_text":       "final answer",
+		"usage":            map[string]any{"input_tokens": 11, "output_tokens": 22, "total_tokens": 33},
+		"cost_usd":         0.25,
+		"session_log_path": "/tmp/session.jsonl",
+		"routing_actual": map[string]any{
+			"harness":  "agent",
+			"provider": "anthropic",
+			"model":    "claude-3-5-sonnet",
+			"power":    65,
+		},
+	})
+	require.NoError(t, err)
+
+	svc := &passthroughTestService{
+		executeEvents: []agentlib.ServiceEvent{
+			{Type: "routing_decision", Data: routingPayload},
+			{Type: "future.event", Data: []byte(`{"opaque":"value"}`)},
+			{Type: "final", Data: finalPayload},
+		},
+	}
+	rcfg := resolvedWithPassthrough("claude", "anthropic", "claude-3-7-sonnet", 0, 0)
+
+	result, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "hello",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	if result.Output != "final answer" {
+		t.Fatalf("Result.Output = %q, want final answer", result.Output)
+	}
+	if result.ExitCode != 0 {
+		t.Fatalf("Result.ExitCode = %d, want 0", result.ExitCode)
+	}
+	if result.Tokens != 33 || result.InputTokens != 11 || result.OutputTokens != 22 {
+		t.Fatalf("token projection mismatch: %+v", result)
+	}
+	if result.CostUSD != 0.25 {
+		t.Fatalf("Result.CostUSD = %v, want 0.25", result.CostUSD)
+	}
+	if result.AgentSessionID != "/tmp/session.jsonl" {
+		t.Fatalf("Result.AgentSessionID = %q, want /tmp/session.jsonl", result.AgentSessionID)
+	}
+	if result.Provider != "anthropic" || result.Model != "claude-3-5-sonnet" || result.Harness != "agent" {
+		t.Fatalf("route projection mismatch: %+v", result)
+	}
+	if result.ActualPower != 65 || result.PredictedPower != 65 {
+		t.Fatalf("power projection mismatch: %+v", result)
+	}
+	if result.PredictedSpeedTPS != 42.5 || result.PredictedCostUSDPer1kTokens != 0.0125 || result.PredictedCostSource != "catalog" {
+		t.Fatalf("route economics mismatch: %+v", result)
+	}
+	if len(result.ToolCalls) != 0 {
+		t.Fatalf("expected no reconstructed tool transcript, got %+v", result.ToolCalls)
+	}
+}
+
 // TestClassifyFailureMode_BlockedByPassthroughConstraint (AC7): error strings
 // that indicate a passthrough+power conflict must classify as
 // blocked_by_passthrough_constraint, not the generic failure modes.

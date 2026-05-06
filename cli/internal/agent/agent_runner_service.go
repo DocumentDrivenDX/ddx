@@ -2,45 +2,12 @@ package agent
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"time"
 
 	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
-
-// Public event-type strings emitted by agentlib.FizeauService.Execute, mirrored
-// from CONTRACT-003 §"Event JSON shapes". Kept as constants here so the
-// drain loop does not have to import the agent's internal/harnesses
-// package (which is module-private).
-const (
-	serviceEventRoutingDecision = "routing_decision"
-	serviceEventFinal           = "final"
-)
-
-// ServiceEvent payload types are now aliases to the upstream v0.8.0 public
-// types (agent-f0bc5467). DDx previously maintained byte-for-byte shadow
-// copies of these structs because CONTRACT-003 hadn't published them; that
-// left the consumer carrying stream-adjacent knowledge and drifted whenever
-// upstream shapes changed. With v0.8.0 the types are public and stable.
-//
-// Aliases rather than an outright delete so existing call sites keep
-// working without a sweep. New code can (and should) use agentlib types
-// directly.
-type (
-	serviceFinalData = agentlib.ServiceFinalData
-)
-
-type serviceRoutingActual struct {
-	Harness                     string
-	Provider                    string
-	Model                       string
-	PredictedPower              int
-	PredictedSpeedTPS           float64
-	PredictedCostUSDPer1kTokens float64
-	PredictedCostSource         string
-}
 
 // useNewAgentPath reports whether RunAgent should dispatch to the new
 // agentlib.FizeauService.Execute path. Default is on. Set the env var
@@ -129,7 +96,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		return nil, fmt.Errorf("agent: execute: %w", err)
 	}
 
-	final, routing, actualPower, _ := drainServiceEvents(events)
+	final, routing, _ := drainServiceEvents(events)
 	elapsed := time.Since(start)
 
 	result := &Result{
@@ -142,13 +109,15 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		if routing.Model != "" {
 			result.Model = routing.Model
 		}
-		result.PredictedPower = routing.PredictedPower
-		result.PredictedSpeedTPS = routing.PredictedSpeedTPS
-		result.PredictedCostUSDPer1kTokens = routing.PredictedCostUSDPer1kTokens
-		result.PredictedCostSource = routing.PredictedCostSource
-	}
-	if actualPower > 0 {
-		result.ActualPower = actualPower
+		if routing.Harness != "" {
+			result.Harness = routing.Harness
+		}
+		if power, speed, cost, source := selectedRoutingCandidateMetrics(routing); power > 0 || speed > 0 || cost > 0 || source != "" {
+			result.PredictedPower = power
+			result.PredictedSpeedTPS = speed
+			result.PredictedCostUSDPer1kTokens = cost
+			result.PredictedCostSource = source
+		}
 	}
 	if final != nil {
 		// Normalized final text from the upstream harness (agent-32e8ff5e).
@@ -179,6 +148,12 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 			if final.RoutingActual.Model != "" {
 				result.Model = final.RoutingActual.Model
 			}
+			if final.RoutingActual.Harness != "" {
+				result.Harness = final.RoutingActual.Harness
+			}
+			if final.RoutingActual.Power > 0 {
+				result.ActualPower = final.RoutingActual.Power
+			}
 		}
 		if final.SessionLogPath != "" {
 			// surface as session ID for downstream cross-reference (mirrors
@@ -202,62 +177,38 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 }
 
 // drainServiceEvents reads service events and returns the final-event payload,
-// the routing decision (when present in the routing_decision start event), the
-// power of the selected model (0 when the routing_decision event does not
-// include candidate power components), and any canonical progress payloads
-// emitted by the service.
-func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*serviceFinalData, *serviceRoutingActual, int, []agentlib.ServiceProgressData) {
-	var final *serviceFinalData
-	var routing *serviceRoutingActual
-	var routingPower int
+// the routing decision (when present in the routing_decision start event), and
+// any canonical progress payloads emitted by the service.
+func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*agentlib.ServiceFinalData, *agentlib.ServiceRoutingDecisionData, []agentlib.ServiceProgressData) {
+	var final *agentlib.ServiceFinalData
+	var routing *agentlib.ServiceRoutingDecisionData
 	var progress []agentlib.ServiceProgressData
 
 	for ev := range events {
-		switch string(ev.Type) {
-		case serviceEventRoutingDecision:
-			var payload struct {
-				Harness    string `json:"harness"`
-				Provider   string `json:"provider"`
-				Model      string `json:"model"`
-				Candidates []struct {
-					Model              string  `json:"model"`
-					Eligible           bool    `json:"eligible"`
-					CostUSDPer1kTokens float64 `json:"cost_usd_per_1k_tokens"`
-					CostSource         string  `json:"cost_source"`
-					Components         struct {
-						Power    int     `json:"power"`
-						SpeedTPS float64 `json:"speed_tps"`
-					} `json:"components"`
-				} `json:"candidates"`
-			}
-			if err := json.Unmarshal(ev.Data, &payload); err == nil {
-				routing = &serviceRoutingActual{
-					Harness:  payload.Harness,
-					Provider: payload.Provider,
-					Model:    payload.Model,
-				}
-				for _, c := range payload.Candidates {
-					if c.Eligible && c.Model == payload.Model {
-						routingPower = c.Components.Power
-						routing.PredictedPower = c.Components.Power
-						routing.PredictedSpeedTPS = c.Components.SpeedTPS
-						routing.PredictedCostUSDPer1kTokens = c.CostUSDPer1kTokens
-						routing.PredictedCostSource = c.CostSource
-						break
-					}
-				}
-			}
-		case agentlib.ServiceEventTypeProgress:
-			var data agentlib.ServiceProgressData
-			if err := json.Unmarshal(ev.Data, &data); err == nil {
-				progress = append(progress, data)
-			}
-		case serviceEventFinal:
-			var data serviceFinalData
-			if err := json.Unmarshal(ev.Data, &data); err == nil {
-				final = &data
-			}
+		decoded, err := agentlib.DecodeServiceEvent(ev)
+		if err != nil {
+			continue
+		}
+		switch {
+		case decoded.RoutingDecision != nil:
+			routing = decoded.RoutingDecision
+		case decoded.Progress != nil:
+			progress = append(progress, *decoded.Progress)
+		case decoded.Final != nil:
+			final = decoded.Final
 		}
 	}
-	return final, routing, routingPower, progress
+	return final, routing, progress
+}
+
+func selectedRoutingCandidateMetrics(routing *agentlib.ServiceRoutingDecisionData) (int, float64, float64, string) {
+	if routing == nil {
+		return 0, 0, 0, ""
+	}
+	for _, candidate := range routing.Candidates {
+		if candidate.Eligible && candidate.Model == routing.Model {
+			return candidate.Components.Power, candidate.Components.SpeedTPS, candidate.CostUSDPer1kTokens, candidate.CostSource
+		}
+	}
+	return 0, 0, 0, ""
 }

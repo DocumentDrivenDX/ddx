@@ -59,14 +59,14 @@ func TestDrainServiceEvents_CapturesRouteEconomics(t *testing.T) {
 	}
 	close(events)
 
-	_, routing, actualPower, _ := drainServiceEvents(events)
-	assert.Equal(t, 65, actualPower,
-		"power must come from the eligible winning candidate in routing_decision.candidates")
+	_, routing, _ := drainServiceEvents(events)
 	require.NotNil(t, routing)
-	assert.Equal(t, 65, routing.PredictedPower)
-	assert.Equal(t, 42.5, routing.PredictedSpeedTPS)
-	assert.Equal(t, 0.0125, routing.PredictedCostUSDPer1kTokens)
-	assert.Equal(t, "catalog", routing.PredictedCostSource)
+	power, speed, cost, source := selectedRoutingCandidateMetrics(routing)
+	assert.Equal(t, 65, power,
+		"power must come from the eligible winning candidate in routing_decision.candidates")
+	assert.Equal(t, 42.5, speed)
+	assert.Equal(t, 0.0125, cost)
+	assert.Equal(t, "catalog", source)
 }
 
 // TestDrainServiceEvents_ForwardsCanonicalProgressPayload proves canonical
@@ -105,7 +105,7 @@ func TestDrainServiceEvents_ForwardsCanonicalProgressPayload(t *testing.T) {
 	}
 	close(events)
 
-	_, _, _, progress := drainServiceEvents(events)
+	_, _, progress := drainServiceEvents(events)
 	require.Len(t, progress, 1)
 	assert.Equal(t, "ddx-1234", progress[0].TaskID)
 	assert.Equal(t, 7, progress[0].TurnIndex)
