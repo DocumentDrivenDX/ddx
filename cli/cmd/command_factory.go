@@ -74,6 +74,10 @@ type CommandFactory struct {
 	// shelling out to a real agent harness.
 	tryExecutorOverride agent.ExecuteBeadExecutor
 
+	// resourceCheckerOverride, when non-nil, replaces the default execution
+	// resource preflight used by ddx try and ddx work.
+	resourceCheckerOverride agent.ExecutionResourceChecker
+
 	// Custom viper instance for isolation
 	viperInstance *viper.Viper
 
