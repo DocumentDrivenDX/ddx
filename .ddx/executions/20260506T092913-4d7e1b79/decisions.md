@@ -1,0 +1,1 @@
+WIRE internal/metaprompt/injector.go:44 NewMetaPromptInjectorWithPaths — already reachable from production via cmd.Execute -> NewCommandFactory -> NewRootCommand -> metaprompt.KeepReachabilityForDeadcode, and used directly by cmd/doctor.go:930 and cmd/init.go:715; current deadcode run reports no remaining internal/metaprompt residuals.
