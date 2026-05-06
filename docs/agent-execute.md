@@ -107,6 +107,11 @@ remove preserved attempts, `refs/ddx/iterations/...`, complete evidence under
 `.ddx/runs` or `.ddx/executions`, active worktrees with live liveness, or
 non-DDx paths.
 
+Use `ddx cleanup` to inspect stale execution resources. The command defaults
+to dry-run mode and reports what it would remove; add `--apply` when you want
+it to actually delete stale DDx temp worktrees, stale run-state files, and
+other DDx-owned scratch data.
+
 Resource exhaustion is loop-fatal. If the worktree or evidence roots run out of
 bytes/inodes or become unwritable, DDx runs one cleanup pass and retries the
 resource check. If the roots are still unhealthy, `ddx work` stops instead of

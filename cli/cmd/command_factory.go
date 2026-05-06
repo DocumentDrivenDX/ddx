@@ -121,6 +121,7 @@ Get started:
   ddx init          Initialize DDx in your project
   ddx list          See available resources
   ddx doctor        Check installation and diagnose issues
+  ddx cleanup       Inspect and clean stale DDx execution resources
 
 More information:
   Documentation: https://github.com/DocumentDrivenDX/ddx
@@ -538,6 +539,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newInitCommand())
 	rootCmd.AddCommand(f.newListCommand())
 	rootCmd.AddCommand(f.newDoctorCommand())
+	rootCmd.AddCommand(f.newCleanupCommand())
 	rootCmd.AddCommand(f.newUpdateCommand())
 	rootCmd.AddCommand(f.newUpgradeCommand())
 	rootCmd.AddCommand(f.newConfigCommand())

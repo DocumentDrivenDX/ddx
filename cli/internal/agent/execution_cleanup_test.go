@@ -280,6 +280,41 @@ func TestExecutionCleanup_ReportsSummary(t *testing.T) {
 	assert.True(t, hasObservationClass(summary.Observations, "complete_evidence"))
 }
 
+func TestExecutionCleanup_DryRunLeavesCandidatesOnDisk(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+
+	stalePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-dryrun-20260506T154739-abcdef01")
+	writeExecutionCleanupCandidate(t, stalePath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-dryrun",
+		AttemptID:    "20260506T154739-abcdef01",
+		WorktreePath: stalePath,
+	}, map[string]string{"scratch.txt": "dry-run\n"})
+	require.NoError(t, WriteRunState(projectRoot, RunState{
+		BeadID:       "ddx-dryrun",
+		AttemptID:    "20260506T154739-live-abcdef01",
+		StartedAt:    time.Now().UTC(),
+		WorktreePath: filepath.Join(tempRoot, "missing-live-path"),
+	}))
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.DryRun = true
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, stalePath)
+	gotState, err := ReadRunState(projectRoot)
+	require.NoError(t, err)
+	require.NotNil(t, gotState)
+	assert.Equal(t, int64(1), summary.RemovedUnregisteredTempDirs)
+	assert.Equal(t, int64(1), summary.RemovedRunStateFiles)
+	assert.True(t, hasObservationClass(summary.Observations, "would_remove_unregistered_temp_dir"))
+	assert.True(t, hasObservationClass(summary.Observations, "would_remove_run_state"))
+}
+
 func hasObservationClass(observations []ExecutionCleanupObservation, class string) bool {
 	for _, obs := range observations {
 		if obs.Class == class {
