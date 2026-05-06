@@ -9,7 +9,10 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -27,6 +30,7 @@ type executeCapturingStub struct {
 	mu            sync.Mutex
 	executeCalled bool
 	lastReq       agentlib.ServiceExecuteRequest
+	executeFn     func(agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
 }
 
 func (s *executeCapturingStub) Execute(_ context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
@@ -34,6 +38,9 @@ func (s *executeCapturingStub) Execute(_ context.Context, req agentlib.ServiceEx
 	s.executeCalled = true
 	s.lastReq = req
 	s.mu.Unlock()
+	if s.executeFn != nil {
+		return s.executeFn(req)
+	}
 	ch := make(chan agentlib.ServiceEvent, 1)
 	ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok"}`)}
 	close(ch)
@@ -100,6 +107,30 @@ func installExecuteCapturingStub(t *testing.T) *executeCapturingStub {
 	})
 	t.Cleanup(func() { agent.SetServiceRunFactory(nil) })
 	return stub
+}
+
+func setupWorkIntakeFixture(t *testing.T) string {
+	t.Helper()
+	dir := minimalProjectDir(t)
+
+	skillDir := filepath.Join(dir, ".agents", "skills", "ddx", "bead-lifecycle")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("intake"), 0o644))
+
+	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:    "ddx-intake-test",
+		Title: "work intake wiring test bead",
+	}))
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
+	require.NoError(t, exec.Command("git", "init", dir).Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "commit", "--allow-empty", "-m", "init").Run())
+	return dir
 }
 
 // TestRunPassthroughHarnessModelToExecute (AC): ddx agent run --harness claude
@@ -227,6 +258,62 @@ func TestWorkPassesEmptyHarnessToService(t *testing.T) {
 	}
 	assert.Empty(t, lastReq.Harness,
 		"ddx work with no --harness must send empty Harness to service for engine auto-selection")
+}
+
+func TestDDxWork_WiresPreClaimIntakeHook(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	var mu sync.Mutex
+	modes := make([]string, 0, 4)
+	stub := installExecuteCapturingStub(t)
+	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		mode := "execute"
+		switch {
+		case strings.Contains(req.Prompt, "MODE: intake"):
+			mode = "intake"
+		case strings.Contains(req.Prompt, "MODE: lint"):
+			mode = "lint"
+		case strings.Contains(req.Prompt, "MODE: triage"):
+			mode = "triage"
+		}
+		mu.Lock()
+		modes = append(modes, mode)
+		mu.Unlock()
+
+		switch mode {
+		case "intake":
+			ch := make(chan agentlib.ServiceEvent, 1)
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"atomic\",\"confidence\":0.99,\"reasoning\":\"single-slice\"}"}`)}
+			close(ch)
+			return ch, nil
+		case "lint":
+			ch := make(chan agentlib.ServiceEvent, 1)
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"score\":9,\"rationale\":\"ok\",\"suggested_fixes\":[],\"waivers_applied\":[]}"}`)}
+			close(ch)
+			return ch, nil
+		case "triage":
+			ch := make(chan agentlib.ServiceEvent, 1)
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"success\",\"recommended_action\":\"none\",\"rationale\":\"ok\",\"suggested_amendments\":\"none\",\"suggested_followup_beads\":[]}"}`)}
+			close(ch)
+			return ch, nil
+		default:
+			ch := make(chan agentlib.ServiceEvent, 1)
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok"}`)}
+			close(ch)
+			return ch, nil
+		}
+	}
+
+	dir := setupWorkIntakeFixture(t)
+	root := NewCommandFactory(dir).NewRootCommand()
+	_, _ = executeCommand(root, "work", "--once")
+
+	mu.Lock()
+	got := append([]string(nil), modes...)
+	mu.Unlock()
+	require.GreaterOrEqual(t, len(got), 1, "work must invoke the intake hook")
+	assert.Equal(t, "intake", got[0], "plain ddx work must run pre-claim intake before claim")
+	assert.GreaterOrEqual(t, len(got), 2, "work must continue past intake to later execution stages")
 }
 
 // TestExecuteBeadDoesNotCallResolveRoute (AC4 / ddx-6036e1bc): ddx agent

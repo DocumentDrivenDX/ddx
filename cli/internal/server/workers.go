@@ -702,6 +702,11 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		OpaquePassthrough: spec.OpaquePassthrough,
 	})
 
+	var qualityRunner agent.AgentRunner
+	lintHook := agent.NewPreDispatchLintHook(projectRoot, store, rcfg, nil, qualityRunner)
+	intakeHook := agent.NewPreClaimIntakeHook(projectRoot, store, rcfg, nil, qualityRunner)
+	triageHook := agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
+
 	var worker *agent.ExecuteBeadWorker
 	var costCap *policyescalation.CostCapTracker
 	if m.BeadWorkerFactory != nil {
@@ -906,18 +911,21 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	landingOps := agent.RealLandingGitOps{}
 
 	loopResult, err := worker.Run(ctx, rcfg, agent.ExecuteBeadLoopRuntime{
-		Once:          spec.Once,
-		PollInterval:  spec.PollInterval,
-		Log:           log,
-		EventSink:     eventSink,
-		WorkerID:      id,
-		ProjectRoot:   projectRoot,
-		LabelFilter:   spec.LabelFilter,
-		ProgressCh:    progressCh,
-		PreClaimHook:  buildPreClaimHook(projectRoot, landingOps),
-		NoReview:      spec.NoReview,
-		ReviewCostCap: costCap,
-		WakeCh:        handle.wakeCh,
+		Once:                  spec.Once,
+		PollInterval:          spec.PollInterval,
+		Log:                   log,
+		EventSink:             eventSink,
+		WorkerID:              id,
+		ProjectRoot:           projectRoot,
+		LabelFilter:           spec.LabelFilter,
+		ProgressCh:            progressCh,
+		PreClaimHook:          buildPreClaimHook(projectRoot, landingOps),
+		PreClaimIntakeHook:    intakeHook,
+		PreDispatchLintHook:   lintHook,
+		PostAttemptTriageHook: triageHook,
+		NoReview:              spec.NoReview,
+		ReviewCostCap:         costCap,
+		WakeCh:                handle.wakeCh,
 	})
 	// Signal end of progress events so drainProgress can finish
 	close(progressCh)

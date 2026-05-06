@@ -38,6 +38,9 @@ func newTriageHookTestRoot(t *testing.T) string {
 	root := t.TempDir()
 	require.NoError(t, os.MkdirAll(filepath.Join(root, ".ddx"), 0o755))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, ResolveLogDir(root, "")), 0o755))
+	skillDir := filepath.Join(root, ".agents", "skills", "ddx", "bead-lifecycle")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("triage"), 0o644))
 	return root
 }
 

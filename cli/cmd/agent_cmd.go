@@ -1724,14 +1724,15 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	// per-knob CLI plumbing. CLI flag values feed CLIOverrides which win
 	// over the on-disk config when set.
 	overrides := config.CLIOverrides{
-		Assignee: resolveClaimAssignee(),
-		Harness:  harness,
-		Model:    model,
-		Provider: provider,
-		ModelRef: modelRef,
-		Profile:  profile,
-		Effort:   effort,
-		MinPower: minPower,
+		Assignee:          resolveClaimAssignee(),
+		Harness:           harness,
+		Model:             model,
+		Provider:          provider,
+		ModelRef:          modelRef,
+		Profile:           profile,
+		Effort:            effort,
+		MinPower:          minPower,
+		OpaquePassthrough: treatPassthroughAsOpaque,
 	}
 	rcfg, err := config.LoadAndResolve(projectRoot, overrides)
 	if err != nil {
@@ -1742,6 +1743,14 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		tailCancel()
 		return fmt.Errorf("load resolved config: %w", err)
 	}
+
+	var qualityRunner agent.AgentRunner
+	if f.AgentRunnerOverride != nil {
+		qualityRunner = f.AgentRunnerOverride
+	}
+	lintHook := agent.NewPreDispatchLintHook(projectRoot, store, rcfg, nil, qualityRunner)
+	intakeHook := agent.NewPreClaimIntakeHook(projectRoot, store, rcfg, nil, qualityRunner)
+	triageHook := agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
 
 	// Cost-cap state shared across attempts for this loop run.
 	// paths. Accumulated billed spend (excluding local and subscription
@@ -1917,17 +1926,20 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 
 	cliLandingOps := agent.RealLandingGitOps{}
 	result, err := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
-		Once:          once,
-		PollInterval:  pollInterval,
-		Log:           cmd.OutOrStdout(),
-		EventSink:     loopSink,
-		WorkerID:      resolveClaimAssignee(),
-		ProjectRoot:   projectRoot,
-		SessionID:     loopSessionID,
-		PreClaimHook:  buildCLIPreClaimHook(projectRoot, cliLandingOps),
-		NoReview:      noReview,
-		TargetBeadID:  tryTargetBeadID,
-		ReviewCostCap: costCap,
+		Once:                  once,
+		PollInterval:          pollInterval,
+		Log:                   cmd.OutOrStdout(),
+		EventSink:             loopSink,
+		WorkerID:              resolveClaimAssignee(),
+		ProjectRoot:           projectRoot,
+		SessionID:             loopSessionID,
+		PreClaimHook:          buildCLIPreClaimHook(projectRoot, cliLandingOps),
+		PreClaimIntakeHook:    intakeHook,
+		PreDispatchLintHook:   lintHook,
+		PostAttemptTriageHook: triageHook,
+		NoReview:              noReview,
+		TargetBeadID:          tryTargetBeadID,
+		ReviewCostCap:         costCap,
 	})
 	tailCancel() // stop session log tailer
 	if err != nil {
