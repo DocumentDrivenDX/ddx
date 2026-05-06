@@ -573,7 +573,7 @@ that have since moved upstream.
 - `docs/helix/02-design/solution-designs/SD-021-service-backed-multi-node-topology.md` — service-backed node topology
 - `docs/helix/02-design/technical-designs/TD-006-agent-session-capture.md` — session log and artifact format
 - `docs/helix/02-design/technical-designs/TD-010-executions.md` — execution attempt bundles at `.ddx/executions/`
-- `docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md` — current thin-consumer migration plan
+- Historical thin-consumer migration plan — superseded by the current Fizeau consumer spec
 - `docs/helix/03-test/test-plans/TP-006-agent-session-capture.md` — session capture test coverage
 - `docs/helix/03-test/test-plans/TP-014-token-awareness.md` — token-awareness coverage
 - `docs/helix/03-test/test-plans/TP-020-fizeau-boundary-and-pass-through.md` — DDx boundary coverage for raw passthrough and no-local-routing behavior

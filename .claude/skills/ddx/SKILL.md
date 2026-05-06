@@ -7,8 +7,9 @@ description: Operates the DDx toolkit for document-driven development. Covers be
 
 DDx (Document-Driven Development eXperience) is a CLI platform for
 document-driven development. It ships a bead tracker (portable work
-items with acceptance criteria), an agent service boundary (DDx
-orchestrates work while the upstream agent routes providers/models), a persona system (bindable AI
+items with acceptance criteria), a task-execution boundary (DDx
+orchestrates work while Fizeau routes providers/models, catalog lookups,
+and transcript rendering), a persona system (bindable AI
 personalities), a library registry (plugins with prompts, templates,
 personas), and git-aware synchronization. This skill makes any
 skills-compatible coding agent (Claude Code, OpenAI Codex, Gemini
@@ -42,8 +43,8 @@ exact definitions.
 - **Close** — mark a bead as done, with evidence (session, commit
   SHA). `ddx bead close <id>`. Beads only close on execution outcomes
   `success` or `already_satisfied`.
-- **Run** — one agent invocation atom. `ddx run` calls upstream agent
-  `Execute` once with prompt/config, `MinPower`/`MaxPower` bounds, and optional
+- **Run** — one task invocation atom. `ddx run` calls Fizeau `Execute`
+  once with prompt/config, `MinPower`/`MaxPower` bounds, and optional
   passthrough constraints.
 - **Try** — one bead attempt in an isolated worktree. `ddx try <id>` wraps
   `ddx run` with bead prompt resolution, evidence capture, and merge/preserve
@@ -55,7 +56,7 @@ exact definitions.
 - **Agent** — an AI coding agent (Claude, Codex, Gemini, etc.)
   invoked via a harness. Not a subagent (harness-specific — see
   below).
-- **Harness** — an upstream agent routing concept. DDx may pass `--harness` as
+- **Harness** — a Fizeau routing concept. DDx may pass `--harness` as
   an operator-supplied constraint, but DDx does not validate, rank, fallback, or
   branch on harness names.
 - **Persona** — a Markdown file (YAML frontmatter + body) that
@@ -67,8 +68,8 @@ exact definitions.
 - **Binding** — a project-specific `role: persona` map in
   `.ddx/config.yaml` under `persona_bindings`.
 - **Power bounds** — `MinPower` and optional `MaxPower` integers passed to the
-  upstream agent. DDx may raise `MinPower` on eligible retries; the agent owns
-  the concrete harness/provider/model routing.
+  upstream execution service. DDx may raise `MinPower` on eligible retries;
+  Fizeau owns the concrete harness/provider/model routing.
 - **Plugin** — a self-contained extension installed to
   `.ddx/plugins/<name>/`. The default `ddx` plugin (personas,
   prompts, patterns, templates) is auto-installed by `ddx init`.
@@ -133,7 +134,7 @@ reference file; do not violate them.
   <branch>` (worktrunk) or equivalent to give each concurrent agent
   its own isolated checkout. Execute-bead does this automatically;
   manual parallel work should too.
-- **Power-first agent dispatch.** Default to `ddx run`/`ddx try`/`ddx work`
+- **Power-first execution dispatch.** Default to `ddx run`/`ddx try`/`ddx work`
   with power bounds. `--harness`, `--provider`, and `--model` are passthrough
   constraints only; DDx must not use them for routing policy.
 

@@ -4,23 +4,24 @@ ddx:
   depends_on:
     - helix.prd
 ---
-# Feature: DDx Agent Service (consumer of ddx-agent contract)
+# Feature: DDx Consumer of the Fizeau Execution Contract
 
 **ID:** FEAT-006
-**Status:** In Progress (migrating to ddx-agent CONTRACT-003)
+**Status:** In Progress (migrating to CONTRACT-003 Fizeau execution contract)
 **Priority:** P0
 **Owner:** DDx Team
 
 ## Overview
 
-DDx invokes LLMs through the `ddx-agent` module, defined by
-**CONTRACT-003-ddx-agent-service** in the `~/Projects/agent` repo
-(`docs/helix/02-design/contracts/CONTRACT-003-ddx-agent-service.md`).
+DDx invokes LLMs through the upstream Fizeau execution contract,
+**CONTRACT-003**, in the `~/Projects/agent` repo
+(`docs/helix/02-design/contracts/CONTRACT-003-fizeau-service.md`).
 
-That contract is the entire boundary. DDx's CLI commands (`ddx agent run`,
-`ddx agent execute-bead`, `ddx work`, `ddx agent providers`, `ddx agent models`,
-`ddx agent route-status`, `ddx agent check`) are thin wrappers that call into
-the `agentlib.DdxAgent` interface and render its results.
+That contract is the entire boundary. DDx exposes the public `ddx run` /
+`ddx try` / `ddx work` layers and sends requests to Fizeau for the actual
+invocation. Upstream diagnostic/status commands may remain as Fizeau-owned
+observability, but the retired workflow namespace is not a public workflow
+surface and has no compatibility alias.
 
 ## DDx-side responsibilities
 
@@ -32,31 +33,31 @@ DDx owns the bead-driven workflow surface. It does NOT own:
 - Tool registration
 - Session-log shape
 
-Those all live inside ddx-agent per CONTRACT-003.
+Those all live inside Fizeau per CONTRACT-003.
 
 DDx owns:
 
-- **Bead-driven invocation.** `ddx agent execute-bead`, `ddx work`, and the
-  server's queue-drain worker translate bead state into `ExecuteRequest`
-  values and surface results back into the bead tracker.
-- **Execute-bead orchestration.** Worktree creation, base-revision pinning,
+- **Bead-driven invocation.** `ddx try`, `ddx work`, and the server's
+  queue-drain worker translate bead state into `ExecuteRequest` values and
+  surface results back into the bead tracker.
+- **Bead-attempt orchestration.** Worktree creation, base-revision pinning,
   result landing (merge / preserve / no-changes), gate evaluation, evidence
-  bundle capture. The agent provides the LLM execution; DDx provides the
+  bundle capture. Fizeau provides the LLM execution; DDx provides the
   git-aware orchestration.
 - **Evidence and session capture.** DDx writes `.ddx/executions/<id>/`
-  bundles with prompts, manifests, and result artifacts. The agent's session
+  bundles with prompts, manifests, and result artifacts. The Fizeau session
   log path (returned in `ExecuteResponse.SessionLogPath`) is captured into
   the bundle.
-- **Profile policy at the request level.** DDx selects `Profile`, `Effort`,
-  `Permissions` per bead (or per CLI invocation) based on bead metadata
-  and user input. The agent receives those as `ExecuteRequest` fields and
-  performs the routing.
+- **Power policy at the request level.** DDx selects requested power bounds,
+  effort, and permissions per bead (or per CLI invocation) based on bead
+  metadata and user input. DDx sends `MinPower` and optionally `MaxPower` to
+  Fizeau and leaves the concrete route to Fizeau.
 
 ## Profile Routing
 
 `ddx work --profile default` is the primary queue-drain invocation. DDx maps
 the user-facing profile to an ordered tier ladder and resolves each tier through
-the agent service with the configured provider affinity and capability gating.
+Fizeau with the configured provider affinity and capability gating.
 
 | Profile | Ladder | Intent |
 | --- | --- | --- |
@@ -70,21 +71,21 @@ ordered tier list per profile. The legacy flat `agent.routing.profile_priority`
 is still read as the `default` profile fallback and emits a deprecation warning;
 new configs should use `profile_ladders.default`. `agent.routing.model_overrides`
 can map a ladder tier such as `cheap`, `standard`, `fast`, or `smart` to a
-concrete model reference before DDx asks the agent service to resolve the route.
+concrete model reference before DDx asks Fizeau to resolve the route.
 
 Escalation advances to the next tier for `execution_failed`,
 `land_conflict`, `post_run_check_failed`, and
 `structural_validation_failed`. `no_changes` keeps the existing cooldown and
 satisfaction-adjudication path rather than consuming a higher tier.
 
-## Asking ddx-agent for changes
+## Asking Fizeau for changes
 
-When DDx needs new behavior from the agent — a new method, a new field on
+When DDx needs new behavior from Fizeau — a new method, a new field on
 `ExecuteRequest`, a new event type, a new policy knob — file a PR against
 CONTRACT-003 in the agent repo. Maintainers decide whether the surface grows.
 
 Do not import agent internal packages. They live under `internal/` and the
-Go compiler blocks external imports after agent v0.5.0 ships.
+Go compiler blocks external imports after Fizeau v0.5.0 ships.
 
 ## Migration status
 
@@ -103,7 +104,7 @@ that have since moved upstream.
 - `docs/helix/02-design/solution-designs/SD-021-service-backed-multi-node-topology.md` — service-backed node topology
 - `docs/helix/02-design/technical-designs/TD-006-agent-session-capture.md` — session log and artifact format
 - `docs/helix/02-design/technical-designs/TD-010-executions.md` — execution attempt bundles at `.ddx/executions/`
-- `docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md` — current thin-consumer migration plan
+- Historical thin-consumer migration plan — superseded by the current Fizeau consumer spec
 - `docs/helix/03-test/test-plans/TP-006-agent-session-capture.md` — session capture test coverage
 - `docs/helix/03-test/test-plans/TP-014-token-awareness.md` — token-awareness coverage
 - `docs/helix/03-test/test-plans/TP-020-agent-routing-and-catalog-resolution.md` — routing and catalog resolution coverage

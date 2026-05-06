@@ -13,7 +13,7 @@ ddx:
 
 ## Overview
 
-The `ddx` CLI is a single Go binary providing all DDx platform services locally: document library management, bead tracker, agent harness dispatch, execution definitions and runs, document dependency graph, persona composition, template application, git sync, and meta-prompt injection.
+The `ddx` CLI is a single Go binary providing all DDx platform services locally: document library management, bead tracker, task execution dispatch, execution definitions and runs, document dependency graph, persona composition, template application, git sync, and meta-prompt injection.
 
 ## Requirements
 
@@ -51,16 +51,17 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 18. Configurable ID prefix (auto-detected from repo name)
 19. Backend abstraction (jsonl/bd/br)
 
-**Agent Service (implemented — FEAT-006)**
-20. `ddx agent run --profile=<default|cheap|fast|smart> --prompt <file>` — invoke an AI agent through automatic routing
-20b. `ddx agent run --model <ref-or-exact> [--effort <level>]` — request a specific model ref, alias, or exact model pin
-20c. `ddx agent run --harness=<name>` — explicitly override automatic routing and force one harness
-21. `ddx agent run --quorum=majority --harnesses=a,b` — multi-agent consensus
-22. `ddx agent list` — show available harnesses with availability status
-23. `ddx agent doctor` — harness health and routing-readiness check (installed, reachable, authenticated, quota state, degradation)
-24. `ddx agent log [session-id]` — session history with token tracking
-25. `ddx agent capabilities [harness]` — show reasoning levels, exact-pin support, and effective profile/model mappings for a harness
-25b. `ddx agent usage [--since] [--harness] [--format]` — token and cost consumption summary (FEAT-014)
+**Task Execution (top-level — FEAT-006/FEAT-010)**
+20. `ddx run --min-power <n> [--max-power <n>] --prompt <file>` — layer-1: invoke Fizeau with requested abstract power bounds; Fizeau owns model/provider routing
+20b. `ddx run --top-power --prompt <file>` — request a `MinPower` threshold derived from Fizeau's available model/power catalog
+20c. `ddx run --effort <level>` — pass non-routing reasoning/effort intent to Fizeau
+20c-1. `ddx run --harness <name> --provider <name> --model <name>` — optional passthrough constraints sent unchanged to Fizeau; DDx does not validate, resolve, fallback, branch on, or widen them
+20d. `ddx try <bead> [--from <rev>] [--no-merge]` — layer-2: bead attempt in isolated worktree with merge-or-preserve semantics
+20e. `ddx work` — layer-3: drain the bead execution queue (mechanical drain; supervisory decisions stay in plugins/HELIX)
+21. `ddx fizeau providers` — show available providers with live status
+22. `ddx fizeau models [--provider <name>]` — show models for a configured provider
+23. `ddx fizeau route-status` — show routing table, cooldowns, and recent decisions
+24. `ddx fizeau check` — probe provider runtime availability (liveness, model inventory)
 
 **Execution Service (in progress — FEAT-010)**
 26. `ddx exec list [--artifact ID]` — list execution definitions
@@ -90,7 +91,7 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 41. `ddx verify` — check integrity of installed packages
 
 **Queue Work (not started — FEAT-006)**
-48. `ddx work` — top-level alias for `ddx agent execute-loop`. All execute-loop flags pass through unchanged. "Work the queue" becomes `ddx work`. This is the primary operator-facing surface for draining the bead execution queue; `ddx agent execute-loop` remains available for scripts and backward compatibility.
+48. `ddx work` — top-level queue-drain verb. All execute-loop flags pass through unchanged. "Work the queue" becomes `ddx work`.
 
 **Embedded Utilities**
 47. `ddx jq <filter> [file...]` — embedded jq processor (powered by gojq), eliminating external jq dependency for HELIX and other workflow tools. Supports standard jq flags: `-r`, `-c`, `-s`, `-n`, `-R`, `-e`, `-j`, `-S`, `--tab`, `--indent`, `--arg`, `--argjson`, `--slurpfile`. Reads from stdin or file arguments. Pure Go, no CGo.
@@ -98,7 +99,7 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 **DDx Skills (not started — FEAT-011)**
 42. DDx ships agent-facing skills (Claude Code slash commands) for its own CLI operations
 43. Skills are installed to `~/.agents/skills/ddx-*` and discoverable via `/ddx-<name>`
-44. Core skills: `ddx-bead` (guided bead create/triage), `ddx-agent` (guided agent dispatch with model/effort selection), `ddx-install` (guided package installation)
+44. Core skills: `ddx-bead` (guided bead create/triage), `ddx` (guided task execution with `run` / `try` / `work` and Fizeau passthrough constraints), `ddx-install` (guided package installation)
 45. Skills validate inputs, suggest flags, and provide contextual guidance that the raw CLI doesn't
 46. `ddx init` registers DDx skills alongside library content
 
@@ -130,4 +131,4 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 - `docs/helix/02-design/solution-designs/SD-018-plugin-api-stability.md` — plugin manifest and extension surfaces
 - `docs/helix/03-test/test-plans/TP-007-e2e-smoke-tests.md` — end-to-end CLI journey
 - `docs/helix/03-test/test-plans/TP-015-onboarding-journey.md` — first-run onboarding
-- `docs/helix/03-test/test-plans/TP-020-agent-routing-and-catalog-resolution.md` — agent routing behaviour consumed by the CLI
+- `docs/helix/03-test/test-plans/TP-020-fizeau-boundary-and-pass-through.md` — DDx boundary behavior for raw routing constraint passthrough
