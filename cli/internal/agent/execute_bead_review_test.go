@@ -896,3 +896,49 @@ func TestGitShowExcludesEvidenceNoiseFromReviewDiff(t *testing.T) {
 		t.Errorf("gitShow output size %d exceeds 150KB budget — pathspec exclusion did not bound the diff", len(out))
 	}
 }
+
+func TestRunPostMergeReviewIgnoresProseFindingsForClosure(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	reviewer := beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+		return &ReviewResult{
+			Verdict: VerdictApprove,
+			PerAC: []ReviewAC{
+				{
+					Number:   1,
+					Item:     "AC#1",
+					Evidence: "correctness evidence",
+				},
+			},
+			ProseFindings: []Finding{
+				{
+					Severity: "warning",
+					Summary:  "tighten the prose",
+					Location: "bead.md:3",
+				},
+			},
+			ReviewerHarness: "claude",
+			ReviewerModel:   "claude-opus-4-6",
+		}, nil
+	})
+
+	out := RunPostMergeReview(context.Background(), PostMergeReviewInput{
+		Bead: *first,
+		Report: ExecuteBeadReport{
+			BeadID:    first.ID,
+			Status:    ExecuteBeadStatusSuccess,
+			SessionID: "sess-review-prose",
+			ResultRev: "cafef00d",
+		},
+		Reviewer:    reviewer,
+		Store:       store,
+		ProjectRoot: t.TempDir(),
+		Rcfg:        config.NewTestConfigForLoop(config.TestLoopConfigOpts{Assignee: "worker"}).Resolve(config.TestLoopOverrides(config.TestLoopConfigOpts{Assignee: "worker"})),
+		Now:         time.Now,
+		Assignee:    "worker",
+	})
+
+	require.True(t, out.Approved, "advisory prose findings must not block closure")
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+}

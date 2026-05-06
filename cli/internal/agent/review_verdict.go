@@ -31,6 +31,7 @@ type ReviewVerdict struct {
 	Verdict       Verdict   `json:"verdict"`
 	Summary       string    `json:"summary,omitempty"`
 	Findings      []Finding `json:"findings,omitempty"`
+	ProseFindings []Finding `json:"prose_findings,omitempty"`
 }
 
 // ErrReviewVerdictUnparseable is the sentinel returned by ParseReviewVerdict

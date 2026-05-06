@@ -109,6 +109,16 @@ func TestParseReviewVerdict(t *testing.T) {
 	}
 }
 
+func TestParseReviewVerdictWithProseFindings(t *testing.T) {
+	input := `{"schema_version":1,"verdict":"APPROVE","summary":"ok","findings":[{"severity":"info","summary":"correctness ok","location":"x.go:1"}],"prose_findings":[{"severity":"warn","summary":"tighten the wording","location":"docs.md:4"}]}`
+	got, err := ParseReviewVerdict([]byte(input))
+	require.NoError(t, err)
+	require.Len(t, got.Findings, 1)
+	require.Len(t, got.ProseFindings, 1)
+	assert.Equal(t, "correctness ok", got.Findings[0].Summary)
+	assert.Equal(t, "tighten the wording", got.ProseFindings[0].Summary)
+}
+
 // TestReviewerJSONHappyPath verifies the call site at DefaultBeadReviewer:
 // when the reviewer emits a valid JSON contract, ReviewBead returns a
 // ReviewResult with the parsed verdict.

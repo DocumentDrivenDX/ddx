@@ -180,6 +180,96 @@ func TestBeadReviewCommandWiring(t *testing.T) {
 	if !strings.HasSuffix(strings.TrimRight(out, "\n"), "</bead-review>") {
 		t.Errorf("output missing </bead-review> closer; got tail:\n%s", lastLines(out, 3))
 	}
+	if strings.Contains(out, "<prose-review") {
+		t.Errorf("default bead review output must not include prose review output; got:\n%s", out)
+	}
+}
+
+func TestBeadReviewCommandWithProseIncludesAdvisoryFindings(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not available")
+	}
+
+	tmp := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", args...)
+		c.Dir = tmp
+		c.Env = append(os.Environ(),
+			"GIT_AUTHOR_NAME=Test", "GIT_AUTHOR_EMAIL=test@example.com",
+			"GIT_COMMITTER_NAME=Test", "GIT_COMMITTER_EMAIL=test@example.com",
+		)
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v: %s", strings.Join(args, " "), err, out)
+		}
+	}
+	runGit("init", "-q")
+	runGit("config", "user.email", "test@example.com")
+	runGit("config", "user.name", "Test")
+	if err := os.WriteFile(filepath.Join(tmp, "x.go"), []byte("package x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("add", "x.go")
+	runGit("commit", "-q", "-m", "init")
+	c := exec.Command("git", "rev-parse", "HEAD")
+	c.Dir = tmp
+	shaOut, err := c.Output()
+	if err != nil {
+		t.Fatalf("rev-parse: %v", err)
+	}
+	sha := strings.TrimSpace(string(shaOut))
+
+	ddxDir := filepath.Join(tmp, ".ddx")
+	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	store := bead.NewStore(ddxDir)
+	if err := store.Init(); err != nil {
+		t.Fatalf("store init: %v", err)
+	}
+	proseInput, err := os.ReadFile(filepath.Join("..", "internal", "docprose", "testdata", "fixtures", "technical", "generic-ai", "input.md"))
+	if err != nil {
+		t.Fatalf("read prose fixture: %v", err)
+	}
+	b := &bead.Bead{
+		ID:          "ddx-prose",
+		Title:       "prose review fixture",
+		Description: string(proseInput),
+		Acceptance:  "AC#1 tighten the prose",
+		Extra:       map[string]any{"closing_commit_sha": sha},
+	}
+	if err := store.Create(b); err != nil {
+		t.Fatalf("store create: %v", err)
+	}
+	if err := store.Update("ddx-prose", func(bd *bead.Bead) {
+		if bd.Extra == nil {
+			bd.Extra = map[string]any{}
+		}
+		bd.Extra["closing_commit_sha"] = sha
+	}); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+
+	factory := NewCommandFactory(tmp)
+	cmd := factory.newBeadReviewCommand()
+	var stdout bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stdout)
+	cmd.SetArgs([]string{"ddx-prose", "--prose"})
+	if err := cmd.ExecuteContext(context.Background()); err != nil {
+		t.Fatalf("execute: %v\noutput: %s", err, stdout.String())
+	}
+
+	out := stdout.String()
+	if !strings.Contains(out, "<prose-review advisory=\"true\">") {
+		t.Fatalf("expected prose review section, got:\n%s", out)
+	}
+	if !strings.Contains(out, "prose_findings") {
+		t.Fatalf("expected prose findings output contract, got:\n%s", out)
+	}
+	if !strings.Contains(out, "prose.generic.claims") {
+		t.Fatalf("expected prose fixture findings in output, got:\n%s", out)
+	}
 }
 
 func quote(s string) string { return `"` + s + `"` }

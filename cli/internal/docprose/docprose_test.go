@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	ddxconfig "github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 func TestProseCheckerFindingSchema(t *testing.T) {
@@ -97,6 +99,30 @@ func TestDefaultAssetLayout(t *testing.T) {
 	}
 	if !containsAll(vocab.Reject, []string{"solution", "process"}) {
 		t.Fatalf("default reject vocabulary missing generic terms: %+v", vocab.Reject)
+	}
+}
+
+func TestResolveSettingsLayersConfig(t *testing.T) {
+	settings, err := ResolveSettings(&ddxconfig.Config{
+		Prose: &ddxconfig.ProseConfig{
+			Mode:     "planning",
+			Severity: "warning",
+			Policy:   "blocking",
+			Runner:   "vale",
+			Vocabulary: &ddxconfig.ProseVocabularyConfig{
+				Accept: []string{"Quartz"},
+				Reject: []string{"system"},
+			},
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if settings.Mode != ModePlanning || settings.Severity != "warning" || settings.Policy != "blocking" || settings.Runner != "vale" {
+		t.Fatalf("unexpected layered settings: %+v", settings)
+	}
+	if !containsAll(settings.Vocabulary.Accept, []string{"Quartz"}) || !containsAll(settings.Vocabulary.Reject, []string{"system"}) {
+		t.Fatalf("expected layered vocabulary overrides: %+v", settings.Vocabulary)
 	}
 }
 

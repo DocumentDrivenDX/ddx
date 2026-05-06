@@ -266,12 +266,12 @@ The rollout should be staged in this order:
 1. skill and rule assets
 2. deterministic `ddx doc prose --changed`
 3. direct-path `ddx doc prose <paths>`
-4. bead review integration later, after the core command and result
-   schema are stable
+4. opt-in bead review integration via `ddx bead review <id> --prose`,
+   after the core command and result schema are stable
 
 That sequencing keeps the first executable surface advisory and
 deterministic before any review workflow starts consuming the findings.
-It also means later bead review wiring can reuse the same finding schema
+It also means bead review wiring can reuse the same finding schema
 without re-litigating the checker boundary or the missing-tool contract.
 
 ## Non-Scope

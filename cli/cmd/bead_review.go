@@ -24,6 +24,9 @@ The prompt includes:
   - Git diff of the reviewed commit (git show)
   - Review instructions with the expected APPROVE/REQUEST_CHANGES/BLOCK output contract
 
+Use --prose to add an advisory prose-quality section derived from the bead
+text, using the same deterministic prose checker as ` + "`ddx doc prose`" + `.
+
 By default the commit is taken from the bead's closing_commit_sha field.
 Use --from-rev to override.
 
@@ -37,6 +40,7 @@ Pipe the output into ddx agent run:
 	cmd.Flags().String("from-rev", "", "Commit SHA to review (default: closing_commit_sha from bead)")
 	cmd.Flags().Int("iter", 1, "Review iteration number (shown in prompt header and grade table)")
 	cmd.Flags().String("output", "", "Write prompt to file instead of stdout")
+	cmd.Flags().Bool("prose", false, "Include advisory prose findings derived from the bead text")
 	return cmd
 }
 
@@ -45,6 +49,7 @@ func (f *CommandFactory) runBeadReview(cmd *cobra.Command, args []string) error 
 	fromRev, _ := cmd.Flags().GetString("from-rev")
 	iter, _ := cmd.Flags().GetInt("iter")
 	outputFile, _ := cmd.Flags().GetString("output")
+	includeProse, _ := cmd.Flags().GetBool("prose")
 
 	s := f.beadStore()
 	b, err := s.Get(beadID)
@@ -81,7 +86,12 @@ func (f *CommandFactory) runBeadReview(cmd *cobra.Command, args []string) error 
 
 	// Delegate prompt assembly to the single source of truth in the agent
 	// package so the CLI handler and the post-merge reviewer cannot drift.
-	prompt := agent.BuildReviewPrompt(b, iter, rev, diff, projectRoot, refs)
+	var prompt string
+	if includeProse {
+		prompt = agent.BuildReviewPromptWithProse(b, iter, rev, diff, projectRoot, refs)
+	} else {
+		prompt = agent.BuildReviewPrompt(b, iter, rev, diff, projectRoot, refs)
+	}
 
 	if outputFile != "" {
 		return os.WriteFile(outputFile, []byte(prompt), 0o644)

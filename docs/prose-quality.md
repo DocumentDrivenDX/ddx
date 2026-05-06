@@ -103,6 +103,16 @@ prose:
 The default is advisory. That keeps the first surface useful for review without
 turning prose guidance into a hard gate by default.
 
+## Bead Review Integration
+
+`ddx bead review <id> --prose` adds an advisory prose-quality section to the
+review prompt. The prose findings are emitted separately from acceptance and
+correctness findings, and they reuse the same checker, rule pack, and config
+resolution path as `ddx doc prose`.
+
+When the prose section is present, review consumers should treat those
+findings as advisory unless an explicit policy says otherwise.
+
 ### Vocabulary
 
 Use `vocabulary.accept` for DDx terms, product names, and domain-specific

@@ -33,16 +33,6 @@ suggested edit fields.`,
 	return cmd
 }
 
-type proseSettings struct {
-	Mode       docprose.Mode
-	Severity   string
-	Policy     string
-	Runner     string
-	Includes   []string
-	Excludes   []string
-	Vocabulary docprose.Vocabulary
-}
-
 func (f *CommandFactory) runDocProse(cmd *cobra.Command, args []string) error {
 	changed, _ := cmd.Flags().GetBool("changed")
 
@@ -51,7 +41,7 @@ func (f *CommandFactory) runDocProse(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	settings, err := resolveProseSettings(cfg)
+	settings, err := docprose.ResolveSettings(cfg)
 	if err != nil {
 		return err
 	}
@@ -141,54 +131,6 @@ func (f *CommandFactory) runDocProse(cmd *cobra.Command, args []string) error {
 		return NewExitError(ExitCodeGeneralError, "")
 	}
 	return nil
-}
-
-func resolveProseSettings(cfg *config.Config) (proseSettings, error) {
-	settings, err := docprose.DefaultSettings()
-	if err != nil {
-		return proseSettings{}, err
-	}
-	out := proseSettings{
-		Mode:       settings.Mode,
-		Severity:   settings.Severity,
-		Policy:     settings.Policy,
-		Runner:     settings.Runner,
-		Includes:   append([]string(nil), settings.Includes...),
-		Excludes:   append([]string(nil), settings.Excludes...),
-		Vocabulary: settings.Vocabulary,
-	}
-	if cfg == nil || cfg.Prose == nil {
-		return out, nil
-	}
-
-	if cfg.Prose.Mode != "" {
-		out.Mode = docprose.Mode(cfg.Prose.Mode)
-	}
-	if cfg.Prose.Severity != "" {
-		out.Severity = cfg.Prose.Severity
-	}
-	if cfg.Prose.Policy != "" {
-		out.Policy = cfg.Prose.Policy
-	}
-	if cfg.Prose.Runner != "" {
-		out.Runner = cfg.Prose.Runner
-	}
-	if len(cfg.Prose.Includes) > 0 {
-		out.Includes = append([]string(nil), cfg.Prose.Includes...)
-	}
-	if len(cfg.Prose.Excludes) > 0 {
-		out.Excludes = append([]string(nil), cfg.Prose.Excludes...)
-	}
-	if cfg.Prose.Vocabulary != nil {
-		if len(cfg.Prose.Vocabulary.Accept) > 0 {
-			out.Vocabulary.Accept = append([]string(nil), cfg.Prose.Vocabulary.Accept...)
-		}
-		if len(cfg.Prose.Vocabulary.Reject) > 0 {
-			out.Vocabulary.Reject = append([]string(nil), cfg.Prose.Vocabulary.Reject...)
-		}
-	}
-
-	return out, nil
 }
 
 func maybeReportMissingRunner(cmd *cobra.Command, runner string) error {

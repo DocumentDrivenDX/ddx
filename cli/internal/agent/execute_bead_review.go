@@ -13,6 +13,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	ddxconfig "github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/docprose"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
@@ -61,6 +62,7 @@ type ReviewResult struct {
 	Verdict          Verdict    `json:"verdict"`
 	Rationale        string     `json:"rationale,omitempty"`
 	PerAC            []ReviewAC `json:"per_ac,omitempty"`
+	ProseFindings    []Finding  `json:"prose_findings,omitempty"`
 	RawOutput        string     `json:"raw_output,omitempty"`
 	ReviewerHarness  string     `json:"reviewer_harness,omitempty"`
 	ReviewerModel    string     `json:"reviewer_model,omitempty"`
@@ -136,6 +138,7 @@ type reviewArtifactManifest struct {
 type reviewArtifactResult struct {
 	Verdict          string                     `json:"verdict"`
 	PerAC            []ReviewAC                 `json:"per_ac,omitempty"`
+	ProseFindings    []Finding                  `json:"prose_findings,omitempty"`
 	Rationale        string                     `json:"rationale,omitempty"`
 	Findings         []Finding                  `json:"findings,omitempty"`
 	Error            string                     `json:"error,omitempty"`
@@ -227,6 +230,11 @@ type BuildReviewPromptOptions struct {
 	Caps evidence.Caps
 }
 
+// ReviewPromptOptions controls optional prompt sections.
+type ReviewPromptOptions struct {
+	IncludeProse bool
+}
+
 // BuildReviewPromptResult is the structured output of BuildReviewPromptBounded.
 // Overflow is true when, after all per-section trimming, the assembled
 // prompt still exceeds Caps.MaxPromptBytes; callers MUST NOT dispatch in
@@ -244,6 +252,13 @@ func BuildReviewPrompt(b *bead.Bead, iter int, rev, diff, projectRoot string, re
 	return BuildReviewPromptBounded(b, iter, rev, diff, projectRoot, refs, BuildReviewPromptOptions{Caps: evidence.DefaultCaps()}).Prompt
 }
 
+// BuildReviewPromptWithProse builds the review prompt and includes an
+// advisory prose-quality section derived from the bead text using the same
+// docprose checker and config path as `ddx doc prose`.
+func BuildReviewPromptWithProse(b *bead.Bead, iter int, rev, diff, projectRoot string, refs []GoverningRef) string {
+	return BuildReviewPromptBoundedWithProse(b, iter, rev, diff, projectRoot, refs, BuildReviewPromptOptions{Caps: evidence.DefaultCaps()}).Prompt
+}
+
 // BuildReviewPromptBounded assembles the review prompt under byte caps using
 // the cli/internal/evidence primitives. Governing documents are read via
 // evidence.ReadFileClamped, the diff is decomposed and clamped via
@@ -252,6 +267,16 @@ func BuildReviewPrompt(b *bead.Bead, iter int, rev, diff, projectRoot string, re
 // description, acceptance, notes, and the full changed-file inventory) is
 // preserved verbatim regardless of cap pressure (FEAT-022 §5).
 func BuildReviewPromptBounded(b *bead.Bead, iter int, rev, diff, projectRoot string, refs []GoverningRef, opts BuildReviewPromptOptions) BuildReviewPromptResult {
+	return buildReviewPromptBounded(b, iter, rev, diff, projectRoot, refs, opts, false)
+}
+
+// BuildReviewPromptBoundedWithProse assembles the review prompt with the
+// optional prose-quality section enabled.
+func BuildReviewPromptBoundedWithProse(b *bead.Bead, iter int, rev, diff, projectRoot string, refs []GoverningRef, opts BuildReviewPromptOptions) BuildReviewPromptResult {
+	return buildReviewPromptBounded(b, iter, rev, diff, projectRoot, refs, opts, true)
+}
+
+func buildReviewPromptBounded(b *bead.Bead, iter int, rev, diff, projectRoot string, refs []GoverningRef, opts BuildReviewPromptOptions, includeProse bool) BuildReviewPromptResult {
 	caps := opts.Caps
 	if caps.MaxPromptBytes == 0 {
 		caps = evidence.DefaultCaps()
@@ -361,9 +386,29 @@ func BuildReviewPromptBounded(b *bead.Bead, iter int, rev, diff, projectRoot str
 	sections = append(sections, diffSection)
 	fmt.Fprintf(&sb, "  <diff rev=%q>\n%s\n  </diff>\n\n", rev, evidence.DelimitUntrustedData(strings.TrimRight(clampedDiff, "\n")))
 
+	if includeProse {
+		proseSection, proseSectionEvidence, proseErr := buildProseReviewSection(projectRoot, b)
+		if proseErr != nil {
+			fmt.Fprintf(&sb, "  <prose-review advisory=%q>\n", "true")
+			fmt.Fprintf(&sb, "    <note>Could not compute prose findings: %s</note>\n", reviewXMLEscape(proseErr.Error()))
+			sb.WriteString("  </prose-review>\n\n")
+			sections = append(sections, evidence.EvidenceAssemblySection{
+				Name:          "prose-review",
+				SelectedItems: []string{"bead"},
+			})
+		} else {
+			sb.WriteString(proseSection)
+			sb.WriteString("\n")
+			sections = append(sections, proseSectionEvidence)
+		}
+	}
+
 	// ── Instructions section ────────────────────────────────────────────────
 	instructions := strings.ReplaceAll(beadReviewInstructions, "<bead-id>", b.ID)
 	instructions = strings.ReplaceAll(instructions, "<N>", fmt.Sprintf("%d", iter))
+	if includeProse {
+		instructions += "\n\nIf a <prose-review> section is present, add a prose_findings array to the JSON output. Keep prose findings separate from correctness findings. Prose findings are advisory by default and must not change the overall verdict."
+	}
 	fmt.Fprintf(&sb, "  <instructions>\n%s\n  </instructions>\n", reviewXMLEscape(instructions))
 
 	sb.WriteString("</bead-review>\n")
@@ -378,6 +423,67 @@ func BuildReviewPromptBounded(b *bead.Bead, iter int, rev, diff, projectRoot str
 		Overflow: len(out) > caps.MaxPromptBytes,
 		Sections: sections,
 	}
+}
+
+func buildProseReviewSection(projectRoot string, b *bead.Bead) (string, evidence.EvidenceAssemblySection, error) {
+	cfg, err := ddxconfig.LoadWithWorkingDir(projectRoot)
+	if err != nil {
+		return "", evidence.EvidenceAssemblySection{}, err
+	}
+
+	settings, err := docprose.ResolveSettings(cfg)
+	if err != nil {
+		return "", evidence.EvidenceAssemblySection{}, err
+	}
+	checker, err := docprose.NewChecker(settings.Mode, settings.Vocabulary)
+	if err != nil {
+		return "", evidence.EvidenceAssemblySection{}, err
+	}
+
+	var src strings.Builder
+	if title := strings.TrimSpace(b.Title); title != "" {
+		fmt.Fprintf(&src, "# %s\n\n", title)
+	}
+	if desc := strings.TrimSpace(b.Description); desc != "" {
+		src.WriteString(desc)
+		src.WriteString("\n\n")
+	}
+	if acc := strings.TrimSpace(b.Acceptance); acc != "" {
+		src.WriteString("## Acceptance\n\n")
+		src.WriteString(acc)
+		src.WriteString("\n\n")
+	}
+	if notes := strings.TrimSpace(b.Notes); notes != "" {
+		src.WriteString("## Notes\n\n")
+		src.WriteString(notes)
+		src.WriteString("\n")
+	}
+
+	findings := checker.Findings("bead.md", src.String())
+	var sb strings.Builder
+	sb.WriteString("  <prose-review advisory=\"true\">\n")
+	fmt.Fprintf(&sb, "    <mode>%s</mode>\n", settings.Mode)
+	fmt.Fprintf(&sb, "    <policy>%s</policy>\n", settings.Policy)
+	if len(findings) == 0 {
+		sb.WriteString("    <findings/>\n")
+	} else {
+		sb.WriteString("    <findings>\n")
+		for _, finding := range findings {
+			fmt.Fprintf(&sb, "      <finding file=%q line=%d rule_id=%q severity=%q>\n", finding.File, finding.Line, finding.RuleID, finding.Severity)
+			fmt.Fprintf(&sb, "        <rationale>%s</rationale>\n", reviewXMLEscape(finding.Rationale))
+			fmt.Fprintf(&sb, "        <suggested_edit>%s</suggested_edit>\n", reviewXMLEscape(finding.SuggestedEdit))
+			sb.WriteString("      </finding>\n")
+		}
+		sb.WriteString("    </findings>\n")
+	}
+	sb.WriteString("  </prose-review>")
+
+	section := evidence.EvidenceAssemblySection{
+		Name:          "prose-review",
+		SelectedItems: []string{"bead"},
+	}
+	section.BytesIncluded = len(src.String())
+	return sb.String(), section, nil
 }
 
 // rankAndDegradeDiffForReview reorders diff files so that AC-referenced files
@@ -813,6 +919,7 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev 
 	reviewRes := &ReviewResult{
 		Verdict:          strictVerdict,
 		Rationale:        rationale,
+		ProseFindings:    parsed.ProseFindings,
 		RawOutput:        output,
 		ReviewerHarness:  actualHarness,
 		ReviewerModel:    actualModel,
@@ -855,6 +962,7 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev 
 		Verdict:          string(strictVerdict),
 		Rationale:        rationale,
 		Findings:         findings,
+		ProseFindings:    parsed.ProseFindings,
 		Error:            reviewRes.Error,
 		EvidenceAssembly: telemetry,
 	})
