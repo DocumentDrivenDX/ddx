@@ -212,7 +212,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		return nil, fmt.Errorf("agent: execute: %w", err)
 	}
 
-	final, routing, _ := drainServiceEvents(events)
+	final, routing, _ := drainServiceEventsWithWriter(events, runtime.Output)
 	finishedAt := time.Now().UTC()
 	elapsed := finishedAt.Sub(start)
 

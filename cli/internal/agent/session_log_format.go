@@ -34,6 +34,29 @@ func FormatServiceProgressEntries(entries []agentlib.ServiceProgressData) string
 	return sb.String()
 }
 
+func FormatServiceRoutingDecision(routing *agentlib.ServiceRoutingDecisionData) string {
+	if routing == nil || (routing.Model == "" && routing.Harness == "" && routing.Provider == "") {
+		return ""
+	}
+	parts := []string{}
+	if routing.Harness != "" {
+		parts = append(parts, "harness="+routing.Harness)
+	}
+	if routing.Provider != "" {
+		parts = append(parts, "provider="+routing.Provider)
+	}
+	if routing.Model != "" {
+		parts = append(parts, "model="+routing.Model)
+	}
+	if routing.Reason != "" {
+		parts = append(parts, "reason="+routing.Reason)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "route: " + strings.Join(parts, " ")
+}
+
 // FormatSessionLogLines formats newline-delimited session log JSON records
 // using the same progress renderer as structured ServiceEvent progress.
 // Malformed lines are skipped.

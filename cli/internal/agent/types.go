@@ -69,7 +69,7 @@ type AgentRunRuntime struct {
 	Prompt                string
 	PromptFile            string
 	PromptSource          string
-	Output                io.Writer
+	Output                io.Writer // optional live service-event progress sink
 	Correlation           map[string]string
 	Record                bool
 	Replay                bool

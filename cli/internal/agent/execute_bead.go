@@ -774,6 +774,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 
 	runRuntime := AgentRunRuntime{
 		PromptFile: artifacts.PromptAbs,
+		Output:     runtime.Output,
 		WorkDir:    wtPath,
 		Correlation: map[string]string{
 			"bead_id":     beadID,
