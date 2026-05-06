@@ -1,0 +1,2 @@
+verification_command: cd cli && go test ./internal/bead/... && cd .. && lefthook run pre-commit
+reason: The queue-rank sort path, parser compatibility, and focused tests required by ddx-5ca2b0af are already present in the worktree. No code changes were necessary because Ready() and ReadyExecution() already call sortBeadsForQueue, parseQueueRank accepts numeric strings, and the acceptance tests are passing.
