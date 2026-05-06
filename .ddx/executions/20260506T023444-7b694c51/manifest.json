@@ -1,0 +1,47 @@
+{
+  "harness": "claude",
+  "model": "claude-opus-4-6",
+  "base_rev": "cb9dde98c235ecd18c026b287cbbd599ac9ec1ac",
+  "result_rev": "268d6658ca057f61f734de3d83a985fe29e41d02",
+  "verdict": "BLOCK",
+  "bead_id": "ddx-86996834",
+  "execution_dir": ".ddx/executions/20260506T023444-7b694c51",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 686,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260506T023305-7e7c99b1/manifest.json",
+          ".ddx/executions/20260506T023305-7e7c99b1/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 110164,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 112691,
+    "output_bytes": 0,
+    "elapsed_ms": 4178,
+    "harness": "claude",
+    "model": "claude-opus-4-6"
+  }
+}
