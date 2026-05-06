@@ -297,7 +297,7 @@ type ExecuteBeadLoopStore interface {
 	Get(id string) (*bead.Bead, error)
 	Claim(id, assignee string) error
 	Unclaim(id string) error
-	Heartbeat(id string) error
+	TouchClaimHeartbeat(id string) error
 	CloseWithEvidence(id, sessionID, commitSHA string) error
 	AppendEvent(id string, event bead.BeadEvent) error
 	Events(id string) ([]bead.BeadEvent, error)
@@ -843,7 +843,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				case <-hbCtx.Done():
 					return
 				case <-ticker.C:
-					_ = w.Store.Heartbeat(beadID)
+					_ = w.Store.TouchClaimHeartbeat(beadID)
 				}
 			}
 		}(candidate.ID)

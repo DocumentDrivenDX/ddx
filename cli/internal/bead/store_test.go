@@ -2,6 +2,7 @@ package bead
 
 import (
 	"bufio"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -587,14 +588,23 @@ func TestHeartbeatReclaimStaleInProgressBead(t *testing.T) {
 	// First worker claims it normally.
 	require.NoError(t, s.Claim(b.ID, "worker-a"))
 
-	// Forge a stale heartbeat by rewriting the store under its lock.
+	// Forge a stale runtime lease and a stale legacy tracker heartbeat.
+	stale := time.Now().UTC().Add(-1 * time.Hour)
+	staleRec := claimLivenessRecord{
+		BeadID:    b.ID,
+		UpdatedAt: stale,
+		PID:       os.Getpid(),
+	}
+	data, err := json.Marshal(staleRec)
+	require.NoError(t, err)
+	require.NoError(t, writeAtomicClaimFile(claimLivenessPath(s.Dir, b.ID), append(data, '\n')))
 	require.NoError(t, s.Update(b.ID, func(bd *Bead) {
 		if bd.Extra == nil {
 			bd.Extra = map[string]any{}
 		}
-		stale := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
-		bd.Extra["execute-loop-heartbeat-at"] = stale
-		bd.Extra["claimed-at"] = stale
+		staleStr := stale.Format(time.RFC3339)
+		bd.Extra["execute-loop-heartbeat-at"] = staleStr
+		bd.Extra["claimed-at"] = staleStr
 	}))
 
 	// A fresh worker must be able to reclaim the stalled bead.
@@ -609,10 +619,14 @@ func TestHeartbeatReclaimStaleInProgressBead(t *testing.T) {
 	orig := &Bead{ID: "ddx-hb-stale-2", Title: "Stale claim 2"}
 	require.NoError(t, s2.Create(orig))
 	require.NoError(t, s2.Claim(orig.ID, "worker-a"))
-	require.NoError(t, s2.Update(orig.ID, func(bd *Bead) {
-		stale := time.Now().UTC().Add(-1 * time.Hour).Format(time.RFC3339)
-		bd.Extra["execute-loop-heartbeat-at"] = stale
-	}))
+	staleLease := claimLivenessRecord{
+		BeadID:    orig.ID,
+		UpdatedAt: time.Now().UTC().Add(-1 * time.Hour),
+		PID:       os.Getpid(),
+	}
+	data, err = json.Marshal(staleLease)
+	require.NoError(t, err)
+	require.NoError(t, writeAtomicClaimFile(claimLivenessPath(s2.Dir, orig.ID), append(data, '\n')))
 	ready, err := s2.ReadyExecution()
 	require.NoError(t, err)
 	require.Len(t, ready, 1)
@@ -631,7 +645,7 @@ func TestHeartbeatKeepsActiveClaimAlive(t *testing.T) {
 	// Actively refresh the heartbeat for longer than the TTL.
 	deadline := time.Now().Add(150 * time.Millisecond)
 	for time.Now().Before(deadline) {
-		require.NoError(t, s.Heartbeat(b.ID))
+		require.NoError(t, s.TouchClaimHeartbeat(b.ID))
 		time.Sleep(5 * time.Millisecond)
 	}
 
@@ -649,6 +663,24 @@ func TestHeartbeatKeepsActiveClaimAlive(t *testing.T) {
 	got, err := s.Get(b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "worker-a", got.Owner)
+}
+
+func TestStoreHeartbeat_RemovedOrNoTrackerWrite(t *testing.T) {
+	s := newTestStore(t)
+	b := &Bead{ID: "ddx-hb-no-tracker", Title: "Heartbeat stays out of JSONL"}
+	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Claim(b.ID, "worker-a"))
+
+	before, err := os.ReadFile(s.File)
+	require.NoError(t, err)
+	require.NoError(t, s.Heartbeat(b.ID))
+	after, err := os.ReadFile(s.File)
+	require.NoError(t, err)
+	assert.Equal(t, before, after, "heartbeat must not mutate beads.jsonl")
+
+	leasePath := claimLivenessPath(s.Dir, b.ID)
+	_, err = os.Stat(leasePath)
+	require.NoError(t, err, "heartbeat must be recorded in the external lease file")
 }
 
 func TestAtomicClaimUnderContention(t *testing.T) {

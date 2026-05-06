@@ -33,7 +33,9 @@ func (s *claimCountingStore) Claim(id, assignee string) error {
 	return s.Store.Claim(id, assignee)
 }
 
-func (s *claimCountingStore) Heartbeat(id string) error            { return s.Store.Heartbeat(id) }
+func (s *claimCountingStore) TouchClaimHeartbeat(id string) error {
+	return s.Store.TouchClaimHeartbeat(id)
+}
 func (s *claimCountingStore) Unclaim(id string) error              { return s.Store.Unclaim(id) }
 func (s *claimCountingStore) ReadyExecution() ([]bead.Bead, error) { return s.Store.ReadyExecution() }
 func (s *claimCountingStore) CloseWithEvidence(id, sessionID, commitSHA string) error {
