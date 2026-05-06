@@ -35,10 +35,9 @@ project context before adapters run. DDx manages worker/bead lifecycle
 progress and worker records only. Fizeau owns agent transcript/session
 payloads and transcript/session presentation for agent events that may travel
 through agent-session records. DDx treats forwarded Fizeau agent events as
-opaque attachments, never renders the inner Fizeau session logs, and never
-interprets their semantics. Those payloads never become worker state or
-lifecycle state; the server surfaces them only as opaque Fizeau payloads
-alongside DDx progress views.
+opaque attachments and never interprets their semantics. Those payloads never
+become worker state or lifecycle state; the server surfaces them only as
+opaque Fizeau payloads alongside DDx progress views.
 
 ## Architecture
 
@@ -162,9 +161,9 @@ resolve exactly one project context.
     including native session/trace references and any forwarded Fizeau
     event/transcript envelope data; those payloads are opaque to DDx, owned by
     Fizeau, and are distinct from worker lifecycle events. DDx stores them as
-    attachments, does not render or semantically interpret the inner Fizeau
-    transcript or session-log content, and does not treat them as worker lifecycle state. The
-    payload is evidence, not worker progress.
+    attachments, keeps the inner Fizeau transcript or session-log content
+    opaque, and does not treat them as worker lifecycle state. The payload is
+    evidence, not worker progress.
 21. MCP tool: `ddx_agent_sessions` (project selector required unless singleton compatibility mode applies)
 
 **Worker Progress (FEAT-006 embedded-agent progress contract)**
@@ -177,9 +176,9 @@ authoritative source for historical phase summaries.
 Worker lifecycle events are DDx-owned. Forwarded Fizeau agent events are
 opaque payloads attached to agent-session records, not worker lifecycle state,
 and the server surfaces them without interpreting transcript semantics or
-rendering session logs. Fizeau owns transcript rendering and session-log
-presentation; DDx only relays opaque payloads alongside its own worker
-records. DDx never converts those forwarded events into worker state.
+turning them into worker progress. Fizeau owns transcript rendering and
+session-log presentation; DDx only relays opaque payloads alongside its own
+worker records. DDx never converts those forwarded events into worker state.
 
 22. `GET /api/projects/:project/workers` — list active and recently completed
     workers for a project; each entry includes worker identity, current status
@@ -244,8 +243,8 @@ shape for the in-flight attempt, enabling a single read model across CLI and UI)
 `recent_phases` retains only phase-transition events (not heartbeats) and is
 capped at the last 20 entries. This is the shared read model for both the CLI
 and the UI status dashboard worker cards; any Fizeau diagnostics surface may
-link or copy the same underlying evidence, but DDx does not render inner
-Fizeau session logs there.
+link or copy the same underlying evidence, but DDx keeps the inner Fizeau
+session logs opaque there.
 
 **Provider Availability and Utilization (FEAT-014)**
 

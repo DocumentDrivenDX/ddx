@@ -380,7 +380,7 @@ The cross-repo entanglement is the failure mode. **Do not supersede. Do not depr
 
 #### Files to GUT on the DDx side
 
-- `docs/helix/01-frame/features/FEAT-006-agent-service.md` — rewrite to one page: "DDx invokes LLMs via the ddx-agent contract. DDx-side responsibilities: bead-driven invocation, execute-bead orchestration, evidence/session capture. End." DDx may keep copied/linkable evidence-envelope references and forward Fizeau transcript `ServiceEvent`s as opaque evidence, but it is only a pass-through/marshalling consumer for those events. Fizeau owns transcript, session-log, and progress rendering plus transcript semantics. DDx must never render, rehydrate, parse, or semantically interpret inner Fizeau transcript or session-log content; it only preserves the opaque envelope and attachments.
+- `docs/helix/01-frame/features/FEAT-006-agent-service.md` — rewrite to one page: "DDx invokes LLMs via the ddx-agent contract. DDx-side responsibilities: bead-driven invocation, execute-bead orchestration, evidence/session capture. End." DDx may keep copied/linkable evidence-envelope references and forward Fizeau transcript `ServiceEvent`s as opaque evidence, but it is only a pass-through/marshalling consumer for those events. Fizeau owns transcript, session-log, and progress rendering plus transcript semantics. DDx only preserves the opaque envelope and attachments; it does not rehydrate, parse, or semantically interpret inner Fizeau transcript or session-log content.
 
 #### Files to TRIM on the agent side (drop boundary claims; describe internals in agent's own language)
 
@@ -438,7 +438,7 @@ When DDx needs new contract behavior, it files an issue/bead against ddx-agent r
 | `cli/internal/agent/compare.go`, `benchmark.go`, `quorum.go`, `condense.go` | **Move to ddx-agent** — these ARE the comparison suite the user wants in one module |
 | `cli/internal/agent/providerstatus/probe.go` | **Moves to ddx-agent** |
 | `cli/internal/agent/claude_stream.go`, `claude_quota_cache.go` | **Move to ddx-agent** as part of the claude harness implementation |
-| `cli/internal/agent/jsonl.go`, `format.go`, `session_log_format.go`, `session_log_tailer.go` | **Mostly move** to ddx-agent (event/format primitives); DDx keeps only copied/linkable evidence-envelope metadata and attachment pointers, and it does not render, rehydrate, or parse the inner Fizeau transcript or session-log content. Fizeau owns the session-log and progress rendering surfaces plus transcript semantics; DDx is only an opaque forwarder for those artifacts |
+| `cli/internal/agent/jsonl.go`, `format.go`, `session_log_format.go`, `session_log_tailer.go` | **Mostly move** to ddx-agent (event/format primitives); DDx keeps only copied/linkable evidence-envelope metadata and attachment pointers, and it keeps the inner Fizeau transcript or session-log content opaque. Fizeau owns the session-log and progress rendering surfaces plus transcript semantics; DDx is only an opaque forwarder for those artifacts |
 | `cli/internal/agent/state.go`, `executions_mirror.go`, `executor.go`, `script.go` | **Stay** in DDx — these are execute-bead orchestration (DDx-specific concern) |
 | `cli/internal/agent/grade.go`, `pricing.go`, `models.go`, `catalog.go`, `model_catalog_yaml.go`, `agent_catalog_shared.go`, `worktree_skills.go` | Mixed — likely most move; some DDx-specific glue stays |
 | `cli/cmd/agent_*.go` | **Stay** in DDx as commands, but become thin Service.* callers |
