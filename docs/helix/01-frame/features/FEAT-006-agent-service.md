@@ -89,9 +89,9 @@ and session presentation. DDx is a pass-through/marshalling consumer for
 Fizeau transcript events: it may forward Fizeau `ServiceEvent`s unchanged and
 link or copy Fizeau artifacts into the execution evidence bundle, but DDx
 tracks those payloads only as opaque evidence. DDx keeps the inner Fizeau
-transcript or session-log content opaque; it does not rehydrate, parse, or
-semantically interpret it, and those payloads never become DDx worker state.
-The session log payload remains opaque to DDx, which only carries the
+transcript or session-log content opaque; it does not rehydrate, parse, render,
+or semantically interpret it, and those payloads never become DDx worker
+state. The session log payload remains opaque to DDx, which only carries the
 envelope around it.
 
 ## Power Intent
@@ -240,7 +240,7 @@ routing, provider health, model fallbacks, or retry destinations. DDx treats
 the session log as a Fizeau-owned transcript artifact and only uses typed
 agent response fields plus DDx-owned attempt evidence as policy inputs. DDx
 copies or links the artifact as evidence; it does not inspect transcript
-semantics.
+semantics or present the inner session log as a DDx-rendered view.
 
 ## Layer Ownership Migration Table
 
