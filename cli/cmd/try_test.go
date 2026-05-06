@@ -1,10 +1,13 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -15,6 +18,71 @@ import (
 type tryHookRunnerStub struct {
 	t            *testing.T
 	promptSource []string
+}
+
+type blockingTryExecutor struct {
+	started chan struct{}
+	once    sync.Once
+}
+
+func (e *blockingTryExecutor) Execute(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+	e.once.Do(func() { close(e.started) })
+	<-ctx.Done()
+	return agent.ExecuteBeadReport{
+		BeadID:    beadID,
+		Status:    agent.ExecuteBeadStatusExecutionFailed,
+		Detail:    ctx.Err().Error(),
+		BaseRev:   "feedface",
+		ResultRev: "feedface",
+	}, ctx.Err()
+}
+
+func runInterruptedTryCommand(t *testing.T) (*bead.Store, string, error) {
+	t.Helper()
+
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	env := NewTestEnvironment(t)
+	env.CreateDefaultConfig()
+	store := bead.NewStore(env.Dir + "/.ddx")
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:    "try-interrupt-001",
+		Title: "Interrupted try bead",
+	}))
+
+	factory := NewCommandFactory(env.Dir)
+	runner := &blockingTryExecutor{started: make(chan struct{})}
+	factory.tryExecutorOverride = runner
+	root := factory.NewRootCommand()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	root.SetContext(ctx)
+
+	var buf bytes.Buffer
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"try", "try-interrupt-001", "--no-review", "--no-review-i-know-what-im-doing"})
+
+	done := make(chan error, 1)
+	go func() {
+		done <- root.Execute()
+	}()
+
+	select {
+	case <-runner.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("try executor did not start")
+	}
+	cancel()
+
+	var err error
+	select {
+	case err = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("try command did not return after cancel")
+	}
+
+	return store, buf.String(), err
 }
 
 func (r *tryHookRunnerStub) Run(opts agent.RunArgs) (*agent.Result, error) {
@@ -156,6 +224,42 @@ func TestTry_HappyPath_ClaimsAndExecutes(t *testing.T) {
 	b, storeErr := store.Get("happy-bead-001")
 	require.NoError(t, storeErr)
 	assert.Equal(t, bead.StatusClosed, b.Status, "bead must be closed after successful execution")
+}
+
+// TestTryInterrupt_InFlightAttemptUnclaimsTarget verifies that cancelling
+// `ddx try <id>` during an in-flight attempt releases the claim and leaves the
+// bead open so it can be reclaimed.
+func TestTryInterrupt_InFlightAttemptUnclaimsTarget(t *testing.T) {
+	store, out, err := runInterruptedTryCommand(t)
+	require.Error(t, err)
+	assert.Contains(t, strings.ToLower(out+err.Error()), "context canceled", "try should surface the interrupted outcome")
+	assert.Contains(t, out, "context canceled", "interrupted try should surface the interrupted outcome")
+
+	got, storeErr := store.Get("try-interrupt-001")
+	require.NoError(t, storeErr)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Empty(t, got.Owner)
+
+	fresh, found, hbErr := store.ClaimHeartbeatFresh("try-interrupt-001")
+	require.NoError(t, hbErr)
+	assert.False(t, found, "interrupted try must remove the claim heartbeat")
+	assert.False(t, fresh)
+	require.NoError(t, store.Claim("try-interrupt-001", "worker-b"))
+}
+
+// TestTryInterrupt_DoesNotReportOperatorCancel verifies that plain context
+// cancellation is not classified as operator_cancel unless the cancel marker
+// is explicitly present.
+func TestTryInterrupt_DoesNotReportOperatorCancel(t *testing.T) {
+	store, out, err := runInterruptedTryCommand(t)
+	require.Error(t, err)
+	assert.Contains(t, strings.ToLower(out+err.Error()), "context canceled", "try should surface the interrupted outcome")
+	assert.NotContains(t, out, agent.OperatorCancelReason, "plain cancellation must not report operator_cancel")
+
+	got, storeErr := store.Get("try-interrupt-001")
+	require.NoError(t, storeErr)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Empty(t, got.Owner)
 }
 
 // TestTry_FlagsPlumbThrough verifies that routing flags (--harness, --model)

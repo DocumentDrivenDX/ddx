@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -343,6 +344,9 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		NoReview:              noReview,
 	})
 	if runErr != nil {
+		if (errors.Is(runErr, context.Canceled) || errors.Is(runErr, context.DeadlineExceeded)) && result != nil && len(result.Results) > 0 {
+			writeTryResult(cmd.OutOrStdout(), result.Results[0])
+		}
 		return runErr
 	}
 
@@ -359,18 +363,22 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		return &ExitError{Code: tryExitFailed, Message: ""}
 	}
 	report := result.Results[0]
-	fmt.Fprintf(cmd.OutOrStdout(), "\nbead: %s\nstatus: %s\n", report.BeadID, report.Status)
-	if report.Detail != "" {
-		fmt.Fprintf(cmd.OutOrStdout(), "detail: %s\n", report.Detail)
-	}
-	if report.ResultRev != "" {
-		fmt.Fprintf(cmd.OutOrStdout(), "result_rev: %s\n", report.ResultRev)
-	}
-	if report.PreserveRef != "" {
-		fmt.Fprintf(cmd.OutOrStdout(), "preserve_ref: %s\n", report.PreserveRef)
-	}
+	writeTryResult(cmd.OutOrStdout(), report)
 
 	return tryExitCodeForStatus(report.Status)
+}
+
+func writeTryResult(w io.Writer, report agent.ExecuteBeadReport) {
+	fmt.Fprintf(w, "\nbead: %s\nstatus: %s\n", report.BeadID, report.Status)
+	if report.Detail != "" {
+		fmt.Fprintf(w, "detail: %s\n", report.Detail)
+	}
+	if report.ResultRev != "" {
+		fmt.Fprintf(w, "result_rev: %s\n", report.ResultRev)
+	}
+	if report.PreserveRef != "" {
+		fmt.Fprintf(w, "preserve_ref: %s\n", report.PreserveRef)
+	}
 }
 
 // tryExitCodeForStatus maps a bead execution status string to the ddx try exit code contract.
