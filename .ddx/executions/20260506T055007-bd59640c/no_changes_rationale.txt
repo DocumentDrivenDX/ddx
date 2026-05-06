@@ -1,0 +1,4 @@
+verification_command: cd cli && go test ./internal/agent/... ./internal/agent/work/... && lefthook run pre-commit
+done: Guard contract, candidate filtering, cooldown behavior, and tests already exist in the checked-out tree.
+blocks: none
+follow_up: none
