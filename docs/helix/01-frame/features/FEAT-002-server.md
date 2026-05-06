@@ -31,11 +31,11 @@ at `~/.local/share/ddx/server-state.json` (`$XDG_DATA_HOME/ddx/server-state.json
 when set), and the last-known server URL is written to
 `~/.local/share/ddx/server.addr` (see FEAT-020). The server binds multiple
 project roots concurrently; each request is resolved against one explicit
-project context before adapters run. DDx manages worker lifecycle progress and
-worker records only. Fizeau owns the agent transcript/session payloads that may
-travel through agent-session records. Forwarded Fizeau agent events remain
-opaque attachments owned by Fizeau, never become worker state or lifecycle
-state, and are not rendered as DDx progress views.
+project context before adapters run. DDx manages worker/bead lifecycle
+progress and worker records only. Fizeau owns the agent transcript/session
+payloads that may travel through agent-session records. Forwarded Fizeau agent
+events remain opaque attachments owned by Fizeau, never become worker state or
+lifecycle state, and are not rendered as DDx progress views.
 
 ## Architecture
 
@@ -91,9 +91,10 @@ Legacy unscoped `/api/...` and `/mcp/...` forms remain only as compatibility ali
 workers as goroutines. Each worker drains exactly one registered project
 context; it never crosses project boundaries. Worker lifecycle state
 (start, live progress, stop, record on disk) is DDx-owned and distinct from
-any agent transcript data. Fizeau owns transcript/progress/session rendering
-for its agent events; DDx only surfaces its own worker state and any opaque
-forwarded Fizeau payloads alongside it. The host+user daemon is the single
+any agent transcript data or forwarded Fizeau events. Fizeau owns
+transcript/progress/session rendering for its agent events; DDx only surfaces
+its own worker state and any opaque forwarded Fizeau payloads alongside it.
+The host+user daemon is the single
 point of coordination for all long-running DDx worker activity on the
 machine. The supervisor exposes worker state through the same project-scoped
 API surface used for beads and executions, and worker records persist under
