@@ -60,7 +60,8 @@ Every automated bead attempt has two quality checkpoints:
    history, and the canonical rubric in
    `docs/helix/06-iterate/bead-authoring-template.md`. The implementation hook
    may still advertise `MODE: intake` for legacy compatibility only; the
-   product concept is bead readiness assessment.
+   product concept is bead readiness assessment. The older "pre-claim intake"
+   wording remains only as a compatibility alias.
 2. **Post-attempt triage.** After an attempt finalizes, DDx triages the result
    against the same lifecycle quality policy so a low-quality prompt failure,
    missing rationale, empty review block, or structurally ambiguous outcome is

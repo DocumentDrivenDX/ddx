@@ -370,12 +370,13 @@ new event kinds or use cooldown as a generic parking lot.
 ### 8.2 Bead Readiness And Triage Contract (ddx-3c154349)
 
 Bead readiness assessment is the normal path for actionability and scope
-checks. It owns the pre-claim queue decision and runs before a worker owns the
+checks. It owns the readiness queue decision and runs before a worker owns the
 bead, so most readiness actions start from `open`. The implementation
-entrypoint may still be named `MODE: intake` for compatibility, but the product
-concept is bead readiness assessment. Post-attempt triage is a separate
-after-evidence queue action that reuses the same event taxonomy without
-changing the pre-claim decision.
+entrypoint may still be named `MODE: intake` for compatibility, but that is
+legacy wording only; the product concept is bead readiness assessment. Within
+readiness, lint/rubric scoring is a diagnostic pass, not a separate queue
+action. Post-attempt triage is a separate after-evidence queue action that
+reuses the same event taxonomy without changing the readiness decision.
 
 Status transitions used:
 

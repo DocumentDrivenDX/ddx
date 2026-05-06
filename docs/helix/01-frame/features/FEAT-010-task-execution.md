@@ -115,12 +115,12 @@ compatibility entrypoint `PreClaimIntakeHook` and record `MODE: intake` for
 legacy compatibility, but the decision being made is bead readiness
 assessment. Within that assessment, the nested bead-lifecycle workflow skill
 performs lint/rubric scoring to support the decision, and the score is
-diagnostic evidence rather than a separate queue action. The hook has enough
-context to evaluate title, description, acceptance criteria, labels, parent,
-deps, bead type, spec-id, prior attempt history, and whether the bead is
-atomic enough to execute. The hook invokes the nested bead-lifecycle workflow
-skill under the `ddx` skill tree and records readiness evidence in the layer-3
-run record.
+diagnostic evidence rather than a separate queue action. Post-attempt triage is
+separate and runs only after evidence exists. The hook has enough context to
+evaluate title, description, acceptance criteria, labels, parent, deps, bead
+type, spec-id, prior attempt history, and whether the bead is atomic enough to
+execute. The hook invokes the nested bead-lifecycle workflow skill under the
+`ddx` skill tree and records readiness evidence in the layer-3 run record.
 
 `ddx work` wires this hook by default in both CLI and server-managed worker
 paths. Decomposition decisions run with a strong `MinPower` floor, defaulting to
@@ -317,7 +317,7 @@ first result was rejected, and why the final result passed.
 The layer-3 drain evaluates each ready bead through this mechanical sequence:
 
 1. **Eligibility and readiness.** Pick a dependency-ready candidate. Run the
-   pre-claim readiness gate. Safe rewrites happen before claim. Too-large work
+   readiness gate. Safe rewrites happen before claim. Too-large work
    is decomposed before an implementation attempt. Ambiguous or underspecified
    work is blocked with `needs_human`. Readiness infrastructure failure records
    evidence and follows the configured fail-open/factory-mode policy; it never
