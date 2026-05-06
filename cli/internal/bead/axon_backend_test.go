@@ -21,12 +21,88 @@ import (
 // surface (Create/Get/Update/Claim/Close/...) gets exercised against the
 // axon-shaped storage layout instead of the JSONL default.
 func newAxonStore(t *testing.T) *Store {
+	s, _ := newAxonStoreWithTransport(t)
+	return s
+}
+
+func newAxonStoreWithTransport(t *testing.T) (*Store, *fakeAxonGraphQLTransport) {
 	t.Helper()
 	dir := filepath.Join(t.TempDir(), ".ddx")
+	transport := newFakeAxonGraphQLTransport()
 	s := NewStore(dir)
-	s.backend = NewAxonBackend(dir, s.LockWait)
+	s.backend = NewAxonBackend(dir, s.LockWait,
+		WithAxonGraphQLTransport(transport),
+		WithAxonGraphQLClient(transport),
+	)
 	require.NoError(t, s.Init())
-	return s
+	return s, transport
+}
+
+type fakeAxonGraphQLTransport struct {
+	mu     sync.Mutex
+	beads  []axonEntityEnvelope
+	events []axonEventEnvelope
+}
+
+func newFakeAxonGraphQLTransport() *fakeAxonGraphQLTransport {
+	return &fakeAxonGraphQLTransport{}
+}
+
+func (t *fakeAxonGraphQLTransport) Query(_ context.Context, query string, variables map[string]any, response any) error {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	switch query {
+	case axonReadCorpusQuery:
+		if response == nil {
+			return nil
+		}
+		resp, ok := response.(*axonCorpusResponse)
+		if !ok {
+			return fmt.Errorf("unexpected response type %T", response)
+		}
+		resp.Beads = append(resp.Beads[:0], t.beads...)
+		resp.Events = append(resp.Events[:0], t.events...)
+		return nil
+	case axonWriteCorpusMutation:
+		var beads []axonEntityEnvelope
+		var events []axonEventEnvelope
+		if raw, ok := variables["beads"]; ok {
+			if err := decodeJSONValue(raw, &beads); err != nil {
+				return err
+			}
+		}
+		if raw, ok := variables["events"]; ok {
+			if err := decodeJSONValue(raw, &events); err != nil {
+				return err
+			}
+		}
+		t.beads = append(t.beads[:0], beads...)
+		t.events = append(t.events[:0], events...)
+		if response != nil {
+			if resp, ok := response.(*axonWriteCorpusResponse); ok {
+				resp.SaveCorpus.OK = true
+			}
+		}
+		return nil
+	default:
+		return fmt.Errorf("unexpected query %q", query)
+	}
+}
+
+func decodeJSONValue(src any, dst any) error {
+	raw, err := json.Marshal(src)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(raw, dst)
+}
+
+func (t *fakeAxonGraphQLTransport) snapshot() ([]axonEntityEnvelope, []axonEventEnvelope) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	beads := append([]axonEntityEnvelope(nil), t.beads...)
+	events := append([]axonEventEnvelope(nil), t.events...)
+	return beads, events
 }
 
 type stubAxonGraphQLTransport struct{}
@@ -157,7 +233,7 @@ func TestAxonBackend_CreateAndGet(t *testing.T) {
 
 func TestAxonBackend_UpdateMutatesAndPersists(t *testing.T) {
 	t.Parallel()
-	s := newAxonStore(t)
+	s, transport := newAxonStoreWithTransport(t)
 
 	b := &Bead{Title: "to-update"}
 	require.NoError(t, s.Create(b))
@@ -170,7 +246,10 @@ func TestAxonBackend_UpdateMutatesAndPersists(t *testing.T) {
 	// Re-read through a fresh Store wired to the same on-disk dir to prove
 	// the change survives the in-memory closure.
 	s2 := NewStore(s.Dir)
-	s2.backend = NewAxonBackend(s.Dir, s.LockWait)
+	s2.backend = NewAxonBackend(s.Dir, s.LockWait,
+		WithAxonGraphQLTransport(transport),
+		WithAxonGraphQLClient(transport),
+	)
 	got, err := s2.Get(b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "added by update", got.Notes)
@@ -230,7 +309,7 @@ func TestAxonBackend_DepAddRemoveAndTree(t *testing.T) {
 
 func TestAxonBackend_AppendEventSplitsIntoEventsCollection(t *testing.T) {
 	t.Parallel()
-	s := newAxonStore(t)
+	s, transport := newAxonStoreWithTransport(t)
 
 	b := &Bead{Title: "with-events"}
 	require.NoError(t, s.Create(b))
@@ -252,32 +331,18 @@ func TestAxonBackend_AppendEventSplitsIntoEventsCollection(t *testing.T) {
 		assert.Equal(t, fmt.Sprintf("event-%d", i), e.Summary)
 	}
 
-	// And the on-disk event collection actually carries the split entries
-	// (TD-030 D3): one entity per event, linked back via event_of.
-	ax := s.backend.(*AxonBackend)
-	data, err := os.ReadFile(ax.EventsFile)
-	require.NoError(t, err)
-	lines := bytes.Split(bytes.TrimSpace(data), []byte("\n"))
-	require.Len(t, lines, 3)
-	for _, line := range lines {
-		var env axonEventEnvelope
-		require.NoError(t, json.Unmarshal(line, &env))
-		assert.Equal(t, AxonEventsCollection, env.Collection)
-		assert.Equal(t, b.ID, env.EventOf)
+	// The GraphQL corpus stores one bead row plus one event entity per
+	// appended event, linked back via event_of.
+	beads, eventRows := transport.snapshot()
+	require.Len(t, beads, 1)
+	require.Len(t, eventRows, 3)
+	for _, row := range eventRows {
+		assert.Equal(t, AxonEventsCollection, row.Collection)
+		assert.Equal(t, b.ID, row.EventOf)
 	}
-
-	// And the bead row in ddx_beads must NOT carry inline events — events
-	// live in their own collection per TD-030 D3.
-	beadData, err := os.ReadFile(ax.BeadsFile)
-	require.NoError(t, err)
-	beadLines := bytes.Split(bytes.TrimSpace(beadData), []byte("\n"))
-	require.Len(t, beadLines, 1)
-	var env axonEntityEnvelope
-	require.NoError(t, json.Unmarshal(beadLines[0], &env))
-	if env.Data.Extra != nil {
-		_, hasEvents := env.Data.Extra["events"]
-		assert.False(t, hasEvents,
-			"bead row in ddx_beads must not carry inline events array")
+	if beads[0].Data.Extra != nil {
+		_, hasEvents := beads[0].Data.Extra["events"]
+		assert.False(t, hasEvents, "bead row must not inline events in GraphQL storage")
 	}
 }
 
@@ -478,14 +543,13 @@ func TestAxonExperimentalEnabledTruthyValues(t *testing.T) {
 // is the partial-write recovery story documented in WriteAll.
 func TestAxonBackend_OrphanEventsDropped(t *testing.T) {
 	t.Parallel()
-	s := newAxonStore(t)
+	s, transport := newAxonStoreWithTransport(t)
 
 	b := &Bead{Title: "live"}
 	require.NoError(t, s.Create(b))
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "k", Summary: "live-event"}))
 
 	// Manually append an orphan event for a bead that does not exist.
-	ax := s.backend.(*AxonBackend)
 	orphan := axonEventEnvelope{
 		Collection:    AxonEventsCollection,
 		SchemaVersion: axonSchemaVersion,
@@ -493,13 +557,9 @@ func TestAxonBackend_OrphanEventsDropped(t *testing.T) {
 		Index:         0,
 		Event:         BeadEvent{Kind: "orphan", Summary: "orphaned", CreatedAt: time.Now().UTC()},
 	}
-	row, err := json.Marshal(orphan)
-	require.NoError(t, err)
-	f, err := os.OpenFile(ax.EventsFile, os.O_APPEND|os.O_WRONLY, 0o644)
-	require.NoError(t, err)
-	_, err = f.Write(append(row, '\n'))
-	require.NoError(t, err)
-	require.NoError(t, f.Close())
+	transport.mu.Lock()
+	transport.events = append(transport.events, orphan)
+	transport.mu.Unlock()
 
 	// Live bead's events still readable; orphan does not surface.
 	events, err := s.Events(b.ID)

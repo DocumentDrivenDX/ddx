@@ -1025,6 +1025,9 @@ func (s *Store) Close(id string) error {
 // under a fresh lock. Safe to call repeatedly — no-op when there are no
 // inline events (already externalized, or none recorded).
 func (s *Store) externalizeEvents(id string) error {
+	if s.axonGraphQLActive() {
+		return nil
+	}
 	return s.WithLock(func() error {
 		beads, _, err := s.readAllLatestRaw()
 		if err != nil {

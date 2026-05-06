@@ -13,18 +13,14 @@ import (
 	"time"
 )
 
-// BackendAxon selects the axon-backed RawBackend. Per TD-030 D3 the on-disk
+// BackendAxon selects the axon-backed RawBackend. Per TD-030 D3 the Axon
 // shape splits beads from their events: one row per bead in the
 // ddx_beads collection, plus one entity per event in the
 // ddx_bead_events collection linked back to its bead via event_of.
 //
-// The implementation in axon_backend.go is an in-process emulation of the
-// axon GraphQL surface. It serializes the two collections to JSONL files
-// under <dir>/axon/ and acquires a single directory lock around mutations.
-// The wire-protocol path (genqlient against a real axon server, per TD-030
-// §"Wire transport") is the GA delivery; this RawBackend keeps the same
-// two-collection split and OCC-compatible bead row schema so the wire path
-// is a contained refactor.
+// When a GraphQL transport is configured, AxonBackend speaks that wire
+// shape directly. The fallback path keeps the existing in-process JSONL
+// emulation for callers that have not wired a transport yet.
 //
 // AC §3 ("Behind a feature flag until ddx-3ec0chaos signs off"): NewStore
 // only routes to AxonBackend when the operator opts in via
@@ -126,6 +122,11 @@ func WithAxonGraphQLTransport(transport AxonGraphQLTransport) AxonBackendOption 
 func WithAxonGraphQLClient(client any) AxonBackendOption {
 	return func(ax *AxonBackend) {
 		ax.GraphQLClient = client
+		if ax.GraphQLTransport == nil {
+			if transport, ok := client.(AxonGraphQLTransport); ok {
+				ax.GraphQLTransport = transport
+			}
+		}
 	}
 }
 
@@ -156,10 +157,88 @@ func (a *AxonBackend) Init() error {
 	return nil
 }
 
+const (
+	axonReadCorpusQuery     = `query AxonReadCorpus { ddxBeads { _collection schema_version data } ddxBeadEvents { _collection schema_version event_of index event } }`
+	axonWriteCorpusMutation = `mutation AxonWriteCorpus($beads: [AxonBeadRowInput!]!, $events: [AxonEventRowInput!]!) { saveCorpus(beads: $beads, events: $events) { ok } }`
+)
+
+type axonCorpusResponse struct {
+	Beads  []axonEntityEnvelope `json:"ddxBeads"`
+	Events []axonEventEnvelope  `json:"ddxBeadEvents"`
+}
+
+type axonWriteCorpusResponse struct {
+	SaveCorpus axonWriteCorpusResult `json:"saveCorpus"`
+}
+
+type axonWriteCorpusResult struct {
+	OK bool `json:"ok"`
+}
+
 // ReadAll loads bead rows and event entities from disk and re-merges events
 // back into each bead's Extra["events"]. Orphan events (event_of pointing at
 // a missing bead, e.g. after a partial-write crash) are silently dropped.
 func (a *AxonBackend) ReadAll() ([]Bead, error) {
+	if transport := a.graphQLTransport(); transport != nil {
+		var resp axonCorpusResponse
+		if err := transport.Query(context.Background(), axonReadCorpusQuery, nil, &resp); err != nil {
+			return nil, fmt.Errorf("bead: axon read corpus: %w", err)
+		}
+		beads := make([]Bead, 0, len(resp.Beads))
+		for _, env := range resp.Beads {
+			if env.Collection != AxonBeadsCollection || env.Data.ID == "" {
+				continue
+			}
+			beads = append(beads, env.Data.Bead)
+		}
+		events := make([]axonEventRecord, 0, len(resp.Events))
+		for _, env := range resp.Events {
+			if env.Collection != AxonEventsCollection || env.EventOf == "" {
+				continue
+			}
+			events = append(events, axonEventRecord{
+				beadID: env.EventOf,
+				index:  env.Index,
+				event:  env.Event,
+			})
+		}
+		sort.SliceStable(events, func(i, j int) bool {
+			if events[i].beadID != events[j].beadID {
+				return events[i].beadID < events[j].beadID
+			}
+			return events[i].index < events[j].index
+		})
+		byID := make(map[string]*Bead, len(beads))
+		for i := range beads {
+			byID[beads[i].ID] = &beads[i]
+		}
+		counts := make(map[string]int, len(events))
+		for _, ev := range events {
+			if _, ok := byID[ev.beadID]; !ok {
+				continue
+			}
+			counts[ev.beadID]++
+		}
+		grouped := make(map[string][]BeadEvent, len(counts))
+		for id, count := range counts {
+			grouped[id] = make([]BeadEvent, 0, count)
+		}
+		for _, ev := range events {
+			if _, ok := byID[ev.beadID]; !ok {
+				continue
+			}
+			grouped[ev.beadID] = append(grouped[ev.beadID], ev.event)
+		}
+		for id, evs := range grouped {
+			b := byID[id]
+			if b.Extra == nil {
+				b.Extra = make(map[string]any)
+			}
+			b.Extra["events"] = encodeEventsForExtra(evs)
+		}
+		return beads, nil
+	}
+
 	beads, err := a.readBeadRows()
 	if err != nil {
 		return nil, err
@@ -213,6 +292,53 @@ func (a *AxonBackend) ReadAll() ([]Bead, error) {
 // rewrites both files in temp+rename style so a crash mid-write leaves the
 // previous snapshot intact rather than producing torn rows.
 func (a *AxonBackend) WriteAll(beads []Bead) error {
+	if transport := a.graphQLTransport(); transport != nil {
+		sort.Slice(beads, func(i, j int) bool { return beads[i].ID < beads[j].ID })
+		var rowBeads []axonEntityEnvelope
+		var rowEvents []axonEventEnvelope
+		for _, b := range beads {
+			var events []BeadEvent
+			if b.Extra != nil {
+				if raw, ok := b.Extra["events"]; ok {
+					events = decodeBeadEvents(raw)
+				}
+			}
+			stripped := beadWithoutInlineEvents(b)
+			if stripped.Extra != nil {
+				delete(stripped.Extra, EventsAttachmentExtraKey)
+			}
+			row, err := axonEncodeBead(stripped)
+			if err != nil {
+				return fmt.Errorf("bead: axon marshal %s: %w", b.ID, err)
+			}
+			var env axonEntityEnvelope
+			if err := json.Unmarshal(row, &env); err != nil {
+				return fmt.Errorf("bead: axon envelope %s: %w", b.ID, err)
+			}
+			rowBeads = append(rowBeads, env)
+			for i, ev := range events {
+				data, err := axonEncodeEvent(b.ID, i, ev)
+				if err != nil {
+					return fmt.Errorf("bead: axon marshal event %s/%d: %w", b.ID, i, err)
+				}
+				var eventEnv axonEventEnvelope
+				if err := json.Unmarshal(data, &eventEnv); err != nil {
+					return fmt.Errorf("bead: axon envelope event %s/%d: %w", b.ID, i, err)
+				}
+				rowEvents = append(rowEvents, eventEnv)
+			}
+		}
+		var resp axonWriteCorpusResponse
+		vars := map[string]any{
+			"beads":  rowBeads,
+			"events": rowEvents,
+		}
+		if err := transport.Query(context.Background(), axonWriteCorpusMutation, vars, &resp); err != nil {
+			return fmt.Errorf("bead: axon write corpus: %w", err)
+		}
+		return nil
+	}
+
 	if err := os.MkdirAll(a.Dir, 0o755); err != nil {
 		return fmt.Errorf("bead: axon mkdir: %w", err)
 	}
@@ -268,6 +394,38 @@ func (a *AxonBackend) WithLock(fn func() error) error {
 	}
 	defer os.RemoveAll(a.LockDir)
 	return fn()
+}
+
+func (a *AxonBackend) graphQLTransport() AxonGraphQLTransport {
+	if a == nil {
+		return nil
+	}
+	if a.GraphQLTransport != nil {
+		return a.GraphQLTransport
+	}
+	if transport, ok := a.GraphQLClient.(AxonGraphQLTransport); ok {
+		return transport
+	}
+	return nil
+}
+
+func (a *AxonBackend) usesGraphQL() bool {
+	return a.graphQLTransport() != nil
+}
+
+func (s *Store) axonBackend() *AxonBackend {
+	if s == nil {
+		return nil
+	}
+	ax, ok := s.backend.(*AxonBackend)
+	if !ok || ax == nil || !ax.usesGraphQL() {
+		return nil
+	}
+	return ax
+}
+
+func (s *Store) axonGraphQLActive() bool {
+	return s.axonBackend() != nil
 }
 
 // beadWithoutInlineEvents returns a shallow copy of b whose Extra map omits

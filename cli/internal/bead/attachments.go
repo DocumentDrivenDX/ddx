@@ -168,6 +168,9 @@ func (s *Store) externalizeEventsInPlace(b *Bead) error {
 	if b == nil {
 		return nil
 	}
+	if s.axonGraphQLActive() {
+		return nil
+	}
 	if b.Extra == nil {
 		b.Extra = make(map[string]any)
 	}
@@ -202,6 +205,9 @@ func (s *Store) LoadEventsInline(b *Bead) error {
 // copy — Bead is a value type so the typical usage is to pass a copy).
 func (s *Store) inlineEventsInPlace(b *Bead) error {
 	if b == nil {
+		return nil
+	}
+	if s.axonGraphQLActive() {
 		return nil
 	}
 	if !hasEventsAttachment(b) {
