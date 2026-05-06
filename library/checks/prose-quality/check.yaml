@@ -14,8 +14,3 @@ vocabulary:
     - Helix
     - Fizeau
   reject:
-    - system
-    - solution
-    - roadmap
-    - initiative
-    - process

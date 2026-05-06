@@ -97,8 +97,8 @@ func TestDefaultAssetLayout(t *testing.T) {
 	if !containsAll(vocab.Accept, []string{"DDx", "bead", "execution"}) {
 		t.Fatalf("default accept vocabulary missing DDx terms: %+v", vocab.Accept)
 	}
-	if !containsAll(vocab.Reject, []string{"solution", "process"}) {
-		t.Fatalf("default reject vocabulary missing generic terms: %+v", vocab.Reject)
+	if len(vocab.Reject) != 0 {
+		t.Fatalf("default reject vocabulary should be empty; got %+v", vocab.Reject)
 	}
 }
 
@@ -158,6 +158,23 @@ func TestProseCheckerPathMode(t *testing.T) {
 	}
 	if findings[0].File != "docs/helix/example.md" {
 		t.Fatalf("unexpected file in finding: %+v", findings[0])
+	}
+}
+
+func TestProseCheckerDoesNotFlagUsefulTechnicalContext(t *testing.T) {
+	checker, err := NewChecker(ModeTechnical, Vocabulary{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := strings.Join([]string{
+		"The effect is robust and reproduced across model families.",
+		"| Bead CRUD, claims, evidence | Comprehensive unit + integration | `cli/internal/bead/*_test.go` |",
+		"`docs/helix/02-design/solution-designs/SD-007-release-readiness.md` documents release gating.",
+		"`--once` processes at most one ready bead, then exits.",
+	}, "\n")
+	findings := checker.Findings("docs/helix/example.md", input)
+	if len(findings) != 0 {
+		t.Fatalf("expected no findings for contextual technical prose, got %+v", findings)
 	}
 }
 

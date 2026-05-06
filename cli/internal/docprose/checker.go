@@ -130,16 +130,113 @@ func matchesRule(line string, rule ruleSpec) bool {
 	if len(rule.ContainsAny) == 0 {
 		return false
 	}
+	if isMarkdownStructureLine(line) {
+		return false
+	}
 	lower := strings.ToLower(line)
+	matched := false
 	for _, phrase := range rule.ContainsAny {
 		if phrase == "" {
 			continue
 		}
 		if strings.Contains(lower, strings.ToLower(phrase)) {
+			matched = true
+			break
+		}
+	}
+	if !matched {
+		return false
+	}
+	if strings.HasSuffix(rule.ID, ".claims") {
+		return unsupportedClaim(line)
+	}
+	return true
+}
+
+func isMarkdownStructureLine(line string) bool {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return true
+	}
+	if strings.HasPrefix(trimmed, "#") || strings.HasPrefix(trimmed, "---") {
+		return true
+	}
+	if strings.HasPrefix(trimmed, "|") && strings.HasSuffix(trimmed, "|") {
+		return true
+	}
+	if strings.Contains(trimmed, ".md") || strings.Contains(trimmed, ".yaml") || strings.Contains(trimmed, ".json") {
+		return true
+	}
+	if strings.HasPrefix(trimmed, "- ") && len(strings.Fields(trimmed)) <= 8 {
+		return true
+	}
+	return false
+}
+
+func unsupportedClaim(line string) bool {
+	lower := strings.ToLower(line)
+	if hasEmpiricalOrCheckContext(lower) {
+		return false
+	}
+	if containsAny(lower, []string{
+		"seamless",
+		"industry-leading",
+		"world-class",
+		"best-in-class",
+		"cutting-edge",
+	}) {
+		return true
+	}
+	if countMatches(lower, []string{"robust", "comprehensive", "smooth", "elegant", "excited", "high"}) >= 2 {
+		return true
+	}
+	if countWords(line) <= 8 {
+		return true
+	}
+	return containsAny(lower, []string{
+		"experience for everyone",
+		"path forward",
+		"broadly useful",
+		"easy to adopt",
+	})
+}
+
+func hasEmpiricalOrCheckContext(lower string) bool {
+	return containsAny(lower, []string{
+		"reproduced",
+		"measured",
+		"benchmark",
+		"test",
+		"coverage",
+		"contract",
+		"verifiable",
+		"quality-lifting pattern",
+		"risk",
+		"mitigation",
+	})
+}
+
+func containsAny(s string, needles []string) bool {
+	for _, needle := range needles {
+		if strings.Contains(s, needle) {
 			return true
 		}
 	}
 	return false
+}
+
+func countMatches(s string, needles []string) int {
+	var count int
+	for _, needle := range needles {
+		if strings.Contains(s, needle) {
+			count++
+		}
+	}
+	return count
+}
+
+func countWords(s string) int {
+	return len(strings.Fields(s))
 }
 
 func repeatedOpeningKey(line string) string {

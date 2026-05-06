@@ -5,7 +5,3 @@ accept:
   - Helix
   - Fizeau
 reject:
-  - solution
-  - process
-  - thing
-  - stuff
