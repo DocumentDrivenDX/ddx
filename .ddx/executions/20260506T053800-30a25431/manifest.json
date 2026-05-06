@@ -1,0 +1,85 @@
+{
+  "attempt_id": "20260506T053800-30a25431",
+  "bead_id": "ddx-12638823",
+  "base_rev": "fb2578c6f0451e7190ba4923c5fddfdcf28e043b",
+  "created_at": "2026-05-06T05:38:03.336887943Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-12638823",
+    "title": "intake: add typed pre-claim actionability hook",
+    "description": "PROBLEM\nThe intake parent bead ddx-f3bbcfce was too broad and bounced because it combined hook contracts, safe rewrites, decomposition, AC maps, depth overflow, and no-progress policy. The first executable slice is the typed pre-claim intake hook contract and loop insertion point.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead_loop.go:680 invokes PreDispatchLintHook before claim, but there is no typed PreClaimIntakeHook with the finalized intake outcomes.\n- cli/internal/agent/lint_hook.go:86 constructs lint-only behavior, not actionability/decomposition decisions.\n\nPROPOSED FIX\n- Add PreClaimIntakeHook (or equivalent guard) to ExecuteBeadLoopRuntime.\n- Define typed outcomes actionable_atomic, actionable_but_rewritten, too_large_decomposed, ambiguous_needs_human, and intake_error.\n- Invoke the hook after ready selection/routing preflight and before Claim.\n- Implement actionable_atomic pass-through and intake_error fail-open for infrastructure failures only.\n\nNON-SCOPE\n- Safe rewrite mutation.\n- Child bead creation/decomposition.\n- No-progress accounting changes beyond not counting intake_error as implementation no-progress.",
+    "acceptance": "1. ExecuteBeadLoopRuntime exposes a pre-claim intake hook/guard with typed outcomes actionable_atomic, actionable_but_rewritten, too_large_decomposed, ambiguous_needs_human, and intake_error.\n2. TestIntake_ActionableAtomic_ClaimsNormally verifies actionable_atomic proceeds to Claim and implementation.\n3. TestIntake_InfrastructureErrorFailsOpen verifies intake_error from hook infrastructure records a warning event and does not count as implementation no-progress.\n4. TestIntake_HookRunsBeforeClaim verifies the hook fires before Store.Claim and after route preflight.\n5. cd cli \u0026\u0026 go test ./internal/agent/... -run \"TestIntake_.*(ActionableAtomic|InfrastructureError|HookRunsBeforeClaim)\" -count=1 passes.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-a9d130d0",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "kind:feature",
+      "reliability",
+      "adr:023",
+      "adr:024",
+      "from:ddx-f3bbcfce"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T05:38:00Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T03:38:37.147894664Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T032956-8a3c2b28\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":6799587,\"output_tokens\":33223,\"total_tokens\":6832810,\"cost_usd\":0,\"duration_ms\":518100,\"exit_code\":0}",
+          "created_at": "2026-05-06T03:38:37.370520224Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=6832810 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T03:38:47.155711898Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=dc228cdf909f3df68325b714672127fdf9a1618a\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T23:43:51-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=9537\noutput_bytes=0\nelapsed_ms=4217",
+          "created_at": "2026-05-06T03:38:51.906540684Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "merged onto current tip\nresult_rev=dc228cdf909f3df68325b714672127fdf9a1618a\nbase_rev=98c83d3cb803e655a9c1adcf79ba472a3e062ea8",
+          "created_at": "2026-05-06T03:38:52.1071093Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T05:38:00.898195525Z",
+      "spec_id": "ADR-023"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260506T053800-30a25431",
+    "prompt": ".ddx/executions/20260506T053800-30a25431/prompt.md",
+    "manifest": ".ddx/executions/20260506T053800-30a25431/manifest.json",
+    "result": ".ddx/executions/20260506T053800-30a25431/result.json",
+    "checks": ".ddx/executions/20260506T053800-30a25431/checks.json",
+    "usage": ".ddx/executions/20260506T053800-30a25431/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-12638823-20260506T053800-30a25431"
+  },
+  "prompt_sha": "c7225f98c1df2ba81ee5a123d86d467ce2afdf2876b7484351aac7c0996732ec"
+}
