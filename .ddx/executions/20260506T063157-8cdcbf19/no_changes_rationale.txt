@@ -1,0 +1,3 @@
+status: completed
+verification_command: cd cli && go test ./cmd -run 'TestMetricCommands|TestCompareAndTrend' && go test ./internal/metric -run 'TestValidateRunAndHistory|TestDefinitionAndHistoryPreferMetricArtifactID|TestCompareAndTrend|TestCompareAndTrendRejectMixedUnitsAndGroupHistoryByUnit|TestConcurrentHistoryWrites' && lefthook run pre-commit
+reason: The current tree already satisfies the bead contract. The cmd acceptance tests cover the MET -> exec.run -> metric.history -> metric.show round-trip, and internal metric tests cover mixed-unit refusal plus unit grouping.
