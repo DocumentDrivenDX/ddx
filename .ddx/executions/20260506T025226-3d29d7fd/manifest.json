@@ -1,0 +1,83 @@
+{
+  "attempt_id": "20260506T025226-3d29d7fd",
+  "bead_id": "ddx-208a5bee",
+  "base_rev": "1e7c049c3254cbc6e062a84f85c161fee727f67f",
+  "created_at": "2026-05-06T02:52:29.179243349Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-208a5bee",
+    "title": "bead/axon: add GraphQL client boundary and row mapping",
+    "description": "PROBLEM\nAxonBackend is still a local JSONL emulation instead of a GraphQL-backed RawBackend. Before mutations can be implemented safely, the backend needs a real client boundary and bead/event row mapping that uses the generated Axon client types.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/bead/axon_backend.go:20 explicitly says the implementation serializes collections to JSONL files under \u003cdir\u003e/axon/.\n- cli/internal/bead/axon_backend.go:71 defines AxonBackend around BeadsFile, EventsFile, and LockDir instead of a GraphQL client/session.\n- cli/internal/bead/axon/generated.go exists, but axon_backend.go does not use the generated client path.\n\nPROPOSED FIX\n- Introduce the GraphQL client dependency boundary for AxonBackend using cli/internal/bead/axon generated types.\n- Implement bead row and event entity encode/decode helpers against the generated GraphQL shapes, preserving the two-collection model ddx_beads and ddx_bead_events.\n- Keep JSONL as the default backend and keep the existing experimental gate behavior unchanged.\n- Add unit tests for client construction/mapping that do not require a live Axon server.\n\nNON-SCOPE\n- Full CRUD mutation implementation; child bead handles write operations.\n- Backend selection config plumbing; existing follow-up handles selection.\n- Broad conformance matrix; child bead handles it after operations exist.",
+    "acceptance": "1. AxonBackend has an injectable GraphQL client boundary instead of hard-coding only BeadsFile/EventsFile local snapshots.\n2. Mapping helpers cover bead rows and event entities for ddx_beads and ddx_bead_events while preserving event_of linkage and schema version fields.\n3. Existing JSONL default backend behavior and DDX_AXON_EXPERIMENTAL gating remain unchanged.\n4. TestAxonBackend_GraphQLClientBoundary and TestAxonBackend_GraphQLMapping_BeadsAndEvents verify the client boundary and mapping without a live Axon server.\n5. cd cli \u0026\u0026 go test ./internal/bead/... -run \"TestAxonBackend_GraphQLClientBoundary|TestAxonBackend_GraphQLMapping_BeadsAndEvents|TestAxonExperimental\" -count=1 passes.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-9c5bca8f",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:storage",
+      "kind:feature",
+      "axon",
+      "from:ddx-9c5bca8f"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T02:52:26Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T01:50:37.757099057Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T014718-e4871f66\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":2559955,\"output_tokens\":17520,\"total_tokens\":2577475,\"cost_usd\":0,\"duration_ms\":196279,\"exit_code\":0}",
+          "created_at": "2026-05-06T01:50:37.997845494Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=2577475 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T01:50:44.163475837Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=1f7ded2e86362a032b75d79d33411b5869deca87\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T21:55:48-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=9888\noutput_bytes=0\nelapsed_ms=4233",
+          "created_at": "2026-05-06T01:50:48.942875313Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=1f7ded2e86362a032b75d79d33411b5869deca87\nbase_rev=2c004949e5276b49d1b3d67a37d66a729120c3cf",
+          "created_at": "2026-05-06T01:50:49.144075316Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T02:52:26.539972482Z",
+      "spec_id": "TD-030"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260506T025226-3d29d7fd",
+    "prompt": ".ddx/executions/20260506T025226-3d29d7fd/prompt.md",
+    "manifest": ".ddx/executions/20260506T025226-3d29d7fd/manifest.json",
+    "result": ".ddx/executions/20260506T025226-3d29d7fd/result.json",
+    "checks": ".ddx/executions/20260506T025226-3d29d7fd/checks.json",
+    "usage": ".ddx/executions/20260506T025226-3d29d7fd/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-208a5bee-20260506T025226-3d29d7fd"
+  },
+  "prompt_sha": "97e7639ad21fa2171329b6e823366c7afb9ba80985812c1f3d7bfccd36f118ac"
+}
