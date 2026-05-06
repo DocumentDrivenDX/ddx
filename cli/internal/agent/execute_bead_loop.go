@@ -96,6 +96,12 @@ const LandConflictCooldown = 15 * time.Minute
 // worker.
 const StoreErrorCooldown = 5 * time.Minute
 
+// ProviderUnavailableCooldown is the retry pause for route/provider outages
+// where no configured tier can currently run the bead. This is transient
+// scheduler state, not bead quality evidence, so it must not become a durable
+// triage:needs-investigation park.
+const ProviderUnavailableCooldown = 15 * time.Minute
+
 // SubmitWithPreMergeChecks is the canonical land-back step for the execute-bead
 // loop. It runs the project's .ddx/checks/*.yaml gate against the worker's
 // (baseRev, resultRev) before forwarding to submit. On Blocked, it preserves
@@ -1191,9 +1197,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				result.Failures++
 				result.LastFailureStatus = report.Status
 			} else {
-				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
-				if shouldSuppressNoProgress(report) {
-					retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
+				if isNoViableProviderReport(report) {
+					report.OutcomeReason = FailureModeNoViableProvider
+					retryAfter := now().UTC().Add(CapLoopCooldown(ProviderUnavailableCooldown))
 					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); err != nil {
 						_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 							return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
@@ -1204,6 +1210,21 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						continue
 					}
 					report.RetryAfter = retryAfter.Format(time.RFC3339)
+				} else {
+					report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
+					if shouldSuppressNoProgress(report) {
+						retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
+						if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); err != nil {
+							_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+								return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
+							})
+							if ctx.Err() != nil {
+								return result, ctx.Err()
+							}
+							continue
+						}
+						report.RetryAfter = retryAfter.Format(time.RFC3339)
+					}
 				}
 				result.Failures++
 				result.LastFailureStatus = report.Status
@@ -1857,6 +1878,18 @@ func isTransientOutcomeReason(reason string) bool {
 	default:
 		return false
 	}
+}
+
+func isNoViableProviderReport(report ExecuteBeadReport) bool {
+	if report.OutcomeReason == FailureModeNoViableProvider {
+		return true
+	}
+	combined := strings.TrimSpace(strings.Join([]string{
+		report.Detail,
+		report.Error,
+		report.Stderr,
+	}, "\n"))
+	return ClassifyFailureMode(report.Status, 0, combined) == FailureModeNoViableProvider
 }
 
 // classifyDisruption examines the loop ctx and the executor's error to decide
