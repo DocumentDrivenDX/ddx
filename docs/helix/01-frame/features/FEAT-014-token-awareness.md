@@ -52,6 +52,8 @@ agent status and cost signals without selecting a concrete route:
 - current quota/headroom where known
 - cost estimate or cost class
 - DDx-observed performance and reliability
+- role/correlation facts for review invocations, including whether review
+  pairing degraded relative to the implementer
 
 External harnesses preserve native persistence. DDx owns only the minimal
 activity and performance metadata needed for routing and provenance.
@@ -144,6 +146,12 @@ Interpretation:
     Outcome samples may record recent success/failure, latency, and last
     observed token/cost values when available; DDx does not store provider
     transcripts or native session bodies as routing inputs.
+13a. **Review cost and pairing signals** — post-merge review invocations record
+    the same normalized cost fields as primary attempts plus compact
+    role/correlation metadata (`role=reviewer`, reviewed `result_rev`, and
+    implementer/reviewer route facts when known). A `review-pairing-degraded`
+    event is a routing-quality signal for operators and metrics; it is not a
+    route-selection input owned by DDx.
 14. **Snapshot history for live quota sources** — when DDx depends on an
     actively probed quota source, it checkpoints time-stamped quota snapshots
     asynchronously and relates them to native usage accumulation to build a
@@ -470,4 +478,7 @@ manual instrumentation
 - Gemini token capture (blocked on auth investigation)
 - Cross-machine usage aggregation (see FEAT-013)
 - Immediate budget enforcement and adaptive throttling policy
+- Queue-drain budget stop policy and reviewer-cost cap handling, which are
+  owned by FEAT-010 and ADR-024. FEAT-014 supplies the normalized cost and
+  cost-class signals they consume.
 - Prompt design and task strategy beyond harness selection

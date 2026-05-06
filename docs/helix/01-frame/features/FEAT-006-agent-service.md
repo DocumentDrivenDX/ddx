@@ -72,6 +72,13 @@ DDx owns:
   result, no-changes rationale, post-run gates, review verdicts, cooldowns,
   and prior run metadata. On retry, DDx may raise `MinPower`. The agent owns
   how those power bounds map to a concrete model/provider.
+- **Review routing request facts.** When DDx launches a post-merge reviewer it
+  uses the same `Execute` boundary, requests a stronger reviewer by raising
+  `MinPower` relative to the implementer's actual power, and supplies
+  `role=reviewer` plus correlation metadata (`bead_id`, `attempt_id`,
+  `session_id`, `result_rev`, and implementer route facts when known). These
+  are request facts and audit metadata, not a DDx-side routing algorithm. See
+  ADR-024.
 
 Fizeau owns the agent's transcript/progress/session rendering surface. DDx is
 a pass-through/marshalling consumer for Fizeau transcript events: it may
@@ -184,6 +191,21 @@ model names, providers, powers, and route candidates returned by the agent for
 debugging. Retry threshold policy may consume only abstract power numbers from
 the catalog to compute `MinPower` thresholds. Neither status nor retry code may
 return or mutate concrete harness/provider/model pins for execution.
+
+## Escalation And Review Routing Boundary
+
+ADR-024 is the governing policy for power escalation and review routing. FEAT-006
+owns only the request envelope: requested `MinPower` / `MaxPower`, opaque
+passthrough constraints, role/correlation metadata, and actual route facts
+returned by the agent. FEAT-010 owns whether a retry or review retry is
+scheduled. FEAT-014 owns normalized usage and cost signals.
+
+DDx may compute the next `MinPower` floor from catalog power numbers, but it
+must not translate that floor into a concrete model/provider or mutate
+operator-supplied passthrough values. Review pairing uses the same boundary:
+DDx can request stronger review and record `review-pairing-degraded` when the
+actual reviewer route converges with the implementer, but concrete reviewer
+selection remains inside the agent service.
 
 ## Session Log Envelope Boundary
 
@@ -544,3 +566,4 @@ that have since moved upstream.
 - `docs/helix/03-test/test-plans/TP-020-agent-routing-and-catalog-resolution.md` — routing and catalog resolution coverage
 - `docs/helix/02-design/adr/ADR-021-operator-prompt-beads-web-write-path.md` — operator-prompt beads as the web write path (Story 15)
 - `docs/helix/02-design/adr/ADR-022-worker-client-server-architecture.md` — workers as long-lived API clients; server-restart preserves in-flight work
+- `docs/helix/02-design/adr/ADR-024-power-escalation-and-review-routing.md` — DDx power escalation, review routing, and cost-cap policy boundary

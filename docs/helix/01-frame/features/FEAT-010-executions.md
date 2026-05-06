@@ -227,6 +227,49 @@ Every retry/stop decision records the classification and evidence used. The
 policy may inspect DDx attempt outcomes and the agent's typed status; it must
 not branch on concrete provider/model identity.
 
+ADR-024 is the decision record for this policy. FEAT-010 owns when `ddx try` or
+`ddx work` schedules a retry, how no-progress and stop conditions are recorded,
+how review-error retry scopes are counted, and how budget caps stop a drain.
+FEAT-006 owns only the agent request envelope used by those decisions.
+
+### Escalation, fallback, retry, and review decision tree
+
+The layer-3 drain evaluates each ready bead through this mechanical sequence:
+
+1. **Eligibility and claim.** Pick a dependency-ready candidate. Run
+   pre-dispatch lint. Valid low lint score may block only in BLOCK mode; hook
+   infrastructure failure is fail-open evidence. Claim races skip the bead for
+   the current pass without cooldown.
+2. **Primary attempt.** Run one layer-2 attempt. A merged success or
+   already-satisfied result closes the bead after required evidence is recorded.
+3. **No usable change.** Verified already-satisfied no-changes closes the bead.
+   Unverified, unjustified, needs-investigation, blocked, superseded, or
+   decomposition no-changes outcomes leave the bead open or blocked according
+   to TD-031. They do not receive retry cooldown by default unless time passing
+   could plausibly change the result.
+4. **Infrastructure fallback.** Transport, quota, rate-limit, command setup,
+   context cancellation, routing preflight rejection, and worker disruption are
+   not model-capability failures. They emit structured evidence and either stay
+   immediately retryable or use a bounded retry-after when the same class is
+   time-based. HTTP 429 retry happens inside one attempt with `rate-limit-retry`
+   events.
+5. **Capability retry.** Failed checks, fixable review blocks,
+   capability-insufficient attempts, and eligible no-changes-after-attempt may
+   schedule a higher-power retry by raising the next request's `MinPower`.
+   Passthrough constraints remain unchanged. If the requested power cannot be
+   satisfied under those constraints, DDx records a terminal operator-action
+   classification and stops retrying that bead.
+6. **Post-merge review.** When review is enabled, the reviewer runs in TD-033
+   no-tool mode over assembled evidence. `APPROVE` closes. `REQUEST_CHANGES`
+   and `BLOCK` reopen with review evidence and feed review triage. Malformed,
+   empty, context-overflow, and transport reviewer failures emit
+   `review-error` scoped to `result_rev`; after `review_max_retries` they emit
+   `review-manual-required` and park the bead without closing.
+7. **Cost stop.** Implementation and review attempts both contribute reported
+   billable cost to the drain budget according to FEAT-014 cost-class metadata.
+   When the cap trips, the drain records a budget stop and stops claiming new
+   work; the cap is not reported as model failure.
+
 ## Substrate Unification
 
 ### One record shape
@@ -732,8 +775,10 @@ FEAT-006 and not to this feature.
   has a write endpoint in this feature.
 - **Workflow-specific action semantics** — phase routing, methodology
   scoring, tool-specific issue closing — delegated to workflow tools.
-- **Autonomy semantics and escalation policy** — DDx provides the
-  substrate; workflow tools decide policy.
+- **Workflow-specific autonomy semantics** — DDx owns the mechanical retry,
+  review, cooldown, and budget policy in this feature and ADR-024. Higher-level
+  methodology decisions such as "file reconciliation beads after a benchmark"
+  remain workflow-tool territory.
 - **Hosted run history storage** — records are repo-local and
   file-backed.
 - **Separate domain-specific runtime stores** — there is one substrate.
