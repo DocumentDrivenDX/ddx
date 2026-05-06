@@ -85,6 +85,40 @@ type ReviewAC struct {
 	Evidence string `json:"evidence,omitempty"`
 }
 
+// ReviewGroupBundle identifies the shared evidence bundle used by a
+// two-slot review-group dispatch.
+type ReviewGroupBundle struct {
+	GroupID   string `json:"group_id"`
+	DirAbs    string `json:"dir_abs"`
+	DirRel    string `json:"dir_rel"`
+	PromptAbs string `json:"prompt_abs"`
+	PromptRel string `json:"prompt_rel"`
+}
+
+// ReviewGroupSlotResult captures one slot's runtime and structured review
+// result for a review-group dispatch.
+type ReviewGroupSlotResult struct {
+	ReviewerIndex int             `json:"reviewer_index"`
+	Runtime       AgentRunRuntime `json:"runtime"`
+	Result        *ReviewResult   `json:"result,omitempty"`
+	Error         string          `json:"error,omitempty"`
+}
+
+// ReviewGroupResult is the structured output of a two-slot review-group
+// dispatch.
+type ReviewGroupResult struct {
+	BeadID    string                  `json:"bead_id"`
+	ResultRev string                  `json:"result_rev"`
+	Bundle    ReviewGroupBundle       `json:"bundle"`
+	Slots     []ReviewGroupSlotResult `json:"slots"`
+}
+
+// ReviewGroupDispatchMeta identifies a single slot within a review group.
+type ReviewGroupDispatchMeta struct {
+	GroupID       string
+	ReviewerIndex int
+}
+
 type reviewArtifactManifest struct {
 	Harness          string                     `json:"harness,omitempty"`
 	Model            string                     `json:"model,omitempty"`
@@ -479,11 +513,24 @@ type DefaultBeadReviewer struct {
 // runtime is missing per-call plumbing (Prompt/PromptFile, WorkDir,
 // SessionLogDirOverride) — the caller fills those in before dispatching.
 func BuildReviewExecuteRequest(impl ImplementerRouting, reviewerHarness, reviewerModel string) AgentRunRuntime {
+	return BuildReviewGroupExecuteRequest(impl, reviewerHarness, reviewerModel, ReviewGroupDispatchMeta{})
+}
+
+// BuildReviewGroupExecuteRequest constructs the reviewer runtime for one
+// slot in a review group. It threads the implementer's correlation facts,
+// overlays reviewer role metadata, and stamps the review_group_id and
+// reviewer_index when provided so downstream routing / tracing can join the
+// two reviewer slots back to the same evidence bundle.
+func BuildReviewGroupExecuteRequest(impl ImplementerRouting, reviewerHarness, reviewerModel string, meta ReviewGroupDispatchMeta) AgentRunRuntime {
 	correlation := map[string]string{}
 	for k, v := range impl.Correlation {
 		correlation[k] = v
 	}
 	correlation["role"] = "reviewer"
+	if meta.GroupID != "" {
+		correlation["review_group_id"] = meta.GroupID
+		correlation["reviewer_index"] = fmt.Sprintf("%d", meta.ReviewerIndex)
+	}
 	if impl.Harness != "" {
 		correlation["impl_harness"] = impl.Harness
 	}
@@ -500,12 +547,37 @@ func BuildReviewExecuteRequest(impl ImplementerRouting, reviewerHarness, reviewe
 	if impl.ActualPower > 0 {
 		minPower = impl.ActualPower + 1
 	}
+	correlationID := reviewCorrelationID(correlation)
 	return AgentRunRuntime{
 		HarnessOverride:  reviewerHarness,
 		ModelOverride:    reviewerModel,
 		MinPowerOverride: minPower,
 		Correlation:      correlation,
+		Role:             "reviewer",
+		CorrelationID:    correlationID,
 	}
+}
+
+func reviewCorrelationID(correlation map[string]string) string {
+	if len(correlation) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, 4)
+	if beadID := correlation["bead_id"]; beadID != "" {
+		parts = append(parts, beadID)
+	}
+	if groupID := correlation["review_group_id"]; groupID != "" {
+		parts = append(parts, groupID)
+	} else if resultRev := correlation["result_rev"]; resultRev != "" {
+		parts = append(parts, resultRev)
+	}
+	if reviewerIndex := correlation["reviewer_index"]; reviewerIndex != "" {
+		parts = append(parts, reviewerIndex)
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return strings.Join(parts, ":")
 }
 
 // reviewPairingDegradedBody renders the kind:review-pairing-degraded event

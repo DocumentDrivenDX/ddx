@@ -33,6 +33,8 @@ func TestBuildReviewExecuteRequest(t *testing.T) {
 	assert.Equal(t, "claude", got.HarnessOverride)
 	assert.Equal(t, "claude-opus-4-7", got.ModelOverride)
 	assert.Equal(t, 71, got.MinPowerOverride, "MinPower must be impl.ActualPower+1 (R4 pairing)")
+	assert.Equal(t, "reviewer", got.Role, "Role=reviewer must be set so the dispatch request is tagged correctly")
+	assert.Equal(t, "ddx-pairing-1", got.CorrelationID, "single-review correlation ID should be derived from bead_id when no review_group_id is present")
 
 	require.NotNil(t, got.Correlation)
 	assert.Equal(t, "reviewer", got.Correlation["role"], "Role=reviewer must be set so events join correctly")
