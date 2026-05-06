@@ -1,0 +1,130 @@
+{
+  "attempt_id": "20260506T125411-935f98b3",
+  "bead_id": "ddx-508a0297",
+  "base_rev": "1fc58364ea2e3e1ace597b31d5ba37e89ba45729",
+  "created_at": "2026-05-06T12:54:14.073955502Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-508a0297",
+    "title": "Integrate prose findings into bead review as opt-in advisory output",
+    "description": "CONTEXT\nThis is an explicit follow-up, not part of the first executable slice. Once `ddx doc prose --changed` has landed and advisory noise is known, DDx can expose prose findings inside bead review or a review hook.\n\nIN-SCOPE FILES\n- cli/cmd/bead_review*.go or existing review command files\n- cli/internal/agent/review/lint hook code if TD-036 selects that path\n- review tests using prose fixtures\n- docs updates for review integration\n\nREQUIRED BEHAVIOR\n- Add an opt-in review surface such as `ddx bead review \u003cid\u003e --prose` or the exact command selected by TD-036.\n- Findings remain advisory by default.\n- Review output must distinguish prose-quality findings from acceptance/correctness findings.\n- The integration must reuse the same checker/rule/config path as `ddx doc prose`.\n\nOUT-OF-SCOPE\n- Making prose findings globally blocking.\n- Changing execute-loop selection or closure semantics based only on prose findings.",
+    "acceptance": "1. A prose review integration command or flag exists as specified by TD-036 and is opt-in.\n2. Tests prove review output includes prose findings separately from acceptance/correctness review findings.\n3. Tests prove prose findings remain advisory by default and do not close/reopen/block beads on their own.\n4. The integration reuses the same config/rule path as `ddx doc prose` rather than duplicating rule logic.\n5. `cd cli \u0026\u0026 go test ./cmd ./internal/agent/... ./internal/docprose/... -run \"Prose|Review\"` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-ccda7a32",
+    "labels": [
+      "phase:2",
+      "area:cli",
+      "area:agent",
+      "kind:feature",
+      "prose-quality",
+      "follow-up"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T12:54:11Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T12:04:05.480618541Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T115251-15c8c0c3\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":10594004,\"output_tokens\":48553,\"total_tokens\":10642557,\"cost_usd\":0,\"duration_ms\":671192,\"exit_code\":0}",
+          "created_at": "2026-05-06T12:04:05.706692395Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=10642557 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T12:04:12.516448676Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=0fa2725138b65913443e992207cfd19826594c73\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T08:09:17-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=18007\noutput_bytes=0\nelapsed_ms=4205",
+          "created_at": "2026-05-06T12:04:17.847064784Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=0fa2725138b65913443e992207cfd19826594c73\nbase_rev=3ea39b5e4b986fdeb30349006bd982b58ed359b3",
+          "created_at": "2026-05-06T12:04:18.059022856Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T12:32:17.114167263Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T123100-43dc9cf9\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":809445,\"output_tokens\":5954,\"total_tokens\":815399,\"cost_usd\":0,\"duration_ms\":73997,\"exit_code\":0}",
+          "created_at": "2026-05-06T12:32:17.329138811Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=815399 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T12:32:24.008327979Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=f37d450aa3abbbc81d597fde23c5d69cf67403dc\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T08:37:29-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=19799\noutput_bytes=0\nelapsed_ms=4112",
+          "created_at": "2026-05-06T12:32:29.503933575Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=f37d450aa3abbbc81d597fde23c5d69cf67403dc\nbase_rev=bf7fb75d733a8fc5d153c38718362f33c9e0c641",
+          "created_at": "2026-05-06T12:32:29.708176463Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T12:54:11.660202157Z",
+      "spec-id": "TD-036"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-036",
+      "path": "docs/helix/02-design/technical-designs/TD-036-prose-quality-pipeline.md",
+      "title": "Technical Design: Prose Quality Pipeline"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T125411-935f98b3",
+    "prompt": ".ddx/executions/20260506T125411-935f98b3/prompt.md",
+    "manifest": ".ddx/executions/20260506T125411-935f98b3/manifest.json",
+    "result": ".ddx/executions/20260506T125411-935f98b3/result.json",
+    "checks": ".ddx/executions/20260506T125411-935f98b3/checks.json",
+    "usage": ".ddx/executions/20260506T125411-935f98b3/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-508a0297-20260506T125411-935f98b3"
+  },
+  "prompt_sha": "a8bc342e8ca6ff3ae437a8c4c256e1614f05d76ca67b3f073ead65759de414b6"
+}
