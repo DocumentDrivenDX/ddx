@@ -45,6 +45,7 @@ func TestFormatSessionLogLines_Corpus(t *testing.T) {
 				"ddx-claude 21",
 				"session_log_format.go",
 				"out=1.8KB 73 lines",
+				"func FormatServiceProgress",
 			},
 		},
 		{
@@ -76,6 +77,16 @@ func TestFormatSessionLogLines_Corpus(t *testing.T) {
 				"tok/s",
 			},
 		},
+		{
+			name: "legacy summary",
+			file: "legacy_summary.jsonl",
+			wantContains: []string{
+				"ddx-legacy 25",
+				"legacy output summary preserved from stream logs",
+				"tok/s",
+			},
+			wantNotContains: []string{"out="},
+		},
 	}
 
 	for _, tc := range cases {
@@ -91,6 +102,12 @@ func TestFormatSessionLogLines_Corpus(t *testing.T) {
 			}
 			for _, want := range tc.wantNotContains {
 				assert.NotContains(t, got, want)
+			}
+
+			if tc.file == "codex_fizeau.jsonl" {
+				line := renderedLineContaining(t, got, "go test ./internal/agent/...")
+				assert.GreaterOrEqual(t, len(line), 72)
+				assert.LessOrEqual(t, len(line), 122)
 			}
 		})
 	}
@@ -115,4 +132,15 @@ func TestProgressCorpus_TurnIndexCountsUp(t *testing.T) {
 	require.NotEqual(t, -1, idx23)
 	assert.Less(t, idx21, idx22)
 	assert.Less(t, idx22, idx23)
+}
+
+func renderedLineContaining(t *testing.T, rendered, want string) string {
+	t.Helper()
+	for _, line := range strings.Split(strings.TrimSpace(rendered), "\n") {
+		if strings.Contains(line, want) {
+			return line
+		}
+	}
+	t.Fatalf("rendered output did not contain %q:\n%s", want, rendered)
+	return ""
 }

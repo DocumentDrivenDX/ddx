@@ -1,0 +1,1 @@
+{"phase":"tool","state":"complete","source":"native","task_id":"ddx-legacy","turn_index":25,"tool_name":"shell","command":"shell","action":"summarize legacy log","output_summary":"legacy output summary preserved from stream logs","duration_ms":2000,"output_tokens":300}
