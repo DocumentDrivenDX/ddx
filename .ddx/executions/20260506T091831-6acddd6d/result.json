@@ -1,0 +1,51 @@
+{
+  "verdict": "",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2196,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260506T091604-645ceb67/manifest.json",
+          ".ddx/executions/20260506T091604-645ceb67/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:TD-036",
+        "bytes_included": 8948,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/02-design/technical-designs/TD-036-prose-quality-pipeline.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 5131,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 18241,
+    "output_bytes": 59,
+    "elapsed_ms": 49594,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
