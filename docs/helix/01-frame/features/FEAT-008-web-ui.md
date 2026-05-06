@@ -453,14 +453,15 @@ thresholds.
 - The default list view assumes a flat, non-virtualized DOM. If the design
   changes that assumption, update this section and the TP-002 measurement
   methodology together.
-- Story 5 grouping is page-local by default: the browser groups only the
-  loaded artifact edges. Story 5 owners should treat any requirement for
-  cross-page or corpus-wide grouping accuracy as the trigger to move `groupBy`
-  into the GraphQL resolver and make it server-side.
-- Story 6 search/filter remains server-side: any query that changes result
+- Story 5 is page-local unless we explicitly add server-side `groupBy`: the
+  browser groups only the loaded artifact edges. Story 5 owners should treat
+  any requirement for cross-page or corpus-wide grouping accuracy as the
+  trigger to move `groupBy` into the GraphQL resolver and make it server-side.
+- Story 6 search/filter stays server-side: any query that changes result
   membership (`q`, `mediaType`, `staleness`, `phase`, `prefix`, `sort`) must
   continue to round-trip through the resolver so pagination and bookmarks stay
-  correct.
+  correct. Story 6 owners should treat server-side filtering as mandatory, not
+  optional, for any corpus-wide search or filter UI.
 - Add server-side `groupBy` when group headers must reflect the full corpus,
   grouping needs to stay correct across page boundaries, or the page-local
   grouping pass can no longer represent the loaded set faithfully.
