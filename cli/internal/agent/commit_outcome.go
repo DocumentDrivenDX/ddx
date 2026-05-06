@@ -34,8 +34,8 @@ func commitOutcomeError(operation, assignee string, result *ExecuteBeadLoopResul
 // commitOutcome keeps the drain loop moving after a post-outcome store failure.
 // The wrapped op supplies the operation label via commitOutcomeError so this
 // helper can preserve the loop-error event and cooldown behavior without
-// hard-erroring the worker.
-func commitOutcome(ctx context.Context, store ExecuteBeadLoopStore, beadID string, op func() error) bool {
+// hard-erroring the worker or surfacing the store error to Drain.
+func commitOutcome(ctx context.Context, store ExecuteBeadLoopStore, beadID string, op func() error) error {
 	if err := op(); err != nil {
 		var failure *commitOutcomeFailure
 		if errors.As(err, &failure) {
@@ -52,10 +52,10 @@ func commitOutcome(ctx context.Context, store ExecuteBeadLoopStore, beadID strin
 				CreatedAt: time.Now().UTC(),
 			})
 			_ = store.SetExecutionCooldown(beadID, time.Now().UTC().Add(StoreErrorCooldown), "loop-error", failure.operation+": "+failure.err.Error())
-			return false
+			return nil
 		}
 		_ = store.SetExecutionCooldown(beadID, time.Now().UTC().Add(StoreErrorCooldown), "loop-error", err.Error())
-		return false
+		return nil
 	}
-	return true
+	return nil
 }

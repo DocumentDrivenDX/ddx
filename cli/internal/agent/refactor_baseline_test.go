@@ -338,6 +338,35 @@ var refactorBaselineScenarios = map[string][]baselineEvent{
 			"stream": "loop",
 		},
 	},
+	"store_glitch_during_close.jsonl": {
+		{
+			"kind":    "routing",
+			"summary": "provider=claude model=claude-sonnet-4-6",
+			"body":    `{"resolved_provider":"claude","resolved_model":"claude-sonnet-4-6","fallback_chain":[]}`,
+			"source":  "ddx agent execute-bead",
+			"actor":   "ddx",
+		},
+		{
+			"kind":    "loop-error",
+			"summary": "CloseWithEvidence failed",
+			"body":    "transient storage failure",
+			"source":  "ddx agent execute-loop",
+			"actor":   "ddx",
+		},
+		{
+			"kind": "bead.result",
+			"data": map[string]any{
+				"bead_id":     "ddx-baseline-closeglitch",
+				"status":      "execution_failed",
+				"detail":      "close store failure",
+				"session_id":  "session-baseline-closeglitch",
+				"result_rev":  "9999999999999999999999999999999999999999",
+				"base_rev":    "8888888888888888888888888888888888888888",
+				"duration_ms": 11223,
+			},
+			"stream": "loop",
+		},
+	},
 	"preserved_needs_review.jsonl": {
 		{
 			"kind":    "routing",
@@ -417,6 +446,7 @@ var refactorBaselineExpectedKinds = map[string][]string{
 	"decomposition.jsonl":                      {"routing", "decomposition-recommendation", "execute-bead", "bead.result"},
 	"push_failed.jsonl":                        {"routing", "execute-bead", "bead.result"},
 	"push_conflict.jsonl":                      {"routing", "push-conflict", "execute-bead", "bead.result"},
+	"store_glitch_during_close.jsonl":          {"routing", "loop-error", "bead.result"},
 	"preserved_needs_review.jsonl":             {"routing", "execute-bead", "bead.result"},
 	"default_failure.jsonl":                    {"routing", "execute-bead", "loop-error", "bead.result"},
 }

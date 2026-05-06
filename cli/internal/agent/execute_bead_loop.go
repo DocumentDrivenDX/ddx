@@ -860,9 +860,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 		if parking := attemptOut.Parking; parking != nil {
 			if parking.Unclaim {
-				if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("Unclaim", assignee, result, w.Store.Unclaim(candidate.ID))
-				}) {
+				if err := w.Store.Unclaim(candidate.ID); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("Unclaim", assignee, result, err)
+					})
 					if ctx.Err() != nil {
 						return result, ctx.Err()
 					}
@@ -883,9 +884,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				})
 			}
 			if !parking.RetryAfter.IsZero() {
-				if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("SetExecutionCooldown", assignee, result, w.Store.SetExecutionCooldown(candidate.ID, parking.RetryAfter, report.Status, report.Detail))
-				}) {
+				if err := w.Store.SetExecutionCooldown(candidate.ID, parking.RetryAfter, report.Status, report.Detail); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
+					})
 					if ctx.Err() != nil {
 						return result, ctx.Err()
 					}
@@ -896,9 +898,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 
 		if attemptOut.Disposition == agenttry.OutcomeSuccess {
-			if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
-				return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, clearExecuteLoopNoChangesMetadata(w.Store, candidate.ID))
-			}) {
+			if err := clearExecuteLoopNoChangesMetadata(w.Store, candidate.ID); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, err)
+				})
 				if ctx.Err() != nil {
 					return result, ctx.Err()
 				}
@@ -907,9 +910,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			result.Successes++
 			result.LastSuccessAt = now().UTC()
 		} else if report.Status == ExecuteBeadStatusSuccess {
-			if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
-				return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, clearExecuteLoopNoChangesMetadata(w.Store, candidate.ID))
-			}) {
+			if err := clearExecuteLoopNoChangesMetadata(w.Store, candidate.ID); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, err)
+				})
 				if ctx.Err() != nil {
 					return result, ctx.Err()
 				}
@@ -955,14 +959,13 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			report = reviewOut.Report
 			reviewApproved := reviewOut.Approved
 			if reviewOut.StoreErr != nil {
-				if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError(reviewOut.StoreErrOp, assignee, result, reviewOut.StoreErr)
-				}) {
-					if ctx.Err() != nil {
-						return result, ctx.Err()
-					}
-					continue
+				})
+				if ctx.Err() != nil {
+					return result, ctx.Err()
 				}
+				continue
 			}
 
 			if reviewApproved {
@@ -977,9 +980,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			result.LastFailureStatus = report.Status
 		} else if attemptOut.NoChanges != nil {
 			noChanges := attemptOut.NoChanges
-			if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
-				return commitOutcomeError("Unclaim", assignee, result, w.Store.Unclaim(candidate.ID))
-			}) {
+			if err := w.Store.Unclaim(candidate.ID); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("Unclaim", assignee, result, err)
+				})
 				if ctx.Err() != nil {
 					return result, ctx.Err()
 				}
@@ -996,9 +1000,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				})
 			}
 			if noChanges.Label != "" {
-				if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("addBeadLabel", assignee, result, addBeadLabel(w.Store, candidate.ID, noChanges.Label))
-				}) {
+				if err := addBeadLabel(w.Store, candidate.ID, noChanges.Label); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("addBeadLabel", assignee, result, err)
+					})
 					if ctx.Err() != nil {
 						return result, ctx.Err()
 					}
@@ -1021,17 +1026,19 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					report.Detail = noChanges.Evidence
 				}
 				_ = w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC()))
-				if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, clearExecuteLoopNoChangesMetadata(w.Store, candidate.ID))
-				}) {
+				if err := clearExecuteLoopNoChangesMetadata(w.Store, candidate.ID); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, err)
+					})
 					if ctx.Err() != nil {
 						return result, ctx.Err()
 					}
 					continue
 				}
-				if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("CloseWithEvidence", assignee, result, w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.BaseRev))
-				}) {
+				if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.BaseRev); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("CloseWithEvidence", assignee, result, err)
+					})
 					if ctx.Err() != nil {
 						return result, ctx.Err()
 					}
@@ -1045,9 +1052,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
 				if noChanges.CooldownEligible && shouldSuppressNoProgress(report) {
 					retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
-					if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError("SetExecutionCooldown", assignee, result, w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail))
-					}) {
+					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); err != nil {
+						_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+							return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
+						})
 						if ctx.Err() != nil {
 							return result, ctx.Err()
 						}
@@ -1064,9 +1072,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 		} else {
 			if attemptOut.Parking == nil && attemptOut.Disposition != agenttry.OutcomePark {
-				if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("Unclaim", assignee, result, w.Store.Unclaim(candidate.ID))
-				}) {
+				if err := w.Store.Unclaim(candidate.ID); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("Unclaim", assignee, result, err)
+					})
 					if ctx.Err() != nil {
 						return result, ctx.Err()
 					}
@@ -1074,9 +1083,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 			}
 			if report.Status == ExecuteBeadStatusPreservedNeedsReview {
-				if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError("AppendNotes", assignee, result, w.Store.AppendNotes(candidate.ID, preservedNeedsReviewNote(report)))
-				}) {
+				if err := w.Store.AppendNotes(candidate.ID, preservedNeedsReviewNote(report)); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("AppendNotes", assignee, result, err)
+					})
 					if ctx.Err() != nil {
 						return result, ctx.Err()
 					}
@@ -1088,9 +1098,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
 				if shouldSuppressNoProgress(report) {
 					retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
-					if !commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError("SetExecutionCooldown", assignee, result, w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail))
-					}) {
+					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); err != nil {
+						_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+							return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
+						})
 						if ctx.Err() != nil {
 							return result, ctx.Err()
 						}
@@ -1111,6 +1122,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		// Duplicating it here would yield two identical events.
 		if report.Status != ExecuteBeadStatusAlreadySatisfied {
 			if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("AppendEvent", assignee, result, err)
+				})
 				// Event recording failure is non-terminal: log it and continue.
 				// result counters were already updated by the outcome block above;
 				// do not double-count by re-running the outcome handler.

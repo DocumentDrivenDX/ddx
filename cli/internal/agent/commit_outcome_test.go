@@ -66,10 +66,10 @@ func TestCommitOutcome_StoreError_SchedulesCooldown_NotExit(t *testing.T) {
 	store, candidate, _ := newExecuteLoopTestStore(t)
 	result := &ExecuteBeadLoopResult{}
 
-	handled := commitOutcome(context.Background(), store, candidate.ID, func() error {
+	err := commitOutcome(context.Background(), store, candidate.ID, func() error {
 		return commitOutcomeError("CloseWithEvidence", "worker", result, errors.New("transient storage failure"))
 	})
-	require.False(t, handled)
+	require.NoError(t, err)
 
 	assert.Equal(t, 1, result.Failures)
 	assert.Equal(t, "loop-error", result.LastFailureStatus)
