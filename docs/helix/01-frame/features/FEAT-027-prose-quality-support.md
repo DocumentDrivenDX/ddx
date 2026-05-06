@@ -120,8 +120,9 @@ finding format.
 
 ### Measurable Acceptance Criteria
 
-The feature is considered successful when it can produce findings with the
-following structure for a changed prose sample:
+The feature is considered successful when it can produce deterministic,
+command-verifiable findings with the following structure for a changed prose
+sample:
 
 - `file`: the path of the changed document
 - `line` or `line_range`: the affected location
@@ -133,6 +134,10 @@ following structure for a changed prose sample:
 The feature must also be able to flag generic prose patterns such as vague
 claims, filler transitions, and uncoupled abstractions while preserving the
 document's own vocabulary and intended voice.
+
+Findings must be structural rather than subjective. Each result must trace to a
+specific file and line span, and the rationale must explain the triggered rule
+in terms of observed text instead of a broad style judgment.
 
 ## Non-Goals
 
@@ -178,4 +183,3 @@ catalog.
 - Choosing the final low-level implementation boundary beyond naming
   deterministic prose checks
 - CLI flags or plugin assets beyond the prose review surface
-

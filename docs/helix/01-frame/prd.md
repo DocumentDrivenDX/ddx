@@ -100,6 +100,8 @@ specifications. The PRD stays at the user- and capability-level:
   beads and agent sessions, project-scoped views for documents, dependency
   graph, and commit log, and layer-aware run-history routes against the unified
   substrate
+- FEAT-027 defines deterministic prose quality support for governing artifacts
+  and user-facing docs
 
 ## Problem
 
