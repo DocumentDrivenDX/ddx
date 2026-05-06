@@ -1,0 +1,57 @@
+{
+  "harness": "claude",
+  "model": "claude-opus-4-6",
+  "base_rev": "62e7e50b62423c3cfeb4af82dd89402102d889ab",
+  "result_rev": "f37d450aa3abbbc81d597fde23c5d69cf67403dc",
+  "verdict": "BLOCK",
+  "bead_id": "ddx-508a0297",
+  "execution_dir": ".ddx/executions/20260506T123225-ab680c14",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1787,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260506T123100-43dc9cf9/manifest.json",
+          ".ddx/executions/20260506T123100-43dc9cf9/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:TD-036",
+        "bytes_included": 8978,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/02-design/technical-designs/TD-036-prose-quality-pipeline.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 7068,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 19799,
+    "output_bytes": 0,
+    "elapsed_ms": 4112,
+    "harness": "claude",
+    "model": "claude-opus-4-6"
+  }
+}
