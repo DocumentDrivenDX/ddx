@@ -37,7 +37,7 @@ ddx:
 - `docs/helix/01-frame/features/FEAT-001-cli.md`
 - `docs/helix/01-frame/features/FEAT-005-artifacts.md`
 - `docs/helix/01-frame/features/FEAT-006-agent-service.md`
-- `docs/helix/01-frame/features/FEAT-010-executions.md`
+- `docs/helix/01-frame/features/FEAT-010-task-execution.md`
 - `docs/helix/02-design/architecture.md`
 - `docs/helix/02-design/adr/ADR-004-bead-backed-runtime-storage.md`
 - `docs/helix/02-design/solution-designs/SD-005-metric-runtime-history.md`
@@ -70,7 +70,7 @@ ddx:
 
 | Finding | Type | Evidence | Impact | Review Issue |
 |---------|------|----------|--------|-------------|
-| FEAT-010, ADR-004, TD-010, TD-005, TP-010, and TP-005 now agree on bead-backed execution collections with metric projections layered on top. | aligned | `docs/helix/01-frame/features/FEAT-010-executions.md`, `docs/helix/02-design/adr/ADR-004-bead-backed-runtime-storage.md`, `docs/helix/02-design/technical-designs/TD-010-executions.md`, `docs/helix/02-design/technical-designs/TD-005-metric-runtime-history.md`, `docs/helix/03-test/test-plans/TP-010-executions.md`, `docs/helix/03-test/test-plans/TP-005-metric-runtime-history.md` | The planning stack is coherent; storage and inspection boundaries are no longer underspecified. | `ddx-facb7aa5` |
+| FEAT-010, ADR-004, TD-010, TD-005, TP-010, and TP-005 now agree on bead-backed execution collections with metric projections layered on top. | aligned | `docs/helix/01-frame/features/FEAT-010-task-execution.md`, `docs/helix/02-design/adr/ADR-004-bead-backed-runtime-storage.md`, `docs/helix/02-design/technical-designs/TD-010-executions.md`, `docs/helix/02-design/technical-designs/TD-005-metric-runtime-history.md`, `docs/helix/03-test/test-plans/TP-010-executions.md`, `docs/helix/03-test/test-plans/TP-005-metric-runtime-history.md` | The planning stack is coherent; storage and inspection boundaries are no longer underspecified. | `ddx-facb7aa5` |
 | The implementation now has a real `ddx exec` substrate and metric projection layer, but the `agent` executor path in `ddx exec` is still unimplemented. | partial | `cli/cmd/exec.go`, `cli/internal/exec/store.go`, `cli/cmd/metric.go`, `cli/internal/metric/exec_bridge.go` | Generic command execution is aligned; FEAT-010 executor coverage is still incomplete. | `ddx-53048c6c` |
 | Storage hardening work remains open for collection migration cleanup, external-backend adapter tests, and CI schema enforcement. | partial | `cli/internal/exec/store.go`, `cli/internal/bead/backend_external.go`, `cli/internal/bead/schema_validation_test.go`, `.github/workflows/ci.yml` | The storage model is correct, but backend and CI guards are not fully closed. | `ddx-f9121a4c`, `ddx-21fda5a4`, `ddx-105e7afc` |
 

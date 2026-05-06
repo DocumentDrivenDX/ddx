@@ -51,7 +51,7 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 18. Configurable ID prefix (auto-detected from repo name)
 19. Backend abstraction (jsonl/bd/br)
 
-**Three-Layer Run Architecture (top-level — FEAT-006/FEAT-010)**
+**Task Execution (top-level — FEAT-006/FEAT-010)**
 20. `ddx run --min-power <n> [--max-power <n>] --prompt <file>` — layer-1: invoke an AI agent with requested abstract power bounds; agent owns model/provider routing
 20b. `ddx run --top-power --prompt <file>` — request a `MinPower` threshold derived from the agent's available model/power catalog
 20c. `ddx run --effort <level>` — pass non-routing reasoning/effort intent to the agent

@@ -329,7 +329,7 @@ shape; the legacy shape is frozen — no new types should be added there.
 Artifacts stay declarative. They define meaning, authority, provenance, and
 relationships in the graph. DDx does **not** execute artifact files directly.
 
-Runtime invocation belongs to the three-layer run architecture (FEAT-010):
+Runtime invocation belongs to task execution (FEAT-010):
 `ddx run` (layer-1 single agent invocation), `ddx try <bead>` (layer-2 bead
 attempt), `ddx work` (layer-3 queue drain). Run records are file-backed and
 linked to artifacts by ID via `generated_by`.
@@ -387,7 +387,7 @@ file by file.
 
 - FEAT-007 (Doc Graph) — provides the `ddx doc` commands, sidecar scanner,
   `media_type` handling, and `generated_by` provenance edges
-- FEAT-010 (Runs) — provides the run records that `generated_by` references
+- FEAT-010 (Task Execution) — provides the run records that `generated_by` references
 - Document library with templates
 
 ## Out of Scope

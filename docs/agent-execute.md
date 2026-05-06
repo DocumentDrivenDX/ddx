@@ -88,3 +88,31 @@ setup failures, or passthrough exhaustion.
 `ResolveRoute` and route candidate traces are status/debug-only. Normal
 `run`/`try`/`work` execution does not call route preflight and never feeds a
 route decision back into `Execute`.
+
+## Cleanup and Resource Exhaustion
+
+`ddx try` owns the isolated worktree lifecycle for one bead attempt. It checks
+the temporary worktree root and durable evidence root before claim, removes
+partial worktrees from failed setup, and removes the isolated worktree after the
+attempt is merged, preserved, classified, or gracefully interrupted.
+
+`ddx work` runs cleanup at startup, after setup/finalization failures, during
+long-lived polling, and during graceful shutdown. Long-lived workers also run a
+background cleanup pass occasionally with jitter and a cleanup lock so parallel
+workers do not all prune at once.
+
+Cleanup is DDx-scoped and conservative. It may remove stale DDx temp
+worktrees, stale liveness files, and partial setup directories. It must not
+remove preserved attempts, `refs/ddx/iterations/...`, complete evidence under
+`.ddx/runs` or `.ddx/executions`, active worktrees with live liveness, or
+non-DDx paths.
+
+Resource exhaustion is loop-fatal. If the worktree or evidence roots run out of
+bytes/inodes or become unwritable, DDx runs one cleanup pass and retries the
+resource check. If the roots are still unhealthy, `ddx work` stops instead of
+claiming another bead. Operators should see messages in this shape:
+
+```text
+cleanup: removed 37 stale ddx worktrees, freed 14210 inodes
+resource exhausted after cleanup; stopping work loop
+```

@@ -6,7 +6,7 @@ ddx:
     - FEAT-005
     - FEAT-006
 ---
-# Feature: Three-Layer Run Architecture
+# Feature: Task Execution
 
 **ID:** FEAT-010
 **Status:** In Progress
@@ -15,8 +15,9 @@ ddx:
 
 ## Overview
 
-DDx owns three explicit, layered run primitives. Each higher layer composes
-the layer beneath it. There are no other run kinds beyond these three.
+DDx owns the task execution lifecycle. The lifecycle is made of concrete layers
+with stable public names: `run`, `try`, and `work`. Each higher layer composes
+the layer beneath it. There are no other run kinds beyond those named layers.
 
 | Layer | CLI | Inputs | Outputs / side effects | Owns |
 |---|---|---|---|---|
@@ -43,8 +44,8 @@ happened, at what layer, with what evidence."
 **Pain points:**
 - Two on-disk record shapes for fundamentally similar artifacts (a single
   agent invocation, with logs, structured result, and provenance)
-- No first-class concept of the three composing layers (atom / attempt /
-  drain), so consumers must intuit which surface to read
+- No first-class concept of the task execution layers (`run` / `try` /
+  `work`), so consumers must intuit which surface to read
 - Stop conditions for queue drain are implicit and not observable
 - Generated-artifact provenance has no clean hook into the run record
 - Open-ended catalog pressure: every new "run flavor" (benchmark, replay,
@@ -54,7 +55,7 @@ happened, at what layer, with what evidence."
 metadata, three top-level CLI verbs that map 1:1 onto the layers, and a
 narrow read-only HTTP/MCP write surface limited to artifact regeneration.
 
-## Three-Layer Architecture
+## Task Execution Layers
 
 ### Layer 1 — `ddx run` (invocation atom)
 
@@ -79,6 +80,8 @@ A layer-2 run is one bead attempt in an isolated worktree. It owns:
 
 - Worktree creation from a base revision and worktree finalization
   (merge or preserve)
+- Worktree cleanup after finalization, failed setup, failed publish, and
+  ordinary interruption
 - Bead → prompt resolution (description, acceptance, governing artifacts)
 - Side-effect bundling (commits, evidence, no-changes rationale)
 - One or more layer-1 invocations recorded inside the attempt record
@@ -194,7 +197,7 @@ across ready beads until a stop condition is met. It owns:
 
 Content-aware supervisory decisions (e.g., "comparison failed → enqueue
 reconciliation beads") are not layer-3 concerns. Those are skill or
-plugin compositions on top of the three layers.
+plugin compositions on top of the task execution layers.
 
 Layer 3 treats raw attempt evidence separately from durable bead action. When a
 worker stops, receives SIGTERM/SIGINT, loses its child agent process, or honors
@@ -353,7 +356,7 @@ The layer-3 drain evaluates each ready bead through this mechanical sequence:
 
 ### One record shape
 
-All three layers persist to a single on-disk shape under
+All task execution layers persist to a single on-disk shape under
 `.ddx/runs/<run-id>/`. The record has the following common fields and a
 discriminating `layer` field; layer-specific extensions live in named
 subobjects rather than separate file trees.
@@ -429,12 +432,70 @@ which condition fired.
    `ddx try` (if any) one cooperative cleanup path to preserve evidence,
    release its claim, and leave the bead re-claimable. A second signal may
    hard-abort the process.
+6. **`resource_exhausted`** — DDx cannot safely create or publish execution
+   state because a required execution root is out of bytes, out of inodes, not
+   writable, or cannot register/remove git worktrees. Resource exhaustion is
+   host infrastructure failure, not bead failure and not model no-progress.
+   `ddx work` stops claiming new beads after recording the failed `ddx try`
+   setup evidence and a cleanup summary. It must not continue to the next
+   ready bead in the same drain.
 
 Stop-condition evaluation normally runs **between** `ddx try` invocations.
 `signal` is the exception: the first signal cancels an in-flight attempt
 cooperatively rather than waiting for the model to finish. The cancelled
 attempt is mechanically disrupted, not a model no-progress failure, and ordinary
 interrupt shutdown MUST NOT park the bead behind `execute-loop-retry-after`.
+
+### Execution Resource Cleanup
+
+DDx-created execution resources must have an owner, a liveness signal, a
+retention policy, and a cleanup path. Missing ownership, missing liveness, or
+unbounded accumulation is a correctness bug in the execution substrate.
+
+Layer 2 owns inline cleanup for one `ddx try` attempt. Before claim or worktree
+creation it validates the required execution roots:
+
+- the temporary worktree root, currently `$TMPDIR/ddx-exec-wt` unless
+  overridden
+- the durable evidence root, currently `.ddx/executions` during migration and
+  `.ddx/runs` for new substrate records
+- git worktree registration/removal for the project repository
+
+The validation checks writability, free bytes, and free inodes where the
+platform exposes inode counts. If validation fails, `ddx try` runs one
+immediate DDx-scoped cleanup pass, re-checks, and then either proceeds or
+returns `resource_exhausted` without claiming the bead.
+
+After an attempt starts, Layer 2 removes the isolated worktree when the result
+has been merged, explicitly preserved, classified as no-changes/no-evidence, or
+interrupted through the cooperative shutdown path. Failed setup must remove any
+partial unregistered directory it created. A worktree may remain only when DDx
+records an explicit preserve decision with evidence pointing at the retained
+path or ref.
+
+Layer 3 owns loop cleanup. `ddx work` runs cleanup:
+
+- once at startup, before the first queue claim
+- before the next claim after any setup/finalization failure
+- periodically while a long-lived poll worker remains active
+- during graceful signal shutdown before exit
+
+Long-lived DDx processes also start a background cleanup worker. The background
+worker runs occasionally with jitter and a project-level cleanup lock so multiple
+workers do not all prune at once. It is conservative and DDx-scoped: it may
+remove stale unregistered directories under DDx temp roots, registered DDx
+worktrees whose attempt is terminal or whose liveness marker is stale, stale
+heartbeat/liveness files for dead PIDs, and partial setup directories that were
+never published as complete evidence. It must not remove preserved worktrees,
+`refs/ddx/iterations/...`, complete `.ddx/runs/<id>` or
+`.ddx/executions/<attempt-id>` evidence, active worktrees with live
+PID/session liveness, or non-DDx directories.
+
+Cleanup is observable but not noisy. Routine passes are trace/debug or worker
+events. Passes that reclaim significant bytes or inodes emit an operator-visible
+summary such as `cleanup: removed 37 stale ddx worktrees, freed 14210 inodes`.
+Resource exhaustion after cleanup is a hard visible stop message and a layer-3
+`resource_exhausted` disposition.
 
 ### Long-running default (`--poll-interval`)
 
@@ -458,8 +519,8 @@ always clear `substate`.
 
 The structured `loop.end` event carries an `exit_reason` field
 (`once_complete`, `explicit_poll_zero`, `sigint`, `sigterm`,
-`fatal_config`; `providers_exhausted` is reserved for the quota-pause
-work in ddx-aede917d).
+`fatal_config`, `resource_exhausted`; `providers_exhausted` is reserved for the
+quota-pause work in ddx-aede917d).
 
 Power escalation is evaluated between attempts as part of retry policy. A
 higher-power retry raises `MinPower` and resets neither the evidence history nor
@@ -531,17 +592,17 @@ it without a fourth run layer or a separate run type.
 
 ## No Run-Type Catalog
 
-DDx will not introduce additional run kinds beyond the three layers.
+DDx will not introduce additional run kinds beyond `run`, `try`, and `work`.
 Comparison, replay, benchmark, adversarial review, effort estimate,
 bead breakdown, and similar workflows are **skill compositions** over
-the three layers — they emit ordinary layer-1, layer-2, or layer-3
-records, optionally tagged with a free-form `skill` label, and do not
-get bespoke storage shapes, bespoke verbs, or bespoke spec sections.
+the task execution layers — they emit ordinary layer-1, layer-2, or layer-3
+records, optionally tagged with a free-form `skill` label, and do not get
+bespoke storage shapes, bespoke verbs, or bespoke spec sections.
 
 This is a load-bearing non-goal: every future "we should add a fourth
 layer for X" proposal is rejected by reference to this section. If a
 new workflow cannot be expressed as a composition over `run` / `try` /
-`work`, the gap is in the three layers' contract, not in the catalog.
+`work`, the gap is in the task execution contract, not in the catalog.
 
 ## Requirements
 
@@ -560,9 +621,9 @@ new workflow cannot be expressed as a composition over `run` / `try` /
    worktree as `merge` or `preserve`.
 5. **Layer-3 drain** — `ddx work` produces exactly one layer-3 record
    per invocation, references its child layer-2 attempt ids, and reports
-   one of the five terminal dispositions (`drained`, `blocked`,
-   `deferred`, `no_progress`, `signal`).
-6. **Stop conditions** — `ddx work` evaluates the five stop conditions
+   one of the terminal dispositions (`drained`, `blocked`, `deferred`,
+   `no_progress`, `signal`, `resource_exhausted`).
+6. **Stop conditions** — `ddx work` evaluates the stop conditions
    between attempts and persists the evaluation log on the layer-3
    record.
 7. **No-progress detection** — the `no_progress` condition is mechanical
@@ -585,6 +646,12 @@ new workflow cannot be expressed as a composition over `run` / `try` /
 13. **Configuration** — substrate root, no-progress threshold, deferred
     budget, and retention settings are configurable in
     `.ddx/config.yaml`.
+14. **Execution cleanup** — `ddx try` and `ddx work` remove stale DDx-owned
+    execution worktrees and liveness files through inline, loop, and background
+    cleanup paths without deleting preserved attempts or published evidence.
+15. **Resource preflight** — `ddx try` validates writable execution roots and
+    free bytes/inodes before claim; failed validation may trigger one cleanup
+    retry and then returns `resource_exhausted` without claiming.
 
 ### Non-Functional
 
@@ -803,11 +870,11 @@ spinning, or interrupted
 ### US-094: Cross-Layer Run History
 
 **As a** workflow tool
-**I want** to query run history across all three layers from one place
+**I want** to query run history across the task execution layers from one place
 **So that** I do not have to merge two on-disk shapes by hand
 
 **Acceptance Criteria:**
-- Given runs exist at all three layers, when a tool calls
+- Given `run`, `try`, and `work` records exist, when a tool calls
   `GET /api/runs?layer=...`, then it receives records of the requested
   layer with consistent common fields.
 - Given a layer-3 record exists, then its child layer-2 attempt ids and
@@ -868,7 +935,7 @@ FEAT-006 and not to this feature.
 
 ## Out of Scope
 
-- **Run kinds beyond the three layers** — comparison, replay, benchmark,
+- **Run kinds beyond `run`, `try`, and `work`** — comparison, replay, benchmark,
   adversarial review, effort estimate, and similar workflows are skill
   compositions, not new layers or new on-disk shapes.
 - **Content-aware supervisory loop decisions** — `ddx work` performs

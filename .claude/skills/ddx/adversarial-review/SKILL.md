@@ -45,7 +45,7 @@ Write the prompt to a file, e.g. `review-target.md`:
 
 ## Governing artifacts
 
-- FEAT-010: docs/helix/01-frame/features/FEAT-010-executions.md
+- FEAT-010: docs/helix/01-frame/features/FEAT-010-task-execution.md
 - (add others)
 
 ## Review question

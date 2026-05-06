@@ -167,7 +167,7 @@ cat > breakdown-target.md << 'EOF'
 
 ## Governing artifacts
 
-- FEAT-010: docs/helix/01-frame/features/FEAT-010-executions.md
+- FEAT-010: docs/helix/01-frame/features/FEAT-010-task-execution.md
 
 ## Breakdown question
 

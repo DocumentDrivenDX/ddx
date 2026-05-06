@@ -42,3 +42,15 @@ A bead's description + AC must be sufficient context for a competent sub-agent t
 
 If a sub-agent succeeds where the bead's auto-prompt failed, the BEAD failed (not the executor). Bead-authoring template enforces this; bead-quality audit (forthcoming bead) retrofits existing beads.
 
+## P8: DDx-Owned Resources Must Be Reclaimed
+
+Every DDx-created temporary execution resource has an owner, liveness signal,
+retention policy, and cleanup path. `ddx try` cleans up one attempt inline;
+`ddx work` cleans up between attempts and on graceful shutdown; long-running
+workers also run conservative background cleanup with a lock and jitter.
+
+Host-level resource exhaustion is not a bead failure and not model
+no-progress. If bytes, inodes, writability, or git worktree registration are
+unhealthy after one cleanup pass, the work loop stops visibly and claims no more
+beads. Continuing to scan the queue under ENOSPC expands the blast radius and
+violates P4.

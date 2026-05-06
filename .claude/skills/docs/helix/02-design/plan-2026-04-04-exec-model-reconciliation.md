@@ -8,7 +8,7 @@ ddx:
 # Design Plan: DDx Execution Model Reconciliation
 
 > **Historical — converged.** Requirements are incorporated into
-> FEAT-010 (`docs/helix/01-frame/features/FEAT-010-executions.md`),
+> FEAT-010 (`docs/helix/01-frame/features/FEAT-010-task-execution.md`),
 > FEAT-004 (`docs/helix/01-frame/features/FEAT-004-beads.md`), TD-010
 > (`docs/helix/02-design/technical-designs/TD-010-executions.md`), and
 > TD-005 (`docs/helix/02-design/technical-designs/TD-005-metric-runtime-history.md`).
@@ -273,7 +273,7 @@ Critical paths before release:
 
 ## Governing Artifacts
 
-- [FEAT-010: Executions](../01-frame/features/FEAT-010-executions.md)
+- [FEAT-010: Executions](../01-frame/features/FEAT-010-task-execution.md)
 - [SD-005: Metric Runtime and History](solution-designs/SD-005-metric-runtime-history.md)
 - [TD-005: Metric Runtime and History](technical-designs/TD-005-metric-runtime-history.md)
 - [TD-010: Execution Definitions and Runs](technical-designs/TD-010-executions.md)

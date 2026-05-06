@@ -587,7 +587,7 @@ mocking of the GraphQL or HTTP layer.
 - FEAT-004 (beads)
 - FEAT-006 (agent service metadata and native session references)
 - FEAT-007 (doc graph)
-- FEAT-010 (unified run substrate and run read APIs)
+- FEAT-010 (Task Execution run records and read APIs)
 - FEAT-012 (git awareness — for commit log endpoint)
 
 ## Federation Compatibility Hooks (FEAT-026)

@@ -37,7 +37,7 @@ Each pain point below maps to a specific DDx capability — the list is bounded 
 1. **Context assembly is manual.** Composing the right persona + pattern + spec + prior evidence into agent context is ad hoc and slow. *(DDx: artifact library + composition.)*
 2. **Documents drift silently.** When an upstream document changes, dependent artifacts go stale with no detection or reconciliation. *(DDx: artifact graph + staleness + reconciliation beads.)*
 3. **Work tracking is reinvented.** Every workflow tool reimplements issue storage, dependency DAGs, and ready/blocked queues. *(DDx: bead tracker + JSONL interchange.)*
-4. **Agent runs leave no shared trace.** Each tool grows its own dispatch, logging, and evidence shape; nothing carries between invocations. *(DDx: three-layer run architecture on a unified on-disk substrate.)*
+4. **Agent runs leave no shared trace.** Each tool grows its own dispatch, logging, and evidence shape; nothing carries between invocations. *(DDx: task execution lifecycle on a unified on-disk substrate.)*
 5. **Cost of agentic work is invisible.** Token spend is a first-order constraint with no shared signal on the cheapest model that reliably closes beads. *(DDx: cost-tier routing + token awareness.)*
 6. **Skills and plugins don't compose.** Each project reinvents its agent instructions, skills, and supporting mechanics from scratch. *(DDx: single `ddx` skill + project-local plugin install.)*
 
@@ -159,9 +159,11 @@ the work; stronger models review; deterministic checks sit at the top of the
 ladder catching what review missed. The agent service routes by capability,
 not by name — endpoints with live model discovery, not hardcoded providers.
 
-### Three-Layer Run Architecture
+### Task Execution Lifecycle
 
-DDx owns three explicit layered primitives:
+The lifecycle is made of the `run`, `try`, and `work` layers.
+
+DDx owns the named task execution layers:
 
 | Layer | CLI | Owns |
 |-------|-----|------|

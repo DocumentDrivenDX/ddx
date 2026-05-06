@@ -10,7 +10,7 @@ ddx:
 **Owner:** DDx Team
 
 This concept note explains *why* DDx's execution layering
-([FEAT-010](../../01-frame/features/FEAT-010-executions.md)) is shaped the way
+([FEAT-010](../../01-frame/features/FEAT-010-task-execution.md)) is shaped the way
 it is. Each bead is one bounded execution unit, executed by a fresh agent
 invocation in an isolated worktree, because long-lived agent sessions degrade
 in measurable, well-documented ways. `ddx work` is a bounded context execution
@@ -96,7 +96,7 @@ DDx treats context as a budget that must be reset between units of work.
   previous loop iteration. It re-reads the bead, re-reads the files it needs,
   and works against the contract as if meeting it for the first time.
 - **One attempt = one isolated worktree.** `ddx try` (see
-  [FEAT-010](../../01-frame/features/FEAT-010-executions.md)) runs the
+  [FEAT-010](../../01-frame/features/FEAT-010-task-execution.md)) runs the
   attempt in a dedicated git worktree off a known base revision. The agent's
   side effects are bounded to that worktree; the worktree's final state is
   captured as evidence under `.ddx/executions/` and either merged or
@@ -158,7 +158,7 @@ unit fresh.
 
 ## See Also
 
-- [FEAT-010 — Three-Layer Run Architecture](../../01-frame/features/FEAT-010-executions.md)
+- [FEAT-010 — Task Execution](../../01-frame/features/FEAT-010-task-execution.md)
   — the on-disk and CLI shape of `ddx run` / `ddx try` / `ddx work` that
   implements bounded context execution.
 - [`ddx agent execute-loop` command reference](../../../../website/content/docs/cli/commands/ddx_agent_execute-loop.md)

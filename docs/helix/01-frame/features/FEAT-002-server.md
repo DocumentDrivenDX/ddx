@@ -340,7 +340,7 @@ Field semantics:
 
 MCP tools: `ddx_provider_list`, `ddx_provider_show` — host+user global; not project-scoped (provider config is per host+user, not per project).
 
-**Executions (FEAT-010)**
+**Task Execution (FEAT-010)**
 22. `GET /api/projects/:project/exec/definitions` — list execution definitions with optional artifact filter
 23. `GET /api/projects/:project/exec/definitions/:id` — show one execution definition
 24. `GET /api/projects/:project/exec/runs` — list execution runs with optional artifact/definition/status filters
@@ -393,7 +393,7 @@ MCP tools: `ddx_provider_list`, `ddx_provider_show` — host+user global; not pr
 ## Dependencies
 
 - FEAT-004 (Beads) — bead endpoints read from bead store
-- FEAT-010 (Executions) — execution endpoints read definitions and immutable run history
+- FEAT-010 (Task Execution) — execution endpoints read definitions and immutable run history
 - FEAT-007 (Doc Graph) — graph/stale endpoints use doc graph engine
 - FEAT-006 (Agent Service) — agent activity endpoints read DDx invocation
   metadata and embedded telemetry references; execute-bead attempt artifacts

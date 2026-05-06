@@ -57,7 +57,7 @@ at the deep margins. Place a small bottom-right registration block reading
 amber `#C79B5B` or terminal-cyan `#7FE3D4` signal-lamp dots (≤ 6 px diameter,
 matte, no halation) as instrument punctuation; never as the figure's subject.
 Optional: a single faint copper rivet glyph at each cartouche corner. The
-diagram itself (three-layer run architecture — `ddx run` / `try` / `work`) must remain the dominant read at first glance —
+diagram itself (task execution lifecycle — `ddx run` / `try` / `work`) must remain the dominant read at first glance —
 the industrial framing rewards the second look without competing with the
 metaphor.
 

@@ -6,16 +6,18 @@ ddx:
     - FEAT-006
     - FEAT-010
 ---
-# Solution Design: Three-Layer Run Substrate
+# Solution Design: Task Execution Lifecycle
 
 ## Purpose
 
-This sketch turns FEAT-010's three-layer run architecture into an implementation
+This design turns FEAT-010's task execution lifecycle into an implementation
 shape. It is intentionally below the feature spec and above code-level storage
-types: enough detail to keep implementation beads aligned without re-opening the
-routing boundary in FEAT-006.
+types: enough detail to keep the `run`, `try`, and `work` layers aligned
+without re-opening the routing boundary in FEAT-006.
 
-The substrate has exactly three layers:
+## Layer Model
+
+Task execution is composed from named layers:
 
 | Layer | Public verb | Meaning |
 | --- | --- | --- |
@@ -25,7 +27,7 @@ The substrate has exactly three layers:
 
 Each higher layer references child records from the layer beneath it. Comparison,
 replay, benchmark, review, and artifact-regeneration workflows are compositions
-over these layers, not new run kinds.
+over the task execution lifecycle, not new run kinds.
 
 ## Record Shape
 
@@ -107,6 +109,8 @@ Layer 2 stores DDx-owned attempt orchestration:
 - preserve ref, if any
 - gate results and review verdicts
 - evidence-bundle attachment refs
+- cleanup summary: removed worktree path, preserve reason, partial setup
+  cleanup, and resource-preflight result
 
 Layer 2 owns success classification for a bead attempt because DDx owns commits,
 merge/preserve state, no-change rationale, post-run gates, and review evidence.
@@ -121,8 +125,9 @@ Layer 3 stores the mechanical queue loop:
 - retry/escalation decisions with requested `MinPower` changes
 - no-progress counter state
 - stop-condition evaluation log
-- terminal disposition: `drained`, `blocked`, `deferred`, `no_progress`, or
-  `signal`
+- cleanup pass summaries and resource stop details
+- terminal disposition: `drained`, `blocked`, `deferred`, `no_progress`,
+  `signal`, or `resource_exhausted`
 
 Layer 3 does not file new content-aware work or decide workflow policy.
 Supervisory behavior belongs to skills or plugins layered on top.
@@ -178,6 +183,7 @@ rewrite historical bead attempt commits or `closing_commit_sha` pointers.
 | `deferred` | wall-clock or attempt-count budget exhausted |
 | `no_progress` | configured consecutive attempts produced no commit and no merged side effect |
 | `signal` | SIGINT/SIGTERM received; first signal cancels in-flight work cooperatively and stops new claims |
+| `resource_exhausted` | execution roots are not safely writable or lack required bytes/inodes after cleanup |
 
 The layer-3 evaluation log records the candidate bead, previous outcome,
 retry eligibility, requested power bounds, passthrough envelope presence, and
@@ -192,6 +198,95 @@ finish the TD-031 interruption path: preserve available evidence, remove
 runtime liveness state, release any non-terminal bead claim, and exit with
 layer-3 disposition `signal`. A second signal may hard-abort rather than wait
 for cleanup.
+
+## Cleanup Manager
+
+The run substrate includes one DDx-owned cleanup manager used by `ddx try`,
+`ddx work`, server-managed workers, and an explicit operator cleanup command.
+The manager is scoped to DDx-created execution resources only; it never scans or
+removes arbitrary temp directories.
+
+### Roots and ownership
+
+The manager knows the configured temporary worktree root, durable run/evidence
+roots, worker liveness root, and project git repository. Every created
+temporary execution directory records enough ownership to answer:
+
+- which project created it
+- which attempt or worker owns it
+- whether the attempt reached published evidence
+- whether it was intentionally preserved
+- when its liveness signal was last refreshed
+
+During the legacy migration window, the manager handles both
+`.ddx/executions/<attempt-id>` and `.ddx/runs/<run-id>` evidence, but it treats
+complete evidence bundles as durable data rather than scratch.
+
+### Entry points
+
+Inline cleanup runs inside `ddx try` before and after worktree lifecycle
+operations. It removes partial directories from failed setup and removes the
+isolated worktree after merge, preserve, no-changes, no-evidence, failed
+publish, or cooperative interruption finalization.
+
+Loop cleanup runs inside `ddx work` at startup, between attempts after
+setup/finalization failure, periodically while polling, and during graceful
+shutdown. It may clean stale resources from prior attempts before the next
+claim.
+
+Background cleanup runs occasionally while long-lived DDx processes are alive.
+It uses jitter plus a project cleanup lock so concurrent workers do not all
+prune at once. It must tolerate another process winning the race to remove a
+resource.
+
+An explicit operator command, such as `ddx cleanup` or `ddx doctor cleanup`,
+runs the same manager and reports what it removed without requiring a queue
+drain.
+
+### Conservative deletion rules
+
+The manager may delete:
+
+- unregistered directories under DDx temp worktree roots whose names and
+  metadata identify DDx ownership and whose liveness is absent or stale
+- registered git worktrees under DDx temp roots whose owning attempt is
+  terminal or whose liveness marker is stale
+- stale heartbeat/liveness files for dead PIDs or expired sessions
+- partial setup directories that never reached atomic evidence publication
+- old non-preserved scratch data past configured retention
+
+The manager must not delete:
+
+- preserved attempt worktrees
+- local evidence refs under `refs/ddx/iterations/...`
+- complete `.ddx/runs/<id>` or `.ddx/executions/<attempt-id>` evidence
+- active worktrees with a live PID/session heartbeat
+- paths outside configured DDx roots
+- paths that only loosely resemble DDx names without matching ownership
+  metadata or registered worktree evidence
+
+### Resource preflight and loop-fatal handling
+
+Before `ddx try` claims a bead or creates a worktree, it checks the configured
+temp worktree root and durable evidence root for writability, free bytes, and
+free inodes when inode data is available. If preflight fails, `ddx try` runs one
+immediate cleanup pass and repeats the check. If the check still fails, the
+attempt returns `resource_exhausted` without claiming the bead.
+
+If resource exhaustion occurs after a claim or during worktree setup,
+`ddx try` records whatever partial evidence is available, removes any partial
+unregistered directory it created, releases the claim if the bead did not close,
+and returns `resource_exhausted`.
+
+`ddx work` treats `resource_exhausted` as host infrastructure failure. It
+records a layer-3 stop-condition entry, prints an operator-visible message such
+as `resource exhausted after cleanup; stopping work loop`, and stops claiming
+new beads. It must not continue scanning the ready queue in the same process.
+
+Cleanup output is structured. Routine passes are trace/debug or worker events.
+Passes that reclaim meaningful bytes or inodes emit an operator-visible summary
+including counts. Failures include path, class, and whether the failure blocked
+progress.
 
 ## Drill-Down Query Model
 

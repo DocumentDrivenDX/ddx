@@ -2,7 +2,7 @@
 ddx:
   id: plan-2026-04-29-artifact-and-run-architecture
 ---
-# Artifact Generalization & Three-Layer Run Architecture
+# Artifact Generalization & Task Execution
 
 Date: 2026-04-29
 Status: Approved (refined through 3 review rounds with codex + fresh-eyes)
@@ -54,7 +54,7 @@ These threads converge: **generating an artifact is a layer-1 agent run** with `
 - Principle #1: "Artifacts are the product (documents primary)."
 
 ### docs/helix/01-frame/prd.md
-- Summary: artifacts (multi-media); three-layer run architecture; one substrate.
+- Summary: artifacts (multi-media); task execution lifecycle; one substrate.
 - Problem: add "no provenance for generated artifacts."
 - Goals: reword #1; add three-layer-architecture goal; add generated-artifact-regeneration goal; add "100% read coverage on HTTP/MCP."
 - Non-goals: sharpen loop wording (mechanical drain in scope; supervisory content-aware decisions out). Add: "DDx does not catalog run types beyond the three layers."
@@ -80,7 +80,7 @@ These threads converge: **generating an artifact is a layer-1 agent run** with `
 - Migration table: what stays in FEAT-006 (CONTRACT-003 boundary, profile/permissions), what moves to FEAT-010 (worktree, merge/preserve, evidence bundles, queue drain), what moves to FEAT-001 (CLI surface).
 - Session-log boundary clarified: DDx owns the envelope/pointer in evidence bundles; upstream owns inner log shape.
 
-### FEAT-010-executions.md (substantial refactor)
+### FEAT-010-task-execution.md (substantial refactor)
 - Three-layer architecture explicit and load-bearing.
 - Substrate unification: one record shape; layer metadata.
 - Migrate `.ddx/exec-runs/` and `.ddx/executions/<attempt-id>/` to one layout.
@@ -178,7 +178,7 @@ Per FEAT-011's path model: source at `skills/ddx/`, embedded at `cli/internal/sk
 
 16. Architecture: artifact identity schema (concurrent with #4)
 17. Architecture: graph schema with media_type + generated_by + separate staleness (concurrent with #9)
-18. Architecture: three-layer run substrate — record shape, layer metadata, on-disk layout, migration, `ddx work` stop conditions (concurrent with #8)
+18. Architecture: task execution lifecycle — record shape, layer metadata, on-disk layout, migration, `ddx work` stop conditions (concurrent with #8)
 19. Sidecar `.ddx.yaml` schema design
 
 **Read-coverage thread:**

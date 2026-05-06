@@ -385,7 +385,7 @@ agent:
 
 ## Dependencies
 
-- FEAT-010 (Executions) — run substrate; comparison/replay/benchmark records
+- FEAT-010 (Task Execution) — run substrate; comparison/replay/benchmark records
   are stored here; FEAT-019 is a child of FEAT-010
 - FEAT-006 (Agent Service) — harness registry, session logging, grading dispatch
 - FEAT-008 (Web UI) — UI rendering surfaces for comparison/replay/benchmark views

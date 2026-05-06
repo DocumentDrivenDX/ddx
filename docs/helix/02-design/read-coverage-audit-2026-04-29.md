@@ -170,7 +170,7 @@ Enumerate every CLI-visible read surface → map to HTTP REST and MCP tool cover
 **G8 · Layer-aware run-history HTTP + MCP** (FEAT-021 unified substrate)
 - No routes exist for the three-layer substrate (`work` → `try` → `run` drill-down)
 - Required for FEAT-021 layer-aware dashboard and for agents traversing the execution hierarchy
-- Note: this gap will be partly addressed by the three-layer run substrate bead (plan #18); listed here to sequence the server-side read exposure.
+- Note: this gap will be partly addressed by the task execution lifecycle bead (plan #18); listed here to sequence the server-side read exposure.
 
 **G9 · MCP server registry + plugin manifest HTTP + MCP**
 - CLI: `ddx mcp list`, `ddx install installed/outdated/search`

@@ -16,7 +16,7 @@ DDx is a monorepo producing three artifacts that together form the shared
 local-first infrastructure for document-driven development:
 
 1. **`ddx` CLI** — multi-media artifact library management, artifact graph
-   operations, bead tracking, three-layer run architecture (`ddx run` /
+   operations, bead tracking, task execution lifecycle (`ddx run` /
    `ddx try` / `ddx work`) on a unified on-disk substrate, agent dispatch,
    persona composition, template application, and git sync
 2. **`ddx-server`** — web server + MCP endpoints for browsing documents,
@@ -58,7 +58,8 @@ specifications. The PRD stays at the user- and capability-level:
   wired to `artifactRegenerate`; layer-aware run views (`work` → `try` → `run`
   drill-down)
 - FEAT-009 defines the online library and plugin registry
-- FEAT-010 defines the three-layer run architecture and unified substrate:
+- FEAT-010 defines the task execution lifecycle and unified substrate:
+  `run`, `try`, and `work` are the concrete layers.
   `ddx run` / `ddx try` / `ddx work` as explicit primitives; one on-disk
   record shape with layer metadata; `.ddx/exec-runs/` and
   `.ddx/executions/<attempt-id>/` collapse into one layout; `ddx work`
@@ -201,7 +202,7 @@ problems outside that mapping belong in workflow tools, not the platform.
 12. **Stabilize the plugin API** — document existing extension surfaces, add
     schema versioning, and commit to backward compatibility so plugin authors
     can build with confidence (FEAT-018)
-13. **Provide a three-layer run architecture** — ship `ddx run` (single agent
+13. **Provide a task execution lifecycle** — ship `ddx run` (single agent
     invocation), `ddx try` (bead attempt in isolated worktree), and `ddx work`
     (mechanical queue drain) as DDx-owned primitives on one unified on-disk
     substrate; layer metadata distinguishes records (FEAT-010)
@@ -243,7 +244,7 @@ problems outside that mapping belong in workflow tools, not the platform.
   work`); content-aware supervisory decisions (deciding what to do next based
   on agent or execution results — for example, "comparison failed → enqueue
   reconciliation beads") remain plugin/HELIX territory
-- Cataloging run types beyond the three layers — comparison, replay,
+- Cataloging run types beyond the `run`, `try`, and `work` layers — comparison, replay,
   benchmark, and similar workflow shapes are skill compositions; DDx does not
   enshrine them in Go core or specs
 - An AI agent or agent framework

@@ -214,7 +214,7 @@ budget stop instead of disguising the stop as model failure.
 ## References
 
 - `docs/helix/01-frame/features/FEAT-006-agent-service.md`
-- `docs/helix/01-frame/features/FEAT-010-executions.md`
+- `docs/helix/01-frame/features/FEAT-010-task-execution.md`
 - `docs/helix/01-frame/features/FEAT-014-token-awareness.md`
 - `docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md`
 - `docs/helix/02-design/technical-designs/TD-033-multi-turn-structured-evidence-assembly.md`

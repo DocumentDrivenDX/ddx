@@ -1328,7 +1328,7 @@ ddx/
 - FEAT-007 (Doc graph) — for dependency graph visualization; queries
   `docGraph` with artifact nodes and provenance edges
 - FEAT-006 (Agent service) — for agent activity and invocation detail
-- FEAT-010 (Executions) — for unified `work` / `try` / `run` records and the
+- FEAT-010 (Task Execution) — for unified `work` / `try` / `run` records and the
   narrow `artifactRegenerate` write surface
 - FEAT-014 (Agent Usage Awareness and Routing Signals) — governs the routing
   signal model consumed by the provider dashboard

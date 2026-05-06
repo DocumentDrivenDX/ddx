@@ -188,6 +188,6 @@ out-of-band report to fix an ordinary authoring problem.
   — Audit 2.
 - `docs/helix/01-frame/features/FEAT-004-beads.md` — bead metadata,
   validation, labels, and evidence.
-- `docs/helix/01-frame/features/FEAT-010-executions.md` — try/work lifecycle
+- `docs/helix/01-frame/features/FEAT-010-task-execution.md` — try/work lifecycle
   and attempt outcomes.
 - `docs/helix/01-frame/features/FEAT-011-skills.md` — DDx skill packaging.
