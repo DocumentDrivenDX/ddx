@@ -133,7 +133,7 @@ Plain-English semantics:
 | `open` → `cancelled` | yes | operator | `cancelled` |
 | `in_progress` → `open` | yes | unclaim (operator or stale-claim sweep) | `unclaimed` |
 | `in_progress` → `closed` | yes | drain loop (on merge/already-satisfied) or operator | `closed-merged` / `closed-already-satisfied` |
-| `in_progress` → `blocked` | yes | drain loop on `review_block`, or operator | `blocked-review` / `blocked` |
+| `in_progress` → `blocked` | yes | drain loop on non-automatable review/intake finding, or operator | `review-block` / `blocked` |
 | `blocked` → `open` | yes | operator (block resolved) | `unblocked` |
 | `blocked` → `cancelled` | yes | operator | `cancelled` |
 | `closed` → * | no | — | — (closed is terminal) |

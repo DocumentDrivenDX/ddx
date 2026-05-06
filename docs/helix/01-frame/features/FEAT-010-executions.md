@@ -225,8 +225,8 @@ could plausibly help after a valid attempt started. Eligible classes include:
   quality or implementation quality was insufficient.
 - `post_run_check_failed` — tests or gates failed after a valid checkout and
   attempted change.
-- `review_blocked_capability` — review blocked the result for issues plausibly
-  addressable by stronger reasoning.
+- `review_fixable_gap` — adversarial review found implementation or test gaps
+  plausibly addressable by another automated cycle.
 - `no_changes_after_attempt` — the agent had a valid checkout and task context
   but produced no usable change, subject to the no-progress budget.
 

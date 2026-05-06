@@ -197,7 +197,13 @@ byte accounting on every review and grading attempt.
 
 **Error classes and review policy**
 
-12. **Review error taxonomy.** The reviewer outcome event distinguishes
+12. **Adversarial review evidence contract.** The default close gate assembles
+    one bounded evidence bundle per `result_rev` and dispatches two no-tool
+    reviewer invocations. Each reviewer must grade every acceptance criterion
+    with evidence. An `APPROVE` without per-AC evidence is treated as
+    `review-error: unparseable`, not as a pass.
+
+13. **Review error taxonomy.** The reviewer outcome event distinguishes
     four classes:
     - `review-error: context_overflow` — bounded assembly exceeded
       `MaxPromptBytes` post-trim; provider was not called.
@@ -206,17 +212,17 @@ byte accounting on every review and grading attempt.
       recognizable verdict line.
     - `review-error: transport` — network or provider error.
 
-13. **Reviewer failure preserves the gate.** Reviewer failure must not
+14. **Reviewer failure preserves the gate.** Reviewer failure must not
     close the bead. This invariant (enforced today by
     `execute_bead_review_failure_modes_test.go`) is preserved: bounded
     prompts change how the reviewer is called, not whether a failed
     review can auto-approve.
 
-14. **Bounded review retry.** Reviewer invocations are capped at a
+15. **Bounded review retry.** Reviewer invocations are capped at a
     configurable N attempts per `result_rev`. On the Nth failure, DDx
-    emits a terminal `review-manual-required` event and stops re-
-    executing primary. A new `result_rev` (fresh primary attempt after
-    manual operator action) resets the counter. Iterations that do not
+    emits a terminal `review-manual-required` event, blocks the bead for
+    operator review, and stops review retries. A new `result_rev` (fresh primary
+    attempt after manual operator action) resets the counter. Iterations that do not
     produce a `result_rev` (e.g. `--no-merge` runs, execution-failed
     outcomes) do not consume the review-retry budget; the counter is
     scoped strictly to reviewer attempts against a committed result.
@@ -225,7 +231,7 @@ byte accounting on every review and grading attempt.
 
 **Telemetry and observability**
 
-15. **Section-level assembly telemetry.** Review and grading paths
+16. **Section-level assembly telemetry.** Review and grading paths
     extend the execute-bead attempt bundle (FEAT-014 §19/§20, FEAT-005
     §Execute-Bead Evidence Bundle) with an evidence-assembly block
     containing:
@@ -242,7 +248,7 @@ byte accounting on every review and grading attempt.
     `result_rev`) are not duplicated by FEAT-022; evidence-assembly
     telemetry is additive to that record, not a replacement.
 
-16. **Compact event summary.** `review`, `review-error`, and
+17. **Compact event summary.** `review`, `review-error`, and
     `compare-result` event bodies carry a compact summary
     (`input_bytes`, `output_bytes`, `elapsed_ms`, `harness`, `model`).
     Full section detail stays in artifacts; event bodies respect the
