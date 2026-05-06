@@ -1,0 +1,2 @@
+verification_command: cd cli && go test ./cmd/... -run 'TestBeadQueue' -count=1 && go test ./cmd/... ./internal/bead/... && lefthook run pre-commit
+reason: The requested queue command surface and sparse rank behavior are already present in the worktree (`cli/cmd/bead_queue.go`, `cli/internal/bead/queue.go`), and the required validation commands passed without changes.
