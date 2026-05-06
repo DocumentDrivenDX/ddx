@@ -1,6 +1,12 @@
 package cmd
 
 import (
+	"context"
+	"errors"
+	"os"
+	"os/signal"
+	"syscall"
+
 	"github.com/spf13/cobra"
 
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
@@ -39,7 +45,15 @@ func Execute(workingDir string) error {
 	// the CLI-backed constructors and methods that cobra callbacks use.
 	persona.KeepReachabilityForDeadcode()
 	exerciseEvidenceCallgraph()
-	return rootCmd.Execute()
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
+	err := executeRootCommand(rootCmd, ctx, stop)
+	if err != nil && errors.Is(err, context.Canceled) {
+		return NewExitError(130, "")
+	}
+	return err
 }
 
 // exerciseEvidenceCallgraph keeps the shared evidence primitives on the
