@@ -239,6 +239,61 @@ func TestLoadAttempts_ExplicitHarnessNotOverwritten(t *testing.T) {
 	}
 }
 
+func TestAgentMetricsIncludesRoutingIntent(t *testing.T) {
+	wd := t.TempDir()
+	writeFile(t, wd, ".ddx/executions/20260501T000000-hint/result.json", `{
+		"bead_id":"ddx-hint","attempt_id":"20260501T000000-hint",
+		"status":"success","cost_usd":0.2,"duration_ms":123,"exit_code":0,
+		"started_at":"2026-05-01T00:00:00Z"
+	}`)
+	now := time.Now().UTC().Format(time.RFC3339)
+	beadJSON := `{"id":"ddx-hint","title":"t","status":"closed",` +
+		`"issue_type":"task","priority":2,` +
+		`"created_at":"` + now + `","updated_at":"` + now + `",` +
+		`"events":[{"kind":"execution-routing-intent","summary":"source=bead_hint tier=smart",` +
+		`"body":"{\"routing_intent_source\":\"bead_hint\",\"requested_tier\":\"smart\",\"smart_justification\":\"This bead decides the durable execution-hint contract.\",\"actual_harness\":\"claude\",\"actual_provider\":\"anthropic\",\"actual_model\":\"claude-sonnet-4-6\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"rejected_route_pins\":[\"harness:claude\",\"execution-model=gpt-5.5\"]}",` +
+		`"created_at":"` + now + `"}]}`
+	writeFile(t, wd, ".ddx/beads.jsonl", beadJSON+"\n")
+
+	got, err := LoadAttempts(wd)
+	if err != nil {
+		t.Fatalf("LoadAttempts: %v", err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("expected 1 attempt, got %d", len(got))
+	}
+	a := got[0]
+	if a.RoutingIntentSource != "bead_hint" {
+		t.Fatalf("routing intent source = %q, want bead_hint", a.RoutingIntentSource)
+	}
+	if a.RequestedTier != "smart" {
+		t.Fatalf("requested tier = %q, want smart", a.RequestedTier)
+	}
+	if a.SmartJustification == "" {
+		t.Fatal("smart justification must be projected")
+	}
+	if a.RejectedRoutePinCount != 2 {
+		t.Fatalf("rejected route pin count = %d, want 2", a.RejectedRoutePinCount)
+	}
+	if !a.RoutingIntentDegraded {
+		t.Fatal("routing intent should be marked degraded")
+	}
+
+	smartCount := 0
+	pinCount := 0
+	for _, attempt := range got {
+		if attempt.RequestedTier == "smart" && attempt.RoutingIntentSource == "bead_hint" {
+			smartCount++
+		}
+		if attempt.RejectedRoutePinCount > 0 {
+			pinCount++
+		}
+	}
+	if smartCount != 1 || pinCount != 1 {
+		t.Fatalf("countable projection broken: smart=%d rejected=%d", smartCount, pinCount)
+	}
+}
+
 // TestLoadAttempts_EmptyDirs returns an empty slice without error when
 // neither source directory exists.
 func TestLoadAttempts_EmptyDirs(t *testing.T) {

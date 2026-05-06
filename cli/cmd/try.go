@@ -372,6 +372,9 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	}
 	report := result.Results[0]
 	writeTryResult(cmd.OutOrStdout(), report)
+	if intent := escalation.ParseExecutionHint(target); intent.Source == escalation.ExecutionIntentSourceBeadHint && intent.RequestedTier != "" {
+		fmt.Fprintf(cmd.OutOrStdout(), "routing intent: tier=%s source=%s\n", intent.RequestedTier, intent.Source)
+	}
 
 	return tryExitCodeForStatus(report.Status)
 }

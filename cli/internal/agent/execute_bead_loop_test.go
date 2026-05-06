@@ -112,8 +112,19 @@ func TestExecuteBeadWorkerSuccessClosesBead(t *testing.T) {
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, "success", events[0].Summary)
+	require.Len(t, events, 2)
+	var sawIntent, sawExecute bool
+	for _, ev := range events {
+		switch ev.Kind {
+		case "execution-routing-intent":
+			sawIntent = true
+		case "execute-bead":
+			sawExecute = true
+			assert.Equal(t, "success", ev.Summary)
+		}
+	}
+	assert.True(t, sawIntent, "routing intent evidence must be recorded")
+	assert.True(t, sawExecute, "execute-bead event must still be recorded")
 }
 
 func TestExecuteBeadWorkerLabelFilterSkipsNonMatchingReadyBeads(t *testing.T) {
@@ -244,9 +255,20 @@ func TestExecuteBeadWorkerLandConflictStaysOpenAndContinues(t *testing.T) {
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, ExecuteBeadStatusLandConflict, events[0].Summary)
-	assert.Contains(t, events[0].Body, "preserve_ref=")
+	require.Len(t, events, 2)
+	var sawIntent, sawExecute bool
+	for _, ev := range events {
+		switch ev.Kind {
+		case "execution-routing-intent":
+			sawIntent = true
+		case "execute-bead":
+			sawExecute = true
+			assert.Equal(t, ExecuteBeadStatusLandConflict, ev.Summary)
+			assert.Contains(t, ev.Body, "preserve_ref=")
+		}
+	}
+	assert.True(t, sawIntent, "routing intent evidence must be recorded")
+	assert.True(t, sawExecute, "execute-bead event must still be recorded")
 }
 
 func TestExecuteBeadWorkerPreservedNeedsReviewEventShape(t *testing.T) {
@@ -283,11 +305,22 @@ func TestExecuteBeadWorkerPreservedNeedsReviewEventShape(t *testing.T) {
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, ExecuteBeadStatusPreservedNeedsReview, events[0].Summary)
-	assert.Contains(t, events[0].Body, "preserved-needs-review")
-	assert.Contains(t, events[0].Body, "preserve_ref="+preserveRef)
-	assert.Contains(t, events[0].Body, "gate_summary=large-deletion gate: huge.txt deleted 250 lines")
+	require.Len(t, events, 2)
+	var sawIntent, sawExecute bool
+	for _, ev := range events {
+		switch ev.Kind {
+		case "execution-routing-intent":
+			sawIntent = true
+		case "execute-bead":
+			sawExecute = true
+			assert.Equal(t, ExecuteBeadStatusPreservedNeedsReview, ev.Summary)
+			assert.Contains(t, ev.Body, "preserved-needs-review")
+			assert.Contains(t, ev.Body, "preserve_ref="+preserveRef)
+			assert.Contains(t, ev.Body, "gate_summary=large-deletion gate: huge.txt deleted 250 lines")
+		}
+	}
+	assert.True(t, sawIntent, "routing intent evidence must be recorded")
+	assert.True(t, sawExecute, "execute-bead event must still be recorded")
 }
 
 func TestExecuteBeadWorkerNoChangesStaysOpenAndContinues(t *testing.T) {
@@ -336,9 +369,12 @@ func TestExecuteBeadWorkerNoChangesStaysOpenAndContinues(t *testing.T) {
 	require.NoError(t, err)
 	// NoChangesContract emits a triage event (no_changes_unjustified) plus the
 	// terminal executeBeadLoopEvent describing the attempt outcome.
-	require.Len(t, events, 2)
+	require.Len(t, events, 3)
 	var sawTerminal, sawTriage bool
 	for _, ev := range events {
+		if ev.Kind == "execution-routing-intent" {
+			continue
+		}
 		if ev.Summary == ExecuteBeadStatusNoChanges {
 			sawTerminal = true
 			assert.Contains(t, ev.Body, "agent made no commits")
@@ -881,8 +917,19 @@ func TestExecuteBeadWorkerCustomSatisfactionCheckerClosesBeadWhenSatisfied(t *te
 
 	events, err := store.Events(b.ID)
 	require.NoError(t, err)
-	require.Len(t, events, 1)
-	assert.Equal(t, ExecuteBeadStatusAlreadySatisfied, events[0].Summary)
+	require.Len(t, events, 2)
+	var sawIntent, sawExecute bool
+	for _, ev := range events {
+		switch ev.Kind {
+		case "execution-routing-intent":
+			sawIntent = true
+		case "execute-bead":
+			sawExecute = true
+			assert.Equal(t, ExecuteBeadStatusAlreadySatisfied, ev.Summary)
+		}
+	}
+	assert.True(t, sawIntent, "routing intent evidence must be recorded")
+	assert.True(t, sawExecute, "execute-bead event must still be recorded")
 }
 
 // TestExecuteBeadWorkerCustomSatisfactionCheckerLeavesBeadOpenWhenUnresolved

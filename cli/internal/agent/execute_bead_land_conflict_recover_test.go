@@ -339,8 +339,19 @@ func TestExecuteBeadLoopLandConflict_EmptyProjectRoot_SkipsRecovery(t *testing.T
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
-	require.Len(t, events, 1, "exactly one execute-bead event when recovery is skipped")
-	assert.Equal(t, ExecuteBeadStatusLandConflict, events[0].Summary)
-	assert.True(t, strings.Contains(events[0].Body, "preserve_ref="),
-		"event body must contain preserve_ref")
+	require.Len(t, events, 2, "routing intent plus exactly one execute-bead event when recovery is skipped")
+	var sawIntent, sawExecute bool
+	for _, ev := range events {
+		switch ev.Kind {
+		case "execution-routing-intent":
+			sawIntent = true
+		case "execute-bead":
+			sawExecute = true
+			assert.Equal(t, ExecuteBeadStatusLandConflict, ev.Summary)
+			assert.True(t, strings.Contains(ev.Body, "preserve_ref="),
+				"event body must contain preserve_ref")
+		}
+	}
+	assert.True(t, sawIntent, "routing intent evidence must be recorded")
+	assert.True(t, sawExecute, "execute-bead event must still be recorded")
 }

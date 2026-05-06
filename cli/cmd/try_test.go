@@ -3,6 +3,7 @@ package cmd
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"strings"
 	"sync"
@@ -224,6 +225,67 @@ func TestTry_HappyPath_ClaimsAndExecutes(t *testing.T) {
 	b, storeErr := store.Get("happy-bead-001")
 	require.NoError(t, storeErr)
 	assert.Equal(t, bead.StatusClosed, b.Status, "bead must be closed after successful execution")
+}
+
+// TestTryRecordsExecutionRoutingIntent verifies that ddx try records the
+// bead-hint routing intent evidence and prints the concise routing-intent
+// line when a durable tier label is present.
+func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
+	env := NewTestEnvironment(t)
+	skillPath := env.Dir + "/.agents/skills/ddx/bead-lifecycle"
+	require.NoError(t, os.MkdirAll(skillPath, 0o755))
+	require.NoError(t, os.WriteFile(skillPath+"/SKILL.md", []byte("lint"), 0o644))
+
+	store := bead.NewStore(env.Dir + "/.ddx")
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:          "hint-bead-001",
+		Title:       "Hinted bead",
+		Labels:      []string{"tier:smart"},
+		Description: "PROBLEM\nhard decision\n\nSMART JUSTIFICATION:\nThis bead decides the durable execution-hint contract.\n",
+	}))
+
+	factory := NewCommandFactory(env.Dir)
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
+	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+		return agent.ExecuteBeadReport{
+			BeadID:      beadID,
+			Status:      agent.ExecuteBeadStatusSuccess,
+			SessionID:   "sess-hint",
+			ResultRev:   "deadbeef01234567",
+			Harness:     "claude",
+			Provider:    "anthropic",
+			Model:       "claude-sonnet-4-6",
+			ActualPower: 91,
+		}, nil
+	})
+	root := factory.NewRootCommand()
+
+	out, err := executeCommand(root, "try", "hint-bead-001", "--harness=claude", "--no-review", "--no-review-i-know-what-im-doing")
+	require.NoError(t, err, "ddx try with a smart bead hint must succeed: %s", out)
+	assert.Contains(t, out, "routing intent: tier=smart source=bead_hint")
+
+	events, err := store.Events("hint-bead-001")
+	require.NoError(t, err)
+
+	var intentEvent *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "execution-routing-intent" {
+			intentEvent = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, intentEvent, "expected execution-routing-intent evidence on the bead")
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(intentEvent.Body), &body))
+	assert.Equal(t, "bead_hint", body["routing_intent_source"])
+	assert.Equal(t, "smart", body["requested_tier"])
+	assert.Contains(t, body["smart_justification"], "durable execution-hint contract")
+	assert.Equal(t, "claude", body["actual_harness"])
+	assert.Equal(t, "anthropic", body["actual_provider"])
+	assert.Equal(t, "claude-sonnet-4-6", body["actual_model"])
+	assert.Equal(t, float64(91), body["actual_power"])
 }
 
 // TestTryInterrupt_InFlightAttemptUnclaimsTarget verifies that cancelling
