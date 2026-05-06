@@ -1,0 +1,5 @@
+internal/server/graphql/resolver.go:21 — DELETE: `NewResolver` is not present in the current checkout; the package is constructed through gqlgen's generated `ResolverRoot` wiring and `Resolver.Mutation`/`Query`/`Subscription` methods instead.
+internal/server/graphql/resolver_meta.go:90 — DELETE: `personaConnectionFrom` is not present in the current checkout; persona GraphQL mapping now flows through `Personas`, `Persona`, `PersonaByRole`, and `personaToGQL`.
+internal/server/graphql/resolver_provider_models.go:292 — DELETE: `resetProviderModelsCacheForTest` is not present in the current checkout; provider-model cache tests reset `providerModelsCache` directly in `resolver_provider_models_test.go`.
+internal/server/graphql/resolver_providers.go:35 — DELETE: `RecordHarnessRateLimit` is not present in the current checkout; the remaining harness quota path reads `LookupHarnessRateLimit` in `quotaFromHarnessInfo`.
+internal/server/graphql/resolver_providers.go:55 — DELETE: `resetHarnessRateLimitCache` is not present in the current checkout; the cache is only exposed through `LookupHarnessRateLimit` and the current provider-status path.
