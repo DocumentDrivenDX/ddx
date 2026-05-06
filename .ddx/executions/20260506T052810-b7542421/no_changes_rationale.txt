@@ -1,0 +1,2 @@
+verification_command: cd cli && go test ./internal/bead/axon/... && cd .. && lefthook run pre-commit
+reason: The requested Axon subscription smoke test already exists as cli/internal/bead/axon/subscription_smoke_test.go:20-95, using the generated Axon client plus NewWebSocketSubscriptionTransport, and the package test suite plus pre-commit gate both pass in this worktree.
