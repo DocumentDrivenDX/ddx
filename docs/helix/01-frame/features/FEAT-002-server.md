@@ -165,7 +165,7 @@ authoritative source for historical phase summaries.
 Worker lifecycle events are DDx-owned. Forwarded Fizeau agent events are
 opaque payloads attached to agent-session records, not worker lifecycle state,
 and the server surfaces them without interpreting transcript semantics or
-rendering the inner session log. Fizeau owns transcript rendering and
+rendering inner session logs. Fizeau owns transcript rendering and
 session-log presentation.
 
 22. `GET /api/projects/:project/workers` — list active and recently completed
