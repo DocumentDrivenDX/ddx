@@ -33,10 +33,10 @@ when set), and the last-known server URL is written to
 project roots concurrently; each request is resolved against one explicit
 project context before adapters run. DDx manages worker/bead lifecycle
 progress and worker records only. Fizeau owns the agent transcript/session
-payloads that may travel through agent-session records and owns their
-rendering. Forwarded Fizeau agent events remain opaque attachments owned by
-Fizeau, never become worker state or lifecycle state, and are not rendered as
-DDx progress views.
+payloads that may travel through agent-session records, including their
+progress and session rendering. Forwarded Fizeau agent events remain opaque
+attachments owned by Fizeau, never become worker state or lifecycle state, and
+are surfaced only as opaque Fizeau payloads alongside DDx progress views.
 
 ## Architecture
 
