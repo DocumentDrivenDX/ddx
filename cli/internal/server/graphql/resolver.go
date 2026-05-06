@@ -153,6 +153,10 @@ type Resolver struct {
 	ReportedWorkers ReportedWorkersProvider
 }
 
+// NewResolver returns a zero-initialized resolver root.
+// Server construction wires the concrete collaborators after creating it.
+func NewResolver() *Resolver { return &Resolver{} }
+
 // ReportedWorkersProvider returns a snapshot of the worker_ingest derived
 // view (ADR-022 rev 5 §Worker-server interface), already classified by
 // freshness state. The server package supplies the production implementation.

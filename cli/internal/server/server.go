@@ -4865,25 +4865,25 @@ func (s *Server) graphqlHandler() http.Handler {
 		if s.hub != nil {
 			fedProvider = newHubFederationProvider(s)
 		}
+		resolver := ddxgraphql.NewResolver()
+		resolver.State = s.state
+		resolver.WorkingDir = s.WorkingDir
+		resolver.Workers = s.workers
+		resolver.BeadBus = s.beadHub
+		resolver.Actions = &workerDispatchAdapter{manager: s.workers}
+		resolver.ExecLogs = &execLogAdapter{}
+		resolver.CoordMetrics = &coordMetricsAdapter{reg: s.workers.LandCoordinators}
+		resolver.CSRFTokens = s.csrfTokens
+		resolver.OperatorPromptIdempotency = s.operatorPromptIdempotency
+		resolver.OperatorPromptAutoApproveAllowlist = s.operatorPromptAutoApproveAllowlist
+		resolver.PromptCapBytes = serverPromptCapBytes
+		resolver.BuildSHA = serverBuildSHA()
+		resolver.NodeID = s.state.Node.ID
+		resolver.ExecuteLoopWaker = s.workers
+		resolver.Federation = fedProvider
+		resolver.ReportedWorkers = s.reportedWorkers
 		gqlServer := handler.New(ddxgraphql.NewExecutableSchema(ddxgraphql.Config{
-			Resolvers: &ddxgraphql.Resolver{
-				State:                              s.state,
-				WorkingDir:                         s.WorkingDir,
-				Workers:                            s.workers,
-				BeadBus:                            s.beadHub,
-				Actions:                            &workerDispatchAdapter{manager: s.workers},
-				ExecLogs:                           &execLogAdapter{},
-				CoordMetrics:                       &coordMetricsAdapter{reg: s.workers.LandCoordinators},
-				CSRFTokens:                         s.csrfTokens,
-				OperatorPromptIdempotency:          s.operatorPromptIdempotency,
-				OperatorPromptAutoApproveAllowlist: s.operatorPromptAutoApproveAllowlist,
-				PromptCapBytes:                     serverPromptCapBytes,
-				BuildSHA:                           serverBuildSHA(),
-				NodeID:                             s.state.Node.ID,
-				ExecuteLoopWaker:                   s.workers,
-				Federation:                         fedProvider,
-				ReportedWorkers:                    s.reportedWorkers,
-			},
+			Resolvers:  resolver,
 			Directives: ddxgraphql.DirectiveRoot{},
 		}))
 		gqlServer.AddTransport(transport.POST{})
