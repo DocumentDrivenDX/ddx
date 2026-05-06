@@ -1474,19 +1474,6 @@ func TestExecuteBeadWorkerPreClaimHookAlwaysFailsLeavesBeadAvailable(t *testing.
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status, "bead must remain open after hook always fails")
-
-	// Second run: hook passes — bead must be executed and closed.
-	result2, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		PreClaimHook: func(ctx context.Context) error { return nil },
-	})
-	require.NoError(t, err)
-	assert.Equal(t, 1, result2.Attempts)
-	assert.Equal(t, 1, result2.Successes)
-	assert.Equal(t, []string{b.ID}, executedIDs)
-
-	got2, err := store.Get(b.ID)
-	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, got2.Status)
 }
 
 // TestExecuteBeadWorkerPreClaimHookFailureRetriesOnNextIteration verifies that

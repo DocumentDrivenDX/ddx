@@ -12,6 +12,7 @@ import (
 	"time"
 
 	agenttry "github.com/DocumentDrivenDX/ddx/internal/agent/try"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/work"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
@@ -376,6 +377,9 @@ type ExecuteBeadWorker struct {
 	// validate the commit against the bead's acceptance criteria. When nil,
 	// post-merge review is skipped (same behaviour as --no-review).
 	Reviewer BeadReviewer
+	// ComplexityGate, when non-nil, is consulted before a bead is claimed.
+	// The zero value fail-opens once and then allows.
+	ComplexityGate work.Guard
 
 	// ConflictResolver, when non-nil, is called after the 3-way ort auto-merge
 	// step fails to recover a preserved iteration. The implementation should
@@ -454,13 +458,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	profile := rcfg.Profile()
 
 	result := &ExecuteBeadLoopResult{}
-	attempted := make(map[string]struct{})
-	// hookFailed tracks beads whose pre-claim hook failed on first presentation
-	// in this run. A bead in hookFailed but not attempted gets one retry: on the
-	// second hook failure it moves to attempted so nextCandidate will skip it and
-	// the loop can exit gracefully. This prevents infinite spinning when the hook
-	// always fails while still allowing transient hook failures to be retried.
-	hookFailed := make(map[string]struct{})
+	resultsResetIdx := 0
+	complexityGuard := work.NewComplexityGuard(w.ComplexityGate, runtime.Log)
+	preclaimGuard := work.NewPreClaimGuard(runtime.PreClaimHook, w.Store, runtime.Log, now, 30*time.Second)
 
 	emit := func(eventType string, data map[string]any) {
 		writeLoopEvent(runtime.EventSink, runtime.SessionID, eventType, data, now().UTC())
@@ -509,7 +509,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			return result, err
 		}
 
-		candidate, skips, ok, err := w.nextCandidate(attempted, runtime.LabelFilter, runtime.TargetBeadID)
+		candidate, skips, ok, err := w.nextCandidate(ctx, result.Results[resultsResetIdx:], []work.Guard{complexityGuard}, runtime.LabelFilter, runtime.TargetBeadID)
 		if err != nil {
 			exitReason = "fatal_config"
 			return result, err
@@ -583,18 +583,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				TS:        now().UTC(),
 				Message:   "no_ready_work",
 			})
-			// Reset per-Run attempted/hookFailed maps before sleeping
-			// (ddx-dc157075 AC #2). Without this reset, beads attempted earlier
-			// in this Run remain filtered out of nextCandidate forever, so the
-			// "attempted-once = exit" trap reasserts itself: a bead whose
-			// cooldown has expired since its last attempt would never be
-			// re-picked by the same long-running worker.
-			for k := range attempted {
-				delete(attempted, k)
-			}
-			for k := range hookFailed {
-				delete(hookFailed, k)
-			}
+			resultsResetIdx = len(result.Results)
 			if err := sleepOrWake(ctx, runtime.PollInterval, runtime.WakeCh); err != nil {
 				if exitReason == "" {
 					switch err {
@@ -623,34 +612,19 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			TS:        now().UTC(),
 		})
 
-		// Pre-claim hook: fetch origin + verify ancestry before claiming.
-		// On error the bead is skipped for this iteration; the loop
-		// continues (ctx is not cancelled). The bead is NOT added to
-		// attempted on the FIRST failure so a transient hook failure (e.g.
-		// diverged branch) allows a retry on the next iteration. On a
-		// SECOND failure for the same bead in the same run it is moved into
-		// attempted so nextCandidate will skip it, preventing an infinite
-		// loop when the hook always fails.
-		if runtime.PreClaimHook != nil {
-			if hookErr := runtime.PreClaimHook(ctx); hookErr != nil {
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "pre-claim hook: %v (skipping %s)\n", hookErr, candidate.ID)
-				}
-				emit("preclaim.skipped", map[string]any{
-					"bead_id": candidate.ID,
-					"reason":  hookErr.Error(),
-				})
-				if _, alreadyFailed := hookFailed[candidate.ID]; alreadyFailed {
-					// Second failure in this run: stop retrying this bead.
-					attempted[candidate.ID] = struct{}{}
-				} else {
-					hookFailed[candidate.ID] = struct{}{}
-				}
-				continue
+		if allowed, reason := complexityGuard.Allow(ctx, candidate.ID); !allowed {
+			if runtime.Log != nil && reason != "" {
+				_, _ = fmt.Fprintf(runtime.Log, "complexity gate: %s (skipping %s)\n", reason, candidate.ID)
 			}
+			continue
 		}
-
-		attempted[candidate.ID] = struct{}{}
+		if allowed, reason := preclaimGuard.Allow(ctx, candidate.ID); !allowed {
+			emit("preclaim.skipped", map[string]any{
+				"bead_id": candidate.ID,
+				"reason":  reason,
+			})
+			continue
+		}
 
 		// Routing preflight gate (FEAT-006 D3, ddx-98e6e9ef): consult the
 		// upstream typed-incompatibility surface BEFORE claiming. If the
@@ -736,6 +710,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					"suggested_fixes":  lintResult.SuggestedFixes,
 					"waivers_applied":  lintResult.WaiversApplied,
 				})
+				if runtime.Once {
+					exitReason = "once_complete"
+					return result, nil
+				}
 				continue
 			}
 		}
@@ -1255,9 +1233,10 @@ type pickerSkip struct {
 // in the priority-sorted ReadyExecution result.
 //
 // It delegates filter+sort to PreviewQueue and then additionally filters out
-// beads present in the per-Run attempted map (which is non-deterministic across
-// runs and therefore excluded from the stable PreviewQueue surface).
-func (w *ExecuteBeadWorker) nextCandidate(attempted map[string]struct{}, labelFilter, targetBeadID string) (bead.Bead, []pickerSkip, bool, error) {
+// beads already present in the current drain results slice (which is
+// non-deterministic across runs and therefore excluded from the stable
+// PreviewQueue surface).
+func (w *ExecuteBeadWorker) nextCandidate(ctx context.Context, results []ExecuteBeadReport, guards []work.Guard, labelFilter, targetBeadID string) (bead.Bead, []pickerSkip, bool, error) {
 	// Use PreviewQueue for the stable filter+sort logic. Limit=0 returns all
 	// entries so we can scan for the first non-attempted candidate.
 	entries, err := PreviewQueue(w.Store, PickerFilters{LabelFilter: labelFilter}, 0)
@@ -1276,6 +1255,12 @@ func (w *ExecuteBeadWorker) nextCandidate(attempted map[string]struct{}, labelFi
 	byID := make(map[string]bead.Bead, len(ready))
 	for _, b := range ready {
 		byID[b.ID] = b
+	}
+	attempted := make(map[string]struct{}, len(results))
+	for _, report := range results {
+		if report.BeadID != "" {
+			attempted[report.BeadID] = struct{}{}
+		}
 	}
 
 	var skips []pickerSkip
@@ -1296,6 +1281,24 @@ func (w *ExecuteBeadWorker) nextCandidate(attempted map[string]struct{}, labelFi
 		if entry.FilterDecision == FilterDecisionSkipped {
 			// PreviewQueue already applied label_filter; record as skip.
 			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, Reason: "label_filter"})
+			continue
+		}
+		allowed := true
+		for _, guard := range guards {
+			if guard == nil {
+				continue
+			}
+			ok, reason := guard.Allow(ctx, candidate.ID)
+			if ok {
+				continue
+			}
+			allowed = false
+			if reason != "" {
+				skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, Reason: reason})
+			}
+			break
+		}
+		if !allowed {
 			continue
 		}
 		return candidate, skips, true, nil
