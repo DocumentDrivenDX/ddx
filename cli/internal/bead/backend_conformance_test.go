@@ -20,6 +20,21 @@ func backendConformanceCases() []backendConformanceCase {
 	}
 }
 
+// newBackendConformanceStore makes the backend choice explicit for the
+// package-wide conformance matrix instead of relying on any default path.
+func newBackendConformanceStore(t *testing.T, backend string) *Store {
+	t.Helper()
+	switch backend {
+	case BackendJSONL:
+		return newJSONLStore(t)
+	case BackendAxon:
+		return newAxonStore(t)
+	default:
+		t.Fatalf("unsupported backend %q", backend)
+		return nil
+	}
+}
+
 func forEachBackendConformanceCase(t *testing.T, fn func(*testing.T, backendConformanceCase)) {
 	t.Helper()
 	for _, tc := range backendConformanceCases() {
@@ -33,18 +48,7 @@ func forEachBackendConformanceCase(t *testing.T, fn func(*testing.T, backendConf
 
 func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 	t.Helper()
-	makeStore := func(t *testing.T) *Store {
-		t.Helper()
-		switch tc.backend {
-		case BackendJSONL:
-			return newJSONLStore(t)
-		case BackendAxon:
-			return newAxonStore(t)
-		default:
-			t.Fatalf("unsupported backend %q", tc.backend)
-			return nil
-		}
-	}
+	makeStore := func(t *testing.T) *Store { return newBackendConformanceStore(t, tc.backend) }
 
 	t.Run("create-get", func(t *testing.T) {
 		t.Parallel()
