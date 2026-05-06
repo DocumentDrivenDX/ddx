@@ -1,0 +1,57 @@
+{
+  "harness": "claude",
+  "model": "opus",
+  "session_id": "/Users/erik/Projects/ddx/.ddx/agent-logs/svc-1778052109429555617.jsonl",
+  "base_rev": "aa9ae829d25ecc6bae25e9786d0025e8d76bc330",
+  "result_rev": "af17ac8744b2da96fc2dfe6b6e980fa7846f6df4",
+  "bead_id": "ddx-b74e66f3",
+  "execution_dir": ".ddx/executions/20260506T072147-3a2bd0a1",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2174,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260506T072000-2ea693d9/manifest.json",
+          ".ddx/executions/20260506T072000-2ea693d9/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:FEAT-027",
+        "bytes_included": 7121,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/01-frame/features/FEAT-027-prose-quality-support.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 12028,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 23272,
+    "output_bytes": 59,
+    "elapsed_ms": 48997,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
