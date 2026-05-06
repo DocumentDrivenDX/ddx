@@ -63,6 +63,7 @@ type Report struct {
 	Error                       string
 	Stderr                      string
 	RateLimitBudget             time.Duration
+	ResourceExhausted           any
 }
 
 type Executor interface {
