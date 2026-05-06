@@ -129,14 +129,15 @@ var CancelPollInterval = 10 * time.Second
 //
 // See SD-024 / TD-024 §Runtime structs and §Stage 3.
 type ExecuteBeadRuntime struct {
-	FromRev     string // base git revision (default: HEAD)
-	PromptFile  string // override prompt file (auto-generated if empty)
-	Output      io.Writer
-	WorkerID    string // from DDX_WORKER_ID env or caller
-	BeadEvents  BeadEventAppender
-	BeadCancel  BeadCancelStore // optional: enables operator-cancel mid-attempt poll
-	Service     agentlib.FizeauService
-	AgentRunner AgentRunner
+	FromRev         string // base git revision (default: HEAD)
+	PromptFile      string // override prompt file (auto-generated if empty)
+	Output          io.Writer
+	WorkerID        string // from DDX_WORKER_ID env or caller
+	BeadEvents      BeadEventAppender
+	BeadCancel      BeadCancelStore // optional: enables operator-cancel mid-attempt poll
+	ResourceChecker ExecutionResourceChecker
+	Service         agentlib.FizeauService
+	AgentRunner     AgentRunner
 	// RateLimitMaxWait bounds the per-bead total wait spent on rate-limit
 	// retries (ddx-c6e3db02 RateLimitRetryContract / TD-031 §8.4). Zero uses
 	// RateLimitRetryDefaultBudget (5 min). Negative disables the wrapper —
@@ -678,11 +679,19 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	attemptID := GenerateAttemptID()
 	if runtime.WorkerID == "" {
 		runtime.WorkerID = os.Getenv("DDX_WORKER_ID")
 	}
 
+	resourceChecker := runtime.ResourceChecker
+	if resourceChecker == nil {
+		resourceChecker = NewExecutionResourceChecker(projectRoot, gitOps)
+	}
+	if _, err := resourceChecker.Check(ctx); err != nil {
+		return nil, err
+	}
+
+	attemptID := GenerateAttemptID()
 	wtPath := executeBeadWorktreePath(beadID, attemptID)
 	if mkErr := os.MkdirAll(filepath.Dir(wtPath), 0o755); mkErr != nil {
 		return nil, fmt.Errorf("creating execute-bead worktree parent dir: %w", mkErr)

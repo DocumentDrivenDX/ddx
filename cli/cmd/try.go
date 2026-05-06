@@ -209,6 +209,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	noRoutingFlags := harness == "" && model == "" && provider == "" && modelRef == "" &&
 		!cmd.Flags().Changed("profile")
 	autoInferTier := noRoutingFlags && !projectHasRoutingConfig(projectRoot)
+	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
 
 	// Build the executor: either the test override or the real single-tier executor.
 	var executor agent.ExecuteBeadExecutor
@@ -247,9 +248,10 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 			attemptRcfg, _ := config.LoadAndResolve(projectRoot, loopOverrides)
 			gitOps := &agent.RealGitOps{}
 			res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, execBeadID, attemptRcfg, agent.ExecuteBeadRuntime{
-				FromRev:    fromRev,
-				Output:     cmd.OutOrStdout(),
-				BeadEvents: bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+				FromRev:         fromRev,
+				Output:          cmd.OutOrStdout(),
+				BeadEvents:      bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+				ResourceChecker: resourceChecker,
 			}, gitOps)
 			if execErr != nil && res == nil {
 				return agent.ExecuteBeadReport{}, execErr
@@ -323,8 +325,6 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return fmt.Errorf("load resolved config: %w", err)
 	}
-
-	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
 	if _, err := resourceChecker.Check(cmd.Context()); err != nil {
 		if resErr, ok := err.(*agent.ResourceExhaustedError); ok && resErr != nil {
 			fmt.Fprintln(cmd.ErrOrStderr(), resErr.Error())
