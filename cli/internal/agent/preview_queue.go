@@ -38,8 +38,8 @@ const (
 )
 
 // QueueEntry is one row in the PreviewQueue result. Position is 1-based;
-// FilterDecision and Why explain why the picker would or would not pick this
-// bead as the next claim.
+// QueueRank is surfaced for ranked beads; FilterDecision and Why explain why
+// the picker would or would not pick this bead as the next claim.
 type QueueEntry struct {
 	Position       int            `json:"position"`
 	BeadID         string         `json:"id"`

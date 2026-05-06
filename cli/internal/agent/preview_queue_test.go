@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"testing"
 	"time"
@@ -82,6 +83,29 @@ func TestPreviewQueue_QueueRankSort(t *testing.T) {
 
 	assert.Equal(t, "ddx-unranked", entries[2].BeadID)
 	assert.Nil(t, entries[2].QueueRank)
+}
+
+// TestPreviewQueue_QueueRankJSONOmit verifies that ranked entries serialize
+// queue_rank while unranked entries keep the field omitted.
+func TestPreviewQueue_QueueRankJSONOmit(t *testing.T) {
+	store, qs := newPreviewTestStore(t)
+
+	ranked := &bead.Bead{ID: "ddx-ranked", Title: "Ranked", Priority: 0, Extra: map[string]any{"queue-rank": 4}}
+	unranked := &bead.Bead{ID: "ddx-unranked", Title: "Unranked", Priority: 0}
+	require.NoError(t, store.Create(ranked))
+	require.NoError(t, store.Create(unranked))
+
+	entries, err := PreviewQueue(qs, PickerFilters{}, 0)
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+
+	rankedJSON, err := json.Marshal(entries[0])
+	require.NoError(t, err)
+	assert.Contains(t, string(rankedJSON), `"queue_rank":4`)
+
+	unrankedJSON, err := json.Marshal(entries[1])
+	require.NoError(t, err)
+	assert.NotContains(t, string(unrankedJSON), "queue_rank")
 }
 
 // TestPreviewQueue_LabelFilter verifies that label filtering narrows the queue
