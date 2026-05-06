@@ -1,0 +1,5 @@
+NewResolver: DELETE - no `NewResolver` definition exists in the current `cli/internal/server/graphql` tree; server wiring constructs `&ddxgraphql.Resolver{...}` directly in `cli/internal/server/server.go:4869`.
+personaConnectionFrom: DELETE - no symbol definition exists in the current tree; persona query shaping is handled by `personaProjectRoot` and the `Personas` / `Persona` resolvers in `cli/internal/server/graphql/resolver_meta.go`.
+resetProviderModelsCacheForTest: DELETE - no symbol definition exists in the current tree; provider-model tests reset the cache directly via `providerModelsCache` in `cli/internal/server/graphql/resolver_provider_models_test.go`.
+RecordHarnessRateLimit: DELETE - no function definition exists in the current tree; harness quota state is read through `LookupHarnessRateLimit` / `quotaFromHarnessInfo` in `cli/internal/server/graphql/resolver_providers.go`.
+resetHarnessRateLimitCache: DELETE - no symbol definition exists in the current tree; harness rate-limit tests reset `harnessRateLimitCache` directly in `cli/internal/server/graphql/providers_unified_test.go`.
