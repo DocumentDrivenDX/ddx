@@ -38,9 +38,10 @@ time inferring intent than executing it.
 - Reviewers have no deterministic prose-quality signal to point at when the
   problem is specific wording rather than missing requirements
 
-**Desired outcome:** DDx can identify common AI-writing tropes and generic
-prose patterns with deterministic rules, explain each finding, and suggest a
-concrete edit without rewriting the author's voice away.
+**Desired outcome:** DDx can identify common AI-writing tropes, generic prose
+patterns, and recognizable LLM-default constructions with deterministic rules,
+explain each finding, and suggest a concrete edit without rewriting the
+author's voice away.
 
 ## Users and Content Modes
 
@@ -116,6 +117,10 @@ findings and do not change the review verdict by default.
 8. **Review compatibility** — the finding format is stable enough for
    `ddx bead review <id> --prose` to consume without changing the core rule
    model.
+9. **AI-slop avoidance** — prose checks must explicitly target common
+   LLM-default constructions: unsupported polish words, vague benefit claims,
+   inflated transition phrases, generic summary sentences, and wording that
+   sounds fluent while omitting actor, action, artifact, boundary, or evidence.
 
 ### Measurable Acceptance Criteria
 
@@ -131,8 +136,9 @@ sample:
 - `suggested_edit`: a concrete replacement or rewrite suggestion
 
 The feature must also be able to flag generic prose patterns such as vague
-claims, filler transitions, and uncoupled abstractions while preserving the
-document's own vocabulary and intended voice.
+claims, filler transitions, uncoupled abstractions, and common AI-slop
+constructions while preserving the document's own vocabulary and intended
+voice.
 
 Findings must be structural rather than subjective. Each result must trace to a
 specific file and line span, and the rationale must explain the triggered rule
@@ -161,6 +167,7 @@ finding must remain explainable and reviewable on its own.
 - Repetition of empty emphasis phrases
 - Passive or indirect phrasing where the responsible actor is known
 - Voice drift that replaces project-specific terminology with generic wording
+- LLM-default polish that uses fluent confidence in place of concrete evidence
 
 These families are examples of the target shape, not a final implementation
 catalog.

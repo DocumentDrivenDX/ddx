@@ -34,6 +34,8 @@ Use a finding when it identifies one of these problems:
 - The prose hides the actor, action, consequence, or review target.
 - The wording replaces a DDx concept with a vague substitute.
 - Repeated or filler text makes the document harder to execute.
+- Common AI-slop constructions make the text sound polished while omitting the
+  actor, action, artifact, boundary, measurement, or evidence.
 
 Ignore or correct the checker when the flagged text is already precise, such
 as a path, command, table cell, API name, quoted contract, empirical claim, or

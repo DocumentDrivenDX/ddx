@@ -10,7 +10,8 @@ voice.
 Prose Quality Support evaluates text with named rules and returns structural
 findings. A useful finding should explain how the prose became harder to
 execute, review, or trust. Typical findings call out unsupported broad claims,
-filler transitions, repeated text, or wording that hides the concrete subject.
+filler transitions, repeated text, common AI-slop constructions, or wording
+that hides the concrete subject.
 
 It is useful when you want:
 
@@ -33,6 +34,12 @@ Legitimate technical lists, headings, paths, tables, and project terminology
 are allowed and often desirable. Dense prose is not automatically bad; the
 question is whether the text gives a maintainer or agent enough concrete
 detail to act.
+
+AI-slop findings target prose behavior, not authorship. The issue is not that
+a model may have written the sentence; the issue is that the sentence uses
+fluent polish, inflated benefit language, or generic transitions while omitting
+the actor, action, artifact, boundary, measurement, or evidence a DDx document
+needs.
 
 ## Run Changed-Prose Checks
 
