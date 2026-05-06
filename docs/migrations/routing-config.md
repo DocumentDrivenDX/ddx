@@ -10,6 +10,8 @@ model/provider routing.
 Delete those keys from project and user config. DDx execution config should
 describe queue cadence, retry policy, power bounds, and evidence handling.
 Fizeau routing config owns provider/model catalogs, fuzzy matching, fallback
-policy, and route health. Explicit harness, provider, or model values are
+policy, route health, and model alias resolution. DDx execution config owns
+`run` / `try` / `work` policy, while Fizeau routing config owns the concrete
+route. Explicit `--harness`, `--provider`, and `--model` values are
 operator-supplied passthrough controls only; they are not replacement routing
 policy and are not filled in from `agent.*` defaults.

@@ -36,8 +36,9 @@ constraints.
 ## Decision
 
 DDx power escalation is a DDx retry-policy decision expressed only by changing
-the next request's `MinPower`. DDx does not choose, substitute, downgrade, or
-fallback concrete harnesses, providers, or models.
+the next request's `MinPower` and carrying the same request facts forward.
+DDx does not choose, substitute, downgrade, or fallback concrete harnesses,
+providers, or models. Fizeau chooses the concrete route.
 
 ### Primary Attempt Escalation
 

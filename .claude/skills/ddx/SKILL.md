@@ -59,6 +59,8 @@ exact definitions.
 - **Harness** — a Fizeau routing concept. DDx may pass `--harness` as
   an operator-supplied constraint, but DDx does not validate, rank, fallback, or
   branch on harness names.
+  Example: `ddx run --model qwen36 --prompt task.md` forwards `qwen36`
+  unchanged; Fizeau owns the fuzzy match.
 - **Persona** — a Markdown file (YAML frontmatter + body) that
   defines an AI personality. DDx injects the body as a system-prompt
   addendum to `ddx run`. `ddx persona list/show/bind`.
@@ -70,6 +72,8 @@ exact definitions.
 - **Power bounds** — `MinPower` and optional `MaxPower` integers passed to the
   upstream execution service. DDx may raise `MinPower` on eligible retries;
   Fizeau owns the concrete harness/provider/model routing.
+  DDx passes raw `--model`, `--provider`, and `--harness` strings through
+  unchanged when operators supply them.
 - **Plugin** — a self-contained extension installed to
   `.ddx/plugins/<name>/`. The default `ddx` plugin (personas,
   prompts, patterns, templates) is auto-installed by `ddx init`.
