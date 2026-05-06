@@ -139,15 +139,18 @@ DDx does ship nested workflow skills under the root skill tree when a
 workflow has enough procedure to deserve its own reusable instructions. Current
 examples include `bead-breakdown/`, `replay-bead/`, `compare-prompts/`,
 `benchmark-suite/`, `effort-estimate/`, and `adversarial-review/`. ADR-023
-(`../../02-design/adr/ADR-023-bead-lifecycle-quality-policy.md`) adds the
-same model for bead-lifecycle quality: pre-dispatch lint and post-attempt
-triage invoke a nested workflow skill while keeping routing through the root
-`ddx` skill.
+(`../../02-design/adr/ADR-023-bead-lifecycle-quality-policy.md`) adds the same
+model for bead-lifecycle quality: bead readiness assessment, lint/rubric
+scoring, and post-attempt triage invoke a nested workflow skill while keeping
+routing through the root `ddx` skill.
 
 Nested workflow skills are compositions over FEAT-010's three layers. They may
 tell the harness to run `ddx run`, `ddx try`, or `ddx work`, but they do not
 create a fourth run layer, bespoke storage shape, or harness-specific
 frontmatter contract.
+
+The bead-lifecycle skill owns readiness, lint/rubric scoring, triage, and
+refine guidance for this policy surface.
 
 ### Installation
 
