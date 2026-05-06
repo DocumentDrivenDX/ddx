@@ -1,0 +1,88 @@
+{
+  "attempt_id": "20260506T115111-9fe732fc",
+  "bead_id": "ddx-a6e65634",
+  "base_rev": "0646b09220bcc3ec3f55dc7b5d44c6c5ae1a8da5",
+  "created_at": "2026-05-06T11:51:13.511109094Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a6e65634",
+    "title": "Document DDx Prose Quality Support",
+    "description": "CONTEXT\nAfter the skill, rules, and advisory CLI command exist, DDx needs user-facing documentation that explains Prose Quality Support without overclaiming. The docs must be clear that DDx provides quality guidance and deterministic checks, not AI detection.\n\nIN-SCOPE FILES\n- docs/prose-quality.md or the docs path chosen by TD-036\n- README.md or docs index only for a concise link\n- CHANGELOG.md if project convention requires an entry for user-facing CLI behavior\n\nREQUIRED DOC CONTENT\n- What Prose Quality Support does and does not do.\n- How to run `ddx doc prose --changed`.\n- Example finding output.\n- Config examples for mode, vocabulary accept/reject, severity, includes/excludes, and advisory/blocking policy if supported.\n- Guidance on when to use the human-writing-support skill.\n- Explicit statement: not an AI detector and not detector bypass.\n\nOUT-OF-SCOPE\n- New checker behavior.\n- Review integration.",
+    "acceptance": "1. User docs for Prose Quality Support exist and include `ddx doc prose --changed`, config examples, and example findings.\n2. `rg -n \"not an AI detector|detector bypass|advisory|vocabulary|technical|planning|public|human-writing-support\" docs README.md CHANGELOG.md` returns matches in appropriate user-facing docs.\n3. Docs explain that technical lists, headings, and project terminology are legitimate and can be configured rather than blanket-suppressed.\n4. `lefthook run pre-commit` passes.",
+    "parent": "ddx-ccda7a32",
+    "labels": [
+      "phase:2",
+      "area:docs",
+      "kind:docs",
+      "prose-quality"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T11:51:11Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T11:29:27.59508213Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T112816-fb3e1761\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":809686,\"output_tokens\":6353,\"total_tokens\":816039,\"cost_usd\":0,\"duration_ms\":69107,\"exit_code\":0}",
+          "created_at": "2026-05-06T11:29:27.822334912Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=816039 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T11:29:34.484846268Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=968aff466755408ff8a32b9e7c24dd3a02b66ce5\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T07:34:39-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=15275\noutput_bytes=0\nelapsed_ms=4114",
+          "created_at": "2026-05-06T11:29:39.831087383Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=968aff466755408ff8a32b9e7c24dd3a02b66ce5\nbase_rev=75184cd7a8a87945d84d5b1b88ae15fbb37ac4f7",
+          "created_at": "2026-05-06T11:29:40.212936254Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T11:51:11.040559756Z",
+      "spec-id": "FEAT-027"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-027",
+      "path": "docs/helix/01-frame/features/FEAT-027-prose-quality-support.md",
+      "title": "Feature: Prose Quality Support"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T115111-9fe732fc",
+    "prompt": ".ddx/executions/20260506T115111-9fe732fc/prompt.md",
+    "manifest": ".ddx/executions/20260506T115111-9fe732fc/manifest.json",
+    "result": ".ddx/executions/20260506T115111-9fe732fc/result.json",
+    "checks": ".ddx/executions/20260506T115111-9fe732fc/checks.json",
+    "usage": ".ddx/executions/20260506T115111-9fe732fc/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-a6e65634-20260506T115111-9fe732fc"
+  },
+  "prompt_sha": "914b3d6a56447a06c3c5cd1eeb4700999eeb21e9840c6c88eed186aa0a5b498d"
+}
