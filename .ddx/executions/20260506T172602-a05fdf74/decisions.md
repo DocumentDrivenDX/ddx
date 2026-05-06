@@ -1,0 +1,5 @@
+DELETE NewResolver - no constructor exists in the current tree; `Server.graphqlHandler` instantiates `&ddxgraphql.Resolver{...}` inline in `cli/internal/server/server.go:4868-4886`.
+DELETE personaConnectionFrom - the current schema exposes `Query.personas` as a flat list and `cli/internal/server/graphql/resolver_meta.go` only contains `Personas`, `Persona`, `PersonaByRole`, `Coordinators`, and `CoordinatorMetricsByProject`.
+DELETE resetProviderModelsCacheForTest - the current provider-model cache helper set in `cli/internal/server/graphql/resolver_provider_models.go` exposes `providerModelsCacheTTL`, `providerModelsFetcher`, `lookupProviderModelsCache`, `loadProviderModels`, and `refreshProviderModels`, but no reset helper.
+DELETE RecordHarnessRateLimit - `cli/internal/server/graphql/resolver_providers.go` now reads harness quota via `LookupHarnessRateLimit` inside `quotaFromHarnessInfo`; there is no exported recorder function in the current tree.
+DELETE resetHarnessRateLimitCache - `cli/internal/server/graphql/resolver_providers.go` only exposes `LookupHarnessRateLimit` for the harness rate-limit cache; no reset helper remains.
