@@ -1,0 +1,48 @@
+{
+  "harness": "claude",
+  "model": "claude-opus-4-6",
+  "base_rev": "6961397966835a2256eac7a79077cdced09138a1",
+  "result_rev": "c4324fc28f30e999d6ffe4239f9f5f4b223974c1",
+  "verdict": "BLOCK",
+  "bead_id": "ddx-b669bb9f",
+  "execution_dir": ".ddx/executions/20260506T000747-1360c25e",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 2747,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 274,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260505T235706-33887e59/checks/production-reachability.json",
+          ".ddx/executions/20260505T235706-33887e59/manifest.json",
+          ".ddx/executions/20260505T235706-33887e59/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 8201,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 12883,
+    "output_bytes": 0,
+    "elapsed_ms": 4120,
+    "harness": "claude",
+    "model": "claude-opus-4-6"
+  }
+}
