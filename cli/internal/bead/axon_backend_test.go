@@ -500,29 +500,6 @@ func TestAxonBackend_ConcurrentClaimsSerialised(t *testing.T) {
 	assert.Equal(t, StatusInProgress, got.Status)
 }
 
-// TestAxonBackend_SelectableViaConfigKnobWithFlag proves AC §3: the backend
-// is selected by beads.backend=axon (via DDX_BEAD_BACKEND) only when the
-// experimental flag is set. Without the flag, beads.backend=axon must fall
-// through to the JSONL default and not silently corrupt the workspace.
-func TestAxonBackend_SelectableViaConfigKnobWithFlag(t *testing.T) {
-	t.Setenv("DDX_BEAD_BACKEND", BackendAxon)
-	t.Setenv(AxonExperimentalEnv, "1")
-
-	dir := filepath.Join(t.TempDir(), ".ddx")
-	s := NewStore(dir)
-	_, ok := s.backend.(*AxonBackend)
-	assert.True(t, ok, "DDX_BEAD_BACKEND=axon plus the experimental flag must select AxonBackend")
-}
-
-func TestAxonBackend_ConfigKnobIgnoredWithoutFlag(t *testing.T) {
-	t.Setenv("DDX_BEAD_BACKEND", BackendAxon)
-	t.Setenv(AxonExperimentalEnv, "")
-
-	dir := filepath.Join(t.TempDir(), ".ddx")
-	s := NewStore(dir)
-	assert.Nil(t, s.backend, "without the feature flag, beads.backend=axon must fall through to the built-in JSONL path; follow-up bead ddx-743bc194 will remove this gate")
-}
-
 func TestAxonExperimentalEnabledTruthyValues(t *testing.T) {
 	for _, val := range []string{"1", "true", "TRUE", "Yes", "on"} {
 		t.Run(val, func(t *testing.T) {

@@ -388,8 +388,8 @@ type BeadConfig struct {
 	IDPrefix string `yaml:"id_prefix,omitempty" json:"id_prefix,omitempty"`
 	// Backend selects the storage backend ("jsonl", "bd", "br", or "axon").
 	// Default is "jsonl". Overridden by the DDX_BEAD_BACKEND environment
-	// variable when set. The "axon" backend is experimental and requires
-	// DDX_AXON_EXPERIMENTAL=1 to be honoured (per ddx-95ec5ed5).
+	// variable when set. The config value is honored directly by the store
+	// factory, so backend: axon selects Axon without an extra opt-in flag.
 	Backend string `yaml:"backend,omitempty" json:"backend,omitempty"`
 }
 

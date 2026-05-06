@@ -125,16 +125,7 @@ func NewStore(dir string, opts ...StoreOption) *Store {
 		}
 		// Fall through to JSONL if tool not available
 	case BackendAxon:
-		// Per ddx-95ec5ed5 AC §3 the axon backend ships behind a feature
-		// flag until ddx-743bc194 (chaos conformance) signs off. Routing
-		// only happens when DDX_AXON_EXPERIMENTAL is truthy; otherwise we
-		// warn once and fall through to JSONL so the workspace stays
-		// usable on misconfiguration.
-		if AxonExperimentalEnabled() {
-			s.backend = NewAxonBackend(s.Dir, s.LockWait)
-		} else {
-			fmt.Fprintf(os.Stderr, "bead: backend=axon ignored: set %s=1 to opt in (axon backend is experimental)\n", AxonExperimentalEnv)
-		}
+		s.backend = NewAxonBackend(s.Dir, s.LockWait)
 	}
 
 	return s

@@ -34,7 +34,7 @@ If a future implementation wants a more explicit bd adapter, it should live besi
 The axon path is defined in `cli/internal/bead/axon_backend.go:15-105` and selected in `cli/internal/bead/store.go:127-137`.
 
 - `BackendAxon` is a separate backend type.
-- It is gated by `DDX_AXON_EXPERIMENTAL`.
+- It is selected by `bead.backend: axon` or `DDX_BEAD_BACKEND=axon`.
 - The current implementation is an in-process emulation that persists two JSONL collections under `.ddx/axon/`.
 
 That makes axon a feature-flagged, repository-local implementation path. The bd fallback is different:
@@ -76,6 +76,6 @@ If axon remains unstable, prefer this ordering:
 
 1. Keep JSONL as the default safe path.
 2. Use bd for operators who want Dolt-backed storage and already have the binary installed.
-3. Keep axon behind `DDX_AXON_EXPERIMENTAL` until its conformance and rollout are proven.
+3. Keep the Axon backend wired through config and the existing conformance suite until its rollout is proven.
 
 This ordering preserves the existing DDx contract: a single `Backend` interface, JSONL interchange, and a storage layer that can be selected without changing callers.

@@ -22,17 +22,15 @@ import (
 // shape directly. The fallback path keeps the existing in-process JSONL
 // emulation for callers that have not wired a transport yet.
 //
-// AC §3 ("Behind a feature flag until ddx-3ec0chaos signs off"): NewStore
-// only routes to AxonBackend when the operator opts in via
-// DDX_AXON_EXPERIMENTAL=1. With the flag unset, beads.backend=axon falls
-// through to the JSONL default and a stderr warning is emitted so the
-// misconfiguration is visible without breaking the workspace.
+// NewStore routes to AxonBackend when beads.backend is set to axon in the
+// config or via DDX_BEAD_BACKEND. The backend implementation itself still
+// supports the legacy DDX_AXON_EXPERIMENTAL helper for compatibility with
+// older tests and tooling, but the store selector no longer requires it.
 const BackendAxon = "axon"
 
-// AxonExperimentalEnv gates whether the axon backend may be selected. The
-// flag is intentionally separate from beads.backend so the chaos-test bead
-// (ddx-743bc194) can flip operators to axon machine-by-machine without
-// editing every project's config.
+// AxonExperimentalEnv is retained for compatibility with older tests and
+// tooling that still probe the legacy helper, but it no longer gates store
+// selection.
 const AxonExperimentalEnv = "DDX_AXON_EXPERIMENTAL"
 
 // axonSchemaVersion is written into every persisted entity. Schema upgrades

@@ -38,6 +38,22 @@ func newTestStore(t *testing.T) *Store {
 	return s
 }
 
+func writeStoreConfig(t *testing.T, dir string, backend string) {
+	t.Helper()
+	ddxDir := filepath.Join(dir, ".ddx")
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	content := fmt.Sprintf(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+bead:
+  backend: %s
+`, backend)
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(content), 0o644))
+}
+
 func TestInit(t *testing.T) {
 	dir := t.TempDir()
 	s := NewStore(filepath.Join(dir, ".ddx"))
@@ -57,6 +73,20 @@ func TestInitUsesCollectionFile(t *testing.T) {
 
 	_, err := os.Stat(s.File)
 	assert.NoError(t, err, "collection file should exist after init")
+}
+
+func TestNewStore_DefaultsToJSONL(t *testing.T) {
+	s := NewStore(filepath.Join(t.TempDir(), ".ddx"))
+	assert.Nil(t, s.backend)
+}
+
+func TestNewStore_SelectsAxonFromConfig(t *testing.T) {
+	tempDir := t.TempDir()
+	writeStoreConfig(t, tempDir, BackendAxon)
+
+	s := NewStore(filepath.Join(tempDir, ".ddx"))
+	_, ok := s.backend.(*AxonBackend)
+	assert.True(t, ok, "bead.backend: axon must select AxonBackend without requiring DDX_AXON_EXPERIMENTAL")
 }
 
 func TestWithCollectionNormalizesJSONLExtension(t *testing.T) {
@@ -84,6 +114,32 @@ func TestExternalBackendCarriesLogicalCollectionName(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Setenv("DDX_BEAD_BACKEND", tc.backend)
 			s := NewStore(filepath.Join(t.TempDir(), ".ddx"), WithCollection(tc.collection))
+			backend, ok := s.backend.(*ExternalBackend)
+			require.True(t, ok)
+			assert.Equal(t, tc.backend, backend.Tool)
+			assert.Equal(t, tc.collection, backend.Collection)
+		})
+	}
+}
+
+func TestNewStore_PreservesExternalBackends(t *testing.T) {
+	toolDir := t.TempDir()
+	writeFakeBackendTool(t, toolDir, "bd")
+	writeFakeBackendTool(t, toolDir, "br")
+	t.Setenv("PATH", toolDir+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	for _, tc := range []struct {
+		name       string
+		backend    string
+		collection string
+	}{
+		{name: "bd", backend: "bd", collection: DefaultCollection},
+		{name: "br", backend: "br", collection: "exec-runs"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			tempDir := t.TempDir()
+			writeStoreConfig(t, tempDir, tc.backend)
+			s := NewStore(filepath.Join(tempDir, ".ddx"), WithCollection(tc.collection))
 			backend, ok := s.backend.(*ExternalBackend)
 			require.True(t, ok)
 			assert.Equal(t, tc.backend, backend.Tool)
