@@ -70,7 +70,8 @@ acceptance criteria as a defect in the spec, not a tolerance in review.
 
 **DDx response:** Bead acceptance criteria are written as concrete,
 checkable statements (commands, file predicates, test names); the
-post-merge review step grades each AC item against the working tree.
+default adversarial pre-close review gate grades each AC item before a
+bead can close.
 
 ### Audit trail required
 
