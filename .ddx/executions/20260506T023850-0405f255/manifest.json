@@ -1,0 +1,175 @@
+{
+  "attempt_id": "20260506T023850-0405f255",
+  "bead_id": "ddx-e2bbcbae",
+  "base_rev": "730f3efe908a65147977031edf27ad5931697121",
+  "created_at": "2026-05-06T02:38:52.37445826Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e2bbcbae",
+    "title": "Update docs to make Fizeau transcript ownership explicit",
+    "description": "Update DDx docs so the boundary is unambiguous: DDx owns worker/bead lifecycle progress; Fizeau owns agent transcript/progress/session rendering. DDx may link or copy Fizeau artifacts and may forward Fizeau ServiceEvents, but must not render inner Fizeau session logs or parse transcript semantics. In-scope files: docs/helix/01-frame/features/FEAT-006-agent-service.md, docs/helix/01-frame/features/FEAT-002-server.md, docs/helix/02-design/plan-2026-04-18-ddx-agent-service-interface.md if still current. Out of scope: code deletion.",
+    "acceptance": "1. FEAT-006 states DDx is a pass-through/marshalling consumer for Fizeau transcript events.\\n2. FEAT-002 distinguishes DDx worker lifecycle events from opaque/forwarded Fizeau agent events.\\n3. Docs no longer say DDx renders Fizeau inner session logs.\\n4. cd cli \u0026\u0026 go test ./internal/agent -run TestAgent -count=1 passes or no code tests are needed because only docs changed.",
+    "parent": "ddx-dda48755",
+    "labels": [
+      "area:docs",
+      "area:agent",
+      "kind:cleanup"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T02:38:50Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-05T16:10:25.809653005Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T160845-2be3894c\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":748901,\"output_tokens\":7443,\"total_tokens\":756344,\"cost_usd\":0,\"duration_ms\":97398,\"exit_code\":0}",
+          "created_at": "2026-05-05T16:10:26.043816179Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=756344 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-05T16:10:35.241860677Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=a7e7f7210330acedb02ffd0649ceaae129de171d\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T12:15:40-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=35459\noutput_bytes=0\nelapsed_ms=4175",
+          "created_at": "2026-05-05T16:10:40.645930181Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=a7e7f7210330acedb02ffd0649ceaae129de171d\nbase_rev=206fb5640c5b6cfbe54ed3f863cf12b57d2c89c4",
+          "created_at": "2026-05-05T16:10:40.856092351Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-05T18:01:21.909638862Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T180009-0e200319\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":688252,\"output_tokens\":7009,\"total_tokens\":695261,\"cost_usd\":0,\"duration_ms\":70156,\"exit_code\":0}",
+          "created_at": "2026-05-05T18:01:22.130341134Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=695261 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-05T18:01:31.088788771Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=029f4585c98c049ee0dddb0b88baca4071c5bbf3\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T14:06:36-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=37928\noutput_bytes=0\nelapsed_ms=4123",
+          "created_at": "2026-05-05T18:01:36.557763212Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=029f4585c98c049ee0dddb0b88baca4071c5bbf3\nbase_rev=e0efaa4f577ff60483f076463a36c0442e2ce621",
+          "created_at": "2026-05-05T18:01:36.789848301Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-05T23:43:52.246843889Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T234254-a38b6e20\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":507273,\"output_tokens\":5383,\"total_tokens\":512656,\"cost_usd\":0,\"duration_ms\":55275,\"exit_code\":0}",
+          "created_at": "2026-05-05T23:43:52.469906088Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=512656 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-05T23:43:58.081233427Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=51c528e784baaec6adfa6ac1645d7727dd74236b\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T19:49:03-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=40293\noutput_bytes=0\nelapsed_ms=4115",
+          "created_at": "2026-05-05T23:44:03.78068733Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=51c528e784baaec6adfa6ac1645d7727dd74236b\nbase_rev=d4f7b1daa9728dc29f3f2c6935714f25f4f0c6d6",
+          "created_at": "2026-05-05T23:44:04.07523782Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "erik",
+          "body": "creating isolated worktree: git worktree add: Preparing worktree (detached HEAD 9c9ea2f9)\nerror: unable to create file cli/internal/server/state_runs_detail_test.go: No space left on device\nerror: unable to create file cli/internal/server/state_runs_test.go: No space left on device\nerror: unable to create file cli/internal/server/state_test.go: No space left on device\nerror: unable to create file cli/internal/server/test_isolation_lint_test.go: No space left on device\nerror: unable to create file cli/internal/server/worker_ingest.go: No space left on device\nerror: unable to create file cli/internal/server/worker_ingest_test.go: No space left on device\nerror: unable to create file cli/internal/server/workers.go: No space left on device\nerror: unable to create file cli/internal/server/workers_config_test.go: No space left on device\nerror: unable to create file cli/internal/server/workers_costcap_test.go: No space left on device\nerror: unable to create file cli/internal/server/workers_e2e_test.go: No space left on device\nerror: unable to create file cli/internal/server/workers_escalation_test.go: No space left on device\nerror: unable to create file cli/internal/server/workers_gates_test.go: No space left on device\nerror: unable to create file cli/internal/server/workers_panel_live_transitions_test.go: No space left on device\nerror: unable to create file cli/internal/server/workers_prune_test.go: No space left on device\nerror: unable to create file cli/internal/server/workers_reap_unix.go: No space left on device\nerror: unable to create file cli/internal/server/workers_reap_windows.go: No space left on device\nerror: unable to create file cli/internal/server/workers_resolve_route_test.go: No space left on device\nerror: unable to create file cli/internal/server/workers_stop_propagation_test.go: No space left on device\nerror: unable to create file cli/internal/server/workers_stop_test.go: No space left on device\nerror: unable to create file cli/internal/server/workers_test.go: No space left on device\nerror: unable to create file cli/internal/server/workers_wake_test.go: No space left on device\nerror: unable to create file cli/internal/server/workers_watchdog_test.go: No space left on device\nfatal: cannot create directory at 'cli/internal/serverreg': No space left on device: exit status 128",
+          "created_at": "2026-05-06T00:53:38.632266001Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T02:38:50.080562981Z",
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Agent Service (consumer of ddx-agent contract)"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T023850-0405f255",
+    "prompt": ".ddx/executions/20260506T023850-0405f255/prompt.md",
+    "manifest": ".ddx/executions/20260506T023850-0405f255/manifest.json",
+    "result": ".ddx/executions/20260506T023850-0405f255/result.json",
+    "checks": ".ddx/executions/20260506T023850-0405f255/checks.json",
+    "usage": ".ddx/executions/20260506T023850-0405f255/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-e2bbcbae-20260506T023850-0405f255"
+  },
+  "prompt_sha": "76798811a74f68d953d24f9fb8c28937c2c51ade84c4825aad202ff21c8004ca"
+}
