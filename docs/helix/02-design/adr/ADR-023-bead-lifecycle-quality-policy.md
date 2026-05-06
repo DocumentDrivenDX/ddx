@@ -59,7 +59,7 @@ Every automated bead attempt has two quality checkpoints:
    criteria, labels, parent, dependency metadata, spec-id, prior attempt
    history, and the canonical rubric in
    `docs/helix/06-iterate/bead-authoring-template.md`. The implementation hook
-   may still advertise `MODE: intake` for legacy compatibility, but the
+   may still advertise `MODE: intake` for legacy compatibility only; the
    product concept is bead readiness assessment.
 2. **Post-attempt triage.** After an attempt finalizes, DDx triages the result
    against the same lifecycle quality policy so a low-quality prompt failure,
@@ -68,8 +68,8 @@ Every automated bead attempt has two quality checkpoints:
 
 The readiness checkpoint and the post-attempt triage checkpoint are distinct:
 readiness decides whether a bead should be claimed or rewritten before
-execution, lint/rubric scoring measures prompt quality, and triage classifies
-the attempt after evidence exists.
+execution, lint/rubric scoring measures prompt quality inside the readiness
+evaluation, and triage classifies the attempt after evidence exists.
 
 Both checkpoints invoke the same nested bead-lifecycle workflow skill under the
 `ddx` skill tree. The skill is responsible for translating the rubric into
