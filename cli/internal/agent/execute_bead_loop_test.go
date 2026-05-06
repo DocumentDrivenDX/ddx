@@ -458,7 +458,7 @@ func TestExecuteBeadWorker_NoViableProviderUsesRetryableTransportPolicy(t *testi
 			return ExecuteBeadReport{
 				BeadID:    beadID,
 				Status:    ExecuteBeadStatusExecutionFailed,
-				Detail:    "execute-loop: all tiers exhausted — no viable provider found",
+				Detail:    "execute-loop: all tiers exhausted - no viable provider found",
 				BaseRev:   "aaaa1111",
 				ResultRev: "aaaa1111",
 			}, nil
