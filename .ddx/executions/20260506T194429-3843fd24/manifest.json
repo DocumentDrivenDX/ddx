@@ -1,0 +1,323 @@
+{
+  "attempt_id": "20260506T194429-3843fd24",
+  "bead_id": "ddx-958b8fc3",
+  "base_rev": "1a09ef0f68431da995b79f7f1e1ef59d052b6271",
+  "created_at": "2026-05-06T19:44:33.161298117Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-958b8fc3",
+    "title": "bead/axon: parameterize conformance suites across JSONL and Axon",
+    "description": "PROBLEM\nThe package-level conformance coverage still needs a single matrix that proves both backends satisfy the same behavioral contract. The current chaos harness already names jsonl and axon in cli/internal/bead/chaos_test.go:23-36, but the rest of the package still relies on ad hoc store construction and has no package-wide backend matrix to prove the new Axon path behaves identically.\n\nROOT CAUSE\ncli/internal/bead/chaos_test.go:23-36 only defines the backend table; there is no end-to-end package test matrix yet that runs the conformance suite through both backends and keeps the existing package tests honest. The rest of the test package still defaults to newTestStore(t) in many places, so the Axon path is not yet a first-class test target.\n\nPROPOSED FIX\n- Extend the backend test helpers so the package conformance suite can run under both jsonl and axon.\n- Keep TestChaos_ConcurrentAppendSafety, TestChaos_AtomicStatusTransitions, TestChaos_ConcurrentCloseAndAppend, and TestChaos_ConcurrentCloseNotLost as explicit backend matrix coverage.\n- Make the package test harness clearly fail if either backend diverges.\n\nNON-SCOPE\n- GraphQL client generation.\n- Backend selection/config plumbing.\n- Subscription integration smoke tests.",
+    "acceptance": "1. TestChaos_ConcurrentAppendSafety, TestChaos_AtomicStatusTransitions, TestChaos_ConcurrentCloseAndAppend, and TestChaos_ConcurrentCloseNotLost run under both jsonl and axon subtests.\n2. The package conformance helpers make the backend selector explicit instead of silently defaulting in only one path.\n3. cd cli \u0026\u0026 go test ./internal/bead/... passes.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-8d747049",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:storage",
+      "kind:feature",
+      "blocked-on-upstream:axon-05c1019d",
+      "blocked-on-upstream:axon-82b6f7b2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T19:44:29Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2049551",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T12:11:35.853913418Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T120844-d2a3f066\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":1670655,\"output_tokens\":10807,\"total_tokens\":1681462,\"cost_usd\":0,\"duration_ms\":168678,\"exit_code\":0}",
+          "created_at": "2026-05-06T12:11:36.081467204Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=1681462 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T12:11:43.216669978Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=8c30b521f1e6ed7e1ecae16d7cb86a9f05b6170c\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T08:16:47-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=9031\noutput_bytes=0\nelapsed_ms=4163",
+          "created_at": "2026-05-06T12:11:47.913977262Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=8c30b521f1e6ed7e1ecae16d7cb86a9f05b6170c\nbase_rev=be7e546b1fe2902a8a429bca7786b9fc072f6df9",
+          "created_at": "2026-05-06T12:11:48.123763561Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T12:37:44.300397771Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T123426-3fce3c4b\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":1880959,\"output_tokens\":9538,\"total_tokens\":1890497,\"cost_usd\":0,\"duration_ms\":195185,\"exit_code\":0}",
+          "created_at": "2026-05-06T12:37:44.532443164Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=1890497 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T12:37:51.580377598Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=749578c98897dfcccb99edc00990afa9e68ada21\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T08:42:56-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=11361\noutput_bytes=0\nelapsed_ms=4179",
+          "created_at": "2026-05-06T12:37:56.278326555Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=749578c98897dfcccb99edc00990afa9e68ada21\nbase_rev=e1d4ef06df81c60792bed1f5b1d95b85d7453605",
+          "created_at": "2026-05-06T12:37:56.502773084Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T13:01:10.504493067Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T125810-6f98ca86\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":2035515,\"output_tokens\":8622,\"total_tokens\":2044137,\"cost_usd\":0,\"duration_ms\":177223,\"exit_code\":0}",
+          "created_at": "2026-05-06T13:01:10.714569818Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=2044137 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T13:01:17.464932238Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=a0ae796b508c4920df936d1b6b9e5291dbf7a611\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T09:06:21-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=13666\noutput_bytes=0\nelapsed_ms=4168",
+          "created_at": "2026-05-06T13:01:22.147569417Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=a0ae796b508c4920df936d1b6b9e5291dbf7a611\nbase_rev=35a2af81c7479b48653979e980768442ad4c664c",
+          "created_at": "2026-05-06T13:01:22.362200205Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T13:35:45.498313436Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "signal: terminated\nresult_rev=24fc5a9cafacead63c0406af20b070208bc07703\nbase_rev=24fc5a9cafacead63c0406af20b070208bc07703\nretry_after=2026-05-06T19:35:45Z",
+          "created_at": "2026-05-06T13:35:46.182112568Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T19:35:48.641472793Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-06T19:37:28.33426305Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T193549-dfafc1a1\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":460461,\"output_tokens\":4284,\"total_tokens\":464745,\"cost_usd\":0,\"duration_ms\":96221,\"exit_code\":0}",
+          "created_at": "2026-05-06T19:37:28.575822741Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=464745 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T19:37:40.509769171Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "The diff only adds an execution artifact and contains no code or test changes, so none of the backend-matrix acceptance criteria can be verified as implemented.\nharness=codex\nmodel=gpt-5.4\ninput_bytes=4999\noutput_bytes=577\nelapsed_ms=19738",
+          "created_at": "2026-05-06T19:38:14.502529934Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"action\":\"re_attempt_with_context\",\"mode\":\"review_block\"}",
+          "created_at": "2026-05-06T19:38:14.750694341Z",
+          "kind": "triage-decision",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block: re_attempt_with_context"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-close review: BLOCK (flagged for human)\nThe diff only adds an execution artifact and contains no code or test changes, so none of the backend-matrix acceptance criteria can be verified as implemented.\nresult_rev=bbd90f56d07827ef6291015ced9ca11bac0e250d\nbase_rev=c98f27ab288972913830d32f8008d0b074139184",
+          "created_at": "2026-05-06T19:38:15.41845958Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T19:39:17.328880647Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T19:39:19.827377812Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-06T19:42:31.361107655Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T193917-468fb55f\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":2225672,\"output_tokens\":8718,\"total_tokens\":2234390,\"cost_usd\":0,\"duration_ms\":190625,\"exit_code\":0}",
+          "created_at": "2026-05-06T19:42:31.703702746Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=2234390 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T19:42:43.811647885Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "The diff only adds DDx execution metadata files and contains no test-helper or package-test changes, so none of the requested backend-matrix conformance work is present or evaluable.\nharness=codex\nmodel=gpt-5.4\ninput_bytes=5525\noutput_bytes=1160\nelapsed_ms=15689",
+          "created_at": "2026-05-06T19:43:14.475250694Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"action\":\"escalate_tier\",\"mode\":\"review_block\",\"tier_hint\":\"standard\"}",
+          "created_at": "2026-05-06T19:43:14.709224678Z",
+          "kind": "triage-decision",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block: escalate_tier"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-close review: BLOCK (flagged for human)\nThe diff only adds DDx execution metadata files and contains no test-helper or package-test changes, so none of the requested backend-matrix conformance work is present or evaluable.\nresult_rev=ab4c765abea1c30c32ff594a2cf94a2fba949b90\nbase_rev=71b48b6be6af9e828c5eacf04b5f6de8d719a092",
+          "created_at": "2026-05-06T19:43:15.338241894Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T19:44:19.669890357Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T19:44:29.030898645Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"needs_human\",\"detail\":\"staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"rationale\":\"The attempt did not produce the requested backend-matrix implementation. It failed while staging due to a stale `.git/index.lock`, and the review also blocked the result because the diff only contained DDx execution metadata with no test-helper or package-test changes to evaluate.\",\"recommended_action\":\"escalate\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":\"Clear or investigate the stale Git lock before rerunning, then ensure the next attempt edits the bead test helpers and backend-matrix coverage expected by the acceptance criteria.\",\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-06T19:44:30.207374388Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx agent execute-loop",
+          "summary": "needs_human: escalate"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T19:44:29.421301256Z",
+      "triage.tier_hint": "standard"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260506T194429-3843fd24",
+    "prompt": ".ddx/executions/20260506T194429-3843fd24/prompt.md",
+    "manifest": ".ddx/executions/20260506T194429-3843fd24/manifest.json",
+    "result": ".ddx/executions/20260506T194429-3843fd24/result.json",
+    "checks": ".ddx/executions/20260506T194429-3843fd24/checks.json",
+    "usage": ".ddx/executions/20260506T194429-3843fd24/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-958b8fc3-20260506T194429-3843fd24"
+  },
+  "prompt_sha": "8dc58c3dcfd0db99a5888f22b00886056b4e492bd1d819ef4b1ac9fea928b239"
+}
