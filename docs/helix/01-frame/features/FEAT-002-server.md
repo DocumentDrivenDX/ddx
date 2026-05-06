@@ -95,7 +95,8 @@ context; it never crosses project boundaries. Worker lifecycle state
 any agent transcript data or forwarded Fizeau events. Fizeau owns
 transcript/progress/session rendering for its agent events; DDx only surfaces
 its own worker state and any opaque forwarded Fizeau payloads alongside it, and
-it does not parse transcript semantics to derive worker state.
+it does not parse transcript semantics to derive worker state. DDx does not
+turn Fizeau session logs into worker progress output.
 The host+user daemon is the single
 point of coordination for all long-running DDx worker activity on the
 machine. The supervisor exposes worker state through the same project-scoped
@@ -160,7 +161,8 @@ resolve exactly one project context.
     event/transcript envelope data; those payloads are opaque to DDx, owned by
     Fizeau, and are distinct from worker lifecycle events. DDx stores them as
     attachments, does not render or semantically interpret the inner Fizeau
-    session logs, and does not treat them as worker lifecycle state.
+    session logs, and does not treat them as worker lifecycle state. The
+    payload is evidence, not worker progress.
 21. MCP tool: `ddx_agent_sessions` (project selector required unless singleton compatibility mode applies)
 
 **Worker Progress (FEAT-006 embedded-agent progress contract)**
@@ -175,7 +177,7 @@ opaque payloads attached to agent-session records, not worker lifecycle state,
 and the server surfaces them without interpreting transcript semantics or
 rendering session logs. Fizeau owns transcript rendering and session-log
 presentation; DDx only relays opaque payloads alongside its own worker
-records.
+records. DDx never converts those forwarded events into worker state.
 
 22. `GET /api/projects/:project/workers` — list active and recently completed
     workers for a project; each entry includes worker identity, current status

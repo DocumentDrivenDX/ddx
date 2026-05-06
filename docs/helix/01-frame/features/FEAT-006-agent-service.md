@@ -225,7 +225,9 @@ DDx may link or copy the session log attachment for humans, but normal
 execution policy must not render or parse the inner session log to infer
 routing, provider health, model fallbacks, or retry destinations. DDx treats
 the session log as a Fizeau-owned transcript artifact and only uses typed
-agent response fields plus DDx-owned attempt evidence as policy inputs.
+agent response fields plus DDx-owned attempt evidence as policy inputs. DDx
+copies or links the artifact as evidence; it does not inspect transcript
+semantics.
 
 ## Layer Ownership Migration Table
 
