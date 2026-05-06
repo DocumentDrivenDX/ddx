@@ -12,12 +12,21 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// newTestBackend returns a Backend rooted at a fresh temp dir. It exists so
-// the chaos suite exercises the JSONL backend through the Backend interface
-// (per ddx-bbdd7564 AC §5) rather than through *Store directly.
-func newTestBackend(t *testing.T) Backend {
+// newTestBackend returns a Backend rooted at a fresh temp dir for the explicit
+// backend name supplied by the caller. The chaos suite uses it so both JSONL
+// and axon run through the same Backend interface surface rather than one path
+// silently defaulting to JSONL.
+func newTestBackend(t *testing.T, backend string) Backend {
 	t.Helper()
-	return newJSONLStore(t)
+	switch backend {
+	case BackendJSONL:
+		return newJSONLStore(t)
+	case BackendAxon:
+		return newAxonStore(t)
+	default:
+		t.Fatalf("unsupported chaos backend %q", backend)
+		return nil
+	}
 }
 
 // chaosBackend names a backend constructor for the parameterized chaos suite.
@@ -25,14 +34,14 @@ func newTestBackend(t *testing.T) Backend {
 // the JSONL default and the axon backend so a regression in either path fails
 // the same suite.
 type chaosBackend struct {
-	name string
-	make func(*testing.T) Backend
+	name    string
+	backend string
 }
 
 func chaosBackends() []chaosBackend {
 	return []chaosBackend{
-		{name: "jsonl", make: func(t *testing.T) Backend { return newJSONLStore(t) }},
-		{name: "axon", make: func(t *testing.T) Backend { return newAxonStore(t) }},
+		{name: "jsonl", backend: BackendJSONL},
+		{name: "axon", backend: BackendAxon},
 	}
 }
 
@@ -44,7 +53,7 @@ func forEachChaosBackend(t *testing.T, fn func(*testing.T, Backend)) {
 		bf := bf
 		t.Run(bf.name, func(t *testing.T) {
 			t.Parallel()
-			fn(t, bf.make(t))
+			fn(t, newTestBackend(t, bf.backend))
 		})
 	}
 }

@@ -9,14 +9,14 @@ import (
 )
 
 type backendConformanceCase struct {
-	name string
-	make func(*testing.T) *Store
+	name    string
+	backend string
 }
 
 func backendConformanceCases() []backendConformanceCase {
 	return []backendConformanceCase{
-		{name: "jsonl", make: newJSONLStore},
-		{name: "axon", make: newAxonStore},
+		{name: "jsonl", backend: BackendJSONL},
+		{name: "axon", backend: BackendAxon},
 	}
 }
 
@@ -33,10 +33,22 @@ func forEachBackendConformanceCase(t *testing.T, fn func(*testing.T, backendConf
 
 func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 	t.Helper()
+	makeStore := func(t *testing.T) *Store {
+		t.Helper()
+		switch tc.backend {
+		case BackendJSONL:
+			return newJSONLStore(t)
+		case BackendAxon:
+			return newAxonStore(t)
+		default:
+			t.Fatalf("unsupported backend %q", tc.backend)
+			return nil
+		}
+	}
 
 	t.Run("create-get", func(t *testing.T) {
 		t.Parallel()
-		s := tc.make(t)
+		s := makeStore(t)
 
 		b := &Bead{Title: "first", Description: "round-trip"}
 		require.NoError(t, s.Create(b))
@@ -51,7 +63,7 @@ func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 
 	t.Run("update", func(t *testing.T) {
 		t.Parallel()
-		s := tc.make(t)
+		s := makeStore(t)
 
 		b := &Bead{Title: "to-update"}
 		require.NoError(t, s.Create(b))
@@ -69,7 +81,7 @@ func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 
 	t.Run("claim", func(t *testing.T) {
 		t.Parallel()
-		s := tc.make(t)
+		s := makeStore(t)
 
 		b := &Bead{Title: "claimable"}
 		require.NoError(t, s.Create(b))
@@ -94,7 +106,7 @@ func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 
 	t.Run("deps", func(t *testing.T) {
 		t.Parallel()
-		s := tc.make(t)
+		s := makeStore(t)
 
 		root := &Bead{Title: "root"}
 		child := &Bead{Title: "child"}
@@ -119,7 +131,7 @@ func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 
 	t.Run("events-close", func(t *testing.T) {
 		t.Parallel()
-		s := tc.make(t)
+		s := makeStore(t)
 
 		b := &Bead{Title: "with-events"}
 		require.NoError(t, s.Create(b))
