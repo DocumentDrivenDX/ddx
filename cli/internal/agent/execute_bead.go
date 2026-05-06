@@ -711,6 +711,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// Create the isolated worktree. Orphan recovery is the parent's responsibility
 	// (call RecoverOrphans before invoking workers).
 	if err := gitOps.WorktreeAdd(projectRoot, wtPath, baseRev); err != nil {
+		_ = os.RemoveAll(wtPath)
 		return nil, fmt.Errorf("creating isolated worktree: %w", err)
 	}
 	defer func() {

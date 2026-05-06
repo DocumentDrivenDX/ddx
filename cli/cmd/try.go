@@ -324,6 +324,14 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("load resolved config: %w", err)
 	}
 
+	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
+	if _, err := resourceChecker.Check(cmd.Context()); err != nil {
+		if resErr, ok := err.(*agent.ResourceExhaustedError); ok && resErr != nil {
+			fmt.Fprintln(cmd.ErrOrStderr(), resErr.Error())
+		}
+		return &ExitError{Code: tryExitFailed, Message: err.Error()}
+	}
+
 	cliLandingOps := agent.RealLandingGitOps{}
 	var qualityRunner agent.AgentRunner
 	if f.AgentRunnerOverride != nil {

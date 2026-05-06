@@ -1737,6 +1737,11 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		return fmt.Errorf("load resolved config: %w", err)
 	}
 
+	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
+	if _, err := resourceChecker.Check(cmd.Context()); err != nil {
+		return err
+	}
+
 	var qualityRunner agent.AgentRunner
 	if f.AgentRunnerOverride != nil {
 		qualityRunner = f.AgentRunnerOverride
@@ -2085,6 +2090,13 @@ func buildCLIPreClaimHook(projectRoot string, gitOps agent.LandingGitOps) func(c
 		}
 		return nil
 	}
+}
+
+func buildCLIResourceChecker(projectRoot string, override agent.ExecutionResourceChecker) agent.ExecutionResourceChecker {
+	if override != nil {
+		return override
+	}
+	return agent.NewExecutionResourceChecker(projectRoot, &agent.RealGitOps{})
 }
 
 // resolveServerURL determines the base URL for the running DDx server.
