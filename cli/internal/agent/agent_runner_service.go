@@ -9,19 +9,6 @@ import (
 	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
-// useNewAgentPath reports whether RunAgent should dispatch to the new
-// agentlib.FizeauService.Execute path. Default is on. Set the env var
-// DDX_USE_NEW_AGENT_PATH=0 (or "false") to disable as an emergency escape
-// hatch.
-func useNewAgentPath() bool {
-	switch os.Getenv("DDX_USE_NEW_AGENT_PATH") {
-	case "0", "false", "FALSE", "False":
-		return false
-	default:
-		return true
-	}
-}
-
 // runAgentViaService is the new RunAgent dispatch path that drives the
 // agent through agentlib.FizeauService.Execute and drains the resulting event
 // channel into a DDx Result. Old in-package code paths (RunAgent legacy

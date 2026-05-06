@@ -195,25 +195,6 @@ func (r *Runner) Run(opts RunArgs) (*Result, error) {
 		execDir = opts.WorkDir
 	}
 
-	// Claude streaming path: when running against the real OSExecutor, pipe
-	// claude's stream-json stdout through parseClaudeStream so operators see
-	// real-time progress (tool calls, turn counts, elapsed) in
-	// `ddx server workers log` instead of a 20–40 minute silence. The path
-	// falls back to the legacy buffered --print behaviour automatically if
-	// the CLI rejects the stream-json flags.
-	if harnessName == "claude" {
-		if _, isOS := r.Executor.(*OSExecutor); isOS {
-			result, err := runClaudeWithFallbackFn(r, ctx, harness, harnessName, model, resolvedOpts, prompt, execDir, timeout)
-			if err == nil && result != nil {
-				finalizeClaudeResult(r, result, opts, prompt, time.Since(start))
-				return result, nil
-			}
-			// If the streaming path failed outright (not just claude exit != 0),
-			// fall through to the classic Executor path so behaviour degrades
-			// gracefully.
-		}
-	}
-
 	execResult, execErr := r.Executor.ExecuteInDir(ctx, harness.Binary, args, stdin, execDir)
 	elapsed := time.Since(start)
 
