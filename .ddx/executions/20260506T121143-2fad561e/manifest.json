@@ -1,0 +1,48 @@
+{
+  "harness": "claude",
+  "model": "claude-opus-4-6",
+  "base_rev": "bca21f72b8e7b336ae8c9778061c7034fc01bf88",
+  "result_rev": "8c30b521f1e6ed7e1ecae16d7cb86a9f05b6170c",
+  "verdict": "BLOCK",
+  "bead_id": "ddx-958b8fc3",
+  "execution_dir": ".ddx/executions/20260506T121143-2fad561e",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1983,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 274,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260506T120844-d2a3f066/checks/production-reachability.json",
+          ".ddx/executions/20260506T120844-d2a3f066/manifest.json",
+          ".ddx/executions/20260506T120844-d2a3f066/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 5113,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 9031,
+    "output_bytes": 0,
+    "elapsed_ms": 4163,
+    "harness": "claude",
+    "model": "claude-opus-4-6"
+  }
+}
