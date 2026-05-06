@@ -5,6 +5,7 @@ library:
         url: https://github.com/easel/ddx-library
         branch: main
 #
+# bead_tracker.backend: axon
 # bead_tracker:
 #   backend: axon
 #   axon:
