@@ -2002,6 +2002,14 @@ func writeExecuteLoopResult(w io.Writer, projectRoot string, result *agent.Execu
 			fmt.Fprintf(w, "  skipped %d bead(s) on retry cooldown%s: %s\n",
 				len(d.SkippedOnCooldown), retryHint, strings.Join(d.SkippedOnCooldown, ", "))
 		}
+		if len(d.SkippedNeedsInvestigation) > 0 {
+			fmt.Fprintf(w, "  skipped %d bead(s) needing investigation or human input: %s\n",
+				len(d.SkippedNeedsInvestigation), strings.Join(d.SkippedNeedsInvestigation, ", "))
+		}
+		if len(d.SkippedBlocked) > 0 {
+			fmt.Fprintf(w, "  skipped %d bead(s) with blocked/proposed/cancelled lifecycle status: %s\n",
+				len(d.SkippedBlocked), strings.Join(d.SkippedBlocked, ", "))
+		}
 		if len(d.SkippedNotEligible) > 0 {
 			fmt.Fprintf(w, "  skipped %d bead(s) with execution-eligible=false: %s\n",
 				len(d.SkippedNotEligible), strings.Join(d.SkippedNotEligible, ", "))

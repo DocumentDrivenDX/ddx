@@ -205,9 +205,12 @@ type StatusCounts struct {
 // external DDx contract (HELIX reads them to decide how to handle a blocker).
 const (
 	BlockerKindDependency         = "dependency"
+	BlockerKindBlockedStatus      = "blocked-status"
 	BlockerKindRetryCooldown      = "retry-cooldown"
 	BlockerKindNeedsInvestigation = "needs-investigation"
 	BlockerKindNotEligible        = "not-execution-eligible"
+	BlockerKindSuperseded         = "superseded"
+	BlockerKindEpicOnly           = "epic-only"
 )
 
 // Blocker describes why an open bead is currently not runnable. Either

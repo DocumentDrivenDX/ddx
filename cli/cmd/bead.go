@@ -946,7 +946,7 @@ func (f *CommandFactory) newBeadBlockedCommand() *cobra.Command {
 				case bead.BlockerKindRetryCooldown:
 					fmt.Fprintf(cmd.OutOrStdout(), "%s  P%d  %s  retry-after: %s\n",
 						e.ID, e.Priority, e.Title, e.Blocker.NextEligibleAt)
-				case bead.BlockerKindNeedsInvestigation, bead.BlockerKindNotEligible:
+				case bead.BlockerKindNeedsInvestigation, bead.BlockerKindNotEligible, bead.BlockerKindBlockedStatus, bead.BlockerKindSuperseded, bead.BlockerKindEpicOnly:
 					fmt.Fprintf(cmd.OutOrStdout(), "%s  P%d  %s  %s: %s\n",
 						e.ID, e.Priority, e.Title, e.Blocker.Kind, e.Blocker.Reason)
 				default:

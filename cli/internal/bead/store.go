@@ -1335,13 +1335,15 @@ func (s *Store) ReadyExecution() ([]Bead, error) {
 }
 
 // ReadyExecutionBreakdown classifies dependency-ready beads by the reason
-// they are NOT execution-eligible: epic containers, retry cooldown,
-// execution-eligible=false, or superseded. It's the diagnostic the work loop
-// emits when the execution queue is empty but `ddx bead ready` is not.
+// they are NOT execution-eligible: lifecycle-blocked statuses, epic
+// containers, retry cooldown, execution-eligible=false, or superseded. It's
+// the diagnostic the work loop emits when the execution queue is empty but
+// `ddx bead ready` is not.
 type ReadyExecutionBreakdown struct {
 	SkippedEpics              []string
 	SkippedOnCooldown         []string
 	SkippedNeedsInvestigation []string
+	SkippedBlocked            []string
 	SkippedNotEligible        []string
 	SkippedSuperseded         []string
 	NextRetryAfter            string
@@ -1349,13 +1351,36 @@ type ReadyExecutionBreakdown struct {
 
 func (s *Store) ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error) {
 	out := ReadyExecutionBreakdown{}
-	ready, err := s.Ready()
+	beads, err := s.ReadAll()
 	if err != nil {
 		return out, err
 	}
+	statusMap := make(map[string]string)
+	childCount := make(map[string]int)
+	for _, b := range beads {
+		statusMap[b.ID] = b.Status
+		if b.Parent != "" {
+			childCount[b.Parent]++
+		}
+	}
 	now := time.Now().UTC()
 	var soonestRetry time.Time
-	for _, b := range ready {
+	for _, b := range beads {
+		if !depsSatisfied(b, statusMap) {
+			continue
+		}
+		switch b.Status {
+		case StatusBlocked, StatusProposed, StatusCancelled:
+			out.SkippedBlocked = append(out.SkippedBlocked, b.ID)
+			continue
+		case StatusInProgress:
+			if !heartbeatIsStale(b.Extra) {
+				continue
+			}
+		case StatusOpen:
+		default:
+			continue
+		}
 		if retryAfterRaw, ok := b.Extra["execute-loop-retry-after"]; ok {
 			if retryAfterStr, isStr := retryAfterRaw.(string); isStr && retryAfterStr != "" {
 				if retryAfter, err := time.Parse(time.RFC3339, retryAfterStr); err == nil && retryAfter.After(now) {
@@ -1366,6 +1391,10 @@ func (s *Store) ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error) {
 					continue
 				}
 			}
+		}
+		if isOrdinaryEpicContainer(b, childCount[b.ID]) {
+			out.SkippedEpics = append(out.SkippedEpics, b.ID)
+			continue
 		}
 		if hasLabel(b, LabelNeedsInvestigation) || hasLabel(b, LabelNeedsHuman) {
 			out.SkippedNeedsInvestigation = append(out.SkippedNeedsInvestigation, b.ID)
@@ -1396,8 +1425,12 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 		return nil, err
 	}
 	statusMap := make(map[string]string)
+	childCount := make(map[string]int)
 	for _, b := range beads {
 		statusMap[b.ID] = b.Status
+		if b.Parent != "" {
+			childCount[b.Parent]++
+		}
 	}
 
 	var ready []Bead
@@ -1423,6 +1456,9 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 		}
 		if executionOnly {
 			if hasLabel(b, LabelNeedsInvestigation) || hasLabel(b, LabelNeedsHuman) {
+				continue
+			}
+			if isOrdinaryEpicContainer(b, childCount[b.ID]) {
 				continue
 			}
 			// Filter by execution-eligible (default true if absent)
@@ -1493,14 +1529,18 @@ func (s *Store) BlockedAll() ([]BlockedBead, error) {
 		return nil, err
 	}
 	statusMap := make(map[string]string)
+	childCount := make(map[string]int)
 	for _, b := range beads {
 		statusMap[b.ID] = b.Status
+		if b.Parent != "" {
+			childCount[b.Parent]++
+		}
 	}
 
 	now := time.Now().UTC()
 	var entries []BlockedBead
 	for _, b := range beads {
-		if b.Status != StatusOpen {
+		if b.Status != StatusOpen && b.Status != StatusBlocked {
 			continue
 		}
 
@@ -1520,6 +1560,16 @@ func (s *Store) BlockedAll() ([]BlockedBead, error) {
 			})
 			continue
 		}
+		if b.Status == StatusBlocked {
+			entries = append(entries, BlockedBead{
+				Bead: b,
+				Blocker: Blocker{
+					Kind:   BlockerKindBlockedStatus,
+					Reason: "persisted blocked status",
+				},
+			})
+			continue
+		}
 
 		if hasLabel(b, LabelNeedsInvestigation) || hasLabel(b, LabelNeedsHuman) {
 			entries = append(entries, BlockedBead{
@@ -1528,6 +1578,16 @@ func (s *Store) BlockedAll() ([]BlockedBead, error) {
 					Kind:       BlockerKindNeedsInvestigation,
 					LastStatus: "no_changes",
 					Reason:     "triage needs investigation before retry",
+				},
+			})
+			continue
+		}
+		if isOrdinaryEpicContainer(b, childCount[b.ID]) {
+			entries = append(entries, BlockedBead{
+				Bead: b,
+				Blocker: Blocker{
+					Kind:   BlockerKindEpicOnly,
+					Reason: "ordinary ddx work skips epic/container beads",
 				},
 			})
 			continue
@@ -1541,6 +1601,18 @@ func (s *Store) BlockedAll() ([]BlockedBead, error) {
 					Blocker: Blocker{
 						Kind:   BlockerKindNotEligible,
 						Reason: reason,
+					},
+				})
+				continue
+			}
+		}
+		if sup, ok := b.Extra["superseded-by"]; ok {
+			if s, isStr := sup.(string); isStr && s != "" {
+				entries = append(entries, BlockedBead{
+					Bead: b,
+					Blocker: Blocker{
+						Kind:   BlockerKindSuperseded,
+						Reason: s,
 					},
 				})
 				continue
@@ -1589,6 +1661,21 @@ func (s *Store) BlockedAll() ([]BlockedBead, error) {
 		return entries[i].ID < entries[j].ID
 	})
 	return entries, nil
+}
+
+func depsSatisfied(b Bead, statusMap map[string]string) bool {
+	for _, depID := range b.DepIDs() {
+		if statusMap[depID] != StatusClosed {
+			return false
+		}
+	}
+	return true
+}
+
+func isOrdinaryEpicContainer(b Bead, childCount int) bool {
+	issueType := strings.ToLower(strings.TrimSpace(b.IssueType))
+	title := strings.ToLower(strings.TrimSpace(b.Title))
+	return issueType == "epic" || strings.HasPrefix(title, "epic:") || (childCount > 0 && strings.HasPrefix(title, "epic "))
 }
 
 func sortBeadsForQueue(beads []Bead) {

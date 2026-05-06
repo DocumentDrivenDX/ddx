@@ -95,6 +95,45 @@ func TestReadyExecutionSkipsRetrySuppressedBeads(t *testing.T) {
 	assert.Equal(t, b.ID, exec[0].ID)
 }
 
+func TestReadyExecutionBreakdown_SeparatesCooldownFromNonExecutable(t *testing.T) {
+	s := newTestStore(t)
+
+	cooldown := &Bead{ID: "ddx-cooldown", Title: "Cooldown", Priority: 0}
+	notEligible := &Bead{
+		ID:       "ddx-not-eligible",
+		Title:    "Not eligible",
+		Priority: 1,
+		Extra:    map[string]any{"execution-eligible": false},
+	}
+	require.NoError(t, s.Create(cooldown))
+	require.NoError(t, s.Create(notEligible))
+	require.NoError(t, s.SetExecutionCooldown(cooldown.ID, time.Now().UTC().Add(time.Hour), "no_changes", "retry later"))
+
+	breakdown, err := s.ReadyExecutionBreakdown()
+	require.NoError(t, err)
+	assert.Equal(t, []string{cooldown.ID}, breakdown.SkippedOnCooldown)
+	assert.Equal(t, []string{notEligible.ID}, breakdown.SkippedNotEligible)
+	assert.Empty(t, breakdown.SkippedSuperseded)
+}
+
+func TestReadyExecution_ExcludesOrdinaryEpics(t *testing.T) {
+	s := newTestStore(t)
+
+	epic := &Bead{ID: "ddx-epic", Title: "Epic container", IssueType: "epic", Priority: 0}
+	task := &Bead{ID: "ddx-task", Title: "Task work", IssueType: "task", Priority: 1}
+	require.NoError(t, s.Create(epic))
+	require.NoError(t, s.Create(task))
+
+	ready, err := s.ReadyExecution()
+	require.NoError(t, err)
+	require.Len(t, ready, 1)
+	assert.Equal(t, task.ID, ready[0].ID)
+
+	breakdown, err := s.ReadyExecutionBreakdown()
+	require.NoError(t, err)
+	assert.Equal(t, []string{epic.ID}, breakdown.SkippedEpics)
+}
+
 func TestBlockedAllClassifiesDepAndRetryCooldown(t *testing.T) {
 	s := newTestStore(t)
 
@@ -137,6 +176,34 @@ func TestBlockedAllClassifiesDepAndRetryCooldown(t *testing.T) {
 	assert.Equal(t, "no_changes", parkedEntry.Blocker.LastStatus)
 	assert.Equal(t, "agent made no commits", parkedEntry.Blocker.LastDetail)
 	assert.Empty(t, parkedEntry.Blocker.UnclosedDepIDs)
+}
+
+func TestBlockedAll_ReportsRetryCooldownWithoutHidingDependencyBlockers(t *testing.T) {
+	s := newTestStore(t)
+
+	dep := &Bead{ID: "ddx-dep", Title: "Dep root", Priority: 1}
+	blockedByDep := &Bead{ID: "ddx-blocked", Title: "Blocked by dep", Priority: 2}
+	parked := &Bead{ID: "ddx-parked", Title: "Retry parked", Priority: 0}
+	require.NoError(t, s.Create(dep))
+	require.NoError(t, s.Create(blockedByDep))
+	require.NoError(t, s.Create(parked))
+	require.NoError(t, s.DepAdd(blockedByDep.ID, dep.ID))
+
+	until := time.Now().UTC().Add(4 * time.Hour).Truncate(time.Second)
+	require.NoError(t, s.SetExecutionCooldown(parked.ID, until, "no_changes", "agent made no commits"))
+
+	entries, err := s.BlockedAll()
+	require.NoError(t, err)
+	require.Len(t, entries, 2)
+
+	byID := map[string]BlockedBead{}
+	for _, e := range entries {
+		byID[e.ID] = e
+	}
+	assert.Equal(t, BlockerKindDependency, byID[blockedByDep.ID].Blocker.Kind)
+	assert.Equal(t, []string{dep.ID}, byID[blockedByDep.ID].Blocker.UnclosedDepIDs)
+	assert.Equal(t, BlockerKindRetryCooldown, byID[parked.ID].Blocker.Kind)
+	assert.Equal(t, until.Format(time.RFC3339), byID[parked.ID].Blocker.NextEligibleAt)
 }
 
 func TestBlockedAllOmitsExpiredCooldown(t *testing.T) {

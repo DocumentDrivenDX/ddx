@@ -433,11 +433,9 @@ func TestExecuteBeadWorkerNoReadyWork(t *testing.T) {
 	assert.Equal(t, 0, result.Attempts)
 }
 
-// TestExecuteBeadWorkerEpicIsExecutable: epics are first-class execution
-// targets. When the only non-cooldown ready bead is an epic, the loop must
-// pick it up, not skip it. The agent is responsible for closing children
-// first and verifying epic-level AC before close.
-func TestExecuteBeadWorkerEpicIsExecutable(t *testing.T) {
+// TestExecuteBeadWorkerEpicIsNotOrdinaryWork: ordinary ddx work skips epic
+// containers unless a dedicated epic-worker path owns them.
+func TestExecuteBeadWorkerEpicIsNotOrdinaryWork(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
@@ -471,8 +469,10 @@ func TestExecuteBeadWorkerEpicIsExecutable(t *testing.T) {
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.False(t, result.NoReadyWork, "epic is ready work, loop must not signal NoReadyWork")
-	assert.Equal(t, []string{"ddx-epic-001"}, executed, "epic must be executed; cooldown task is skipped")
+	assert.True(t, result.NoReadyWork, "ordinary ddx work must skip epic containers")
+	assert.Empty(t, executed, "ordinary ddx work must not execute epics")
+	assert.Equal(t, []string{"ddx-epic-001"}, result.NoReadyWorkDetail.SkippedEpics)
+	assert.Equal(t, []string{"ddx-task-002"}, result.NoReadyWorkDetail.SkippedOnCooldown)
 }
 
 func TestExecuteBeadWorkerConcurrentWorkersDoNotDoubleExecuteSameBead(t *testing.T) {
@@ -621,7 +621,7 @@ func TestExecuteBeadWorkerConcurrentWorkersDistributeDistinctReadyBeads(t *testi
 	assert.Equal(t, "sess-"+second.ID, secondGot.Extra["session_id"])
 }
 
-func TestReadyExecutionIncludesEpics(t *testing.T) {
+func TestReadyExecutionExcludesEpics(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
@@ -632,7 +632,8 @@ func TestReadyExecutionIncludesEpics(t *testing.T) {
 
 	ready, err := store.ReadyExecution()
 	require.NoError(t, err)
-	require.Len(t, ready, 2, "epics are executable: agent closes children, verifies epic-level AC, then closes epic")
+	require.Len(t, ready, 1, "ordinary execution excludes epic containers")
+	assert.Equal(t, "ddx-task01", ready[0].ID)
 }
 
 func TestExecuteBeadWorkerEmitsStructuredProgressEvents(t *testing.T) {
