@@ -1,0 +1,80 @@
+{
+  "attempt_id": "20260506T031050-dc85085e",
+  "bead_id": "ddx-00a8ed79",
+  "base_rev": "a5e5ddb2a3227a58eeebfc90f90bfcb44965a9ff",
+  "created_at": "2026-05-06T03:10:52.653089729Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-00a8ed79",
+    "title": "cli: support root --version flag",
+    "description": "PROBLEM\n  `ddx --version` exits with an unknown-flag error even though `ddx version` works. Operators commonly guess top-level `--version` for modern CLIs; DDx should support both forms so discovery works without removing or changing the existing `version` subcommand.\n\nROOT CAUSE\n  cli/cmd/command_factory.go:124-127 registers root persistent flags for `--config`, `--verbose`/`-v`, and `--library-base-path`, but no root `--version` flag exists. cli/cmd/command_factory.go:450-466 defines the `version` subcommand and prints the desired version/commit/build output there only. cli/cmd/command_factory.go:130-147 runs root PersistentPreRunE for normal command execution; a root `--version` path must print version info and exit successfully before ordinary command validation/update checks make the flag behave like a missing command.\n\nPROPOSED FIX\n  - Add a root persistent `--version` boolean flag in cli/cmd/command_factory.go near the other root flags.\n  - Factor the existing version-printing body from the `version` subcommand into a shared helper so `ddx version` and `ddx --version` return the same concise DDx version, commit, and build output.\n  - Wire root flag handling so `ddx --version` exits 0, writes to command stdout, does not require a subcommand, and does not consume `-v` because `-v` remains the verbose flag.\n  - Add focused tests in cli/cmd/version_acceptance_test.go for `TestRootVersionFlag_PrintsVersionAndBuildInfo` and `TestVersionCommand_StillPrintsVersionAndBuildInfo` (or update the existing acceptance test with those exact subtests).\n\nNON-SCOPE\n  - Do not remove or rename `ddx version`.\n  - Do not change `-v`; it remains verbose output.\n  - Do not alter `ddx status`, plugin version checks, installation/update behavior, or release metadata formatting beyond sharing the existing version output helper.\n\nPARENT\n  This is a root-level CLI ergonomics bug; no suitable open CLI umbrella bead exists.\n\nDEPS\n  No deps.",
+    "acceptance": "1. `ddx --version` exits 0 and prints the same DDx version, Commit, and Built lines currently printed by `ddx version`.\n2. `ddx version` remains supported and keeps printing DDx version, Commit, and Built lines.\n3. `-v` remains the existing verbose flag; this bead does not introduce `ddx -v` as a version alias.\n4. TestRootVersionFlag_PrintsVersionAndBuildInfo in cli/cmd/version_acceptance_test.go (or an equivalently named subtest under TestAcceptance_US008_CheckDDxVersion) verifies root `--version` output and exit success.\n5. TestVersionCommand_StillPrintsVersionAndBuildInfo in cli/cmd/version_acceptance_test.go (or the existing updated acceptance subtest) verifies the `version` subcommand still works after the helper extraction.\n6. `cd cli \u0026\u0026 go test ./cmd/... -run 'TestRootVersionFlag_PrintsVersionAndBuildInfo|TestVersionCommand_StillPrintsVersionAndBuildInfo|TestAcceptance_US008_CheckDDxVersion' -count=1` passes.\n7. `lefthook run pre-commit` passes.",
+    "labels": [
+      "phase:2",
+      "area:cli",
+      "kind:fix",
+      "ux",
+      "discovery"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T03:10:50Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T01:25:03.939132147Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T011801-6a3687e3\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":5528363,\"output_tokens\":24408,\"total_tokens\":5552771,\"cost_usd\":0,\"duration_ms\":420652,\"exit_code\":0}",
+          "created_at": "2026-05-06T01:25:04.152005921Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=5552771 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T01:25:11.492624856Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=e23cf3e487a5cac8fcb4ea2dcf16a106a06f96dd\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T21:30:16-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=11361\noutput_bytes=0\nelapsed_ms=4237",
+          "created_at": "2026-05-06T01:25:16.238653897Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=e23cf3e487a5cac8fcb4ea2dcf16a106a06f96dd\nbase_rev=849d82c3ba7523ecd58d89de76af1ff8221d39e8",
+          "created_at": "2026-05-06T01:25:16.475049369Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T03:10:50.415768067Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260506T031050-dc85085e",
+    "prompt": ".ddx/executions/20260506T031050-dc85085e/prompt.md",
+    "manifest": ".ddx/executions/20260506T031050-dc85085e/manifest.json",
+    "result": ".ddx/executions/20260506T031050-dc85085e/result.json",
+    "checks": ".ddx/executions/20260506T031050-dc85085e/checks.json",
+    "usage": ".ddx/executions/20260506T031050-dc85085e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-00a8ed79-20260506T031050-dc85085e"
+  },
+  "prompt_sha": "fd1e3945a813d3826b8cb08b09cbc8b241ba186a8949b105fa9c95857f2a7b24"
+}
