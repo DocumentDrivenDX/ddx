@@ -26,9 +26,11 @@ and shareable.
 The dashboard UI is implemented as a SvelteKit application with graphql-request for
 GraphQL data fetching. Every page uses `+page.ts` load functions to fetch data
 from the `/graphql` endpoint defined in SD-022. The shared run-detail surface
-uses the FEAT-008/FEAT-010 tab structure: `overview`; `overview` / `prompt` /
-`response` / `tools` / `evidence` for `try`; `overview` / `prompt` /
-`response` / `session` / `tools` / `evidence` for `run`.
+uses the FEAT-008/FEAT-010 tab structure:
+
+- `work` → `overview`
+- `try` → `overview`, `prompt`, `response`, `tools`, `evidence`
+- `run` → `overview`, `prompt`, `response`, `session`, `tools`, `evidence`
 
 ## Problem Statement
 
@@ -135,14 +137,14 @@ label: `work`, `try`, or `run`.
   parent/child links, and artifact producer links
 - Layer-aware row expansion replaces the retired Sessions and Executions
   top-level activity tabs and opens the shared run-detail tab strip:
-  `layer=run` rows expose `overview`, `prompt`, `response`, `session`,
-  `tools`, and `evidence`; `layer=try` rows expose `overview`,
-  `prompt`, `response`, `tools`, and `evidence`; `layer=work` rows expose
-  `overview` only plus queue inputs and child run links.
+  `layer=work` rows expose `overview` only plus queue inputs and child run
+  links; `layer=try` rows expose `overview`, `prompt`, `response`, `tools`,
+  and `evidence`; `layer=run` rows expose `overview`, `prompt`, `response`,
+  `session`, `tools`, and `evidence`.
 - Re-queue affordances per FEAT-008 US-086c (try-layer + run-layer
   re-queue button; work-layer "Start worker from this drain"); every
   successful re-queue emits a `run_requeue` audit event on the
-  originating bead per FEAT-010 §"Re-queue audit events".
+  originating bead per FEAT-010 §"Re-queue audit event schema".
 - Same capabilities as FEAT-008 US-086 and US-086b
 
 **GraphQL Query:** `runs` from FEAT-010 with optional `projectID` omitted.
@@ -246,12 +248,13 @@ The global navigation bar shows:
 Sessions and Executions are no longer top-level activity tabs. The unified
 Runs view (this feature + FEAT-008 §5) carries layer chips (`work`, `try`,
 `run`) and an inline row-expansion pane that surfaces what those tabs used
-to show — agent-session transcript and cost detail under `layer=run`,
-execute-bead bundle detail under `layer=try`, queue-drain detail under
-`layer=work`. Legacy URLs (`/sessions`, `/executions`, `/executions/[id]`)
-respond with 302 redirects (NOT 301) to the matching filtered Runs URL with
-all query params preserved and a `Sunset` header set for the deprecation
-window.
+to show — `work` shows `overview` only plus queue inputs and child run
+links; `try` shows `overview`, `prompt`, `response`, `tools`, and
+`evidence`; `run` shows `overview`, `prompt`, `response`, `session`,
+`tools`, and `evidence`. Legacy URLs (`/sessions`, `/executions`,
+`/executions/[id]`) respond with 302 redirects (NOT 301) to the matching
+filtered Runs URL with all query params preserved and a `Sunset` header set
+for the deprecation window.
 
 The project picker changes the `:projectId` segment in-place while preserving
 the current page tab. So switching project while on the Graph tab navigates to

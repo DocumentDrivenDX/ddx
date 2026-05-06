@@ -61,11 +61,14 @@ management, run lifecycle, or dispatch mechanics.
 
 When an evaluation record links into a preserved `try` or `run`, the shared
 project-scoped run-detail surface from FEAT-008/FEAT-010 is the canonical
-drill-down view, including the layer-aware tab structure (`overview`;
-`overview` / `prompt` / `response` / `tools` / `evidence` for `try`;
-`overview` / `prompt` / `response` / `session` / `tools` / `evidence` for
-`run`). The canonical access audit semantics stay on that surface. FEAT-019
-does not own a parallel detail page for those links.
+drill-down view, including the layer-aware tab structure:
+
+- `work` → `overview`
+- `try` → `overview`, `prompt`, `response`, `tools`, `evidence`
+- `run` → `overview`, `prompt`, `response`, `session`, `tools`, `evidence`
+
+The canonical access audit semantics stay on that surface. FEAT-019 does not
+own a parallel detail page for those links.
 
 ### Relationship to manual re-queue (FEAT-010 `runRequeue`)
 
@@ -75,7 +78,7 @@ evaluation auto-retry policies skills compose on top of FEAT-019 records.
 Both go through the same backend write surface — the FEAT-010
 `runRequeue` GraphQL mutation — and both produce the same canonical
 `run_requeue` audit event on the originating bead (schema in FEAT-010
-§"Re-queue audit events"). FEAT-019 does not own dispatch; it consumes the
+§"Re-queue audit event schema"). FEAT-019 does not own dispatch; it consumes the
 resulting layer-2 try / layer-1 run records the same way it consumes any
 other preserved `ddx try` iteration.
 
@@ -374,11 +377,11 @@ agent:
   try session ID and hidden ref — no FEAT-019-owned duplicate provenance record exists.
 - Given an evaluation record links to a run detail, then opening that link
   uses the shared project-scoped run-detail surface, including the layer-
-  appropriate tab strip (`overview`; `overview` / `prompt` / `response` /
-  `tools` / `evidence` for `try`; `overview` / `prompt` / `response` /
-  `session` / `tools` / `evidence` for `run`), the Evidence tab / download
-  affordances, and the same project-membership visibility rules that drive
-  the FEAT-008/FEAT-010 audit event.
+  appropriate tab strip (`work` → `overview`; `try` → `overview`, `prompt`,
+  `response`, `tools`, `evidence`; `run` → `overview`, `prompt`, `response`,
+  `session`, `tools`, `evidence`), the Evidence tab / download affordances,
+  and the same project-membership visibility rules that drive the FEAT-008/
+  FEAT-010 audit event.
 
 ## Dependencies
 

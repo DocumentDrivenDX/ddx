@@ -82,7 +82,7 @@ project-scoped tabs in the global navigation, in this order:
 | Beads | `beads` | Bead list / kanban / ready / detail (US-082*) |
 | Artifacts | `artifacts` | Artifact browser (US-080, US-081b, US-083) |
 | Graph | `graph` | Document dependency graph (US-081, US-081c) |
-| Runs | `runs` | Layer-aware run history with `work` / `try` / `run` chips, row expansion into the shared run-detail tab structure, and re-queue (US-086b, US-086c) |
+| Runs | `runs` | Layer-aware run history with `work` / `try` / `run` chips, row expansion into the shared layer-aware run-detail tabs, and re-queue (US-086b, US-086c) |
 | Workers | `workers` | Live + recent worker processes for this project (US-085b, US-086, US-086a) |
 | Personas | `personas` | Persona browser + role bindings (US-097) |
 | Plugins | `plugins` | Plugin registry + install/uninstall (US-098) |
@@ -328,7 +328,7 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
      - Re-queue against a closed bead is disabled and surfaces a
        "Reopen bead first" link.
      - Every successful re-queue emits a `run_requeue` audit event on the
-       originating bead (schema: FEAT-010 §"Re-queue audit events").
+       originating bead (schema: FEAT-010 §"Re-queue audit event schema").
    - Layer-aware run views consume read-only GraphQL/HTTP state except for the
      narrow `artifactRegenerate` and `runRequeue` mutations.
 
@@ -807,7 +807,8 @@ provider logs
 - Given I filter by layer `work`, then only work records are shown and the URL
   reflects the filter
 - Given I click a `work` record, then I navigate to its detail showing queue
-  inputs, selected beads, stop condition, and child try attempts in order
+  inputs, selected beads, stop condition, child try attempts in order, and
+  the `overview` tab
 - Given I click a child `try` record, then I navigate to its detail showing
   bead id, base/result revisions, worktree path, merge or preserve outcome,
   checks, child layer-1 run records, and the `overview` / `prompt` /

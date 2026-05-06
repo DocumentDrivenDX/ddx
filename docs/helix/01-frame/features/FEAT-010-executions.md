@@ -629,7 +629,7 @@ The write surfaces added by this feature are limited to
 CLI-only. Additional write endpoints require a separate feature update;
 they are not implicit in this read-coverage expansion.
 
-### Re-queue audit events
+### Re-queue audit event schema
 
 The `runRequeue` mutation reopens the originating bead and appends a
 `run_requeue` event to that bead's audit log. Concurrent or repeat
@@ -638,7 +638,7 @@ re-queue and a single event (`deduplicated=true` is returned to all
 subsequent callers); if the cached idempotency record points at a
 missing bead, the requeue is replayed against the run's current
 originating bead. The event uses the standard `bead.BeadEvent`
-envelope:
+envelope and the following field schema:
 
 | Field | Value |
 |---|---|
@@ -655,6 +655,9 @@ empty string when the caller did not pass `RunRequeueInput.layer`.
 (`unknown`, `localhost`, or `tsnet`). `actor` is the resolved user or
 operator label; when the request carries no identifying header, the
 audit fields fall back to `identity=unknown actor=anonymous`.
+
+The GraphQL mutation response may also report `deduplicated=true`, but
+that is a write-response flag, not part of the persisted audit event.
 
 Consumers of the audit log (FEAT-008 Runs row expansion, evaluation
 skills under FEAT-019) treat `run_requeue` events as the canonical
@@ -821,7 +824,7 @@ to CONTRACT-003: write surfaces for `artifactRegenerate` (HTTP/MCP) and
 `runRequeue` (GraphQL). `runRequeue` does not invoke an agent — it
 reopens the originating bead so the existing `ddx agent execute-loop`
 can claim it again — but it is still a write because it mutates bead
-state and appends an audit event (see "Re-queue audit events" above).
+state and appends an audit event (see "Re-queue audit event schema" above).
 No other write surfaces are added; in particular, layer-1, layer-2,
 and layer-3 invocation remain CLI-only.
 
