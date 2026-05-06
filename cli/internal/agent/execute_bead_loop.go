@@ -24,10 +24,16 @@ import (
 // (assignee, retry caps, harness/model, tier bounds, etc.) live on
 // config.ResolvedConfig and are passed via Run's rcfg argument.
 type ExecuteBeadLoopRuntime struct {
-	Log                   io.Writer
-	EventSink             io.Writer
-	ProgressCh            chan<- ProgressEvent
-	PreClaimHook          func(ctx context.Context) error
+	Log          io.Writer
+	EventSink    io.Writer
+	ProgressCh   chan<- ProgressEvent
+	PreClaimHook func(ctx context.Context) error
+	// PreClaimIntakeHook runs after routing preflight and before Claim. It
+	// classifies the candidate for actionability/scope; only
+	// actionable_atomic proceeds directly to Claim. Non-atomic outcomes
+	// skip the bead without claim. intake_error fail-opens so infrastructure
+	// failures do not become hidden dispatch failures.
+	PreClaimIntakeHook    PreClaimIntakeHook
 	PreDispatchLintHook   func(ctx context.Context, beadID string) (LintResult, error)
 	PostAttemptTriageHook func(ctx context.Context, beadID string, report ExecuteBeadReport) (TriageResult, error)
 	// ReviewCostCap, when non-nil, accumulates reviewer cost on the same
@@ -664,6 +670,55 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				// ddx-dc157075 AC #3: do NOT abandon the rest of the queue on
 				// a single bead's preflight rejection. Continue to the next
 				// candidate. If --once was requested we still honour it.
+				if runtime.Once {
+					exitReason = "once_complete"
+					return result, nil
+				}
+				continue
+			}
+		}
+
+		// Pre-claim intake runs after routing preflight and before the
+		// existing lint gate so actionability/scope decisions can stop a
+		// bead before we spend work on the claim/execute path.
+		if runtime.PreClaimIntakeHook != nil {
+			intakeResult, intakeErr := runtime.PreClaimIntakeHook(ctx, candidate.ID)
+			intakeOutcome := intakeResult.normalizedOutcome()
+			switch {
+			case intakeErr != nil:
+				warning := intakeErr.Error()
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake: %v (continuing to claim %s)\n", intakeErr, candidate.ID)
+				}
+				emit("pre_claim_intake.warn", map[string]any{
+					"bead_id": candidate.ID,
+					"outcome": string(PreClaimIntakeError),
+					"warning": warning,
+				})
+			case intakeOutcome == PreClaimIntakeActionableAtomic:
+				// pass-through
+			case intakeOutcome == PreClaimIntakeError:
+				warning := intakeResult.Detail
+				if warning == "" {
+					warning = "pre-claim intake returned intake_error"
+				}
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake: %s (continuing to claim %s)\n", warning, candidate.ID)
+				}
+				emit("pre_claim_intake.warn", map[string]any{
+					"bead_id": candidate.ID,
+					"outcome": string(PreClaimIntakeError),
+					"warning": warning,
+				})
+			default:
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake: %s (skipping %s)\n", intakeOutcome, candidate.ID)
+				}
+				emit("pre_claim_intake.blocked", map[string]any{
+					"bead_id": candidate.ID,
+					"outcome": string(intakeOutcome),
+					"detail":  intakeResult.Detail,
+				})
 				if runtime.Once {
 					exitReason = "once_complete"
 					return result, nil
