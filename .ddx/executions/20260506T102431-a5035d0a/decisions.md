@@ -1,0 +1,2 @@
+Cache.Invalidate: DELETE stale evidence; `cli/internal/update/cache.go` in the current tree has no `Invalidate` method, and `go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./...` reports no remaining `internal/update` dead symbols.
+InvalidateCache: DELETE stale evidence; the symbol is absent from the current `cli/internal/update` package, and `cd cli && go test ./...` passes with the update package green.
