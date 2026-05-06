@@ -1,0 +1,12 @@
+status: already_satisfied
+reason: The current tree already contains the Runs reuse work the bead asks for, so there is no safe source edit to make in this attempt.
+
+evidence:
+- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/runs/+page.svelte:10-19` imports the shared `FilterChip` primitive and defines `VIRTUALIZE_THRESHOLD = 1000`.
+- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/runs/+page.svelte:154-185` derives the virtualized row style and subscribes to `subscribeWorkerProgress` for live worker phase updates.
+- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/runs/+page.svelte:10-19` uses the same shared `FilterChip` primitive and the same virtualization threshold.
+- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/+page.svelte:5-7` imports the same shared `FilterChip` primitive from `$lib/components/FilterChip.svelte`.
+- `cli/internal/server/frontend/e2e/runs.spec.ts:596-728` verifies project-scoped Runs virtualization and live phase updates.
+- `cli/internal/server/frontend/e2e/runs.spec.ts:731-868` verifies the node-scoped Runs page uses shared chips, virtualizes after 1000 rows, and keeps live worker phases updating.
+
+verification_command: cd cli/internal/server/frontend && bun run check
