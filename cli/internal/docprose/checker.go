@@ -190,6 +190,9 @@ func unsupportedClaim(line string) bool {
 	if hasEmpiricalOrCheckContext(lower) {
 		return false
 	}
+	if unsupportedBenefitClaim(lower) {
+		return true
+	}
 	if countMatches(lower, []string{"robust", "comprehensive", "smooth", "elegant", "excited", "high"}) >= 2 {
 		return true
 	}
@@ -216,6 +219,22 @@ func unsupportedComprehensiveClaim(lower string) bool {
 		"comprehensive checklists",
 		"comprehensive tests",
 		"comprehensive documentation",
+	})
+}
+
+func unsupportedBenefitClaim(lower string) bool {
+	return containsAny(lower, []string{
+		"better alignment",
+		"better pattern",
+		"better tools",
+		"complex problems",
+		"cutting edge",
+		"powerful commands",
+		"productive ways",
+		"sophisticated autonomous",
+		"sophisticated control flow",
+		"sophisticated multi-agent",
+		"true power",
 	})
 }
 

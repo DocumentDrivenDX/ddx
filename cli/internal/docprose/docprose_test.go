@@ -178,6 +178,28 @@ func TestProseCheckerDoesNotFlagUsefulTechnicalContext(t *testing.T) {
 	}
 }
 
+func TestProseCheckerFlagsUnsupportedBenefitClaims(t *testing.T) {
+	checker, err := NewChecker(ModeTechnical, Vocabulary{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := strings.Join([]string{
+		"The framework exposes powerful commands for better alignment.",
+		"Teams can use sophisticated multi-agent systems to solve complex problems.",
+		"The pattern enables cutting edge automation in productive ways.",
+		"Benchmarks showed significantly better output on the prompt suite.",
+	}, "\n")
+	findings := checker.Findings("docs/helix/example.md", input)
+	if len(findings) != 3 {
+		t.Fatalf("expected three unsupported benefit findings, got %+v", findings)
+	}
+	for _, finding := range findings {
+		if finding.RuleID != "prose.generic.claims" {
+			t.Fatalf("unexpected rule id: %+v", finding)
+		}
+	}
+}
+
 func sameFindings(got, want []Finding) bool {
 	if len(got) != len(want) {
 		return false

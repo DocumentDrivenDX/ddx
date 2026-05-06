@@ -10,6 +10,17 @@ rules:
       - world-class
       - best-in-class
       - cutting-edge
+      - better alignment
+      - better pattern
+      - better tools
+      - complex problems
+      - cutting edge
+      - powerful commands
+      - productive ways
+      - sophisticated autonomous
+      - sophisticated control flow
+      - sophisticated multi-agent
+      - true power
     rationale: The sentence uses unsupported promotional claims such as "robust", "comprehensive", and "seamless" instead of precise behavior.
     suggested_edit: Replace the claim with a concrete description of the actual change and its measured effect.
   - id: prose.generic.importance
