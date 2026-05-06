@@ -1,0 +1,13 @@
+verification_command: cd cli && go test ./cmd ./internal/agent/... ./internal/docprose/... -run "Prose|Review" && lefthook run pre-commit
+
+The requested prose-review integration is already present in the current
+tree, so no code changes were needed for this bead. Evidence:
+- `cli/cmd/bead_review.go` exposes the opt-in `--prose` flag on
+  `ddx bead review <id>`.
+- `cli/internal/agent/execute_bead_review.go` renders a separate
+  `<prose-review advisory="true">` section, emits `prose_findings`, and
+  reuses `docprose.ResolveSettings` plus `docprose.NewChecker`.
+- `cli/internal/agent/execute_bead_review_test.go` covers advisory
+  closure behavior and the prose-only result path.
+- `cli/cmd/bead_review_test.go` covers the CLI prompt wiring and the
+  opt-in prose section.
