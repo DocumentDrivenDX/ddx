@@ -83,6 +83,7 @@ func TestNewStore_DefaultsToJSONL(t *testing.T) {
 func TestNewStore_SelectsAxonFromConfig(t *testing.T) {
 	tempDir := t.TempDir()
 	writeStoreConfig(t, tempDir, BackendAxon)
+	t.Setenv(AxonExperimentalEnv, "0")
 
 	s := NewStore(filepath.Join(tempDir, ".ddx"))
 	_, ok := s.backend.(*AxonBackend)

@@ -22,10 +22,10 @@ import (
 // shape directly. The fallback path keeps the existing in-process JSONL
 // emulation for callers that have not wired a transport yet.
 //
-// NewStore routes to AxonBackend when beads.backend is set to axon in the
-// config or via DDX_BEAD_BACKEND. The backend implementation itself still
-// supports the legacy DDX_AXON_EXPERIMENTAL helper for compatibility with
-// older tests and tooling, but the store selector no longer requires it.
+// NewStore routes to AxonBackend when bead.backend is set to axon in the
+// config or via DDX_BEAD_BACKEND. The backend implementation still exposes
+// the legacy DDX_AXON_EXPERIMENTAL helper for compatibility with older tests
+// and tooling, but store selection does not consult it.
 const BackendAxon = "axon"
 
 // AxonExperimentalEnv is retained for compatibility with older tests and
@@ -129,8 +129,8 @@ func WithAxonGraphQLClient(client any) AxonBackendOption {
 }
 
 // AxonExperimentalEnabled reports whether the operator has opted in to the
-// experimental axon backend via DDX_AXON_EXPERIMENTAL=1. NewStore consults
-// this before routing beads.backend=axon to AxonBackend.
+// legacy axon helper via DDX_AXON_EXPERIMENTAL=1. It remains available for
+// tests and compatibility checks, but store selection does not depend on it.
 func AxonExperimentalEnabled() bool {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(AxonExperimentalEnv))) {
 	case "1", "true", "yes", "on":
