@@ -26,8 +26,9 @@ implementation bead:
 - whether DDx should wrap a pluggable runner and treat external tooling
   as optional
 
-This TD answers those questions so the implementation beads can start
-from a stable contract instead of inventing their own architecture.
+This TD answers the checker boundary question so the implementation
+beads can start from a stable contract instead of inventing their own
+architecture.
 
 ## Decision
 
@@ -192,6 +193,9 @@ are:
 - `severity`
 - `rationale`
 - `suggested_edit`
+
+Each finding therefore carries file, line, and rule identifiers together
+with an explanation and a concrete edit suggestion.
 
 Implementation may add helper fields such as `mode`, `snippet`, or
 `runner`, but these core fields must remain stable.
