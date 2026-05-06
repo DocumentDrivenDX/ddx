@@ -334,7 +334,8 @@ func compactProgressEventIdentity(data map[string]any) string {
 	}
 	taskID, _ := data["task_id"].(string)
 	taskID = strings.TrimSpace(taskID)
-	turn := progressTurnNumber(data)
+	phase, _ := data["phase"].(string)
+	turn := progressVisibleCounter(phase, data)
 	switch {
 	case taskID != "" && turn > 0:
 		return fmt.Sprintf("%s %d", taskID, turn)
@@ -347,7 +348,12 @@ func compactProgressEventIdentity(data map[string]any) string {
 	}
 }
 
-func progressTurnNumber(data map[string]any) int {
+func progressVisibleCounter(phase string, data map[string]any) int {
+	if phase == "tool" {
+		if toolCallIndex := progressInt(data, "tool_call_index"); toolCallIndex > 0 {
+			return toolCallIndex
+		}
+	}
 	if turn := progressInt(data, "turn_index"); turn > 0 {
 		return turn
 	}

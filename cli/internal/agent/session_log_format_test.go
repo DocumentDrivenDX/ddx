@@ -140,6 +140,26 @@ func TestProgressCorpus_TurnIndexCountsUp(t *testing.T) {
 	assert.Less(t, idx22, idx23)
 }
 
+func TestFormatServiceProgressEntries_UsesToolCallIndexAndSummary(t *testing.T) {
+	got := FormatServiceProgressEntries([]agentlib.ServiceProgressData{
+		{
+			Phase:         "tool",
+			State:         "complete",
+			TaskID:        "ddx-live",
+			TurnIndex:     1,
+			ToolName:      "go",
+			Command:       "go test ./internal/agent/...",
+			Action:        "run go test ./internal/agent/...",
+			ToolCallID:    "call-2",
+			ToolCallIndex: 2,
+			OutputSummary: "command finished successfully",
+		},
+	})
+
+	require.Equal(t, "  ok ddx-live 2 run go test ./internal/agent/... < command finished successfully\n", got)
+	assert.NotContains(t, got, "\n  >")
+}
+
 func renderedLineContaining(t *testing.T, rendered, want string) string {
 	t.Helper()
 	for _, line := range strings.Split(strings.TrimSpace(rendered), "\n") {
