@@ -84,7 +84,10 @@ prose check into a hard failure by default.
 
 The important rule is that missing optional tooling never erases the
 document analysis path. It only changes whether DDx can use the selected
-runner implementation.
+runner implementation. The first executable surface stays advisory by
+default even when the runner is optional: the user still gets findings,
+and missing-tool state is surfaced separately as an execution diagnostic
+instead of suppressing the scan.
 
 ## Default Plugin Asset Layout
 
@@ -268,6 +271,8 @@ The rollout should be staged in this order:
 
 That sequencing keeps the first executable surface advisory and
 deterministic before any review workflow starts consuming the findings.
+It also means later bead review wiring can reuse the same finding schema
+without re-litigating the checker boundary or the missing-tool contract.
 
 ## Non-Scope
 
