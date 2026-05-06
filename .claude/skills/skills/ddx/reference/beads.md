@@ -3,7 +3,7 @@
 A bead is a portable work item. It's created, picked up by an agent,
 run against a real codebase, and closed with evidence. The single
 hardest rule: **the bead description must be readable cold**. An
-automated `ddx agent execute-bead` run has no chat history, no open
+automated `ddx try` run has no chat history, no open
 tabs, no prior context — only what's in the bead.
 
 ## Required structure
@@ -62,11 +62,11 @@ epic. Two small beads that each land cleanly are better than one
 big bead that stalls.
 
 ```
-Epic: "Wire multi-harness quorum into ddx bead review"
-├── Task: Add --quorum flag to ddx bead review command
-├── Task: Dispatch the review prompt to N harnesses concurrently
-├── Task: Aggregate per-harness verdicts into a structured report
-└── Task: Add integration test using script harness for 2-arm quorum
+Epic: "Add structured bead review evidence"
+├── Task: Render per-criterion verdict rows
+├── Task: Attach review evidence to a bead
+├── Task: Reject malformed verdicts without evidence
+└── Task: Add integration test using script reviewer output
 ```
 
 Each child bead has ~3 files in scope, a command-based AC, and

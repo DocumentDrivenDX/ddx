@@ -20,8 +20,8 @@ DDx invokes LLMs through the upstream Fizeau execution contract,
 That contract is the entire execution boundary. DDx exposes the public
 `ddx run` / `ddx try` / `ddx work` layers and sends requests to Fizeau for the
 actual invocation. Upstream diagnostic/status commands may remain as
-Fizeau-owned observability, but the old `ddx agent` workflow namespace is not
-a public workflow surface.
+Fizeau-owned observability, but the retired workflow namespace is
+not a public workflow surface and has no compatibility alias.
 
 ## DDx-side responsibilities
 
@@ -253,7 +253,7 @@ formed; it does not own worktree, queue, or CLI namespace design.
 | Unified `.ddx/runs/<run-id>/` substrate, layer metadata, child/parent run links, migration from `.ddx/exec-runs/` and `.ddx/executions/` | Moves to FEAT-010 |
 | Queue iteration, no-progress detection, retry scheduling, cooldowns, stop conditions, loop records | Moves to FEAT-010 layer 3 (`ddx work`) |
 | Public top-level command shape: `ddx run`, `ddx try`, `ddx work`, `ddx runs`, `ddx tries`, `ddx work workers` | Moves to FEAT-001 |
-| Structural mounting of the upstream agent Cobra root under `ddx agent` and hard-deprecation redirects for legacy DDx workflow commands | Moves to FEAT-001, with the contract boundary referenced here |
+| Structural mounting of the upstream agent Cobra root under the retired DDx workflow namespace and hard-deprecation redirects for legacy workflow commands | Moves to FEAT-001, with the contract boundary referenced here |
 
 ### Conflict-recovery structured outcomes (bead ddx-0097af14)
 
@@ -544,7 +544,7 @@ a server.
 ### Compatibility writers
 
 `.ddx/workers/` (spec.json + status.json) is preserved as a fallback
-source of truth for `ddx agent doctor` / Fizeau observability for one alpha release lag, then
+source of truth for Fizeau observability for one alpha release lag, then
 deprecated once the doctor migrates to the server's derived view. The
 server's append-only event log lives at `.ddx/server/worker-events.jsonl`.
 

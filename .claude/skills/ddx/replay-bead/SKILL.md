@@ -1,6 +1,6 @@
 ---
 name: replay-bead
-description: Re-run a previously executed bead under altered conditions (different harness, model, profile, persona, or base revision) and diff the new attempt against the prior baseline. Use when investigating why an attempt failed, A/B-testing a model upgrade on a known task, or sanity-checking a regression. Replaces the deprecated `ddx agent replay` CLI.
+description: Re-run a previously executed bead under altered conditions (different harness, model, profile, persona, or base revision) and diff the new attempt against the prior baseline. Use when investigating why an attempt failed, A/B-testing a model upgrade on a known task, or sanity-checking a regression. Replaces the deprecated replay CLI from the old task-dispatch namespace.
 ---
 
 # Replay Bead
@@ -10,10 +10,10 @@ conditions and diffing the result against the original baseline.
 Composes `ddx try` (the layer-2 bead-attempt primitive) with the
 output structure from `compare-prompts` step 5 (replay aggregation).
 
-This skill replaces the retired `ddx agent replay` CLI. The retired
-command silently re-ran a bead's reconstructed prompt under a swapped
-harness/model and dropped the result into a sandbox worktree. The
-skill formalizes the same shape: pin the baseline, vary exactly one
+This skill replaces the retired replay CLI from the old task-dispatch
+namespace. The retired command silently re-ran a bead's reconstructed prompt
+under a swapped harness/model and dropped the result into a sandbox worktree.
+The skill formalizes the same shape: pin the baseline, vary exactly one
 condition, capture the new attempt as a peer record, render a diff.
 
 ## When to use
@@ -190,16 +190,16 @@ mechanically. Replay verdicts require human judgment on whether the
 new diff is genuinely better, equivalent under noise, or regressed
 on a dimension the baseline got right.
 
-## Replacing `ddx agent replay`
+## Replacing the retired replay CLI
 
 The retired command mapped to this workflow:
 
 | Old | New |
 |---|---|
-| `ddx agent replay <bead> --harness <h>` | `ddx try <bead> --harness <h> --no-merge` (step 3) |
-| `ddx agent replay <bead> --model <m>` | `ddx try <bead> --model <m> --no-merge` |
-| `ddx agent replay <bead> --at-head` | `ddx try <bead> --at-head --no-merge` (varies base-rev axis) |
-| `ddx agent replay <bead> --sandbox` | always implicit — `ddx try` runs in an isolated worktree |
+| old replay CLI with `--harness <h>` | `ddx try <bead> --harness <h> --no-merge` (step 3) |
+| old replay CLI with `--model <m>` | `ddx try <bead> --model <m> --no-merge` |
+| old replay CLI with `--at-head` | `ddx try <bead> --at-head --no-merge` (varies base-rev axis) |
+| old replay CLI with `--sandbox` | always implicit — `ddx try` runs in an isolated worktree |
 | inline reconstructed prompt | bead description is re-resolved by `ddx try` per layer-2 |
 | no diff rendering | step 5/6 produce explicit baseline-vs-replay diff |
 

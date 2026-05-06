@@ -12,7 +12,7 @@ matrix: same prompt, varied conditions, structured aggregation.
 This skill replaces two retired surfaces:
 
 - the removed inline quorum flag.
-- `ddx agent benchmark` — the per-prompt benchmark CLI.
+- the retired benchmark CLI from the old task-dispatch namespace.
 
 Both collapse into the same workflow shape: dispatch N invocations,
 aggregate their outputs, render a verdict.
@@ -212,8 +212,8 @@ through the same `MinPower`/`MaxPower` bounds.
 
 ## Replacing `agent benchmark`
 
-The retired `ddx agent benchmark` mapped a prompt across a fixed
-matrix and rendered a results table. The skill subsumes it by:
+The retired benchmark CLI mapped a prompt across a fixed matrix and rendered a
+results table. The skill subsumes it by:
 
 - Authoring the matrix as the per-arm dispatch list in step 3.
 - Reusing the output contract in step 2 to keep arms aggregateable.

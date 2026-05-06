@@ -38,7 +38,7 @@ evidence model rather than a separate artifact-only ledger.
 - Claude exposes historical usage via `~/.claude/stats-cache.json`, but the
   best current-quota source is still unresolved. DDx should exhaust stable
   non-PTY options before accepting PTY automation.
-- The embedded `ddx-agent` runtime is gaining its own session logging and OTEL
+- The embedded Fizeau runtime is gaining its own session logging and OTEL
   telemetry. DDx should consume that telemetry minimally rather than re-owning
   the runtime's logs.
 - DDx does not yet have a normalized status/cost signal model that combines
@@ -76,7 +76,7 @@ activity and performance metadata needed for routing and provenance.
 | Codex native session JSONL / local state | Yes, when persistence is enabled and `token_count.rate_limits` is present | Yes, recent usage totals from session JSONL and local state | Near-real-time once Codex writes the session log; stale if the file is missing or unreadable | Machine-local, authenticated Codex session/account state | Yes, preferred live source for Codex routing when readable | Treat missing persistence or unreadable logs as `unknown`; do not rely on inline PTY scraping in the routing path |
 | Claude `~/.claude/stats-cache.json` | No stable non-PTY source confirmed yet; surface as `unknown` | Yes, account-wide daily activity, daily tokens by model, cumulative model usage, session counts, and hour-of-day distribution | Cached and delayed; freshness depends on the last stats-cache write | Machine-local cache with account-wide historical usage | Yes for historical usage, no for current quota | Use this source for history and load balancing only; current quota remains `unknown` until a stable live source is confirmed |
 | Claude runtime / statusline / SDK / hook artifacts | None confirmed | None confirmed | N/A unless a trustworthy source is discovered | N/A until validated | No, not yet | Investigate these before any PTY fallback; if live probing becomes necessary, feed an async snapshot cache rather than routing-time terminal scraping |
-| embedded `ddx-agent` telemetry | Not a provider quota source | Yes, DDx-owned invocation activity, runtime metrics, and session references | Per invocation or per write | Local workspace / install / session | Yes for DDx-observed performance and provenance; no for provider quota routing | Consume references and derived metrics only; do not duplicate provider transcript storage or provider quota state |
+| embedded Fizeau telemetry | Not a provider quota source | Yes, DDx-owned invocation activity, runtime metrics, and session references | Per invocation or per write | Local workspace / install / session | Yes for DDx-observed performance and provenance; no for provider quota routing | Consume references and derived metrics only; do not duplicate provider transcript storage or provider quota state |
 
 Interpretation:
 
@@ -109,7 +109,7 @@ Interpretation:
 3. opencode harness: `run --format json`, JSON envelope parsing
 4. `input_tokens`, `output_tokens`, `cost_usd` fields on DDx invocation
    activity rows
-5. `ddx agent usage` command with harness/time-window/machine-readable output
+5. Fizeau usage diagnostics with harness/time-window/machine-readable output
 6. gemini harness: investigate `--output-format=json` output when auth is
    available; implement token extraction if format is known
 
@@ -163,8 +163,8 @@ Interpretation:
 16. **Routing integration** — harness selection uses the normalized signal
     model together with requested profile, model, effort, permission mode, and
     explicit harness override semantics.
-17. **Operator visibility** — `ddx agent doctor --routing` and `ddx agent
-    usage` consume the normalized signal model and report source freshness.
+17. **Operator visibility** — Fizeau routing diagnostics and usage views
+    consume the normalized signal model and report source freshness.
 
 **Budgeting and throttling**
 18. **Deferred scope** — budget passthrough, automatic throttling, and pacing
@@ -320,20 +320,20 @@ Sorting is supported on: `harness` (alpha), `status`, `auth_state`,
 
 ```bash
 # Routing state with freshness and quota/headroom where known
-ddx agent doctor --routing
+Fizeau routing diagnostics
 
 # Usage summary derived from provider-native sources + DDx-owned metrics
-ddx agent usage
+Fizeau usage diagnostics
 
 # Filter to one harness
-ddx agent usage --harness claude
+Fizeau usage diagnostics --harness claude
 
 # Specific time window
-ddx agent usage --since 7d
-ddx agent usage --since 2026-04-01
+Fizeau usage diagnostics --since 7d
+Fizeau usage diagnostics --since 2026-04-01
 
 # Machine-readable
-ddx agent usage --format json
+Fizeau usage diagnostics --format json
 ```
 
 ## User Stories
@@ -344,11 +344,11 @@ ddx agent usage --format json
 **So that** I can understand what DDx is routing on
 
 **Acceptance Criteria:**
-- Given I run `ddx agent usage`, then I see per-harness usage/cost where
+- Given I run Fizeau usage diagnostics, then I see per-harness usage/cost where
   available, plus DDx-observed runtime metrics
-- Given I run `ddx agent usage --since today`, then only today's windows are
+- Given I run Fizeau usage diagnostics --since today, then only today's windows are
   counted
-- Given I run `ddx agent usage --format json`, then output is valid JSON
+- Given I run Fizeau usage diagnostics --format json, then output is valid JSON
 
 ### US-141: DDx Routes Using Current Availability Signals
 **As** the DDx agent router
@@ -369,12 +369,12 @@ performance signals
 
 ### US-142: Developer Sees Signal Freshness in Doctor Output
 **As a** developer debugging harness selection
-**I want** `ddx agent doctor --routing` to show where each signal came from and
+**I want** Fizeau routing diagnostics to show where each signal came from and
 how fresh it is
 **So that** I can trust or question DDx's decision with evidence
 
 **Acceptance Criteria:**
-- Given I run `ddx agent doctor --routing`, then each harness reports current
+- Given I run Fizeau routing diagnostics, then each harness reports current
   availability state, quota/headroom state, and last-checked freshness
 - Given a signal came from a provider-native source, then doctor output
   identifies that source
@@ -444,14 +444,14 @@ manual instrumentation
 - MET-002 (cost per closed bead) — canonical `source: external` MET artifact
   for process-cost reporting that consumes FEAT-014 usage signals
 - provider-native local stores such as `~/.codex/` and `~/.claude/`
-- embedded `ddx-agent` runtime telemetry and session references
+- embedded Fizeau runtime telemetry and session references
 
 ## Implementation Strategy
 
 ### Phase 1 — Signal-source spikes
 - Inventory provider-native signal sources and freshness semantics
 - Define the minimal routing metrics schema and retention rules
-  (now part of ddx-agent's internal routing per CONTRACT-003-ddx-agent-service)
+  (now part of Fizeau's internal routing per CONTRACT-003-fizeau-service)
 - Resolve whether Claude has a stable non-PTY current-quota source
 
 ### Phase 2 — Preserve native persistence and add adapters
