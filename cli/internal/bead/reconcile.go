@@ -125,6 +125,12 @@ func planLifecycleReconcile(b Bead, events []BeadEvent, childCount int, now time
 		return p, true
 	}
 
+	if isNoViableProviderEvent(latest) && hasLabel(b, LabelNeedsInvestigation) {
+		p.Reason = "no_viable_provider is retryable transport state; clear stale needs-investigation label"
+		p.RemoveLabels = []string{LabelNeedsInvestigation}
+		return p, true
+	}
+
 	if hasLabel(b, LabelNeedsInvestigation) || latest.Kind == "no_changes_needs_investigation" {
 		if hasRetryAfter(b) || hasAnyExtra(b, ExtraLastStatus, ExtraLastDetail) {
 			p.Reason = "needs_investigation is non-retryable; clear cooldown metadata"
@@ -239,6 +245,15 @@ func isSuccessEvent(e BeadEvent) bool {
 	}
 	summary := strings.TrimSpace(e.Summary)
 	return summary == "success" || summary == "already_satisfied"
+}
+
+func isNoViableProviderEvent(e BeadEvent) bool {
+	if e.Kind != "execute-bead" || strings.TrimSpace(e.Summary) != "execution_failed" {
+		return false
+	}
+	body := strings.ToLower(e.Body)
+	return strings.Contains(body, "no viable provider") ||
+		strings.Contains(body, "all tiers exhausted")
 }
 
 func hasNoChangesResidue(b Bead) bool {
