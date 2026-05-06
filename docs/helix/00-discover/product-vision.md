@@ -20,7 +20,16 @@ DDx synthesizes three traditions, each grounded in prior art:
 
 1. **Software factories** — model- and pattern-driven industrialization of software construction. DDx's framing of documents, templates, and tooling as the production line traces directly to Greenfield, Short, Cook, and Kent's 2004 *Software Factories* ([REF-007](references/REF-007-software-factories.md)).
 2. **Spec-driven development** — executable specifications, not code, as the durable artifact AI agents consume. DDx inherits this stance from contemporary spec-first toolchains, notably GitHub Spec Kit ([REF-005](references/REF-005-github-spec-kit.md)) and AWS Kiro ([REF-006](references/REF-006-aws-kiro.md)).
-3. **Bounded-context agent execution** — quality decays as a single context window fills, well before the hard token limit. DDx's Ralph-loop / `ddx work` design responds to the empirical findings of *Lost in the Middle* ([REF-008](references/REF-008-lost-in-the-middle.md)) and Chroma's *Context Rot* ([REF-009](references/REF-009-context-rot.md)) by running each bead in a fresh, narrowly-scoped context against an explicit contract.
+3. **Continual improvement** — PDCA, ITIL continual improvement, and lean
+   build-measure-learn loops all share the same control pattern: plan from
+   current evidence, act, check the result, and adjust the operating model before the
+   next cycle. DDx adapts that pattern to document-driven software work.
+4. **Bounded-context agent execution** — quality decays as a single context
+   window fills, well before the hard token limit. DDx's Ralph-loop /
+   `ddx work` design responds to the empirical findings of *Lost in the
+   Middle* ([REF-008](references/REF-008-lost-in-the-middle.md)) and Chroma's
+   *Context Rot* ([REF-009](references/REF-009-context-rot.md)) by running each
+   bead in a fresh, narrowly-scoped context against an explicit contract.
 
 ## Core Thesis
 
@@ -69,6 +78,29 @@ DDx pairs with workflow tools across explicit boundaries:
 DDx provides primitives. HELIX and others provide opinions. Each layer is
 independently useful and replaceable.
 
+## Operator Loop
+
+DDx is not a workflow methodology, but it does define the operating loop that
+DDx-powered workflows use:
+
+```text
+Plan -> Execute -> Measure -> Adapt
+```
+
+- **Plan** turns intent and current evidence into updated specs, acceptance
+  criteria, measurement expectations, and a bead DAG.
+- **Execute** runs bounded work through `ddx run`, `ddx try`, and `ddx work`.
+- **Measure** inspects tests, reviews, run records, costs, stale-doc signals,
+  failed-attempt evidence, and production feedback.
+- **Adapt** updates specs, refines beads, changes templates or workflow rules,
+  closes the loop, or stops.
+
+This is the platform-level control loop. It is close to PDCA and ITIL
+continual improvement, but DDx makes two software-specific moves explicit:
+specs are the planning surface, and execution evidence is the measurement
+surface. HELIX is one opinionated implementation of the loop; other
+methodologies can use the same DDx substrate.
+
 ## Mission
 
 Make artifacts the unit of software development. Provide the shared
@@ -100,9 +132,10 @@ deliver the artifacts agents produce and consume to build software.
 
 ## What DDx Is Not
 
-- **Not a methodology.** No phases, no gates, no prescribed artifact types.
-  Workflow tools (HELIX) own those.
-- **Not a storage system.** Files in Git. No proprietary backend.
+- **Not a workflow methodology.** No phases, no gates, no prescribed artifact
+  types. DDx defines the Plan -> Execute -> Measure -> Adapt operating loop;
+  workflow tools such as HELIX decide the phase model and gates.
+- **Not a database.** Files in Git. No proprietary backend.
 - **Not an editor or IDE.** Editing happens wherever the user works.
 - **Not opinionated about agents.** Any harness with a prompt-in/output-out
   contract plugs in.
@@ -111,10 +144,9 @@ deliver the artifacts agents produce and consume to build software.
 
 ### vs. Ad-Hoc Agentic Coding
 
-Code-as-system-of-record produces point changes without coupling awareness, no
-structured intent, and constant context re-explanation. DDx makes documents the
-system of record for intent and architecture; code remains the system of record
-for implementation.
+Code-as-record produces point changes without coupling awareness, structured
+intent, or reusable context. DDx makes documents the record for intent and
+architecture; code remains the record for implementation.
 
 ### vs. Code-Only Agent Tools
 

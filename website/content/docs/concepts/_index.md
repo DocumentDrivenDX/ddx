@@ -78,6 +78,23 @@ HELIX evolve, lets alternative workflows exist, and lets DDx serve both
 fully-autonomous and human-driven teams from the same primitives.
 {{< /callout >}}
 
+## The Operator Loop
+
+DDx-powered work follows a continual-improvement loop:
+
+```text
+Plan -> Execute -> Measure -> Adapt
+```
+
+Planning updates specs, acceptance criteria, measurement expectations, and the
+bead DAG. Execution runs bounded tasks through `ddx run`, `ddx try`, and
+`ddx work`. Measurement reads tests, review verdicts, run evidence, costs,
+stale-doc signals, failed attempts, and operational feedback. Adaptation
+updates specs, refines beads, changes process assets, or stops.
+
+That loop is DDx's operating model, not a workflow methodology. HELIX can map
+its phases onto it, and other workflows can do the same.
+
 ## Documents Are the Product
 
 The fundamental shift: **you maintain documents, agents produce code.**
@@ -123,6 +140,7 @@ documents. Better documents produce better code, every time.
 ## Read Next
 
 - [Principles](principles/) — the load-bearing decisions behind DDx.
+- [Operator Loop](operator-loop/) — how DDx turns evidence into the next plan.
 - [Architecture](architecture/) — how beads, personas, and the
   project-local install model fit together.
 - [Run Architecture](run-architecture/) — the layered `ddx run` /

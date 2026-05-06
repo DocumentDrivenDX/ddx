@@ -3,16 +3,16 @@ ddx:
   id: TD-036
   depends_on:
     - FEAT-027
-  status: draft
+  status: implemented
 ---
 # Technical Design: Prose Quality Pipeline
 
 ## Status
 
-Draft. This TD closes the implementation-boundary gap left open by
+Implemented. This TD closes the implementation-boundary gap left open by
 FEAT-027 by deciding how DDx evaluates prose deterministically, how the
-default plugin packages the assets, and how the first command surface
-behaves when optional tooling is unavailable.
+default plugin packages the assets, and how the command surfaces behave when
+optional tooling is unavailable.
 
 ## Why This TD Exists
 
@@ -52,7 +52,7 @@ That boundary keeps the product contract stable:
 
 ### Default path
 
-The default path is the embedded checker. It runs in-process and does not
+The default runner is the embedded checker. It runs inside the CLI and does not
 require Vale or any other external binary.
 
 ### Install behavior
@@ -143,9 +143,9 @@ prose:
       - bead
       - execution
     reject:
-      - system
-      - solution
-      - seamless
+      - thing
+      - stuff
+      - effortless
 ```
 
 Semantics:
@@ -175,13 +175,12 @@ The CLI surface is intentionally small.
 This is the first supported surface. It checks changed prose only and is
 the default entry point for pre-review and pre-merge usage.
 
-### Future direct-path command
+### Direct-path command
 
 `ddx doc prose <paths>`
 
-This is the future explicit-path form. It should accept one or more
-paths, reuse the same engine, and allow a caller to target a fixed set of
-documents without relying on the diff.
+This explicit-path form accepts one or more paths, reuses the same engine, and
+allows a caller to target a fixed set of documents without relying on the diff.
 
 ### Shared behavior
 
@@ -235,7 +234,7 @@ tests rather than ad hoc assertions.
 Recommended fixture set:
 
 - one technical sample with vague claims and uncoupled abstractions
-- one planning sample with generic roadmap language
+- one planning sample with generic milestone language
 - one public sample with voice drift and filler phrases
 - one sample with accepted project vocabulary that must be preserved
 - one sample with an unavailable optional runner
@@ -263,11 +262,11 @@ future runner swap does not invalidate the acceptance corpus.
 
 The rollout should be staged in this order:
 
-1. skill and rule assets
-2. deterministic `ddx doc prose --changed`
-3. direct-path `ddx doc prose <paths>`
-4. opt-in bead review integration via `ddx bead review <id> --prose`,
-   after the core command and result schema are stable
+1. skill and rule assets — implemented
+2. deterministic `ddx doc prose --changed` — implemented
+3. direct-path `ddx doc prose <paths>` — implemented
+4. opt-in bead review integration via `ddx bead review <id> --prose` —
+   implemented
 
 That sequencing keeps the first executable surface advisory and
 deterministic before any review workflow starts consuming the findings.
@@ -276,8 +275,6 @@ without re-litigating the checker boundary or the missing-tool contract.
 
 ## Non-Scope
 
-- No CLI implementation in this TD
 - No rule file content in this TD
 - No Vale packaging requirement
-- No bead review wiring in this TD
 - No automatic prose rewriting

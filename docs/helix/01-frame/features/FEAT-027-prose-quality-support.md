@@ -7,7 +7,7 @@ ddx:
 # Feature: Prose Quality Support
 
 **ID:** FEAT-027
-**Status:** Not Started
+**Status:** Implemented
 **Priority:** P2
 **Owner:** DDx Team
 
@@ -19,7 +19,7 @@ voice-preserving writing in DDx materials, not AI-detection evasion.
 
 This feature introduces a default skill surface, a deterministic checker/rules
 surface, and a docs command surface for reviewing changed prose. It produces
-structural findings that can be reviewed, tracked, and later fed into review
+structural findings that can be reviewed, tracked, and fed into review
 workflow integration.
 
 ## Problem Statement
@@ -83,12 +83,11 @@ DDx adds a docs surface for checking changed prose only. The command is meant
 for pre-review and pre-merge use cases where maintainers want a focused,
 diff-based advisory report instead of a full repository scan.
 
-### 4. Later Review Integration
+### 4. Review Integration
 
-The feature reserves room for later review integration so prose findings can be
-surfaced in review workflows. This feature does not define that integration
-boundary beyond naming it as the next consumer of the same deterministic
-finding format.
+`ddx bead review <id> --prose` uses the same checker and emits prose findings
+as advisory review evidence. Prose findings stay separate from correctness
+findings and do not change the review verdict by default.
 
 ## Requirements
 
@@ -114,8 +113,8 @@ finding format.
    changed prose by default and reports findings for the touched lines.
 7. **Explainable output** — the checker must describe why a rule fired using
    concrete textual evidence from the input.
-8. **Later review compatibility** — the finding format must be stable enough to
-   be consumed by future review integration without changing the core rule
+8. **Review compatibility** — the finding format is stable enough for
+   `ddx bead review <id> --prose` to consume without changing the core rule
    model.
 
 ### Measurable Acceptance Criteria
@@ -145,9 +144,9 @@ in terms of observed text instead of a broad style judgment.
 - No detector bypass
 - No default blocking behavior
 - No automatic rewriting that strips authorial voice
-- No implementation of the checker in this feature
-- No CLI flag design beyond naming the deterministic prose check surface
-- No plugin asset additions
+- No AI-based rewrite engine
+- No semantic judgment of correctness; prose findings stay separate from
+  acceptance and implementation review
 
 ## Rule Model
 
@@ -173,13 +172,13 @@ catalog.
 - The deterministic checker owns the actual finding generation
 - `ddx doc prose --changed` is the primary command surface for reviewing only
   changed prose
-- Review integration is a later consumer of the same structured findings
+- `ddx bead review <id> --prose` is an advisory consumer of the same
+  structured findings
 
 ## Out of Scope
 
 - Detector scoring heuristics that try to infer authorship
 - Content transformation that rewrites style by default
 - Blocking docs operations by default
-- Choosing the final low-level implementation boundary beyond naming
-  deterministic prose checks
-- CLI flags or plugin assets beyond the prose review surface
+- Automatic semantic rewrites
+- Treating prose findings as correctness failures by default

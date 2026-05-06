@@ -25,8 +25,8 @@ local-first infrastructure for document-driven development:
    linking to docs
 
 DDx is the foundation layer. Workflow tools (HELIX, others) build on top. DDx
-provides reusable local services; it does not impose workflow phases or
-methodology.
+provides reusable local services and a platform-level operator loop. It does
+not impose workflow phases, gates, or methodology-specific artifact ladders.
 
 Concrete command, API, and storage contracts belong in the DDx feature
 specifications. The PRD stays at the user- and capability-level:
@@ -76,7 +76,7 @@ specifications. The PRD stays at the user- and capability-level:
 - FEAT-015 defines the installation architecture: clean separation of
   install.sh (binary), ddx install --global (skills), ddx init (project),
   and ddx install <plugin> (plugin lifecycle)
-- FEAT-016 defines process metrics: bead lifecycle cost, rework rates, and
+- FEAT-016 defines delivery metrics: bead lifecycle cost, rework rates, and
   derived measures computed from existing stores (beads, agent sessions).
   Distinct from FEAT-010 which covers operational metrics you *run*.
 - ~~FEAT-017~~: adversarial review is a form of multi-agent dispatch covered by
@@ -103,6 +103,20 @@ specifications. The PRD stays at the user- and capability-level:
   substrate
 - FEAT-027 defines deterministic prose quality support for governing artifacts
   and user-facing docs
+
+DDx's operator loop is:
+
+```text
+Plan -> Execute -> Measure -> Adapt
+```
+
+Planning updates governing specs, acceptance criteria, measurement
+expectations, and the bead DAG. Execution drains bounded tasks through `ddx
+run`, `ddx try`, and `ddx work`. Measurement reads tests, review verdicts,
+run records, cost, stale-doc signals, failed-attempt evidence, and operational
+feedback. Adaptation updates specs, refines beads, changes workflow assets, or
+stops. This loop is DDx's operating model, not a workflow methodology: HELIX
+and other plugins decide the phase model, gates, and supervisory policy.
 
 ## Problem
 
@@ -195,8 +209,8 @@ problems outside that mapping belong in workflow tools, not the platform.
 10. **Maintain artifact graph integrity** — track relationships between
     documents, detect staleness when upstream artifacts change, and generate
     reconciliation tasks automatically (FEAT-007)
-11. **Track process metrics** — derive bead lifecycle cost, rework rates, and
-    other process measures from existing stores (beads, agent sessions) so
+11. **Track delivery metrics** — derive bead lifecycle cost, rework rates, and
+    other delivery measures from existing stores (beads, agent sessions) so
     teams can understand the economics and efficiency of their workflow
     (FEAT-016)
 12. **Stabilize the plugin API** — document existing extension surfaces, add
@@ -214,6 +228,10 @@ problems outside that mapping belong in workflow tools, not the platform.
     sidecar metadata) is readable over the network; write surfaces are added
     case-by-case as workflows demand, starting with `artifactRegenerate`
     (FEAT-002, FEAT-010)
+16. **Support the DDx operator loop** — provide platform primitives for
+    Plan -> Execute -> Measure -> Adapt: artifact graph and prose checks for
+    planning, beads for executable decomposition, run/try/work for bounded
+    execution, and evidence/metrics/staleness for measurement and adaptation
 
 ### Secondary
 1. **Promote the practice** — website explains document-driven development and
@@ -235,7 +253,9 @@ problems outside that mapping belong in workflow tools, not the platform.
 
 ### Non-Goals
 
-- A workflow methodology (that's HELIX and others, not DDx)
+- A workflow methodology (that's HELIX and others, not DDx). DDx owns the
+  platform-level Plan -> Execute -> Measure -> Adapt operating loop, but not
+  workflow-specific phases or gates.
 - Workflow-specific artifact ladders or stage progression (for example,
   `FEAT -> SD -> TD -> TP`) beyond storing IDs and relationships
 - Workflow-specific bead validation (phase labels, spec-id enforcement — that's
@@ -252,7 +272,7 @@ problems outside that mapping belong in workflow tools, not the platform.
   in `ddx-server` is in-scope per FEAT-008; a separate desktop application is not)
 - A cloud/SaaS service
 - Real-time collaboration
-- A storage system — artifacts are versioned in Git; future backends are
+- A storage backend — artifacts are versioned in Git; future backends are
   possible but not DDx's concern
 - Defining artifact types or templates — those come from plugins. DDx provides
   the infrastructure for storing and relating them.
@@ -277,7 +297,7 @@ reinventing instructions and runtime tooling per project
 
 **Role:** Developer building a methodology tool (like HELIX) on DDx primitives
 **Goals:** Leverage DDx's document management, bead storage, agent dispatch,
-execution history, persona system, and sync without reimplementing them
+execution history, persona binding, and sync without reimplementing them
 **Pain:** No standard infrastructure to build on; every workflow tool reinvents
 local state, execution, and document management
 
@@ -309,7 +329,7 @@ local operator surface that lets users:
 - reuse and update shared DDx library content across projects
 - invoke DDx operations through agent-facing skills (slash commands) that
   provide guided, validated workflows for complex CLI commands
-- query process metrics (bead lifecycle cost, rework rates) derived from
+- query delivery metrics (bead lifecycle cost, rework rates) derived from
   existing bead and agent session data
 
 **Plugin API**
@@ -357,7 +377,7 @@ The CLI feature spec should also define requirements for:
   operations
 - higher-level projections over execution history for domains such as metrics
   and acceptance evidence
-- process metrics derived from existing stores: bead lifecycle cost (time,
+- delivery metrics derived from existing stores: bead lifecycle cost (time,
   tokens, rework), reopen rates, revision counts (FEAT-016)
 
 **Team enablement**
@@ -409,7 +429,7 @@ The server feature spec should also define requirements for:
 | Risk | Probability | Impact | Mitigation |
 |------|------------|--------|-----------|
 | Documents go stale and get ignored | High | High | Reconciliation beads auto-generated on upstream changes; adversarial review agents check consistency; `ddx doctor` checks freshness |
-| DDx/plugin boundary is fuzzy | Medium | High | Resolved for feedback (beads), metrics (FEAT-010 operational / FEAT-016 process), optimization (primitives in DDx, loop in plugins). Document remaining boundaries in FEAT-018. |
+| DDx/plugin boundary is fuzzy | Medium | High | Resolved for feedback (beads), metrics (FEAT-010 operational / FEAT-016 delivery), optimization (primitives in DDx, loop in plugins). Document remaining boundaries in FEAT-018. |
 | Framework requires its author to explain it | High | High | Self-documenting project structures; getting-started guides bundled with plugins; team enablement as a P1 requirement |
 | Agent testing and validation is unsolved industry-wide | Medium | High | DDx gives agents better context for first-pass correctness; adversarial review catches more issues; but fundamental problem remains open |
 | MCP spec changes break server | Medium | Medium | Keep MCP integration thin; abstract behind internal API |
@@ -436,7 +456,7 @@ The server feature spec should also define requirements for:
 - [ ] README includes animated terminal recordings of core workflows
 - [ ] Upstream document changes auto-generate reconciliation beads for stale
       dependents
-- [ ] Process metrics (bead cost, rework rate) queryable from existing data
+- [ ] Delivery metrics (bead cost, rework rate) queryable from existing data
 - [ ] Multi-agent review workflow produces structured findings from quorum
       dispatch
 - [ ] Plugin API is documented and stable enough for external plugin authors

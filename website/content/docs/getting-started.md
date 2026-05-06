@@ -5,7 +5,8 @@ prev: /docs
 next: /docs/concepts
 ---
 
-Get DDx installed and start tracking work in under 5 minutes.
+Get DDx installed and run the first pass through the DDx operator loop:
+plan, execute, measure, adapt.
 
 {{< asciinema src="07-quickstart" cols="100" rows="30" >}}
 
@@ -50,6 +51,19 @@ ddx install helix
 This installs HELIX to `.ddx/plugins/helix/` and copies its skills
 into the project's `.agents/skills/` and `.claude/skills/` trees.
 
+## Plan
+
+Start by writing down what should change. In a small project that might be a
+short spec, a README update, or a bead description. In a HELIX project it may
+be a PRD, feature spec, design, or test plan.
+
+The planning output should name:
+
+- the intended behavior
+- the acceptance criteria
+- the measurement or test that proves the work is done
+- any scope boundaries the agent must respect
+
 ## Track Work
 
 ```bash
@@ -59,7 +73,10 @@ ddx bead list
 ddx bead ready
 ```
 
-## Drain the Queue (Zero-Config)
+Beads are the executable form of the plan. They carry the contract that agents
+or humans will work against.
+
+## Execute
 
 Once you have at least one provider configured in your agent service
 ([fizeau](https://github.com/DocumentDrivenDX/fizeau)), draining the bead
@@ -74,6 +91,31 @@ cheap-tier model by default — no `.ddx/config.yaml` is required, and no
 `--harness`, `--profile`, `--model`, or `--provider` flags are needed to
 start. Provider configuration and any "no providers configured" errors
 are reported by the agent service.
+
+## Measure
+
+After a run, inspect the evidence before trusting the result:
+
+```bash
+ddx bead show <id>
+ddx bead review <id>
+ddx bead metrics <id>
+ddx doc stale
+```
+
+Run the bead's acceptance commands yourself when closing important work. DDx
+records run evidence, review output, and metrics so the next planning pass is
+based on what happened, not on the agent's summary.
+
+## Adapt
+
+Use what you measured to decide the next move:
+
+- close the bead when the evidence passed
+- refine the bead when the task was underspecified
+- update the spec when the requirement changed
+- create follow-up beads for new work
+- stop when the outcome is reached
 
 ### Optional: Project-Level Routing Override
 
@@ -101,6 +143,8 @@ ddx update helix      # Update HELIX plugin
 
 ## Next Steps
 
+- [Operator Loop](../concepts/operator-loop/) — the DDx Plan -> Execute ->
+  Measure -> Adapt model
 - [CLI reference](../cli) — all commands
 - [Ecosystem](../ecosystem) — how DDx fits with HELIX and other tools
 - [Creating plugins](../plugins) — add your own workflow to the registry
