@@ -448,6 +448,52 @@ func TestExecuteBeadWorkerNoChangesLabelsWithoutCooldownAcrossRuns(t *testing.T)
 	assert.Equal(t, 2, callCount)
 }
 
+func TestExecuteBeadWorkerNoViableProviderUsesCooldownWithoutTriage(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	var triageCalls int
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusExecutionFailed,
+				Detail:    "execute-loop: all tiers exhausted — no viable provider found",
+				BaseRev:   "aaaa1111",
+				ResultRev: "aaaa1111",
+			}, nil
+		}),
+		Now: func() time.Time {
+			return now
+		},
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		PostAttemptTriageHook: func(ctx context.Context, beadID string, report ExecuteBeadReport) (TriageResult, error) {
+			triageCalls++
+			return TriageResult{Classification: "needs_investigation"}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Results, 1)
+	require.Equal(t, 0, triageCalls, "provider outage must bypass post-attempt triage")
+	assert.Equal(t, FailureModeNoViableProvider, result.Results[0].OutcomeReason)
+	assert.Equal(t, now.Add(ProviderUnavailableCooldown).Format(time.RFC3339), result.Results[0].RetryAfter)
+
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Empty(t, got.Owner)
+	assert.NotContains(t, got.Labels, NoChangesLabelNeedsInvestigation)
+	require.NotNil(t, got.Extra)
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, got.Extra["execute-loop-last-status"])
+	assert.Equal(t, now.Add(ProviderUnavailableCooldown).Format(time.RFC3339), got.Extra["execute-loop-retry-after"])
+}
+
 func TestExecuteBeadWorkerNoReadyWork(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
