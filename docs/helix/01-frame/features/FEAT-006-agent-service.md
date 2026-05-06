@@ -84,7 +84,7 @@ Fizeau owns the agent's transcript/progress/session rendering surface. DDx is
 a pass-through/marshalling consumer for Fizeau transcript events: it may
 forward Fizeau `ServiceEvent`s unchanged and link or copy Fizeau artifacts
 into the execution evidence bundle, but DDx treats those payloads as opaque
-evidence only. DDx forwards the event stream and attachments as evidence, and
+evidence only. DDx may carry the event stream and attachments as evidence, but
 it does not render, rehydrate, or semantically interpret inner Fizeau session
 logs or transcript semantics. Those payloads never become DDx worker state.
 The session log payload remains opaque to DDx; DDx only carries the envelope
