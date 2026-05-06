@@ -97,8 +97,10 @@ returning to the stale flat sibling model (`ddx-bead`, `ddx-run`,
 break down an epic into beads, replay a bead under altered conditions, compare
 prompt variants, estimate effort, run adversarial review, and perform
 bead-lifecycle readiness assessment, lint/rubric scoring, and post-attempt
-triage. They do not introduce new DDx run kinds; FEAT-010's three-layer
-architecture remains the execution substrate.
+triage. The bead-lifecycle skill owns the readiness decision, the rubric pass
+inside that decision, post-attempt triage, and refine guidance. They do not
+introduce new DDx run kinds; FEAT-010's three-layer architecture remains the
+execution substrate.
 
 ### Portability contract
 
@@ -142,7 +144,7 @@ examples include `bead-breakdown/`, `replay-bead/`, `compare-prompts/`,
 `benchmark-suite/`, `effort-estimate/`, and `adversarial-review/`. ADR-023
 (`../../02-design/adr/ADR-023-bead-lifecycle-quality-policy.md`) adds the same
 model for bead-lifecycle quality: bead readiness assessment is the canonical
-readiness decision, lint/rubric scoring is the rubric pass inside that
+pre-claim decision, lint/rubric scoring is the rubric pass inside that
 decision, and post-attempt triage is the after-evidence classification. Those
 steps invoke a nested workflow skill while keeping routing through the root
 `ddx` skill.

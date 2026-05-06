@@ -111,17 +111,19 @@ layers and not new bead-schema fields.
 
 `BeadReadinessHook` is the product concept: it runs after the worker has
 selected a dependency-ready candidate but before DDx claims the bead or
-creates the implementation worktree. The implementation may still call the
-compatibility entrypoint `PreClaimIntakeHook` and record `MODE: intake` for
-legacy compatibility, but the decision being made is bead readiness
-assessment. Within that assessment, the nested bead-lifecycle workflow skill
-performs lint/rubric scoring to support the decision, and the score is
-diagnostic evidence rather than a separate queue action. Post-attempt triage is
-separate and runs only after evidence exists. The hook has enough context to
-evaluate title, description, acceptance criteria, labels, parent, deps, bead
-type, spec-id, prior attempt history, and whether the bead is atomic enough to
-execute. The hook invokes the nested bead-lifecycle workflow skill under the
-`ddx` skill tree and records readiness evidence in the layer-3 run record.
+creates the implementation worktree. The canonical decision being made is bead
+readiness assessment, the pre-claim check for tractability and actionability.
+The implementation may still call the compatibility entrypoint
+`PreClaimIntakeHook` and record `MODE: intake` for legacy compatibility, but
+those names are aliases only. Within readiness, the nested bead-lifecycle
+workflow skill performs lint/rubric scoring to support the decision, and the
+score is diagnostic evidence rather than a separate queue action. Post-attempt
+triage is separate and runs only after evidence exists. The hook has enough
+context to evaluate title, description, acceptance criteria, labels, parent,
+deps, bead type, spec-id, prior attempt history, and whether the bead is
+atomic enough to execute. The hook invokes the nested bead-lifecycle workflow
+skill under the `ddx` skill tree and records readiness evidence in the
+layer-3 run record.
 
 `ddx work` wires this hook by default in both CLI and server-managed worker
 paths. Decomposition decisions run with a strong `MinPower` floor, defaulting to
@@ -161,9 +163,9 @@ checks, adversarial review verdict, merge/preserve result, and the readiness
 report.
 It uses the same bead-lifecycle skill to classify whether the outcome is a
 normal attempt result, a quality-policy failure, a missing-evidence failure, or
-an infrastructure failure. This is distinct from readiness assessment and from
-the lint/rubric scoring used inside readiness. The hook must never rewrite the
-attempt result or erase artifacts; it only adds triage evidence and feeds
+an infrastructure failure. This is distinct from bead readiness assessment and
+from the lint/rubric scoring used inside readiness. The hook must never rewrite
+the attempt result or erase artifacts; it only adds triage evidence and feeds
 retry/stop classification.
 
 If post-attempt triage finds that an implementation attempt stopped because the
@@ -550,9 +552,10 @@ owns bead selection, attempt finalization, and retry classification.
 
 `BeadReadinessHook` runs after a bead has been selected and verified as
 dependency-eligible, but before DDx claims it or creates the implementation
-worktree. It is the canonical pre-claim bead readiness assessment. The legacy
-compatibility name `PreClaimIntakeHook` and `MODE: intake` may still appear in
-migration code or notes, but they are not the product concept.
+worktree. It performs the canonical bead readiness assessment, the pre-claim
+decision about tractability and actionability. The legacy compatibility name
+`PreClaimIntakeHook` and `MODE: intake` may still appear in migration code or
+notes, but they are not the product concept.
 
 The hook receives the bead record, current execution policy, hook mode
 (`WARN-ONLY` or `BLOCK`), and the layer-3 evidence directory. It invokes the
