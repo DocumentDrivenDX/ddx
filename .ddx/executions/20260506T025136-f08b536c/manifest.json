@@ -1,0 +1,76 @@
+{
+  "attempt_id": "20260506T025136-f08b536c",
+  "bead_id": "ddx-c851c3dd",
+  "base_rev": "4e2d0190f827b9cf20543491c612bf1cc2df66b9",
+  "created_at": "2026-05-06T02:51:39.317535193Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c851c3dd",
+    "title": "agent: add default adversarial pre-close review gate",
+    "description": "PROBLEM\nADR-024 and FEAT-010 now require adversarial review to be the default pre-close gate, but current loop/review code still models single post-merge review and reopen behavior. A successful implementation can be closed even though the review path is not modeled as a two-reviewer unanimous pre-close gate with repair-cycle traceability.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead_loop.go:226 documents ReviewVerdict as post-merge review.\n- cli/internal/agent/execute_bead_loop.go:300 documents Reopen as the REQUEST_CHANGES/BLOCK path after a bead was closed.\n- cli/internal/agent/execute_bead_review.go:474 builds one reviewer request, without review_group_id or reviewer_index correlation metadata.\n- cli/internal/agent/execute_bead_review.go:528 runs a single DefaultBeadReviewer.ReviewBead invocation and parses one verdict.\n- cli/internal/agent/execute_bead_review_test.go:242 and cli/internal/agent/execute_bead_review_test.go:279 assert REQUEST_CHANGES/BLOCK reopen behavior instead of pre-close blocking behavior.\n\nPROPOSED FIX\n- Add a pre-close review coordinator used by execute-loop after a close-eligible implementation result and before CloseWithEvidence.\n- Default behavior runs two no-tool reviewer invocations against the same bounded evidence bundle. Each invocation carries role=reviewer plus bead_id, attempt_id, result_rev, review_group_id, reviewer_index, and implementer route facts.\n- Close only when both reviewers return APPROVE with per-AC evidence. Treat APPROVE without required evidence as review_error: unparseable.\n- Any evidenced REQUEST_CHANGES or BLOCK prevents close and classifies the result into review_fixable_gap, review_spec_gap, review_missing_acceptance, review_too_large, review_unsafe_or_out_of_scope, or review_error.\n- review_fixable_gap schedules a bounded repair cycle with repair_context_from_review_group. Terminal classifications block the bead with needs_human or decomposition metadata as specified by TD-031.\n- Review transport/provider/parse errors retry per result_rev + reviewer_index up to review_max_retries; exhaustion emits review-manual-required and blocks without closing.\n\nNON-SCOPE\n- GraphQL review-session UI mutations.\n- Manual human conversation review sessions.\n- Changing the evidence assembler beyond adding the review-group fields required by this gate.",
+    "acceptance": "1. Execute-loop invokes the adversarial pre-close review coordinator before CloseWithEvidence for every close-eligible implementation result unless an explicit audited override disables review.\n2. TestPreCloseReview_DefaultRunsTwoNoToolReviewers verifies two reviewer invocations receive the same evidence bundle and correlation fields role=reviewer, review_group_id, reviewer_index=0/1, bead_id, attempt_id, result_rev, and implementer route facts.\n3. TestPreCloseReview_UnanimousApproveCloses verifies close occurs only when both reviewers APPROVE and each approval includes per-AC evidence.\n4. TestPreCloseReview_ApproveWithoutEvidenceIsReviewError verifies an evidence-free APPROVE is classified as review_error: unparseable and does not close the bead.\n5. TestPreCloseReview_RequestChangesBlocksCloseAndSchedulesRepair verifies REQUEST_CHANGES/BLOCK with fixable implementation findings records review-fixable-gap, leaves the bead unclosed, and starts the next implementation cycle with repair_context_from_review_group.\n6. TestPreCloseReview_TerminalClassificationsBlockOperator verifies review_spec_gap, review_missing_acceptance, review_too_large at depth cap, review_unsafe_or_out_of_scope, and exhausted review_error block with needs_human and do not schedule unbounded retries.\n7. TestPreCloseReview_ReviewErrorRetryBudgetIsPerReviewerSlot verifies review errors retry by result_rev + reviewer_index up to review_max_retries, then emit review-manual-required and block without close.\n8. TestPreCloseReview_NoClosedBeadReopen verifies REQUEST_CHANGES/BLOCK never closes and reopens a bead; the failed review prevents close in the first place.\n9. cd cli \u0026\u0026 go test ./internal/agent/... green.\n10. lefthook run pre-commit passes.",
+    "parent": "ddx-42b917fe",
+    "labels": [
+      "phase:2",
+      "story:18",
+      "area:agent",
+      "kind:feature",
+      "reliability",
+      "adr:024"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T02:51:36Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T01:31:12.670222809Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T013038-65691bd1\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":217933,\"output_tokens\":2206,\"total_tokens\":220139,\"cost_usd\":0,\"duration_ms\":31138,\"exit_code\":0}",
+          "created_at": "2026-05-06T01:31:12.890832163Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=220139 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "This bead is too large to execute as a single bounded pass and cannot be decomposed further because the execution tree is already at the split-depth cap. The contract spans multiple unrelated subsystems: execute-loop pre-close coordination, reviewer transport/retry plumbing, review classification taxonomy, repair-cycle scheduling, and a large new test matrix across cli/internal/agent/*. The requested ACs also exceed the one-bead scope by requiring both implementation and a full suite of new/updated tests. A follow-up should split this into smaller beads before implementation.",
+          "created_at": "2026-05-06T01:31:13.584176168Z",
+          "kind": "no_changes_needs_investigation",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes_needs_investigation"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: needs_investigation\nreason: This bead is too large to execute as a single bounded pass and cannot be decomposed further because the execution tree is already at the split-depth cap. The contract spans multiple unrelated subsystems: execute-loop pre-close coordination, reviewer transport/retry plumbing, review classification taxonomy, repair-cycle scheduling, and a large new test matrix across cli/internal/agent/*. The requested ACs also exceed the one-bead scope by requiring both implementation and a full suite of new/updated tests. A follow-up should split this into smaller beads before implementation.\nresult_rev=db59d49fa177d62352b4ece9db36e5e1be6adcdb\nbase_rev=db59d49fa177d62352b4ece9db36e5e1be6adcdb",
+          "created_at": "2026-05-06T01:31:13.993366099Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T02:51:36.7772736Z",
+      "execute-loop-no-changes-count": 1,
+      "spec_id": "ADR-024"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260506T025136-f08b536c",
+    "prompt": ".ddx/executions/20260506T025136-f08b536c/prompt.md",
+    "manifest": ".ddx/executions/20260506T025136-f08b536c/manifest.json",
+    "result": ".ddx/executions/20260506T025136-f08b536c/result.json",
+    "checks": ".ddx/executions/20260506T025136-f08b536c/checks.json",
+    "usage": ".ddx/executions/20260506T025136-f08b536c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c851c3dd-20260506T025136-f08b536c"
+  },
+  "prompt_sha": "8a4e9dca84f646e7d4d15dd58a966c9fec3cfdbf0c6e9fa1d7768595083d5fb6"
+}
