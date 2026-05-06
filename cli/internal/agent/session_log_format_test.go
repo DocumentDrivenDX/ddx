@@ -107,7 +107,13 @@ func TestFormatSessionLogLines_Corpus(t *testing.T) {
 			if tc.file == "codex_fizeau.jsonl" {
 				line := renderedLineContaining(t, got, "go test ./internal/agent/...")
 				assert.GreaterOrEqual(t, len(line), 72)
-				assert.LessOrEqual(t, len(line), 122)
+				assert.LessOrEqual(t, len(line), 120)
+			}
+
+			if tc.file == "secondary_harness.jsonl" {
+				line := renderedLineContaining(t, got, "secondary harness response complete")
+				assert.GreaterOrEqual(t, len(line), 72)
+				assert.LessOrEqual(t, len(line), 80)
 			}
 		})
 	}
