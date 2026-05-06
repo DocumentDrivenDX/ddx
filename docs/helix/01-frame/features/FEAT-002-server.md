@@ -34,11 +34,11 @@ project roots concurrently; each request is resolved against one explicit
 project context before adapters run. DDx manages worker/bead lifecycle
 progress and worker records only. Fizeau owns agent transcript/session
 payloads and transcript/session presentation for agent events that may travel
-through agent-session records. DDx never renders the inner Fizeau session
-logs or interprets their semantics. Forwarded Fizeau agent events remain
-opaque attachments owned by Fizeau, never become worker state or lifecycle
-state, and are surfaced only as opaque Fizeau payloads alongside DDx progress
-views.
+through agent-session records. DDx treats forwarded Fizeau agent events as
+opaque attachments, never renders the inner Fizeau session logs, and never
+interprets their semantics. Those payloads never become worker state or
+lifecycle state; the server surfaces them only as opaque Fizeau payloads
+alongside DDx progress views.
 
 ## Architecture
 
@@ -243,7 +243,9 @@ shape for the in-flight attempt, enabling a single read model across CLI and UI)
 
 `recent_phases` retains only phase-transition events (not heartbeats) and is
 capped at the last 20 entries. This is the shared read model for both the CLI
-the Fizeau diagnostics worker-log surface and the UI status dashboard worker cards.
+and the UI status dashboard worker cards; any Fizeau diagnostics surface may
+link or copy the same underlying evidence, but DDx does not render inner
+Fizeau session logs there.
 
 **Provider Availability and Utilization (FEAT-014)**
 
