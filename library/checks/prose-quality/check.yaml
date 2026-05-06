@@ -3,7 +3,7 @@ severity: advisory
 policy: advisory
 runner: embedded
 includes:
-  - docs/helix/**
+  - docs/**
 excludes:
   - "**/*.generated.md"
 vocabulary:
