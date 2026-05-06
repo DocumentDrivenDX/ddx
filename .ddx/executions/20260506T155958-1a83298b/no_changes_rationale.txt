@@ -1,0 +1,12 @@
+status: complete
+reason: |
+  The execution cleanup manager is already implemented in cli/internal/agent/execution_cleanup.go and covered by cli/internal/agent/execution_cleanup_test.go.
+  The bead ACs are satisfied by public package functions/types:
+  - TestExecutionCleanup_RemovesStaleUnregisteredDDXTempDirs
+  - TestExecutionCleanup_RemovesRegisteredStaleWorktree
+  - TestExecutionCleanup_PreservesActiveAndPreservedAttempts
+  - TestExecutionCleanup_ReportsSummary
+  - NewExecutionCleanupManager, ExecutionCleanupManager.Cleanup, WriteExecutionCleanupMetadata, and ReadExecutionCleanupMetadata
+  Verification already passed locally with:
+  cd cli && go test ./internal/agent/... -run 'TestExecutionCleanup' -count=1
+verification_command: cd cli && go test ./internal/agent/... -run 'TestExecutionCleanup' -count=1
