@@ -39,15 +39,13 @@ type ExecuteBeadLoopRuntime struct {
 	// ReviewCostCap, when non-nil, accumulates reviewer cost on the same
 	// loop budget tracker used by the implementer attempts.
 	ReviewCostCap *escalation.CostCapTracker
-	// RoutePreflight, when non-nil, is invoked between nextCandidate and
-	// Claim. It is expected to call upstream ResolveRoute against the
-	// loop's resolved (harness, model) and return whatever typed routing
-	// error the upstream surfaced — notably agent.ErrHarnessModelIncompatible
-	// when the harness allow-list rejects the model. Any non-nil error
-	// causes the loop to exit immediately without claiming the bead, with
-	// a worker-level execution_failed record naming the rejected pair.
-	// DDx does NOT duplicate the upstream allow-list; this gate only
-	// consumes the typed-incompatibility surface.
+	// RoutePreflight, when non-nil, runs once during Run bootstrap before
+	// the drain loop starts. It is expected to call upstream ResolveRoute
+	// against the loop's resolved (harness, model) and return whatever typed
+	// routing error the upstream surfaced — notably
+	// agent.ErrHarnessModelIncompatible when the harness allow-list rejects
+	// the model. Any non-nil error stops the worker before any bead is
+	// claimed; DDx does NOT duplicate the upstream allow-list.
 	RoutePreflight func(ctx context.Context, harness, model string) error
 	Once           bool
 	PollInterval   time.Duration
@@ -484,9 +482,40 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	})
 	// exitReason is populated as the loop exits to surface a structured reason
 	// in the loop.end event (ddx-dc157075 AC #4). Recognized values: "sigterm",
-	// "sigint", "fatal_config", "once_complete", "explicit_poll_zero". The
-	// "providers_exhausted" slot is reserved for ddx-aede917d (quota pause).
+	// "sigint", "fatal_config", "preflight_failed", "once_complete",
+	// "explicit_poll_zero". The "providers_exhausted" slot is reserved for
+	// ddx-aede917d (quota pause).
 	exitReason := ""
+	if runtime.RoutePreflight != nil {
+		if rerr := runtime.RoutePreflight(ctx, harness, model); rerr != nil {
+			detail := fmt.Sprintf("routing preflight rejected (harness=%s model=%s): %s",
+				harness, model, rerr.Error())
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "routing preflight: %s (startup)\n", detail)
+			}
+			emit("preflight.rejected", map[string]any{
+				"harness": harness,
+				"model":   model,
+				"reason":  rerr.Error(),
+				"startup": true,
+			})
+			report := ExecuteBeadReport{
+				Status:           ExecuteBeadStatusExecutionFailed,
+				Detail:           detail,
+				Harness:          harness,
+				Model:            model,
+				Disrupted:        true,
+				DisruptionReason: "preflight_rejected",
+				OutcomeReason:    "preflight_failed",
+			}
+			emitDisruptionDetected(emit, w.Store, "", "preflight_rejected", detail, harness, model, assignee, now().UTC())
+			result.Failures++
+			result.LastFailureStatus = report.Status
+			result.Results = append(result.Results, report)
+			exitReason = "preflight_failed"
+			return result, nil
+		}
+	}
 	defer func() {
 		emit("loop.end", map[string]any{
 			"attempts":            result.Attempts,
@@ -628,57 +657,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 			continue
 		}
-		// Routing preflight gate (FEAT-006 D3, ddx-98e6e9ef): consult the
-		// upstream typed-incompatibility surface BEFORE claiming. If the
-		// configured (harness, model) cannot serve the bead, exit the loop
-		// with a worker-level failure record — no claim, no executor
-		// invocation, no tier-attempt event burn.
-		if runtime.RoutePreflight != nil {
-			if rerr := runtime.RoutePreflight(ctx, harness, model); rerr != nil {
-				detail := fmt.Sprintf("routing preflight rejected (harness=%s model=%s): %s",
-					harness, model, rerr.Error())
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "routing preflight: %s (skipping %s)\n",
-						detail, candidate.ID)
-				}
-				emit("preflight.rejected", map[string]any{
-					"bead_id": candidate.ID,
-					"harness": harness,
-					"model":   model,
-					"reason":  rerr.Error(),
-				})
-				report := ExecuteBeadReport{
-					BeadID:           candidate.ID,
-					Status:           ExecuteBeadStatusExecutionFailed,
-					Detail:           detail,
-					Harness:          harness,
-					Model:            model,
-					Disrupted:        true,
-					DisruptionReason: "preflight_rejected",
-				}
-				// ddx-5b3e57f4: a routing preflight rejection is an operator
-				// configuration issue (harness/model allow-list mismatch), not
-				// evidence the model could not make progress. Mark the report
-				// Disrupted and emit the diagnostic event so operators can see
-				// disruption rates without parking the bead in a no-progress
-				// cooldown.
-				emitDisruptionDetected(emit, w.Store, candidate.ID,
-					"preflight_rejected", detail, harness, model, assignee, now().UTC())
-				result.Attempts++
-				result.Failures++
-				result.LastFailureStatus = report.Status
-				result.Results = append(result.Results, report)
-				// ddx-dc157075 AC #3: do NOT abandon the rest of the queue on
-				// a single bead's preflight rejection. Continue to the next
-				// candidate. If --once was requested we still honour it.
-				if runtime.Once {
-					exitReason = "once_complete"
-					return result, nil
-				}
-				continue
-			}
-		}
-
 		// Pre-claim intake runs after routing preflight and before the
 		// existing lint gate so actionability/scope decisions can stop a
 		// bead before we spend work on the claim/execute path.

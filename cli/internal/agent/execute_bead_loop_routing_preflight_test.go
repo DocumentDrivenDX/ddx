@@ -59,9 +59,8 @@ func (s *claimCountingStore) Reopen(id, reason, notes string) error {
 
 // TestRoutingPreflightRejectionExitsLoopWithoutClaim covers ddx-98e6e9ef:
 // when RoutePreflight returns the upstream typed-incompatibility error
-// (agent.ErrHarnessModelIncompatible), the loop must NOT claim the bead,
-// must NOT invoke the executor, must record a worker-level execution_failed
-// result naming the rejected (harness, model) pair, and must exit.
+// (agent.ErrHarnessModelIncompatible), the loop must fail during startup
+// before any bead is claimed or executed.
 func TestRoutingPreflightRejectionExitsLoopWithoutClaim(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	store := &claimCountingStore{Store: inner}
@@ -103,7 +102,7 @@ func TestRoutingPreflightRejectionExitsLoopWithoutClaim(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	// AC#1: preflight ran before Claim.
+	// AC#1: preflight ran exactly once during startup.
 	assert.Equal(t, int32(1), atomic.LoadInt32(&preflightCalls), "preflight must be invoked")
 
 	// AC#2: Claim was NEVER called on the store.
@@ -114,24 +113,26 @@ func TestRoutingPreflightRejectionExitsLoopWithoutClaim(t *testing.T) {
 	assert.Equal(t, int32(0), atomic.LoadInt32(&execCount),
 		"executor must not run when preflight rejects")
 
-	// AC#3: worker-level execution_failed record names the rejected pair.
+	// AC#3: startup failure is surfaced once as a worker-level
+	// execution_failed record before any bead-specific attempt exists.
 	require.Len(t, result.Results, 1, "exactly one worker-level failure record")
 	report := result.Results[0]
 	assert.Equal(t, ExecuteBeadStatusExecutionFailed, report.Status)
-	assert.Equal(t, candidate.ID, report.BeadID)
+	assert.Empty(t, report.BeadID)
 	assert.Equal(t, "claude", report.Harness)
 	assert.Equal(t, "gpt-5", report.Model)
 	assert.Contains(t, report.Detail, "claude", "detail must name rejected harness")
 	assert.Contains(t, report.Detail, "gpt-5", "detail must name rejected model")
 	assert.Equal(t, ExecuteBeadStatusExecutionFailed, result.LastFailureStatus)
 	assert.Equal(t, 1, result.Failures)
+	assert.Equal(t, 0, result.Attempts)
 
-	// AC#4: bead has no kind:tier-attempt event from this attempt.
+	// AC#4: no bead-specific attempt events were appended.
 	events, err := store.Events(candidate.ID)
 	require.NoError(t, err)
 	for _, ev := range events {
 		assert.NotEqual(t, "tier-attempt", ev.Kind,
-			"no tier-attempt event must be recorded when preflight rejects pre-claim")
+			"no tier-attempt event must be recorded when preflight rejects at startup")
 	}
 
 	// Bead must remain open with no owner — confirms no Claim side-effects.
