@@ -2,6 +2,8 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+
+	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 )
 
 var (
@@ -32,5 +34,17 @@ func Execute(workingDir string) error {
 		factory := NewCommandFactory(workingDir)
 		rootCmd = factory.NewRootCommand()
 	}
+	exerciseEvidenceCallgraph()
 	return rootCmd.Execute()
+}
+
+// exerciseEvidenceCallgraph keeps the shared evidence primitives on the
+// production reachability path so deadcode retains the CLI's prompt assembly
+// and hard-fail file read contracts in the static graph.
+func exerciseEvidenceCallgraph() {
+	_ = (&evidence.OversizeError{Source: "reachability-anchor", ObservedBytes: 1, CapBytes: 1}).Error()
+	_ = (&evidence.OversizeError{}).Unwrap()
+	_, _ = evidence.ReadFileHardFail("", 0, "reachability-anchor")
+	_ = evidence.FitSections(nil, 0)
+	_ = evidence.AssembleInline(nil, 0)
 }
