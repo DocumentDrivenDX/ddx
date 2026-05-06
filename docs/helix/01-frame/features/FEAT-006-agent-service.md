@@ -85,14 +85,14 @@ DDx owns:
 
 DDx owns bead/worker lifecycle progress and execution evidence capture.
 Fizeau owns transcript/progress/session rendering, provider/model discovery,
-and session presentation. DDx is a pass-through/marshalling consumer for
-Fizeau transcript events: it may forward Fizeau `ServiceEvent`s unchanged and
-link or copy Fizeau artifacts into the execution evidence bundle, but DDx
-tracks those payloads only as opaque evidence. DDx keeps the inner Fizeau
-transcript or session-log content opaque; it does not rehydrate, parse, render,
-or semantically interpret it, and those payloads never become DDx worker
-state. The session log payload remains opaque to DDx, which only carries the
-envelope around it.
+and session presentation. DDx is a pass-through/marshalling consumer of
+opaque Fizeau transcript events: it may forward Fizeau `ServiceEvent`s
+unchanged and link or copy Fizeau artifacts into the execution evidence
+bundle, but DDx tracks those payloads only as opaque evidence. DDx keeps the
+inner Fizeau transcript or session-log content opaque; it does not rehydrate,
+parse, render, or semantically interpret it, and those payloads never become
+DDx worker state. The session log payload remains opaque to DDx, which only
+carries the envelope around it.
 
 ## Power Intent
 

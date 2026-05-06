@@ -380,7 +380,7 @@ The cross-repo entanglement is the failure mode. **Do not supersede. Do not depr
 
 #### Files to GUT on the DDx side
 
-- `docs/helix/01-frame/features/FEAT-006-agent-service.md` — rewrite to one page: "DDx invokes LLMs via the ddx-agent contract. DDx-side responsibilities: bead-driven invocation, execute-bead orchestration, evidence/session capture. End." DDx may keep copied/linkable evidence-envelope references and forward Fizeau transcript `ServiceEvent`s as opaque evidence, but it is only a pass-through/marshalling consumer for those events. Fizeau owns transcript, session-log, and progress rendering plus transcript semantics. DDx only preserves the opaque envelope and attachments; it does not rehydrate, parse, render, or semantically interpret inner Fizeau transcript or session-log content.
+- `docs/helix/01-frame/features/FEAT-006-agent-service.md` — rewrite to one page: "DDx invokes LLMs via the ddx-agent contract. DDx-side responsibilities: bead-driven invocation, execute-bead orchestration, evidence/session capture. End." DDx may keep copied/linkable evidence-envelope references and forward Fizeau transcript `ServiceEvent`s as opaque evidence, but it is only a pass-through/marshalling consumer for those events. Fizeau owns transcript, session-log, and progress rendering plus transcript semantics. DDx only preserves the opaque envelope and attachments; it does not rehydrate, parse, render, or semantically interpret inner Fizeau transcript or session-log content, and it does not render inner session logs in DDx worker views.
 
 #### Files to TRIM on the agent side (drop boundary claims; describe internals in agent's own language)
 
