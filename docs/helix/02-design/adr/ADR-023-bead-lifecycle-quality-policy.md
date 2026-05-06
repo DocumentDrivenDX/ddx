@@ -53,15 +53,23 @@ No new top-level FEAT is created.
 
 Every automated bead attempt has two quality checkpoints:
 
-1. **Pre-claim intake.** Before `ddx work` claims a bead or `ddx try` launches
-   the implementation invocation, DDx evaluates actionability, scope, and
-   decomposition risk. It checks the bead description, acceptance criteria,
-   labels, parent, dependency metadata, spec-id, prior attempt history, and the
-   canonical rubric in `docs/helix/06-iterate/bead-authoring-template.md`.
+1. **Bead readiness assessment.** Before `ddx work` claims a bead or `ddx try`
+   launches the implementation invocation, DDx evaluates whether the bead is
+   tractable and actionable. It checks the bead description, acceptance
+   criteria, labels, parent, dependency metadata, spec-id, prior attempt
+   history, and the canonical rubric in
+   `docs/helix/06-iterate/bead-authoring-template.md`. The implementation hook
+   may still advertise `MODE: intake` for legacy compatibility, but the
+   product concept is bead readiness assessment.
 2. **Post-attempt triage.** After an attempt finalizes, DDx triages the result
    against the same lifecycle quality policy so a low-quality prompt failure,
    missing rationale, empty review block, or structurally ambiguous outcome is
    classified and surfaced consistently.
+
+The readiness checkpoint and the post-attempt triage checkpoint are distinct:
+readiness decides whether a bead should be claimed or rewritten before
+execution, lint/rubric scoring measures prompt quality, and triage classifies
+the attempt after evidence exists.
 
 Both checkpoints invoke the same nested bead-lifecycle workflow skill under the
 `ddx` skill tree. The skill is responsible for translating the rubric into
@@ -127,15 +135,15 @@ infrastructure failures.
 
 ### Safe Improvement, Decomposition, And Recovery UX
 
-Pre-claim intake may update a bead before execution only when the update is
-intent-preserving and grounded in durable context. Safe improvements include
-normalizing the description into the authoring template, adding discovered
-file:line evidence, adding an obvious subsystem test command, and wiring
-deterministic labels, parent, or dependencies. Intake must block for human input
-instead of inventing acceptance criteria, changing scope, choosing between
-conflicting requirements, or guessing a missing governing artifact.
+Bead readiness assessment may update a bead before execution only when the
+update is intent-preserving and grounded in durable context. Safe improvements
+include normalizing the description into the authoring template, adding
+discovered file:line evidence, adding an obvious subsystem test command, and
+wiring deterministic labels, parent, or dependencies. Readiness must block for
+human input instead of inventing acceptance criteria, changing scope, choosing
+between conflicting requirements, or guessing a missing governing artifact.
 
-If intake finds the bead too broad, it decomposes before claim. Every parent AC
+If readiness finds the bead too broad, it decomposes before claim. Every parent AC
 must map to at least one child AC or be explicitly marked `needs_human` or
 `non_scope`; token-overlap metrics are heuristics, not proof of preservation.
 The parent is blocked/decomposed with child ids and the AC map in evidence.

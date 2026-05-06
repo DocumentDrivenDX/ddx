@@ -82,6 +82,11 @@ bd/br statuses, labels, dependency edges, append-only events, and preserved
 `Extra` fields. FEAT-004 does not introduce additional status vocabulary for
 no_changes, cooldown, superseded, or execution-readiness cases.
 
+Bead readiness assessment and related lint/triage flows use those existing
+metadata carriers. They do not add dedicated readiness fields to the schema;
+readiness is derived from the bead record's existing title, description,
+acceptance, labels, parent, dependencies, claim metadata, and preserved extras.
+
 ### Queue Semantics For Epics
 
 Epics remain first-class beads, but they are not consumed by the same

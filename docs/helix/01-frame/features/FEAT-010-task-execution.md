@@ -105,13 +105,16 @@ ADR-023 defines two lifecycle quality hooks owned by the layer-2 and layer-3
 execution loop. They are hooks inside `ExecuteBeadLoopRuntime`, not new run
 layers and not new bead-schema fields.
 
-`PreClaimIntakeHook` runs after the worker has selected a dependency-ready
-candidate but before DDx claims the bead or creates the implementation worktree.
-It has enough context to evaluate title, description, acceptance criteria,
-labels, parent, deps, bead type, spec-id, prior attempt history, and whether the
-bead is atomic enough to execute. The hook invokes the nested bead-lifecycle
-workflow skill under the `ddx` skill tree and records intake evidence in the
-layer-3 run record.
+`BeadReadinessHook` is the product concept: it runs after the worker has
+selected a dependency-ready candidate but before DDx claims the bead or
+creates the implementation worktree. The implementation may still call the
+compatibility entrypoint `PreClaimIntakeHook` and record `MODE: intake`, but
+the decision being made is bead readiness assessment. The hook has enough
+context to evaluate title, description, acceptance criteria, labels, parent,
+deps, bead type, spec-id, prior attempt history, and whether the bead is
+atomic enough to execute. The hook invokes the nested bead-lifecycle workflow
+skill under the `ddx` skill tree and records readiness evidence in the layer-3
+run record.
 
 `ddx work` wires this hook by default in both CLI and server-managed worker
 paths. Decomposition decisions run with a strong `MinPower` floor, defaulting to
@@ -122,7 +125,7 @@ passthrough constraints. If those constraints cannot satisfy the strong floor,
 DDx records `agent_power_unsatisfied` and blocks instead of running weak
 decomposition.
 
-The intake result is one of:
+The readiness result is one of:
 
 - `actionable_atomic` — claim and execute normally.
 - `actionable_but_rewritten` — DDx applied safe, intent-preserving bead updates
@@ -136,8 +139,8 @@ The intake result is one of:
 - `ambiguous_needs_human` — the bead/spec is unclear, contradictory,
   unverifiable, or missing acceptance criteria that DDx cannot safely invent.
   DDx blocks or marks the bead `needs_human` and does not claim it.
-- `intake_error` — intake infrastructure failed. In migration/WARN mode this
-  fails open with evidence; in reliable factory/BLOCK mode it may skip the
+- `readiness_error` — readiness infrastructure failed. In migration/WARN mode
+  this fails open with evidence; in reliable factory/BLOCK mode it may skip the
   candidate for the current pass but must not park it behind a cooldown unless a
   retryable time-based class is recorded.
 
@@ -147,7 +150,7 @@ missing governing artifact. Those cases become `ambiguous_needs_human`.
 
 `PostAttemptTriageHook` runs after the attempt has produced its local evidence:
 agent result, commit/no-commit state, no-changes rationale if any, post-run
-checks, adversarial review verdict, merge/preserve result, and the intake
+checks, adversarial review verdict, merge/preserve result, and the readiness
 report.
 It uses the same bead-lifecycle skill to classify whether the outcome is a
 normal attempt result, a quality-policy failure, a missing-evidence failure, or
@@ -158,7 +161,7 @@ classification.
 If post-attempt triage finds that an implementation attempt stopped because the
 bead was too large or the worker could not legally decompose inside its
 worktree/depth context, the layer-3 worker must invoke the same orchestrator
-decomposition path used by `PreClaimIntakeHook`. This is machine-actionable
+decomposition path used by `BeadReadinessHook`. This is machine-actionable
 work: DDx files child beads, records the AC map, and blocks the parent unless
 the split is lossy, ambiguous, or at the queue-level decomposition depth cap.
 The operator is not required merely because the implementer could not split
@@ -185,7 +188,7 @@ A layer-3 run is one drain of the bead queue. It iterates `ddx try`
 across ready beads until a stop condition is met. It owns:
 
 - Queue iteration order
-- Pre-claim intake, safe bead improvement, decomposition, claim acquisition,
+- Pre-claim readiness, safe bead improvement, decomposition, claim acquisition,
   claim release, and shutdown/interruption cleanup for claimed beads, using the
   TD-031 claim-state contract
 - Durable bead action after each layer-2 attempt, using TD-031's outcome,
@@ -257,7 +260,7 @@ failures:
 - dirty worktree, merge/land conflict, missing checkout, invalid bead metadata,
   unresolved dependencies, config parse errors, missing harness binaries,
   authentication failures, command-not-found/toolchain setup failures
-- intake ambiguity, missing acceptance criteria, spec contradictions,
+- readiness ambiguity, missing acceptance criteria, spec contradictions,
   decomposition overflow, review errors, reviewer context overflow, claim races,
   routing preflight rejection, quota/transport disruption, and any other class
   where the implementer did not receive valid task context and an opportunity to
@@ -306,12 +309,12 @@ first result was rejected, and why the final result passed.
 
 The layer-3 drain evaluates each ready bead through this mechanical sequence:
 
-1. **Eligibility and intake.** Pick a dependency-ready candidate. Run the
-   pre-claim intake gate. Safe rewrites happen before claim. Too-large work is
-   decomposed before an implementation attempt. Ambiguous or underspecified work
-   is blocked with `needs_human`. Intake infrastructure failure records evidence
-   and follows the configured fail-open/factory-mode policy; it never creates an
-   unexplained cooldown.
+1. **Eligibility and readiness.** Pick a dependency-ready candidate. Run the
+   pre-claim readiness gate. Safe rewrites happen before claim. Too-large work
+   is decomposed before an implementation attempt. Ambiguous or underspecified
+   work is blocked with `needs_human`. Readiness infrastructure failure records
+   evidence and follows the configured fail-open/factory-mode policy; it never
+   creates an unexplained cooldown.
 2. **Claim.** Claim only an `actionable_atomic` or safely rewritten bead. Claim
    races skip the bead for the current pass without cooldown.
 3. **Primary implementation cycle.** Run one layer-2 implementation attempt.
@@ -562,8 +565,8 @@ invocation fails, DDx records the hook error and continues with the underlying
 attempt flow in WARN-ONLY mode. In BLOCK/factory mode, hook infrastructure
 failure may skip the current candidate for the pass with observable evidence,
 but it must not park the bead behind an unexplained cooldown. Only a
-successfully computed intake/lint result can block dispatch as an authoring or
-scope failure. `--force --reason <text>` records an event with the actor,
+successfully computed readiness/lint result can block dispatch as an authoring
+or scope failure. `--force --reason <text>` records an event with the actor,
 reason, hook mode, and overridden criteria before proceeding.
 
 `ExecuteBeadReport` gains an `OutcomeReason` field beside the existing
@@ -853,7 +856,7 @@ spinning, or interrupted
   merged side-effect (default `N = 3`, configurable), then the next
   stop-condition evaluation triggers `no_progress` and the layer-3 record
   terminates with that disposition.
-- Given a candidate is skipped by intake, claim race, routing preflight,
+- Given a candidate is skipped by readiness, claim race, routing preflight,
   quota/transport/auth/tool setup failure, review error, or operator-action
   class, then that iteration does not increment the no-progress counter.
 - Given retry policy permits escalation before `no_progress` fires, when

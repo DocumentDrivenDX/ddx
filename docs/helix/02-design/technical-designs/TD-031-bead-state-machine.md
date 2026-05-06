@@ -133,7 +133,7 @@ Plain-English semantics:
 | `open` → `cancelled` | yes | operator | `cancelled` |
 | `in_progress` → `open` | yes | unclaim (operator or stale-claim sweep) | `unclaimed` |
 | `in_progress` → `closed` | yes | drain loop (on merge/already-satisfied) or operator | `closed-merged` / `closed-already-satisfied` |
-| `in_progress` → `blocked` | yes | drain loop on non-automatable review/intake finding, or operator | `review-block` / `blocked` |
+| `in_progress` → `blocked` | yes | drain loop on non-automatable review/readiness finding, or operator | `review-block` / `blocked` |
 | `blocked` → `open` | yes | operator (block resolved) | `unblocked` |
 | `blocked` → `cancelled` | yes | operator | `cancelled` |
 | `closed` → * | no | — | — (closed is terminal) |
@@ -194,15 +194,15 @@ Review and triage events:
 - `review-pass` — reviewer cleared the change
 - `review-fixable-gap` — reviewer found an implementation/test gap that can be
   repaired by another automated cycle
-- `review-too-large` — reviewer or intake found the bead/result too broad for a
+- `review-too-large` — reviewer or readiness found the bead/result too broad for a
   bounded review cycle
 - `review-error` — reviewer invocation failed, was malformed, overflowed, or
   returned no parseable verdict
 - `review-manual-required` — reviewer failures or non-automatable findings
   exhausted automatic recovery and require operator action
-- `triage-decomposed` — intake or review decomposed a parent into child beads
+- `triage-decomposed` — readiness or review decomposed a parent into child beads
 - `triage-overflow` — decomposition reached the depth cap
-- `triage-ambiguous` — intake could not safely clarify the bead
+- `triage-ambiguous` — readiness could not safely clarify the bead
 - `auto-triage` — TriageContract: triage path mutated labels/status
 
 Each event SHOULD include `kind`, `actor`, `created_at`, and a free-form
@@ -367,17 +367,19 @@ then returns the lifecycle action. The drain loop applies section 5 exactly and
 appends one of the no_changes event kinds from section 4; it does not invent
 new event kinds or use cooldown as a generic parking lot.
 
-### 8.2 Intake And Triage Contract (ddx-3c154349)
+### 8.2 Bead Readiness And Triage Contract (ddx-3c154349)
 
-Pre-claim intake is the normal path for actionability and scope checks. It runs
-before a worker owns the bead, so most intake actions start from `open`.
+Bead readiness assessment is the normal path for actionability and scope
+checks. It runs before a worker owns the bead, so most readiness actions start
+from `open`. The implementation entrypoint may still be named `MODE: intake`
+for compatibility, but the product concept is readiness.
 
 Status transitions used:
 
 - `in_progress → open` when releasing stale claims.
 - `open → blocked` when triage decides a bead has an unmet hard
   precondition.
-- `open → blocked` when intake decomposes a parent, reaches decomposition depth
+- `open → blocked` when readiness decomposes a parent, reaches decomposition depth
   overflow, or finds ambiguity that cannot be safely rewritten.
 
 Labels added: `triage`, `needs_human`, `blocked-on-upstream:<id>`,
@@ -395,9 +397,9 @@ Claim behavior: the auto-triage sweep is the only path that releases a
 claim it does not own. It MUST log the prior `assignee` and `claimed-at`
 in the appended event body.
 
-Loop interaction: triage runs out-of-band of execute-bead. It MUST NOT
-race with an active drain attempt holding the store lock — it acquires
-the same store lock and releases-then-reclaims is not its job.
+Loop interaction: readiness and triage run out-of-band of execute-bead. They
+MUST NOT race with an active drain attempt holding the store lock — they
+acquire the same store lock and releases-then-reclaims is not their job.
 
 ### 8.3 QuotaPauseContract (ddx-aede917d)
 
