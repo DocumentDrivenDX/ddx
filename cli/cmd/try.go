@@ -186,10 +186,6 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		loopSink = workerprobe.TeeJSONL(io.Discard, probe)
 	}
 
-	// Session log tailer so the operator sees progress.
-	tailCtx, tailCancel := context.WithCancel(context.Background())
-	go agent.TailSessionLogs(tailCtx, projectRoot, cmd.OutOrStdout())
-
 	// Process-local LandCoordinator.
 	localCoord := serverpkg.NewLocalLandCoordinator(projectRoot, agent.RealLandingGitOps{})
 	defer localCoord.Stop()
@@ -323,7 +319,6 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	}
 	rcfg, err := config.LoadAndResolve(projectRoot, overrides)
 	if err != nil {
-		tailCancel()
 		return fmt.Errorf("load resolved config: %w", err)
 	}
 
@@ -346,7 +341,6 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		PostAttemptTriageHook: triageHook,
 		NoReview:              noReview,
 	})
-	tailCancel()
 	if runErr != nil {
 		return runErr
 	}

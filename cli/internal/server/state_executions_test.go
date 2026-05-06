@@ -153,6 +153,9 @@ func TestExecutions_ListAndDetail(t *testing.T) {
 	if exec.SessionID == nil || *exec.SessionID == "" {
 		t.Fatal("expected sessionId to be present")
 	}
+	if exec.AgentLogPath == nil || *exec.AgentLogPath != filepath.ToSlash(filepath.Join(".ddx", "agent-logs", "agent-eb-20260423T020000-bbbb2222.jsonl")) {
+		t.Fatalf("expected agent log path pointer, got %#v", exec.AgentLogPath)
+	}
 
 	// Tool-call stream for the bundle that has one.
 	calls := s.GetExecutionToolCallsGraphQL("20260423T020000-bbbb2222")

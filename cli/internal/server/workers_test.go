@@ -2,6 +2,7 @@ package server
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -575,41 +576,9 @@ func TestProjectWorkerProgressKeepaliveOnIdleWorker(t *testing.T) {
 	assert.True(t, found, "expected at least one keepalive comment line, got: %v", lines)
 }
 
-func TestFormatSessionLogLines(t *testing.T) {
-	lines := []string{
-		`{"type":"session.start","data":{"model":"qwen/qwen3.6-plus"}}`,
-		`{"type":"llm.request","data":{"attempt_index":1,"messages":[{"role":"user","content":"find .rs files"}]}}`,
-		`{"type":"llm.response","data":{"model":"qwen/qwen3.6-plus-04-02","latency_ms":5491,"attempt":{"cost":{"raw":{"total_tokens":8408,"prompt_tokens":8204,"completion_tokens":204}}},"tool_calls":[{"name":"read","arguments":{"path":"docs/FEAT-006.md"}}],"finish_reason":"tool_calls"}}`,
-		`{"type":"tool.call","data":{"tool":"read","input":{"path":"docs/FEAT-006.md"},"duration_ms":120,"error":""}}`,
-		`{"type":"tool.call","data":{"tool":"write","input":{"path":"docs/new.md"},"duration_ms":50,"error":"permission denied"}}`,
-		`{"type":"llm.delta","data":{}}`,
-	}
-
-	result := agent.FormatSessionLogLines(lines)
-
-	assert.Contains(t, result, "session started (model: qwen/qwen3.6-plus)")
-	assert.Contains(t, result, "→ llm request (attempt 1, req=44B) [find .rs files]")
-	assert.Contains(t, result, "← llm response (8408 tokens, 5.5s, 1531.2 tok/s) qwen/qwen3.6-plus-04-02 → read")
-	assert.Contains(t, result, "🔧 read docs/FEAT-006.md in=27B (0.1s)")
-	assert.Contains(t, result, "🔧 write docs/new.md in=22B (0.1s) ❌ permission denied")
-	assert.NotContains(t, result, "llm.delta") // deltas should be suppressed
-}
-
-func TestWorkerProgressUsesCanonicalFizeauProgressEvents(t *testing.T) {
-	root := t.TempDir()
-	legacyDir := filepath.Join(root, ".ddx", "agent-logs")
-	canonicalDir := filepath.Join(root, ".ddx", "executions", "attempt-1", "embedded")
-	require.NoError(t, os.MkdirAll(legacyDir, 0o755))
-	require.NoError(t, os.MkdirAll(canonicalDir, 0o755))
-
-	legacyPath := filepath.Join(legacyDir, "agent-legacy.jsonl")
-	canonicalPath := filepath.Join(canonicalDir, "svc-canonical.jsonl")
-
-	require.NoError(t, os.WriteFile(legacyPath, []byte(strings.Join([]string{
-		`{"type":"llm.response","data":{"model":"claude-sonnet-4-6","latency_ms":10,"attempt":{"cost":{"raw":{"total_tokens":12}}},"tool_calls":[{"name":"Bash"}],"finish_reason":"tool_use"}}`,
-	}, "\n")+"\n"), 0o644))
-	require.NoError(t, os.WriteFile(canonicalPath, []byte(strings.Join([]string{
-		mustProgressLine(t, agentlib.ServiceProgressData{
+func TestFormatServiceProgressEntries(t *testing.T) {
+	result := agent.FormatServiceProgressEntries([]agentlib.ServiceProgressData{
+		{
 			Phase:         "tool",
 			State:         "complete",
 			TaskID:        "ddx-1234",
@@ -622,32 +591,36 @@ func TestWorkerProgressUsesCanonicalFizeauProgressEvents(t *testing.T) {
 			OutputExcerpt: "Success. Updated the following files:",
 			DurationMS:    35,
 			TokPerSec:     float64Ptr(18.4),
-		}),
-	}, "\n")+"\n"), 0o644))
-
-	now := time.Now()
-	require.NoError(t, os.Chtimes(legacyPath, now, now))
-	require.NoError(t, os.Chtimes(canonicalPath, now.Add(-2*time.Minute), now.Add(-2*time.Minute)))
-
-	m := &WorkerManager{projectRoot: root}
-	result := m.readActiveSessionLog(&workerHandle{})
+		},
+	})
 
 	assert.Contains(t, result, "ok ddx-1234 7 add test implementation to cli/internal/file.go")
 	assert.Contains(t, result, "< out=312B 12 lines")
 	assert.Contains(t, result, "18.4 tok/s")
-	assert.NotContains(t, result, "llm response")
 }
 
-func mustProgressLine(t *testing.T, data agentlib.ServiceProgressData) string {
-	t.Helper()
-	raw, err := json.Marshal(data)
+func TestWorkerManagerLogsDoesNotRenderSessionLogs(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, ".ddx", "agent-logs"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, ".ddx", "agent-logs", "agent-live.jsonl"), []byte(strings.Join([]string{
+		`{"type":"progress","data":{"phase":"thinking","state":"complete","message":"ddx-99419bc1 #1 thought 5.0s","output_tokens":8,"duration_ms":5000}}`,
+	}, "\n")+"\n"), 0o644))
+
+	m := &WorkerManager{
+		projectRoot: root,
+		workers: map[string]*workerHandle{
+			"worker-1": {
+				record: WorkerRecord{ID: "worker-1", State: "running"},
+				logBuf: bytes.NewBufferString("worker stdout\n"),
+			},
+		},
+	}
+
+	stdout, stderr, err := m.Logs("worker-1")
 	require.NoError(t, err)
-	line, err := json.Marshal(map[string]any{
-		"type": "progress",
-		"data": json.RawMessage(raw),
-	})
-	require.NoError(t, err)
-	return string(line)
+	assert.Equal(t, "worker stdout\n", stdout)
+	assert.Empty(t, stderr)
+	assert.NotContains(t, stdout, "thought 5.0s")
 }
 
 func float64Ptr(v float64) *float64 {

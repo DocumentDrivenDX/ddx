@@ -1419,11 +1419,7 @@ func (m *WorkerManager) Logs(id string) (string, string, error) {
 	m.mu.Lock()
 	if handle, ok := m.workers[id]; ok {
 		log := handle.logBuf.String()
-		sessionLog := m.readActiveSessionLog(handle)
 		m.mu.Unlock()
-		if sessionLog != "" {
-			return log + "\n" + sessionLog, "", nil
-		}
 		return log, "", nil
 	}
 	m.mu.Unlock()
@@ -1610,113 +1606,6 @@ func (m *WorkerManager) SubscribeProgress(workerID string) (<-chan agent.Progres
 		}
 	}
 	return ch, unsub
-}
-
-// readActiveSessionLog reads the latest session log entries for an active worker.
-// Canonical service-event output is written as svc-*.jsonl inside the embedded
-// execution bundle; legacy agent-*.jsonl remains supported as a fallback.
-func (m *WorkerManager) readActiveSessionLog(handle *workerHandle) string {
-	candidates := m.activeSessionLogCandidates()
-	if len(candidates) == 0 {
-		return ""
-	}
-	sort.SliceStable(candidates, func(i, j int) bool {
-		if candidates[i].canonical != candidates[j].canonical {
-			return candidates[i].canonical
-		}
-		return candidates[i].modTime.After(candidates[j].modTime)
-	})
-
-	// Read the last N lines of the preferred log and format them as readable progress.
-	data, err := os.ReadFile(candidates[0].path)
-	if err != nil {
-		return ""
-	}
-
-	lines := strings.Split(strings.TrimSpace(string(data)), "\n")
-	// Show the last 50 entries
-	start := 0
-	if len(lines) > 50 {
-		start = len(lines) - 50
-	}
-
-	return formatActiveSessionLogLines(lines[start:])
-}
-
-type sessionLogCandidate struct {
-	path      string
-	canonical bool
-	modTime   time.Time
-}
-
-func (m *WorkerManager) activeSessionLogCandidates() []sessionLogCandidate {
-	var candidates []sessionLogCandidate
-	appendDir := func(dir string) {
-		entries, err := os.ReadDir(dir)
-		if err != nil {
-			return
-		}
-		for _, entry := range entries {
-			if entry.IsDir() || !strings.HasSuffix(entry.Name(), ".jsonl") {
-				continue
-			}
-			// Skip loop event files — they contain loop milestones, not agent session
-			// entries. Loop milestone progress is already captured in worker.log.
-			if strings.HasPrefix(entry.Name(), "agent-loop-") {
-				continue
-			}
-			canonical := strings.HasPrefix(entry.Name(), "svc-")
-			if !canonical && !strings.HasPrefix(entry.Name(), "agent-") {
-				continue
-			}
-			info, err := entry.Info()
-			if err != nil {
-				continue
-			}
-			candidates = append(candidates, sessionLogCandidate{
-				path:      filepath.Join(dir, entry.Name()),
-				canonical: canonical,
-				modTime:   info.ModTime(),
-			})
-		}
-	}
-
-	appendDir(filepath.Join(m.projectRoot, ".ddx", "agent-logs"))
-	embeddedDirs, _ := filepath.Glob(filepath.Join(m.projectRoot, ".ddx", "executions", "*", "embedded"))
-	for _, dir := range embeddedDirs {
-		appendDir(dir)
-	}
-	return candidates
-}
-
-func formatActiveSessionLogLines(lines []string) string {
-	var progress []agentlib.ServiceProgressData
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			continue
-		}
-		var entry map[string]any
-		if err := json.Unmarshal([]byte(line), &entry); err != nil {
-			continue
-		}
-		if typ, _ := entry["type"].(string); typ != agentlib.ServiceEventTypeProgress {
-			continue
-		}
-		var data agentlib.ServiceProgressData
-		rawData, err := json.Marshal(entry["data"])
-		if err != nil {
-			continue
-		}
-		if err := json.Unmarshal(rawData, &data); err != nil {
-			continue
-		}
-		progress = append(progress, data)
-	}
-	if len(progress) > 0 {
-		return agent.FormatServiceProgressEntries(progress)
-	}
-	return agent.FormatSessionLogLines(lines)
 }
 
 // buildPreClaimHook returns a PreClaimHook function that fetches origin and
