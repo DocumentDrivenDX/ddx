@@ -1,0 +1,2 @@
+DELETE internal/update/cache.go:87 Cache.Invalidate — the symbol is absent in the current tree; `cli/internal/update/cache.go` now exposes `IsExpired` instead, and deadcode no longer reports any `internal/update` symbol.
+DELETE internal/update/cache.go:93 InvalidateCache — the symbol is absent in the current tree; the remaining cache logic is only `IsExpired`/`Load`/`Save`, and deadcode no longer reports any `internal/update` symbol.
