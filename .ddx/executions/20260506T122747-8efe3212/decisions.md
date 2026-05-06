@@ -1,0 +1,2 @@
+Cache.Invalidate (internal/update/cache.go:87): DELETE - current tree has no invalidate method in `cli/internal/update/cache.go`; the update cache API only exposes `Load`, `Save`, `IsExpired`, and `getCacheFilePath`.
+InvalidateCache (internal/update/cache.go:93): DELETE - current tree has no standalone invalidation helper in `cli/internal/update/cache.go`; no production caller exists in `cli/cmd` or `cli/internal`.
