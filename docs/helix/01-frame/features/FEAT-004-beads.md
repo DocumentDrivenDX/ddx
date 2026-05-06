@@ -84,7 +84,7 @@ no_changes, cooldown, superseded, or execution-readiness cases.
 
 Bead readiness assessment uses those existing metadata carriers. Lint/rubric
 scoring happens inside readiness, and post-attempt triage happens after
-execution. None of them add dedicated readiness fields to the schema;
+execution. None of them add dedicated readiness fields or new schema values;
 readiness is derived from the bead record's existing title, description,
 acceptance, labels, parent, dependencies, claim metadata, and preserved
 extras.
@@ -217,7 +217,8 @@ measures prompt quality, and post-attempt triage, which classifies evidence
 after execution. The older "pre-claim intake" wording survives only as legacy
 compatibility language. Base validation still protects the reusable bead
 schema; authoring quality checks protect the "bead as prompt" contract needed
-by `ddx try`, `ddx work`, and autonomous sub-agent execution.
+by `ddx try`, `ddx work`, and autonomous sub-agent execution. Readiness uses
+the existing bead metadata carriers and does not add schema fields.
 
 The lint rubric is the 8-criterion template in
 `docs/helix/06-iterate/bead-authoring-template.md`:
