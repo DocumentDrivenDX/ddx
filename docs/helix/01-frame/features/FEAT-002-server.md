@@ -31,11 +31,11 @@ at `~/.local/share/ddx/server-state.json` (`$XDG_DATA_HOME/ddx/server-state.json
 when set), and the last-known server URL is written to
 `~/.local/share/ddx/server.addr` (see FEAT-020). The server binds multiple
 project roots concurrently; each request is resolved against one explicit
-project context before adapters run. DDx-owned worker lifecycle state remains
+project context before adapters run. DDx-owned worker lifecycle state is
 separate from the opaque Fizeau transcript/session payloads that may travel
 through agent-session records. DDx manages worker lifecycle events and worker
 records, while forwarded Fizeau events remain opaque attachments owned by
-Fizeau rather than worker state.
+Fizeau rather than worker state or lifecycle state.
 
 ## Architecture
 
