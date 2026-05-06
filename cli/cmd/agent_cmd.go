@@ -1690,13 +1690,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		loopSink = workerprobe.TeeJSONL(io.Discard, probe)
 	}
 
-	// Start session log tailer so the user sees progress during agent execution.
-	// JSON mode must stay machine-readable, so suppress the live human tailer.
-	tailCtx, tailCancel := context.WithCancel(context.Background())
-	if !asJSON {
-		go agent.TailSessionLogs(tailCtx, projectRoot, cmd.OutOrStdout())
-	}
-
 	// Instantiate a process-local LandCoordinator for the inline land path.
 	// Stopped on function exit.
 	localCoord := serverpkg.NewLocalLandCoordinator(projectRoot, agent.RealLandingGitOps{})
@@ -1740,7 +1733,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		// zero-value ResolvedConfig flow into RunWithConfig — the
 		// SD-024 sealed-construction sentinel would otherwise panic
 		// at first accessor read instead of producing a clean CLI error.
-		tailCancel()
 		return fmt.Errorf("load resolved config: %w", err)
 	}
 
@@ -1941,7 +1933,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		TargetBeadID:          tryTargetBeadID,
 		ReviewCostCap:         costCap,
 	})
-	tailCancel() // stop session log tailer
 	if err != nil {
 		return err
 	}
