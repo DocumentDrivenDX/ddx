@@ -1,0 +1,1 @@
+verification_command: cd cli && go test ./cmd/... -run "TestRootSignal|TestWork|TestTry|TestExecuteLoop" -count=1 && lefthook run pre-commit
