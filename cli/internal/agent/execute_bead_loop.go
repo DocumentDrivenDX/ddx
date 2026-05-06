@@ -1317,7 +1317,8 @@ func hasGuardSkips(skips []pickerSkip) bool {
 // PreviewQueue surface).
 func (w *ExecuteBeadWorker) nextCandidate(ctx context.Context, results []ExecuteBeadReport, guards []work.Guard, labelFilter, targetBeadID string) (bead.Bead, []pickerSkip, bool, error) {
 	// Use PreviewQueue for the stable filter+sort logic. Limit=0 returns all
-	// entries so we can scan for the first non-attempted candidate.
+	// entries so we can scan for the first candidate not already present in
+	// the current drain results slice.
 	entries, err := PreviewQueue(w.Store, PickerFilters{LabelFilter: labelFilter}, 0)
 	if err != nil {
 		return bead.Bead{}, nil, false, err
@@ -1336,13 +1337,6 @@ func (w *ExecuteBeadWorker) nextCandidate(ctx context.Context, results []Execute
 	for _, b := range ready {
 		byID[b.ID] = b
 	}
-	attempted := make(map[string]struct{}, len(results))
-	for _, report := range results {
-		if report.BeadID != "" {
-			attempted[report.BeadID] = struct{}{}
-		}
-	}
-
 	var skips []pickerSkip
 	for _, entry := range entries {
 		candidate, ok := byID[entry.BeadID]
@@ -1354,7 +1348,7 @@ func (w *ExecuteBeadWorker) nextCandidate(ctx context.Context, results []Execute
 			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, Reason: "target_bead"})
 			continue
 		}
-		if _, seen := attempted[candidate.ID]; seen {
+		if hasResultForBead(results, candidate.ID) {
 			skips = append(skips, pickerSkip{BeadID: candidate.ID, Priority: candidate.Priority, Reason: "in_attempted"})
 			continue
 		}
@@ -1384,6 +1378,15 @@ func (w *ExecuteBeadWorker) nextCandidate(ctx context.Context, results []Execute
 		return candidate, skips, true, nil
 	}
 	return bead.Bead{}, skips, false, nil
+}
+
+func hasResultForBead(results []ExecuteBeadReport, beadID string) bool {
+	for _, report := range results {
+		if report.BeadID == beadID {
+			return true
+		}
+	}
+	return false
 }
 
 // appendLoopRoutingEvidence records a kind:routing evidence event on the bead
