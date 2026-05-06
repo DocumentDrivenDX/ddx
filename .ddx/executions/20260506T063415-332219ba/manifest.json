@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260506T063415-332219ba",
+  "bead_id": "ddx-83e3687b",
+  "base_rev": "24a3d00d37d934b5ed5be5e225af820f3f56b0d9",
+  "created_at": "2026-05-06T06:34:17.546576818Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-83e3687b",
+    "title": "progress: quarantine legacy formatter only if deletion is deferred",
+    "description": "PROBLEM\nThis bead overlaps with the deletion beads unless it is explicitly treated as a fallback quarantine. If ddx-f948b7a4 deletes the legacy formatter/tailer first, there is nothing left to isolate.\n\nROOT CAUSE\n- cli/internal/agent/session_log_format.go may still contain legacy normalization while ddx-b20bdc55 introduces canonical SD-011 progress consumption.\n- ddx-f948b7a4 is the preferred cleanup path and should remove the production formatter/tailer entirely.\n\nPROPOSED FIX\nRun this only if deletion is deferred or incomplete. Quarantine any remaining legacy normalization behind an explicitly named fallback-only path that is unreachable from capture-time Claude/Codex/native wrappers. If ddx-f948b7a4 removes the formatter/tailer production code, close this bead as superseded.\n\nNON-SCOPE\n- Reintroducing production dependence on Fizeau session-log parsing.\n- Fizeau schema changes.",
+    "acceptance": "1. If rg -n 'FormatSessionLogLines|TailSessionLogs|readActiveSessionLog' cli/internal/agent cli/internal/server has no production hits after ddx-f948b7a4, close this bead as superseded with no code changes.\n2. If legacy normalization remains, canonical SD-011 progress formatting is implemented separately from legacy normalization.\n3. No capture-time Claude/Codex/native wrapper calls formatter-layer helpers such as output-summary/excerpt functions.\n4. Legacy normalization, if retained, is explicitly fallback-only for historical logs and maps turn/round fields into canonical turn_index.\n5. cd cli \u0026\u0026 go test ./internal/agent -run \"TestFormatSessionLogLines|Test.*Progress|Test.*Legacy\" -count=1 passes if any legacy formatter remains.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-dda48755",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:progress",
+      "kind:cleanup",
+      "upstream-fizeau",
+      "deferred"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T06:34:15Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "execute-loop-heartbeat-at": "2026-05-06T06:34:15.116865114Z",
+      "spec-id": "SD-011"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-011",
+      "path": "docs/helix/02-design/solution-designs/SD-011-agent-skills.md",
+      "title": "Solution Design: DDx Agent Skills"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T063415-332219ba",
+    "prompt": ".ddx/executions/20260506T063415-332219ba/prompt.md",
+    "manifest": ".ddx/executions/20260506T063415-332219ba/manifest.json",
+    "result": ".ddx/executions/20260506T063415-332219ba/result.json",
+    "checks": ".ddx/executions/20260506T063415-332219ba/checks.json",
+    "usage": ".ddx/executions/20260506T063415-332219ba/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-83e3687b-20260506T063415-332219ba"
+  },
+  "prompt_sha": "c1c3b52d8dcd6fc628fa2fb9996a13d805818da5d7dfe927544c3dde4b9a13b4"
+}
