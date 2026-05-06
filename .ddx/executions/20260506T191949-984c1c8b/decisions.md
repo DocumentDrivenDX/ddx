@@ -1,0 +1,5 @@
+DELETE NewResolver: no definition remains in the current `cli/internal/server/graphql` package; `cli/internal/server/server.go:4868-4886` instantiates `&ddxgraphql.Resolver{...}` directly in the production GraphQL handler.
+DELETE personaConnectionFrom: no definition remains in the current `cli/internal/server/graphql` package; persona resolvers now convert loader results directly to GraphQL objects in `resolver_meta.go:11-33`.
+DELETE resetProviderModelsCacheForTest: no definition remains in the current `cli/internal/server/graphql` package; provider-model tests reset package state inline rather than through a helper.
+DELETE RecordHarnessRateLimit: no production caller remains; `resolver_providers.go:23-39` only exposes `LookupHarnessRateLimit`, and `quotaFromHarnessInfo` consumes that read path.
+DELETE resetHarnessRateLimitCache: no definition remains in the current `cli/internal/server/graphql` package; the harness rate-limit cache is only read through `LookupHarnessRateLimit` and there is no production reset hook.
