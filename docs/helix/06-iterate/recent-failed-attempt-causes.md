@@ -4,6 +4,9 @@ Evidence window: `2026-05-05T01:31:09Z` through `2026-05-06T15:21:21Z`.
 Sources sampled: `.ddx/beads.jsonl` event streams plus
 `.ddx/executions/<attempt-id>/result.json` and
 `.ddx/executions/<attempt-id>/manifest.json` for the attempts below.
+Sampled execution directories span
+`.ddx/executions/20260505T012605-cd23d1fd` through
+`.ddx/executions/20260506T160123-7b468ece`.
 
 This report groups the observed failures into the five buckets required by the
 bead acceptance. The point is not perfect root-cause proof; it is a durable,
