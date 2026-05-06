@@ -1,0 +1,204 @@
+{
+  "attempt_id": "20260506T163353-ba20f527",
+  "bead_id": "ddx-4ab66676",
+  "base_rev": "799c60228eff72de5ffb5eae650f8c24eedefd29",
+  "created_at": "2026-05-06T16:33:55.559485587Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4ab66676",
+    "title": "cli: translate SIGINT/SIGTERM into graceful ddx cancellation",
+    "description": "PROBLEM\nCtrl-C / SIGTERM should trigger DDx cooperative cancellation for `ddx work` and `ddx try`, but the CLI root currently executes without a signal-backed context. Operators see abrupt termination rather than an explicit shutdown message and cleanup path.\n\nROOT CAUSE WITH FILE:LINE\n- cli/main.go:31 calls `cmd.Execute(workingDir)` and relies on the default process signal behavior.\n- cli/cmd/root.go:31-39 initializes the root command and calls `rootCmd.Execute()` instead of `ExecuteContext(ctx)`.\n- cli/cmd/work.go:37-40 advertises `signal` as a stop condition, but no production signal handler cancels `cmd.Context()`.\n- docs/helix/01-frame/features/FEAT-010-task-execution.md:423-434 and docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md:177-190 require first-signal cooperative shutdown and the exact operator message `Cancel received, shutting down gracefully`.\n\nPROPOSED FIX\n- Install a root SIGINT/SIGTERM handler for production CLI execution using `signal.NotifyContext` or equivalent.\n- Execute Cobra with the signal-backed context.\n- On first signal, print `Cancel received, shutting down gracefully` exactly once to the operator-visible stream before cancellation-dependent cleanup begins.\n- On a second signal, hard-abort or restore default signal behavior so wedged cleanup can still be killed.\n- Keep tests deterministic by exposing a small helper/seam rather than sending real OS signals where unit tests can use a cancellable context.\n\nNON-SCOPE\n- Do not decide bead cleanup policy here beyond propagating context cancellation.\n- Do not change server worker stop/watchdog behavior.",
+    "acceptance": "1. Production root command execution uses a SIGINT/SIGTERM-backed context and calls ExecuteContext.\n2. First signal prints exactly `Cancel received, shutting down gracefully` once, visible to the operator.\n3. Second signal hard-aborts or restores default signal behavior; the behavior is documented in a source comment and covered by a focused test where practical.\n4. TestRootSignal_FirstInterruptCancelsContextAndPrintsGracefulMessage verifies cancellation and exact message without relying on slow real-time sleeps.\n5. TestRootSignal_MessagePrintedOnce verifies repeated first-path cancellation does not duplicate the message.\n6. Existing command tests that use ExecuteContext continue to control cancellation explicitly.\n7. `cd cli \u0026\u0026 go test ./cmd/... -run \"TestRootSignal|TestWork|TestTry|TestExecuteLoop\" -count=1` passes.\n8. `lefthook run pre-commit` passes.",
+    "parent": "ddx-99a3be32",
+    "labels": [
+      "phase:2",
+      "area:cli",
+      "area:agent",
+      "kind:bug",
+      "reliability",
+      "spec:FEAT-010",
+      "spec:SD-025",
+      "interrupt"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T16:33:53Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "960259",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T15:18:34.593232708Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"transport\",\"detail\":\"pre-execute-bead checkpoint: synthesize commit: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"rationale\":\"The attempt failed before implementation due to a local git lock contention (`.git/index.lock` exists), which is an environment/process issue rather than a code or test failure.\",\"recommended_action\":\"retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":\"Before retrying, verify no other git process is active and remove the stale `.git/index.lock` if it is safe to do so; then rerun the pre-execute checkpoint.\",\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-06T15:18:45.467861139Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx agent execute-loop",
+          "summary": "transport: retry"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-execute-bead checkpoint: synthesize commit: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=transport",
+          "created_at": "2026-05-06T15:18:45.67809204Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T15:19:56.037257591Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"\",\"classification\":\"quota\",\"detail\":\"creating isolated worktree: git worktree add: Preparing worktree (detached HEAD 8be33a99c)\\nerror: unable to create file .ddx/executions/20260506T092913-4d7e1b79/result.json: No space left on device\\nerror: unable to create file .ddx/executions/20260506T092913-4d7e1b79/usage.json: No space left on device\\nfatal: cannot create directory at '.ddx/executions/20260506T093152-38057663': No space left on device: exit status 128\",\"rationale\":\"The attempt failed before implementation because the workspace ran out of disk space while creating the isolated worktree and execution artifacts (`No space left on device`). This is an environment capacity issue, not a code or test failure.\",\"recommended_action\":\"retry\",\"result_rev\":\"\",\"session_id\":\"\",\"status\":\"execution_failed\",\"suggested_amendments\":\"Free disk space in the repo/workspace, then rerun the execute-bead flow. If stale execution artifacts are safe to remove, prune `.ddx/executions/` and any unused worktrees before retrying.\",\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-06T15:20:10.074600465Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx agent execute-loop",
+          "summary": "quota: retry"
+        },
+        {
+          "actor": "erik",
+          "body": "creating isolated worktree: git worktree add: Preparing worktree (detached HEAD 8be33a99c)\nerror: unable to create file .ddx/executions/20260506T092913-4d7e1b79/result.json: No space left on device\nerror: unable to create file .ddx/executions/20260506T092913-4d7e1b79/usage.json: No space left on device\nfatal: cannot create directory at '.ddx/executions/20260506T093152-38057663': No space left on device: exit status 128\noutcome_reason=quota",
+          "created_at": "2026-05-06T15:20:10.289485447Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T15:41:50.029248222Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-06T15:47:13.623282431Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T154152-4a9c452c\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":3936186,\"output_tokens\":26165,\"total_tokens\":3962351,\"cost_usd\":0,\"duration_ms\":319342,\"exit_code\":0}",
+          "created_at": "2026-05-06T15:47:13.841603514Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=3962351 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T15:47:27.597352128Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=7b96d80ec2b5192efc019a20a8d74e9e39fc02a7\n\nreview-group: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T11:52:33-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=55410\noutput_bytes=0\nelapsed_ms=4128",
+          "created_at": "2026-05-06T15:47:33.340832957Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-close review: review-error: transport\nagent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T11:52:33-04:00)\nresult_rev=7b96d80ec2b5192efc019a20a8d74e9e39fc02a7\nbase_rev=e14178f31d037acef34ece3b2e662a36ac97dc2c",
+          "created_at": "2026-05-06T15:47:33.60997411Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_malfunction"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T15:54:40.051103521Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-06T15:56:12.488191443Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T155440-9c31debb\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":576223,\"output_tokens\":5589,\"total_tokens\":581812,\"cost_usd\":0,\"duration_ms\":89601,\"exit_code\":0}",
+          "created_at": "2026-05-06T15:56:12.695675575Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=581812 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T15:56:19.849243963Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=6b036f3943f3239d0b54eb409772312366c65247\n\nreview-group: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T12:01:24-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=67105\noutput_bytes=0\nelapsed_ms=4102",
+          "created_at": "2026-05-06T15:56:25.05438247Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-close review: review-error: transport\nagent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T12:01:24-04:00)\nresult_rev=6b036f3943f3239d0b54eb409772312366c65247\nbase_rev=716c93cdd88498410f7856859531907e9694362f",
+          "created_at": "2026-05-06T15:56:25.25861023Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_malfunction"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T16:33:52.749987739Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T16:33:53.108362958Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T163353-ba20f527",
+    "prompt": ".ddx/executions/20260506T163353-ba20f527/prompt.md",
+    "manifest": ".ddx/executions/20260506T163353-ba20f527/manifest.json",
+    "result": ".ddx/executions/20260506T163353-ba20f527/result.json",
+    "checks": ".ddx/executions/20260506T163353-ba20f527/checks.json",
+    "usage": ".ddx/executions/20260506T163353-ba20f527/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4ab66676-20260506T163353-ba20f527"
+  },
+  "prompt_sha": "a1c0f4b82270a77d99c5940625c79bae6b88d6f0ccc040301359739bde4eb440"
+}
