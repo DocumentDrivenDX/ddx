@@ -1,0 +1,59 @@
+{
+  "attempt_id": "20260506T171752-9eaf51c0",
+  "bead_id": "ddx-f326f001",
+  "base_rev": "e2306cff5c2d6941cd54ee303ddd00169418d5a1",
+  "created_at": "2026-05-06T17:17:55.142062819Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f326f001",
+    "title": "work: render terminal result lines with status-specific markers",
+    "description": "PROBLEM\n`ddx work` prints a success-looking terminal line for failed iterations. Operators see output such as `✓ ddx-8fa7ecf6 → error: pre-close review: review-error: transport`, where the leading checkmark contradicts the error detail and makes it unclear whether the bead closed successfully.\n\nROOT CAUSE WITH FILE:LINE\n`cli/internal/agent/execute_bead_loop.go:1214-1215` always prints `✓ \u003cbead\u003e → \u003cformatted-result\u003e` whenever an iteration finishes, regardless of `ExecuteBeadReport.Status`. `cli/internal/agent/execute_bead_loop.go:1590-1616` formats failed statuses as `error: ...`, but the caller still prefixes them with the success glyph.\n\nPROPOSED FIX\n- Add a small terminal result-line formatter near `formatLoopResult` that returns both a status marker and the existing concise result text.\n- Use a success marker only for `success` and `already_satisfied` results.\n- Use a neutral or failure marker for `no_changes`, review malfunction, execution_failed, post-run check failures, and other non-closing statuses so the first token no longer implies success.\n- Keep persisted `bead.result` events and status enums unchanged; this bead is CLI/log presentation only.\n\nNON-SCOPE\n- Renaming `pre-claim intake` / `pre-dispatch lint` readiness-hook terminology; that is owned by `ddx-1c0de0af`.\n- Review retry/manual-required policy; that is owned by `ddx-639af4ef` and related review beads.\n- Changing status taxonomy or persisted event schemas; classification work is owned by `ddx-e2479b81`.",
+    "acceptance": "1. `TestFormatLoopResultLine_SuccessUsesSuccessMarker` proves success and already_satisfied statuses render with the success marker and unchanged concise result text.\n2. `TestFormatLoopResultLine_FailuresDoNotUseSuccessMarker` proves review malfunction, execution_failed, post_run_check_failed, no_evidence_produced, and preserved-error statuses do not render with `✓`.\n3. `TestExecuteBeadLoop_LogLineDoesNotUseSuccessMarkerForReviewError` covers a loop result with `Detail=\"pre-close review: review-error: transport\"` and asserts the emitted log line does not start with `✓`.\n4. Existing `formatLoopResult` behavior remains covered for `merged`, `already_satisfied`, `no_changes`, `preserved: ...`, and `error: ...` text.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... -run \"TestFormatLoopResult|TestExecuteBeadLoop_LogLine\" -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-a9d130d0",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:cli",
+      "kind:bug",
+      "reliability",
+      "operator-ux",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T17:17:52Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "960259",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T17:17:51.829707318Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T17:17:52.189892867Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T171752-9eaf51c0",
+    "prompt": ".ddx/executions/20260506T171752-9eaf51c0/prompt.md",
+    "manifest": ".ddx/executions/20260506T171752-9eaf51c0/manifest.json",
+    "result": ".ddx/executions/20260506T171752-9eaf51c0/result.json",
+    "checks": ".ddx/executions/20260506T171752-9eaf51c0/checks.json",
+    "usage": ".ddx/executions/20260506T171752-9eaf51c0/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-f326f001-20260506T171752-9eaf51c0"
+  },
+  "prompt_sha": "391224c510a0893a0e68ca236569d0ca529cc715bffb129624fee4a4350f0858"
+}
