@@ -21,6 +21,11 @@ import (
 	"github.com/spf13/viper"
 )
 
+const versionTemplate = `DDx {{.Version}}
+Commit: {{index .Annotations "commit"}}
+Built: {{index .Annotations "date"}}
+`
+
 // CommandFactory creates fresh command instances without global state
 type CommandFactory struct {
 	// Configuration options
@@ -121,6 +126,13 @@ More information:
 		},
 	}
 
+	rootCmd.Version = formattedVersion(f.Version)
+	rootCmd.Annotations = map[string]string{
+		"commit": f.Commit,
+		"date":   f.Date,
+	}
+	rootCmd.SetVersionTemplate(versionTemplate)
+
 	// Setup flags - these are now local to this command instance
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.ddx.yml)")
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
@@ -164,6 +176,20 @@ More information:
 	persona.KeepReachabilityForDeadcode()
 
 	return rootCmd
+}
+
+func formattedVersion(version string) string {
+	if version == "dev" {
+		return "v0.0.1-dev"
+	}
+	if !strings.HasPrefix(version, "v") {
+		return "v" + version
+	}
+	return version
+}
+
+func (f *CommandFactory) versionOutput() string {
+	return fmt.Sprintf("DDx %s\nCommit: %s\nBuilt: %s\n", formattedVersion(f.Version), f.Commit, f.Date)
 }
 
 // initConfig initializes configuration for this command instance
@@ -452,17 +478,7 @@ func (f *CommandFactory) registerSubcommands(rootCmd *cobra.Command) {
 		Use:   "version",
 		Short: "Show version information",
 		Run: func(cmd *cobra.Command, args []string) {
-			// Display version with proper formatting
-			version := f.Version
-			if version == "dev" {
-				version = "v0.0.1-dev" // Make dev version semantic for tests
-			} else if !strings.HasPrefix(version, "v") {
-				version = "v" + version
-			}
-
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "DDx %s\n", version)
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Commit: %s\n", f.Commit)
-			_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Built: %s\n", f.Date)
+			_, _ = fmt.Fprint(cmd.OutOrStdout(), f.versionOutput())
 			f.warnIfInstalledBinaryBehindSource(cmd)
 
 			// Check for --no-check flag

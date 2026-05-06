@@ -18,19 +18,30 @@ func getVersionTestRootCommand(workingDir string) *cobra.Command {
 	return factory.NewRootCommand()
 }
 
+func assertVersionInfo(t *testing.T, output string) {
+	t.Helper()
+	assert.Contains(t, output, "DDx", "Should mention DDx")
+	assert.Contains(t, output, "v", "Should show version with 'v' prefix")
+	assert.Contains(t, output, "Commit:", "Should show commit hash")
+	assert.Contains(t, output, "Built:", "Should show build date")
+}
+
 // TestAcceptance_US008_CheckDDxVersion tests US-008: Check DDX Version
 func TestAcceptance_US008_CheckDDxVersion(t *testing.T) {
+	t.Run("TestRootVersionFlag_PrintsVersionAndBuildInfo", func(t *testing.T) {
+		rootCmd := getVersionTestRootCommand("")
+		output, err := executeCommand(rootCmd, "--version")
 
-	t.Run("display_current_version", func(t *testing.T) {
-		// AC: Given I want version info, when I run `ddx version`, then the current DDX version number is displayed
+		require.NoError(t, err, "Root version flag should execute successfully")
+		assertVersionInfo(t, output)
+	})
+
+	t.Run("TestVersionCommand_StillPrintsVersionAndBuildInfo", func(t *testing.T) {
 		rootCmd := getVersionTestRootCommand("")
 		output, err := executeCommand(rootCmd, "version")
 
 		require.NoError(t, err, "Version command should execute successfully")
-
-		// Should display version number
-		assert.Contains(t, output, "DDx", "Should mention DDx")
-		assert.Contains(t, output, "v", "Should show version with 'v' prefix")
+		assertVersionInfo(t, output)
 
 		// Should follow semantic versioning pattern (at least major.minor.patch)
 		lines := strings.Split(output, "\n")
