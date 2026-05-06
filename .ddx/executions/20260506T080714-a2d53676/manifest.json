@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260506T080714-a2d53676",
+  "bead_id": "ddx-cbd09cde",
+  "base_rev": "4a059810e78589d022b7d295c0059eb01a73facd",
+  "created_at": "2026-05-06T08:07:17.12221943Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cbd09cde",
+    "title": "bead/axon: add Axon backend conformance and import/export coverage",
+    "description": "PROBLEM\nOnce GraphQL-backed operations exist, the backend needs parity coverage against JSONL so worker execution can trust AxonBackend without silently diverging on import/export, events, dependencies, and store behavior.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/bead/axon_backend_test.go contains Axon-specific tests, but the parent acceptance requires JSONL import/export round trip and package-level conformance.\n- cli/internal/bead/benchmark_backends_test.go and related store tests exercise backend behavior primarily through JSONL paths.\n- Without a parameterized conformance pass, AxonBackend can pass targeted CRUD tests but still diverge from RawBackend expectations.\n\nPROPOSED FIX\n- Parameterize the existing backend/store conformance suite so JSONL and Axon exercise the same core operations where practical.\n- Add Axon import/export round-trip coverage.\n- Document any intentional Axon-only limitation in test names and bead notes, not hidden in implementation comments.\n\nNON-SCOPE\n- Adding new backend selection config plumbing.\n- UI or server integration.",
+    "acceptance": "1. TestAxonBackend_JSONLImportExportRoundTrip passes against the GraphQL-backed implementation.\n2. Backend conformance tests run against both JSONL and Axon for create/get/update/claim/deps/events/close behavior.\n3. Any Axon-only limitation has an explicit skipped test or assertion message with a follow-up bead ID; no silent gaps remain.\n4. cd cli \u0026\u0026 go test ./internal/bead/... passes.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-9c5bca8f",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:storage",
+      "kind:test",
+      "axon",
+      "from:ddx-9c5bca8f"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T08:07:14Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "execute-loop-heartbeat-at": "2026-05-06T08:07:14.323500075Z",
+      "spec_id": "TD-030"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260506T080714-a2d53676",
+    "prompt": ".ddx/executions/20260506T080714-a2d53676/prompt.md",
+    "manifest": ".ddx/executions/20260506T080714-a2d53676/manifest.json",
+    "result": ".ddx/executions/20260506T080714-a2d53676/result.json",
+    "checks": ".ddx/executions/20260506T080714-a2d53676/checks.json",
+    "usage": ".ddx/executions/20260506T080714-a2d53676/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-cbd09cde-20260506T080714-a2d53676"
+  },
+  "prompt_sha": "f2a1e32d59bb4ee3658d3173182f75c51c5b6d2ca732abd5b1752316860cba74"
+}
