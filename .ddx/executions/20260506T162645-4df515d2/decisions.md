@@ -1,0 +1,16 @@
+WIRE internal/persona/binding.go:18 NewBindingManager via cmd.Execute -> cmd.NewRootCommand -> persona.KeepReachabilityForDeadcode.
+WIRE internal/persona/claude.go:17 NewClaudeInjector via cmd.Execute -> cmd.NewRootCommand -> persona.KeepReachabilityForDeadcode.
+WIRE internal/persona/claude.go:24 NewClaudeInjectorWithPath via cmd.Execute -> cmd.NewRootCommand -> persona.KeepReachabilityForDeadcode.
+WIRE internal/persona/claude.go:31 ClaudeInjectorImpl.InjectPersona via cmd.Execute -> cmd.NewRootCommand -> persona.KeepReachabilityForDeadcode.
+WIRE internal/persona/claude.go:50 ClaudeInjectorImpl.InjectMultiple via cmd.Execute -> cmd.NewRootCommand -> persona.KeepReachabilityForDeadcode.
+WIRE internal/persona/claude.go:96 ClaudeInjectorImpl.RemovePersonas via cmd.Execute -> cmd.NewRootCommand -> persona.KeepReachabilityForDeadcode.
+WIRE internal/persona/claude.go:114 ClaudeInjectorImpl.GetLoadedPersonas via cmd.Execute -> cmd.NewRootCommand -> persona.KeepReachabilityForDeadcode.
+WIRE internal/persona/claude.go:129 ClaudeInjectorImpl.removePersonasSection via cmd.Execute -> cmd.NewRootCommand -> persona.KeepReachabilityForDeadcode.
+WIRE internal/persona/claude.go:169 ClaudeInjectorImpl.buildPersonasSection via cmd.Execute -> cmd.NewRootCommand -> persona.KeepReachabilityForDeadcode.
+WIRE internal/persona/claude.go:199 ClaudeInjectorImpl.extractRolePersonaPairs via cmd.Execute -> cmd.NewRootCommand -> persona.KeepReachabilityForDeadcode.
+WIRE internal/persona/claude.go:236 formatRoleDisplay via cmd.Execute -> cmd.NewRootCommand -> persona.KeepReachabilityForDeadcode.
+WIRE internal/persona/claude.go:261 ClaudeInjectorImpl.saveClaudeFile via cmd.Execute -> cmd.NewRootCommand -> persona.KeepReachabilityForDeadcode.
+WIRE internal/persona/claude.go:284 ClaudeInjectorImpl.getExistingPersonas via cmd.Execute -> cmd.NewRootCommand -> persona.KeepReachabilityForDeadcode.
+WIRE internal/persona/claude.go:370 formatRoleFromDisplay via cmd.Execute -> cmd.NewRootCommand -> persona.KeepReachabilityForDeadcode.
+WIRE internal/persona/loader.go:44 NewPersonaLoaderWithDir via cmd.Execute -> cmd.NewRootCommand -> persona.KeepReachabilityForDeadcode.
+WIRE internal/persona/loader.go:52 NewPersonaLoaderWithDirs via cmd.Execute -> cmd.NewRootCommand -> persona.KeepReachabilityForDeadcode.
