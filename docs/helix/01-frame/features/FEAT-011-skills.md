@@ -96,8 +96,9 @@ returning to the stale flat sibling model (`ddx-bead`, `ddx-run`,
 `ddx-review`, etc.). They describe reusable workflows over DDx primitives:
 break down an epic into beads, replay a bead under altered conditions, compare
 prompt variants, estimate effort, run adversarial review, and perform
-bead-lifecycle lint/triage. They do not introduce new DDx run kinds; FEAT-010's
-three-layer architecture remains the execution substrate.
+bead-lifecycle readiness assessment, lint/rubric scoring, and post-attempt
+triage. They do not introduce new DDx run kinds; FEAT-010's three-layer
+architecture remains the execution substrate.
 
 ### Portability contract
 
@@ -149,8 +150,8 @@ tell the harness to run `ddx run`, `ddx try`, or `ddx work`, but they do not
 create a fourth run layer, bespoke storage shape, or harness-specific
 frontmatter contract.
 
-The bead-lifecycle skill owns readiness, lint/rubric scoring, triage, and
-refine guidance for this policy surface.
+The bead-lifecycle skill owns readiness assessment, lint/rubric scoring,
+post-attempt triage, and refine guidance for this policy surface.
 
 ### Installation
 
