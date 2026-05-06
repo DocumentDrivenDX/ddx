@@ -10,25 +10,30 @@ ddx:
 
 ## Question
 
-Can DDx integrate Vale so that users experience it as `ddx doc prose`, with no
-Vale setup, no Vale config, and no public runner choice?
+Can DDx integrate Vale so that users experience it as `ddx doc prose`, with a
+pinned Vale binary on `PATH`, no project-local Vale config, and no public
+runner choice?
 
 ## Installation And Maintenance Gate
 
-This is the hard gate. Vale is acceptable only if DDx can control it through
-the DDx release/install process.
+This is the hard gate. Vale is acceptable only if DDx pins the supported
+version, delegates installation to Vale's official release/install channel, and
+verifies the installed binary through `ddx doctor`.
 
 Rejected paths:
 
-- Asking users to install Vale separately.
+- Asking users to install an unpinned or arbitrary Vale version.
 - Building Vale from source during DDx install.
 - Shelling out to Python, Node, Java, or package-manager glue.
 - Requiring `.vale.ini` in each project for the default DDx behavior.
 
 Potentially acceptable paths:
 
-- Bundle platform-specific Vale release binaries with DDx releases.
-- Install a pinned Vale binary as a DDx-managed companion asset.
+- Require a pinned Vale release binary on `PATH` and validate it with
+  `ddx doctor`.
+- Document the pinned release artifacts and checksums in ADR-025.
+- Bundle platform-specific Vale release binaries later only if the upstream
+  install channel proves unreliable.
 - Keep the embedded Go checker if binary bundling is too heavy or fragile.
 
 ## Packaging Evidence
@@ -41,8 +46,9 @@ Observed locally:
 - The extracted `vale` binary reported `vale version 3.13.0`.
 - The Linux arm64 binary size was 37 MB.
 
-Conclusion: DDx must not rely on building Vale from source during install.
-Bundling/pinning release binaries is the only credible Vale path.
+Conclusion: DDx must not rely on building Vale from source during install. The
+credible path is a pinned official Vale release binary on `PATH`, checked by
+`ddx doctor`.
 
 ## Invocation Evidence
 
@@ -101,7 +107,6 @@ remain DDx-owned.
 
 ## Provisional Recommendation
 
-Vale remains viable only as a DDx-managed companion binary or release asset. It
-should be rejected if DDx requires a literal single executable with no companion
-assets. The embedded Go checker remains the lower-maintenance default unless
-Vale's rule authoring advantage justifies the release complexity.
+Vale is viable as a pinned external binary, installed through Vale's official
+channel and verified by DDx. DDx should not compile Vale, expose Vale as a
+public runner, or silently fall back once Vale becomes the active prose engine.

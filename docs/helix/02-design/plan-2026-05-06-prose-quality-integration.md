@@ -4,6 +4,7 @@ ddx:
   depends_on:
     - FEAT-027
     - TD-036
+    - ADR-025
   status: draft
 ---
 # Plan: Prose Quality Integration Reset
@@ -11,9 +12,9 @@ ddx:
 ## Purpose
 
 DDx needs one opinionated prose-quality path, not a menu of optional linters.
-The public surface is `ddx doc prose`; the checker engine is an implementation
-detail. If a third-party checker cannot be made to feel like part of DDx, it is
-not the right default engine.
+The public surface is `ddx doc prose`; Vale is the pinned deterministic engine
+behind that surface per ADR-025. DDx owns the rules, output, workflow behavior,
+and diagnostics.
 
 ## Goal
 
@@ -26,14 +27,14 @@ structure, and run quietly in normal document workflows.
 
 ### Deterministic checks
 
-- Select exactly one default checker engine.
+- Integrate Vale 3.13.0 as the default checker engine behind `ddx doc prose`.
 - Keep DDx-owned finding fields: file, line, rule id, severity, rationale, and
   suggested edit.
 - Build a labeled DDx prose corpus from real docs and synthetic edge cases.
-- Evaluate candidate engines as internal implementation options, not public
-  runner choices.
-- Reject any engine that requires user-managed language runtimes, package
-  managers, project-local config files, or manual setup.
+- Generate temporary Vale config from DDx-packaged rules instead of requiring
+  project-local `.vale.ini`.
+- Normalize Vale JSON into DDx findings.
+- Add `ddx doctor` validation for the pinned Vale version on `PATH`.
 
 ### Agent skill
 
@@ -65,10 +66,9 @@ structure, and run quietly in normal document workflows.
 
 ## Decision Flow
 
-The spikes feed an ADR, not a TD. The ADR should choose the prose checker
-engine and record rejected alternatives. A TD is only warranted after the ADR
-if the chosen path requires architecture beyond a small command/checker
-implementation.
+The spikes fed ADR-025. Implementation can proceed from that ADR without a TD
+unless the Vale adapter requires broader architecture than command invocation,
+temporary config generation, JSON normalization, and workflow wiring.
 
 ## Hard Constraints
 
@@ -80,4 +80,5 @@ implementation.
   installation path.
 - Missing or broken internals produce a DDx diagnostic, not third-party setup
   homework.
-
+- Vale installation is delegated to Vale's official release/install channel,
+  pinned by DDx, and verified by `ddx doctor`.

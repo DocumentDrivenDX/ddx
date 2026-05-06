@@ -63,9 +63,8 @@ This keeps prose quality observable without turning it into a correctness gate.
 
 ## Open Decisions For ADR
 
-- Is the default engine embedded Go or internally managed Vale?
-- If Vale is chosen, is it bundled into the DDx binary, shipped as a companion
-  asset, or rejected for violating installation constraints?
+- How should `ddx doctor` report pinned Vale version drift in non-verbose and
+  verbose modes?
 - Should pre-commit run the prose check by default, or only when installed
   project hooks opt in?
 - What finding-count threshold is noisy enough to suppress automatic display
@@ -73,6 +72,6 @@ This keeps prose quality observable without turning it into a correctness gate.
 
 ## Provisional Recommendation
 
-Wire workflow behavior around the `ddx doc prose` surface, not around any
-backend engine. The workflow should be implemented only after the engine ADR
-chooses embedded Go or internally managed Vale.
+Wire workflow behavior around the `ddx doc prose` surface, not around Vale
+directly. ADR-025 selected Vale as the backend engine, but agents and users
+should see DDx prose findings.

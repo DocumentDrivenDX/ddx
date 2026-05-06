@@ -28,8 +28,8 @@ the single default implementation behind `ddx doc prose`?
 
 | Candidate | Installation fit | Rule fit | Initial verdict |
 |---|---:|---:|---|
-| Embedded Go checker | Strong | Medium | Keep as baseline; easy to ship and maintain. |
-| Vale | Possible if bundled as release binary | Strong | Continue spike; reject local build/package-manager paths. |
+| Embedded Go checker | Strong | Medium | Keep as fallback/reference; not selected by ADR-025. |
+| Vale | Strong if installed as pinned release binary on `PATH` | Strong | Selected by ADR-025; reject local build/package-manager paths. |
 | textlint | Weak | Strong | Reject as default unless DDx accepts Node runtime, which it should not. |
 | write-good | Weak | Weak | Reject as default; signal is too generic for DDx. |
 | alex | Weak | Narrow | Reject as prose engine; possible research input for inclusive-language rules only. |
@@ -69,10 +69,12 @@ complete.
 
 ## Provisional Recommendation
 
-Continue with two viable paths only:
+ADR-025 selected Vale as the default engine path:
 
-1. Vale bundled/invoked as an internal DDx engine.
-2. Embedded Go checker extended with DDx-owned rules.
+- Vale 3.13.0 is the pinned version.
+- DDx delegates installation to Vale's official release/install channel.
+- `ddx doctor` verifies that a supported Vale binary is available on `PATH`.
+- `ddx doc prose` remains the only public prose surface.
 
 Do not pursue Node, Java, or Python-distributed tools for the default DDx prose
 path. They can inform rule design, but they do not fit the installation model.
