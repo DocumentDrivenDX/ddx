@@ -1,15 +1,13 @@
 package cmd
 
 import (
-	"time"
-
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/spf13/cobra"
 )
 
 // newWorkCommand creates the top-level "ddx work" command: the FEAT-010 layer-3
-// queue drain. Unlike "ddx agent execute-loop", ddx work treats --harness,
+// queue drain. ddx work treats --harness,
 // --provider, and --model as opaque passthrough constraints that are forwarded
 // to the agent unchanged. DDx does not validate or branch on their values.
 // Retry-power policy between attempts is owned here, not in the agent service.
@@ -21,10 +19,10 @@ func (f *CommandFactory) newWorkCommand() *cobra.Command {
 queue drain: it iterates ddx try (layer 2) across ready beads until a stop
 condition is met and owns retry-power policy between attempts.
 
-Unlike "ddx agent execute-loop", ddx work treats --harness, --provider, and
---model as opaque passthrough constraints forwarded to the agent unchanged.
-DDx does not validate these values or branch on them; the agent owns routing
-within the requested power bounds.
+ddx work treats --harness, --provider, and --model as opaque passthrough
+constraints forwarded to the agent unchanged. DDx does not validate these
+values or branch on them; the agent owns routing within the requested power
+bounds.
 
 Review is on by default. --no-review is a break-glass override and
 requires --no-review-i-know-what-im-doing. A bead label of review:skip
@@ -42,7 +40,7 @@ work runs inline in the current process; per ADR-022 there is no separate
 "submit to server" mode. The legacy --local flag is accepted but ignored
 (deprecation warning printed) and will be removed in a future release.
 `,
-		Example: `  # Drain the current execution-ready queue once and exit
+		Example: `  # Drain the current execution-ready queue and exit
   ddx work
 
   # Pick one ready bead, execute it, and stop
@@ -74,7 +72,7 @@ work runs inline in the current process; per ADR-022 there is no separate
 	cmd.Flags().String("model-ref", "", "Model catalog reference (e.g. code-medium); resolved via the model catalog")
 	cmd.Flags().String("effort", "", "Effort level")
 	cmd.Flags().Bool("once", false, "Process at most one ready bead")
-	cmd.Flags().Duration("poll-interval", 30*time.Second, "Poll interval for continuous scanning; zero drains current ready work and exits (legacy opt-out). Default 30s keeps the worker alive across empty polls.")
+	cmd.Flags().Duration("poll-interval", 0, "Poll interval for continuous scanning; zero drains current ready work and exits. Set 30s to keep the worker alive across empty polls.")
 	cmd.Flags().Bool("json", false, "Output loop result as JSON")
 	cmd.Flags().Bool("local", false, "Deprecated: no-op; ddx work always runs inline (ADR-022)")
 	_ = cmd.Flags().MarkDeprecated("local", "ddx work always runs inline; the flag is a no-op (ADR-022)")

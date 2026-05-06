@@ -40,10 +40,9 @@ The worker classifies its outcome as one of:
 The orchestrator then applies landing logic (merge, gate evaluation, preserve)
 and the final result reflects both the worker and landing decisions.
 
-For normal queue-driven work use "ddx agent execute-loop", which claims
-ready beads, calls this command, and closes or unclaims each bead based on
-the result. Reach for execute-bead directly only to debug or re-run a
-specific bead.
+For normal queue-driven work use "ddx work", which claims ready beads,
+calls this command, and closes or unclaims each bead based on the result.
+Reach for execute-bead directly only to debug or re-run a specific bead.
 
 Result status is reported on the "status:" line and is one of:
   success                          — merged (or preserved with --no-merge)
@@ -55,10 +54,10 @@ Result status is reported on the "status:" line and is one of:
   execution_failed                 — agent or harness error
   structural_validation_failed     — bead or prompt inputs invalid
 
-execute-loop closes the bead with session/commit evidence only on success
+ddx work closes the bead with session/commit evidence only on success
 (and already_satisfied); every other status leaves the bead open and
 unclaimed for a later attempt.`,
-		Example: `  # Debug one specific bead (prefer "execute-loop" for normal queue work)
+		Example: `  # Debug one specific bead (prefer "ddx work" for normal queue work)
   ddx agent execute-bead ddx-7a01ba6c
 
   # Run against a non-HEAD base revision
@@ -154,7 +153,7 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 	}
 
 	// Preflight the orphan-model check before creating a worktree. Mirrors
-	// the execute-loop preflight so `ddx agent execute-bead --model <unroutable>`
+	// the queue-work preflight so `ddx agent execute-bead --model <unroutable>`
 	// errors before any git work happens rather than mid-execution. Skip the
 	// preflight when a test runner override is in use — overrides may be
 	// fakes that bypass routing entirely.

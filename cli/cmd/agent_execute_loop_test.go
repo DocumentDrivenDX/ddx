@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestAgentExecuteLoopUsesProjectRootForNoWorkScan(t *testing.T) {
+func TestWorkUsesProjectRootForNoWorkScan(t *testing.T) {
 	env := NewTestEnvironment(t)
 	subdir := filepath.Join(env.Dir, "nested", "path")
 	require.NoError(t, os.MkdirAll(subdir, 0o755))
@@ -23,11 +23,7 @@ func TestAgentExecuteLoopUsesProjectRootForNoWorkScan(t *testing.T) {
 	factory := NewCommandFactory(subdir)
 	root := factory.NewRootCommand()
 
-	// Explicit --poll-interval=0 selects legacy drain-and-exit semantics
-	// (ddx-dc157075). The default flipped to 30s so the worker stays alive
-	// across empty polls; tests that want to assert the no-ready-work
-	// outcome must opt out of the long-running default.
-	out, err := executeCommand(root, "agent", "execute-loop", "--json", "--poll-interval=0")
+	out, err := executeCommand(root, "work", "--json")
 	require.NoError(t, err)
 
 	var res struct {

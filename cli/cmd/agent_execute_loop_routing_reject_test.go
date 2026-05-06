@@ -10,10 +10,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestExecuteLoopLocalRejectsProfileLadders verifies AC #4 of bead ddx-3bd7396a:
+// TestWorkRejectsProfileLadders verifies AC #4 of bead ddx-3bd7396a:
 // a project config carrying agent.routing.profile_ladders causes ddx work
 // --once --local to fail with a hard error naming the removed field.
-func TestExecuteLoopLocalRejectsProfileLadders(t *testing.T) {
+func TestWorkRejectsProfileLadders(t *testing.T) {
 	dir := t.TempDir()
 	ddxDir := filepath.Join(dir, ".ddx")
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
@@ -31,16 +31,16 @@ agent:
 
 	factory := NewCommandFactory(dir)
 	root := factory.NewRootCommand()
-	_, err := executeCommand(root, "agent", "execute-loop", "--json", "--once")
-	require.Error(t, err, "execute-loop must fail when config has profile_ladders")
+	_, err := executeCommand(root, "work", "--json", "--once")
+	require.Error(t, err, "work must fail when config has profile_ladders")
 	// routinglint:legacy-rejection reason="asserts the rejection error names the retired field"
 	assert.Contains(t, err.Error(), "profile_ladders")
 }
 
-// TestExecuteLoopLocalRejectsModelOverrides verifies AC #4 of bead ddx-3bd7396a:
+// TestWorkRejectsModelOverrides verifies AC #4 of bead ddx-3bd7396a:
 // a project config carrying agent.routing.model_overrides causes ddx work
 // --once --local to fail with a hard error naming the removed field.
-func TestExecuteLoopLocalRejectsModelOverrides(t *testing.T) {
+func TestWorkRejectsModelOverrides(t *testing.T) {
 	dir := t.TempDir()
 	ddxDir := filepath.Join(dir, ".ddx")
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
@@ -58,8 +58,8 @@ agent:
 
 	factory := NewCommandFactory(dir)
 	root := factory.NewRootCommand()
-	_, err := executeCommand(root, "agent", "execute-loop", "--json", "--once")
-	require.Error(t, err, "execute-loop must fail when config has model_overrides")
+	_, err := executeCommand(root, "work", "--json", "--once")
+	require.Error(t, err, "work must fail when config has model_overrides")
 	// routinglint:legacy-rejection reason="asserts the rejection error names the retired field"
 	assert.True(t, strings.Contains(err.Error(), "model_overrides"), "error must name the field: %v", err)
 }

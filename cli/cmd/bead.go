@@ -1232,7 +1232,7 @@ func gitStageBlob(ctx context.Context, repoRoot string, stage int, path string) 
 
 // newBeadCooldownCommand wires `ddx bead cooldown show|clear <id>`.
 //
-// `cooldown show` prints the bead's current execute-loop cooldown fields
+// `cooldown show` prints the bead's current work cooldown fields
 // (retry-after, last-status, last-detail) in human or JSON form. `cooldown
 // clear` removes those three fields so the bead becomes execution-eligible
 // again at the next loop pass. This is the first-class operator-facing
@@ -1243,8 +1243,8 @@ func gitStageBlob(ctx context.Context, repoRoot string, stage int, path string) 
 func (f *CommandFactory) newBeadCooldownCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "cooldown",
-		Short: "Inspect and clear execute-loop cooldowns",
-		Long: `Inspect and clear the execute-loop cooldown that parks a bead from
+		Short: "Inspect and clear work cooldowns",
+		Long: `Inspect and clear the work cooldown that parks a bead from
 re-execution. Cooldowns are set automatically by the loop in three cases:
 
   * no_changes with a vague rationale (short retry, default 6h)
@@ -1261,7 +1261,7 @@ Use this command instead of editing the magic Extra key directly:
 
 	showCmd := &cobra.Command{
 		Use:   "show <id>",
-		Short: "Show the execute-loop cooldown fields for a bead",
+		Short: "Show the work cooldown fields for a bead",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
@@ -1306,7 +1306,7 @@ Use this command instead of editing the magic Extra key directly:
 
 	clearCmd := &cobra.Command{
 		Use:   "clear <id>",
-		Short: "Clear the execute-loop cooldown for a bead",
+		Short: "Clear the work cooldown for a bead",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()

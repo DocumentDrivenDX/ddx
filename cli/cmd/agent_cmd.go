@@ -62,6 +62,7 @@ Examples:
 			serverreg.TryRegisterAsync(f.WorkingDir)
 			return nil
 		},
+		Args: cobra.NoArgs,
 		Run: func(cmd *cobra.Command, args []string) {
 			_ = cmd.Help()
 		},
@@ -77,7 +78,6 @@ Examples:
 	cmd.AddCommand(f.newAgentUsageCommand())
 	cmd.AddCommand(f.newAgentReplayCommand())
 	cmd.AddCommand(f.newAgentExecuteBeadCommand())
-	cmd.AddCommand(f.newAgentExecuteLoopCommand())
 	cmd.AddCommand(f.newAgentExecutionsCommand())
 	cmd.AddCommand(f.newAgentWorkersCommand())
 	cmd.AddCommand(f.newAgentCatalogCommand())
@@ -1271,7 +1271,7 @@ func (f *CommandFactory) newAgentCatalogCommand() *cobra.Command {
 			// Reachability warnings (ddx-5538aa5b AC#4): for each tier surface,
 			// probe the agent service to see whether the catalog model resolves
 			// to a healthy route. A tier with zero reachable surfaces would
-			// produce "no viable provider" in execute-loop; surface that gap
+			// produce "no viable provider" in queue work; surface that gap
 			// here so users discover it before invoking the queue.
 			projectFlag, _ := cmd.Flags().GetString("project")
 			projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
@@ -1483,100 +1483,6 @@ Examples:
 	return cmd
 }
 
-func (f *CommandFactory) newAgentExecuteLoopCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "execute-loop",
-		Short: "Drain the single-project execution-ready bead queue",
-		Long: `execute-loop is the primary queue-driven execution surface. It scans the
-target project's execution-ready bead queue, claims the next ready bead,
-runs "ddx agent execute-bead" on it from the project root, records the
-structured result, and continues until no unattempted ready work remains.
-
-Reach for execute-loop by default. Use "ddx agent execute-bead" directly
-only as the primitive for debugging or re-running one specific bead.
-
-Planning and document-only beads are valid execution targets — any bead
-with unmet acceptance criteria and no blocking deps is eligible.
-
-Close semantics (per execute-bead result status):
-  success                      — close bead with session + commit evidence
-  already_satisfied            — close bead (after repeated no_changes)
-  no_changes                   — unclaim; may cooldown or close after retries
-  land_conflict                — unclaim; result preserved under refs/ddx/iterations/
-  post_run_check_failed        — unclaim; result preserved
-  execution_failed             — unclaim
-  structural_validation_failed — unclaim
-
-Only success (and already_satisfied) closes the bead. Every other status
-leaves the bead open and unclaimed so a later attempt can try again. Each
-attempt is appended to the bead as an execute-bead event (status, detail,
-base_rev, result_rev, preserve_ref, retry_after), and the underlying agent
-session log is recorded under the execute-bead agent-log path.
-
-execute-loop runs inline in the current process; per ADR-022 there is no
-separate "submit to server" mode. The legacy --local flag is accepted but
-ignored (deprecation warning printed) and will be removed in a future release.
-
-Review is on by default. --no-review is a break-glass override and
-requires --no-review-i-know-what-im-doing. A bead label of review:skip
-is only honored when it also carries a sibling review:skip-reason:*
-label; otherwise the label is ignored.
-
-Project targeting (multi-project servers):
-  --project <path>    target a specific project root (absolute path or name)
-  DDX_PROJECT_ROOT    env var fallback; used when --project is not set
-  (default)           the git root of the current working directory
-
-When submitting to a multi-project server you must ensure the target project
-is registered with the server (run "ddx server" from that directory, or use
-"ddx server projects register"). The server rejects unrecognised project paths.
-`,
-		Example: `  # Drain the current execution-ready queue once and exit (normal surface)
-  ddx agent execute-loop
-
-  # Pick one ready bead, execute it, and stop
-  ddx agent execute-loop --profile default --once
-
-  # Run continuously as a bounded queue worker
-  ddx agent execute-loop --poll-interval 30s
-
-  # Force a specific harness/model for a debugging pass
-  ddx agent execute-loop --once --harness codex
-  ddx agent execute-loop --once --harness agent --model minimax/minimax-m2.7
-
-  # Skip review only with the break-glass acknowledgement flag
-  ddx agent execute-loop --once --no-review --no-review-i-know-what-im-doing`,
-		Args: cobra.NoArgs,
-		RunE: f.runAgentExecuteLoop,
-	}
-	cmd.Flags().String("project", "", "Target project root path or name (default: CWD git root). Env: DDX_PROJECT_ROOT")
-	cmd.Flags().String("from", "", "Base git revision to start from (default: HEAD)")
-	cmd.Flags().String("harness", "", "Agent harness to use")
-	cmd.Flags().String("model", "", "Model override")
-	cmd.Flags().String("profile", agent.DefaultRoutingProfile, "Routing profile: default, cheap, fast, or smart")
-	cmd.Flags().String("provider", "", "Provider name (e.g. vidar, openrouter); selects a named provider from config")
-	cmd.Flags().String("model-ref", "", "Model catalog reference (e.g. code-medium); resolved via the model catalog")
-	cmd.Flags().String("effort", "", "Effort level")
-	cmd.Flags().Bool("once", false, "Process at most one ready bead")
-	cmd.Flags().Duration("poll-interval", 30*time.Second, "Poll interval for continuous scanning; zero drains current ready work and exits (legacy opt-out). Default 30s keeps the worker alive across empty polls.")
-	cmd.Flags().Bool("json", false, "Output loop result as JSON")
-	cmd.Flags().Bool("local", false, "Deprecated: no-op; execute-loop always runs inline (ADR-022)")
-	_ = cmd.Flags().MarkDeprecated("local", "execute-loop always runs inline; the flag is a no-op (ADR-022)")
-	cmd.Flags().Bool("no-review", false, "Skip post-merge review (break-glass: requires --no-review-i-know-what-im-doing; e.g. for doc-only beads or tight iteration loops)")
-	cmd.Flags().Bool("no-review-i-know-what-im-doing", false, "Break-glass acknowledgement required when using --no-review")
-	cmd.Flags().String("review-harness", "", "Harness to use for the post-merge reviewer (default: same as implementation harness)")
-	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart tier)")
-	cmd.Flags().Float64("max-cost", escalation.DefaultMaxCostUSD, "Stop the loop when accumulated billed cost exceeds USD; 0 = unlimited; subscription and local providers do not count")
-	cmd.Flags().Duration("request-timeout", 0, "Per-request provider wall-clock timeout (e.g. 60m, 2h); overrides project config and model-class defaults. Use when a thinking model needs more than the default 15 min.")
-	cmd.Flags().Int("min-power", 0, "Minimum model power required (0 = unconstrained); passed to agent routing unchanged")
-	cmd.Flags().Int("max-power", 0, "Maximum model power allowed (0 = unconstrained); passed to agent routing unchanged")
-	return cmd
-}
-
-func (f *CommandFactory) runAgentExecuteLoop(cmd *cobra.Command, args []string) error {
-	return f.runAgentExecuteLoopImpl(cmd, false, "")
-}
-
 // hostnameOrEmpty returns os.Hostname() or "" on error. Used to populate
 // the workerprobe identity envelope without short-circuiting probe startup
 // on a transient hostname-lookup failure.
@@ -1588,12 +1494,10 @@ func hostnameOrEmpty() string {
 	return h
 }
 
-// runAgentExecuteLoopImpl is the shared implementation for runAgentExecuteLoop
-// and runWork. When treatPassthroughAsOpaque is true (ddx work path),
-// harness/provider/model are passed to Execute unchanged and
-// ValidateForExecuteLoopViaService is not called; DDx does not inspect or
-// branch on their values. When false (ddx agent execute-loop path), the
-// pre-flight validation gate runs first.
+// runAgentExecuteLoopImpl is the implementation for runWork. When
+// treatPassthroughAsOpaque is true, harness/provider/model are passed to Execute
+// unchanged and ValidateForExecuteLoopViaService is not called; DDx does not
+// inspect or branch on their values.
 func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassthroughAsOpaque bool, tryTargetBeadID string) error {
 	projectFlag, _ := cmd.Flags().GetString("project")
 	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
@@ -1630,7 +1534,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	// through fizeau's provider resolution. Provider configuration and any
 	// "no providers configured" error reporting is fizeau's concern; ddx
 	// does not read fizeau's config files.
-	// ADR-022: execute-loop always runs inline. The legacy --local flag is
+	// ADR-022: queue work always runs inline. The legacy --local flag is
 	// a deprecated no-op and the server-submit path is removed from this CLI
 	// surface — server-spawned workers exec `ddx work` directly.
 
@@ -1856,7 +1760,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				ctx, projectRoot, targetBead, res,
 				func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
 				bead.NewStore(filepath.Join(projectRoot, ".ddx")),
-				resolveClaimAssignee(), "ddx agent execute-loop",
+				resolveClaimAssignee(), "ddx work",
 				nil,
 			)
 			if landErr == nil {
@@ -2086,8 +1990,8 @@ func writeExecuteLoopResult(w io.Writer, projectRoot string, result *agent.Execu
 	return nil
 }
 
-// resolveProjectRoot returns the project root to use for execute-loop,
-// execute-bead, and agent-run commands. Resolution order:
+// resolveProjectRoot returns the project root to use for work, execute-bead,
+// and agent-run commands. Resolution order:
 //  1. --project flag value (if non-empty)
 //  2. DDX_PROJECT_ROOT environment variable
 //  3. CWD-based git project root detection (gitpkg.FindProjectRoot)
@@ -2101,7 +2005,7 @@ func resolveProjectRoot(projectFlag, workingDir string) string {
 	return gitpkg.FindProjectRoot(workingDir)
 }
 
-// buildCLIPreClaimHook returns a PreClaimHook for the inline execute-loop
+// buildCLIPreClaimHook returns a PreClaimHook for inline queue work
 // that fetches origin and verifies ancestry before each bead claim. Fetch
 // failures are logged but do not block the worker (air-gap friendly).
 func buildCLIPreClaimHook(projectRoot string, gitOps agent.LandingGitOps) func(ctx context.Context) error {
@@ -2218,9 +2122,9 @@ func resolveWorktree(repoRoot, name string) (string, error) {
 
 // projectHasRoutingConfig reports whether the project at projectRoot has a
 // .ddx/config.yaml that supplies routing inputs (agent.harness, agent.model,
-// or agent.endpoints). When false, ddx work and ddx agent execute-loop fall
-// through to the global agent config defaults instead of demanding per-project
-// flags. Tracks ddx-b790449b AC1.
+// or agent.endpoints). When false, ddx work falls through to the global agent
+// config defaults instead of demanding per-project flags. Tracks ddx-b790449b
+// AC1.
 func projectHasRoutingConfig(projectRoot string) bool {
 	if projectRoot == "" {
 		return false

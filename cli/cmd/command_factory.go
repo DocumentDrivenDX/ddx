@@ -57,7 +57,7 @@ type CommandFactory struct {
 	executeBeadOrchestratorGitOverride agent.OrchestratorGitOps
 
 	// executeBeadLandingGitOverride overrides the LandingGitOps used by the
-	// single-bead CLI and the execute-loop LandCoordinator for testing.
+	// single-bead CLI and the queue-work LandCoordinator for testing.
 	executeBeadLandingGitOverride agent.LandingGitOps
 
 	// executeBeadLandingAdvancerOverride, when non-nil, replaces the default

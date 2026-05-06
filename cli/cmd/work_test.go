@@ -2,12 +2,13 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	"github.com/spf13/pflag"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -30,30 +31,19 @@ func TestWorkCommandHasPassthroughFlags(t *testing.T) {
 	}
 }
 
-// TestWorkCommandHasAllExecuteLoopFlags verifies that ddx work exposes the
-// full set of flags that operators need to control queue drain behavior.
-// All execute-loop flags must be present so operators can use work as the
-// primary queue drain surface without switching commands.
-func TestWorkCommandHasAllExecuteLoopFlags(t *testing.T) {
+// TestAgentExecuteLoopCommandRemoved verifies that the old nested command name
+// is no longer part of the public CLI surface.
+func TestAgentExecuteLoopCommandRemoved(t *testing.T) {
 	dir := t.TempDir()
 	root := NewCommandFactory(dir).NewRootCommand()
 
-	workCmd, _, err := root.Find([]string{"work"})
-	require.NoError(t, err, "ddx work must exist")
+	found, remaining, err := root.Find([]string{"agent", "execute-loop"})
+	require.NoError(t, err)
+	assert.NotEqual(t, "execute-loop", found.Name())
+	assert.Equal(t, []string{"execute-loop"}, remaining)
 
-	loopCmd, _, err := root.Find([]string{"agent", "execute-loop"})
-	require.NoError(t, err, "ddx agent execute-loop must exist")
-
-	loopFlags := map[string]bool{}
-	loopCmd.Flags().VisitAll(func(f *pflag.Flag) {
-		loopFlags[f.Name] = true
-	})
-
-	for name := range loopFlags {
-		if workCmd.Flags().Lookup(name) == nil {
-			t.Errorf("ddx work missing flag --%s from execute-loop", name)
-		}
-	}
+	_, err = executeCommand(root, "agent", "execute-loop")
+	require.Error(t, err)
 }
 
 // TestWorkHelpDocumentsReviewGuardrails verifies that the work help text
@@ -98,6 +88,41 @@ func TestWorkPassthroughNotValidated(t *testing.T) {
 	require.NoError(t, json.Unmarshal([]byte(out), &res))
 	assert.True(t, res.NoReadyWork,
 		"ddx work with no ready beads must report no_ready_work=true")
+}
+
+func TestWorkDefaultPollIntervalExitsOnEmptyQueue(t *testing.T) {
+	env := NewTestEnvironment(t)
+	root := NewCommandFactory(env.Dir).NewRootCommand()
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	root.SetContext(ctx)
+
+	start := time.Now()
+	out, err := executeCommand(root, "work", "--json")
+	elapsed := time.Since(start)
+	require.NoError(t, err)
+	require.Less(t, elapsed, 500*time.Millisecond,
+		"ddx work must not wait for the long-running worker poll interval by default")
+
+	var res struct {
+		NoReadyWork bool `json:"no_ready_work"`
+		Attempts    int  `json:"attempts"`
+	}
+	require.NoError(t, json.Unmarshal([]byte(out), &res))
+	assert.True(t, res.NoReadyWork)
+	assert.Equal(t, 0, res.Attempts)
+}
+
+func TestWorkLongRunningPollIntervalRemainsOptIn(t *testing.T) {
+	dir := t.TempDir()
+	root := NewCommandFactory(dir).NewRootCommand()
+
+	workCmd, _, err := root.Find([]string{"work"})
+	require.NoError(t, err, "ddx work must exist")
+	flag := workCmd.Flags().Lookup("poll-interval")
+	require.NotNil(t, flag)
+	assert.Equal(t, "0s", flag.DefValue)
+	assert.Contains(t, flag.Usage, "Set 30s to keep the worker alive")
 }
 
 func TestWorkDefaultOutput_PrintsSelectedRouteEconomics(t *testing.T) {
