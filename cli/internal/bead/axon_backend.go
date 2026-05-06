@@ -3,6 +3,7 @@ package bead
 import (
 	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -69,12 +70,25 @@ const (
 // attachment file remains the canonical source for those events so Store's
 // existing read path (eventsForBead) keeps working unchanged.
 type AxonBackend struct {
-	Dir        string
-	BeadsFile  string
-	EventsFile string
-	LockDir    string
-	LockWait   time.Duration
+	Dir              string
+	BeadsFile        string
+	EventsFile       string
+	LockDir          string
+	LockWait         time.Duration
+	GraphQLTransport AxonGraphQLTransport
+	GraphQLClient    any
 }
+
+// AxonGraphQLTransport is the injectable GraphQL execution boundary used by
+// the Axon backend. It mirrors the generated client's transport surface, so a
+// caller can wire a real transport into the future GraphQL implementation
+// without changing the storage code that uses this backend.
+type AxonGraphQLTransport interface {
+	Query(ctx context.Context, query string, variables map[string]any, response any) error
+}
+
+// AxonBackendOption configures an AxonBackend during construction.
+type AxonBackendOption func(*AxonBackend)
 
 // Compile-time check: AxonBackend satisfies RawBackend.
 var _ RawBackend = (*AxonBackend)(nil)
@@ -82,14 +96,36 @@ var _ RawBackend = (*AxonBackend)(nil)
 // NewAxonBackend constructs an axon-backed RawBackend rooted at dir. dir is
 // the .ddx directory for the project; collection files and the lock live
 // under <dir>/axon/.
-func NewAxonBackend(dir string, lockWait time.Duration) *AxonBackend {
+func NewAxonBackend(dir string, lockWait time.Duration, opts ...AxonBackendOption) *AxonBackend {
 	root := filepath.Join(dir, AxonDirName)
-	return &AxonBackend{
+	ax := &AxonBackend{
 		Dir:        root,
 		BeadsFile:  filepath.Join(root, AxonBeadsCollection+".jsonl"),
 		EventsFile: filepath.Join(root, AxonEventsCollection+".jsonl"),
 		LockDir:    filepath.Join(root, ".lock"),
 		LockWait:   lockWait,
+	}
+	for _, opt := range opts {
+		if opt != nil {
+			opt(ax)
+		}
+	}
+	return ax
+}
+
+// WithAxonGraphQLTransport injects the GraphQL transport boundary used by the
+// axon backend.
+func WithAxonGraphQLTransport(transport AxonGraphQLTransport) AxonBackendOption {
+	return func(ax *AxonBackend) {
+		ax.GraphQLTransport = transport
+	}
+}
+
+// WithAxonGraphQLClient injects a pre-built GraphQL client object for future
+// mutation and query wiring.
+func WithAxonGraphQLClient(client any) AxonBackendOption {
+	return func(ax *AxonBackend) {
+		ax.GraphQLClient = client
 	}
 }
 

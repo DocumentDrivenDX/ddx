@@ -2,6 +2,7 @@ package bead
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -28,6 +29,36 @@ func newAxonStore(t *testing.T) *Store {
 	return s
 }
 
+type stubAxonGraphQLTransport struct{}
+
+func (stubAxonGraphQLTransport) Query(context.Context, string, map[string]any, any) error {
+	return nil
+}
+
+func TestAxonBackend_GraphQLClientBoundary(t *testing.T) {
+	t.Parallel()
+
+	dir := filepath.Join(t.TempDir(), ".ddx")
+	transport := stubAxonGraphQLTransport{}
+	client := struct{ Name string }{Name: "stub"}
+
+	ax := NewAxonBackend(dir, 3*time.Second,
+		WithAxonGraphQLTransport(transport),
+		WithAxonGraphQLClient(client),
+	)
+
+	assert.IsType(t, transport, ax.GraphQLTransport)
+	assert.Equal(t, transport, ax.GraphQLTransport)
+	require.Equal(t, client, ax.GraphQLClient)
+	assert.Equal(t, filepath.Join(dir, AxonDirName), ax.Dir)
+	assert.Equal(t, filepath.Join(dir, AxonDirName, AxonBeadsCollection+".jsonl"), ax.BeadsFile)
+	assert.Equal(t, filepath.Join(dir, AxonDirName, AxonEventsCollection+".jsonl"), ax.EventsFile)
+
+	plain := NewAxonBackend(dir, 3*time.Second)
+	assert.Nil(t, plain.GraphQLTransport)
+	assert.Nil(t, plain.GraphQLClient)
+}
+
 func TestAxonBackend_InitCreatesCollections(t *testing.T) {
 	t.Parallel()
 	s := newAxonStore(t)
@@ -38,6 +69,75 @@ func TestAxonBackend_InitCreatesCollections(t *testing.T) {
 		_, err := os.Stat(path)
 		assert.NoError(t, err, "axon collection file %s should exist after Init", path)
 	}
+}
+
+func TestAxonBackend_GraphQLMapping_BeadsAndEvents(t *testing.T) {
+	t.Parallel()
+
+	local := Bead{
+		ID:          "ddx-00000001",
+		Title:       "mapped",
+		Status:      StatusOpen,
+		Priority:    2,
+		IssueType:   DefaultType,
+		Owner:       "owner",
+		CreatedAt:   time.Unix(10, 0).UTC(),
+		CreatedBy:   "creator",
+		UpdatedAt:   time.Unix(20, 0).UTC(),
+		Labels:      []string{"kind:feature"},
+		Parent:      "ddx-00000002",
+		Description: "local model",
+		Acceptance:  "AC",
+		Notes:       "notes",
+		Dependencies: []Dependency{{
+			IssueID:     "ddx-00000001",
+			DependsOnID: "ddx-00000002",
+			Type:        "blocks",
+			CreatedAt:   "2026-05-04T00:00:00Z",
+			CreatedBy:   "creator",
+			Metadata:    "meta",
+		}},
+		Extra: map[string]any{
+			"source": "test",
+			"events": []any{
+				map[string]any{"kind": "created", "summary": "one"},
+				map[string]any{"kind": "updated", "summary": "two"},
+			},
+		},
+	}
+
+	beadRow, err := axonEncodeBead(beadWithoutInlineEvents(local))
+	require.NoError(t, err)
+
+	var beadEnv axonEntityEnvelope
+	require.NoError(t, json.Unmarshal(beadRow, &beadEnv))
+	assert.Equal(t, AxonBeadsCollection, beadEnv.Collection)
+	assert.Equal(t, axonSchemaVersion, beadEnv.SchemaVersion)
+	require.NotNil(t, beadEnv.Data.Extra)
+	_, hasEvents := beadEnv.Data.Extra["events"]
+	assert.False(t, hasEvents, "bead rows must not inline events")
+	assert.Equal(t, local.ID, beadEnv.Data.ID)
+	assert.Equal(t, local.Title, beadEnv.Data.Title)
+	require.Len(t, beadEnv.Data.Dependencies, 1)
+	assert.Equal(t, local.Dependencies[0].DependsOnID, beadEnv.Data.Dependencies[0].DependsOnID)
+
+	eventRow, err := axonEncodeEvent(local.ID, 1, BeadEvent{
+		Kind:      "updated",
+		Summary:   "two",
+		Body:      "body",
+		Actor:     "tester",
+		CreatedAt: time.Unix(30, 0).UTC(),
+	})
+	require.NoError(t, err)
+
+	var eventEnv axonEventEnvelope
+	require.NoError(t, json.Unmarshal(eventRow, &eventEnv))
+	assert.Equal(t, AxonEventsCollection, eventEnv.Collection)
+	assert.Equal(t, axonSchemaVersion, eventEnv.SchemaVersion)
+	assert.Equal(t, local.ID, eventEnv.EventOf)
+	assert.Equal(t, 1, eventEnv.Index)
+	assert.Equal(t, "updated", eventEnv.Event.Kind)
+	assert.Equal(t, "two", eventEnv.Event.Summary)
 }
 
 func TestAxonBackend_CreateAndGet(t *testing.T) {
