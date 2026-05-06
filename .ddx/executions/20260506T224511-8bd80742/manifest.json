@@ -1,0 +1,62 @@
+{
+  "attempt_id": "20260506T224511-8bd80742",
+  "bead_id": "ddx-6ecd59aa",
+  "base_rev": "f54eda56b6ac709e39c18eddaaf2d16178a50818",
+  "created_at": "2026-05-06T22:45:14.522807457Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6ecd59aa",
+    "title": "work: preflight project-local skills before long-running entrypoints",
+    "description": "PROBLEM\nLong-running DDx entrypoints can start work even when the project-local skill install is broken. In /Users/erik/Projects/fizeau, post-attempt triage logged `triage hook: skill missing: bead-lifecycle (continuing)` only after an execution failed. The operator had to infer that the project still had a pre-migration skill layout and needed `ddx update --force` / `ddx doctor`.\n\nROOT CAUSE\n`cli/cmd/work.go:106` delegates directly to `runAgentExecuteLoopImpl` without a lightweight runtime preflight. `cli/cmd/try.go:102-120` resolves execution flags and proceeds toward store/runtime setup without checking project-local skill prerequisites. `cli/cmd/server.go:98-146` starts the server without surfacing degraded project-local skill layout. `cli/cmd/doctor.go:281-287` already detects legacy skill symlinks and prints `run: ddx update --force`, but that diagnostic is only available when the operator explicitly runs `ddx doctor`.\n\nPROPOSED FIX\n- Add a shared lightweight project-runtime preflight helper for long-running entrypoints. It should reuse existing doctor/install helper logic where practical, but must not run the full `ddx doctor` checks.\n- Wire the helper into `ddx work`, `ddx try`, compatibility `ddx agent execute-loop`, and `ddx server` before execution begins.\n- For work/try/execute-loop: fail on missing required project/tracker state, warn once per process for optional lifecycle-hook degradation in WARN-ONLY mode, and include remediation.\n- For server: fail on required server project state, but log degraded startup diagnostics for missing lifecycle skills or legacy skill symlink layout.\n- Checked paths for `bead-lifecycle` must be `.agents/skills/ddx/bead-lifecycle/SKILL.md` and `.claude/skills/ddx/bead-lifecycle/SKILL.md` under the resolved project root.\n- Remediation text must include `ddx update --force` first, then `ddx doctor`.\n\nNON-SCOPE\n- Do not add network, package-manager, route/provider, stale-doc, or Fizeau health probes to this preflight.\n- Do not change bead-lifecycle hook classification semantics.\n- Do not make `ddx server` refuse to start solely because `bead-lifecycle` is missing.\n- Do not edit `.ddx/beads.jsonl` manually; tracker mutation is handled by this bead record only.\n\nPARENT + DEPS\nParent: ddx-a9d130d0. No deps.",
+    "acceptance": "1. `TestProjectRuntimePreflight_MissingBeadLifecycleReportsCheckedPathsAndRemediation` verifies a project with `.agents/skills/ddx/SKILL.md` but no nested `bead-lifecycle` reports the resolved project root, both checked nested skill paths, `ddx update --force`, and `ddx doctor`.\n2. `TestWorkPreflight_WarnsOnceForMissingLifecycleSkill` verifies `ddx work --once` emits one preflight warning before dispatch and does not repeat the warning across loop iterations in the same process.\n3. `TestTryPreflight_WarnsBeforeClaimForMissingLifecycleSkill` verifies `ddx try \u003cid\u003e` runs the preflight before claim/worktree setup and includes the remediation text.\n4. `TestServerPreflight_MissingLifecycleSkillStartsDegraded` verifies `ddx server` surfaces degraded startup diagnostics without blocking server construction/startup solely because `bead-lifecycle` is missing.\n5. `TestProjectRuntimePreflight_LegacySkillSymlinkSuggestsUpdateForce` verifies legacy project-local skill symlinks reuse the FEAT-015 remediation path: `ddx update --force`, then `ddx doctor`.\n6. `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... ./internal/server/... -run 'Test(ProjectRuntimePreflight|WorkPreflight|TryPreflight|ServerPreflight)'` green.\n7. `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... ./internal/server/...` green.\n8. `lefthook run pre-commit` passes.",
+    "parent": "ddx-a9d130d0",
+    "labels": [
+      "phase:2",
+      "area:cli",
+      "area:agent",
+      "area:server",
+      "area:skills",
+      "kind:feature",
+      "reliability",
+      "bead-quality",
+      "spec:FEAT-010",
+      "spec:FEAT-015"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T22:45:11Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2049424",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T22:45:11.021957446Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T22:45:11.425383828Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T224511-8bd80742",
+    "prompt": ".ddx/executions/20260506T224511-8bd80742/prompt.md",
+    "manifest": ".ddx/executions/20260506T224511-8bd80742/manifest.json",
+    "result": ".ddx/executions/20260506T224511-8bd80742/result.json",
+    "checks": ".ddx/executions/20260506T224511-8bd80742/checks.json",
+    "usage": ".ddx/executions/20260506T224511-8bd80742/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6ecd59aa-20260506T224511-8bd80742"
+  },
+  "prompt_sha": "5e6e0a093cc361a5aa227545e56d325aaf706d5909093996c0426fe2675f2f22"
+}
