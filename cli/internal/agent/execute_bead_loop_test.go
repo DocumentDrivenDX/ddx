@@ -448,7 +448,7 @@ func TestExecuteBeadWorkerNoChangesLabelsWithoutCooldownAcrossRuns(t *testing.T)
 	assert.Equal(t, 2, callCount)
 }
 
-func TestExecuteBeadWorkerNoViableProviderUsesCooldownWithoutTriage(t *testing.T) {
+func TestExecuteBeadWorker_NoViableProviderUsesRetryableTransportPolicy(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	now := time.Now().UTC().Truncate(time.Second)
 	var triageCalls int
@@ -1256,7 +1256,7 @@ func TestExecuteBeadWorkerNoChangesVerificationFailsKeepsBeadOpen(t *testing.T) 
 // NoChangesContract needs_investigation path: when the agent declares it cannot
 // make progress, the bead stays open with a triage:needs-investigation label
 // and a no_changes_needs_investigation event capturing the reason.
-func TestExecuteBeadWorkerNoChangesNeedsInvestigationKeepsBeadOpen(t *testing.T) {
+func TestExecuteBeadWorker_NeedsInvestigationRationaleStillParks(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
