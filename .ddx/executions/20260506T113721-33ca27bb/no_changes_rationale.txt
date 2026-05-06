@@ -1,0 +1,6 @@
+What changed:
+- No code changes were needed for `internal/metric`; the current tree already has zero deadcode RTA hits in that package.
+- Recorded the per-symbol decisions in `.ddx/executions/20260506T113721-33ca27bb/decisions.md`.
+
+Verification:
+- verification_command: cd cli && go test ./... && ! go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./... 2>&1 | rg 'internal/metric'
