@@ -1,0 +1,109 @@
+{
+  "attempt_id": "20260506T165037-eedd8843",
+  "bead_id": "ddx-8fa7ecf6",
+  "base_rev": "05813493f8d513ec26f04a28e32c769dcdcf32bd",
+  "created_at": "2026-05-06T16:50:40.003666826Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-8fa7ecf6",
+    "title": "try: preflight execution resources before claim and worktree setup",
+    "description": "PROBLEM\nddx try can claim/checkpoint and then fail during worktree setup when the temp worktree or evidence root is out of bytes/inodes or unwritable. In the May 6 incident, git worktree add failed with No space left on device after creating partial execution artifacts, and the failure was treated as ordinary execution_failed instead of a resource guardrail.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead.go:686-714 creates the temp worktree parent, commits/checkpoints, resolves base, and calls WorktreeAdd before any resource-health check of $TMPDIR/ddx-exec-wt or .ddx/executions/.ddx/runs.\n- cli/internal/agent/execute_bead.go:713-714 returns immediately on WorktreeAdd failure, so partial unregistered directories can remain outside the deferred WorktreeRemove path.\n- cli/cmd/try.go:306-342 routes ddx try through ExecuteBeadWorker without a pre-claim resource gate that can fail before claiming the target bead.\n- docs/helix/01-frame/features/FEAT-010-task-execution.md:454-467 requires ddx try to validate roots, run one cleanup pass, re-check, and return resource_exhausted without claiming when still unhealthy.\n\nPROPOSED FIX\n- Introduce a resource checker abstraction that validates temp worktree root and durable evidence root writability, free bytes, and free inodes where supported.\n- Run resource preflight before claim/worktree creation in ddx try paths, using the cleanup manager once before final failure.\n- Classify persistent resource failure as resource_exhausted with structured detail, not generic execution_failed/quota.\n- Ensure WorktreeAdd failure removes partial unregistered worktree directories created for the attempt.\n\nNON-SCOPE\n- Do not decide ddx work loop stop behavior here; sibling ddx work bead consumes the resource_exhausted outcome.\n- Do not add background cleanup cadence here.\n- Do not implement a real low-disk integration test that fills a filesystem; use injectable resource checker/fake filesystem boundaries.",
+    "acceptance": "1. TestTryResourcePreflight_FailsBeforeClaim verifies a failing injected resource checker runs cleanup once, returns resource_exhausted, and leaves the bead open/unclaimed.\n2. TestTryResourcePreflight_RechecksAfterCleanup verifies ddx try proceeds when cleanup restores healthy resource status.\n3. TestExecuteBeadWorktreeAddFailure_RemovesPartialDir verifies a simulated WorktreeAdd ENOSPC failure removes the attempt partial directory under DDX_EXEC_WT_DIR.\n4. TestTryResourcePreflight_ChecksEvidenceAndTempRoots verifies both the temp worktree root and durable evidence root are checked for writability and resource health.\n5. Production ddx try/work paths call the resource preflight before claim/worktree creation; tests assert the new code path is wired, not just unit-tested.\n6. cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run \"TestTryResourcePreflight|TestExecuteBeadWorktreeAddFailure\" -count=1 passes.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-f3dfde0d",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:cli",
+      "kind:bug",
+      "reliability",
+      "spec:FEAT-010",
+      "spec:SD-025",
+      "cleanup",
+      "resource-exhaustion"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T16:50:37Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "963074",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T16:37:30.029076568Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-06T16:48:15.024971566Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T163730-b7d62098\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":10986528,\"output_tokens\":51838,\"total_tokens\":11038366,\"cost_usd\":0,\"duration_ms\":642218,\"exit_code\":0}",
+          "created_at": "2026-05-06T16:48:15.247198699Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=11038366 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T16:48:26.425913648Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=021a9a5fdd79b155d8cc58ad4253e6c244e4b94a\n\nreview-group: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T12:53:29-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=55866\noutput_bytes=0\nelapsed_ms=2167",
+          "created_at": "2026-05-06T16:48:29.892351864Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-close review: review-error: transport\nagent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T12:53:29-04:00)\nresult_rev=021a9a5fdd79b155d8cc58ad4253e6c244e4b94a\nbase_rev=656478e6ab21740824b9207d87a4181f04d4ca4b",
+          "created_at": "2026-05-06T16:48:30.106345255Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_malfunction"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T16:50:36.980294088Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T16:50:37.35964258Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T165037-eedd8843",
+    "prompt": ".ddx/executions/20260506T165037-eedd8843/prompt.md",
+    "manifest": ".ddx/executions/20260506T165037-eedd8843/manifest.json",
+    "result": ".ddx/executions/20260506T165037-eedd8843/result.json",
+    "checks": ".ddx/executions/20260506T165037-eedd8843/checks.json",
+    "usage": ".ddx/executions/20260506T165037-eedd8843/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-8fa7ecf6-20260506T165037-eedd8843"
+  },
+  "prompt_sha": "e5d3a1a35b3efa6d860e6454434e8d5a0583ed8e63707d3e41605eeb95e2bad5"
+}
