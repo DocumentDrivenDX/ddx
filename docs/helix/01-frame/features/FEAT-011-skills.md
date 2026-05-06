@@ -142,7 +142,7 @@ examples include `bead-breakdown/`, `replay-bead/`, `compare-prompts/`,
 `benchmark-suite/`, `effort-estimate/`, and `adversarial-review/`. ADR-023
 (`../../02-design/adr/ADR-023-bead-lifecycle-quality-policy.md`) adds the same
 model for bead-lifecycle quality: bead readiness assessment is the canonical
-pre-claim decision, lint/rubric scoring is the rubric pass inside that
+readiness decision, lint/rubric scoring is the rubric pass inside that
 decision, and post-attempt triage is the after-evidence classification. Those
 steps invoke a nested workflow skill while keeping routing through the root
 `ddx` skill.
@@ -153,7 +153,9 @@ create a fourth run layer, bespoke storage shape, or harness-specific
 frontmatter contract.
 
 The bead-lifecycle skill owns readiness assessment, lint/rubric scoring,
-post-attempt triage, and refine guidance for this policy surface.
+post-attempt triage, and refine guidance for this policy surface. Those
+responsibilities are separate from the legacy `MODE: intake` compatibility
+wording, which remains only as an implementation detail for older hooks.
 
 ### Installation
 
