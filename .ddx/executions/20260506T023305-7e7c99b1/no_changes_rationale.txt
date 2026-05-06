@@ -1,0 +1,3 @@
+status: verified_no_changes
+reason: The requested guardrails are already implemented and covered in the current tree. `--no-review` requires `--no-review-i-know-what-im-doing` in `cli/cmd/try.go` and `cli/cmd/work.go`, and `review:skip` only skips when paired with `review:skip-reason:*` in `cli/internal/agent/execute_bead_post_review.go`. The matching tests already exist in `cli/cmd/try_test.go` and `cli/internal/agent/execute_bead_review_test.go`.
+verification_command: cd cli && go test ./cmd -run 'TestTry_NoReviewRequiresAckFlag|TestTry_CommandRegistered|TestWorkHelpDocumentsReviewGuardrails' && go test ./internal/agent -run 'TestExecuteBeadWorkerReviewSkipLabelWithoutReasonIsIgnored|TestExecuteBeadWorkerReviewSkipLabelWithReasonSkipsReviewer'
