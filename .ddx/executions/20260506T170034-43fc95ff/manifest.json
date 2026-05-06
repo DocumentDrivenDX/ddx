@@ -1,0 +1,61 @@
+{
+  "attempt_id": "20260506T170034-43fc95ff",
+  "bead_id": "ddx-ef2a7638",
+  "base_rev": "593684cbb142be731f4d482cadf60a06437e9763",
+  "created_at": "2026-05-06T17:00:36.912927811Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ef2a7638",
+    "title": "cli: expose DDx execution cleanup command and report",
+    "description": "PROBLEM\nOperators currently have no first-class command to inspect and clean DDx-owned stale execution resources. During the May 6 incident, cleanup required manual shell inspection of /tmp/ddx-exec-wt, git worktree list, and inode usage, which is error-prone and can accidentally delete non-DDx or preserved state.\n\nROOT CAUSE WITH FILE:LINE\n- cli/cmd/command_factory.go:561-562 registers top-level work/try commands but there is no ddx cleanup or doctor cleanup command that invokes the execution cleanup manager.\n- cli/cmd/doctor.go:111-202 checks general repo health but does not expose DDx execution temp worktree/liveness cleanup.\n- cli/internal/agent/execute_bead.go:257-279 defines DDx temp worktree locations, but operators must discover and prune them manually.\n- docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md:240-244 requires an explicit operator command such as ddx cleanup or ddx doctor cleanup that runs the same manager and reports what it removed.\n\nPROPOSED FIX\n- Add an operator command, preferably ddx cleanup unless existing CLI conventions strongly favor ddx doctor cleanup.\n- Support dry-run and apply behavior if consistent with existing command style; at minimum produce a clear human summary and JSON output.\n- Wire the command to the shared cleanup manager, not a separate shell/script implementation.\n- Report removed registered worktrees, unregistered dirs, liveness files, warnings, and resource observations; never scan outside configured DDx roots.\n\nNON-SCOPE\n- Do not add destructive broad system cleanup outside DDx-owned roots.\n- Do not remove complete .ddx/runs or .ddx/executions evidence.\n- Do not require the command to fix provider quota/auth/network failures.",
+    "acceptance": "1. TestCleanupCommand_DryRunReportsWithoutDeleting verifies dry-run lists stale DDx resources and leaves them on disk.\n2. TestCleanupCommand_ApplyRemovesStaleDDxResources verifies apply mode invokes the shared cleanup manager and removes stale temp worktrees/liveness files.\n3. TestCleanupCommand_JSONShape verifies JSON output includes removed counts, warnings, bytes/inodes when available, and blocked errors.\n4. TestCleanupCommand_DoesNotRemovePreservedEvidence verifies preserved attempts and complete evidence bundles survive command execution.\n5. The command is registered in the root CLI and documented in docs/agent-execute.md or adjacent operator docs.\n6. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -run \"TestCleanupCommand|TestExecutionCleanup\" -count=1 passes.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-f3dfde0d",
+    "labels": [
+      "phase:2",
+      "area:cli",
+      "area:agent",
+      "kind:implementation",
+      "reliability",
+      "spec:FEAT-010",
+      "spec:SD-025",
+      "cleanup",
+      "operator-ux"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T17:00:34Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "963074",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T17:00:33.779222933Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T17:00:34.159119309Z",
+      "spec-id": "SD-025"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-025",
+      "path": "docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md",
+      "title": "Solution Design: Task Execution Lifecycle"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T170034-43fc95ff",
+    "prompt": ".ddx/executions/20260506T170034-43fc95ff/prompt.md",
+    "manifest": ".ddx/executions/20260506T170034-43fc95ff/manifest.json",
+    "result": ".ddx/executions/20260506T170034-43fc95ff/result.json",
+    "checks": ".ddx/executions/20260506T170034-43fc95ff/checks.json",
+    "usage": ".ddx/executions/20260506T170034-43fc95ff/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ef2a7638-20260506T170034-43fc95ff"
+  },
+  "prompt_sha": "eea9e3bc90589134be4e22b4495805ab031569f15097377ea59d7a38753316fa"
+}
