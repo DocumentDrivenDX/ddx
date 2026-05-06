@@ -1,0 +1,59 @@
+{
+  "attempt_id": "20260506T232946-abc5bd73",
+  "bead_id": "ddx-c14f6525",
+  "base_rev": "85b9c6fed1da52a132941c04c59aefecc0b2c7b9",
+  "created_at": "2026-05-06T23:29:49.029577579Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c14f6525",
+    "title": "work: evaluate completed epics for closure",
+    "description": "PROBLEM\n`ddx work` currently reports dependency-ready epics only as structural skips. That is correct for epics with open child work, but stale for epics whose direct children are all closed. Operators then have to manually notice and close completed epics, and the no-ready-work diagnostic keeps showing noise.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/bead/store.go:1416 appends every ordinary epic container to ReadyExecutionBreakdown.SkippedEpics.\n- cli/internal/bead/store.go:1482 filters ordinary epic containers out of ReadyExecution entirely.\n- cli/internal/bead/store.go:1696 defines isOrdinaryEpicContainer as true for any issue_type `epic`, without considering whether the epic has open children or only closed children.\n- cli/cmd/agent_cmd.go:1940-1942 renders all skipped epics with the same \"epics are structural containers; decompose into tasks\" message, so completed epics are not surfaced as closure candidates.\n\nPROPOSED FIX\nTeach the execution queue to distinguish epics with open children from epics whose direct children are all closed. `ddx work` should at least evaluate completed epics for closure instead of treating them as ordinary structural skips. A safe implementation may add an explicit closure-candidate classification and auto-close only when the epic acceptance/dependencies are satisfied by closed children; if auto-close is not safe, the text/JSON plan must clearly surface the epic as a closure candidate requiring operator action.\n\nIN-SCOPE FILES\n- cli/internal/bead/store.go\n- cli/internal/bead/gaps_test.go\n- cli/internal/agent/execute_bead_loop.go\n- cli/internal/agent/execute_bead_loop_test.go\n- cli/cmd/agent_cmd.go and/or cli/cmd/work_plan_test.go for operator-facing output\n\nNON-SCOPE\n- Do not execute epics through the normal bead executor. Epics remain structural containers.\n- Do not close epics that still have any direct child whose status is not closed.\n- Do not implement recursive grandchild graph closure beyond the existing direct-child/dependency model unless a failing test proves it is required.\n- Do not change task queue priority ordering for ordinary executable tasks.",
+    "acceptance": "1. TestReadyExecutionBreakdown_ClassifiesEpicClosureCandidates creates one epic with only closed direct children and one epic with an open direct child; the completed epic is not reported in SkippedEpics, while the active epic still is.\n2. TestExecuteBeadWorkerEvaluatesCompletedEpicForClosure proves `ddx work` does not dispatch the normal executor for an epic but does surface or close a completed epic through the new closure-evaluation path.\n3. TestWorkPlan_ShowsCompletedEpicClosureCandidate verifies `ddx work plan --json` or text output distinguishes completed-epic closure candidates from structural epics with open children.\n4. Existing TestExecuteBeadWorkerEpicIsNotOrdinaryWork remains green for epics with open children.\n5. cd cli \u0026\u0026 go test ./internal/bead/... ./internal/agent/... ./cmd/... -run \"TestReadyExecutionBreakdown_ClassifiesEpicClosureCandidates|TestExecuteBeadWorkerEvaluatesCompletedEpicForClosure|TestWorkPlan_ShowsCompletedEpicClosureCandidate|TestExecuteBeadWorkerEpicIsNotOrdinaryWork\" -count=1 passes.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-f3dfde0d",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:beads",
+      "area:cli",
+      "kind:bug",
+      "reliability",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T23:29:44Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3635533",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T23:29:44.025359075Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T23:29:44.424503278Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T232946-abc5bd73",
+    "prompt": ".ddx/executions/20260506T232946-abc5bd73/prompt.md",
+    "manifest": ".ddx/executions/20260506T232946-abc5bd73/manifest.json",
+    "result": ".ddx/executions/20260506T232946-abc5bd73/result.json",
+    "checks": ".ddx/executions/20260506T232946-abc5bd73/checks.json",
+    "usage": ".ddx/executions/20260506T232946-abc5bd73/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c14f6525-20260506T232946-abc5bd73"
+  },
+  "prompt_sha": "1129cab32334a71a59222ef50aba8cb3a7cd8805ee5d79e870daca14f972e7e7"
+}
