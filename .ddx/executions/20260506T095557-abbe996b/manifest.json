@@ -1,0 +1,41 @@
+{
+  "attempt_id": "20260506T095557-abbe996b",
+  "bead_id": "ddx-9228a484",
+  "base_rev": "ccbe2d60dd128644e306480a5789f38672364718",
+  "created_at": "2026-05-06T09:55:59.681770746Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9228a484",
+    "title": "agent: implement StopCondition, valid-attempt retry budget, and repair-cycle escalation",
+    "description": "PROBLEM\nThe execution loop now needs a single durable stop/retry policy for the reliable factory workflow. Current code still exposes older post-merge review/reopen semantics and scattered stop logic: ExecuteBeadReport.ReviewVerdict is documented as post-merge in cli/internal/agent/execute_bead_loop.go:226, Reopen is documented for REQUEST_CHANGES/BLOCK at cli/internal/agent/execute_bead_loop.go:300, no-progress suppression only excludes a narrow transient set at cli/internal/agent/execute_bead_loop.go:1576, and C9 previously depended on ddx-cfedee8e even though C9 absorbs that scope.\n\nROOT CAUSE WITH FILE:LINE\n- cli/cmd/agent_cmd.go:1722 and cli/cmd/agent_cmd.go:1818 contain historical cost-cap stop sites outside a first-class StopCondition gate.\n- cli/internal/agent/execute_bead_loop.go:226 and cli/internal/agent/execute_bead_loop.go:300 still describe post-merge reviewer close/reopen behavior, which conflicts with ADR-024 default adversarial pre-close review.\n- cli/internal/agent/execute_bead_loop.go:1576 counts no-progress by base/result equality but only excludes transport/quota/routing/timeout/merge_conflict outcome reasons; intake blocks, decomposition, review errors, and operator-required states must not consume no-progress retry budget.\n- ddx-9228a484 previously listed ddx-cfedee8e as a dependency while also absorbing it, creating a queue deadlock.\n\nPROPOSED FIX\n- Implement cli/internal/agent/work/stop.go with StopCondition values Drained, Once, Signal, Budget, NoProgress, Blocked.\n- Move all budget/cost-cap decisions, including implementer plus adversarial reviewer group cost, into drain.stop(state).\n- Relocate MinPower retry behavior from ddx-cfedee8e into the attempt/retry path without mutating requested harness/model/profile pins. A review_fixable_gap may raise MinPower for the repair attempt; spec gaps, missing acceptance, too-large, unsafe/out-of-scope, review errors beyond cap, intake ambiguity, and decomposition overflow block for the operator instead.\n- Make no-progress budget count only valid implementation attempts where checkout/context existed and the implementer had an opportunity to modify or verify code. Exclude intake rewrites/blocks/decomposition, claim races, routing preflight, quota/transport/auth/tool setup, review errors, and operator-action states.\n- Keep append-only cycle trace fields for every implementation cycle and repair cycle: cycle_index, attempt_id, result_rev, implementer route facts, review_group_id, reviewer slots, review result, final decision.\n\nNON-SCOPE\n- Implementing the adversarial review gate itself; that is tracked separately.\n- Frontend display of stop reasons.\n- Poll-interval defaults and idle workers; already handled by ddx-dc157075 / C10.",
+    "acceptance": "1. cli/internal/agent/work/stop.go defines StopCondition enum: Drained | Once | Signal | Budget | NoProgress | Blocked, and drain.stop(state) is the only production budget/terminal stop classifier.\n2. Cost-cap checks are removed from executor closure call sites and reviewer group cost is charged to the same budget accumulator before close eligibility is evaluated.\n3. No-progress retry budget is incremented only for valid implementation attempts; TestStopCondition_NoProgress_IgnoresIntakeRoutingReviewAndOperatorStates covers intake block, decomposition, claim race, routing preflight, quota/transport/auth/tool setup, review-error, and needs_human cases.\n4. Review REQUEST_CHANGES/BLOCK no longer reopens a closed bead. A review_fixable_gap prevents close, records review-fixable-gap, and schedules one bounded repair cycle with repair_context_from_review_group. TestPreCloseReviewFixableGap_PreventsCloseAndSchedulesRepair covers this.\n5. review_spec_gap, review_missing_acceptance, review_too_large at depth cap, review_unsafe_or_out_of_scope, and exhausted review_error transition to blocked with needs_human and do not consume no-progress budget. TestReviewTerminalClassifications_BlockWithoutNoProgress covers this.\n6. MinPower retry/escalation behavior from ddx-cfedee8e is wired in the attempt/retry path without mutating explicit harness/model/profile pins. TestRetryPolicy_ReviewFixableGapRaisesMinPowerAndPreservesPins covers the path.\n7. Execution records include append-only cycle trace data for initial and repair cycles: cycle_index, attempt_id, result_rev, implementer route facts, review_group_id, reviewer_index values, review verdicts, and final decision. TestExecutionTrace_RecordsInitialAndRepairCycles covers both cycles.\n8. Downstream-consumer audit for cost-cap and stop-condition event names is committed to .ddx/executions/\u003crun-id\u003e/cost-cap-consumers.md.\n9. cd cli \u0026\u0026 go test ./internal/agent/... green.\n10. lefthook run pre-commit passes.",
+    "parent": "ddx-5cb6e6cd",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "area:cost",
+      "kind:refactor",
+      "reliability",
+      "adr:024"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T09:55:57Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "execute-loop-heartbeat-at": "2026-05-06T09:55:57.137518017Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260506T095557-abbe996b",
+    "prompt": ".ddx/executions/20260506T095557-abbe996b/prompt.md",
+    "manifest": ".ddx/executions/20260506T095557-abbe996b/manifest.json",
+    "result": ".ddx/executions/20260506T095557-abbe996b/result.json",
+    "checks": ".ddx/executions/20260506T095557-abbe996b/checks.json",
+    "usage": ".ddx/executions/20260506T095557-abbe996b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-9228a484-20260506T095557-abbe996b"
+  },
+  "prompt_sha": "246b157956a263e2cf1558542daff662663b6907dc6bbaf114445800d97df44e"
+}
