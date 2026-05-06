@@ -112,7 +112,9 @@ layers and not new bead-schema fields.
 `BeadReadinessHook` is the product concept: it runs after the worker has
 selected a dependency-ready candidate but before DDx claims the bead or
 creates the implementation worktree. The canonical decision being made is bead
-readiness assessment, the pre-claim check for tractability and actionability.
+readiness assessment, the pre-claim check for tractability and actionability;
+lint/rubric scoring is the diagnostic pass inside readiness, and post-attempt
+triage is a separate after-evidence action.
 The implementation may still call the compatibility entrypoint
 `PreClaimIntakeHook` and record `MODE: intake` for legacy compatibility, but
 those names are aliases only. Within readiness, the nested bead-lifecycle
@@ -553,9 +555,11 @@ owns bead selection, attempt finalization, and retry classification.
 `BeadReadinessHook` runs after a bead has been selected and verified as
 dependency-eligible, but before DDx claims it or creates the implementation
 worktree. It performs the canonical bead readiness assessment, the pre-claim
-decision about tractability and actionability. The legacy compatibility name
-`PreClaimIntakeHook` and `MODE: intake` may still appear in migration code or
-notes, but they are not the product concept.
+decision about tractability and actionability; lint/rubric scoring is the
+diagnostic pass inside readiness, and post-attempt triage is a separate
+after-evidence action. The legacy compatibility name `PreClaimIntakeHook` and
+`MODE: intake` may still appear in migration code or notes, but they are not
+the product concept.
 
 The hook receives the bead record, current execution policy, hook mode
 (`WARN-ONLY` or `BLOCK`), and the layer-3 evidence directory. It invokes the
