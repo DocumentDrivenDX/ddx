@@ -68,11 +68,12 @@ There is no second-class "managed asset" concept. Either a file has identity
 
 DDx uses content-based discovery: it scans for embedded `ddx:` frontmatter
 in markdown and for sidecar `*.ddx.yaml` files within the project's
-configured roots, subject to an exclusion list of tool-managed and storage
-directories (e.g. `.git/`, `.ddx/`, `.ddx/plugins/`, `.claude/`, `.agents/`,
-and any `worktrees/` subtree). Identity comes from frontmatter, not from
-file paths, but discovery is bounded so plugin-shipped or agent-scratch
-copies of canonical docs do not collide with the project's own artifacts.
+configured roots, subject to exclusion of any hidden dot-prefixed subtree
+plus tool-managed and storage directories (e.g. `.git/`, `.ddx/`,
+`.ddx/plugins/`, `.claude/`, `.agents/`, and any `worktrees/` subtree).
+Identity comes from frontmatter, not from file paths, but discovery is
+bounded so plugin-shipped or agent-scratch copies of canonical docs do not
+collide with the project's own artifacts.
 
 ### Common Artifact Types (by convention)
 

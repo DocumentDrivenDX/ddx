@@ -543,6 +543,7 @@ func findMarkdownFiles(root string, roots []string) ([]string, error) {
 		targetDirs = roots
 	}
 
+	rootClean := filepath.Clean(root)
 	files := []string{}
 	for _, base := range targetDirs {
 		cleanRoot := filepath.Clean(base)
@@ -553,14 +554,12 @@ func findMarkdownFiles(root string, roots []string) ([]string, error) {
 			if info == nil {
 				return nil
 			}
-			// Path-based skip for tool-managed plugin trees. The basename
-			// switch below catches a top-level `.ddx/` walk, but a graph
-			// config may add an explicit root that lives inside `.ddx/`
-			// (e.g. `.ddx/plugins/helix/docs/`). In that case the basename
-			// rule never fires because the walker starts past `.ddx`.
-			// Plugins ship their own (often stale) copies of canonical
-			// docs, so any path under `.ddx/plugins/` is excluded.
-			if isInsideDDxPlugins(path) {
+			// Exclude any repository-relative path that contains a hidden
+			// segment. This catches configured roots that start inside
+			// `.agents/`, `.claude/`, `.ddx/`, `.skills/`, or any future
+			// dot-prefixed tool tree before either directory or file
+			// acceptance can happen.
+			if hasHiddenPathSegment(relPath(rootClean, path)) {
 				if info.IsDir() {
 					return filepath.SkipDir
 				}
@@ -578,9 +577,6 @@ func findMarkdownFiles(root string, roots []string) ([]string, error) {
 				}
 				return nil
 			}
-			if strings.HasPrefix(filepath.Base(path), ".") {
-				return nil
-			}
 			ext := strings.ToLower(filepath.Ext(path))
 			if ext != ".md" {
 				return nil
@@ -596,17 +592,21 @@ func findMarkdownFiles(root string, roots []string) ([]string, error) {
 	return files, nil
 }
 
-// isInsideDDxPlugins reports whether path lies under a `.ddx/plugins/`
-// segment, regardless of where the walk started. Used to defensively
-// exclude plugin-shipped doc copies even when a graph config configures
-// a root that descends into `.ddx/`.
-func isInsideDDxPlugins(path string) bool {
+// hasHiddenPathSegment reports whether the provided repository-relative path
+// contains any dot-prefixed segment. It is used to exclude hidden/tool-managed
+// trees even when a configured graph root starts inside that subtree.
+func hasHiddenPathSegment(path string) bool {
 	slash := filepath.ToSlash(path)
-	if strings.Contains(slash, "/.ddx/plugins/") || strings.HasSuffix(slash, "/.ddx/plugins") {
-		return true
+	if slash == "" || slash == "." {
+		return false
 	}
-	if slash == ".ddx/plugins" || strings.HasPrefix(slash, ".ddx/plugins/") {
-		return true
+	for _, segment := range strings.Split(slash, "/") {
+		if segment == "" || segment == "." || segment == ".." {
+			continue
+		}
+		if strings.HasPrefix(segment, ".") {
+			return true
+		}
 	}
 	return false
 }

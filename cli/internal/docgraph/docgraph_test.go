@@ -676,19 +676,61 @@ func TestBuildGraph_ExcludesDDxPluginsTree(t *testing.T) {
 	}
 }
 
-func TestIsInsideDDxPlugins(t *testing.T) {
+func TestBuildGraph_ExcludesConfiguredHiddenRoots(t *testing.T) {
+	root := setupTestRepo(t, map[string]string{
+		"docs/feat.md":                    "---\nddx:\n  id: FEAT-001\n---\n# Canonical\n",
+		".agents/skills/docs/feat.md":     "---\nddx:\n  id: FEAT-001\n---\n# Hidden Shadow\n",
+		".ddx/graphs/graph.yml":           "roots:\n  - docs\n  - .agents/skills/docs\n",
+		".agents/skills/docs/other.md":    "---\nddx:\n  id: hidden.other\n---\n# Hidden Other\n",
+		".agents/skills/docs/readme.md":   "---\nddx:\n  id: hidden.readme\n---\n# Hidden Readme\n",
+		".agents/skills/docs/nested/a.md": "---\nddx:\n  id: hidden.nested\n---\n# Hidden Nested\n",
+	})
+
+	graph, err := BuildGraphWithConfig(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(graph.Documents) != 1 {
+		t.Fatalf("expected only canonical document, got %d: %#v", len(graph.Documents), graph.Documents)
+	}
+	if graph.Documents["FEAT-001"] == nil {
+		t.Fatal("expected canonical FEAT-001 in graph")
+	}
+	if got := graph.PathToID[filepath.FromSlash("docs/feat.md")]; got != "FEAT-001" {
+		t.Fatalf("expected docs/feat.md to map to FEAT-001, got %q", got)
+	}
+	if len(filterIssuesByKind(graph.Issues, IssueDuplicateID)) != 0 {
+		t.Fatalf("expected no duplicate_id issues, got %#v", graph.Issues)
+	}
+
+	hiddenRoot := filepath.Join(root, ".agents", "skills", "docs")
+	files, err := findMarkdownFiles(root, []string{hiddenRoot})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(files) != 0 {
+		t.Errorf("expected zero files under hidden root, got %v", files)
+	}
+}
+
+func TestHasHiddenPathSegment(t *testing.T) {
 	cases := map[string]bool{
 		"/repo/.ddx/plugins/helix/docs/foo.md":  true,
 		"/repo/.ddx/plugins":                    true,
 		".ddx/plugins/helix/docs/foo.md":        true,
 		".ddx/plugins":                          true,
-		"/repo/.ddx/library/foo.md":             false,
-		"/repo/docs/.ddx/plugins-not-this/x.md": false,
+		"/repo/.agents/skills/docs/foo.md":      true,
+		"/repo/.claude/skills/foo.md":           true,
+		"/repo/.skills/foo.md":                  true,
+		"/repo/.ddx/library/foo.md":             true,
+		"/repo/docs/.ddx/plugins-not-this/x.md": true,
 		"/repo/docs/foo.md":                     false,
+		"docs/foo.md":                           false,
+		".":                                     false,
 	}
 	for path, want := range cases {
-		if got := isInsideDDxPlugins(filepath.FromSlash(path)); got != want {
-			t.Errorf("isInsideDDxPlugins(%q) = %v, want %v", path, got, want)
+		if got := hasHiddenPathSegment(filepath.FromSlash(path)); got != want {
+			t.Errorf("hasHiddenPathSegment(%q) = %v, want %v", path, got, want)
 		}
 	}
 }
