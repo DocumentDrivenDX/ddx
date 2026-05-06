@@ -1,0 +1,38 @@
+{
+  "attempt_id": "20260506T011801-6a3687e3",
+  "bead_id": "ddx-00a8ed79",
+  "base_rev": "849d82c3ba7523ecd58d89de76af1ff8221d39e8",
+  "created_at": "2026-05-06T01:18:03.283859444Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-00a8ed79",
+    "title": "cli: support root --version flag",
+    "description": "PROBLEM\n  `ddx --version` exits with an unknown-flag error even though `ddx version` works. Operators commonly guess top-level `--version` for modern CLIs; DDx should support both forms so discovery works without removing or changing the existing `version` subcommand.\n\nROOT CAUSE\n  cli/cmd/command_factory.go:124-127 registers root persistent flags for `--config`, `--verbose`/`-v`, and `--library-base-path`, but no root `--version` flag exists. cli/cmd/command_factory.go:450-466 defines the `version` subcommand and prints the desired version/commit/build output there only. cli/cmd/command_factory.go:130-147 runs root PersistentPreRunE for normal command execution; a root `--version` path must print version info and exit successfully before ordinary command validation/update checks make the flag behave like a missing command.\n\nPROPOSED FIX\n  - Add a root persistent `--version` boolean flag in cli/cmd/command_factory.go near the other root flags.\n  - Factor the existing version-printing body from the `version` subcommand into a shared helper so `ddx version` and `ddx --version` return the same concise DDx version, commit, and build output.\n  - Wire root flag handling so `ddx --version` exits 0, writes to command stdout, does not require a subcommand, and does not consume `-v` because `-v` remains the verbose flag.\n  - Add focused tests in cli/cmd/version_acceptance_test.go for `TestRootVersionFlag_PrintsVersionAndBuildInfo` and `TestVersionCommand_StillPrintsVersionAndBuildInfo` (or update the existing acceptance test with those exact subtests).\n\nNON-SCOPE\n  - Do not remove or rename `ddx version`.\n  - Do not change `-v`; it remains verbose output.\n  - Do not alter `ddx status`, plugin version checks, installation/update behavior, or release metadata formatting beyond sharing the existing version output helper.\n\nPARENT\n  This is a root-level CLI ergonomics bug; no suitable open CLI umbrella bead exists.\n\nDEPS\n  No deps.",
+    "acceptance": "1. `ddx --version` exits 0 and prints the same DDx version, Commit, and Built lines currently printed by `ddx version`.\n2. `ddx version` remains supported and keeps printing DDx version, Commit, and Built lines.\n3. `-v` remains the existing verbose flag; this bead does not introduce `ddx -v` as a version alias.\n4. TestRootVersionFlag_PrintsVersionAndBuildInfo in cli/cmd/version_acceptance_test.go (or an equivalently named subtest under TestAcceptance_US008_CheckDDxVersion) verifies root `--version` output and exit success.\n5. TestVersionCommand_StillPrintsVersionAndBuildInfo in cli/cmd/version_acceptance_test.go (or the existing updated acceptance subtest) verifies the `version` subcommand still works after the helper extraction.\n6. `cd cli \u0026\u0026 go test ./cmd/... -run 'TestRootVersionFlag_PrintsVersionAndBuildInfo|TestVersionCommand_StillPrintsVersionAndBuildInfo|TestAcceptance_US008_CheckDDxVersion' -count=1` passes.\n7. `lefthook run pre-commit` passes.",
+    "labels": [
+      "phase:2",
+      "area:cli",
+      "kind:fix",
+      "ux",
+      "discovery"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T01:18:01Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "execute-loop-heartbeat-at": "2026-05-06T01:18:01.110867766Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260506T011801-6a3687e3",
+    "prompt": ".ddx/executions/20260506T011801-6a3687e3/prompt.md",
+    "manifest": ".ddx/executions/20260506T011801-6a3687e3/manifest.json",
+    "result": ".ddx/executions/20260506T011801-6a3687e3/result.json",
+    "checks": ".ddx/executions/20260506T011801-6a3687e3/checks.json",
+    "usage": ".ddx/executions/20260506T011801-6a3687e3/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-00a8ed79-20260506T011801-6a3687e3"
+  },
+  "prompt_sha": "1c46c8216a2a93b1b39d9e1396d1b542ac2e06cc59a74d4dd1f308ec8663e6ae"
+}
