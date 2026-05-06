@@ -1,0 +1,57 @@
+{
+  "harness": "claude",
+  "model": "claude-opus-4-6",
+  "base_rev": "736b2bf863d225d783ec9dfcf290e8c703488b32",
+  "result_rev": "c61963498759a10d96c08a278b488faf93652ec2",
+  "verdict": "BLOCK",
+  "bead_id": "ddx-e2bbcbae",
+  "execution_dir": ".ddx/executions/20260506T132209-90a526a3",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1170,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 180,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260506T132056-350a2253/manifest.json",
+          ".ddx/executions/20260506T132056-350a2253/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:FEAT-006",
+        "bytes_included": 30331,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/01-frame/features/FEAT-006-agent-service.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 41239,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 74710,
+    "output_bytes": 0,
+    "elapsed_ms": 4075,
+    "harness": "claude",
+    "model": "claude-opus-4-6"
+  }
+}
