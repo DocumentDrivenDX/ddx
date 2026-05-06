@@ -175,9 +175,6 @@ func isMarkdownStructureLine(line string) bool {
 
 func unsupportedClaim(line string) bool {
 	lower := strings.ToLower(line)
-	if hasEmpiricalOrCheckContext(lower) {
-		return false
-	}
 	if containsAny(lower, []string{
 		"seamless",
 		"industry-leading",
@@ -186,6 +183,12 @@ func unsupportedClaim(line string) bool {
 		"cutting-edge",
 	}) {
 		return true
+	}
+	if unsupportedComprehensiveClaim(lower) {
+		return true
+	}
+	if hasEmpiricalOrCheckContext(lower) {
+		return false
 	}
 	if countMatches(lower, []string{"robust", "comprehensive", "smooth", "elegant", "excited", "high"}) >= 2 {
 		return true
@@ -198,6 +201,21 @@ func unsupportedClaim(line string) bool {
 		"path forward",
 		"broadly useful",
 		"easy to adopt",
+	})
+}
+
+func unsupportedComprehensiveClaim(lower string) bool {
+	if !strings.Contains(lower, "comprehensive") {
+		return false
+	}
+	return containsAny(lower, []string{
+		"comprehensive prd",
+		"comprehensive implementation plan",
+		"comprehensive plan",
+		"comprehensive checklist",
+		"comprehensive checklists",
+		"comprehensive tests",
+		"comprehensive documentation",
 	})
 }
 
