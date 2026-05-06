@@ -1,0 +1,5 @@
+DELETE NewResolver - no `func NewResolver` exists in `cli/internal/server/graphql` on this branch, and `go run golang.org/x/tools/cmd/deadcode@v0.42.0 -json ./...` from `cli/` reports no dead symbols in `internal/server/graphql`.
+DELETE personaConnectionFrom - no `func personaConnectionFrom` exists in `cli/internal/server/graphql` on this branch, and the current deadcode run reports no dead symbols in `internal/server/graphql`.
+DELETE resetProviderModelsCacheForTest - no `func resetProviderModelsCacheForTest` exists in `cli/internal/server/graphql` on this branch, and the current deadcode run reports no dead symbols in `internal/server/graphql`.
+DELETE RecordHarnessRateLimit - no `func RecordHarnessRateLimit` exists in `cli/internal/server/graphql` on this branch, and the current deadcode run reports no dead symbols in `internal/server/graphql`.
+DELETE resetHarnessRateLimitCache - no `func resetHarnessRateLimitCache` exists in `cli/internal/server/graphql` on this branch, and the current deadcode run reports no dead symbols in `internal/server/graphql`.
