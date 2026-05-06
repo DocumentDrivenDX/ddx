@@ -1,0 +1,61 @@
+{
+  "attempt_id": "20260506T172809-7a0a7018",
+  "bead_id": "ddx-2d49729e",
+  "base_rev": "8d52f6a27e0e8100bb348d727c28d14a5dd0ad37",
+  "created_at": "2026-05-06T17:28:12.524600743Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2d49729e",
+    "title": "work: stop queue drain on resource_exhausted attempts",
+    "description": "PROBLEM\nddx work currently continues scanning and claiming ready beads after setup/infrastructure failures. During the May 6 ENOSPC incident, ddx work failed to create one isolated worktree, then immediately claimed another production-reachability bead and failed again. Resource exhaustion must stop the drain because continuing expands the blast radius.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead_loop.go:437-530 initializes loop events and exitReason but does not include resource_exhausted as a recognized loop-fatal exit reason.\n- cli/internal/agent/execute_bead_loop.go:529 onward continues iterating after non-success reports unless existing retry/no-progress/once logic stops it; there is no host-resource circuit breaker.\n- cli/internal/agent/execute_bead_status.go:263-283 defines status taxonomy around execution_failed/no_evidence/etc., but there is no distinct resource_exhausted status/reason for loop policy to inspect.\n- docs/helix/01-frame/features/FEAT-010-task-execution.md:434-440 and docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md:281-284 require ddx work to stop claiming new beads after resource_exhausted.\n\nPROPOSED FIX\n- Add a stable resource_exhausted attempt/loop classification that can be returned by ddx try/resource preflight and recognized by ExecuteBeadWorker.\n- On resource_exhausted, release any non-terminal claim, emit cleanup/resource events, set loop.end exit_reason=resource_exhausted, and return without scanning the next ready bead.\n- Print an operator-visible message such as resource exhausted after cleanup; stopping work loop.\n- Ensure resource_exhausted is not counted as model no-progress, capability retry, or review/quota retry.\n\nNON-SCOPE\n- Do not implement the resource checker itself here; this bead consumes the outcome from the try/resource-preflight bead.\n- Do not change queue ranking or production-reachability bead priority.\n- Do not change provider 429 in-attempt retry behavior.",
+    "acceptance": "1. TestExecuteBeadWorkerResourceExhaustedStopsLoop creates two ready beads and an executor returning resource_exhausted for the first; verifies the second bead is never claimed or executed.\n2. TestExecuteBeadWorkerResourceExhaustedUnclaimsAndNoCooldown verifies any claimed bead is open/re-claimable and no execute-loop-retry-after/no-progress cooldown is written.\n3. TestExecuteBeadWorkerResourceExhaustedLoopEndEvent verifies loop.end includes exit_reason=resource_exhausted and cleanup/resource detail is emitted.\n4. TestWorkResourceExhausted_PrintsOperatorMessage verifies the ddx work command output includes resource exhausted after cleanup; stopping work loop or the finalized exact message.\n5. Resource exhaustion remains distinct from review transport/quota and provider rate-limit retry in status/detail handling.\n6. cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run \"TestExecuteBeadWorkerResourceExhausted|TestWorkResourceExhausted\" -count=1 passes.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-f3dfde0d",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:cli",
+      "kind:bug",
+      "reliability",
+      "spec:FEAT-010",
+      "spec:SD-025",
+      "resource-exhaustion",
+      "cleanup"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T17:28:09Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "963074",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T17:28:09.406477484Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T17:28:09.800151211Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T172809-7a0a7018",
+    "prompt": ".ddx/executions/20260506T172809-7a0a7018/prompt.md",
+    "manifest": ".ddx/executions/20260506T172809-7a0a7018/manifest.json",
+    "result": ".ddx/executions/20260506T172809-7a0a7018/result.json",
+    "checks": ".ddx/executions/20260506T172809-7a0a7018/checks.json",
+    "usage": ".ddx/executions/20260506T172809-7a0a7018/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-2d49729e-20260506T172809-7a0a7018"
+  },
+  "prompt_sha": "d5e89e42acf1589a358852e763da285ae31e9e8139a128b5942437cb245161ea"
+}
