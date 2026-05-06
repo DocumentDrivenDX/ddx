@@ -294,6 +294,7 @@ func (f ExecuteBeadExecutorFunc) Execute(ctx context.Context, beadID string) (Ex
 
 type ExecuteBeadLoopStore interface {
 	ReadyExecution() ([]bead.Bead, error)
+	Get(id string) (*bead.Bead, error)
 	Claim(id, assignee string) error
 	Unclaim(id string) error
 	Heartbeat(id string) error
@@ -697,6 +698,22 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				})
 			case intakeOutcome == PreClaimIntakeActionableAtomic:
 				// pass-through
+			case intakeOutcome == PreClaimIntakeActionableButRewritten:
+				if err := applyPreClaimIntakeRewrite(w.Store, candidate.ID, assignee, intakeResult, now().UTC()); err != nil {
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake rewrite: %v (skipping %s)\n", err, candidate.ID)
+					}
+					emit("pre_claim_intake.blocked", map[string]any{
+						"bead_id": candidate.ID,
+						"outcome": string(PreClaimIntakeAmbiguousNeedsHuman),
+						"detail":  err.Error(),
+					})
+					if runtime.Once {
+						exitReason = "once_complete"
+						return result, nil
+					}
+					continue
+				}
 			case intakeOutcome == PreClaimIntakeError:
 				warning := intakeResult.Detail
 				if warning == "" {

@@ -19,6 +19,16 @@ const (
 type PreClaimIntakeResult struct {
 	Outcome PreClaimIntakeOutcome `json:"outcome,omitempty"`
 	Detail  string                `json:"detail,omitempty"`
+	Rewrite PreClaimIntakeRewrite `json:"rewrite,omitempty"`
+}
+
+// PreClaimIntakeRewrite carries intent-preserving bead edits returned by the
+// intake hook when a bead is actionable but needs safe refinement before
+// claim.
+type PreClaimIntakeRewrite struct {
+	Description   string   `json:"description,omitempty"`
+	Acceptance    string   `json:"acceptance,omitempty"`
+	ChangedFields []string `json:"changed_fields,omitempty"`
 }
 
 // PreClaimIntakeHook classifies a ready bead before Claim. The loop treats

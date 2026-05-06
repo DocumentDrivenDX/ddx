@@ -32,9 +32,16 @@ type preClaimIntakeAttempt struct {
 }
 
 type preClaimIntakePromptResult struct {
-	Classification string  `json:"classification"`
-	Confidence     float64 `json:"confidence,omitempty"`
-	Reasoning      string  `json:"reasoning,omitempty"`
+	Classification string                      `json:"classification"`
+	Confidence     float64                     `json:"confidence,omitempty"`
+	Reasoning      string                      `json:"reasoning,omitempty"`
+	Rewrite        preClaimIntakePromptRewrite `json:"rewrite,omitempty"`
+}
+
+type preClaimIntakePromptRewrite struct {
+	Description   string   `json:"description,omitempty"`
+	Acceptance    string   `json:"acceptance,omitempty"`
+	ChangedFields []string `json:"changed_fields,omitempty"`
 }
 
 // NewPreClaimIntakeHook constructs the bead-intake complexity gate used
@@ -107,6 +114,16 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 		switch strings.ToLower(strings.TrimSpace(out.Classification)) {
 		case "atomic":
 			return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic, Detail: strings.TrimSpace(out.Reasoning)}, nil
+		case "rewritten":
+			return PreClaimIntakeResult{
+				Outcome: PreClaimIntakeActionableButRewritten,
+				Detail:  strings.TrimSpace(out.Reasoning),
+				Rewrite: PreClaimIntakeRewrite{
+					Description:   strings.TrimSpace(out.Rewrite.Description),
+					Acceptance:    strings.TrimSpace(out.Rewrite.Acceptance),
+					ChangedFields: normalizePreClaimIntakeRewriteFields(out.Rewrite.ChangedFields),
+				},
+			}, nil
 		case "decomposable":
 			return PreClaimIntakeResult{Outcome: PreClaimIntakeTooLargeDecomposed, Detail: strings.TrimSpace(out.Reasoning)}, nil
 		case "ambiguous":
@@ -160,8 +177,11 @@ func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bea
 
 	var sb strings.Builder
 	sb.WriteString("MODE: intake\n")
-	sb.WriteString("You are evaluating whether this bead is atomic, decomposable, or ambiguous.\n")
-	sb.WriteString("Return exactly one JSON object matching the Complexity Evaluator schema.\n")
+	sb.WriteString("You are evaluating whether this bead is atomic, decomposable, ambiguous, or safely refinable before claim.\n")
+	sb.WriteString("Use rewritten only when you can preserve the bead's intent and return safe description/acceptance updates without inventing behavior, choosing product semantics, widening scope, or dropping acceptance criteria.\n")
+	sb.WriteString("If the bead cannot be safely refined, classify it as ambiguous.\n")
+	sb.WriteString("Return exactly one JSON object matching the intake schema with classification, confidence, reasoning, and optional rewrite fields.\n")
+	sb.WriteString("When classification is rewritten, include rewrite.changed_fields, rewrite.description, and rewrite.acceptance.\n")
 	sb.WriteString("Do not include prose or markdown.\n\n")
 	sb.WriteString("```json\n")
 	sb.Write(body)
@@ -185,6 +205,26 @@ func intakeResultPayload(result *Result) (string, error) {
 		return "", fmt.Errorf("pre-claim intake: no JSON object found")
 	}
 	return candidate, nil
+}
+
+func normalizePreClaimIntakeRewriteFields(fields []string) []string {
+	if len(fields) == 0 {
+		return nil
+	}
+	seen := make(map[string]struct{}, len(fields))
+	out := make([]string, 0, len(fields))
+	for _, field := range fields {
+		field = strings.ToLower(strings.TrimSpace(field))
+		if field == "" {
+			continue
+		}
+		if _, ok := seen[field]; ok {
+			continue
+		}
+		seen[field] = struct{}{}
+		out = append(out, field)
+	}
+	return out
 }
 
 const defaultStrongSplitterMinPower = 90

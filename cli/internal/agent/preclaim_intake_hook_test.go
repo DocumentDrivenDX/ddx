@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -204,4 +205,23 @@ func TestDecompositionHook_StrongPowerUnsatisfiedBlocks(t *testing.T) {
 	assert.Equal(t, PreClaimIntakeAmbiguousNeedsHuman, got.Outcome)
 	assert.Contains(t, got.Detail, "agent_power_unsatisfied")
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
+}
+
+func TestDecompositionHook_ActionableButRewrittenParsesRewrite(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+	escapedDescription := strings.ReplaceAll(b.Description, "\n", `\n`)
+
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"classification":"rewritten","confidence":0.91,"reasoning":"safe refinement","rewrite":{"changed_fields":["acceptance","description"],"description":"` + escapedDescription + `\n\nAdd an explicit validation step.","acceptance":"1. TestDecompositionHook_ActionableButRewrittenParsesRewrite\n2. cd cli && go test ./internal/agent/... -run \"TestIntake_.*Rewrite|TestLintHook\" -count=1\n3. lefthook run pre-commit"}}`,
+	}
+
+	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+	got, err := hook(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableButRewritten, got.Outcome)
+	assert.Equal(t, "safe refinement", got.Detail)
+	assert.Equal(t, []string{"acceptance", "description"}, got.Rewrite.ChangedFields)
+	assert.Contains(t, got.Rewrite.Description, "Add an explicit validation step.")
+	assert.Contains(t, got.Rewrite.Acceptance, "lefthook run pre-commit")
 }

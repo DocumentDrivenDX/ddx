@@ -3,7 +3,9 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -180,4 +182,141 @@ func TestIntake_NonAtomicSkipsClaim(t *testing.T) {
 	got, err := inner.Get("ddx-0001")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
+}
+
+func TestIntake_ActionableButRewritten_UpdatesBeforeClaim(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+		b.Description = "PROBLEM\nlegacy intake is vague\n\nROOT CAUSE\nmissing constraints\n\nPROPOSED FIX\nrewrite the bead\n\nNON-SCOPE\nchange no product semantics\n"
+		b.Acceptance = "1. preserve the original intent\n2. name the verification command"
+	}))
+
+	var claimSawRewrite int32
+	store := &claimCountingStore{
+		Store: inner,
+		beforeClaim: func() {
+			got, err := inner.Get(candidate.ID)
+			require.NoError(t, err)
+			if !strings.Contains(got.Description, "Add an explicit validation step.") {
+				t.Fatalf("description must be rewritten before Claim; got %q", got.Description)
+			}
+			if !strings.Contains(got.Acceptance, "lefthook run pre-commit") {
+				t.Fatalf("acceptance must be rewritten before Claim; got %q", got.Acceptance)
+			}
+			atomic.StoreInt32(&claimSawRewrite, 1)
+		},
+	}
+
+	var eventSink bytes.Buffer
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-intake-rewrite",
+				ResultRev: "abc123",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:      true,
+		EventSink: &eventSink,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome: PreClaimIntakeActionableButRewritten,
+				Detail:  "tightened scope and verification",
+				Rewrite: PreClaimIntakeRewrite{
+					Description:   "PROBLEM\nlegacy intake is vague\n\nROOT CAUSE\nmissing constraints\n\nPROPOSED FIX\nrewrite the bead\n\nNON-SCOPE\nchange no product semantics\n\nAdd an explicit validation step.",
+					Acceptance:    "1. preserve the original intent\n2. name the verification command\n3. lefthook run pre-commit",
+					ChangedFields: []string{"description", "acceptance"},
+				},
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "rewritten intake must still proceed to Claim")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&claimSawRewrite), "rewrite must land before Claim")
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
+
+	got, err := inner.Get(candidate.ID)
+	require.NoError(t, err)
+	assert.Contains(t, got.Description, "Add an explicit validation step.")
+	assert.Contains(t, got.Acceptance, "lefthook run pre-commit")
+
+	events, err := inner.Events(candidate.ID)
+	require.NoError(t, err)
+	var found bool
+	for _, ev := range events {
+		if ev.Kind != "intake-rewritten" {
+			continue
+		}
+		found = true
+		assert.Contains(t, ev.Summary, "description")
+		assert.Contains(t, ev.Summary, "acceptance")
+		var body map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+		assert.Equal(t, "tightened scope and verification", body["rationale"])
+		assert.Contains(t, body, "before")
+		assert.Contains(t, body, "after")
+		assert.NotContains(t, ev.Body, "MODE: intake")
+		assert.NotContains(t, ev.Body, "legacy intake is vague\n\nROOT CAUSE")
+	}
+	require.True(t, found, "rewritten intake must record an intake-rewritten event")
+}
+
+func TestIntake_UnsafeRewriteBlocksForHuman(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+		b.Description = "PROBLEM\nlegacy intake is vague\n\nROOT CAUSE\nmissing constraints\n\nPROPOSED FIX\nrewrite the bead\n"
+		b.Acceptance = "1. preserve the original intent\n2. name the verification command"
+	}))
+
+	store := &claimCountingStore{Store: inner}
+	var eventSink bytes.Buffer
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatal("executor must not run for unsafe rewrites")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:      true,
+		EventSink: &eventSink,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome: PreClaimIntakeActionableButRewritten,
+				Detail:  "attempted to drop acceptance criteria",
+				Rewrite: PreClaimIntakeRewrite{
+					Description:   "PROBLEM\ninvented product semantics\n",
+					Acceptance:    "1. preserve the original intent",
+					ChangedFields: []string{"description", "acceptance"},
+				},
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, int32(0), atomic.LoadInt32(&store.claimCalls), "unsafe rewrite must not proceed to Claim")
+	assert.Contains(t, eventSink.String(), "pre_claim_intake.blocked")
+	assert.Contains(t, eventSink.String(), "ambiguous_needs_human")
+	assert.Equal(t, 0, result.Attempts)
+
+	got, err := inner.Get(candidate.ID)
+	require.NoError(t, err)
+	assert.NotContains(t, got.Description, "invented product semantics")
+	assert.Equal(t, "1. preserve the original intent\n2. name the verification command", got.Acceptance)
 }
