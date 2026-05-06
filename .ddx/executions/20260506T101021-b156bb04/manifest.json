@@ -1,0 +1,58 @@
+{
+  "harness": "claude",
+  "model": "opus",
+  "session_id": "/Users/erik/Projects/ddx/.ddx/agent-logs/svc-1778062223419269288.jsonl",
+  "base_rev": "79fb3aca77177f5eced75cec760fe0c123b16b57",
+  "result_rev": "75fd63c3bb3fcd47b5216a1d7ce292a0bacaa16d",
+  "bead_id": "ddx-317d0254",
+  "execution_dir": ".ddx/executions/20260506T101021-b156bb04",
+  "evidence_assembly": {
+    "sections": [
+      {
+        "name": "bead",
+        "bytes_included": 1861,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "bead"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "changed-files",
+        "bytes_included": 274,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          ".ddx/executions/20260506T100540-6ca9c889/checks/production-reachability.json",
+          ".ddx/executions/20260506T100540-6ca9c889/manifest.json",
+          ".ddx/executions/20260506T100540-6ca9c889/result.json"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "governing:TD-036",
+        "bytes_included": 8948,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": [
+          "docs/helix/02-design/technical-designs/TD-036-prose-quality-pipeline.md"
+        ],
+        "omitted_items": null
+      },
+      {
+        "name": "diff",
+        "bytes_included": 5239,
+        "bytes_omitted": 0,
+        "truncation_reason": "",
+        "selected_items": null,
+        "omitted_items": null
+      }
+    ],
+    "input_bytes": 18108,
+    "output_bytes": 59,
+    "elapsed_ms": 48482,
+    "harness": "claude",
+    "model": "opus"
+  }
+}
