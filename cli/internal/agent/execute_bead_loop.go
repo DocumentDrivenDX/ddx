@@ -509,7 +509,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			return result, err
 		}
 
-		candidate, skips, ok, err := w.nextCandidate(ctx, result.Results[resultsResetIdx:], []work.Guard{complexityGuard}, runtime.LabelFilter, runtime.TargetBeadID)
+		candidate, skips, ok, err := w.nextCandidate(ctx, result.Results[resultsResetIdx:], []work.Guard{complexityGuard, preclaimGuard}, runtime.LabelFilter, runtime.TargetBeadID)
 		if err != nil {
 			exitReason = "fatal_config"
 			return result, err
@@ -525,6 +525,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			emitPickerPrioritySkips(emit, candidate, skips)
 		}
 		if !ok {
+			if hasGuardSkips(skips) {
+				continue
+			}
 			if result.Attempts == 0 {
 				result.NoReadyWork = true
 				if diag, ok := w.Store.(readyDiagnoser); ok {
@@ -618,14 +621,6 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 			continue
 		}
-		if allowed, reason := preclaimGuard.Allow(ctx, candidate.ID); !allowed {
-			emit("preclaim.skipped", map[string]any{
-				"bead_id": candidate.ID,
-				"reason":  reason,
-			})
-			continue
-		}
-
 		// Routing preflight gate (FEAT-006 D3, ddx-98e6e9ef): consult the
 		// upstream typed-incompatibility surface BEFORE claiming. If the
 		// configured (harness, model) cannot serve the bead, exit the loop
@@ -1226,6 +1221,18 @@ type pickerSkip struct {
 	Reason   string
 }
 
+func hasGuardSkips(skips []pickerSkip) bool {
+	for _, skip := range skips {
+		switch skip.Reason {
+		case "label_filter", "in_attempted", "claim_race", "eligibility_filter", "retry_cooldown", "target_bead":
+			continue
+		default:
+			return true
+		}
+	}
+	return false
+}
+
 // nextCandidate returns the next claimable bead from the execution-ready
 // queue along with the list of higher-priority beads it skipped (and the
 // reason for each skip). The returned skips slice is only meaningful when
@@ -1245,8 +1252,9 @@ func (w *ExecuteBeadWorker) nextCandidate(ctx context.Context, results []Execute
 	}
 
 	// Rebuild the ready list from the preview entries in picker order so we
-	// can apply the per-Run attempted map on top. We need the original bead
-	// values for the return; fetch them from ReadyExecution (already ordered).
+	// can apply the per-run drain results slice on top. We need the original
+	// bead values for the return; fetch them from ReadyExecution (already
+	// ordered).
 	ready, err := w.Store.ReadyExecution()
 	if err != nil {
 		return bead.Bead{}, nil, false, err
