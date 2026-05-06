@@ -1,0 +1,40 @@
+{
+  "attempt_id": "20260506T120844-d2a3f066",
+  "bead_id": "ddx-958b8fc3",
+  "base_rev": "be7e546b1fe2902a8a429bca7786b9fc072f6df9",
+  "created_at": "2026-05-06T12:08:47.172499657Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-958b8fc3",
+    "title": "bead/axon: parameterize conformance suites across JSONL and Axon",
+    "description": "PROBLEM\nThe package-level conformance coverage still needs a single matrix that proves both backends satisfy the same behavioral contract. The current chaos harness already names jsonl and axon in cli/internal/bead/chaos_test.go:23-36, but the rest of the package still relies on ad hoc store construction and has no package-wide backend matrix to prove the new Axon path behaves identically.\n\nROOT CAUSE\ncli/internal/bead/chaos_test.go:23-36 only defines the backend table; there is no end-to-end package test matrix yet that runs the conformance suite through both backends and keeps the existing package tests honest. The rest of the test package still defaults to newTestStore(t) in many places, so the Axon path is not yet a first-class test target.\n\nPROPOSED FIX\n- Extend the backend test helpers so the package conformance suite can run under both jsonl and axon.\n- Keep TestChaos_ConcurrentAppendSafety, TestChaos_AtomicStatusTransitions, TestChaos_ConcurrentCloseAndAppend, and TestChaos_ConcurrentCloseNotLost as explicit backend matrix coverage.\n- Make the package test harness clearly fail if either backend diverges.\n\nNON-SCOPE\n- GraphQL client generation.\n- Backend selection/config plumbing.\n- Subscription integration smoke tests.",
+    "acceptance": "1. TestChaos_ConcurrentAppendSafety, TestChaos_AtomicStatusTransitions, TestChaos_ConcurrentCloseAndAppend, and TestChaos_ConcurrentCloseNotLost run under both jsonl and axon subtests.\n2. The package conformance helpers make the backend selector explicit instead of silently defaulting in only one path.\n3. cd cli \u0026\u0026 go test ./internal/bead/... passes.\n4. lefthook run pre-commit passes.",
+    "parent": "ddx-8d747049",
+    "labels": [
+      "phase:2",
+      "area:beads",
+      "area:storage",
+      "kind:feature",
+      "blocked-on-upstream:axon-05c1019d",
+      "blocked-on-upstream:axon-82b6f7b2"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T12:08:44Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "execute-loop-heartbeat-at": "2026-05-06T12:08:44.337037048Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260506T120844-d2a3f066",
+    "prompt": ".ddx/executions/20260506T120844-d2a3f066/prompt.md",
+    "manifest": ".ddx/executions/20260506T120844-d2a3f066/manifest.json",
+    "result": ".ddx/executions/20260506T120844-d2a3f066/result.json",
+    "checks": ".ddx/executions/20260506T120844-d2a3f066/checks.json",
+    "usage": ".ddx/executions/20260506T120844-d2a3f066/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-958b8fc3-20260506T120844-d2a3f066"
+  },
+  "prompt_sha": "42b14a6a2df1ce12e38c937bb62bb3e4a516f6543fa2cc422abeff37089c999c"
+}
