@@ -81,6 +81,30 @@ Acceptance:
 - Rule files are shipped by `ddx init` / default plugin update.
 - Existing DDx terms remain accepted by default.
 
+Rule-pack contents:
+
+| Vale file | DDx rule id | Purpose | Example finding |
+|---|---|---|---|
+| `DDx/UnsupportedClaim.yml` | `prose.claim.unsupported` | Broad praise or capability claim without concrete subject, mechanism, or evidence. | "This robust system creates a seamless workflow." |
+| `DDx/AISlop.yml` | `prose.ai_slop.polish` | LLM-default polish words and phrases when they replace useful detail. | "This unlocks powerful, sophisticated automation." |
+| `DDx/FillerTransition.yml` | `prose.filler.transition` | Throat-clearing transitions that can be removed without losing meaning. | "It is important to note that..." |
+| `DDx/MissingActorAction.yml` | `prose.specificity.actor_action` | Sentences that say a process "enables", "supports", or "streamlines" without naming the actor, action, artifact, or boundary. | "This enables better collaboration across the workflow." |
+| `DDx/TokenCost.yml` | `prose.cost.filler` | Removable intensifiers, duplicate summaries, or empty framing that increase token cost without adding execution value. | "In order to effectively begin to..." |
+| `DDx/RepeatedOpening.yml` | `prose.structure.repeated_opening` | Repeated opening sentence shapes or duplicated lead-ins that read like generated filler. | "This document provides..." repeated across adjacent paragraphs. |
+| `DDx/Vocabulary.yml` | `prose.vocabulary.generic_substitute` | Project-local generic substitutes that hide DDx terms. | "task" where the document means "bead", if configured. |
+
+Rule implementation notes:
+
+- Use Vale existence/substitution rules for deterministic phrase detection.
+- Use Vale scopes and token ignores to skip code spans, fenced blocks, links,
+  and frontmatter.
+- Use DDx normalization to merge multiple word-level Vale hits on the same line
+  into one DDx finding when the sentence has one underlying problem.
+- Keep rule messages short; DDx owns the longer rationale and suggested edit in
+  the normalization layer.
+- Avoid default "bad word" behavior. A word becomes a finding only when the rule
+  description says why it weakens DDx execution, review, trust, or token cost.
+
 ### Phase 3: Vale Adapter and Normalization
 
 Make `ddx doc prose` invoke Vale while returning DDx findings.
@@ -131,6 +155,40 @@ Acceptance:
 - Full `docs/**` scan reports a plausible number of findings and no broad
   technical-structure noise.
 
+Corpus contents:
+
+| Corpus group | Purpose | Minimum cases |
+|---|---|---:|
+| `positive/ai-slop` | Common LLM constructions that sound polished but omit useful detail. | 12 |
+| `positive/unsupported-claim` | Broad claims that need actor/action/evidence. | 10 |
+| `positive/token-cost` | Sentences where shorter wording is strictly better. | 10 |
+| `positive/missing-actor-action` | Abstract "enables/supports/streamlines" sentences. | 8 |
+| `negative/technical-density` | Dense but useful DDx technical prose. | 10 |
+| `negative/markdown-structure` | Tables, commands, paths, links, frontmatter, IDs, code spans. | 12 |
+| `negative/evidence-backed-claim` | Strong claims backed by tests, benchmarks, measurements, or explicit constraints. | 8 |
+| `real/ddx-docs` | Excerpts from existing DDx docs with reviewed labels. | 30 |
+
+Evaluation metrics:
+
+| Metric | Gate |
+|---|---|
+| Positive recall | At least 80% of labeled positive cases produce the expected DDx rule id. |
+| Negative quiet rate | At least 90% of negative cases produce no finding. |
+| Structure false positives | 0 findings in code spans, fenced blocks, paths, commands, frontmatter, and DDx IDs unless the case is explicitly positive. |
+| Token-cost precision | At least 80% of token-cost findings are judged shorter-without-meaning-loss. |
+| Real-doc usefulness | A manual review of the full-doc scan marks at least 70% of findings useful. |
+| Finding volume | Full `docs/**` scan is sparse enough for review: target under 1 finding per 1,000 words until rules prove higher precision. |
+
+How we know it works:
+
+- Golden tests lock expected normalized findings for the corpus.
+- A full `docs/**` report is reviewed and labeled before enabling workflow
+  hooks.
+- Each rule has both positive and negative examples; no rule ships with only
+  synthetic positives.
+- Token-count improvements are reported separately from clarity findings so
+  terse-but-ambiguous rewrites do not pass as quality improvements.
+
 ### Phase 5: Agent Skill Upgrade
 
 Make agents use the prose workflow without reminders.
@@ -152,6 +210,55 @@ Acceptance:
 - Skill validation passes.
 - A docs-edit dry run shows the agent runs the prose check, applies obvious
   edits, and leaves legitimate technical prose intact.
+
+Skill contents:
+
+- Trigger: any writing, rewriting, editing, or reviewing of Markdown under
+  `docs/`.
+- Required workflow:
+  1. preserve the author's intent and DDx terminology;
+  2. edit the document;
+  3. run `ddx doc prose --changed`;
+  4. apply high-signal findings;
+  5. rerun `ddx doc prose --changed`;
+  6. summarize remaining intentional exceptions.
+- Preservation rules:
+  - keep paths, commands, IDs, frontmatter, headings, table structure, API
+    names, and acceptance criteria intact;
+  - do not flatten useful technical density;
+  - do not rewrite quoted source text unless the task is explicitly about that
+    quote.
+- Rewrite guidance:
+  - replace broad claims with actor/action/artifact/evidence;
+  - delete filler transitions when the sentence still reads correctly;
+  - prefer shorter wording when it is equally precise;
+  - split overstuffed sentences only when doing so improves reviewability;
+  - leave a finding unresolved when the flagged text is precise and explain why.
+- Examples:
+  - unsupported benefit claim before/after;
+  - AI-slop paragraph before/after;
+  - token-cost reduction before/after with word-count delta;
+  - false positive that should be ignored;
+  - table/path/API sample that must not be rewritten.
+
+Skill evals:
+
+| Eval | Prompt | Pass condition |
+|---|---|---|
+| `docs-edit-runs-check` | Edit a small doc under `docs/`. | Agent runs `ddx doc prose --changed` after editing. |
+| `fixes-ai-slop` | Given a doc with broad LLM-default claims. | Agent rewrites to concrete actor/action/evidence and reruns the check. |
+| `preserves-technical-structure` | Given a doc with paths, commands, tables, IDs, and AC. | Agent leaves structure intact and does not chase false positives. |
+| `reduces-token-cost` | Given filler-heavy prose with clear meaning. | Agent shortens prose without losing constraints or evidence. |
+| `reports-exceptions` | Given a legitimate finding that should remain. | Agent states the exception and rationale instead of silently ignoring it. |
+
+How we know the skill works:
+
+- The eval prompts run through the same skill-loading path agents use in normal
+  work.
+- Each eval checks behavior, not exact prose: command was run, findings were
+  handled, structure was preserved, and remaining exceptions were explained.
+- A failed eval produces a concrete skill patch, not a checker-rule patch,
+  unless the underlying deterministic finding is wrong.
 
 ### Phase 6: Workflow Hooks
 
@@ -207,16 +314,52 @@ The evaluation corpus should track token-cost candidates separately from
 clarity findings so DDx can tune this without encouraging terse but ambiguous
 docs.
 
-## Open Beads To File
+## Bead Breakdown
 
-1. `doctor: validate pinned Vale prose checker`
-2. `docprose: add DDx Vale style pack`
-3. `docprose: invoke Vale and normalize JSON findings`
-4. `docprose: build labeled prose corpus`
-5. `skills: upgrade human-writing-support workflow examples`
-6. `try: attach prose-check evidence for docs-changing attempts`
+This plan is not one bead. It is an epic with dependency-ordered child beads.
+Each child should be executable on its own, with a narrow file scope and a
+small verification surface.
+
+### Epic
+
+`prose: integrate Vale-backed DDx prose quality`
+
+Acceptance:
+
+1. `ddx doctor` reports pinned Vale health.
+2. `ddx doc prose --changed` uses Vale-backed DDx rules with no project
+   `.vale.ini`.
+3. Normalized findings use DDx rule IDs, rationales, and suggested edits.
+4. Labeled corpus tests prove useful findings and low structural noise.
+5. `human-writing-support` tells agents how to run and apply the workflow.
+6. Docs-changing DDx attempts attach advisory prose-check evidence.
+
+### Child Beads
+
+| Order | Bead | Scope | Depends on |
+|---:|---|---|---|
+| 1 | `doctor: validate pinned Vale prose checker` | `cli/cmd/doctor.go`, doctor tests, constants for Vale version. | none |
+| 2 | `docprose: add DDx Vale style pack skeleton` | `library/checks/prose-quality/styles/DDx/`, metadata schema, no command wiring. | 1 |
+| 3 | `docprose: add corpus harness for normalized findings` | `cli/internal/docprose/testdata/corpus/`, corpus loader/tests, expected JSON schema. | 2 |
+| 4 | `docprose: port initial rules to Vale styles` | Vale style files and corpus golden cases for unsupported claim, AI slop, filler, token cost. | 3 |
+| 5 | `docprose: generate temporary Vale config` | config generation from DDx defaults/project config; no Vale execution yet. | 2 |
+| 6 | `docprose: invoke Vale and parse JSON` | Vale subprocess adapter, JSON structs, error diagnostics. | 5 |
+| 7 | `docprose: normalize Vale findings to DDx findings` | rule-id mapping, rationale/suggested-edit mapping, line merge behavior. | 4, 6 |
+| 8 | `doc prose: switch command to Vale-backed engine` | `ddx doc prose --changed` and explicit path behavior. | 7 |
+| 9 | `bead review: reuse Vale-backed prose findings` | `ddx bead review --prose` path, review evidence. | 8 |
+| 10 | `skills: upgrade human-writing-support workflow examples` | active and shipped skill copies, eval prompts if available. | 8 |
+| 11 | `try: attach prose-check evidence for docs-changing attempts` | execute/try/work evidence capture and advisory handling. | 8, 10 |
+| 12 | `docs: run Vale-backed prose pass across DDx docs` | Apply high-signal findings to `docs/**`; record before/after finding count and word-count delta. | 11 |
+
+### Split Rules
+
+- If a bead would touch both command plumbing and rule semantics, split it.
+- If a bead would require changing execution flow and docs content, split it.
+- If corpus labels change because rule behavior changes, keep that with the
+  rule bead that caused the change.
+- Do not file the full-doc cleanup bead until the checker, skill, and workflow
+  evidence path are working.
 
 Each bead should reference ADR-025 and this plan via `spec-id` or inline
 context. The first implementation bead should start with `ddx doctor` because
 the engine decision depends on a trustworthy Vale binary.
-
