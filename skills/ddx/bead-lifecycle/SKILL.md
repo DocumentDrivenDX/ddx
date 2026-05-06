@@ -1,18 +1,20 @@
 ---
 name: bead-lifecycle
-description: Score, classify, and refine ddx beads. Used by ddx try hooks pre-dispatch (lint mode) and post-attempt (triage mode); operator-invocable for refine mode.
+description: Assess readiness, score, classify, and refine ddx beads. Used by ddx try/work hooks before claim or dispatch, after failed attempts, and for operator-invoked refinement.
 ---
 
 # Bead Lifecycle
 
-Score, classify, and refine DDx beads using the repository's bead-authoring
-rubric. This skill is intentionally prompt-only: it gives agents a stable
-contract for bead quality checks before dispatch, failed-attempt triage after
-dispatch, and operator-invoked bead refinement.
+Assess readiness, score, classify, and refine DDx beads using the repository's
+bead-authoring rubric. This skill is intentionally prompt-only: it gives agents
+a stable contract for bead readiness checks before claim or dispatch,
+failed-attempt triage after dispatch, and operator-invoked bead refinement.
 
 Invocation prompts MUST begin with one of:
 
 ```text
+MODE: readiness
+MODE: intake
 MODE: lint
 MODE: triage
 MODE: refine
@@ -24,6 +26,107 @@ for explanatory prose.
 
 Ground all scoring in `docs/helix/06-iterate/bead-authoring-template.md`, which
 is canonical for the 8-criterion sufficient-sub-agent-prompt rubric.
+
+`MODE: intake` is the compatibility name for readiness mode. Treat it exactly
+like `MODE: readiness` unless the caller gives a narrower schema.
+
+## READINESS MODE
+
+Use readiness mode before a bead is claimed or dispatched. The input is bead
+JSON plus any available queue context, dependencies, prior attempt summaries,
+or cheap repository evidence. The goal is to decide whether the bead is a
+tractable, self-contained unit of work for an agent before DDx spends an
+implementation attempt.
+
+Readiness mode answers a different question than infrastructure preflight.
+Do not classify provider outages, quota exhaustion, missing harnesses,
+transport failures, git index locks, worktree creation failures, ENOSPC, or
+missing lifecycle automation as bead defects. Report those as system readiness
+failures so DDx can pause, preflight, clean up, or fail open according to the
+current policy.
+
+Check these bead-readiness failure reasons when the evidence is available:
+
+1. `too_large` — the bead bundles multiple independent implementation scopes,
+   broad subsystem rewrites, or acceptance criteria that should be split into
+   child beads.
+2. `ambiguous_scope` — the requested behavior, ownership boundary, target file,
+   or non-scope is unclear or contradictory.
+3. `missing_root_cause_or_current_state` — a fix bead lacks file:line-grounded
+   root cause, or a feature/docs bead lacks a concrete current-state anchor.
+4. `missing_verification` — acceptance criteria lack named `Test*` symbols,
+   unique `go test -run` filters, package-level `go test` commands, or
+   `lefthook run pre-commit`, after legitimate waivers.
+5. `missing_code_path_assertion` — introduced behavior has no wired assertion
+   or reachable integration check, after legitimate waivers.
+6. `missing_dependency_or_parent` — dependency, parent, spec-id, or external
+   prerequisite information needed to execute safely is absent or inconsistent.
+7. `hidden_external_blocker` — progress depends on credentials, service state,
+   human decisions, generated artifacts, or upstream work that is not encoded
+   as a dependency or blocker.
+8. `already_satisfied_candidate` — cheap evidence strongly suggests the AC is
+   already met and the attempt would be a no-op unless verification proves
+   otherwise.
+
+Return JSON only:
+
+```json
+{
+  "classification": "ready|needs_refine|needs_split|needs_human|system_unready",
+  "tractability": "tractable|too_large|ambiguous|blocked|unknown",
+  "score": 0,
+  "rationale": "brief evidence-grounded explanation",
+  "readiness_checks": [
+    {
+      "reason": "too_large|ambiguous_scope|missing_root_cause_or_current_state|missing_verification|missing_code_path_assertion|missing_dependency_or_parent|hidden_external_blocker|already_satisfied_candidate|system_unready",
+      "verdict": "pass|fail|unknown|waived",
+      "evidence": "smallest durable evidence, preferably file:line or bead field",
+      "checkable_before_attempt": true
+    }
+  ],
+  "suggested_fixes": [
+    {
+      "target": "title|description|acceptance|labels|parent|deps|split|system",
+      "fix": "specific amendment, split, or operator action"
+    }
+  ],
+  "suggested_child_beads": [
+    {
+      "title": "imperative child title",
+      "description": "standalone PROBLEM / ROOT CAUSE or CURRENT STATE / PROPOSED FIX / NON-SCOPE summary",
+      "acceptance": [
+        "1. Named verification criterion."
+      ],
+      "labels": [
+        "phase:*",
+        "area:*",
+        "kind:*"
+      ],
+      "parent": "ddx-id",
+      "deps": [
+        "ddx-id: why"
+      ]
+    }
+  ],
+  "waivers_applied": [
+    {
+      "reason": "doc-only|epic|deletion|rename",
+      "criteria": [
+        "c"
+      ],
+      "evidence": "why the waiver is legitimate"
+    }
+  ]
+}
+```
+
+Use `ready` only when the bead is tractable and the sufficient-prompt rubric
+passes after legitimate waivers. Use `needs_refine` when targeted metadata or
+AC edits can make the bead ready without changing intent. Use `needs_split`
+when child beads are required. Use `needs_human` when intent, scope, or
+external state cannot be safely inferred. Use `system_unready` only when the
+readiness assessment itself cannot run or the provided context proves an
+infrastructure blocker rather than a bead defect.
 
 ## LINT MODE
 
@@ -130,6 +233,21 @@ Valid recommended actions:
 Prefer the narrowest classification supported by the evidence. If the log shows
 both a vague bead and a tool timeout, classify the first event that explains why
 work could not be completed reliably.
+
+Do not collapse recurring system failures into bead-quality failures. Recent
+attempt evidence should be classified as follows:
+
+- Provider exhaustion, quota ceilings, missing viable provider, missing harness,
+  or transport errors are `routing`, `quota`, or `transport`.
+- ENOSPC, failed worktree creation, evidence write failures, and git index lock
+  contention are `recoverable` infrastructure failures unless the log proves a
+  deterministic repository defect.
+- A pre-execute checkpoint or pre-commit failure before implementation starts
+  is `recoverable` or `needs_investigation` unless the failing test output
+  identifies a bead-owned code regression.
+- `no_changes` with passing verification is `already_satisfied`; `no_changes`
+  without enough proof is `no_changes_unjustified`.
+- Red tests after the worker changed code are `tests_red`.
 
 Return JSON only:
 
