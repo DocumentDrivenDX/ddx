@@ -1,0 +1,5 @@
+`internal/server/graphql/resolver.go:21 NewResolver` - DELETE: no `NewResolver` symbol exists in the current tree; server code constructs `&graphql.Resolver{...}` directly in `cli/internal/server/server.go:4869`.
+`internal/server/graphql/resolver_meta.go:90 personaConnectionFrom` - DELETE: no `personaConnectionFrom` symbol exists in the current tree; the package only retains generated persona connection support.
+`internal/server/graphql/resolver_provider_models.go:292 resetProviderModelsCacheForTest` - DELETE: no `resetProviderModelsCacheForTest` symbol exists in the current tree; tests reset `providerModelsCache` inline in `cli/internal/server/graphql/resolver_provider_models_test.go`.
+`internal/server/graphql/resolver_providers.go:35 RecordHarnessRateLimit` - DELETE: no `RecordHarnessRateLimit` symbol exists in the current tree; the package now exposes `LookupHarnessRateLimit`, which `quotaFromHarnessInfo` reads.
+`internal/server/graphql/resolver_providers.go:55 resetHarnessRateLimitCache` - DELETE: no `resetHarnessRateLimitCache` symbol exists in the current tree; the cache is package-private and has no production reset path.
