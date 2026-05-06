@@ -30,7 +30,8 @@ substrate; layer metadata distinguishes records.
 
 Implementation code for this boundary should follow the task-execution
 vocabulary (`taskexec` for core layer logic, `fizeauadapter` for the service
-bridge) rather than the legacy `internal/agent` package name.
+bridge) rather than the legacy `internal/agent` package name. Those package
+names should make the DDx-owned workflow boundary explicit.
 
 `ddx artifact regenerate <id>` is sugar over layer 1 (or layer 2 when the
 generator edits the repo) with `produces_artifact: <id>` metadata. It is

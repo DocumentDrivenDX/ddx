@@ -35,6 +35,10 @@ DDx owns the bead-driven workflow surface. It does NOT own:
 
 Those all live inside Fizeau per CONTRACT-003.
 
+Historical migration notes below preserve older ddx-agent naming and draft
+shapes for traceability only. They are not the desired current contract names
+or preferred DDx terminology.
+
 DDx owns:
 
 - **Bead-driven invocation.** `ddx try`, `ddx work`, and the server's
@@ -155,6 +159,7 @@ ddx run --min-power 10 --model qwen36 --prompt task.md
 
 DDx forwards `qwen36` verbatim. Fizeau owns any fuzzy matching, alias
 resolution, provider fallback, or typed error returned for that raw string.
+DDx passes the raw string unchanged.
 
 These fields must not leak into DDx routing policy:
 
