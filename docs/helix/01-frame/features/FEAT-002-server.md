@@ -161,7 +161,7 @@ resolve exactly one project context.
     event/transcript envelope data; those payloads are opaque to DDx, owned by
     Fizeau, and are distinct from worker lifecycle events. DDx stores them as
     attachments, does not render or semantically interpret the inner Fizeau
-    session logs, and does not treat them as worker lifecycle state. The
+    transcript or session-log content, and does not treat them as worker lifecycle state. The
     payload is evidence, not worker progress.
 21. MCP tool: `ddx_agent_sessions` (project selector required unless singleton compatibility mode applies)
 
