@@ -24,10 +24,14 @@ import (
 // (assignee, retry caps, harness/model, tier bounds, etc.) live on
 // config.ResolvedConfig and are passed via Run's rcfg argument.
 type ExecuteBeadLoopRuntime struct {
-	Log          io.Writer
-	EventSink    io.Writer
-	ProgressCh   chan<- ProgressEvent
-	PreClaimHook func(ctx context.Context) error
+	Log             io.Writer
+	CleanupLog      io.Writer
+	CleanupRunner   executionCleanupRunner
+	CleanupInterval time.Duration
+	CleanupTickCh   <-chan time.Time
+	EventSink       io.Writer
+	ProgressCh      chan<- ProgressEvent
+	PreClaimHook    func(ctx context.Context) error
 	// PreClaimIntakeHook runs after routing preflight and before Claim. It
 	// classifies the candidate for actionability/scope; only
 	// actionable_atomic proceeds directly to Claim. Non-atomic outcomes
@@ -483,6 +487,13 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		"assignee":     assignee,
 		"once":         runtime.Once,
 	})
+	cleanupLog := runtime.CleanupLog
+	if cleanupLog == nil {
+		cleanupLog = runtime.Log
+	}
+	cleanupStop := startExecutionCleanupWorker(ctx, runtime.ProjectRoot, runtime.CleanupRunner, runtime.CleanupInterval, runtime.CleanupTickCh, cleanupLog, emit)
+	defer cleanupStop()
+	_, _, _ = runExecutionCleanupPass(ctx, runtime.ProjectRoot, runtime.CleanupRunner, cleanupLog, emit, "startup")
 	// exitReason is populated as the loop exits to surface a structured reason
 	// in the loop.end event (ddx-dc157075 AC #4). Recognized values: "sigterm",
 	// "sigint", "fatal_config", "preflight_failed", "once_complete",
@@ -530,6 +541,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	}()
 
 	for {
+		_, _, _ = runExecutionCleanupPass(ctx, runtime.ProjectRoot, runtime.CleanupRunner, cleanupLog, emit, "pre-claim")
 		// Respect context cancellation between iterations. Without this check,
 		// a Stop() request (which cancels ctx) would only take effect during
 		// the idle poll sleep — the loop would happily claim the next ready
