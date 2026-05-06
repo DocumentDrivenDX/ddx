@@ -1,0 +1,21 @@
+mode: technical
+severity: advisory
+policy: advisory
+runner: embedded
+includes:
+  - docs/helix/**
+excludes:
+  - "**/*.generated.md"
+vocabulary:
+  accept:
+    - DDx
+    - bead
+    - execution
+    - Helix
+    - Fizeau
+  reject:
+    - system
+    - solution
+    - roadmap
+    - initiative
+    - process

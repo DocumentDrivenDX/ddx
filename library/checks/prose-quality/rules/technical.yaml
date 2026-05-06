@@ -1,0 +1,25 @@
+mode: technical
+rules:
+  - id: prose.generic.claims
+    severity: warning
+    contains_any:
+      - robust
+      - comprehensive
+      - seamless
+      - industry-leading
+      - world-class
+      - best-in-class
+      - cutting-edge
+    rationale: The sentence uses unsupported promotional claims such as "robust", "comprehensive", and "seamless" instead of precise behavior.
+    suggested_edit: Replace the claim with a concrete description of the actual change and its measured effect.
+  - id: prose.generic.importance
+    severity: warning
+    contains_any:
+      - very important
+    rationale: The phrase "very important" asserts significance without naming the technical consequence.
+    suggested_edit: State the specific consequence, invariant, or user-visible impact instead of importance language.
+  - id: prose.generic.repeated_opening
+    severity: warning
+    kind: repeated_opening
+    rationale: The same opening sentence is repeated, which reads like filler rather than new information.
+    suggested_edit: Keep the first instance and replace the duplicate with a distinct sentence that adds new information.

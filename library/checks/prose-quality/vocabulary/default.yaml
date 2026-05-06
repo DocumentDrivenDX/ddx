@@ -1,0 +1,11 @@
+accept:
+  - DDx
+  - bead
+  - execution
+  - Helix
+  - Fizeau
+reject:
+  - solution
+  - process
+  - thing
+  - stuff

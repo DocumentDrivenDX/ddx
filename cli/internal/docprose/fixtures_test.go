@@ -102,15 +102,20 @@ func TestFixtures(t *testing.T) {
 				t.Fatalf("golden must be a JSON array: %s", tc.Golden)
 			}
 
-			got, err := json.MarshalIndent(tc.Findings, "", "  ")
+			checker, err := NewChecker(Mode(tc.Mode), Vocabulary{})
 			if err != nil {
-				t.Fatalf("marshal findings: %v", err)
+				t.Fatal(err)
 			}
-			if strings.TrimSpace(string(got)) != tc.Golden {
-				t.Fatalf("fixture golden mismatch for %s/%s\n--- got ---\n%s\n--- want ---\n%s", tc.Mode, tc.Name, got, tc.Golden)
+			got := checker.Findings("input.md", tc.Input)
+			if !sameFindings(got, tc.Findings) {
+				gotJSON, err := json.MarshalIndent(got, "", "  ")
+				if err != nil {
+					t.Fatalf("marshal got findings: %v", err)
+				}
+				t.Fatalf("fixture golden mismatch for %s/%s\n--- got ---\n%s\n--- want ---\n%s", tc.Mode, tc.Name, gotJSON, tc.Golden)
 			}
 
-			for i, finding := range tc.Findings {
+			for i, finding := range got {
 				if finding.File == "" || finding.Line == 0 || finding.RuleID == "" || finding.Severity == "" || finding.Rationale == "" || finding.SuggestedEdit == "" {
 					t.Fatalf("finding %d missing required field: %+v", i, finding)
 				}

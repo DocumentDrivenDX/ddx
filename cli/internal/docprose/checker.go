@@ -1,0 +1,191 @@
+package docprose
+
+import (
+	"fmt"
+	"regexp"
+	"strings"
+	"unicode"
+)
+
+type Mode string
+
+const (
+	ModeTechnical Mode = "technical"
+	ModePlanning  Mode = "planning"
+	ModePublic    Mode = "public"
+)
+
+type Checker struct {
+	mode       Mode
+	rules      []ruleSpec
+	vocabulary Vocabulary
+}
+
+func NewChecker(mode Mode, vocabulary Vocabulary) (*Checker, error) {
+	if mode == "" {
+		mode = ModeTechnical
+	}
+	rules, err := loadRulePack(string(mode))
+	if err != nil {
+		return nil, err
+	}
+	defaultVocab, err := loadDefaultVocabulary()
+	if err != nil {
+		return nil, err
+	}
+	if len(vocabulary.Accept) == 0 {
+		vocabulary.Accept = defaultVocab.Accept
+	}
+	if len(vocabulary.Reject) == 0 {
+		vocabulary.Reject = defaultVocab.Reject
+	}
+	return &Checker{
+		mode:       mode,
+		rules:      rules,
+		vocabulary: vocabulary,
+	}, nil
+}
+
+func (c *Checker) Findings(file, text string) []Finding {
+	var findings []Finding
+	lines := strings.Split(text, "\n")
+
+	for idx, raw := range lines {
+		lineNo := idx + 1
+		line := strings.TrimSpace(raw)
+		if line == "" {
+			continue
+		}
+
+		for _, rule := range c.rules {
+			if rule.Kind == "repeated_opening" {
+				if repeatedOpeningKey(line) != "" {
+					findings = append(findings, Finding{
+						File:          file,
+						Line:          lineNo,
+						RuleID:        rule.ID,
+						Severity:      rule.Severity,
+						Rationale:     rule.Rationale,
+						SuggestedEdit: rule.SuggestedEdit,
+					})
+				}
+				continue
+			}
+			if matchesRule(line, rule) {
+				findings = append(findings, Finding{
+					File:          file,
+					Line:          lineNo,
+					RuleID:        rule.ID,
+					Severity:      rule.Severity,
+					Rationale:     rule.Rationale,
+					SuggestedEdit: rule.SuggestedEdit,
+				})
+			}
+		}
+
+		findings = append(findings, c.vocabularyFindings(file, lineNo, line)...)
+	}
+
+	return findings
+}
+
+func (c *Checker) vocabularyFindings(file string, lineNo int, line string) []Finding {
+	var findings []Finding
+	lower := strings.ToLower(line)
+	for _, reject := range c.vocabulary.Reject {
+		if reject == "" {
+			continue
+		}
+		if !containsWord(lower, reject) {
+			continue
+		}
+		if c.termAccepted(reject) {
+			continue
+		}
+		findings = append(findings, Finding{
+			File:          file,
+			Line:          lineNo,
+			RuleID:        "prose.vocabulary.reject",
+			Severity:      "warning",
+			Rationale:     fmt.Sprintf("The vocabulary term %q is discouraged in default prose because it is too generic.", reject),
+			SuggestedEdit: fmt.Sprintf("Replace %q with the project-specific term or concrete noun that names the actual concept.", reject),
+		})
+	}
+	return findings
+}
+
+func (c *Checker) termAccepted(term string) bool {
+	for _, accept := range c.vocabulary.Accept {
+		if accept == "" {
+			continue
+		}
+		if strings.EqualFold(strings.TrimSpace(accept), strings.TrimSpace(term)) {
+			return true
+		}
+	}
+	return false
+}
+
+func matchesRule(line string, rule ruleSpec) bool {
+	if len(rule.ContainsAny) == 0 {
+		return false
+	}
+	lower := strings.ToLower(line)
+	for _, phrase := range rule.ContainsAny {
+		if phrase == "" {
+			continue
+		}
+		if strings.Contains(lower, strings.ToLower(phrase)) {
+			return true
+		}
+	}
+	return false
+}
+
+func repeatedOpeningKey(line string) string {
+	first, rest, ok := cutSentence(line)
+	if !ok {
+		return ""
+	}
+	second, _, ok := cutSentence(rest)
+	if !ok {
+		return ""
+	}
+	first = normalizeSentence(first)
+	second = normalizeSentence(second)
+	if first == "" || first != second {
+		return ""
+	}
+	return first
+}
+
+func cutSentence(s string) (head, tail string, ok bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return "", "", false
+	}
+	for i, r := range s {
+		if r == '.' || r == '!' || r == '?' {
+			return strings.TrimSpace(s[:i+1]), strings.TrimSpace(s[i+1:]), true
+		}
+	}
+	return "", "", false
+}
+
+func normalizeSentence(s string) string {
+	s = strings.ToLower(strings.TrimSpace(s))
+	s = strings.TrimFunc(s, func(r rune) bool {
+		return unicode.IsPunct(r) || unicode.IsSpace(r)
+	})
+	s = strings.Join(strings.Fields(s), " ")
+	return s
+}
+
+func containsWord(haystack, needle string) bool {
+	needle = strings.TrimSpace(needle)
+	if needle == "" {
+		return false
+	}
+	pattern := `(?i)(^|[^[:alnum:]_])` + regexp.QuoteMeta(needle) + `([^[:alnum:]_]|$)`
+	return regexp.MustCompile(pattern).FindStringIndex(haystack) != nil
+}

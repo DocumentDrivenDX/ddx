@@ -1,0 +1,140 @@
+package docprose
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func TestProseCheckerFindingSchema(t *testing.T) {
+	checker, err := NewChecker(ModeTechnical, Vocabulary{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	findings := checker.Findings("input.md", "This is robust.\n")
+	if len(findings) == 0 {
+		t.Fatal("expected at least one finding")
+	}
+	f := findings[0]
+	if f.File != "input.md" || f.Line != 1 || f.RuleID == "" || f.Severity == "" || f.Rationale == "" || f.SuggestedEdit == "" {
+		t.Fatalf("finding missing required field(s): %+v", f)
+	}
+}
+
+func TestProseCheckerVocabularyOverrides(t *testing.T) {
+	checker, err := NewChecker(ModeTechnical, Vocabulary{
+		Accept: []string{"Quartz"},
+		Reject: []string{"system", "solution"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	findings := checker.Findings("input.md", "Quartz keeps the system solution honest.\n")
+	if len(findings) != 2 {
+		t.Fatalf("expected 2 reject findings, got %+v", findings)
+	}
+	for _, finding := range findings {
+		if finding.RuleID != "prose.vocabulary.reject" {
+			t.Fatalf("unexpected rule id: %+v", finding)
+		}
+	}
+}
+
+func TestDefaultAssetLayout(t *testing.T) {
+	root, err := defaultAssetRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, path := range []string{
+		filepath.Join(root, "check.yaml"),
+		filepath.Join(root, "rules", "technical.yaml"),
+		filepath.Join(root, "rules", "planning.yaml"),
+		filepath.Join(root, "rules", "public.yaml"),
+		filepath.Join(root, "vocabulary", "default.yaml"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Fatalf("expected asset %s: %v", path, err)
+		}
+	}
+
+	cfg, err := loadDefaultConfig()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Mode != string(ModeTechnical) || cfg.Policy != "advisory" || cfg.Runner != "embedded" {
+		t.Fatalf("unexpected default config: %+v", cfg)
+	}
+
+	vocab, err := loadDefaultVocabulary()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !containsAll(vocab.Accept, []string{"DDx", "bead", "execution"}) {
+		t.Fatalf("default accept vocabulary missing DDx terms: %+v", vocab.Accept)
+	}
+	if !containsAll(vocab.Reject, []string{"solution", "process"}) {
+		t.Fatalf("default reject vocabulary missing generic terms: %+v", vocab.Reject)
+	}
+}
+
+func TestProseCheckerChangedMode(t *testing.T) {
+	cases := listFixtureCases(t, "testdata/fixtures")
+	for _, tc := range cases {
+		t.Run(tc.Mode+"/"+tc.Name, func(t *testing.T) {
+			checker, err := NewChecker(Mode(tc.Mode), Vocabulary{})
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := checker.Findings("input.md", tc.Input)
+			if !sameFindings(got, tc.Findings) {
+				t.Fatalf("fixture mismatch for %s/%s\n--- got ---\n%v\n--- want ---\n%v", tc.Mode, tc.Name, got, tc.Findings)
+			}
+		})
+	}
+}
+
+func TestProseCheckerPathMode(t *testing.T) {
+	checker, err := NewChecker(ModeTechnical, Vocabulary{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := strings.Join([]string{
+		"## Technical Context",
+		"",
+		"This is robust and comprehensive.",
+	}, "\n")
+	findings := checker.Findings("docs/helix/example.md", input)
+	if len(findings) != 1 {
+		t.Fatalf("expected one finding, got %+v", findings)
+	}
+	if findings[0].File != "docs/helix/example.md" {
+		t.Fatalf("unexpected file in finding: %+v", findings[0])
+	}
+}
+
+func sameFindings(got, want []Finding) bool {
+	if len(got) != len(want) {
+		return false
+	}
+	for i := range got {
+		if got[i] != want[i] {
+			return false
+		}
+	}
+	return true
+}
+
+func containsAll(got []string, want []string) bool {
+	m := make(map[string]bool, len(got))
+	for _, s := range got {
+		m[s] = true
+	}
+	for _, s := range want {
+		if !m[s] {
+			return false
+		}
+	}
+	return true
+}
