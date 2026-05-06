@@ -198,6 +198,20 @@ install_cli() {
         fi
         log "Installing DDx from build artifact: ${INSTALL_SOURCE}"
         install -m 0755 "${INSTALL_SOURCE}" "${LOCAL_BIN}/ddx"
+        if command -v sha256sum &> /dev/null; then
+            SOURCE_HASH=$(sha256sum "${INSTALL_SOURCE}" | awk '{print $1}')
+            INSTALLED_HASH=$(sha256sum "${LOCAL_BIN}/ddx" | awk '{print $1}')
+        elif command -v shasum &> /dev/null; then
+            SOURCE_HASH=$(shasum -a 256 "${INSTALL_SOURCE}" | awk '{print $1}')
+            INSTALLED_HASH=$(shasum -a 256 "${LOCAL_BIN}/ddx" | awk '{print $1}')
+        else
+            SOURCE_HASH=""
+            INSTALLED_HASH=""
+            warn "No sha256sum or shasum found; skipping local binary verification."
+        fi
+        if [ -n "$SOURCE_HASH" ] && [ "$SOURCE_HASH" != "$INSTALLED_HASH" ]; then
+            error "Installed binary hash mismatch. Expected ${SOURCE_HASH}, got ${INSTALLED_HASH}."
+        fi
         success "CLI tool installed from build artifact"
         return
     fi

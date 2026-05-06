@@ -102,17 +102,15 @@ The doctor helps identify and resolve:
 func (f *CommandFactory) newUpdateCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "update [target]",
-		Short: "Update DDx CLI or installed plugins",
-		Long: `Update DDx CLI or installed plugins to their latest versions.
+		Short: "Update shipped skills and installed plugins",
+		Long: `Update shipped skills and installed plugins to their latest versions.
 
 Targets:
-  ddx        - Update DDx CLI to latest release
   helix      - Update helix plugin to latest version
-  all        - Update everything (default)
+  all        - Update shipped skills and installed plugins (default)
 
 Examples:
-  ddx update           # Update all installed packages
-  ddx update ddx       # Update DDx CLI only
+  ddx update           # Refresh shipped skills and update installed packages
   ddx update helix    # Update helix plugin only
   ddx update --check   # Check for updates without applying`,
 		Args: cobra.MaximumNArgs(1),

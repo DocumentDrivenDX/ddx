@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -48,4 +49,15 @@ func TestUpdate_ForceReplacesStaleSymlinks(t *testing.T) {
 	if info.Mode()&os.ModeSymlink != 0 {
 		t.Errorf("symlink was not replaced by ddx update --force: %s is still a symlink", symlinkPath)
 	}
+}
+
+func TestUpdate_DoesNotAttemptBinaryUpgrade(t *testing.T) {
+	te := NewTestEnvironment(t, WithGitInit(false))
+
+	output, err := te.RunCommand("update")
+	require.NoError(t, err)
+
+	assert.NotContains(t, output, "Checking for DDx updates")
+	assert.NotContains(t, output, "Upgrading DDx")
+	assert.Contains(t, output, "Shipped skills refreshed")
 }

@@ -55,12 +55,6 @@ func (f *CommandFactory) runUpdate(cmd *cobra.Command, args []string) error {
 		return err
 	}
 
-	// Upgrade the DDx binary synchronously (always check upstream).
-	if err := f.runUpgrade(cmd, []string{}); err != nil {
-		// Non-fatal: report but continue to plugin updates.
-		_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Warning: binary upgrade check failed: %v\n", err)
-	}
-
 	// Call pure business logic
 	result, err := performUpdate(f.WorkingDir, opts)
 	if err != nil {
@@ -71,11 +65,13 @@ func (f *CommandFactory) runUpdate(cmd *cobra.Command, args []string) error {
 	return displayUpdateResult(cmd, result, opts)
 }
 
-// performUpdate upgrades the DDx binary if a new release is available, then
-// checks GitHub for the latest version of each installed plugin and updates
-// any that are outdated (or all if --force). Always refreshes the embedded
-// `ddx` skill and the AGENTS.md block so projects that ran `ddx init` under
-// an older DDx version pick up current skill content without re-running init.
+// performUpdate checks GitHub for the latest version of each installed plugin
+// and updates any that are outdated (or all if --force). Always refreshes the
+// embedded `ddx` skill and the AGENTS.md block so projects that ran `ddx init`
+// under an older DDx version pick up current skill content without re-running
+// init. Binary updates are intentionally explicit via `ddx upgrade`; `ddx
+// update` must not replace a locally-built dogfood binary with the latest
+// public release.
 func performUpdate(workingDir string, opts *UpdateOptions) (*UpdateResult, error) {
 	// Refresh the shipped `ddx` skill copy + AGENTS.md block first, regardless
 	// of whether any plugins are installed. This is what lets older projects
