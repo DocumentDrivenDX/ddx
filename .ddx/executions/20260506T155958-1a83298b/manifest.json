@@ -1,0 +1,108 @@
+{
+  "attempt_id": "20260506T155958-1a83298b",
+  "bead_id": "ddx-5d154c5d",
+  "base_rev": "d41cc859d841c0f1d3faf64ce26453747f4468c0",
+  "created_at": "2026-05-06T16:00:00.369728902Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-5d154c5d",
+    "title": "agent: add DDx-scoped task execution cleanup manager",
+    "description": "PROBLEM\nDDx-created temporary execution resources do not have one shared cleanup owner. Inline attempt cleanup, orphan recovery, and liveness cleanup are spread across attempt code and ad hoc test helpers, which let stale /tmp/ddx-exec-wt directories and registered orphan worktrees accumulate until /tmp ran out of inodes.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead.go:257-279 defines the DDx temp worktree root and naming convention, but there is no cleanup manager that owns that root.\n- cli/internal/agent/execute_bead.go:296-324 exposes WorktreeAdd/Remove/List/Prune primitives, but no production code uses them to reconcile stale registered vs unregistered DDx worktrees before attempts.\n- cli/internal/agent/run_state.go:16-29 records one live attempt path, but it does not model cleanup ownership, preserved state, stale PID/session liveness, or partial setup directories.\n- docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md:202-266 defines the cleanup manager roots, ownership metadata, entry points, and conservative deletion rules now missing in code.\n\nPROPOSED FIX\n- Add a focused cleanup manager under cli/internal/agent, e.g. execution_cleanup.go, with injectable filesystem/git/liveness probes for tests.\n- Teach it to inspect the configured DDx temp worktree root, project git worktree list, run-state/liveness files, and legacy .ddx/executions/.ddx/runs evidence roots.\n- Implement conservative deletion: remove only DDx-owned stale unregistered dirs, stale registered DDx worktrees, stale liveness files, and partial setup dirs; preserve published evidence, preserve refs, and active liveness.\n- Return a structured cleanup summary with removed path counts, bytes/inodes where measurable, warnings, and blocked errors.\n\nNON-SCOPE\n- Do not wire the manager into ddx try/work loops here; that is covered by sibling beads.\n- Do not add the operator CLI command here; that is covered by a sibling bead.\n- Do not implement .ddx/executions to .ddx/runs migration.",
+    "acceptance": "1. TestExecutionCleanup_RemovesStaleUnregisteredDDxTempDirs creates DDx-owned stale dirs under a temp DDX_EXEC_WT_DIR and verifies the manager removes only stale DDx-owned dirs.\n2. TestExecutionCleanup_RemovesRegisteredStaleWorktree verifies a registered DDx worktree with stale/missing liveness is removed through GitOps.WorktreeRemove and git worktree prune.\n3. TestExecutionCleanup_PreservesActiveAndPreservedAttempts verifies live PID/session liveness, preserved worktree metadata, refs/ddx/iterations/*, complete .ddx/runs, and complete .ddx/executions bundles are not removed.\n4. TestExecutionCleanup_ReportsSummary verifies removed counts, warnings, and resource observations are returned in a structured summary usable by work events and CLI output.\n5. The cleanup manager is invoked by tests through public package functions/types, not unstructured shell cleanup snippets.\n6. cd cli \u0026\u0026 go test ./internal/agent/... -run \"TestExecutionCleanup\" -count=1 passes.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-f3dfde0d",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:git",
+      "kind:implementation",
+      "reliability",
+      "spec:FEAT-010",
+      "spec:SD-025",
+      "cleanup"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T15:59:57Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "963074",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T15:47:38.808011502Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-06T15:57:13.502067306Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T154739-dc6ff0dc\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":8951392,\"output_tokens\":36201,\"total_tokens\":8987593,\"cost_usd\":0,\"duration_ms\":571838,\"exit_code\":0}",
+          "created_at": "2026-05-06T15:57:13.729085507Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=8987593 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T15:57:21.827016087Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: unparseable\nattempt_count=1\nresult_rev=840af239536a890987ba49fadefbe89bb4a3c881\n\nreview-group: review-error: unparseable: reviewer output: unparseable JSON verdict: no JSON object found (raw output 59 bytes; see .ddx/executions/20260506T155722-af479560)\nharness=claude\nmodel=opus\ninput_bytes=19517\noutput_bytes=59\nelapsed_ms=48654",
+          "created_at": "2026-05-06T15:58:13.616039111Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: unparseable"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-close review: review-error: unparseable\nresult_rev=840af239536a890987ba49fadefbe89bb4a3c881\nbase_rev=78413d47140c5cd25e95f9df9d08620e564d387d",
+          "created_at": "2026-05-06T15:58:13.834148735Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_malfunction"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T15:59:57.549767974Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T15:59:57.929171392Z",
+      "spec-id": "SD-025"
+    }
+  },
+  "governing": [
+    {
+      "id": "SD-025",
+      "path": "docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md",
+      "title": "Solution Design: Task Execution Lifecycle"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T155958-1a83298b",
+    "prompt": ".ddx/executions/20260506T155958-1a83298b/prompt.md",
+    "manifest": ".ddx/executions/20260506T155958-1a83298b/manifest.json",
+    "result": ".ddx/executions/20260506T155958-1a83298b/result.json",
+    "checks": ".ddx/executions/20260506T155958-1a83298b/checks.json",
+    "usage": ".ddx/executions/20260506T155958-1a83298b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-5d154c5d-20260506T155958-1a83298b"
+  },
+  "prompt_sha": "88f7849d1e1938023024b69198c53acbde0c69b2e32c42e1aaca0928b3b24d0f"
+}
