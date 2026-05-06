@@ -13,6 +13,7 @@ import (
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/metaprompt"
+	"github.com/DocumentDrivenDX/ddx/internal/metric"
 	"github.com/DocumentDrivenDX/ddx/internal/persona"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/DocumentDrivenDX/ddx/internal/update"
@@ -176,6 +177,7 @@ More information:
 	// real CLI implementations visible without changing runtime behavior.
 	persona.KeepReachabilityForDeadcode()
 	metaprompt.KeepReachabilityForDeadcode()
+	metric.KeepReachabilityForDeadcode()
 
 	return rootCmd
 }

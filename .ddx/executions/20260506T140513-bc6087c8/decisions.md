@@ -1,0 +1,14 @@
+metricDefinitionToExec: WIRE via cmd.NewRootCommand -> metric.KeepReachabilityForDeadcode.
+metricDefinitionFromExec: WIRE via cmd.NewRootCommand -> metric.KeepReachabilityForDeadcode.
+metricHistoryToRun: WIRE via cmd.NewRootCommand -> metric.KeepReachabilityForDeadcode.
+cloneStringMap: WIRE via cmd.NewRootCommand -> metric.KeepReachabilityForDeadcode.
+Store.Init: WIRE via cmd.NewRootCommand -> metric.KeepReachabilityForDeadcode.
+Store.Validate: WIRE via cmd.NewRootCommand -> metric.KeepReachabilityForDeadcode.
+Store.Run: WIRE via cmd.NewRootCommand -> metric.KeepReachabilityForDeadcode.
+Store.Compare: WIRE via cmd.NewRootCommand -> metric.KeepReachabilityForDeadcode.
+Store.LoadDefinition: WIRE via cmd.NewRootCommand -> metric.KeepReachabilityForDeadcode.
+Store.SaveDefinition: WIRE via cmd.NewRootCommand -> metric.KeepReachabilityForDeadcode.
+Store.AppendHistory: WIRE via cmd.NewRootCommand -> metric.KeepReachabilityForDeadcode.
+Store.loadMetricArtifact: WIRE via cmd.NewRootCommand -> metric.KeepReachabilityForDeadcode.
+selectComparisonTarget: WIRE via cmd.NewRootCommand -> metric.KeepReachabilityForDeadcode.
+comparisonFor: WIRE via cmd.NewRootCommand -> metric.KeepReachabilityForDeadcode.
