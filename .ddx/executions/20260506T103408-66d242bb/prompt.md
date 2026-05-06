@@ -1,0 +1,249 @@
+<bead-review>
+  <bead id="ddx-29f02cf4" iter=1>
+    <title>bead/axon: wire backend selection through .ddx config</title>
+    <description>
+PROBLEM
+The store factory still treats Axon as an experimental special case and only enables it behind an environment gate. The relevant branch is cli/internal/bead/store.go:117-137, which falls back to JSONL unless DDX_AXON_EXPERIMENTAL is truthy, even when config has backend: axon. The checked-in sample config also does not document the bead_tracker backend block yet (.ddx/config.yaml:1-17).
+
+ROOT CAUSE
+cli/internal/bead/store.go:117-137 and .ddx/config.yaml:1-17 do not present Axon as a normal selectable backend. The config type already has a Backend field, but the factory still requires an env override and emits a warning instead of honoring configuration directly.
+
+PROPOSED FIX
+- Update the store factory so bead_tracker.backend=axon selects the Axon backend from config without requiring the experimental env var.
+- Update the checked-in .ddx/config.yaml example to show the backend and Axon connection block.
+- Keep the default backend unchanged when backend is unset.
+- Preserve bd/br behavior for the existing external backend path.
+
+NON-SCOPE
+- GraphQL client generation.
+- Axon backend CRUD internals.
+- Subscription transport.
+    </description>
+    <acceptance>
+1. .ddx/config.yaml documents bead_tracker.backend: axon plus the Axon connection block.
+2. TestNewStore_DefaultsToJSONL, TestNewStore_SelectsAxonFromConfig, and TestNewStore_PreservesExternalBackends are added or updated.
+3. config selection honors axon without requiring DDX_AXON_EXPERIMENTAL, while jsonl remains the default.
+4. cd cli &amp;&amp; go test ./internal/bead/... passes.
+5. lefthook run pre-commit passes.
+    </acceptance>
+    <labels>phase:2, area:beads, area:storage, kind:feature, blocked-on-upstream:axon-05c1019d, blocked-on-upstream:axon-82b6f7b2</labels>
+  </bead>
+
+  <changed-files>
+    <file>.ddx/executions/20260506T103104-a57adec4/checks/production-reachability.json</file>
+    <file>.ddx/executions/20260506T103104-a57adec4/manifest.json</file>
+    <file>.ddx/executions/20260506T103104-a57adec4/result.json</file>
+  </changed-files>
+
+  <governing>
+    <note>No governing documents found. Evaluate the diff against the acceptance criteria alone.</note>
+  </governing>
+
+  <diff rev="1a870813efa6bfaa891c13e2f8dd5729ac95b4d9">
+<untrusted-data>
+diff --git a/.ddx/executions/20260506T103104-a57adec4/checks/production-reachability.json b/.ddx/executions/20260506T103104-a57adec4/checks/production-reachability.json
+new file mode 100644
+index 000000000..246408be7
+--- /dev/null
++++ b/.ddx/executions/20260506T103104-a57adec4/checks/production-reachability.json
+@@ -0,0 +1,4 @@
++{
++  "status": "pass",
++  "message": "no new top-level functions or methods added"
++}
+\ No newline at end of file
+diff --git a/.ddx/executions/20260506T103104-a57adec4/manifest.json b/.ddx/executions/20260506T103104-a57adec4/manifest.json
+new file mode 100644
+index 000000000..b706f6623
+--- /dev/null
++++ b/.ddx/executions/20260506T103104-a57adec4/manifest.json
+@@ -0,0 +1,122 @@
++{
++  "attempt_id": "20260506T103104-a57adec4",
++  "bead_id": "ddx-29f02cf4",
++  "base_rev": "200339441019626d7c55bc85420ad8c5b68b4bd7",
++  "created_at": "2026-05-06T10:31:06.780146575Z",
++  "requested": {
++    "prompt": "synthesized"
++  },
++  "bead": {
++    "id": "ddx-29f02cf4",
++    "title": "bead/axon: wire backend selection through .ddx config",
++    "description": "PROBLEM\nThe store factory still treats Axon as an experimental special case and only enables it behind an environment gate. The relevant branch is cli/internal/bead/store.go:117-137, which falls back to JSONL unless DDX_AXON_EXPERIMENTAL is truthy, even when config has backend: axon. The checked-in sample config also does not document the bead_tracker backend block yet (.ddx/config.yaml:1-17).\n\nROOT CAUSE\ncli/internal/bead/store.go:117-137 and .ddx/config.yaml:1-17 do not present Axon as a normal selectable backend. The config type already has a Backend field, but the factory still requires an env override and emits a warning instead of honoring configuration directly.\n\nPROPOSED FIX\n- Update the store factory so bead_tracker.backend=axon selects the Axon backend from config without requiring the experimental env var.\n- Update the checked-in .ddx/config.yaml example to show the backend and Axon connection block.\n- Keep the default backend unchanged when backend is unset.\n- Preserve bd/br behavior for the existing external backend path.\n\nNON-SCOPE\n- GraphQL client generation.\n- Axon backend CRUD internals.\n- Subscription transport.",
++    "acceptance": "1. .ddx/config.yaml documents bead_tracker.backend: axon plus the Axon connection block.\n2. TestNewStore_DefaultsToJSONL, TestNewStore_SelectsAxonFromConfig, and TestNewStore_PreservesExternalBackends are added or updated.\n3. config selection honors axon without requiring DDX_AXON_EXPERIMENTAL, while jsonl remains the default.\n4. cd cli \u0026\u0026 go test ./internal/bead/... passes.\n5. lefthook run pre-commit passes.",
++    "parent": "ddx-8d747049",
++    "labels": [
++      "phase:2",
++      "area:beads",
++      "area:storage",
++      "kind:feature",
++      "blocked-on-upstream:axon-05c1019d",
++      "blocked-on-upstream:axon-82b6f7b2"
++    ],
++    "metadata": {
++      "claimed-at": "2026-05-06T10:31:03Z",
++      "claimed-machine": "eitri",
++      "claimed-pid": "601864",
++      "events": [
++        {
++          "actor": "ddx",
++          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
++          "created_at": "2026-05-06T09:26:31.124729613Z",
++          "kind": "routing",
++          "source": "ddx agent execute-bead",
++          "summary": "provider=codex model=gpt-5.4-mini"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"attempt_id\":\"20260506T092212-36d077c0\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":3410571,\"output_tokens\":15610,\"total_tokens\":3426181,\"cost_usd\":0,\"duration_ms\":256113,\"exit_code\":0}",
++          "created_at": "2026-05-06T09:26:31.433540929Z",
++          "kind": "cost",
++          "source": "ddx agent execute-bead",
++          "summary": "tokens=3426181 model=gpt-5.4-mini"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
++          "created_at": "2026-05-06T09:26:38.195755779Z",
++          "kind": "routing",
++          "source": "ddx agent execute-loop",
++          "summary": "provider=codex model=gpt-5.4-mini"
++        },
++        {
++          "actor": "erik",
++          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=30cc6a51f01547fac0a120e58bed2d5f4eccaeaa\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T05:31:42-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=8878\noutput_bytes=0\nelapsed_ms=4187",
++          "created_at": "2026-05-06T09:26:42.924429157Z",
++          "kind": "review-error",
++          "source": "ddx agent execute-loop",
++          "summary": "review-error: transport"
++        },
++        {
++          "actor": "erik",
++          "body": "success\nresult_rev=30cc6a51f01547fac0a120e58bed2d5f4eccaeaa\nbase_rev=521e1c806a51bb800d0baeba067aa49417f912c7",
++          "created_at": "2026-05-06T09:26:43.13405592Z",
++          "kind": "execute-bead",
++          "source": "ddx agent execute-loop",
++          "summary": "success"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
++          "created_at": "2026-05-06T09:50:01.45948383Z",
++          "kind": "routing",
++          "source": "ddx agent execute-bead",
++          "summary": "provider=codex model=gpt-5.4-mini"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"attempt_id\":\"20260506T094802-362f926d\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":1176414,\"output_tokens\":7121,\"total_tokens\":1183535,\"cost_usd\":0,\"duration_ms\":116612,\"exit_code\":0}",
++          "created_at": "2026-05-06T09:50:01.674994204Z",
++          "kind": "cost",
++          "source": "ddx agent execute-bead",
++          "summary": "tokens=1183535 model=gpt-5.4-mini"
++        },
++        {
++          "actor": "ddx",
++          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
++          "created_at": "2026-05-06T09:50:08.432188923Z",
++          "kind": "routing",
++          "source": "ddx agent execute-loop",
++          "summary": "provider=codex model=gpt-5.4-mini"
++        },
++        {
++          "actor": "erik",
++          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=0c2e8ac0e85df4d080200cdb09ae7c5ecf6022d7\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-06T05:55:12-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=10669\noutput_bytes=0\nelapsed_ms=4167",
++          "created_at": "2026-05-06T09:50:13.097176826Z",
++          "kind": "review-error",
++          "source": "ddx agent execute-loop",
++          "summary": "review-error: transport"
++        },
++        {
++          "actor": "erik",
++          "body": "success\nresult_rev=0c2e8ac0e85df4d080200cdb09ae7c5ecf6022d7\nbase_rev=85d6ea0c4786b6b9cdea46f1f6d462dbecc3cb0a",
++          "created_at": "2026-05-06T09:50:13.285190066Z",
++          "kind": "execute-bead",
++          "source": "ddx agent execute-loop",
++          "summary": "success"
++        }
++      ],
++      "execute-loop-heartbeat-at": "2026-05-06T10:31:03.994917876Z"
++    }
++  },
++  "paths": {
++    "dir": ".ddx/executions/20260506T103104-a57adec4",
++    "prompt": ".ddx/executions/20260506T103104-a57adec4/prompt.md",
++    "manifest": ".ddx/executions/20260506T103104-a57adec4/manifest.json",
++    "result": ".ddx/executions/20260506T103104-a57adec4/result.json",
++    "checks": ".ddx/executions/20260506T103104-a57adec4/checks.json",
++    "usage": ".ddx/executions/20260506T103104-a57adec4/usage.json",
++    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-29f02cf4-20260506T103104-a57adec4"
++  },
++  "prompt_sha": "cdf96a3d4989433039e42b5081fdc32b13d1e52d0a3d513f8dba413dede9b714"
++}
+\ No newline at end of file
+diff --git a/.ddx/executions/20260506T103104-a57adec4/result.json b/.ddx/executions/20260506T103104-a57adec4/result.json
+new file mode 100644
+index 000000000..452126a28
+--- /dev/null
++++ b/.ddx/executions/20260506T103104-a57adec4/result.json
+@@ -0,0 +1,25 @@
++{
++  "bead_id": "ddx-29f02cf4",
++  "attempt_id": "20260506T103104-a57adec4",
++  "base_rev": "200339441019626d7c55bc85420ad8c5b68b4bd7",
++  "result_rev": "23d0d01868e5e4d8a22980627cad4a397b8cef3b",
++  "outcome": "task_succeeded",
++  "status": "success",
++  "detail": "success",
++  "harness": "codex",
++  "model": "gpt-5.4-mini",
++  "actual_power": 8,
++  "predicted_power": 8,
++  "predicted_cost_source": "subscription",
++  "session_id": "eb-5c89262b",
++  "duration_ms": 174342,
++  "tokens": 1782951,
++  "exit_code": 0,
++  "execution_dir": ".ddx/executions/20260506T103104-a57adec4",
++  "prompt_file": ".ddx/executions/20260506T103104-a57adec4/prompt.md",
++  "manifest_file": ".ddx/executions/20260506T103104-a57adec4/manifest.json",
++  "result_file": ".ddx/executions/20260506T103104-a57adec4/result.json",
++  "usage_file": ".ddx/executions/20260506T103104-a57adec4/usage.json",
++  "started_at": "2026-05-06T10:31:06.780525324Z",
++  "finished_at": "2026-05-06T10:34:01.123149104Z"
++}
+\ No newline at end of file
+</untrusted-data>
+  </diff>
+
+  <instructions>
+You are reviewing a bead implementation against its acceptance criteria.
+
+For each acceptance-criteria (AC) item, decide whether it is implemented correctly, then assign one overall verdict:
+
+- APPROVE — every AC item is fully and correctly implemented.
+- REQUEST_CHANGES — some AC items are partial or have fixable minor issues.
+- BLOCK — at least one AC item is not implemented or incorrectly implemented; or the diff is insufficient to evaluate.
+
+## Required output format (schema_version: 1)
+
+Respond with EXACTLY one JSON object as your final response, fenced as a single ```json … ``` code block. Do not include any prose outside the fenced block. The JSON must match this schema:
+
+```json
+{
+  "schema_version": 1,
+  "verdict": "APPROVE",
+  "summary": "≤300 char human-readable verdict justification",
+  "findings": [
+    { "severity": "info", "summary": "what is wrong or notable", "location": "path/to/file.go:42" }
+  ]
+}
+```
+
+Rules:
+- "verdict" must be exactly one of "APPROVE", "REQUEST_CHANGES", "BLOCK".
+- "severity" must be exactly one of "info", "warn", "block".
+- Output the JSON object inside ONE fenced ```json … ``` block. No additional prose, no extra fences, no markdown headings.
+- Do not echo this template back. Do not write the words APPROVE, REQUEST_CHANGES, or BLOCK anywhere except as the JSON value of the verdict field.
+  </instructions>
+</bead-review>
