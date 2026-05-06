@@ -299,10 +299,10 @@ byte accounting on every review and grading attempt.
 
 ## User Stories
 
-### US-220: Reviewer succeeds on large changes without silent overflow
+### US-220: Pre-close reviewer succeeds on large changes without silent overflow
 **As** an operator running `ddx work` against beads with large diffs
-**I want** the post-merge reviewer to produce a verdict on every
-acceptable diff, and to fail with an actionable overflow error otherwise
+**I want** the default adversarial pre-close reviewers to produce verdicts on
+every acceptable diff, and to fail with an actionable overflow error otherwise
 **So that** primary work is not silently redone after empty reviewer
 responses
 
@@ -346,7 +346,7 @@ re-executing primary after a small number of attempts
   event
 - Given a `review-manual-required` event exists, when an operator
   lists blocked beads, then the bead appears there with the triggering
-  failure class
+  failure class and is not closed
 
 ### US-223: Oversize `--prompt` files fail fast with a clear error
 **As** a developer running `ddx run --prompt ./huge.md`

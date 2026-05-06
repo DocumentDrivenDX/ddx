@@ -192,6 +192,17 @@ Review and triage events:
 
 - `review-block` — reviewer raised a BLOCKING finding
 - `review-pass` — reviewer cleared the change
+- `review-fixable-gap` — reviewer found an implementation/test gap that can be
+  repaired by another automated cycle
+- `review-too-large` — reviewer or intake found the bead/result too broad for a
+  bounded review cycle
+- `review-error` — reviewer invocation failed, was malformed, overflowed, or
+  returned no parseable verdict
+- `review-manual-required` — reviewer failures or non-automatable findings
+  exhausted automatic recovery and require operator action
+- `triage-decomposed` — intake or review decomposed a parent into child beads
+- `triage-overflow` — decomposition reached the depth cap
+- `triage-ambiguous` — intake could not safely clarify the bead
 - `auto-triage` — TriageContract: triage path mutated labels/status
 
 Each event SHOULD include `kind`, `actor`, `created_at`, and a free-form
@@ -216,21 +227,34 @@ Lifecycle reliability invariants:
   explainable durable reason using existing mechanisms: dependency edge,
   `blocked` status, `needs_human`/triage labels, `execution-eligible=false`,
   `superseded-by`, epic/parent queue mode, or an active retry cooldown.
+- `closed` means implementation, verification, and the default adversarial
+  pre-close review gate have all passed, or the work was verified as already
+  satisfied. Review failure never reopens a closed bead; it prevents close.
+- Automatic implementation retry is bounded and applies only to classifications
+  where the implementer had valid task context and further automated work can
+  plausibly resolve the finding. Spec gaps, missing acceptance criteria,
+  decomposition overflow, and exhausted reviewer failures require operator
+  resolution.
 - Latest terminal events and close evidence beat stale `execute-loop-*` Extra
   metadata. Reconciliation may clear stale management fields, but MUST preserve
   append-only events and evidence.
 
 | Outcome or lifecycle action | Status transition | Label changes | Events appended | Extra updates |
 |---|---|---|---|---|
-| `merged` | `in_progress → closed` | remove `claimed`, add `last-merged-rev:<sha>` (optional) | `closed-merged` | `Extra["last-run"]` updated with run-id; clear stale `execute-loop-*` management fields |
+| `review_pass` after merged candidate | `in_progress → closed` | remove `claimed`, add `last-merged-rev:<sha>` (optional) | `review-pass` + `closed-merged` | `Extra["last-run"]`, `Extra["last-review"]`, and `Extra["closing_commit_sha"]` updated; clear stale `execute-loop-*` management fields |
 | `already_satisfied` | `in_progress → closed` | (none) | `closed-already-satisfied` | `Extra["last-run"]`; clear stale `execute-loop-*` management fields |
-| `review_block` | `in_progress → blocked` | add `needs_human` | `review-block` | `Extra["last-review"]` carries findings ref |
+| `review_fixable_gap` with retry budget remaining | no durable status change if continuing immediately; otherwise `in_progress → open` (claim released) | add no human label unless retry budget exhausted | `review-fixable-gap` + retry decision | `Extra["last-review"]` carries findings ref; next cycle records `repair_context_from_review_group` |
+| `review_fixable_gap` with retry budget exhausted | `in_progress → blocked` | add `needs_human` | `review-block` | `Extra["last-review"]` carries findings ref and exhausted budget |
+| `review_spec_gap` / `review_missing_acceptance` | `in_progress → blocked` | add `needs_human`, `triage:spec-gap` or `triage:missing-acceptance` | `review-block` | `Extra["last-review"]` carries findings ref |
+| `review_too_large` | `in_progress → blocked` after children are filed, or `in_progress → blocked` with `needs-human-decomposition` at depth cap | add `decomposed` when children exist; otherwise add `needs_human` | `review-too-large` and optionally `triage-decomposed` / `triage-overflow` | `Extra["children"]` and AC mapping when decomposed |
+| `review_error` below retry cap | no durable status change; retry reviewer for same `result_rev` | (none) | `review-error` | `Extra["last-review-error"]` carries class, reviewer slot, and attempt count |
+| `review_error` exhausted | `in_progress → blocked` | add `needs_human` | `review-manual-required` | `Extra["last-review-error"]` carries class, reviewer slot, and attempt count |
 | `execution_failed` | `in_progress → open` (claim released) | (none) | `unclaimed` + a structured failure event | `Extra["last-run"]` |
 | verified no_changes already satisfied | `in_progress → closed` | remove no_changes triage labels if present | `no_changes_verified` + `closed-already-satisfied` | `Extra["last-run"]`; clear `execute-loop-retry-after`, `execute-loop-last-status`, and `execute-loop-last-detail` |
 | unverified no_changes | `in_progress → open` (claim released) | add `triage:no-changes-unverified` | `no_changes_unverified` | record verification command/result; do not set retry cooldown by default |
 | unjustified no_changes / no rationale | `in_progress → open` (claim released) | add `triage:no-changes-unjustified` | `no_changes_unjustified` | record rationale absence/detail; do not set retry cooldown by default |
 | no_changes needs investigation | `in_progress → open` (claim released) | add `triage:needs-investigation`; add `needs_human` when operator action is required before retry | `no_changes_needs_investigation` | `Extra["last-rationale"]`; do not set retry cooldown by default |
-| parent/epic/decomposed container | `in_progress → closed` when children were created; otherwise `in_progress → open` with `execution-eligible=false` | add `decomposed` when children exist | `no_changes_decomposed` | `Extra["children"]` lists child IDs, or `Extra["execution-eligible"]=false` explains container-only work |
+| parent/epic/decomposed container | `in_progress → blocked` when children were created; otherwise `in_progress → open` with `execution-eligible=false` | add `decomposed` when children exist | `no_changes_decomposed` or `triage-decomposed` | `Extra["children"]` lists child IDs plus AC mapping, or `Extra["execution-eligible"]=false` explains container-only work |
 | external blocker | `in_progress → blocked` for hard blockers, or `in_progress → open` with a `blocked-on-upstream:<id>` label for visible soft blockers | add `needs_human` or `blocked-on-upstream:<id>` | `no_changes_blocked` | `Extra["last-rationale"]` names the external blocker |
 | superseded work | no terminal success; leave open only if visible history is needed | add no triage labels | structured superseded event if appended by caller | `Extra["superseded-by"]` names the replacement and makes ordinary execution ineligible |
 | transient infra/quota/transport | `in_progress → open` (claim released) | (none) | `no_changes_recoverable`, `drain-paused-quota`, `rate-limit-retry`, or structured transport event | may set `execute-loop-retry-after` only for the retryable time-based condition |
@@ -342,22 +366,29 @@ then returns the lifecycle action. The drain loop applies section 5 exactly and
 appends one of the no_changes event kinds from section 4; it does not invent
 new event kinds or use cooldown as a generic parking lot.
 
-### 8.2 TriageContract (ddx-3c154349)
+### 8.2 Intake And Triage Contract (ddx-3c154349)
+
+Pre-claim intake is the normal path for actionability and scope checks. It runs
+before a worker owns the bead, so most intake actions start from `open`.
 
 Status transitions used:
 
 - `in_progress → open` when releasing stale claims.
 - `open → blocked` when triage decides a bead has an unmet hard
   precondition.
+- `open → blocked` when intake decomposes a parent, reaches decomposition depth
+  overflow, or finds ambiguity that cannot be safely rewritten.
 
-Labels added: `triage`, `needs_human`, `blocked-on-upstream:<id>` (as
-applicable).
+Labels added: `triage`, `needs_human`, `blocked-on-upstream:<id>`,
+`decomposed`, `needs-human-decomposition`, `triage:spec-gap`,
+`triage:missing-acceptance` (as applicable).
 
 Labels removed: `triage` after a triaged bead is reclaimed cleanly (the
 reverse mutation of `triage` is "next successful claim removes the
 label").
 
-Events fired: `auto-triage`, `unclaimed`, optionally `blocked`.
+Events fired: `auto-triage`, `triage-ambiguous`, `triage-decomposed`,
+`triage-overflow`, `unclaimed`, optionally `blocked`.
 
 Claim behavior: the auto-triage sweep is the only path that releases a
 claim it does not own. It MUST log the prior `assignee` and `claimed-at`

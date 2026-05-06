@@ -72,13 +72,13 @@ DDx owns:
   result, no-changes rationale, post-run gates, review verdicts, cooldowns,
   and prior run metadata. On retry, DDx may raise `MinPower`. The agent owns
   how those power bounds map to a concrete model/provider.
-- **Review routing request facts.** When DDx launches a post-merge reviewer it
-  uses the same `Execute` boundary, requests a stronger reviewer by raising
-  `MinPower` relative to the implementer's actual power, and supplies
-  `role=reviewer` plus correlation metadata (`bead_id`, `attempt_id`,
-  `session_id`, `result_rev`, and implementer route facts when known). These
-  are request facts and audit metadata, not a DDx-side routing algorithm. See
-  ADR-024.
+- **Review routing request facts.** When DDx launches the default adversarial
+  pre-close reviewer gate it uses the same `Execute` boundary, requests
+  stronger reviewers by raising `MinPower` relative to the implementer's actual
+  power, and supplies `role=reviewer` plus correlation metadata (`bead_id`,
+  `attempt_id`, `session_id`, `result_rev`, `review_group_id`, reviewer slot,
+  and implementer route facts when known). These are request facts and audit
+  metadata, not a DDx-side routing algorithm. See ADR-024.
 
 Fizeau owns the agent's transcript/progress/session rendering surface. DDx is
 a pass-through/marshalling consumer for Fizeau transcript events: it may

@@ -53,10 +53,11 @@ No new top-level FEAT is created.
 
 Every automated bead attempt has two quality checkpoints:
 
-1. **Pre-dispatch lint.** Before `ddx try` launches the agent invocation for a
-   bead, DDx evaluates the bead description, acceptance criteria, labels,
-   parent, and dependency metadata against the canonical rubric in
-   `docs/helix/06-iterate/bead-authoring-template.md`.
+1. **Pre-claim intake.** Before `ddx work` claims a bead or `ddx try` launches
+   the implementation invocation, DDx evaluates actionability, scope, and
+   decomposition risk. It checks the bead description, acceptance criteria,
+   labels, parent, dependency metadata, spec-id, prior attempt history, and the
+   canonical rubric in `docs/helix/06-iterate/bead-authoring-template.md`.
 2. **Post-attempt triage.** After an attempt finalizes, DDx triages the result
    against the same lifecycle quality policy so a low-quality prompt failure,
    missing rationale, empty review block, or structurally ambiguous outcome is
@@ -73,7 +74,7 @@ define final queue mutation policy; TD-031 remains the source of truth for
 whether an attempt closes, stays open for human triage, becomes blocked, is
 superseded, or receives a retry cooldown.
 
-### Staged Rollout
+### Staged Rollout And Factory Mode
 
 The default rollout is WARN-ONLY.
 
@@ -84,6 +85,9 @@ The default rollout is WARN-ONLY.
 - BLOCK mode may stop only on a valid low lint score after applicable rubric
   skips and label waivers are applied. It must not stop on hook crashes,
   missing skill files, transient filesystem errors, or malformed lint output.
+- Reliable factory mode is BLOCK mode plus default adversarial review. In that
+  mode, poorly specified work is improved, decomposed, or blocked before claim
+  rather than allowed to consume implementation attempts.
 
 This makes the policy measurable before it becomes a dispatch gate and avoids
 freezing the queue while legacy beads are being retrofitted.
@@ -121,7 +125,20 @@ infrastructure failures.
   report and evidence so retry policy and operators can distinguish "agent made
   a bad attempt" from "quality infrastructure failed."
 
-### Recovery UX
+### Safe Improvement, Decomposition, And Recovery UX
+
+Pre-claim intake may update a bead before execution only when the update is
+intent-preserving and grounded in durable context. Safe improvements include
+normalizing the description into the authoring template, adding discovered
+file:line evidence, adding an obvious subsystem test command, and wiring
+deterministic labels, parent, or dependencies. Intake must block for human input
+instead of inventing acceptance criteria, changing scope, choosing between
+conflicting requirements, or guessing a missing governing artifact.
+
+If intake finds the bead too broad, it decomposes before claim. Every parent AC
+must map to at least one child AC or be explicitly marked `needs_human` or
+`non_scope`; token-overlap metrics are heuristics, not proof of preservation.
+The parent is blocked/decomposed with child ids and the AC map in evidence.
 
 When BLOCK mode stops dispatch, the operator-facing output must be actionable.
 It prints:

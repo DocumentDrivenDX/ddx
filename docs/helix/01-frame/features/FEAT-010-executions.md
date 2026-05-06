@@ -102,26 +102,41 @@ ADR-023 defines two lifecycle quality hooks owned by the layer-2 and layer-3
 execution loop. They are hooks inside `ExecuteBeadLoopRuntime`, not new run
 layers and not new bead-schema fields.
 
-`PreDispatchLintHook` runs after the worker has selected and claimed a bead, and
-after bead-to-prompt context has been resolved enough to know the description,
-acceptance criteria, labels, parent, deps, bead type, and evidence directory.
-It runs before the layer-1 agent invocation starts. Inputs include the bead JSON,
-the resolved mode (`warn` or `block`), any `lint-waiver:<criterion>` labels,
-the rubric-skip rules from `docs/helix/06-iterate/bead-authoring-template.md`,
-and the path where ephemeral lint evidence should be written. The hook invokes
-the nested bead-lifecycle skill under the `ddx` skill tree.
+`PreClaimIntakeHook` runs after the worker has selected a dependency-ready
+candidate but before DDx claims the bead or creates the implementation worktree.
+It has enough context to evaluate title, description, acceptance criteria,
+labels, parent, deps, bead type, spec-id, prior attempt history, and whether the
+bead is atomic enough to execute. The hook invokes the nested bead-lifecycle
+workflow skill under the `ddx` skill tree and records intake evidence in the
+layer-3 run record.
 
-In WARN-ONLY mode, `PreDispatchLintHook` records findings and dispatch proceeds.
-In BLOCK mode, dispatch stops only when the hook returns a valid low lint score
-after rubric skips and label waivers are applied. Infrastructure failures are
-classified as hook errors, recorded in evidence, and fail open per ADR-023.
-When a valid BLOCK result stops dispatch, DDx prints the failed criteria,
-missing fields, waiver labels, and suggested `ddx bead update` commands before
-returning a non-success attempt outcome.
+The intake result is one of:
+
+- `actionable_atomic` — claim and execute normally.
+- `actionable_but_rewritten` — DDx applied safe, intent-preserving bead updates
+  such as formatting the description into the authoring template, adding
+  discovered file:line evidence, adding an obvious test command, or wiring
+  deterministic labels/parent/deps. The update is recorded through `ddx bead`
+  mutation paths before claim.
+- `too_large_decomposed` — DDx created child beads, mapped every parent AC to
+  child ACs or an explicit `needs_human` / `non_scope` marker, blocked the
+  parent, and did not execute the parent.
+- `ambiguous_needs_human` — the bead/spec is unclear, contradictory,
+  unverifiable, or missing acceptance criteria that DDx cannot safely invent.
+  DDx blocks or marks the bead `needs_human` and does not claim it.
+- `intake_error` — intake infrastructure failed. In migration/WARN mode this
+  fails open with evidence; in reliable factory/BLOCK mode it may skip the
+  candidate for the current pass but must not park it behind a cooldown unless a
+  retryable time-based class is recorded.
+
+Safe rewrites may clarify existing intent; they must not invent product
+behavior, choose between conflicting requirements, change scope, or guess a
+missing governing artifact. Those cases become `ambiguous_needs_human`.
 
 `PostAttemptTriageHook` runs after the attempt has produced its local evidence:
 agent result, commit/no-commit state, no-changes rationale if any, post-run
-checks, review verdict, merge/preserve result, and the pre-dispatch lint report.
+checks, adversarial review verdict, merge/preserve result, and the intake
+report.
 It uses the same bead-lifecycle skill to classify whether the outcome is a
 normal attempt result, a quality-policy failure, a missing-evidence failure, or
 an infrastructure failure. The hook must never rewrite the attempt result or
@@ -132,10 +147,11 @@ classification.
 signal. `Disrupted` remains the mechanical indicator that normal completion was
 interrupted. `OutcomeReason` is the stable classification string that explains
 why the attempt ended, such as `lint_warn`, `lint_blocked`,
-`lint_hook_error_fail_open`, `triage_missing_evidence`, `review_blocked`,
-`post_run_check_failed`, or `success`. Layer-3 `ddx work` records aggregate
-these reasons when evaluating retry eligibility, no-progress, blocked, and
-deferred stop conditions.
+`lint_hook_error_fail_open`, `intake_ambiguous`, `intake_decomposed`,
+`triage_missing_evidence`, `review_fixable_gap`, `review_spec_gap`,
+`review_too_large`, `post_run_check_failed`, or `success`. Layer-3 `ddx work`
+records aggregate these reasons when evaluating retry eligibility, no-progress,
+blocked, and deferred stop conditions.
 
 The hook evidence lives in the attempt evidence bundle and is surfaced through
 the unified run substrate. The originating bead may receive an evidence event
@@ -148,8 +164,9 @@ A layer-3 run is one drain of the bead queue. It iterates `ddx try`
 across ready beads until a stop condition is met. It owns:
 
 - Queue iteration order
-- Claim acquisition, claim release, and shutdown/interruption cleanup for
-  claimed beads, using the TD-031 claim-state contract
+- Pre-claim intake, safe bead improvement, decomposition, claim acquisition,
+  claim release, and shutdown/interruption cleanup for claimed beads, using the
+  TD-031 claim-state contract
 - Durable bead action after each layer-2 attempt, using TD-031's outcome,
   no_changes, cooldown, and stale-metadata rules
 - No-progress / stop-condition evaluation
@@ -219,6 +236,11 @@ failures:
 - dirty worktree, merge/land conflict, missing checkout, invalid bead metadata,
   unresolved dependencies, config parse errors, missing harness binaries,
   authentication failures, command-not-found/toolchain setup failures
+- intake ambiguity, missing acceptance criteria, spec contradictions,
+  decomposition overflow, review errors, reviewer context overflow, claim races,
+  routing preflight rejection, quota/transport disruption, and any other class
+  where the implementer did not receive valid task context and an opportunity to
+  act
 - `blocked_by_passthrough_constraint` / `agent_power_unsatisfied`
 - any status where retry would require DDx to inspect, remove, rewrite, or
   substitute `--harness`, `--provider`, or `--model`
@@ -232,40 +254,79 @@ ADR-024 is the decision record for this policy. FEAT-010 owns when `ddx try` or
 how review-error retry scopes are counted, and how budget caps stop a drain.
 FEAT-006 owns only the agent request envelope used by those decisions.
 
+### Execution Cycle Traceability
+
+A bead execution is an append-only chain of implementation/review cycles. Layer
+3 owns the chain; layer 2 owns the evidence for each cycle. A repair attempt
+must create a new cycle record rather than overwrite the rejected one.
+
+Each cycle records:
+
+- `cycle_index`
+- `attempt_id`
+- `base_rev`
+- `result_rev` when a stable candidate exists
+- implementer layer-1 run ids, requested power bounds, actual route/power, and
+  cost/usage facts
+- verification command output and exit status
+- `review_group_id`, reviewer layer-1 run ids, reviewer requested/actual
+  route facts, aggregate verdict, per-AC evidence summary, and reviewer cost
+- prior review linkage (`repair_context_from_review_group`) when this cycle is
+  a repair attempt
+- final cycle decision: close, retry, decompose, block, manual-required, or
+  budget stop
+
+When a review requires another implementation cycle, the next implementation
+prompt includes the prior review group's findings as required repair context.
+The prior cycle remains immutable so operators can answer what changed, why the
+first result was rejected, and why the final result passed.
+
 ### Escalation, fallback, retry, and review decision tree
 
 The layer-3 drain evaluates each ready bead through this mechanical sequence:
 
-1. **Eligibility and claim.** Pick a dependency-ready candidate. Run
-   pre-dispatch lint. Valid low lint score may block only in BLOCK mode; hook
-   infrastructure failure is fail-open evidence. Claim races skip the bead for
-   the current pass without cooldown.
-2. **Primary attempt.** Run one layer-2 attempt. A merged success or
-   already-satisfied result closes the bead after required evidence is recorded.
-3. **No usable change.** Verified already-satisfied no-changes closes the bead.
-   Unverified, unjustified, needs-investigation, blocked, superseded, or
-   decomposition no-changes outcomes leave the bead open or blocked according
-   to TD-031. They do not receive retry cooldown by default unless time passing
-   could plausibly change the result.
-4. **Infrastructure fallback.** Transport, quota, rate-limit, command setup,
+1. **Eligibility and intake.** Pick a dependency-ready candidate. Run the
+   pre-claim intake gate. Safe rewrites happen before claim. Too-large work is
+   decomposed before an implementation attempt. Ambiguous or underspecified work
+   is blocked with `needs_human`. Intake infrastructure failure records evidence
+   and follows the configured fail-open/factory-mode policy; it never creates an
+   unexplained cooldown.
+2. **Claim.** Claim only an `actionable_atomic` or safely rewritten bead. Claim
+   races skip the bead for the current pass without cooldown.
+3. **Primary implementation cycle.** Run one layer-2 implementation attempt.
+   A candidate result records `base_rev`, `result_rev`, implementation run ids,
+   route/power facts, verification output, and cost. Already-satisfied
+   no-changes may close only after the required verification evidence exists;
+   otherwise no-changes outcomes follow TD-031.
+4. **Adversarial pre-close review.** Review is enabled by default. For every
+   close-eligible `result_rev`, layer 2 dispatches two no-tool reviewer runs
+   with `role=reviewer`, a stronger `MinPower` floor than the implementer, and
+   correlation metadata (`review_group_id`, `result_rev`, reviewer slot, and
+   implementer route facts). Close is permitted only when the aggregate review
+   is unanimous `APPROVE` with per-AC evidence.
+5. **Review classification.** Any evidenced `REQUEST_CHANGES` or `BLOCK`
+   prevents close. `review_fixable_gap` schedules a repair cycle on the same
+   bead when retry budgets allow, injecting the review findings as required
+   repair context and optionally raising `MinPower`. `review_spec_gap`,
+   `review_missing_acceptance`, `review_too_large`, and non-mechanical unsafe or
+   out-of-scope findings block or decompose instead of asking another
+   implementer to guess. Malformed, empty, context-overflow, and transport
+   reviewer failures emit `review-error` scoped to `result_rev` and reviewer
+   slot; after `review_max_retries` they emit `review-manual-required`, block
+   with `needs_human`, and do not close.
+6. **Infrastructure fallback.** Transport, quota, rate-limit, command setup,
    context cancellation, routing preflight rejection, and worker disruption are
    not model-capability failures. They emit structured evidence and either stay
    immediately retryable or use a bounded retry-after when the same class is
    time-based. HTTP 429 retry happens inside one attempt with `rate-limit-retry`
    events.
-5. **Capability retry.** Failed checks, fixable review blocks,
+7. **Capability retry.** Failed checks, `review_fixable_gap`,
    capability-insufficient attempts, and eligible no-changes-after-attempt may
    schedule a higher-power retry by raising the next request's `MinPower`.
    Passthrough constraints remain unchanged. If the requested power cannot be
    satisfied under those constraints, DDx records a terminal operator-action
    classification and stops retrying that bead.
-6. **Post-merge review.** When review is enabled, the reviewer runs in TD-033
-   no-tool mode over assembled evidence. `APPROVE` closes. `REQUEST_CHANGES`
-   and `BLOCK` reopen with review evidence and feed review triage. Malformed,
-   empty, context-overflow, and transport reviewer failures emit
-   `review-error` scoped to `result_rev`; after `review_max_retries` they emit
-   `review-manual-required` and park the bead without closing.
-7. **Cost stop.** Implementation and review attempts both contribute reported
+8. **Cost stop.** Implementation and review attempts both contribute reported
    billable cost to the drain budget according to FEAT-014 cost-class metadata.
    When the cap trips, the drain records a budget stop and stops claiming new
    work; the cap is not reported as model failure.
@@ -337,10 +398,13 @@ which condition fired.
 3. **`deferred`** — a configured wall-clock or attempt-count budget is
    exhausted. The remaining queue is intact and a subsequent `ddx work`
    resumes from where this one stopped.
-4. **`no_progress`** — `N` consecutive `ddx try` attempts produced no
-   commit and no merged side-effect on the base branch (default
-   `N = 3`; configurable). This is the mechanical "we are spinning"
-   detector, not a content-aware judgment.
+4. **`no_progress`** — `N` consecutive valid implementation attempts produced
+   no commit and no merged side-effect on the base branch (default `N = 3`;
+   configurable). A valid implementation attempt is one where DDx created a
+   checkout, supplied task context to the implementer, and the implementer had
+   an opportunity to act. Intake blocks, decomposition, claim races, routing
+   preflight rejection, quota/transport/auth/tool setup failures, review errors,
+   and operator-action classes do not increment this counter.
 5. **`signal`** — a SIGINT/SIGTERM was received between attempts. The
    in-flight `ddx try` (if any) finalizes per its own merge/preserve
    policy before the loop record closes.
@@ -389,13 +453,15 @@ adds two quality hooks to the layer-2/layer-3 lifecycle. The hooks are
 implemented in `ExecuteBeadLoopRuntime` at the same boundary that already
 owns bead selection, attempt finalization, and retry classification.
 
-`PreDispatchLintHook` runs after a bead has been selected and verified as
-dependency-eligible, but before DDx creates or starts the agent attempt. It
-receives the bead record, current execution policy, hook mode
-(`WARN-ONLY` or `BLOCK`), and the attempt evidence directory. It invokes the
-bead-lifecycle workflow skill from FEAT-011 and writes a criterion report into
-the evidence bundle. In WARN-ONLY mode, the report is diagnostic. In BLOCK
-mode, a valid low score stops the layer-2 attempt before agent invocation.
+`PreClaimIntakeHook` runs after a bead has been selected and verified as
+dependency-eligible, but before DDx claims it or creates the implementation
+worktree. It receives the bead record, current execution policy, hook mode
+(`WARN-ONLY` or `BLOCK`), and the layer-3 evidence directory. It invokes the
+bead-lifecycle workflow skill from FEAT-011 and writes an actionability,
+scope, and decomposition report. In WARN-ONLY mode, the report is diagnostic
+unless the hook can safely improve or decompose the bead. In BLOCK/factory mode,
+a valid low actionability score, unsafe ambiguity, or too-large classification
+stops implementation before claim.
 
 `PostAttemptTriageHook` runs after the attempt has produced its owned
 evidence: commits or no-changes rationale, command results, review verdicts,
@@ -409,9 +475,12 @@ not replace the existing success/no-changes/failed outcome taxonomy.
 Both hooks are fail-open for infrastructure failures. If the skill package is
 missing, the hook process crashes, evidence cannot be written, or the model
 invocation fails, DDx records the hook error and continues with the underlying
-attempt flow. Only a successfully computed low lint score can block dispatch,
-and only when BLOCK mode is active. `--force --reason <text>` records an event
-with the actor, reason, hook mode, and overridden criteria before proceeding.
+attempt flow in WARN-ONLY mode. In BLOCK/factory mode, hook infrastructure
+failure may skip the current candidate for the pass with observable evidence,
+but it must not park the bead behind an unexplained cooldown. Only a
+successfully computed intake/lint result can block dispatch as an authoring or
+scope failure. `--force --reason <text>` records an event with the actor,
+reason, hook mode, and overridden criteria before proceeding.
 
 `ExecuteBeadReport` gains an `OutcomeReason` field beside the existing
 `Disrupted` flag. `Disrupted` remains the coarse boolean that the attempt did
@@ -420,6 +489,10 @@ by lifecycle classification, for example:
 
 - `bead_lint_warn`
 - `bead_lint_blocked`
+- `intake_actionable_atomic`
+- `intake_rewritten`
+- `intake_decomposed`
+- `intake_needs_human`
 - `forced_with_reason`
 - `triage_prompt_quality`
 - `triage_task_quality`
@@ -681,10 +754,13 @@ spinning, or interrupted
 **So that** I do not burn budget on a pathological queue state
 
 **Acceptance Criteria:**
-- Given `N` consecutive `ddx try` attempts produce no commit and no
+- Given `N` consecutive valid implementation attempts produce no commit and no
   merged side-effect (default `N = 3`, configurable), then the next
-  stop-condition evaluation triggers `no_progress` and the layer-3
-  record terminates with that disposition.
+  stop-condition evaluation triggers `no_progress` and the layer-3 record
+  terminates with that disposition.
+- Given a candidate is skipped by intake, claim race, routing preflight,
+  quota/transport/auth/tool setup failure, review error, or operator-action
+  class, then that iteration does not increment the no-progress counter.
 - Given retry policy permits escalation before `no_progress` fires, when
   a retry is scheduled, then the next layer-1 run raises `MinPower`
   and records the actual model/power returned by the agent.

@@ -18,7 +18,8 @@ ddx:
 DDx now has three overlapping concerns in the bead execution path:
 
 - retrying a bead attempt when stronger reasoning could plausibly help
-- running a post-merge reviewer that is independent from the implementer
+- running an adversarial pre-close reviewer gate that is independent from the
+  implementer
 - enforcing cost visibility and budget stops without taking ownership of
   provider/model routing
 
@@ -91,10 +92,22 @@ exponential backoff, and emits `rate-limit-retry` evidence. When the retry
 budget is exhausted, the attempt falls back to the ordinary `execution_failed`
 mapping.
 
-### Reviewer Routing
+### Default Adversarial Pre-Close Review Gate
 
-Post-merge review is a separate review-mode invocation over assembled evidence.
-The reviewer must run in TD-033 no-tool reviewer mode.
+Every close-eligible implementation result passes through an adversarial
+pre-close review gate before DDx mutates the bead to `closed`. Review is enabled
+by default. Disabling it is an explicit operator override and must record an
+auditable reason.
+
+The gate runs after the implementation attempt has produced stable evidence
+(`base_rev`, `result_rev`, diff, verification command output, bead metadata, and
+governing artifacts), and before the durable close mutation. The candidate
+commit may already exist in git so the reviewer can inspect a stable
+`result_rev`; the bead is not closed until the review gate approves that result.
+
+The default gate dispatches two independent reviewer invocations. Each reviewer
+runs in TD-033 no-tool reviewer mode over the same bounded evidence bundle and
+must return a structured verdict with per-acceptance-criterion evidence.
 
 DDx requests a reviewer that is stronger than the implementer by using the
 implementer's actual power as evidence and setting reviewer `MinPower` to a
@@ -105,6 +118,8 @@ higher floor. DDx also supplies structured correlation facts:
 - `attempt_id`
 - `session_id`
 - `result_rev`
+- `review_group_id`
+- `reviewer_index`
 - implementer harness/provider/model/power when known
 
 These fields are Day-1 observability. DDx records them so operators and metrics
@@ -119,16 +134,47 @@ visibility; it is not by itself a review failure.
 
 ### Review Outcomes And Retry
 
-Reviewer output must satisfy the structured verdict contract. `APPROVE` closes
-the bead. `REQUEST_CHANGES` and `BLOCK` reopen the bead with review evidence and
-feed the review-triage ladder. Malformed output, empty provider output,
-context-overflow, and transport failure are `review-error` classes, scoped to
-the reviewed `result_rev`.
+Reviewer output must satisfy the structured verdict contract. A valid approval
+requires per-AC evidence; an `APPROVE` without evidence is malformed, not a
+pass. The aggregate gate is conservative:
+
+- unanimous reviewer `APPROVE` with per-AC evidence permits close;
+- any evidenced `REQUEST_CHANGES` or `BLOCK` prevents close;
+- reviewer disagreement is preserved in the review group evidence, and the
+  non-approve verdict wins when it cites evidence;
+- malformed, empty, context-overflow, and transport failures are
+  `review-error` classes scoped to the reviewed `result_rev` and reviewer.
+
+Non-approve reviewer findings are classified before the next action:
+
+- `review_fixable_gap` — implementation or test work is missing, incomplete, or
+  erroneous. DDx schedules a new implementation cycle on the same bead when
+  retry budgets allow. The next implementation prompt includes the review
+  findings as required repair context. DDx may raise `MinPower` only when the
+  finding is plausibly capability-sensitive.
+- `review_spec_gap` / `review_missing_acceptance` — the bead or governing spec
+  is ambiguous, unverifiable, contradictory, or missing acceptance criteria. DDx
+  blocks the bead with `needs_human` and does not ask another implementer to
+  guess.
+- `review_too_large` — the result or bead is too broad for bounded review. DDx
+  runs the intake/decomposition path, blocks or decomposes the parent, and does
+  not re-run the same monolithic implementation attempt.
+- `review_unsafe_or_out_of_scope` — the implementation changed forbidden scope,
+  removed checks, weakened behavior, or otherwise needs explicit repair. If the
+  repair is mechanical it follows `review_fixable_gap`; otherwise it blocks with
+  `needs_human`.
 
 Review errors retry the review path up to `review_max_retries` for the same
-`result_rev`. On exhaustion, DDx emits `review-manual-required` and parks the
-bead for operator review without closing it. A new implementation result starts
-a new review-error retry scope.
+`result_rev` and reviewer slot. On exhaustion, DDx emits
+`review-manual-required`, blocks the bead with `needs_human`, and parks it for
+operator review without closing it. A new implementation result starts a new
+review-error retry scope.
+
+Each implementation/review cycle is append-only. A repair attempt creates a new
+cycle record linked to the prior review group (`repair_context_from_review_group`)
+and records its own `base_rev`, `result_rev`, implementer run ids, verification
+output, reviewer run ids, aggregate verdict, retry/decomposition/block decision,
+and cost summary. No cycle overwrites prior evidence.
 
 ### Cost Accounting
 
@@ -147,8 +193,9 @@ budget stop instead of disguising the stop as model failure.
 
 - FEAT-006 owns request construction: `MinPower` / `MaxPower`, passthrough
   envelope, role/correlation metadata, and actual power recording.
-- FEAT-010 owns retry scheduling, stop-condition evaluation, no-progress
-  handling, review retry scopes, and budget stops.
+- FEAT-010 owns intake, retry scheduling, stop-condition evaluation,
+  no-progress handling, adversarial review aggregation, review retry scopes, and
+  budget stops.
 - FEAT-014 owns normalized usage, cost, cost-class, and freshness semantics.
 - FEAT-022 and TD-033 own review evidence assembly and no-tool reviewer mode.
 - DDx routing lint should treat concrete route mutation in `run`, `try`, or
@@ -158,8 +205,9 @@ budget stop instead of disguising the stop as model failure.
 
 - Specifying Fizeau's internal routing, fallback, provider-health, or model
   scoring algorithm.
-- Guaranteeing a different reviewer provider. DDx can request stronger review
-  and record degradation, not force a route.
+- Guaranteeing a different reviewer provider or model. DDx can request stronger
+  review, dispatch independent reviewer slots, and record degradation, not force
+  a route.
 - Retrying by concrete model name or profile mutation.
 - Adding a fourth run layer or a review-specific execution substrate.
 

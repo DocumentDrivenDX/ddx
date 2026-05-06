@@ -146,12 +146,12 @@ Interpretation:
     Outcome samples may record recent success/failure, latency, and last
     observed token/cost values when available; DDx does not store provider
     transcripts or native session bodies as routing inputs.
-13a. **Review cost and pairing signals** — post-merge review invocations record
-    the same normalized cost fields as primary attempts plus compact
-    role/correlation metadata (`role=reviewer`, reviewed `result_rev`, and
-    implementer/reviewer route facts when known). A `review-pairing-degraded`
-    event is a routing-quality signal for operators and metrics; it is not a
-    route-selection input owned by DDx.
+13a. **Review cost and pairing signals** — default adversarial pre-close review
+    invocations record the same normalized cost fields as primary attempts plus
+    compact role/correlation metadata (`role=reviewer`, reviewed `result_rev`,
+    `review_group_id`, reviewer slot, and implementer/reviewer route facts when
+    known). A `review-pairing-degraded` event is a routing-quality signal for
+    operators and metrics; it is not a route-selection input owned by DDx.
 14. **Snapshot history for live quota sources** — when DDx depends on an
     actively probed quota source, it checkpoints time-stamped quota snapshots
     asynchronously and relates them to native usage accumulation to build a

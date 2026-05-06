@@ -1,21 +1,29 @@
-# Triage Gate — Pre-Claim Complexity Evaluator
+# Intake Gate — Pre-Claim Actionability And Complexity Evaluator
 
-The triage gate is a pre-Claim phase in `ddx work` that evaluates each candidate
-bead before an agent worker claims it. Its purpose is to prevent coarse epics
-(beads with multiple independent deliverables) from being dispatched as
-monolithic work items, which wastes attempt slots and corrupts claim semantics.
+The intake gate is a pre-Claim phase in `ddx work` that evaluates each
+candidate bead before an agent worker claims it. Its purpose is to improve beads
+that can be safely clarified, prevent coarse epics from being dispatched as
+monolithic work items, and block ambiguous work before an implementer is forced
+to guess.
 
 ## When the gate triggers
 
-The gate runs for every ready bead, between the routing preflight check and
-`Store.Claim`. It evaluates the bead's title, description, acceptance criteria,
+The gate runs for every ready bead before `Store.Claim`. It evaluates the bead's
+title, description, acceptance criteria, labels, parent, dependencies, spec-id,
 and prior attempt history to classify it as:
 
-- **atomic** — a single coherent unit of work; proceeds to Claim normally.
-- **decomposable** — multiple independent deliverables; the gate files child
-  beads and blocks the parent.
-- **ambiguous** — needs human clarification; the gate sets
-  `execution-eligible=false` and adds `label=triage:needs-human`.
+- **actionable_atomic** — a single coherent unit of work; proceeds to Claim
+  normally.
+- **actionable_but_rewritten** — the gate made safe, intent-preserving bead
+  updates through `ddx bead update`; proceeds to Claim after the mutation.
+- **too_large_decomposed** — multiple independent deliverables; the gate files
+  child beads, records the AC map, and blocks the parent.
+- **ambiguous_needs_human** — needs human clarification; the gate sets
+  `execution-eligible=false` or `blocked`, and adds `needs_human`.
+
+Safe rewrites may add durable evidence, normalize the bead body, or wire obvious
+metadata. They must not invent product behavior, change scope, choose between
+conflicting requirements, or guess a missing governing artifact.
 
 ## Bypassing the gate per-bead
 
@@ -36,9 +44,14 @@ When the gate decomposes a bead:
 1. Child beads are filed with `parent: <id>` linking back to the epic.
 2. The parent's status is set to `blocked`.
 3. The parent receives a `kind:triage-decomposed` event whose JSON body lists
-   the `child_ids` and the splitter's `rationale`.
+   the `child_ids`, the splitter's `rationale`, and an `ac_map`.
 4. Dependency edges are added: the parent depends on all children, ensuring it
    cannot be dispatched again until children close (should it be re-opened).
+
+The `ac_map` is load-bearing. Every parent acceptance criterion must map to at
+least one child acceptance criterion or be explicitly marked `needs_human` or
+`non_scope` with a rationale. A split that drops an AC is invalid and blocks for
+operator review instead of dispatching children as if the work were complete.
 
 Children re-enter the triage gate on their next dispatch cycle. If a child is
 itself decomposable, the gate will split it further — up to the depth cap.
@@ -65,10 +78,16 @@ The operator must manually split the bead or add `triage:skip` to bypass.
 
 ## AC-coverage metric
 
-The `bead-split` prompt is evaluated against a held-out corpus using a
-string-overlap metric: the fraction of unique AC tokens (alphanumeric tokens
-≥ 3 chars) from the parent's acceptance criteria that appear in the combined
-acceptance criteria of the child specs. A rate ≥ 90% is required.
+The `bead-split` prompt is evaluated against a held-out corpus using both:
+
+- hard AC traceability: every parent AC maps to child ACs, `needs_human`, or
+  `non_scope`;
+- string-overlap metric: the fraction of unique AC tokens (alphanumeric tokens
+  ≥ 3 chars) from the parent's acceptance criteria that appear in the combined
+  acceptance criteria of the child specs.
+
+A rate ≥ 90% is required for the heuristic metric, but overlap alone is not
+acceptance. The hard AC map is the gate that prevents lossy decomposition.
 
 ## Regenerating the historical corpus
 
@@ -109,7 +128,8 @@ production, always wire a `ComplexityGate` via `NewComplexityGate`.
 
 | Event kind              | When                                       | Body                          |
 |-------------------------|--------------------------------------------|-------------------------------|
-| `triage-decomposed`     | Parent split into children                 | `{child_ids, rationale}`      |
+| `triage-rewritten`      | Safe bead improvement applied              | `{fields, rationale}`         |
+| `triage-decomposed`     | Parent split into children                 | `{child_ids, rationale, ac_map}` |
 | `triage-overflow`       | Bead at depth cap, blocked                 | `{depth, max}`                |
 | `triage-ambiguous`      | Gate returned ambiguous classification     | `{confidence, reasoning}`     |
 | `triage.gate_disabled`  | Loop boot with nil gate (loop event log)   | `{bead_id}`                   |
