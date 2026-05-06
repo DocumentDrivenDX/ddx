@@ -1,0 +1,47 @@
+{
+  "attempt_id": "20260506T091329-84c76e82",
+  "bead_id": "ddx-9d466892",
+  "base_rev": "e92f760d1bc63c360e6eb9236920b9c642c22b17",
+  "created_at": "2026-05-06T09:13:32.011046071Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9d466892",
+    "title": "Add prose quality fixtures and expected findings",
+    "description": "CONTEXT\nThe prose checker needs fixture coverage before rule and CLI work so agents can distinguish useful findings from noisy false positives. This bead adds test inputs and expected outputs only; it should not implement checker logic unless a tiny schema helper is already required by existing test conventions.\n\nIN-SCOPE FILES\n- cli/internal/docprose/testdata/ or the fixture path selected by TD-036\n- cli/internal/docprose/*_test.go only if needed to lock fixture loading/golden comparison conventions\n- docs/helix/02-design/technical-designs/TD-036-prose-quality-pipeline.md only if the selected fixture path needs a minor correction\n\nFIXTURE CASES\n- Generic AI-like prose that should be flagged: unsupported robust/comprehensive/seamless claims, vague importance language, filler transitions, repeated openings.\n- Technical DDx prose that should not be over-flagged: headings, lists, ADR/spec terminology, precise implementation references.\n- Vocabulary behavior: accept DDx, bead, Helix, Fizeau-like project terms when configured; reject known filler when unsupported.\n- Mode differences: technical, planning, and public prose.\n\nOUT-OF-SCOPE\n- CLI command implementation.\n- Default skill text.\n- Review integration.",
+    "acceptance": "1. Fixture Markdown files cover positive and negative examples for generic AI-like prose, technical DDx prose, project vocabulary, and at least two prose modes.\n2. Expected findings are stored in a machine-readable golden format with file, line, rule id, severity, rationale, and suggested edit fields.\n3. A focused test such as `cd cli \u0026\u0026 go test ./internal/docprose/... -run TestFixtures` passes, or if the package does not exist yet, the bead creates the minimal package/test harness needed for fixture validation.\n4. The fixtures include at least one negative case proving technical lists/headings/domain terms are not automatically findings.\n5. `lefthook run pre-commit` passes.",
+    "parent": "ddx-ccda7a32",
+    "labels": [
+      "phase:2",
+      "area:docs",
+      "area:cli",
+      "kind:test",
+      "prose-quality"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T09:13:29Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "execute-loop-heartbeat-at": "2026-05-06T09:13:29.648567921Z",
+      "spec-id": "TD-036"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-036",
+      "path": "docs/helix/02-design/technical-designs/TD-036-prose-quality-pipeline.md",
+      "title": "Technical Design: Prose Quality Pipeline"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T091329-84c76e82",
+    "prompt": ".ddx/executions/20260506T091329-84c76e82/prompt.md",
+    "manifest": ".ddx/executions/20260506T091329-84c76e82/manifest.json",
+    "result": ".ddx/executions/20260506T091329-84c76e82/result.json",
+    "checks": ".ddx/executions/20260506T091329-84c76e82/checks.json",
+    "usage": ".ddx/executions/20260506T091329-84c76e82/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-9d466892-20260506T091329-84c76e82"
+  },
+  "prompt_sha": "ceef1357d3ddf08d8aab7cac911449489acef3c4fa9dda3743bef47b33528645"
+}
