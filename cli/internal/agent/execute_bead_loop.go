@@ -278,6 +278,9 @@ type ExecuteBeadReport struct {
 	// the attempt outcome. It complements Disrupted/DisruptionReason without
 	// changing their mechanical interruption semantics.
 	OutcomeReason string `json:"outcome_reason,omitempty"`
+	// ResourceExhausted carries the execution-root preflight result when the
+	// attempt stopped before the agent could safely continue.
+	ResourceExhausted any `json:"resource_exhausted,omitempty"`
 }
 
 type ExecuteBeadExecutor interface {
@@ -855,6 +858,68 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 		if report.Detail == "" {
 			report.Detail = ExecuteBeadStatusDetail(report.Status, "", "")
+		}
+		if IsResourceExhaustedStatus(report.Status) {
+			result.Attempts++
+			exitReason = "resource_exhausted"
+			if err := w.Store.Unclaim(candidate.ID); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("Unclaim", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return result, ctx.Err()
+				}
+				return result, err
+			}
+			emitResourceExhausted(emit, w.Store, candidate.ID, report, assignee, now().UTC())
+			result.Results = append(result.Results, report)
+			result.Failures++
+			result.LastFailureStatus = report.Status
+			if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("AppendEvent", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return result, ctx.Err()
+				}
+				return result, err
+			}
+			finalAttemptID := report.AttemptID
+			if finalAttemptID == "" {
+				finalAttemptID = provAttemptID
+			}
+			phaseSeq++
+			emitProgress(runtime.ProgressCh, ProgressEvent{
+				EventID:   "evt-" + randomProgressID(),
+				AttemptID: finalAttemptID,
+				WorkerID:  runtime.WorkerID,
+				ProjectID: runtime.ProjectRoot,
+				BeadID:    candidate.ID,
+				Harness:   harness,
+				Model:     model,
+				Profile:   profile,
+				Phase:     "failed",
+				PhaseSeq:  phaseSeq,
+				Heartbeat: false,
+				TS:        now().UTC(),
+				ElapsedMS: now().Sub(runStart).Milliseconds(),
+				Message:   report.Detail,
+			})
+			emit("bead.result", map[string]any{
+				"bead_id":              candidate.ID,
+				"status":               report.Status,
+				"detail":               report.Detail,
+				"session_id":           report.SessionID,
+				"result_rev":           report.ResultRev,
+				"base_rev":             report.BaseRev,
+				"preserve_ref":         report.PreserveRef,
+				"no_changes_rationale": report.NoChangesRationale,
+				"duration_ms":          now().Sub(runStart).Milliseconds(),
+			})
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintln(runtime.Log, ResourceExhaustedStopMessage)
+			}
+			return result, nil
 		}
 		// ddx-5b3e57f4: distinguish worker-disrupted from model-gave-up.
 		// A failed attempt where the loop ctx was cancelled, or the executor
@@ -1585,6 +1650,66 @@ func writeLoopEvent(sink io.Writer, sessionID, eventType string, data map[string
 	_, _ = sink.Write([]byte("\n"))
 }
 
+func resourceExhaustedCheckResult(report ExecuteBeadReport) (ExecutionResourceCheckResult, bool) {
+	switch v := report.ResourceExhausted.(type) {
+	case ExecutionResourceCheckResult:
+		return v, true
+	case *ExecutionResourceCheckResult:
+		if v != nil {
+			return *v, true
+		}
+	}
+	return ExecutionResourceCheckResult{}, false
+}
+
+func emitResourceExhausted(emit func(string, map[string]any), store ExecuteBeadLoopStore, beadID string, report ExecuteBeadReport, actor string, createdAt time.Time) {
+	var detail map[string]any
+	if result, ok := resourceExhaustedCheckResult(report); ok {
+		detail = map[string]any{
+			"bead_id":         beadID,
+			"project_root":    result.ProjectRoot,
+			"temp_root":       result.TempRoot,
+			"evidence_roots":  result.EvidenceRoots,
+			"root_checks":     result.RootChecks,
+			"cleanup_summary": result.CleanupSummary,
+			"detail":          report.Detail,
+			"status":          report.Status,
+		}
+		body, err := json.Marshal(detail)
+		if err != nil {
+			detail = map[string]any{
+				"bead_id": beadID,
+				"detail":  report.Detail,
+				"status":  report.Status,
+			}
+		} else {
+			detail["body"] = string(body)
+		}
+	} else {
+		detail = map[string]any{
+			"bead_id": beadID,
+			"detail":  report.Detail,
+			"status":  report.Status,
+		}
+	}
+	emit("resource.exhausted", detail)
+	if store == nil {
+		return
+	}
+	body, err := json.Marshal(detail)
+	if err != nil {
+		body = []byte(report.Detail)
+	}
+	_ = store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "resource-exhausted",
+		Summary:   ResourceExhaustedStopMessage,
+		Body:      string(body),
+		Actor:     actor,
+		Source:    "ddx agent execute-loop",
+		CreatedAt: createdAt,
+	})
+}
+
 // formatLoopResult returns a concise human-readable summary of a bead execution
 // result using merged/preserved/error terminology instead of raw status codes.
 func formatLoopResult(report ExecuteBeadReport) string {
@@ -1600,6 +1725,11 @@ func formatLoopResult(report ExecuteBeadReport) string {
 		return "merged"
 	case ExecuteBeadStatusAlreadySatisfied:
 		return "already_satisfied"
+	case ExecuteBeadStatusResourceExhausted:
+		if report.Detail != "" {
+			return fmt.Sprintf("resource_exhausted: %s", report.Detail)
+		}
+		return "resource_exhausted"
 	case ExecuteBeadStatusNoChanges:
 		if report.NoChangesRationale != "" {
 			return fmt.Sprintf("no_changes: %s", report.NoChangesRationale)

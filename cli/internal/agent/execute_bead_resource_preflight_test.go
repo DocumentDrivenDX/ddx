@@ -90,9 +90,11 @@ func TestExecuteBeadResourcePreflight_FailsBeforeWorktreeSetup(t *testing.T) {
 		ResourceChecker: checker,
 	}, gitOps)
 
-	require.Error(t, err)
-	assert.Nil(t, res)
-	assert.ErrorContains(t, err, "resource_exhausted")
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, ExecuteBeadStatusResourceExhausted, res.Status)
+	assert.Contains(t, res.Error, "resource_exhausted")
+	require.NotNil(t, res.ResourceExhausted)
 	assert.Equal(t, 1, checker.calls)
 	assert.Zero(t, gitOps.headRevCalls)
 	assert.Zero(t, gitOps.resolveRevCalls)

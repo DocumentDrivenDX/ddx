@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"errors"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
@@ -65,6 +66,10 @@ type ExecuteBeadResult struct {
 	// exited without creating a commit or no_changes_rationale.txt. It helps
 	// operators diagnose silent commit failures before the worktree is cleaned up.
 	NoEvidencePaths []string `json:"no_evidence_paths,omitempty"`
+
+	// ResourceExhausted captures the root and cleanup summary when execution
+	// stopped before a bead attempt because the host could not safely continue.
+	ResourceExhausted any `json:"resource_exhausted,omitempty"`
 
 	Harness                     string  `json:"harness,omitempty"`
 	Provider                    string  `json:"provider,omitempty"`
@@ -688,6 +693,21 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		resourceChecker = NewExecutionResourceChecker(projectRoot, gitOps)
 	}
 	if _, err := resourceChecker.Check(ctx); err != nil {
+		var resourceErr *ResourceExhaustedError
+		if errors.As(err, &resourceErr) {
+			res := &ExecuteBeadResult{
+				BeadID:            beadID,
+				WorkerID:          runtime.WorkerID,
+				ExitCode:          1,
+				Error:             resourceErr.Error(),
+				Reason:            resourceErr.Error(),
+				Outcome:           ExecuteBeadOutcomeTaskFailed,
+				Status:            ExecuteBeadStatusResourceExhausted,
+				ResourceExhausted: &resourceErr.Result,
+			}
+			res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
+			return res, nil
+		}
 		return nil, err
 	}
 

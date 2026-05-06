@@ -44,6 +44,11 @@ const (
 	FailureModeUnknown                        = "unknown"
 )
 
+// ResourceExhaustedStopMessage is the operator-visible message emitted when
+// execution must stop because the host cannot safely continue draining the
+// queue.
+const ResourceExhaustedStopMessage = "resource exhausted after cleanup; stopping work loop"
+
 // ClassifyFailureMode derives a failure_mode for a worker-level result from
 // its outcome, exit code, and error message. Returns "" when the outcome is
 // task_succeeded (success carries no failure mode). task_no_changes always
@@ -274,6 +279,7 @@ const (
 	ExecuteBeadStatusNoChanges                  = "no_changes"
 	ExecuteBeadStatusAlreadySatisfied           = "already_satisfied"
 	ExecuteBeadStatusSuccess                    = "success"
+	ExecuteBeadStatusResourceExhausted          = "resource_exhausted"
 
 	// ExecuteBeadStatusDeclinedNeedsDecomposition is a structured outcome
 	// signalling that the executor inspected the bead and concluded it cannot
@@ -361,6 +367,12 @@ func ClassifyExecuteBeadStatus(outcome string, exitCode int, reason string) stri
 	default:
 		return ExecuteBeadStatusExecutionFailed
 	}
+}
+
+// IsResourceExhaustedStatus reports whether the status is the stable
+// host-resource failure classification.
+func IsResourceExhaustedStatus(status string) bool {
+	return status == ExecuteBeadStatusResourceExhausted
 }
 
 func isPreservedNeedsReviewReason(reason string) bool {

@@ -1739,6 +1739,10 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 
 	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
 	if _, err := resourceChecker.Check(cmd.Context()); err != nil {
+		var resourceErr *agent.ResourceExhaustedError
+		if errors.As(err, &resourceErr) {
+			_, _ = fmt.Fprintln(cmd.OutOrStdout(), agent.ResourceExhaustedStopMessage)
+		}
 		return err
 	}
 
@@ -1820,6 +1824,31 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		}, gitOps)
 		if execErr != nil && res == nil {
 			return agent.ExecuteBeadReport{}, execErr
+		}
+		if res != nil && agent.IsResourceExhaustedStatus(res.Status) {
+			return agent.ExecuteBeadReport{
+				BeadID:                      res.BeadID,
+				AttemptID:                   res.AttemptID,
+				WorkerID:                    res.WorkerID,
+				Harness:                     res.Harness,
+				Provider:                    res.Provider,
+				Model:                       res.Model,
+				ActualPower:                 res.ActualPower,
+				PredictedPower:              res.PredictedPower,
+				PredictedSpeedTPS:           res.PredictedSpeedTPS,
+				PredictedCostUSDPer1kTokens: res.PredictedCostUSDPer1kTokens,
+				PredictedCostSource:         res.PredictedCostSource,
+				Status:                      res.Status,
+				Detail:                      res.Detail,
+				SessionID:                   res.SessionID,
+				BaseRev:                     res.BaseRev,
+				ResultRev:                   res.ResultRev,
+				PreserveRef:                 res.PreserveRef,
+				NoChangesRationale:          res.NoChangesRationale,
+				CostUSD:                     res.CostUSD,
+				DurationMS:                  int64(res.DurationMS),
+				ResourceExhausted:           res.ResourceExhausted,
+			}, nil
 		}
 		if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
 			targetBead, _ := store.Get(beadID)
