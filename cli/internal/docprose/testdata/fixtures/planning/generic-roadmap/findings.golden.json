@@ -1,0 +1,26 @@
+[
+  {
+    "file": "input.md",
+    "line": 3,
+    "rule_id": "prose.planning.claims",
+    "severity": "warning",
+    "rationale": "The sentence uses broad planning language such as \"robust\", \"seamless\", and \"high\" without concrete deliverables.",
+    "suggested_edit": "Replace the roadmap claim with explicit milestones, owners, or dates."
+  },
+  {
+    "file": "input.md",
+    "line": 5,
+    "rule_id": "prose.generic.repeated_opening",
+    "severity": "warning",
+    "rationale": "The opening sentence repeats verbatim, which adds filler instead of direction.",
+    "suggested_edit": "Keep one copy of the sentence and replace the duplicate with a specific next step."
+  },
+  {
+    "file": "input.md",
+    "line": 7,
+    "rule_id": "prose.planning.vagueness",
+    "severity": "warning",
+    "rationale": "The phrase \"most important work\" is too vague to support a plan.",
+    "suggested_edit": "Name the actual work item or decision rather than using priority language alone."
+  }
+]

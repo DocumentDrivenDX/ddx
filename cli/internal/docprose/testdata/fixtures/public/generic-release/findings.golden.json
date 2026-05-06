@@ -1,0 +1,18 @@
+[
+  {
+    "file": "input.md",
+    "line": 3,
+    "rule_id": "prose.public.claims",
+    "severity": "warning",
+    "rationale": "The release copy relies on promotional language such as \"excited\", \"smooth\", \"elegant\", and \"seamless\" instead of specific facts.",
+    "suggested_edit": "Describe the release outcome, compatibility notes, or user-visible change directly."
+  },
+  {
+    "file": "input.md",
+    "line": 5,
+    "rule_id": "prose.public.filler",
+    "severity": "warning",
+    "rationale": "The sentence uses generic filler verbs like \"iterate\", \"polish\", and \"make the experience better\" without a concrete change.",
+    "suggested_edit": "Name the exact improvement or omit the sentence if it does not add information."
+  }
+]
