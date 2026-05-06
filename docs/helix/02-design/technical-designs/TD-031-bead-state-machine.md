@@ -367,17 +367,15 @@ then returns the lifecycle action. The drain loop applies section 5 exactly and
 appends one of the no_changes event kinds from section 4; it does not invent
 new event kinds or use cooldown as a generic parking lot.
 
-### 8.2 Bead Readiness And Triage Contract (ddx-3c154349)
+### 8.2 Bead Readiness Assessment And Triage Contract (ddx-3c154349)
 
 Bead readiness assessment is the canonical pre-claim decision for
 actionability and scope. It owns the readiness queue decision and runs before a
-worker owns the bead, so most readiness actions start from `open`. The
-implementation entrypoint may still be named `MODE: intake` for compatibility,
-but that is legacy wording only; the product concept is bead readiness
-assessment. Within readiness, lint/rubric scoring is a diagnostic pass, not a
-separate queue action. Post-attempt triage is a separate after-evidence queue
-action that reuses the same event taxonomy without changing the readiness
-decision.
+worker owns the bead, so most readiness actions start from `open`.
+Lint/rubric scoring is the diagnostic pass inside readiness, and post-attempt
+triage is a separate after-evidence queue action. The implementation entrypoint
+may still be named `MODE: intake` for compatibility, but that is legacy
+wording only; the product concept is bead readiness assessment.
 
 Status transitions used:
 
@@ -514,9 +512,9 @@ represent these transient states.
 The actual migration survey — which existing beads carry orphaned status
 values, which code paths persist non-canonical statuses, and what the
 mechanical rename looks like — runs in the sibling reconciliation bead.
-This TD does not catalogue current data. The readiness and triage queue-action
-contract in section 8.2 is already defined here; only compatibility wording
-such as `MODE: intake` remains legacy.
+This TD does not catalogue current data. The readiness assessment and triage
+queue-action contract in section 8.2 is already defined here; only
+compatibility wording such as `MODE: intake` remains legacy.
 
 Sibling beads handling the migration:
 

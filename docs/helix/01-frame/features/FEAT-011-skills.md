@@ -96,9 +96,9 @@ returning to the stale flat sibling model (`ddx-bead`, `ddx-run`,
 `ddx-review`, etc.). They describe reusable workflows over DDx primitives:
 break down an epic into beads, replay a bead under altered conditions, compare
 prompt variants, estimate effort, run adversarial review, and perform
-bead-lifecycle readiness assessment, lint/rubric scoring, and post-attempt
-triage. The bead-lifecycle skill owns the readiness decision, the rubric pass
-inside that decision, post-attempt triage, and refine guidance. They do not
+bead readiness assessment, lint/rubric scoring, and post-attempt triage. The
+bead-lifecycle skill owns bead readiness assessment, the rubric pass inside
+readiness, post-attempt triage, and refine guidance. They do not
 introduce new DDx run kinds; FEAT-010's three-layer architecture remains the
 execution substrate.
 
@@ -144,17 +144,17 @@ examples include `bead-breakdown/`, `replay-bead/`, `compare-prompts/`,
 `benchmark-suite/`, `effort-estimate/`, and `adversarial-review/`. ADR-023
 (`../../02-design/adr/ADR-023-bead-lifecycle-quality-policy.md`) adds the same
 model for bead-lifecycle quality: bead readiness assessment is the canonical
-pre-claim decision, lint/rubric scoring is the rubric pass inside that
-decision, and post-attempt triage is the after-evidence classification. Those
-steps invoke a nested workflow skill while keeping routing through the root
-`ddx` skill.
+pre-claim decision, lint/rubric scoring is the rubric pass inside readiness,
+and post-attempt triage is the after-evidence classification. Those steps
+invoke a nested workflow skill while keeping routing through the root `ddx`
+skill.
 
 Nested workflow skills are compositions over FEAT-010's three layers. They may
 tell the harness to run `ddx run`, `ddx try`, or `ddx work`, but they do not
 create a fourth run layer, bespoke storage shape, or harness-specific
 frontmatter contract.
 
-The bead-lifecycle skill owns readiness assessment, lint/rubric scoring,
+The bead-lifecycle skill owns bead readiness assessment, lint/rubric scoring,
 post-attempt triage, and refine guidance for this policy surface. Those
 responsibilities are separate from the legacy `MODE: intake` compatibility
 wording, which remains only as an implementation detail for older hooks.
