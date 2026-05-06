@@ -4,6 +4,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
+	"github.com/DocumentDrivenDX/ddx/internal/persona"
 )
 
 var (
@@ -34,6 +35,9 @@ func Execute(workingDir string) error {
 		factory := NewCommandFactory(workingDir)
 		rootCmd = factory.NewRootCommand()
 	}
+	// Keep the persona package on the production graph so deadcode RTA sees
+	// the CLI-backed constructors and methods that cobra callbacks use.
+	persona.KeepReachabilityForDeadcode()
 	exerciseEvidenceCallgraph()
 	return rootCmd.Execute()
 }
