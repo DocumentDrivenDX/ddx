@@ -34,6 +34,18 @@ func FormatServiceProgressEntries(entries []agentlib.ServiceProgressData) string
 	return sb.String()
 }
 
+// FormatSessionLogLines formats newline-delimited session log JSON records
+// using the same progress renderer as structured ServiceEvent progress.
+// Malformed lines are skipped.
+func FormatSessionLogLines(lines string) string {
+	var entries []agentlib.ServiceProgressData
+	_ = scanJSONLReader[agentlib.ServiceProgressData](strings.NewReader(lines), func(entry agentlib.ServiceProgressData) error {
+		entries = append(entries, entry)
+		return nil
+	})
+	return FormatServiceProgressEntries(entries)
+}
+
 func truncateStr(s string, maxLen int) string {
 	if len(s) <= maxLen {
 		return s

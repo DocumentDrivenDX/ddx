@@ -1,0 +1,1 @@
+{"phase":"tool","state":"complete","source":"native","task_id":"ddx-native","turn_index":23,"tool_name":"git","command":"git status --short","action":"inspect git status","output_bytes":512,"output_lines":14,"output_excerpt":" M cli/internal/agent/session_log_format.go","duration_ms":0}
