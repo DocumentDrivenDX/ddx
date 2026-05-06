@@ -19,9 +19,20 @@ type claimLivenessRecord struct {
 }
 
 func claimLivenessPath(ddxDir, id string) string {
-	root := filepath.Clean(filepath.Dir(ddxDir))
+	root := canonicalClaimRoot(ddxDir)
 	sum := sha1.Sum([]byte(root))
 	return filepath.Join(os.TempDir(), claimLivenessNamespace, hex.EncodeToString(sum[:]), id+".json")
+}
+
+func canonicalClaimRoot(ddxDir string) string {
+	root := filepath.Clean(filepath.Dir(ddxDir))
+	if abs, err := filepath.Abs(root); err == nil {
+		root = abs
+	}
+	if real, err := filepath.EvalSymlinks(root); err == nil {
+		root = real
+	}
+	return filepath.Clean(root)
 }
 
 func writeAtomicClaimFile(path string, data []byte) error {

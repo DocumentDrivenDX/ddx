@@ -738,6 +738,40 @@ func TestHeartbeatKeepsActiveClaimAlive(t *testing.T) {
 	assert.Equal(t, "worker-a", got.Owner)
 }
 
+func TestClaimLeaseCanonicalizesProjectRootAliases(t *testing.T) {
+	withHeartbeat(t, 5*time.Millisecond, 50*time.Millisecond)
+
+	root := t.TempDir()
+	realRoot := filepath.Join(root, "repo")
+	require.NoError(t, os.MkdirAll(filepath.Join(realRoot, ".ddx"), 0o755))
+	aliasRoot := filepath.Join(root, "repo-alias")
+	require.NoError(t, os.Symlink(realRoot, aliasRoot))
+
+	sReal := NewStore(filepath.Join(realRoot, ".ddx"))
+	sAlias := NewStore(filepath.Join(aliasRoot, ".ddx"))
+	b := &Bead{ID: "ddx-hb-alias", Title: "Live claim through alias"}
+	require.NoError(t, sReal.Create(b))
+	require.NoError(t, sReal.Claim(b.ID, "worker-a"))
+
+	deadline := time.Now().Add(150 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		require.NoError(t, sReal.TouchClaimHeartbeat(b.ID))
+		time.Sleep(5 * time.Millisecond)
+	}
+
+	err := sAlias.Claim(b.ID, "worker-b")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "cannot claim")
+
+	ready, err := sAlias.ReadyExecution()
+	require.NoError(t, err)
+	assert.Empty(t, ready)
+
+	got, err := sReal.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "worker-a", got.Owner)
+}
+
 func TestStoreHeartbeat_RemovedOrNoTrackerWrite(t *testing.T) {
 	s := newTestStore(t)
 	b := &Bead{ID: "ddx-hb-no-tracker", Title: "Heartbeat stays out of JSONL"}

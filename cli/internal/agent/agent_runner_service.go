@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"io"
 	"os"
 	"time"
 
@@ -83,7 +84,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		return nil, fmt.Errorf("agent: execute: %w", err)
 	}
 
-	final, routing, _ := drainServiceEvents(events)
+	final, routing, _ := drainServiceEventsWithWriter(events, opts.Output)
 	elapsed := time.Since(start)
 
 	result := &Result{
@@ -167,6 +168,10 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 // the routing decision (when present in the routing_decision start event), and
 // any canonical progress payloads emitted by the service.
 func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*agentlib.ServiceFinalData, *agentlib.ServiceRoutingDecisionData, []agentlib.ServiceProgressData) {
+	return drainServiceEventsWithWriter(events, nil)
+}
+
+func drainServiceEventsWithWriter(events <-chan agentlib.ServiceEvent, w io.Writer) (*agentlib.ServiceFinalData, *agentlib.ServiceRoutingDecisionData, []agentlib.ServiceProgressData) {
 	var final *agentlib.ServiceFinalData
 	var routing *agentlib.ServiceRoutingDecisionData
 	var progress []agentlib.ServiceProgressData
@@ -179,8 +184,16 @@ func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*agentlib.ServiceF
 		switch {
 		case decoded.RoutingDecision != nil:
 			routing = decoded.RoutingDecision
+			if w != nil {
+				if line := FormatServiceRoutingDecision(decoded.RoutingDecision); line != "" {
+					_, _ = fmt.Fprintln(w, line)
+				}
+			}
 		case decoded.Progress != nil:
 			progress = append(progress, *decoded.Progress)
+			if w != nil {
+				_, _ = fmt.Fprint(w, FormatServiceProgressEntries([]agentlib.ServiceProgressData{*decoded.Progress}))
+			}
 		case decoded.Final != nil:
 			final = decoded.Final
 		}
