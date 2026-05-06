@@ -235,12 +235,12 @@ details inside it. DDx owns only the envelope around that log:
 - DDx-owned attempt outcome, merge/preserve outcome, gates, and evidence refs
 
 DDx may link or copy the session log attachment for humans, but normal
-execution policy must not render or parse the inner session log to infer
-routing, provider health, model fallbacks, or retry destinations. DDx treats
-the session log as a Fizeau-owned transcript artifact and only uses typed
-agent response fields plus DDx-owned attempt evidence as policy inputs. DDx
-copies or links the artifact as evidence; it does not inspect transcript
-semantics or present the inner session log as a DDx-rendered view.
+execution policy must not render the inner session log, parse transcript
+semantics, or infer routing, provider health, model fallbacks, or retry
+destinations from it. DDx treats the session log as a Fizeau-owned transcript
+artifact and only uses typed agent response fields plus DDx-owned attempt
+evidence as policy inputs. DDx copies or links the artifact as evidence; it
+does not present the inner session log as a DDx-rendered view.
 
 ## Layer Ownership Migration Table
 

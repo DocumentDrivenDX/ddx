@@ -35,9 +35,10 @@ project context before adapters run. DDx manages worker/bead lifecycle
 progress and worker records only. Fizeau owns agent transcript/session
 payloads and transcript/session presentation for agent events that may travel
 through agent-session records. DDx treats forwarded Fizeau agent events as
-opaque attachments and never interprets their semantics. Those payloads never
-become worker state or lifecycle state; the server surfaces them only as
-opaque Fizeau payloads alongside DDx progress views.
+opaque attachments, never interprets their semantics, and never promotes them
+into worker state. Those payloads stay distinct from worker lifecycle state;
+the server surfaces them only as opaque Fizeau payloads alongside DDx
+progress views.
 
 ## Architecture
 
