@@ -189,7 +189,8 @@ Concretely:
 
 1. A worker process (`ddx work`) reads the bead store directly, picks
    the next eligible bead per the current picker logic (priority asc,
-   FIFO within tier), claims it atomically, executes via `try.Attempt`,
+   optional queue-rank within tier, then FIFO), claims it atomically,
+   executes via `try.Attempt`,
    writes evidence locally, and reports the result by writing the bead's
    event log + closing the bead via the store.
 2. **All of #1 happens regardless of whether a server is running.**
@@ -236,7 +237,8 @@ breaking-changes section documents this.
 This is **Proposal B-shaped** (server is passive observer) with one
 addition: the server can write back to the bead store to influence
 worker decisions (e.g., cancel a bead by setting an extra field; set
-priority overrides). Workers see those changes on next bead-store read.
+queue-rank overrides inside a priority bucket, or explicitly change
+priority). Workers see those changes on next bead-store read.
 
 ### Why autonomous-default workers
 
@@ -285,8 +287,9 @@ rules (unchanged from current code):
 
 1. Read eligible beads via `Store.ReadyExecution()` (excludes superseded,
    not-execution-eligible, in retry-cooldown).
-2. Sort by priority ascending (P0 first), then by `updated_at` ascending
-   (FIFO within tier).
+2. Sort by priority ascending (P0 first), then by explicit `queue-rank`
+   ascending inside that priority bucket, then by `created_at` ascending
+   and `id` ascending for deterministic FIFO-style tie-breaking.
 3. If `--label-filter` is set, intersect with bead labels.
 4. Skip beads in the per-Run `attempted` map (set after each unsuccessful
    claim attempt; reset on falling through to "no candidate" per the

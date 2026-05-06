@@ -80,7 +80,9 @@ Known fields are parsed into the bead struct. Unknown fields are preserved in
 `Extra` and round-trip through read/write and import/export flows. This is the
 mechanism that allows HELIX to store fields such as `spec-id`,
 `execution-eligible`, `claimed-at`, `claimed-pid`, `superseded-by`, and
-`replaces`.
+`replaces`. Queue-order metadata such as `queue-rank` also lives in `Extra` so
+operators can override order within a priority bucket without changing the
+bd/br-compatible core schema.
 
 The design also reserves two workflow-facing shapes:
 
@@ -191,8 +193,20 @@ The tracker queue views are derived from one in-memory snapshot.
 - Execution-ready diagnostics must expose TD-031's distinct skipped reasons:
   active cooldown, not executable, superseded, blocked, and epic-only/container
   work. These reasons must not be collapsed into a generic cooldown bucket.
-- Results are sorted by priority, then by stable iteration order from the
-  parsed snapshot.
+- Results are sorted deterministically by:
+  1. `priority` ascending
+  2. explicit `queue-rank` ascending, with missing `queue-rank` sorted after
+     explicit ranks within the same priority bucket
+  3. `created_at` ascending
+  4. `id` ascending
+- `queue-rank` is an operator override only inside one priority bucket. It
+  never makes a lower-priority bead precede a higher-priority bead, and it
+  never bypasses execution-ready filters.
+- Read paths accept integer `queue-rank` values and numeric strings for
+  compatibility. Mutating CLI paths canonicalize queue ranks as JSON numbers.
+- `ddx bead queue move` computes sparse integer ranks. If the requested move
+  has no available midpoint, DDx renormalizes only the affected priority bucket
+  in current effective order before applying the move.
 
 ### Blocked
 
@@ -206,6 +220,8 @@ The tracker queue views are derived from one in-memory snapshot.
 - Status reporting never reparses the file independently of the queue view.
 - Evidence history stored in `Extra["events"]` does not affect queue derivation.
 - Claim metadata does not affect queue derivation beyond the bead's status.
+- Queue-rank metadata affects only ready-order tie-breaking inside a priority
+  bucket and does not affect Ready/Blocked membership.
 
 ## Concurrency Model
 

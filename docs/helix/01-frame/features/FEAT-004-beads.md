@@ -46,6 +46,7 @@ The name follows the `bd` (Dolt-backed) and `br` (SQLite-backed) convention: sho
 11. **Claim ownership** (`ddx bead update <id> --claim [--assignee A]`) — claim a bead with explicit assignee control and stable claim metadata
 12. **Execution evidence** (`ddx bead evidence add/list`) — append-only history for close summaries, agent outputs, and experiment outcomes
 13. **Unknown field preservation** — round-trip fields DDx doesn't know about (enables workflow-specific extensions)
+14. **In-priority queue ordering override** (`ddx bead queue ...`) — let operators move a bead within its existing priority bucket without changing priority or extending the core bead schema
 
 ### Non-Functional
 
@@ -74,7 +75,7 @@ The name follows the `bd` (Dolt-backed) and `br` (SQLite-backed) convention: sho
 | created | datetime | auto | — | ISO-8601 UTC |
 | updated | datetime | auto | — | ISO-8601 UTC |
 
-Unknown fields in imported or existing beads are preserved on read/write. This allows HELIX to store `spec-id`, `execution-eligible`, `claimed-at`, `claimed-pid`, `superseded-by`, and `replaces` without DDx needing to understand them.
+Unknown fields in imported or existing beads are preserved on read/write. This allows HELIX to store `spec-id`, `execution-eligible`, `claimed-at`, `claimed-pid`, `superseded-by`, `replaces`, and DDx-specific queue metadata such as `queue-rank` without extending the core bd/br-compatible schema table.
 
 TD-031 defines how lifecycle actions use the existing carriers: persisted
 bd/br statuses, labels, dependency edges, append-only events, and preserved
@@ -99,6 +100,42 @@ queue-drain contract as ordinary executable task/bug/chore beads.
 
 This split preserves the simple `W2 = bead(W1)` contract for ordinary beads
 while allowing a separate sequential execution mode for epic branches.
+
+### Queue Ordering Overrides
+
+The canonical ready-queue order is:
+
+1. `priority` ascending (`0` first, `4` last)
+2. explicit `queue-rank` ascending, with missing `queue-rank` sorted after
+   explicit ranks inside the same priority bucket
+3. `created_at` ascending
+4. `id` ascending
+
+`queue-rank` is preserved extension metadata stored in the bead's unknown-field
+map, not a core bead schema field. It is an operator override for ordering
+within one priority bucket only. A ranked `P1` bead never sorts ahead of an
+unranked `P0` bead, and a ranked bead that is blocked, on retry cooldown,
+superseded, `execution-eligible=false`, or epic-only/container work remains
+excluded from `ddx work`'s execution-ready picker.
+
+The CLI exposes queue movement as a first-class surface rather than requiring
+operators to manage raw metadata:
+
+- `ddx bead queue top <id>` assigns a rank that places the bead first among
+  ready beads with the same priority.
+- `ddx bead queue move <id> --before <other-id>` places the bead before another
+  bead in the same priority bucket.
+- `ddx bead queue move <id> --after <other-id>` places the bead after another
+  bead in the same priority bucket.
+- `ddx bead queue clear <id>` removes the explicit rank and restores the
+  default tie-break ordering for that bead.
+
+`queue move --before/--after` fails when the two beads have different
+priorities. Operators that want to change urgency must use `ddx bead update
+<id> --priority N` explicitly. Queue-rank values are canonicalized as integers;
+read paths may accept numeric strings for compatibility, but writes persist a
+number. Rank calculation should use sparse integer values and renormalize only
+the affected priority bucket when no midpoint exists.
 
 ## Storage
 
@@ -219,6 +256,9 @@ ddx bead init
 ddx bead create "Title" [--type T] [--priority N] [--labels L,L] [--acceptance A] [--parent ID] [--description D]
 ddx bead show <id> [--json]
 ddx bead update <id> [--title T] [--status S] [--priority N] [--labels L,L] [--acceptance A] [--assignee A] [--claim]
+ddx bead queue top <id>
+ddx bead queue move <id> [--before OTHER | --after OTHER]
+ddx bead queue clear <id>
 ddx bead evidence add <id> [--kind K] [--body B] [--summary S] [--source SRC] [--actor A]
 ddx bead evidence list <id> [--json]
 ddx bead close <id>
@@ -284,6 +324,18 @@ ddx bead export [--stdout] [file]
 **Acceptance Criteria:**
 - Given ddx-server is running with beads, when an agent calls `ddx_bead_ready`, then it receives ready beads as structured JSON
 - Given an agent calls `ddx_show_bead` with an ID, then it receives the full bead including all fields (known and unknown)
+
+### US-023a: Operator Reorders Work Within Priority
+**As an** operator managing the ready queue
+**I want** to move a bead ahead of other beads with the same priority
+**So that** I can express immediate sequence without changing urgency or rewriting the core bead schema
+
+**Acceptance Criteria:**
+- Given two ready `P0` beads exist, when I run `ddx bead queue top <later-id>`, then `ddx bead ready --execution` lists `<later-id>` before the other `P0` bead
+- Given a `P1` bead has `queue-rank=0` and a `P0` bead has no `queue-rank`, when I run `ddx bead ready --execution`, then the `P0` bead remains before the `P1` bead
+- Given two beads with different priorities, when I run `ddx bead queue move <id> --before <other-id>`, then DDx returns an error explaining that queue moves are limited to one priority bucket
+- Given a ranked bead is blocked, superseded, on retry cooldown, `execution-eligible=false`, or an epic-only/container bead, then `ddx bead ready --execution` still excludes it
+- Given a ranked bead exists, when I run `ddx bead queue clear <id>`, then DDx removes `queue-rank` and the bead returns to the default priority/created/id ordering
 
 ### US-024: Operator Recovers From Partial JSONL Corruption
 **As a** repo operator
