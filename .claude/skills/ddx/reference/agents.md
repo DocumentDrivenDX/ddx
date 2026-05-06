@@ -1,8 +1,8 @@
-# Agents — Power, Persona Dispatch
+# Task Dispatch — Power, Persona, Passthrough
 
 > **Debugging routing?** Routing lives entirely in Fizeau. See `CONTRACT-003-fizeau-service` (in the agent repo, `docs/helix/02-design/contracts/`) for the public surface; routing internals are inside that module.
 
-DDx invokes AI coding agents through the upstream Fizeau service. DDx does not
+DDx invokes task execution through the upstream Fizeau service. DDx does not
 choose harnesses, providers, endpoints, or models on the normal work path. It
 describes the work, requests an abstract power level, and lets Fizeau route.
 
@@ -14,9 +14,9 @@ Normal execution should use power bounds:
 ddx run --min-power 10 --prompt task.md
 ```
 
-Power is an integer scale exposed by the agent contract. DDx passes
+Power is an integer scale exposed by the Fizeau contract. DDx passes
 `MinPower` and optional `MaxPower` bounds and treats them as ordering
-constraints, not as model identities. The agent reports what it actually used:
+constraints, not as model identities. Fizeau reports what it actually used:
 
 ```text
 running with qwen 3.6-27b (power 10)
@@ -52,7 +52,7 @@ pins, call `ResolveRoute`, or retry in a loop.
 
 The intended command layering is:
 
-- `ddx run` — one agent `Execute` call with requested `MinPower`/`MaxPower`.
+- `ddx run` — one Fizeau `Execute` call with requested `MinPower`/`MaxPower`.
   No `ResolveRoute`.
 - `ddx try <bead>` — one bead attempt layered over `run`.
 - `ddx work` — queue drain and retry policy layered over `try`.
@@ -165,11 +165,10 @@ ddx run --min-power 10 --provider openrouter --model qwen3.6-27b --prompt task.m
 ddx run --persona code-reviewer --prompt review.md
 
 # Introspection
-ddx agent list                         # available harnesses
-ddx agent capabilities                 # model + power options
-ddx agent doctor                       # harness health
-ddx agent log                          # recent invocation metadata
-ddx agent log <session-id>             # one invocation's detail
+ddx doctor                              # environment health
+ddx status                              # project drift / stale docs
+ddx bead status                         # queue state
+# Fizeau diagnostics, if exposed by the project, remain separate from DDx verbs.
 
 # Personas
 ddx persona list

@@ -30,7 +30,7 @@ substrate; layer metadata distinguishes records.
 
 Implementation code for this boundary should follow the task-execution
 vocabulary (`taskexec` for core layer logic, `fizeauadapter` for the service
-bridge) rather than `internal/agent`.
+bridge) rather than the legacy `internal/agent` package name.
 
 `ddx artifact regenerate <id>` is sugar over layer 1 (or layer 2 when the
 generator edits the repo) with `produces_artifact: <id>` metadata. It is
@@ -218,20 +218,20 @@ DDx owns retry policy between bead attempts. If an attempt produces classified
 evidence that more capable reasoning could plausibly change the result, DDx may
 retry the bead with a higher `MinPower`.
 
-The agent owns routing within the requested power bounds. A retry request says
+Fizeau owns routing within the requested power bounds. A retry request says
 "use at least this much power" by raising `MinPower`; an explicit `MaxPower`, if
 supplied, remains a hard upper bound. Operator-supplied `--harness`,
-`--provider`, and `--model` values may be sent to the agent as passthrough
+`--provider`, and `--model` values may be sent to Fizeau as passthrough
 constraints, but DDx does not interpret them. Each layer-1 record stores:
 
 - requested `MinPower` and optional `MaxPower`
 - requested passthrough constraints, if any
-- actual model and actual power reported by the agent
+- actual model and actual power reported by Fizeau
 - run outcome and DDx attempt outcome
 
-DDx may query the agent's available model/power catalog to choose escalation
+DDx may query Fizeau's available model/power catalog to choose escalation
 targets such as "retry using only top-power models." DDx uses the returned power
-numbers only to compute `MinPower` thresholds; the agent still chooses the
+numbers only to compute `MinPower` thresholds; Fizeau still chooses the
 concrete model.
 
 Passthrough constraints stay sticky across retries. DDx may increase `MinPower`
@@ -874,7 +874,7 @@ spinning, or interrupted
   not inspect those values when choosing the next requested `MinPower`.
 - Given retry escalation would exceed the power available under hard
   passthrough pins, then DDx stops with `blocked_by_passthrough_constraint` or
-  `agent_power_unsatisfied`, records the agent-supplied evidence, and does not
+  `agent_power_unsatisfied`, records the Fizeau-supplied evidence, and does not
   mutate the pins or call `ResolveRoute`.
 
 ### US-094: Cross-Layer Run History

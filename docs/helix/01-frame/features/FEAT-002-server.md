@@ -19,8 +19,8 @@ ddx:
 
 `ddx-server` is a lightweight Go web server that exposes DDx platform services
 over HTTP and MCP endpoints. It serves documents, beads, execution definitions
-and run history, the document dependency graph, DDx agent invocation activity
-plus embedded-agent telemetry references, and (via FEAT-008) an embedded web
+and run history, the document dependency graph, DDx execution activity plus
+embedded Fizeau telemetry references, and (via FEAT-008) an embedded web
 UI — all from a single binary.
 
 `ddx-server` runs as a per-user host daemon: one server process per machine,
@@ -63,7 +63,7 @@ before dispatching to feature-specific adapters.
 - the server holds one project registry per host+user, persisted at
   `~/.local/share/ddx/server-state.json` as specified in FEAT-020
 - projects enter the registry by auto-registration from CLI commands
-  (`ddx bead`, `ddx agent`, `ddx doc`) running in any project directory on
+  (`ddx bead`, `ddx run`, `ddx try`, `ddx work`, `ddx doc`) running in any project directory on
   the machine, and by the server registering its own startup working directory
 - optional seed entries may be provided via `server.projects` in config so a
   fresh install can boot with a known project list before any CLI commands run
@@ -243,7 +243,7 @@ shape for the in-flight attempt, enabling a single read model across CLI and UI)
 
 `recent_phases` retains only phase-transition events (not heartbeats) and is
 capped at the last 20 entries. This is the shared read model for both the CLI
-`ddx agent log --worker` command and the UI status dashboard worker cards.
+the Fizeau diagnostics worker-log surface and the UI status dashboard worker cards.
 
 **Provider Availability and Utilization (FEAT-014)**
 

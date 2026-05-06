@@ -34,7 +34,7 @@ domain guidance.
 ## Problem Statement
 
 Prior iterations of FEAT-011 shipped ~7 sibling skills
-(`ddx-bead`, `ddx-agent`, `ddx-run`, `ddx-review`, `ddx-status`,
+(`ddx-bead`, `ddx-run`, `ddx-review`, `ddx-status`,
 `ddx-install`, `ddx-doctor`). Real-world usage exposed problems:
 
 - **Intent ambiguity.** Users say "do work", not "/ddx-run". A flat
@@ -170,7 +170,7 @@ post-attempt triage, and refine guidance for this policy surface.
   project-local DDx-managed copy.
 - On init and on `ddx update`, stale ddx-prefixed skill directories
   from prior DDx versions are removed:
-  `ddx-bead`, `ddx-run`, `ddx-agent`, `ddx-review`, `ddx-status`,
+  `ddx-bead`, `ddx-run`, `ddx-review`, `ddx-status`,
   `ddx-doctor`, `ddx-install`, `ddx-release`. Third-party skills are
   untouched.
 - Skills embed into the binary via `//go:embed all:ddx` against a

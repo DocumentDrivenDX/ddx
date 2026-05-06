@@ -13,7 +13,7 @@ ddx:
 
 ## Overview
 
-The `ddx` CLI is a single Go binary providing all DDx platform services locally: document library management, bead tracker, agent harness dispatch, execution definitions and runs, document dependency graph, persona composition, template application, git sync, and meta-prompt injection.
+The `ddx` CLI is a single Go binary providing all DDx platform services locally: document library management, bead tracker, task execution dispatch, execution definitions and runs, document dependency graph, persona composition, template application, git sync, and meta-prompt injection.
 
 ## Requirements
 
@@ -112,7 +112,7 @@ legacy workflow verbs under that namespace.
 **DDx Skills (not started — FEAT-011)**
 42. DDx ships agent-facing skills (Claude Code slash commands) for its own CLI operations
 43. Skills are installed project-locally to `<projectRoot>/.agents/skills/ddx-*` and discoverable via `/ddx-<name>` (FEAT-015: home-directory targets retired)
-44. Core skills: `ddx-bead` (guided bead create/triage), `ddx-agent` (guided agent dispatch with model/effort selection), `ddx-install` (guided package installation)
+44. Core skills: `ddx-bead` (guided bead create/triage), `ddx` (guided task execution with `run` / `try` / `work` and Fizeau passthrough constraints), `ddx-install` (guided package installation)
 45. Skills validate inputs, suggest flags, and provide contextual guidance that the raw CLI doesn't
 46. `ddx init` registers DDx skills alongside library content
 
