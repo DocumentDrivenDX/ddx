@@ -55,6 +55,12 @@ That boundary keeps the product contract stable:
 The default path is the embedded checker. It runs in-process and does not
 require Vale or any other external binary.
 
+### Install behavior
+
+The default DDx plugin should ship the embedded checker assets and their
+rules/vocabulary/fixture tree. It should not require the user to install Vale
+for the first supported surface to run.
+
 ### Optional runner path
 
 The wrapper may delegate to Vale when a project explicitly selects that
@@ -211,7 +217,7 @@ Rules for each field:
 - `suggested_edit` must propose a concrete rewrite, replacement, or
   deletion.
 
-The TD-027-style principle applies here too: the output must be specific
+The FEAT-027 principle applies here too: the output must be specific
 enough that a later review consumer can reuse it without changing the
 rule model.
 
