@@ -31,9 +31,9 @@ DDx about workflow phases or tool-specific actions.
 ## Problem Statement
 
 **Current situation:** DDx already knows artifacts and their relationships, and
-it already has specialized runtime surfaces such as `ddx agent`. But there is
-no generic execution primitive for non-agent operations or for linking runtime
-evidence back to artifacts in a uniform way.
+it already has specialized runtime surfaces such as the legacy agent execution
+surface. But there is no generic execution primitive for non-agent operations
+or for linking runtime evidence back to artifacts in a uniform way.
 
 **Pain points:**
 - Artifact documents get overloaded with runtime details that do not belong in
@@ -93,10 +93,10 @@ Execution definitions may be authored as git-tracked documents (graph-authored
 definitions, discovered via FEAT-007) or managed as DDx runtime records
 (runtime-managed definitions stored in the `exec-definitions` collection).
 Graph-authored definitions participate in ordinary DDx document indexing and
-are the preferred source when using `ddx agent execute-bead`. Runtime-managed
-definitions in the `exec-definitions` collection remain valid for `ddx exec`
-operations that do not require graph discovery. In either case, execution
-runs are always immutable runtime records in the exec-runs substrate.
+are the preferred source when using the legacy execute-bead workflow.
+Runtime-managed definitions in the `exec-definitions` collection remain valid
+for `ddx exec` operations that do not require graph discovery. In either case,
+execution runs are always immutable runtime records in the exec-runs substrate.
 
 ### Execution Run
 
@@ -145,7 +145,7 @@ preserved implementation work.
 9. **Append-only history** — DDx retains ordered execution history without mutating prior runs
 10. **History inspection** — users and tools can query runs by artifact ID, definition ID, status, or recency
 11. **Run detail inspection** — users and tools can inspect one run's logs, structured result, and provenance
-12. **Agent executor integration** — agent-backed definitions can delegate to `ddx agent` and retain the underlying session identity and logs
+12. **Agent executor integration** — Fizeau-backed definitions can delegate to the upstream execution service and retain the underlying session identity and logs
 13. **Configuration** — storage roots, retention settings, and executor defaults are configurable in `.ddx/config.yaml`
 14. **Projection support** — DDx supports domain-specific read models over shared execution definitions and runs without introducing separate runtime stores
 15. **Metric specialization** — metrics may define numeric-result conventions, comparison behavior, and trend summaries as projections over execution runs linked to `MET-*` artifacts
@@ -242,13 +242,13 @@ The HTTP/MCP surface is read-only for v1. Execution invocation remains CLI-only.
 - Given only a runtime-managed definition exists for an artifact, when `ddx exec run` is invoked, then it proceeds using the runtime-managed definition without error.
 - Given an execution definition is marked `required: true`, when its execution run terminates with a non-success status, then the result is classified as merge-blocking and any execute-bead workflow consuming it preserves rather than lands.
 - Given a metric-producing execution run completes, when `ddx metric` queries for that metric, then the result is served from the `exec-runs` collection — no `.ddx/metrics/` directory is created or required.
-- Given an agent-backed execution run completes, when the run record is inspected, then it retains a stable link to the underlying agent session ID resolvable via `ddx agent log`.
-- Given `ddx agent execute-bead` triggers execution documents, when the resulting runs are queried, then they appear in `ddx exec history` and `ddx metric` output through the standard inspection surfaces.
+- Given a Fizeau-backed execution run completes, when the run record is inspected, then it retains a stable link to the underlying session ID resolvable via `ddx exec log`.
+- Given the legacy execute-bead workflow triggers execution documents, when the resulting runs are queried, then they appear in `ddx exec history` and `ddx metric` output through the standard inspection surfaces.
 
 ## Dependencies
 
 - FEAT-005 (Artifacts) — execution definitions link runtime behavior to artifact IDs
-- FEAT-006 (Agent Service) — provides the `agent` executor kind and canonical agent session logs
+- FEAT-006 (Fizeau Execution Contract) — provides the `agent` executor kind and canonical session logs
 - DDx CLI infrastructure (config loading, command factory)
 
 ## Out of Scope
