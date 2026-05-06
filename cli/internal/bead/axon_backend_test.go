@@ -520,7 +520,7 @@ func TestAxonBackend_ConfigKnobIgnoredWithoutFlag(t *testing.T) {
 
 	dir := filepath.Join(t.TempDir(), ".ddx")
 	s := NewStore(dir)
-	assert.Nil(t, s.backend, "without the feature flag, beads.backend=axon must fall through to the built-in JSONL path")
+	assert.Nil(t, s.backend, "without the feature flag, beads.backend=axon must fall through to the built-in JSONL path; follow-up bead ddx-743bc194 will remove this gate")
 }
 
 func TestAxonExperimentalEnabledTruthyValues(t *testing.T) {
