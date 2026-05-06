@@ -1,0 +1,1 @@
+WIRE NewMetaPromptInjectorWithPaths: production CLI paths in `cmd/init.go` and `cmd/doctor.go` construct the injector, and deadcode no longer reports `internal/metaprompt` after the existing keepalive root.
