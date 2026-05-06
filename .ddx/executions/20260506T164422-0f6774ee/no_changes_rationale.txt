@@ -1,0 +1,2 @@
+verification_command: cd cli && go test ./internal/agent/... -run "TestPreviewQueue_QueueRank|TestPicker_QueueRank|TestPickerPrioritySkip" -count=1 && go test ./internal/agent/... ./cmd/... && lefthook run pre-commit
+notes: The current checkout already satisfies the queue-rank surfacing criteria in cli/internal/agent/preview_queue.go, cli/internal/agent/execute_bead_loop.go, cli/cmd/work_plan.go, and the associated tests; no source edits were required.
