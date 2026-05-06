@@ -210,19 +210,26 @@ func loadFromBundles(workingDir string) ([]Attempt, error) {
 	return out, nil
 }
 
-// routingFacts is the harness/provider/model the most recent kind:routing
-// or kind:escalation-summary event recorded for a bead. Used to fill in
-// blanks on legacy attempts whose result.json predates those fields.
+// routingFacts is the harness/provider/model plus routing-intent metadata the
+// most recent kind:routing, kind:escalation-summary, or
+// execution-routing-intent event recorded for a bead. Used to fill in blanks
+// on legacy attempts whose result.json predates those fields.
 type routingFacts struct {
-	Harness  string
-	Provider string
-	Model    string
+	Harness               string
+	Provider              string
+	Model                 string
+	RoutingIntentSource   string
+	RequestedTier         string
+	SmartJustification    string
+	RejectedRoutePinCount int
+	RoutingIntentDegraded bool
+	RoutingIntentNote     string
 }
 
 // loadRoutingEnrichment scans the bead store and indexes the most recent
-// routing/escalation-summary facts per bead. Best-effort: a missing or
-// unreadable bead store yields an empty map, never an error, since the
-// loader still has authoritative data on each result.
+// routing/escalation-summary/routing-intent facts per bead. Best-effort: a
+// missing or unreadable bead store yields an empty map, never an error, since
+// the loader still has authoritative data on each result.
 func loadRoutingEnrichment(workingDir string) (map[string]routingFacts, error) {
 	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
 	beads, err := store.ReadAll()
@@ -234,7 +241,10 @@ func loadRoutingEnrichment(workingDir string) (map[string]routingFacts, error) {
 	out := make(map[string]routingFacts, len(beads))
 	for _, b := range beads {
 		facts := routingFromExtra(b.Extra)
-		if facts.Harness == "" && facts.Provider == "" && facts.Model == "" {
+		if facts.Harness == "" && facts.Provider == "" && facts.Model == "" &&
+			facts.RoutingIntentSource == "" && facts.RequestedTier == "" &&
+			facts.SmartJustification == "" && facts.RejectedRoutePinCount == 0 &&
+			!facts.RoutingIntentDegraded && facts.RoutingIntentNote == "" {
 			continue
 		}
 		out[b.ID] = facts
@@ -243,10 +253,11 @@ func loadRoutingEnrichment(workingDir string) (map[string]routingFacts, error) {
 }
 
 // routingFromExtra walks bead.Extra["events"] in chronological order and
-// returns the last kind:routing or kind:escalation-summary facts. Both
-// kinds carry resolved_provider / resolved_model in the JSON body; the
-// escalation summary additionally exposes a tiers_attempted list whose
-// final entry is the winning tier.
+// returns the last kind:routing, kind:escalation-summary, or
+// execution-routing-intent facts. The routing event carries resolved_provider
+// / resolved_model, the escalation summary exposes a tiers_attempted list
+// whose final entry is the winning tier, and the routing-intent event carries
+// the durable bead-hint audit fields.
 func routingFromExtra(extra map[string]any) routingFacts {
 	if extra == nil {
 		return routingFacts{}
@@ -271,7 +282,7 @@ func routingFromExtra(extra map[string]any) routingFacts {
 			continue
 		}
 		kind, _ := m["kind"].(string)
-		if kind != "routing" && kind != "escalation-summary" {
+		if kind != "routing" && kind != "escalation-summary" && kind != "execution-routing-intent" {
 			continue
 		}
 		body, _ := m["body"].(string)
@@ -343,6 +354,44 @@ func routingFromExtra(extra map[string]any) routingFacts {
 					out.Model = last.Model
 				}
 			}
+		case "execution-routing-intent":
+			var body struct {
+				RoutingIntentSource   string   `json:"routing_intent_source"`
+				RequestedTier         string   `json:"requested_tier"`
+				SmartJustification    string   `json:"smart_justification"`
+				ActualHarness         string   `json:"actual_harness"`
+				ActualProvider        string   `json:"actual_provider"`
+				ActualModel           string   `json:"actual_model"`
+				RoutingIntentDegraded bool     `json:"routing_intent_degraded"`
+				RoutingIntentNote     string   `json:"routing_intent_note"`
+				RejectedRoutePins     []string `json:"rejected_route_pins"`
+			}
+			if err := json.Unmarshal([]byte(e.body), &body); err != nil {
+				continue
+			}
+			if body.RoutingIntentSource != "" {
+				out.RoutingIntentSource = body.RoutingIntentSource
+			}
+			if body.RequestedTier != "" {
+				out.RequestedTier = body.RequestedTier
+			}
+			if body.SmartJustification != "" {
+				out.SmartJustification = body.SmartJustification
+			}
+			if body.ActualHarness != "" {
+				out.Harness = body.ActualHarness
+			}
+			if body.ActualProvider != "" {
+				out.Provider = body.ActualProvider
+			}
+			if body.ActualModel != "" {
+				out.Model = body.ActualModel
+			}
+			out.RoutingIntentDegraded = body.RoutingIntentDegraded
+			if body.RoutingIntentNote != "" {
+				out.RoutingIntentNote = body.RoutingIntentNote
+			}
+			out.RejectedRoutePinCount = len(body.RejectedRoutePins)
 		}
 	}
 	return out
@@ -364,6 +413,24 @@ func applyEnrichment(a *Attempt, enrich map[string]routingFacts) {
 	}
 	if a.Model == "" {
 		a.Model = facts.Model
+	}
+	if a.RoutingIntentSource == "" {
+		a.RoutingIntentSource = facts.RoutingIntentSource
+	}
+	if a.RequestedTier == "" {
+		a.RequestedTier = facts.RequestedTier
+	}
+	if a.SmartJustification == "" {
+		a.SmartJustification = facts.SmartJustification
+	}
+	if a.RejectedRoutePinCount == 0 {
+		a.RejectedRoutePinCount = facts.RejectedRoutePinCount
+	}
+	if !a.RoutingIntentDegraded {
+		a.RoutingIntentDegraded = facts.RoutingIntentDegraded
+	}
+	if a.RoutingIntentNote == "" {
+		a.RoutingIntentNote = facts.RoutingIntentNote
 	}
 }
 

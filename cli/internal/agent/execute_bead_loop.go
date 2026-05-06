@@ -944,6 +944,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 
 		result.Attempts++
+		appendExecutionRoutingIntentEvidence(w.Store, candidate, report, now().UTC())
 
 		if attemptOut.StoreErr != nil {
 			_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
@@ -1479,6 +1480,63 @@ func appendLoopRoutingEvidence(store BeadEventAppender, beadID string, report Ex
 		Kind:      "routing",
 		Summary:   summary,
 		Body:      string(body),
+		Actor:     "ddx",
+		Source:    "ddx agent execute-loop",
+		CreatedAt: createdAt,
+	})
+}
+
+func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.Bead, report ExecuteBeadReport, createdAt time.Time) {
+	if store == nil || target.ID == "" {
+		return
+	}
+	intent := escalation.ParseExecutionHint(&target)
+	body := map[string]any{
+		"bead_id":                 target.ID,
+		"attempt_id":              report.AttemptID,
+		"routing_intent_source":   string(intent.Source),
+		"requested_tier":          string(intent.RequestedTier),
+		"smart_justification":     intent.SmartJustification,
+		"actual_harness":          report.Harness,
+		"actual_provider":         report.Provider,
+		"actual_model":            report.Model,
+		"actual_power":            report.ActualPower,
+		"routing_intent_degraded": false,
+		"routing_intent_note":     "",
+		"rejected_route_pins":     intent.RejectedRoutePins,
+	}
+	degraded := false
+	note := ""
+	if intent.Source == escalation.ExecutionIntentSourceBeadHint && intent.RequestedTier == escalation.TierSmart && strings.TrimSpace(intent.SmartJustification) == "" {
+		degraded = true
+		note = "missing SMART JUSTIFICATION"
+	}
+	if report.Harness == "" || report.Model == "" {
+		degraded = true
+		if note == "" {
+			note = "actual route facts unavailable"
+		}
+	}
+	body["routing_intent_degraded"] = degraded
+	body["routing_intent_note"] = note
+	data, err := json.Marshal(body)
+	if err != nil {
+		return
+	}
+	summary := fmt.Sprintf("source=%s tier=%s", intent.Source, intent.RequestedTier)
+	if report.Model != "" {
+		summary += " model=" + report.Model
+	}
+	if report.Harness != "" {
+		summary += " harness=" + report.Harness
+	}
+	if degraded && note != "" {
+		summary += " note=" + note
+	}
+	_ = store.AppendEvent(target.ID, bead.BeadEvent{
+		Kind:      "execution-routing-intent",
+		Summary:   summary,
+		Body:      string(data),
 		Actor:     "ddx",
 		Source:    "ddx agent execute-loop",
 		CreatedAt: createdAt,

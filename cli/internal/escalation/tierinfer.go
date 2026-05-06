@@ -28,15 +28,8 @@ func InferTier(b *bead.Bead) ModelTier {
 			continue
 		}
 		// Explicit override wins.
-		if v, ok := strings.CutPrefix(l, "tier:"); ok {
-			switch strings.TrimSpace(v) {
-			case "smart":
-				return TierSmart
-			case "standard":
-				return TierStandard
-			case "cheap":
-				return TierCheap
-			}
+		if tier, ok := parseTierLabel(l); ok {
+			return tier
 		}
 		if v, ok := strings.CutPrefix(l, "kind:"); ok {
 			kindLabel = strings.TrimSpace(v)

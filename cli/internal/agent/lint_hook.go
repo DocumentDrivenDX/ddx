@@ -11,6 +11,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
@@ -105,6 +106,20 @@ func NewPreDispatchLintHook(projectRoot string, store BeadReader, rcfg config.Re
 		b, err := store.Get(beadID)
 		if err != nil {
 			return LintResult{}, &LintHookError{Kind: LintHookErrorKindDispatchFailure, Err: fmt.Errorf("load bead %s: %w", beadID, err)}
+		}
+
+		if findings := escalation.LintExecutionHints(b); len(findings) > 0 {
+			rationaleParts := make([]string, 0, len(findings))
+			suggestedFixes := make([]string, 0, len(findings))
+			for _, finding := range findings {
+				rationaleParts = append(rationaleParts, finding.Message)
+				suggestedFixes = append(suggestedFixes, finding.Message)
+			}
+			return LintResult{
+				Score:          0,
+				Rationale:      strings.Join(rationaleParts, "; "),
+				SuggestedFixes: suggestedFixes,
+			}, nil
 		}
 
 		prompt, err := buildPreDispatchLintPrompt(b)
