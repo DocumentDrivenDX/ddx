@@ -1,0 +1,79 @@
+{
+  "attempt_id": "20260505T235706-33887e59",
+  "bead_id": "ddx-b669bb9f",
+  "base_rev": "3527821aad38fea0b52516b62451783dc9308268",
+  "created_at": "2026-05-05T23:57:08.458435459Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b669bb9f",
+    "title": "C6: single commitOutcome helper deletes 18 store-error exit paths + handleOutcomeStoreError",
+    "description": "PROBLEM\nThe execute-bead loop body (cli/internal/agent/execute_bead_loop.go:875-1036) has 18 store-error exit paths — every bead outcome write can hard-exit the drain loop. This violates the loop's contract: a single bead's store failure should never kill the entire drain worker.\n\nROOT CAUSE\ncli/internal/agent/execute_bead_loop.go:875-1036 contains ~14 direct error returns triggered by store write failures, all routing through handleOutcomeStoreError. Each returns a hard error to Drain instead of scheduling a cooldown and continuing. The helper handleOutcomeStoreError itself is also a terminal-exit path. The 18 exit paths (14 store-error sites + handleOutcomeStoreError variants) are the dominant smell: 18 of 24 returns in the loop body are store-error paths.\n\nPROPOSED FIX\n- Add cli/internal/agent/work/commit.go defining commitOutcome(ctx, store, beadID, op func() error).\n- commitOutcome calls op(); on error, calls SetExecutionCooldown with 'loop-error' ParkReason and returns nil (never hard-errors to Drain).\n- Delete handleOutcomeStoreError.\n- Replace all 14 callsites in execute_bead_loop.go (pre-refactor coordinates: 628, 740, 763, 800, 834, 850, 869, 877, 905, 918, 963, 979, 1014, 1026) with commitOutcome.\n\nNON-SCOPE\n- Logic changes to what's stored (only how store errors are handled).\n- execute_bead_loop.go file rename (separate bead ddx-1d867ec1).\n\nINTERSECTIONS\n- P1: store-write failure must not terminate the whole drain loop.\n- P3: loop-error fallback should be observable as a structured degradation event.\n- P4: a write failure on one bead must not affect later beads.",
+    "acceptance": "1. cli/internal/agent/work/commit.go (or cli/internal/agent/execute_bead_loop.go equivalent) defines commitOutcome(ctx, store, beadID string, op func() error) error.\n2. handleOutcomeStoreError deleted from execute_bead_loop.go.\n3. All 14 callsites in execute_bead_loop.go (pre-refactor: 628, 740, 763, 800, 834, 850, 869, 877, 905, 918, 963, 979, 1014, 1026) replaced with commitOutcome.\n4. TestCommitOutcome_StoreErrorContinuesLoop verifies that a store write failure schedules cooldown and returns nil (loop continues).\n5. TestCommitOutcome_StoreError_SchedulesCooldown_NotExit verifies cooldown event is recorded with ParkReason=loop-error.\n6. C0 fixture diff: store-glitch-during-close lifecycle byte-identical event stream (loop-error event present, no hard exit).\n7. cd cli \u0026\u0026 go test ./internal/agent/... green.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-5cb6e6cd",
+    "labels": [
+      "phase:2",
+      "refactor",
+      "kind:refactor"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-05T23:57:06Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "427120",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-05T19:06:36.079273036Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T185505-2726ffeb\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":8984089,\"output_tokens\":69034,\"total_tokens\":9053123,\"cost_usd\":0,\"duration_ms\":687969,\"exit_code\":0}",
+          "created_at": "2026-05-05T19:06:36.307187177Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=9053123 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-05T19:06:44.493588656Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=407cca5b0dc262e0a47ec202a2c2d0bf5257f408\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T15:11:49-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=10551\noutput_bytes=0\nelapsed_ms=4195",
+          "created_at": "2026-05-05T19:06:49.251114405Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=407cca5b0dc262e0a47ec202a2c2d0bf5257f408\nbase_rev=6dc3f78203c42b05c429491b229ae0ea8007453b",
+          "created_at": "2026-05-05T19:06:49.480795794Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-05T23:57:06.048747464Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260505T235706-33887e59",
+    "prompt": ".ddx/executions/20260505T235706-33887e59/prompt.md",
+    "manifest": ".ddx/executions/20260505T235706-33887e59/manifest.json",
+    "result": ".ddx/executions/20260505T235706-33887e59/result.json",
+    "checks": ".ddx/executions/20260505T235706-33887e59/checks.json",
+    "usage": ".ddx/executions/20260505T235706-33887e59/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b669bb9f-20260505T235706-33887e59"
+  },
+  "prompt_sha": "79da44fe92b5de265d5dc816ecfa245176bf2376cdd000ecfbfe0eda6977ddce"
+}
