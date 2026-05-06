@@ -84,7 +84,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		return nil, fmt.Errorf("agent: execute: %w", err)
 	}
 
-	final, routing, _ := drainServiceEventsWithWriter(events, opts.Output)
+	final, routing, _ := drainServiceEvents(events)
 	elapsed := time.Since(start)
 
 	result := &Result{
