@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"testing"
@@ -120,6 +121,28 @@ func TestDrainServiceEvents_ForwardsCanonicalProgressPayload(t *testing.T) {
 	assert.Contains(t, FormatServiceProgressEntries(progress), "ok ddx-1234 7 add test implementation to cli/internal/file.go")
 	assert.Contains(t, FormatServiceProgressEntries(progress), "< out=312B 12 lines")
 	assert.Contains(t, FormatServiceProgressEntries(progress), "18.4 tok/s")
+}
+
+func TestDrainServiceEvents_WritesLiveRouteAndProgress(t *testing.T) {
+	events := make(chan agentlib.ServiceEvent, 2)
+	events <- agentlib.ServiceEvent{
+		Type: "routing_decision",
+		Time: time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
+		Data: json.RawMessage(`{"harness":"agent","provider":"openrouter","model":"gpt-5.4-mini","reason":"profile"}`),
+	}
+	events <- agentlib.ServiceEvent{
+		Type: "progress",
+		Time: time.Date(2026, 4, 30, 12, 0, 1, 0, time.UTC),
+		Data: json.RawMessage(`{"phase":"tool","state":"complete","task_id":"ddx-live","turn_index":2,"action":"run tests","target":"cli/internal/bead","output_bytes":42,"output_lines":3}`),
+	}
+	close(events)
+
+	var out bytes.Buffer
+	_, routing, progress := drainServiceEventsWithWriter(events, &out)
+	require.NotNil(t, routing)
+	require.Len(t, progress, 1)
+	assert.Contains(t, out.String(), "route: harness=agent provider=openrouter model=gpt-5.4-mini reason=profile")
+	assert.Contains(t, out.String(), "ok ddx-live 2 run tests to cli/internal/bead < out=42B 3 lines")
 }
 
 // TestAgentExecution_UsesFizeauServicePathOnly proves transcript-producing
