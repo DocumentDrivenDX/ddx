@@ -1,0 +1,14 @@
+metricDefinitionToExec: WIRE via `main -> cmd.Execute -> NewRootCommand -> registerSubcommands -> newMetricCommand -> RunE bindings` keeps the metric CLI and store helpers reachable.
+metricDefinitionFromExec: WIRE via `main -> cmd.Execute -> NewRootCommand -> registerSubcommands -> newMetricCommand -> RunE bindings` keeps the metric CLI and store helpers reachable.
+metricHistoryToRun: WIRE via `main -> cmd.Execute -> NewRootCommand -> registerSubcommands -> newMetricCommand -> RunE bindings` keeps the metric CLI and store helpers reachable.
+cloneStringMap: WIRE via `main -> cmd.Execute -> NewRootCommand -> registerSubcommands -> newMetricCommand -> RunE bindings` keeps the metric CLI and store helpers reachable.
+Store.Init: WIRE via `main -> cmd.Execute -> NewRootCommand -> registerSubcommands -> newMetricCommand -> RunE bindings` keeps the metric CLI and store helpers reachable.
+Store.Validate: WIRE via `main -> cmd.Execute -> NewRootCommand -> registerSubcommands -> newMetricCommand -> RunE bindings` keeps the metric CLI and store helpers reachable.
+Store.Run: WIRE via `main -> cmd.Execute -> NewRootCommand -> registerSubcommands -> newMetricCommand -> RunE bindings` keeps the metric CLI and store helpers reachable.
+Store.Compare: WIRE via `main -> cmd.Execute -> NewRootCommand -> registerSubcommands -> newMetricCommand -> RunE bindings` keeps the metric CLI and store helpers reachable.
+Store.LoadDefinition: WIRE via `main -> cmd.Execute -> NewRootCommand -> registerSubcommands -> newMetricCommand -> RunE bindings` keeps the metric CLI and store helpers reachable.
+Store.SaveDefinition: WIRE via `main -> cmd.Execute -> NewRootCommand -> registerSubcommands -> newMetricCommand -> RunE bindings` keeps the metric CLI and store helpers reachable.
+Store.AppendHistory: WIRE via `main -> cmd.Execute -> NewRootCommand -> registerSubcommands -> newMetricCommand -> RunE bindings` keeps the metric CLI and store helpers reachable.
+Store.loadMetricArtifact: WIRE via `main -> cmd.Execute -> NewRootCommand -> registerSubcommands -> newMetricCommand -> RunE bindings` keeps the metric CLI and store helpers reachable.
+selectComparisonTarget: WIRE via `main -> cmd.Execute -> NewRootCommand -> registerSubcommands -> newMetricCommand -> RunE bindings` keeps the metric CLI and store helpers reachable.
+comparisonFor: WIRE via `main -> cmd.Execute -> NewRootCommand -> registerSubcommands -> newMetricCommand -> RunE bindings` keeps the metric CLI and store helpers reachable.
