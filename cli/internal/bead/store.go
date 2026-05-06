@@ -1339,11 +1339,12 @@ func (s *Store) ReadyExecution() ([]Bead, error) {
 // execution-eligible=false, or superseded. It's the diagnostic the work loop
 // emits when the execution queue is empty but `ddx bead ready` is not.
 type ReadyExecutionBreakdown struct {
-	SkippedEpics       []string
-	SkippedOnCooldown  []string
-	SkippedNotEligible []string
-	SkippedSuperseded  []string
-	NextRetryAfter     string
+	SkippedEpics              []string
+	SkippedOnCooldown         []string
+	SkippedNeedsInvestigation []string
+	SkippedNotEligible        []string
+	SkippedSuperseded         []string
+	NextRetryAfter            string
 }
 
 func (s *Store) ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error) {
@@ -1365,6 +1366,10 @@ func (s *Store) ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error) {
 					continue
 				}
 			}
+		}
+		if hasLabel(b, LabelNeedsInvestigation) || hasLabel(b, LabelNeedsHuman) {
+			out.SkippedNeedsInvestigation = append(out.SkippedNeedsInvestigation, b.ID)
+			continue
 		}
 		if eligible, ok := b.Extra["execution-eligible"]; ok {
 			if val, isBool := eligible.(bool); isBool && !val {
@@ -1417,6 +1422,9 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 			continue
 		}
 		if executionOnly {
+			if hasLabel(b, LabelNeedsInvestigation) || hasLabel(b, LabelNeedsHuman) {
+				continue
+			}
 			// Filter by execution-eligible (default true if absent)
 			eligible, ok := b.Extra["execution-eligible"]
 			if ok {
@@ -1511,6 +1519,32 @@ func (s *Store) BlockedAll() ([]BlockedBead, error) {
 				},
 			})
 			continue
+		}
+
+		if hasLabel(b, LabelNeedsInvestigation) || hasLabel(b, LabelNeedsHuman) {
+			entries = append(entries, BlockedBead{
+				Bead: b,
+				Blocker: Blocker{
+					Kind:       BlockerKindNeedsInvestigation,
+					LastStatus: "no_changes",
+					Reason:     "triage needs investigation before retry",
+				},
+			})
+			continue
+		}
+
+		if eligible, ok := b.Extra["execution-eligible"]; ok {
+			if val, isBool := eligible.(bool); isBool && !val {
+				reason, _ := b.Extra["execution-skip-reason"].(string)
+				entries = append(entries, BlockedBead{
+					Bead: b,
+					Blocker: Blocker{
+						Kind:   BlockerKindNotEligible,
+						Reason: reason,
+					},
+				})
+				continue
+			}
 		}
 
 		retryAfterRaw, ok := b.Extra["execute-loop-retry-after"]

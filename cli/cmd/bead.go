@@ -63,6 +63,7 @@ Examples:
 	cmd.AddCommand(f.newBeadMetricsCommand())
 	cmd.AddCommand(f.newBeadDoctorCommand())
 	cmd.AddCommand(f.newBeadCooldownCommand())
+	cmd.AddCommand(f.newBeadReconcileCommand())
 	cmd.AddCommand(f.newBeadMigrateCommand())
 	cmd.AddCommand(f.newBeadArchiveCommand())
 
@@ -945,6 +946,9 @@ func (f *CommandFactory) newBeadBlockedCommand() *cobra.Command {
 				case bead.BlockerKindRetryCooldown:
 					fmt.Fprintf(cmd.OutOrStdout(), "%s  P%d  %s  retry-after: %s\n",
 						e.ID, e.Priority, e.Title, e.Blocker.NextEligibleAt)
+				case bead.BlockerKindNeedsInvestigation, bead.BlockerKindNotEligible:
+					fmt.Fprintf(cmd.OutOrStdout(), "%s  P%d  %s  %s: %s\n",
+						e.ID, e.Priority, e.Title, e.Blocker.Kind, e.Blocker.Reason)
 				default:
 					fmt.Fprintf(cmd.OutOrStdout(), "%s  P%d  %s  deps: %s\n",
 						e.ID, e.Priority, e.Title, strings.Join(e.DepIDs(), ", "))
@@ -954,6 +958,63 @@ func (f *CommandFactory) newBeadBlockedCommand() *cobra.Command {
 		},
 	}
 	cmd.Flags().Bool("json", false, "Output as JSON")
+	return cmd
+}
+
+func (f *CommandFactory) newBeadReconcileCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "reconcile [id ...]",
+		Short: "Reconcile stale bead lifecycle metadata",
+		Long: `Reconcile stale no_changes lifecycle metadata using supported bead
+store mutations. The command is dry-run by default; pass --apply to mutate the
+tracker. It never edits .ddx/beads.jsonl directly.`,
+		Args: cobra.ArbitraryArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			apply, _ := cmd.Flags().GetBool("apply")
+			_, _ = cmd.Flags().GetBool("dry-run")
+			asJSON, _ := cmd.Flags().GetBool("json")
+			s := f.beadStore()
+			plans, err := s.ReconcileLifecycleMetadata(bead.ReconcileOptions{Apply: apply, IDs: args})
+			if err != nil {
+				return err
+			}
+			if plans == nil {
+				plans = []bead.ReconcilePlan{}
+			}
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(plans)
+			}
+			if len(plans) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "No lifecycle metadata repairs.")
+				return nil
+			}
+			mode := "would repair"
+			if apply {
+				mode = "repaired"
+			}
+			for _, p := range plans {
+				fmt.Fprintf(cmd.OutOrStdout(), "%s  %s  %s\n", p.BeadID, mode, p.Reason)
+				if len(p.ClearFields) > 0 {
+					fmt.Fprintf(cmd.OutOrStdout(), "  clear: %s\n", strings.Join(p.ClearFields, ", "))
+				}
+				if len(p.RemoveLabels) > 0 {
+					fmt.Fprintf(cmd.OutOrStdout(), "  remove-labels: %s\n", strings.Join(p.RemoveLabels, ", "))
+				}
+				if len(p.AddLabels) > 0 {
+					fmt.Fprintf(cmd.OutOrStdout(), "  add-labels: %s\n", strings.Join(p.AddLabels, ", "))
+				}
+			}
+			if apply {
+				f.beadAutoCommit("reconcile lifecycle metadata")
+			}
+			return nil
+		},
+	}
+	cmd.Flags().Bool("apply", false, "Apply proposed repairs")
+	cmd.Flags().Bool("dry-run", false, "Preview proposed repairs without mutating (default)")
+	cmd.Flags().Bool("json", false, "Output JSON")
 	return cmd
 }
 

@@ -204,8 +204,10 @@ type StatusCounts struct {
 // Blocker kinds surfaced through BlockedAll. These strings are part of the
 // external DDx contract (HELIX reads them to decide how to handle a blocker).
 const (
-	BlockerKindDependency    = "dependency"
-	BlockerKindRetryCooldown = "retry-cooldown"
+	BlockerKindDependency         = "dependency"
+	BlockerKindRetryCooldown      = "retry-cooldown"
+	BlockerKindNeedsInvestigation = "needs-investigation"
+	BlockerKindNotEligible        = "not-execution-eligible"
 )
 
 // Blocker describes why an open bead is currently not runnable. Either
@@ -217,6 +219,7 @@ type Blocker struct {
 	UnclosedDepIDs []string `json:"unclosed_dep_ids,omitempty"`
 	LastStatus     string   `json:"last_status,omitempty"`
 	LastDetail     string   `json:"last_detail,omitempty"`
+	Reason         string   `json:"reason,omitempty"`
 }
 
 // BlockedBead pairs a bead with its blocker classification.
