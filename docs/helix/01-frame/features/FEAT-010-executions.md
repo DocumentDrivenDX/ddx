@@ -110,6 +110,15 @@ bead is atomic enough to execute. The hook invokes the nested bead-lifecycle
 workflow skill under the `ddx` skill tree and records intake evidence in the
 layer-3 run record.
 
+`ddx work` wires this hook by default in both CLI and server-managed worker
+paths. Decomposition decisions run with a strong `MinPower` floor, defaulting to
+the smart/top-power tier floor when no project-specific splitter override is
+configured. DDx does not choose the concrete model; it passes the raised power
+floor to the agent and preserves any operator-supplied harness/provider/model
+passthrough constraints. If those constraints cannot satisfy the strong floor,
+DDx records `agent_power_unsatisfied` and blocks instead of running weak
+decomposition.
+
 The intake result is one of:
 
 - `actionable_atomic` — claim and execute normally.

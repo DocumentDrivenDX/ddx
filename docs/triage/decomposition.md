@@ -126,6 +126,15 @@ routing and execution. The triage gate must not choose or rank concrete
 providers, models, or harnesses; if an operator supplied those values, DDx
 passes them through as opaque constraints to the agent runtime.
 
+Decomposition is a high-judgment routing decision. The splitter must run through
+the normal `ddx work` path with a strong `MinPower` floor, defaulting to the
+smart/top-power tier floor when the project has no explicit splitter override.
+DDx still does not pick a concrete model: it only raises the power floor and
+lets the agent route within any operator-supplied passthrough constraints. If no
+available route satisfies that strong floor, the bead is blocked with
+`agent_power_unsatisfied`; DDx must not silently fall back to weak
+decomposition.
+
 ## Disabling the gate
 
 The gate is disabled when `ExecuteBeadWorker.ComplexityGate == nil`. This is
