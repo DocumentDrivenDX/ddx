@@ -143,6 +143,15 @@ an infrastructure failure. The hook must never rewrite the attempt result or
 erase artifacts; it only adds triage evidence and feeds retry/stop
 classification.
 
+If post-attempt triage finds that an implementation attempt stopped because the
+bead was too large or the worker could not legally decompose inside its
+worktree/depth context, the layer-3 worker must invoke the same orchestrator
+decomposition path used by `PreClaimIntakeHook`. This is machine-actionable
+work: DDx files child beads, records the AC map, and blocks the parent unless
+the split is lossy, ambiguous, or at the queue-level decomposition depth cap.
+The operator is not required merely because the implementer could not split
+from inside the attempted execution.
+
 `ExecuteBeadReport` gains `OutcomeReason` beside the existing `Disrupted`
 signal. `Disrupted` remains the mechanical indicator that normal completion was
 interrupted. `OutcomeReason` is the stable classification string that explains

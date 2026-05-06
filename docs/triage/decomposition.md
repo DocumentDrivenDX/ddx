@@ -25,6 +25,14 @@ Safe rewrites may add durable evidence, normalize the bead body, or wire obvious
 metadata. They must not invent product behavior, change scope, choose between
 conflicting requirements, or guess a missing governing artifact.
 
+The same decomposition policy is also used as a post-attempt safety net. If an
+implementation attempt returns `no_changes_needs_investigation` or an equivalent
+structured outcome whose rationale says the bead is too large or cannot be
+safely split inside the implementation worktree, `ddx work` must run the
+orchestrator-level splitter on the original bead. That fallback is not operator
+work unless the splitter cannot produce a lossless AC map or the configured
+decomposition depth has truly been exhausted at the queue level.
+
 ## Bypassing the gate per-bead
 
 Add the label `triage:skip` to a bead to bypass the complexity gate entirely:
@@ -67,14 +75,20 @@ agent:
     max_decomposition_depth: 3
 ```
 
-When a bead at the depth cap is evaluated, the gate:
+When a bead at the queue-level depth cap is evaluated, the gate:
 
 1. Appends a `kind:triage-overflow` event.
 2. Sets `status=blocked` with `label=needs-human-decomposition`.
 3. Does **not** invoke the classifier or splitter.
 4. Does **not** dispatch the bead.
 
-The operator must manually split the bead or add `triage:skip` to bypass.
+Implementation-attempt depth is not the same as queue-level decomposition depth.
+If a worker reports that it cannot split because the attempt prompt forbids
+another child layer, the orchestrator still owns the next split decision unless
+the bead itself has reached `agent.triage.max_decomposition_depth`.
+
+The operator must manually split the bead or add `triage:skip` to bypass only
+after queue-level overflow or lossy/ambiguous decomposition is recorded.
 
 ## AC-coverage metric
 
