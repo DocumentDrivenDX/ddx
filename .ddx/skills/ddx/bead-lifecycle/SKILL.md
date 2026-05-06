@@ -89,13 +89,24 @@ Use triage mode after an attempt ends without straightforward success. The input
 is the bead, an outcome event, and a relevant session log excerpt. Classify the
 failure and recommend the next queue action.
 
+Triage mode is advisory. It classifies evidence and recommends a TD-031 action
+category; final queue mutation semantics are owned by
+`docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md` and the
+`ddx try` / `ddx work` implementation. Do not invent persisted statuses or
+queue mutation rules in skill output.
+
 Valid classifications:
 
 - `already_satisfied` — repository already meets the bead AC.
-- `ambiguous` — bead text lacks enough detail for a reliable retry.
-- `investigated_no_path` — investigation found no viable implementation path.
-- `decomposed` — bead is too large and should be replaced by children.
-- `operator_input_needed` — human decision or external secret/access is needed.
+- `no_changes_unverified` — no-change evidence included verification, but it
+  failed or could not run.
+- `no_changes_unjustified` — no-change evidence lacks enough structured
+  rationale to prove satisfaction or a durable blocker.
+- `needs_investigation` — evidence is ambiguous or asks for operator triage.
+- `decomposed` — parent/epic/container work was decomposed or should be made
+  execution-ineligible for ordinary queue execution.
+- `blocked` — a hard external precondition prevents progress.
+- `superseded` — work has been replaced by another bead or artifact.
 - `routing` — model/provider/harness selection or capability mismatch.
 - `quota` — rate limit, spend cap, or usage ceiling.
 - `transport` — network, API, subprocess, serialization, or connector failure.
@@ -103,16 +114,18 @@ Valid classifications:
 - `merge_conflict` — landing failed due to git conflicts.
 - `review_block` — reviewer found blocking issues or requested changes.
 - `timeout` — attempt exceeded time or idle limits.
+- `recoverable` — transient infrastructure or time-based condition can plausibly
+  succeed by retrying the same bead later.
 
 Valid recommended actions:
 
-- `refine_bead_and_retry`
-- `retry_with_more_context`
-- `file_children_and_supersede`
-- `escalate_to_operator`
-- `close_as_already_done`
-- `wait_and_retry`
-- `give_up`
+- `close_already_satisfied`
+- `release_claim_retry`
+- `release_claim_needs_investigation`
+- `release_claim_mark_blocked`
+- `release_claim_mark_superseded`
+- `release_claim_wait_retry`
+- `close_decomposed_or_mark_execution_ineligible`
 
 Prefer the narrowest classification supported by the evidence. If the log shows
 both a vague bead and a tool timeout, classify the first event that explains why
@@ -122,8 +135,8 @@ Return JSON only:
 
 ```json
 {
-  "classification": "already_satisfied|ambiguous|investigated_no_path|decomposed|operator_input_needed|routing|quota|transport|tests_red|merge_conflict|review_block|timeout",
-  "recommended_action": "refine_bead_and_retry|retry_with_more_context|file_children_and_supersede|escalate_to_operator|close_as_already_done|wait_and_retry|give_up",
+  "classification": "already_satisfied|no_changes_unverified|no_changes_unjustified|needs_investigation|decomposed|blocked|superseded|routing|quota|transport|tests_red|merge_conflict|review_block|timeout|recoverable",
+  "recommended_action": "close_already_satisfied|release_claim_retry|release_claim_needs_investigation|release_claim_mark_blocked|release_claim_mark_superseded|release_claim_wait_retry|close_decomposed_or_mark_execution_ineligible",
   "rationale": "brief evidence-grounded explanation",
   "suggested_amendments": [
     {
