@@ -423,13 +423,18 @@ which condition fired.
    an opportunity to act. Intake blocks, decomposition, claim races, routing
    preflight rejection, quota/transport/auth/tool setup failures, review errors,
    and operator-action classes do not increment this counter.
-5. **`signal`** — a SIGINT/SIGTERM was received between attempts. The
-   in-flight `ddx try` (if any) finalizes per its own merge/preserve
-   policy before the loop record closes.
+5. **`signal`** — a SIGINT/SIGTERM was received. On the first signal, DDx
+   prints `Cancel received, shutting down gracefully`, cancels the active
+   command context, stops claiming new beads, and gives the in-flight
+   `ddx try` (if any) one cooperative cleanup path to preserve evidence,
+   release its claim, and leave the bead re-claimable. A second signal may
+   hard-abort the process.
 
-Stop-condition evaluation runs **between** `ddx try` invocations; an
-in-flight attempt is never aborted to satisfy a stop condition (`signal`
-excepted, and only after the in-flight attempt finalizes).
+Stop-condition evaluation normally runs **between** `ddx try` invocations.
+`signal` is the exception: the first signal cancels an in-flight attempt
+cooperatively rather than waiting for the model to finish. The cancelled
+attempt is mechanically disrupted, not a model no-progress failure, and ordinary
+interrupt shutdown MUST NOT park the bead behind `execute-loop-retry-after`.
 
 ### Long-running default (`--poll-interval`)
 
@@ -763,6 +768,8 @@ spinning, or interrupted
 **Acceptance Criteria:**
 - Given I invoke `ddx work`, then DDx writes exactly one layer-3 record
   per invocation referencing each child layer-2 attempt id.
+- Given I press Ctrl-C while `ddx work` or `ddx try` is running, then DDx
+  prints `Cancel received, shutting down gracefully` before cleanup begins.
 - Given the loop stops, then the layer-3 record's terminal disposition
   is one of `drained`, `blocked`, `deferred`, `no_progress`, `signal`,
   and the evaluation log names which condition fired and on which

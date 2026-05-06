@@ -177,12 +177,21 @@ rewrite historical bead attempt commits or `closing_commit_sha` pointers.
 | `blocked` | remaining ready beads are terminal for the current policy |
 | `deferred` | wall-clock or attempt-count budget exhausted |
 | `no_progress` | configured consecutive attempts produced no commit and no merged side effect |
-| `signal` | SIGINT/SIGTERM received after in-flight attempt finalizes |
+| `signal` | SIGINT/SIGTERM received; first signal cancels in-flight work cooperatively and stops new claims |
 
 The layer-3 evaluation log records the candidate bead, previous outcome,
 retry eligibility, requested power bounds, passthrough envelope presence, and
 the condition that fired. The log may inspect DDx-owned attempt outcomes and
 agent typed status; it must not branch on concrete provider/model identity.
+
+Signal handling is process-root behavior, not a per-command special case.
+The root command installs a SIGINT/SIGTERM-backed context. On the first signal,
+DDx writes `Cancel received, shutting down gracefully` to stderr/stdout visible
+to the operator, cancels the root context, and lets `ddx work` / `ddx try`
+finish the TD-031 interruption path: preserve available evidence, remove
+runtime liveness state, release any non-terminal bead claim, and exit with
+layer-3 disposition `signal`. A second signal may hard-abort rather than wait
+for cleanup.
 
 ## Drill-Down Query Model
 
