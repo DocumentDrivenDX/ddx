@@ -1,12 +1,16 @@
 package cmd
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
+	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -107,6 +111,21 @@ library:
 `
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfg), 0o644))
 	return dir
+}
+
+type blockingAgentRunner struct {
+	started chan struct{}
+	once    sync.Once
+}
+
+func (r *blockingAgentRunner) Run(opts agent.RunArgs) (*agent.Result, error) {
+	r.once.Do(func() { close(r.started) })
+	ctx := opts.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	<-ctx.Done()
+	return &agent.Result{ExitCode: 1, Error: ctx.Err().Error()}, nil
 }
 
 // AC #1: ddx agent run --harness claude forwards Harness to Execute.
@@ -288,4 +307,80 @@ agent:
 		"ddx work must not inject config agent.harness into Execute (ddx-c4231775)")
 	assert.Empty(t, capturedReq.Model,
 		"ddx work must not inject config agent.model into Execute (ddx-c4231775)")
+}
+
+// TestWorkInterrupt_InFlightAttemptUnclaimsBead verifies that cancelling
+// `ddx work` during an in-flight attempt releases the claim, keeps the bead
+// open, and removes the claim heartbeat so the bead can be reclaimed.
+func TestWorkInterrupt_InFlightAttemptUnclaimsBead(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	env := NewTestEnvironment(t)
+	env.CreateDefaultConfig()
+	dir := env.Dir
+	skillPath := filepath.Join(dir, ".agents", "skills", "ddx", "bead-lifecycle")
+	require.NoError(t, os.MkdirAll(skillPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillPath, "SKILL.md"), []byte("lint + triage"), 0o644))
+	installStubService(t, &stubAgentService{})
+
+	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:    "work-interrupt-001",
+		Title: "work interrupt fixture",
+	}))
+
+	factory := NewCommandFactory(dir)
+	runner := &blockingAgentRunner{started: make(chan struct{})}
+	factory.AgentRunnerOverride = runner
+	root := factory.NewRootCommand()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	root.SetContext(ctx)
+
+	var buf bytes.Buffer
+	root.SetOut(&buf)
+	root.SetErr(&buf)
+	root.SetArgs([]string{"work", "--once", "--no-review", "--no-review-i-know-what-im-doing"})
+
+	done := make(chan error, 1)
+	go func() {
+		done <- root.Execute()
+	}()
+
+	var err error
+	select {
+	case <-runner.started:
+	case <-time.After(5 * time.Second):
+		select {
+		case err = <-done:
+		default:
+		}
+		t.Fatalf("work runner did not start; err=%v output=%q", err, buf.String())
+	}
+	cancel()
+
+	select {
+	case err = <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("work command did not return after cancel")
+	}
+	if err != nil {
+		assert.Contains(t, strings.ToLower(err.Error()), "canceled")
+	}
+	assert.Contains(t, strings.ToLower(buf.String()), "context canceled",
+		"interrupted work should surface the cancellation in the command output")
+
+	got, getErr := store.Get("work-interrupt-001")
+	require.NoError(t, getErr)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Empty(t, got.Owner)
+	_, hasRetry := got.Extra["execute-loop-retry-after"]
+	assert.False(t, hasRetry, "interrupted work must not persist execute-loop-retry-after")
+
+	fresh, found, hbErr := store.ClaimHeartbeatFresh("work-interrupt-001")
+	require.NoError(t, hbErr)
+	assert.False(t, found, "interrupted work must remove the claim heartbeat")
+	assert.False(t, fresh)
+	require.NoError(t, store.Claim("work-interrupt-001", "worker-b"))
 }

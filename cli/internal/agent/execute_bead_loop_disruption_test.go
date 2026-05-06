@@ -246,6 +246,138 @@ func TestLoop_DisruptionEventEmitted(t *testing.T) {
 	assert.Equal(t, "transport_error", beadEv.Summary)
 }
 
+func runInterruptedWorkAttempt(t *testing.T) (*bead.Store, *bead.Bead, *ExecuteBeadLoopResult, error) {
+	t.Helper()
+
+	store, candidate, _ := newExecuteLoopTestStore(t)
+	cancelCtx, cancel := context.WithCancel(context.Background())
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, id string) (ExecuteBeadReport, error) {
+			cancel()
+			<-ctx.Done()
+			return ExecuteBeadReport{
+				BeadID:    id,
+				Status:    ExecuteBeadStatusExecutionFailed,
+				Detail:    "context canceled",
+				BaseRev:   "abc1234",
+				ResultRev: "abc1234",
+			}, ctx.Err()
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(cancelCtx, rcfg, ExecuteBeadLoopRuntime{Once: true})
+	return store, candidate, result, err
+}
+
+// TestWorkInterrupt_InFlightAttemptUnclaimsBead verifies that an in-flight
+// interrupted attempt releases the claim and returns the bead to open so it is
+// re-claimable.
+func TestWorkInterrupt_InFlightAttemptUnclaimsBead(t *testing.T) {
+	store, candidate, result, err := runInterruptedWorkAttempt(t)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	require.NotNil(t, result)
+	require.Len(t, result.Results, 1)
+	assert.True(t, result.Results[0].Disrupted)
+
+	got, err := store.Get(candidate.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Empty(t, got.Owner)
+}
+
+// TestWorkInterrupt_DoesNotSetNoProgressCooldown verifies that interrupted
+// work stays off the execute-loop retry cooldown and does not increment the
+// no-progress suppression path.
+func TestWorkInterrupt_DoesNotSetNoProgressCooldown(t *testing.T) {
+	store, candidate, result, err := runInterruptedWorkAttempt(t)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	require.NotNil(t, result)
+	require.Len(t, result.Results, 1)
+	report := result.Results[0]
+	assert.True(t, report.Disrupted)
+	assert.Equal(t, "context_canceled", report.DisruptionReason)
+	assert.Empty(t, report.RetryAfter)
+
+	got, err := store.Get(candidate.ID)
+	require.NoError(t, err)
+	_, hasRetry := got.Extra["execute-loop-retry-after"]
+	assert.False(t, hasRetry, "interrupted work must not persist execute-loop-retry-after")
+}
+
+// TestWorkInterrupt_RemovesClaimLiveness verifies that cleanup removes the
+// external claim heartbeat so the bead can be reclaimed immediately.
+func TestWorkInterrupt_RemovesClaimLiveness(t *testing.T) {
+	store, candidate, _, err := runInterruptedWorkAttempt(t)
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	fresh, found, err := store.ClaimHeartbeatFresh(candidate.ID)
+	require.NoError(t, err)
+	assert.False(t, found, "interrupted work must remove the claim heartbeat file")
+	assert.False(t, fresh, "removed heartbeat cannot be fresh")
+
+	require.NoError(t, store.Claim(candidate.ID, "worker-b"), "bead must be re-claimable after cleanup")
+	got, err := store.Get(candidate.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "worker-b", got.Owner)
+}
+
+// TestInterruptedAfterTerminalMutation_DoesNotUndoClose verifies that a
+// cancellation that lands after the bead has been successfully closed does not
+// reopen or unclaim the bead.
+func TestInterruptedAfterTerminalMutation_DoesNotUndoClose(t *testing.T) {
+	realStore, candidate, _ := newExecuteLoopTestStore(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	store := &errorInjectingStore{
+		ExecuteBeadLoopStore: realStore,
+		onCloseWithEvidence: func(id, sessionID, commitSHA string) error {
+			err := realStore.CloseWithEvidence(id, sessionID, commitSHA)
+			cancel()
+			return err
+		},
+	}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, id string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    id,
+				Status:    ExecuteBeadStatusSuccess,
+				Detail:    "merged cleanly",
+				SessionID: "sess-close",
+				ResultRev: "deadbeef",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{Once: true})
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	require.NotNil(t, result)
+	require.Len(t, result.Results, 1)
+
+	got, err := realStore.Get(candidate.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+	assert.Equal(t, "worker", got.Owner)
+
+	fresh, found, err := realStore.ClaimHeartbeatFresh(candidate.ID)
+	require.NoError(t, err)
+	assert.False(t, found, "closed bead must not retain a live claim heartbeat")
+	assert.False(t, fresh)
+}
+
 // TestClassifyDisruption_Markers asserts the transport-error marker set
 // recognizes a representative sample of disruption-class strings, and that
 // non-transport errors are not misclassified.

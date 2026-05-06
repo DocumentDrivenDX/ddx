@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -1934,6 +1935,9 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		TargetBeadID:          tryTargetBeadID,
 		ReviewCostCap:         costCap,
 	})
+	if err != nil && result != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
+		_ = writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, asJSON)
+	}
 	if err != nil {
 		return err
 	}
