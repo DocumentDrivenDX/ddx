@@ -1,0 +1,5 @@
+NewResolver: DELETE - the resolver root is constructed through `Resolver.Query()`/`Mutation()`/`Subscription()` and wired directly into gqlgen at `cli/internal/server/server.go:4868`; no `func NewResolver` remains in `cli/internal/server/graphql`.
+personaConnectionFrom: DELETE - no current definition exists in `cli/internal/server/graphql`; persona queries resolve through `Personas`, `Persona`, and `PersonaByRole` in `cli/internal/server/graphql/resolver_meta.go:10-48`.
+resetProviderModelsCacheForTest: DELETE - no current definition exists; provider-model cache tests reset `providerModelsCache` inline in `cli/internal/server/graphql/resolver_provider_models_test.go:1-240` instead of calling a helper.
+RecordHarnessRateLimit: DELETE - no current definition exists; harness quota detection now flows through `LookupHarnessRateLimit` and `QuotaFromRateLimitSignal` in `cli/internal/server/graphql/resolver_providers.go:23-44` and `:499-565`.
+resetHarnessRateLimitCache: DELETE - no current definition exists; the rate-limit cache is managed directly in `cli/internal/server/graphql/resolver_providers.go:27-38` and there is no production caller for a reset seam.
