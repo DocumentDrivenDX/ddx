@@ -20,6 +20,17 @@ func backendConformanceCases() []backendConformanceCase {
 	}
 }
 
+func forEachBackendConformanceCase(t *testing.T, fn func(*testing.T, backendConformanceCase)) {
+	t.Helper()
+	for _, tc := range backendConformanceCases() {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			fn(t, tc)
+		})
+	}
+}
+
 func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 	t.Helper()
 
@@ -139,20 +150,8 @@ func runBackendConformanceSuite(t *testing.T, tc backendConformanceCase) {
 	})
 }
 
-func TestBackendConformance_JSONL(t *testing.T) {
-	for _, tc := range backendConformanceCases() {
-		if tc.name != "jsonl" {
-			continue
-		}
+func TestBackendConformance(t *testing.T) {
+	forEachBackendConformanceCase(t, func(t *testing.T, tc backendConformanceCase) {
 		runBackendConformanceSuite(t, tc)
-	}
-}
-
-func TestBackendConformance_Axon(t *testing.T) {
-	for _, tc := range backendConformanceCases() {
-		if tc.name != "axon" {
-			continue
-		}
-		runBackendConformanceSuite(t, tc)
-	}
+	})
 }
