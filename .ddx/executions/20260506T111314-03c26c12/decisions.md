@@ -1,0 +1,1 @@
+WIRE internal/metaprompt/injector.go:44 NewMetaPromptInjectorWithPaths — production roots already exist via cli/cmd/command_factory.go:178 calling metaprompt.KeepReachabilityForDeadcode(), plus runtime call sites in cli/cmd/init.go:715 and cli/cmd/doctor.go:930; verified by deadcode producing no internal/metaprompt entries.
