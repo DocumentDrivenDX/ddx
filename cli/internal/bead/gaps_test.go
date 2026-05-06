@@ -55,6 +55,24 @@ func TestReadySortedByPriority(t *testing.T) {
 	assert.Equal(t, 3, ready[2].Priority)
 }
 
+func TestReadySortsByQueueRankWithinPriority(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	require.NoError(t, s.WriteAll([]Bead{
+		{ID: "ddx-unranked", Title: "Unranked", Status: StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now, UpdatedAt: now},
+		{ID: "ddx-rank-10", Title: "Rank 10", Status: StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now, UpdatedAt: now, Extra: map[string]any{"queue-rank": 10}},
+		{ID: "ddx-rank-1", Title: "Rank 1", Status: StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now, UpdatedAt: now, Extra: map[string]any{"queue-rank": 1}},
+	}))
+
+	ready, err := s.Ready()
+	require.NoError(t, err)
+	require.Len(t, ready, 3)
+	assert.Equal(t, "ddx-rank-1", ready[0].ID)
+	assert.Equal(t, "ddx-rank-10", ready[1].ID)
+	assert.Equal(t, "ddx-unranked", ready[2].ID)
+}
+
 // ── Execution-eligible filtering ──────────────────────────────────
 
 func TestReadyExecutionFilters(t *testing.T) {
@@ -78,6 +96,77 @@ func TestReadyExecutionFilters(t *testing.T) {
 	assert.Len(t, exec, 2)
 	assert.Equal(t, "hx-001", exec[0].ID) // eligible
 	assert.Equal(t, "hx-004", exec[1].ID) // no metadata = eligible by default
+}
+
+func TestReadyExecutionSortsByQueueRankWithinPriority(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	require.NoError(t, s.WriteAll([]Bead{
+		{ID: "ddx-unranked", Title: "Unranked", Status: StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now, UpdatedAt: now},
+		{ID: "ddx-rank-3", Title: "Rank 3", Status: StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now, UpdatedAt: now, Extra: map[string]any{"queue-rank": 3}},
+		{ID: "ddx-rank-1", Title: "Rank 1", Status: StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now, UpdatedAt: now, Extra: map[string]any{"queue-rank": 1}},
+		{ID: "ddx-not-eligible", Title: "Not eligible", Status: StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now, UpdatedAt: now, Extra: map[string]any{"execution-eligible": false}},
+	}))
+
+	exec, err := s.ReadyExecution()
+	require.NoError(t, err)
+	require.Len(t, exec, 3)
+	assert.Equal(t, "ddx-rank-1", exec[0].ID)
+	assert.Equal(t, "ddx-rank-3", exec[1].ID)
+	assert.Equal(t, "ddx-unranked", exec[2].ID)
+}
+
+func TestQueueRankDoesNotCrossPriorityBoundary(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	require.NoError(t, s.WriteAll([]Bead{
+		{ID: "ddx-p0-unranked", Title: "P0", Status: StatusOpen, Priority: 0, IssueType: "task", CreatedAt: now, UpdatedAt: now},
+		{ID: "ddx-p1-ranked", Title: "P1 ranked", Status: StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now, UpdatedAt: now, Extra: map[string]any{"queue-rank": 0}},
+	}))
+
+	ready, err := s.Ready()
+	require.NoError(t, err)
+	require.Len(t, ready, 2)
+	assert.Equal(t, "ddx-p0-unranked", ready[0].ID)
+	assert.Equal(t, "ddx-p1-ranked", ready[1].ID)
+}
+
+func TestQueueRankMissingSortsAfterExplicitRankWithinPriority(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	require.NoError(t, s.WriteAll([]Bead{
+		{ID: "ddx-rank-0", Title: "Rank 0", Status: StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now, UpdatedAt: now, Extra: map[string]any{"queue-rank": 0}},
+		{ID: "ddx-rank-9", Title: "Rank 9", Status: StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now, UpdatedAt: now, Extra: map[string]any{"queue-rank": 9}},
+		{ID: "ddx-unranked", Title: "Unranked", Status: StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now, UpdatedAt: now},
+	}))
+
+	ready, err := s.Ready()
+	require.NoError(t, err)
+	require.Len(t, ready, 3)
+	assert.Equal(t, "ddx-rank-0", ready[0].ID)
+	assert.Equal(t, "ddx-rank-9", ready[1].ID)
+	assert.Equal(t, "ddx-unranked", ready[2].ID)
+}
+
+func TestQueueRankNumericStringCompatibility(t *testing.T) {
+	s := newTestStore(t)
+	now := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	require.NoError(t, s.WriteAll([]Bead{
+		{ID: "ddx-rank-1", Title: "Rank 1", Status: StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now, UpdatedAt: now, Extra: map[string]any{"queue-rank": 1}},
+		{ID: "ddx-rank-2", Title: "Rank 2 string", Status: StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now, UpdatedAt: now, Extra: map[string]any{"queue-rank": "2"}},
+		{ID: "ddx-unranked", Title: "Unranked", Status: StatusOpen, Priority: 1, IssueType: "task", CreatedAt: now, UpdatedAt: now},
+	}))
+
+	ready, err := s.Ready()
+	require.NoError(t, err)
+	require.Len(t, ready, 3)
+	assert.Equal(t, "ddx-rank-1", ready[0].ID)
+	assert.Equal(t, "ddx-rank-2", ready[1].ID)
+	assert.Equal(t, "ddx-unranked", ready[2].ID)
 }
 
 func TestReadyExecutionSkipsRetrySuppressedBeads(t *testing.T) {

@@ -1704,11 +1704,60 @@ func sortBeadsForQueue(beads []Bead) {
 		if beads[i].Priority != beads[j].Priority {
 			return beads[i].Priority < beads[j].Priority
 		}
+		ir, iok := parseQueueRank(beads[i].Extra["queue-rank"])
+		jr, jok := parseQueueRank(beads[j].Extra["queue-rank"])
+		if iok != jok {
+			return iok
+		}
+		if iok && jok && ir != jr {
+			return ir < jr
+		}
 		if !beads[i].CreatedAt.Equal(beads[j].CreatedAt) {
 			return beads[i].CreatedAt.Before(beads[j].CreatedAt)
 		}
 		return beads[i].ID < beads[j].ID
 	})
+}
+
+func parseQueueRank(raw any) (int, bool) {
+	switch v := raw.(type) {
+	case int:
+		return v, true
+	case int8:
+		return int(v), true
+	case int16:
+		return int(v), true
+	case int32:
+		return int(v), true
+	case int64:
+		return int(v), true
+	case uint:
+		return int(v), true
+	case uint8:
+		return int(v), true
+	case uint16:
+		return int(v), true
+	case uint32:
+		return int(v), true
+	case uint64:
+		return int(v), true
+	case float32:
+		return int(v), v == float32(int(v))
+	case float64:
+		return int(v), v == float64(int(v))
+	case json.Number:
+		if n, err := v.Int64(); err == nil {
+			return int(n), true
+		}
+		if f, err := v.Float64(); err == nil {
+			return int(f), f == float64(int(f))
+		}
+	case string:
+		if n, err := strconv.Atoi(strings.TrimSpace(v)); err == nil {
+			return n, true
+		}
+	}
+	return 0, false
 }
 
 // Status returns aggregate counts.
