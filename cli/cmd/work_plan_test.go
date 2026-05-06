@@ -3,6 +3,7 @@ package cmd
 import (
 	"encoding/json"
 	"path/filepath"
+	"regexp"
 	"testing"
 	"time"
 
@@ -28,7 +29,7 @@ func setupWorkPlanEnv(t *testing.T, beads ...*bead.Bead) *TestEnvironment {
 // TestWorkPlan_CLI_TextOutput verifies that the default text output contains the
 // documented column headers and at least one data row when beads are present.
 func TestWorkPlan_CLI_TextOutput(t *testing.T) {
-	b1 := &bead.Bead{ID: "ddx-text-001", Title: "First bead", Priority: 0}
+	b1 := &bead.Bead{ID: "ddx-text-001", Title: "First bead", Priority: 0, Extra: map[string]any{"queue-rank": 3}}
 	b2 := &bead.Bead{ID: "ddx-text-002", Title: "Second bead", Priority: 1}
 	env := setupWorkPlanEnv(t, b1, b2)
 	root := NewCommandFactory(env.Dir).NewRootCommand()
@@ -40,6 +41,7 @@ func TestWorkPlan_CLI_TextOutput(t *testing.T) {
 	assert.Contains(t, out, "POS")
 	assert.Contains(t, out, "ID")
 	assert.Contains(t, out, "PRI")
+	assert.Contains(t, out, "RANK")
 	assert.Contains(t, out, "UPDATED")
 	assert.Contains(t, out, "STATUS")
 	assert.Contains(t, out, "DECISION")
@@ -48,12 +50,13 @@ func TestWorkPlan_CLI_TextOutput(t *testing.T) {
 	// Both bead IDs must appear.
 	assert.Contains(t, out, "ddx-text-001")
 	assert.Contains(t, out, "ddx-text-002")
+	assert.Regexp(t, regexp.MustCompile(`ddx-text-001.*\b3\b`), out)
 }
 
 // TestWorkPlan_CLI_JSONOutput verifies that --json emits valid JSON parseable
 // as an array of queue entries with expected fields.
 func TestWorkPlan_CLI_JSONOutput(t *testing.T) {
-	b := &bead.Bead{ID: "ddx-json-001", Title: "JSON bead", Priority: 0}
+	b := &bead.Bead{ID: "ddx-json-001", Title: "JSON bead", Priority: 0, Extra: map[string]any{"queue-rank": 11}}
 	env := setupWorkPlanEnv(t, b)
 	root := NewCommandFactory(env.Dir).NewRootCommand()
 
@@ -65,6 +68,8 @@ func TestWorkPlan_CLI_JSONOutput(t *testing.T) {
 	require.Len(t, entries, 1)
 	assert.Equal(t, "ddx-json-001", entries[0].BeadID)
 	assert.Equal(t, agent.FilterDecisionNext, entries[0].FilterDecision)
+	require.NotNil(t, entries[0].QueueRank)
+	assert.Equal(t, 11, *entries[0].QueueRank)
 }
 
 // TestWorkPlan_Subcommand_Registered verifies that "ddx work plan" is wired as

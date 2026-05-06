@@ -206,17 +206,22 @@ func TestExecuteLoop_TwoWorkersBothClaimP0sBeforeP2s(t *testing.T) {
 	}
 }
 
-// TestExecuteLoop_EmitsPickerPrioritySkipEvent verifies AC #4: when a worker
+// TestPickerPrioritySkip_IncludesQueueRank verifies AC #4: when a worker
 // passes over a higher-priority bead (because it is in the per-Run
 // `attempted` map from a prior iteration) and claims a lower-priority bead,
-// the loop emits a structured picker.priority_skip event naming the
-// skipped bead and the reason. Without this, future starvation regressions
-// would be invisible to operators.
-func TestExecuteLoop_EmitsPickerPrioritySkipEvent(t *testing.T) {
+// the loop emits a structured picker.priority_skip event naming the skipped
+// bead, the reason, and the queue-rank when present. Without this, future
+// starvation regressions would be invisible to operators.
+func TestPickerPrioritySkip_IncludesQueueRank(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
-	require.NoError(t, store.Create(&bead.Bead{ID: "ddx-p0-skipped", Title: "P0 will fail preflight", Priority: 0}))
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:       "ddx-p0-skipped",
+		Title:    "P0 will fail preflight",
+		Priority: 0,
+		Extra:    map[string]any{"queue-rank": 7},
+	}))
 	require.NoError(t, store.Create(&bead.Bead{ID: "ddx-p2-claimed", Title: "P2 fallback", Priority: 2}))
 
 	// Preflight returns nil for the P2 but a non-nil error for the P0.
@@ -302,13 +307,13 @@ func TestExecuteLoop_EmitsPickerPrioritySkipEvent(t *testing.T) {
 			continue
 		}
 		first, _ := skipped[0].(map[string]any)
-		if first["bead_id"] == "ddx-p0-skipped" && first["reason"] == "in_attempted" {
+		if first["bead_id"] == "ddx-p0-skipped" && first["reason"] == "in_attempted" && first["queue_rank"] == float64(7) {
 			found = true
 			break
 		}
 	}
 	require.True(t, found,
-		"expected picker.priority_skip event for chosen=ddx-p2-claimed skipping ddx-p0-skipped (reason=in_attempted); got events:\n%s",
+		"expected picker.priority_skip event for chosen=ddx-p2-claimed skipping ddx-p0-skipped (reason=in_attempted, queue_rank=7); got events:\n%s",
 		sink.dump())
 }
 

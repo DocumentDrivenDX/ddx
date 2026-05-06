@@ -54,6 +54,36 @@ func TestPreviewQueue_PrioritySort(t *testing.T) {
 	assert.Equal(t, FilterDecisionEligible, entries[2].FilterDecision)
 }
 
+// TestPreviewQueue_QueueRankSort verifies that ranked beads sort ahead of
+// unranked beads within the same priority bucket and that queue_rank is
+// surfaced for ranked entries.
+func TestPreviewQueue_QueueRankSort(t *testing.T) {
+	store, qs := newPreviewTestStore(t)
+
+	now := time.Now().UTC()
+	rankNine := &bead.Bead{ID: "ddx-rank-9", Title: "Rank 9", Priority: 1, CreatedAt: now, Extra: map[string]any{"queue-rank": 9}}
+	rankOne := &bead.Bead{ID: "ddx-rank-1", Title: "Rank 1", Priority: 1, CreatedAt: now.Add(time.Second), Extra: map[string]any{"queue-rank": 1}}
+	unranked := &bead.Bead{ID: "ddx-unranked", Title: "Unranked", Priority: 1, CreatedAt: now.Add(2 * time.Second)}
+	for _, b := range []*bead.Bead{rankNine, rankOne, unranked} {
+		require.NoError(t, store.Create(b))
+	}
+
+	entries, err := PreviewQueue(qs, PickerFilters{}, 0)
+	require.NoError(t, err)
+	require.Len(t, entries, 3)
+
+	assert.Equal(t, "ddx-rank-1", entries[0].BeadID)
+	require.NotNil(t, entries[0].QueueRank)
+	assert.Equal(t, 1, *entries[0].QueueRank)
+
+	assert.Equal(t, "ddx-rank-9", entries[1].BeadID)
+	require.NotNil(t, entries[1].QueueRank)
+	assert.Equal(t, 9, *entries[1].QueueRank)
+
+	assert.Equal(t, "ddx-unranked", entries[2].BeadID)
+	assert.Nil(t, entries[2].QueueRank)
+}
+
 // TestPreviewQueue_LabelFilter verifies that label filtering narrows the queue
 // identically to the worker's label intersection logic.
 func TestPreviewQueue_LabelFilter(t *testing.T) {
@@ -171,34 +201,34 @@ func TestPreviewQueue_DeterministicAcrossRuns(t *testing.T) {
 	}
 }
 
-// TestPicker_StillWorks_AfterRefactor verifies that ExecuteBeadWorker.nextCandidate
-// still returns the first eligible candidate correctly after the PreviewQueue
-// refactor — behavior must remain unchanged.
-func TestPicker_StillWorks_AfterRefactor(t *testing.T) {
+// TestPicker_QueueRankOrdering verifies that ExecuteBeadWorker.nextCandidate
+// honors queue-rank within a priority bucket and still falls back to the next
+// ranked bead when the lowest-ranked candidate is already attempted.
+func TestPicker_QueueRankOrdering(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
-	// Create two beads; first by priority should win.
-	high := &bead.Bead{ID: "ddx-high", Title: "High priority", Priority: 0}
-	low := &bead.Bead{ID: "ddx-low", Title: "Low priority", Priority: 2}
-	require.NoError(t, store.Create(high))
-	require.NoError(t, store.Create(low))
+	// Create two same-priority beads with different queue-rank values.
+	rankNine := &bead.Bead{ID: "ddx-rank-9", Title: "Rank 9", Priority: 0, Extra: map[string]any{"queue-rank": 9}}
+	rankOne := &bead.Bead{ID: "ddx-rank-1", Title: "Rank 1", Priority: 0, Extra: map[string]any{"queue-rank": 1}}
+	require.NoError(t, store.Create(rankNine))
+	require.NoError(t, store.Create(rankOne))
 
 	worker := &ExecuteBeadWorker{Store: store}
 
-	// Empty result slice — both are eligible; high priority wins.
+	// Empty result slice — the lower queue-rank bead wins within the bucket.
 	got, skips, ok, err := worker.nextCandidate(context.Background(), nil, nil, "", "")
 	require.NoError(t, err)
 	require.True(t, ok)
-	assert.Equal(t, "ddx-high", got.ID)
+	assert.Equal(t, "ddx-rank-1", got.ID)
 	assert.Empty(t, skips)
 
-	// With high priority in attempted, low priority should be returned.
-	results := []ExecuteBeadReport{{BeadID: "ddx-high"}}
+	// With the rank-1 bead already attempted, the next ranked bead should be returned.
+	results := []ExecuteBeadReport{{BeadID: "ddx-rank-1"}}
 	got2, skips2, ok2, err := worker.nextCandidate(context.Background(), results, nil, "", "")
 	require.NoError(t, err)
 	require.True(t, ok2)
-	assert.Equal(t, "ddx-low", got2.ID)
+	assert.Equal(t, "ddx-rank-9", got2.ID)
 	assert.Len(t, skips2, 1)
 	assert.Equal(t, "in_attempted", skips2[0].Reason)
 }

@@ -45,6 +45,7 @@ type QueueEntry struct {
 	BeadID         string         `json:"id"`
 	Title          string         `json:"title"`
 	Priority       int            `json:"priority"`
+	QueueRank      *int           `json:"queue_rank,omitempty"`
 	UpdatedAt      time.Time      `json:"updated_at"`
 	Status         string         `json:"status"`
 	FilterDecision FilterDecision `json:"filter_decision"`
@@ -57,9 +58,9 @@ type QueueEntry struct {
 // intentionally omits the per-Run attempted map (non-deterministic across runs).
 //
 // The returned slice is ordered identically to what ReadyExecution returns —
-// priority asc, then created_at asc within priority. The first entry whose
-// FilterDecision is FilterDecisionNext is the bead nextCandidate would return
-// on a fresh Run (before any claim).
+// priority asc, then queue-rank asc, then created_at asc, then id within a
+// priority bucket. The first entry whose FilterDecision is FilterDecisionNext
+// is the bead nextCandidate would return on a fresh Run (before any claim).
 //
 // Limit controls the maximum number of entries returned. 0 means no limit
 // (return all entries from ReadyExecution).
@@ -77,6 +78,7 @@ func PreviewQueue(store PreviewQueueStore, filters PickerFilters, limit int) ([]
 			BeadID:    b.ID,
 			Title:     b.Title,
 			Priority:  b.Priority,
+			QueueRank: queueRankPtr(b.Extra["queue-rank"]),
 			UpdatedAt: b.UpdatedAt,
 			Status:    b.Status,
 		}
@@ -111,4 +113,48 @@ func PreviewQueue(store PreviewQueueStore, filters PickerFilters, limit int) ([]
 	}
 
 	return entries, nil
+}
+
+func queueRankPtr(raw any) *int {
+	rank, ok := parseQueueRank(raw)
+	if !ok {
+		return nil
+	}
+	return &rank
+}
+
+func parseQueueRank(raw any) (int, bool) {
+	switch v := raw.(type) {
+	case *int:
+		if v == nil {
+			return 0, false
+		}
+		return *v, true
+	case int:
+		return v, true
+	case int8:
+		return int(v), true
+	case int16:
+		return int(v), true
+	case int32:
+		return int(v), true
+	case int64:
+		return int(v), true
+	case uint:
+		return int(v), true
+	case uint8:
+		return int(v), true
+	case uint16:
+		return int(v), true
+	case uint32:
+		return int(v), true
+	case uint64:
+		return int(v), true
+	case float32:
+		return int(v), true
+	case float64:
+		return int(v), true
+	default:
+		return 0, false
+	}
 }

@@ -39,6 +39,7 @@ Columns:
   POS      — 1-based pick order
   ID       — bead ID
   PRI      — priority (0 = highest)
+  RANK     — queue-rank within the priority bucket, when present
   UPDATED  — last updated timestamp (RFC3339)
   STATUS   — bead status
   DECISION — "next claim", "eligible (rank N)", or "skipped: <reason>"
@@ -113,15 +114,19 @@ func printWorkPlanText(cmd *cobra.Command, entries []agent.QueueEntry, limit int
 	}
 
 	w := tabwriter.NewWriter(out, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(w, "POS\tID\tPRI\tUPDATED\tSTATUS\tDECISION\tWHY")
-	fmt.Fprintln(w, "---\t--\t---\t-------\t------\t--------\t---")
+	fmt.Fprintln(w, "POS\tID\tPRI\tRANK\tUPDATED\tSTATUS\tDECISION\tWHY")
+	fmt.Fprintln(w, "---\t--\t---\t----\t-------\t------\t--------\t---")
 	for _, e := range entries {
 		updated := e.UpdatedAt.UTC().Format(time.RFC3339)
 		if e.UpdatedAt.IsZero() {
 			updated = "-"
 		}
-		fmt.Fprintf(w, "%d\t%s\t%d\t%s\t%s\t%s\t%s\n",
-			e.Position, e.BeadID, e.Priority, updated, e.Status, e.FilterDecision, e.Why)
+		rank := "-"
+		if e.QueueRank != nil {
+			rank = fmt.Sprintf("%d", *e.QueueRank)
+		}
+		fmt.Fprintf(w, "%d\t%s\t%d\t%s\t%s\t%s\t%s\t%s\n",
+			e.Position, e.BeadID, e.Priority, rank, updated, e.Status, e.FilterDecision, e.Why)
 	}
 	_ = w.Flush()
 
