@@ -128,6 +128,7 @@ type ExecutionCleanupManager struct {
 	ProjectRoot string
 	TempRoot    string
 	GitOps      GitOps
+	DryRun      bool
 	Now         func() time.Time
 	Probe       ExecutionCleanupLivenessProbe
 }
@@ -173,6 +174,7 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 	}
 
 	registered := map[string]struct{}{}
+	runStateMatchesLiveCandidate := false
 	if m.GitOps != nil {
 		paths, err := m.GitOps.WorktreeList(m.ProjectRoot)
 		if err != nil {
@@ -233,6 +235,14 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 
 		live, reason := probe.IsLive(meta, runState, now())
 		if live {
+			if runState != nil {
+				if meta.WorktreePath != "" && filepath.Clean(runState.WorktreePath) == filepath.Clean(meta.WorktreePath) {
+					runStateMatchesLiveCandidate = true
+				}
+				if meta.AttemptID != "" && runState.AttemptID == meta.AttemptID {
+					runStateMatchesLiveCandidate = true
+				}
+			}
 			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
 				Path:    path,
 				Class:   "preserved_temp_dir",
@@ -259,21 +269,27 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 					Message: measureErr.Error(),
 				})
 			}
-			if err := m.GitOps.WorktreeRemove(m.ProjectRoot, path); err != nil {
-				summary.Issues = append(summary.Issues, ExecutionCleanupIssue{
-					Path:     path,
-					Class:    "registered_worktree_remove",
-					Message:  err.Error(),
-					Blocking: true,
-				})
-				continue
+			if !m.DryRun {
+				if err := m.GitOps.WorktreeRemove(m.ProjectRoot, path); err != nil {
+					summary.Issues = append(summary.Issues, ExecutionCleanupIssue{
+						Path:     path,
+						Class:    "registered_worktree_remove",
+						Message:  err.Error(),
+						Blocking: true,
+					})
+					continue
+				}
 			}
 			summary.RemovedRegisteredWorktrees++
 			summary.BytesReclaimed += reclaimedBytes
 			summary.InodesReclaimed += reclaimedInodes
+			class := "removed_registered_worktree"
+			if m.DryRun {
+				class = "would_remove_registered_worktree"
+			}
 			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
 				Path:    path,
-				Class:   "removed_registered_worktree",
+				Class:   class,
 				Message: reason,
 				Bytes:   reclaimedBytes,
 				Inodes:  reclaimedInodes,
@@ -289,28 +305,34 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 				Message: measureErr.Error(),
 			})
 		}
-		if err := os.RemoveAll(path); err != nil {
-			summary.Issues = append(summary.Issues, ExecutionCleanupIssue{
-				Path:     path,
-				Class:    "unregistered_temp_dir_remove",
-				Message:  err.Error(),
-				Blocking: false,
-			})
-			continue
+		if !m.DryRun {
+			if err := os.RemoveAll(path); err != nil {
+				summary.Issues = append(summary.Issues, ExecutionCleanupIssue{
+					Path:     path,
+					Class:    "unregistered_temp_dir_remove",
+					Message:  err.Error(),
+					Blocking: false,
+				})
+				continue
+			}
 		}
 		summary.RemovedUnregisteredTempDirs++
 		summary.BytesReclaimed += reclaimedBytes
 		summary.InodesReclaimed += reclaimedInodes
+		class := "removed_unregistered_temp_dir"
+		if m.DryRun {
+			class = "would_remove_unregistered_temp_dir"
+		}
 		summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
 			Path:    path,
-			Class:   "removed_unregistered_temp_dir",
+			Class:   class,
 			Message: reason,
 			Bytes:   reclaimedBytes,
 			Inodes:  reclaimedInodes,
 		})
 	}
 
-	if m.GitOps != nil && summary.RemovedRegisteredWorktrees > 0 {
+	if m.GitOps != nil && summary.RemovedRegisteredWorktrees > 0 && !m.DryRun {
 		if err := m.GitOps.WorktreePrune(m.ProjectRoot); err != nil {
 			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
 				Path:    m.ProjectRoot,
@@ -323,18 +345,7 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 	// Stale run-state files are removed when they point at an execution
 	// resource that is no longer live.
 	if runState != nil {
-		runStateLive := false
-		if runState.WorktreePath != "" {
-			meta := ExecutionCleanupMetadata{
-				ProjectRoot:  m.ProjectRoot,
-				AttemptID:    runState.AttemptID,
-				WorktreePath: runState.WorktreePath,
-			}
-			if live, _ := probe.IsLive(meta, runState, now()); live {
-				runStateLive = true
-			}
-		}
-		if !runStateLive {
+		if !runStateMatchesLiveCandidate {
 			runStatePath := runStatePath(m.ProjectRoot)
 			var runStateBytes int64
 			var runStatePresent bool
@@ -342,21 +353,26 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 				runStatePresent = true
 				runStateBytes = info.Size()
 			}
-			if err := ClearRunState(m.ProjectRoot); err != nil {
-				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
-					Path:    runStatePath,
-					Class:   "run_state_clear",
-					Message: err.Error(),
-				})
-			} else {
-				if runStatePresent {
-					summary.RemovedRunStateFiles++
-					summary.BytesReclaimed += runStateBytes
-					summary.InodesReclaimed++
+			if !m.DryRun {
+				if err := ClearRunState(m.ProjectRoot); err != nil {
+					summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+						Path:    runStatePath,
+						Class:   "run_state_clear",
+						Message: err.Error(),
+					})
+				}
+			}
+			if runStatePresent {
+				summary.RemovedRunStateFiles++
+				summary.BytesReclaimed += runStateBytes
+				summary.InodesReclaimed++
+				class := "removed_run_state"
+				if m.DryRun {
+					class = "would_remove_run_state"
 				}
 				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
 					Path:    runStatePath,
-					Class:   "removed_run_state",
+					Class:   class,
 					Message: "stale run-state",
 					Bytes:   runStateBytes,
 					Inodes:  1,
