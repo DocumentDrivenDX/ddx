@@ -1,0 +1,69 @@
+{
+  "attempt_id": "20260506T154343-ae2fdd7f",
+  "bead_id": "ddx-259bb4e2",
+  "base_rev": "f4563c74a101707e1538414fb3a4ee4fea7f45bd",
+  "created_at": "2026-05-06T15:43:46.066001412Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-259bb4e2",
+    "title": "agent: cleanly unwind interrupted work and try attempts",
+    "description": "PROBLEM\nAfter the root context is cancelled by Ctrl-C/SIGTERM, `ddx work` and `ddx try` must finish the TD-031 interruption path: preserve available evidence, classify the attempt as mechanically disrupted, release any non-terminal bead claim, remove runtime liveness state, and leave the unfinished bead re-claimable. The current code has partial context-cancellation classification but needs explicit end-to-end coverage for the CLI work/try paths.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead_loop.go:859-878 marks non-success reports as disrupted when ctx is cancelled, but the surrounding cleanup/unclaim behavior is only incidentally covered by generic failure branches.\n- cli/internal/agent/execute_bead_loop.go:812-846 starts and stops claim heartbeat around an attempt; interrupted attempts must stop liveness and release or clear claims deterministically.\n- cli/internal/agent/execute_bead.go:797-807 creates a dispatch context and only the bead-extra cancel path forces `operator_cancel`; plain context cancellation should remain `signal`/mechanical disruption, not `operator_cancel`.\n- cli/cmd/try.go:333-342 and cli/cmd/agent_cmd.go:1921-1940 propagate `cmd.Context()` into worker.Run but need regression tests that cancellation leaves the target bead re-claimable and reports the signal path.\n- docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md:289-314 defines the claim release and no-cooldown requirements for worker shutdown/interruption.\n\nPROPOSED FIX\n- Make interrupted attempts produce a stable disrupted/interrupted report reason (for example `context_canceled` / `signal`) without counting as model no-progress.\n- Ensure the loop unclaims interrupted non-terminal beads and removes any external claim heartbeat/liveness record.\n- Ensure interrupted attempts do not set `execute-loop-retry-after` unless a separate retryable condition was already recorded before cancellation.\n- Ensure `ddx try \u003cid\u003e` reports a clear interrupted outcome and exits non-zero after cleanup.\n- Add regression tests around worker.Run plus command-level try/work cancellation paths using controllable fake executors/runners.\n\nNON-SCOPE\n- Do not preserve worktrees as resumable by default. Cleanup/retry-from-scratch is the reliable default.\n- Do not alter operator cancel-marker semantics (`cancel-requested` / `operator_cancel`).\n- Do not change successful landing/review behavior when cancellation arrives after a terminal mutation.",
+    "acceptance": "1. TestWorkInterrupt_InFlightAttemptUnclaimsBead verifies cancelling the work command context during an in-flight attempt releases the claim and leaves the bead open/re-claimable.\n2. TestWorkInterrupt_DoesNotSetNoProgressCooldown verifies interrupted work does not set `execute-loop-retry-after` or increment no-progress suppression.\n3. TestWorkInterrupt_RemovesClaimLiveness verifies external claim heartbeat/liveness is removed or stale-safe after cleanup.\n4. TestTryInterrupt_InFlightAttemptUnclaimsTarget verifies `ddx try \u003cid\u003e` cancellation leaves the target bead re-claimable and exits non-zero with an interrupted/signal-class outcome.\n5. TestTryInterrupt_DoesNotReportOperatorCancel verifies plain context cancellation is not classified as `operator_cancel` unless the bead cancel marker was present.\n6. TestInterruptedAfterTerminalMutation_DoesNotUndoClose verifies cancellation after a successful terminal mutation does not reopen or unclaim a closed bead.\n7. `rg -n \"context.Canceled|context_canceled|signal|operator_cancel|execute-loop-retry-after\" cli/internal/agent cli/cmd` shows cancellation paths are explicit and comments distinguish signal interruption from operator cancel.\n8. `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... ./internal/bead/... -run \"TestWorkInterrupt|TestTryInterrupt|TestInterrupted|TestCancel|TestClaim\" -count=1` passes.\n9. `lefthook run pre-commit` passes.",
+    "parent": "ddx-99a3be32",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:beads",
+      "area:cli",
+      "kind:bug",
+      "reliability",
+      "spec:FEAT-010",
+      "spec:TD-031",
+      "interrupt"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T15:43:41Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "963074",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T15:18:50.774671047Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-06T15:43:41.356333644Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T15:43:41.707344813Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T154343-ae2fdd7f",
+    "prompt": ".ddx/executions/20260506T154343-ae2fdd7f/prompt.md",
+    "manifest": ".ddx/executions/20260506T154343-ae2fdd7f/manifest.json",
+    "result": ".ddx/executions/20260506T154343-ae2fdd7f/result.json",
+    "checks": ".ddx/executions/20260506T154343-ae2fdd7f/checks.json",
+    "usage": ".ddx/executions/20260506T154343-ae2fdd7f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-259bb4e2-20260506T154343-ae2fdd7f"
+  },
+  "prompt_sha": "ee082e59b3e2b4b7f12c010bcb3069e5ccd6717742678292f6cf5134583abb2e"
+}
