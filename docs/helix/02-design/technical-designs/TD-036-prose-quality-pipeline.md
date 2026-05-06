@@ -78,6 +78,9 @@ prose check into a hard failure by default.
 - In `policy: blocking`, DDx still prefers to run the embedded checker
   so the user gets concrete findings; an unavailable optional runner is
   reported as an execution diagnostic, not as a prose finding.
+- When fallback is possible, the command should still return the
+  embedded checker findings and keep the runner-missing diagnostic
+  separate from the finding stream.
 
 The important rule is that missing optional tooling never erases the
 document analysis path. It only changes whether DDx can use the selected
