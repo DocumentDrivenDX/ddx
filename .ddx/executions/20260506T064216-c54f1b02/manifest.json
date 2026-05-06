@@ -1,0 +1,197 @@
+{
+  "attempt_id": "20260506T064216-c54f1b02",
+  "bead_id": "ddx-9c81b20f",
+  "base_rev": "945f893c973bd9a8a30cc751f27d3a3125b57a15",
+  "created_at": "2026-05-06T06:42:19.32218537Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9c81b20f",
+    "title": "cli: wire ddx try quality hooks into runtime",
+    "description": "PROBLEM\n  ddx try constructs ExecuteBeadLoopRuntime with PreClaimHook only, so even after quality hooks exist in the agent package, direct ddx try invocations will not run lint or triage.\n\nROOT CAUSE\n  cli/cmd/try.go:320-329 constructs ExecuteBeadLoopRuntime for ddx try and currently sets Once, Log, EventSink, WorkerID, ProjectRoot, SessionID, PreClaimHook, and NoReview. There are no PreDispatchLintHook or PostAttemptTriageHook assignments at this wire site.\n\nPROPOSED FIX\n  - In cli/cmd/try.go, build and assign PreDispatchLintHook and PostAttemptTriageHook when constructing ExecuteBeadLoopRuntime.\n  - Reuse the agent-package hook constructors from the lint and triage child beads and pass the resolved config/project root/runner plumbing they require.\n  - Default behavior remains warn-only/fail-open as implemented by the loop and hook layers.\n  - Add --no-lint and --no-triage flags only if needed by the implementation; otherwise keep defaults with no extra flags.\n  - Ensure operator output remains clear when lint blocks under opt-in block mode.\n\nNON-SCOPE\n  - Implementing hook contracts or hook bodies; depends on child beads.\n  - ddx work integration.\n  - BLOCK threshold policy tuning.\n  - GraphQL exposure of OutcomeReason.\n\nPARENT\n  ddx-e1a576a7.\n\nDEPS\n  - ddx-d1dae2dd: pre-dispatch lint loop policy must exist first.\n  - ddx-68706ef9: runner-backed lint hook must exist first.\n  - ddx-4375292b: runner-backed post-attempt triage hook must exist first.\n  - ddx-e1a576a7: parent decomposition edge requested by the parent attempt instructions.",
+    "acceptance": "1. cli/cmd/try.go wires PreDispatchLintHook into ExecuteBeadLoopRuntime construction for ddx try.\n2. cli/cmd/try.go wires PostAttemptTriageHook into ExecuteBeadLoopRuntime construction for ddx try.\n3. TestTry_HooksWired proves the command runtime receives both hooks when ddx try runs with default options.\n4. WIRED-IN: git grep PreDispatchLintHook cli/cmd/ shows the try.go wire site.\n5. WIRED-IN: git grep PostAttemptTriageHook cli/cmd/ shows the try.go wire site.\n6. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... green.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-e1a576a7",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:cli",
+      "kind:feature",
+      "reliability",
+      "bead-quality",
+      "adr:023",
+      "triage:no-changes-unverified"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T06:42:16Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-05T23:42:37.188515696Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T234013-2c206bcf\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":884774,\"output_tokens\":6011,\"total_tokens\":890785,\"cost_usd\":0,\"duration_ms\":140709,\"exit_code\":0}",
+          "created_at": "2026-05-05T23:42:37.401420356Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=890785 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-05T23:42:49.246033426Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=af16757c77cf1a9c02d8f8487a795817395681f3\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T19:47:53-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=9387\noutput_bytes=0\nelapsed_ms=4123",
+          "created_at": "2026-05-05T23:42:53.880030083Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=af16757c77cf1a9c02d8f8487a795817395681f3\nbase_rev=38f3c3837c4678b7ea76f122711dd78b87e7e518",
+          "created_at": "2026-05-05T23:42:54.075263772Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T00:53:22.219436752Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T005206-bb877a90\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":494820,\"output_tokens\":3955,\"total_tokens\":498775,\"cost_usd\":0,\"duration_ms\":73909,\"exit_code\":0}",
+          "created_at": "2026-05-06T00:53:22.451149261Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=498775 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T00:53:31.088627936Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=e213cdf56d28f4457f5aeb2e366de8998f044382\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T20:58:35-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=11714\noutput_bytes=0\nelapsed_ms=4080",
+          "created_at": "2026-05-06T00:53:35.655545808Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=e213cdf56d28f4457f5aeb2e366de8998f044382\nbase_rev=6904320a1869a05af69612105d4e05af1b184d49",
+          "created_at": "2026-05-06T00:53:35.867779337Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T02:37:50.256752899Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T023613-5f698e51\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":705713,\"output_tokens\":6027,\"total_tokens\":711740,\"cost_usd\":0,\"duration_ms\":94053,\"exit_code\":0}",
+          "created_at": "2026-05-06T02:37:50.497002835Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=711740 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-06T02:37:57.998433096Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: unparseable\nattempt_count=1\nresult_rev=38249f6a4e99725124bf4ed20f40c16d3ba30367\n\nreviewer: review-error: unparseable: reviewer output: unparseable JSON verdict: no JSON object found (raw output 66 bytes; see .ddx/executions/20260506T023758-47d03996)\nharness=claude\nmodel=opus\ninput_bytes=14013\noutput_bytes=66\nelapsed_ms=48681",
+          "created_at": "2026-05-06T02:38:49.152475365Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: unparseable"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=38249f6a4e99725124bf4ed20f40c16d3ba30367\nbase_rev=4daf0ed87d37cec24b3a252e684cc54884f000b8",
+          "created_at": "2026-05-06T02:38:49.360188422Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T05:02:19.325175202Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T050057-fb00512f\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":624889,\"output_tokens\":4470,\"total_tokens\":629359,\"cost_usd\":0,\"duration_ms\":78471,\"exit_code\":0}",
+          "created_at": "2026-05-06T05:02:19.550359122Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=629359 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "verification_command=cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... \u0026\u0026 lefthook run pre-commit\nexit_code=-1\noutput:\nok  \tgithub.com/DocumentDrivenDX/ddx/cmd\t23.957s\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent\t86.088s\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent/escalation\t0.004s\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent/try\t(cached)\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent/work\t(cached)\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent/workerprobe\t7.190s\n\nrun_error: verification_command timed out after 1m0s",
+          "created_at": "2026-05-06T05:03:54.02889551Z",
+          "kind": "no_changes_unverified",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes_unverified"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: verified_already\nreason: The requested try wiring is already present in cli/cmd/try.go, and the dedicated hook test already exists in cli/cmd/try_test.go. No source edits were needed in this attempt.\nverification_command: cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... \u0026\u0026 lefthook run pre-commit\nresult_rev=f8bff9234b198e0d01bc905bf52a133f2521f26c\nbase_rev=f8bff9234b198e0d01bc905bf52a133f2521f26c",
+          "created_at": "2026-05-06T05:03:54.473498726Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-06T06:42:16.489849353Z",
+      "execute-loop-no-changes-count": 1
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260506T064216-c54f1b02",
+    "prompt": ".ddx/executions/20260506T064216-c54f1b02/prompt.md",
+    "manifest": ".ddx/executions/20260506T064216-c54f1b02/manifest.json",
+    "result": ".ddx/executions/20260506T064216-c54f1b02/result.json",
+    "checks": ".ddx/executions/20260506T064216-c54f1b02/checks.json",
+    "usage": ".ddx/executions/20260506T064216-c54f1b02/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-9c81b20f-20260506T064216-c54f1b02"
+  },
+  "prompt_sha": "f77cf25aa6cfb9384bda04fa1a1af2267c2b72fc2f832c0c4a484204a20241d6"
+}
