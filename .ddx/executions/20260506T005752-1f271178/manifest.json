@@ -1,0 +1,37 @@
+{
+  "attempt_id": "20260506T005752-1f271178",
+  "bead_id": "ddx-06eb05d8",
+  "base_rev": "57be05187e5532cb4bafd4b99b8c6d454f45e53c",
+  "created_at": "2026-05-06T00:57:54.480085097Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-06eb05d8",
+    "title": "C7: uniform Guard contract + delete attempted/hookFailed maps + pick() derives from drain.result",
+    "description": "PROBLEM\n  The drain loop tracks attempted and hookFailed beads via ad-hoc in-memory maps rather than a structured Guard contract, making the loop body untestable in isolation and the skip policy implicit.\n\nROOT CAUSE\n  cli/internal/agent/execute_bead_loop.go:403-413 declares attempted := make(map[string]struct{}) and hookFailed := make(map[string]struct{}). Lines 534-544 manually clear both maps between sleep cycles. Lines 591-601 implement the two-strikes pre-claim hook policy by mutating these maps inline. nextCandidate (line 1216) accepts attempted as a parameter and checks membership at line 1223. No Guard interface exists; the pre-claim logic and the complexity gate each embed their skip logic directly in the loop body.\n\nPROPOSED FIX\n  - Define Guard interface in cli/internal/agent/work/guard.go: Allow(ctx context.Context, beadID string) (bool, reason string).\n  - Implement two concrete Guards: PreClaimGuard (wraps runtime.PreClaimHook two-strikes logic) and ComplexityGuard (wraps w.ComplexityGate nil-check).\n  - Delete attempted and hookFailed maps from execute_bead_loop.go:403-413. Replace nextCandidate's attempted parameter with drain.result.Results slice (already populated per-iteration): filter beads whose ID appears in Results.\n  - Pre-claim hook denial: call w.Store.SetExecutionCooldown(candidate.ID, 30s, ...) instead of recording in hookFailed.\n  - Add TestGuard_PreClaim_TwoStrikesSkips and TestGuard_Complexity_NilGateWarnsOnce to a new cli/internal/agent/work/guard_test.go.\n\nNON-SCOPE\n  - Heartbeat extraction (C11, ddx-0b8780db).\n  - File renames (C13, ddx-387a0178).\n  - Any change to SetExecutionCooldown duration policy (controlled by caller constants).\n\nINTERSECTIONS\n- P1: guard denials should skip the candidate rather than wedge the queue.\n- P2: each guard owns only its own skip policy.\n- P4: a denied bead stays isolated from other beads.",
+    "acceptance": "1. Guard interface in cli/internal/agent/work/guard.go with Allow(ctx context.Context, beadID string) (bool, string) signature.\n2. PreClaimGuard and ComplexityGuard implement Guard; loop body passes them to nextCandidate.\n3. attempted and hookFailed maps deleted from cli/internal/agent/execute_bead_loop.go:403-413; no references remain.\n4. nextCandidate signature no longer accepts attempted map; filters via drain.result.Results instead.\n5. Pre-claim hook denial calls w.Store.SetExecutionCooldown with 30s cooldown; hookFailed logic removed.\n6. TestGuard_PreClaim_TwoStrikesSkips in cli/internal/agent/work/guard_test.go: two consecutive Allow calls with hook error → second returns false.\n7. TestGuard_Complexity_NilGateWarnsOnce: nil ComplexityGate → one warning, allow proceeds.\n8. Existing TestPreClaimHookDivergedSkipsBead in cli/internal/agent/execute_bead_preclaim_test.go still passes.\n9. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/agent/work/... green.\n10. lefthook run pre-commit passes.",
+    "parent": "ddx-5cb6e6cd",
+    "labels": [
+      "phase:2",
+      "refactor",
+      "kind:refactor"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T00:57:52Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "601864",
+      "execute-loop-heartbeat-at": "2026-05-06T00:57:52.066863527Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260506T005752-1f271178",
+    "prompt": ".ddx/executions/20260506T005752-1f271178/prompt.md",
+    "manifest": ".ddx/executions/20260506T005752-1f271178/manifest.json",
+    "result": ".ddx/executions/20260506T005752-1f271178/result.json",
+    "checks": ".ddx/executions/20260506T005752-1f271178/checks.json",
+    "usage": ".ddx/executions/20260506T005752-1f271178/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-06eb05d8-20260506T005752-1f271178"
+  },
+  "prompt_sha": "cecfcf707398a4c91ebf70057b821c673627d4b3bb4fc83980284e26c23811d8"
+}
