@@ -117,6 +117,7 @@ bound to the metric artifact.
 | `ddx init` | Initialize document library |
 | `ddx install <name>` | Install a workflow plugin |
 | `ddx doctor` | Validate installation health |
+| [Prose quality support](docs/prose-quality.md) | Guidance for `ddx doc prose --changed` and prose config |
 | `ddx bead create/list/ready` | Track work items |
 | `ddx metric list/show/validate/run/history/compare/trend` | Inspect metric artifacts and run history |
 | `ddx agent run` | Invoke an AI agent |

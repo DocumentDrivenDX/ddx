@@ -4,6 +4,14 @@ All notable changes to DDx are documented in this file.
 
 ## [Unreleased]
 
+### Added: Prose quality support user guide
+
+DDx now includes user-facing prose-quality documentation at
+[`docs/prose-quality.md`](docs/prose-quality.md). The guide explains the
+changed-prose command surface, configuration knobs, example findings, and the
+human-writing-support workflow. It also states explicitly that DDx prose
+quality support is not an AI detector and not detector bypass.
+
 ### Added: Fizeau v0.10.9 point release
 
 DDx now consumes `github.com/DocumentDrivenDX/fizeau v0.10.9`.
