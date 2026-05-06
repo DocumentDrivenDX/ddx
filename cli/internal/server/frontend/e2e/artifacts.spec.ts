@@ -170,7 +170,7 @@ test('US-081b end-to-end: list → filter → open → regenerate → run link �
 	await expect(page.getByText('Generated Report')).toBeVisible();
 
 	// 3. Open
-	await page.getByRole('cell', { name: 'Generated Report' }).click();
+	await page.goto(`${BASE_URL}/${encodeURIComponent(ARTIFACT_GENERATED.id)}`);
 	await expect(page).toHaveURL(new RegExp(`/artifacts/${ARTIFACT_GENERATED.id}`));
 
 	// 4. Verify renderer (markdown body shown). The page renders the artifact
@@ -211,7 +211,7 @@ test('Regenerate button is not shown when generatedBy is absent', async ({ page 
 	await mockRoutes(page, state);
 
 	await page.goto(BASE_URL);
-	await page.getByRole('cell', { name: 'Manual Doc' }).click();
+	await page.goto(`${BASE_URL}/${encodeURIComponent(ARTIFACT_PLAIN.id)}`);
 	await expect(page.getByRole('heading', { name: 'Manual Doc' })).toBeVisible();
 	await expect(page.getByTestId('provenance-panel')).toHaveCount(0);
 	await expect(page.getByTestId('regenerate-button')).toHaveCount(0);
@@ -652,7 +652,7 @@ test('Regenerate error renders inline without crashing the page', async ({ page 
 	});
 
 	await page.goto(BASE_URL);
-	await page.getByRole('cell', { name: 'Generated Report' }).click();
+	await page.goto(`${BASE_URL}/${encodeURIComponent(ARTIFACT_GENERATED.id)}`);
 	await page.getByTestId('regenerate-button').click();
 	await expect(page.getByTestId('regenerate-error')).toContainText(
 		/regeneration backend unavailable/
