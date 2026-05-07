@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -18,14 +19,24 @@ func (r *mutationResolver) beadStore(ctx context.Context) *bead.Store {
 // beadModelFromBead converts a bead.Bead to the GraphQL Bead model.
 func beadModelFromBead(b *bead.Bead) *Bead {
 	gql := &Bead{
-		ID:        b.ID,
-		Title:     b.Title,
-		Status:    b.Status,
-		Priority:  b.Priority,
-		IssueType: b.IssueType,
-		CreatedAt: b.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt: b.UpdatedAt.UTC().Format(time.RFC3339),
-		Labels:    b.Labels,
+		ID:         b.ID,
+		Title:      b.Title,
+		Status:     b.Status,
+		Priority:   b.Priority,
+		IssueType:  b.IssueType,
+		CreatedAt:  b.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt:  b.UpdatedAt.UTC().Format(time.RFC3339),
+		Labels:     b.Labels,
+		NeedsHuman: slices.Contains(b.Labels, "needs_human"),
+	}
+	if v, ok := b.Extra["needs-human-reason"].(string); ok && v != "" {
+		gql.NeedsHumanReason = &v
+	}
+	if v, ok := b.Extra["needs-human-suggested-action"].(string); ok && v != "" {
+		gql.NeedsHumanSuggestedAction = &v
+	}
+	if v, ok := b.Extra["needs-human-summary"].(string); ok && v != "" {
+		gql.NeedsHumanSummary = &v
 	}
 	if b.Owner != "" {
 		gql.Owner = &b.Owner
@@ -204,6 +215,53 @@ func (r *mutationResolver) BeadReopen(ctx context.Context, id string) (*Bead, er
 		b.Owner = ""
 	})
 	if err != nil {
+		return nil, err
+	}
+
+	b, err := store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	return beadModelFromBead(b), nil
+}
+
+// BeadHumanResolve is the resolver for the beadHumanResolve mutation.
+func (r *mutationResolver) BeadHumanResolve(ctx context.Context, id string, action HumanResolveAction, note string, children []string) (*Bead, error) {
+	if r.workingDir(ctx) == "" {
+		return nil, fmt.Errorf("working directory not configured")
+	}
+	if note == "" {
+		return nil, fmt.Errorf("note is required")
+	}
+
+	store := r.beadStore(ctx)
+
+	switch action {
+	case HumanResolveActionRetry, HumanResolveActionDefer:
+		if err := store.Update(id, func(b *bead.Bead) {
+			var filtered []string
+			for _, l := range b.Labels {
+				if l != "needs_human" {
+					filtered = append(filtered, l)
+				}
+			}
+			b.Labels = filtered
+		}); err != nil {
+			return nil, err
+		}
+	case HumanResolveActionObsolete, HumanResolveActionSplit:
+		if err := store.Close(id); err != nil {
+			return nil, err
+		}
+	}
+
+	if err := store.AppendEvent(id, bead.BeadEvent{
+		Kind:    "human-resolution",
+		Summary: string(action),
+		Body:    fmt.Sprintf(`{"action":%q,"note":%q}`, action, note),
+		Actor:   "operator",
+		Source:  "graphql",
+	}); err != nil {
 		return nil, err
 	}
 

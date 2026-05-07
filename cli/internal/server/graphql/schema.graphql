@@ -130,6 +130,14 @@ type Bead implements Node {
   notes: String
   """Dependency edges to other beads"""
   dependencies: [Dependency!]
+  """Whether this bead is flagged for human review (has needs_human label)"""
+  needsHuman: Boolean!
+  """Failure mode from the last triage-decision event (e.g. "review-block")"""
+  needsHumanReason: String
+  """Triage action recorded in the last triage-decision event (e.g. "needs_human")"""
+  needsHumanSuggestedAction: String
+  """Summary text from the last triage-decision event"""
+  needsHumanSummary: String
 }
 
 """Dependency is a directed edge between two beads"""
@@ -178,6 +186,10 @@ type BeadStatusCounts {
   ready: Int!
   """Total number of beads"""
   total: Int!
+  """Number of open beads flagged needs_human"""
+  needsHuman: Int!
+  """Number of execution-eligible ready beads (ready and not needs_human/needs_investigation)"""
+  workerReady: Int!
 }
 
 # ============================================
@@ -2328,6 +2340,18 @@ type Query {
   """Return aggregate bead counts by status (maps to GET /api/beads/status)"""
   beadsStatus: BeadStatusCounts!
 
+  """List open beads flagged needs_human, enriched with triage-decision event metadata"""
+  beadsNeedsHuman(
+    """Return the first N edges after the cursor"""
+    first: Int,
+    """Cursor to start after"""
+    after: String,
+    """Return the last N edges before the cursor"""
+    last: Int,
+    """Cursor to end before"""
+    before: String
+  ): BeadConnection!
+
   """Return the dependency tree for a bead as a formatted string (maps to GET /api/beads/dep/tree/{id})"""
   beadDepTree(
     """Bead ID to compute the dependency tree for"""
@@ -3144,6 +3168,18 @@ type FederatedProject {
   project: Project!
 }
 
+"""HumanResolveAction is the operator decision when resolving a needs-human bead"""
+enum HumanResolveAction {
+  """Re-queue the bead for another automated attempt"""
+  retry
+  """Split the bead into child beads (children field required)"""
+  split
+  """Mark the bead as obsolete and close it"""
+  obsolete
+  """Defer the bead for later consideration"""
+  defer
+}
+
 # ============================================
 # Mutations
 # ============================================
@@ -3187,6 +3223,18 @@ type Mutation {
     id: ID!,
     """Operator-provided reason"""
     reason: String
+  ): Bead!
+
+  """Resolve a needs-human bead with an operator decision, removing the needs_human flag"""
+  beadHumanResolve(
+    """Bead ID to resolve"""
+    id: ID!,
+    """Resolution action chosen by the operator"""
+    action: HumanResolveAction!,
+    """Required operator note explaining the decision (empty string is rejected)"""
+    note: String!,
+    """Optional child bead IDs (used with split action)"""
+    children: [String!]
   ): Bead!
 
   """Write or update a document in the library (maps to PUT /api/docs/{id})"""

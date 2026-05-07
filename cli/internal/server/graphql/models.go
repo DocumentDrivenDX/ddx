@@ -393,6 +393,14 @@ type Bead struct {
 	Notes *string `json:"notes,omitempty"`
 	// Dependency edges to other beads
 	Dependencies []*Dependency `json:"dependencies,omitempty"`
+	// Whether this bead is flagged for human review (has needs_human label)
+	NeedsHuman bool `json:"needsHuman"`
+	// Failure mode from the last triage-decision event (e.g. "review-block")
+	NeedsHumanReason *string `json:"needsHumanReason,omitempty"`
+	// Triage action recorded in the last triage-decision event (e.g. "needs_human")
+	NeedsHumanSuggestedAction *string `json:"needsHumanSuggestedAction,omitempty"`
+	// Summary text from the last triage-decision event
+	NeedsHumanSummary *string `json:"needsHumanSummary,omitempty"`
 }
 
 func (Bead) IsNode() {}
@@ -498,6 +506,10 @@ type BeadStatusCounts struct {
 	Ready int `json:"ready"`
 	// Total number of beads
 	Total int `json:"total"`
+	// Number of open beads flagged needs_human
+	NeedsHuman int `json:"needsHuman"`
+	// Number of execution-eligible ready beads
+	WorkerReady int `json:"workerReady"`
 }
 
 // Input type for updating an existing bead
@@ -2826,6 +2838,66 @@ func (e *RunLayer) UnmarshalJSON(b []byte) error {
 }
 
 func (e RunLayer) MarshalJSON() ([]byte, error) {
+	var buf bytes.Buffer
+	e.MarshalGQL(&buf)
+	return buf.Bytes(), nil
+}
+
+// HumanResolveAction is the operator decision when resolving a needs-human bead
+type HumanResolveAction string
+
+const (
+	HumanResolveActionRetry    HumanResolveAction = "retry"
+	HumanResolveActionSplit    HumanResolveAction = "split"
+	HumanResolveActionObsolete HumanResolveAction = "obsolete"
+	HumanResolveActionDefer    HumanResolveAction = "defer"
+)
+
+var AllHumanResolveAction = []HumanResolveAction{
+	HumanResolveActionRetry,
+	HumanResolveActionSplit,
+	HumanResolveActionObsolete,
+	HumanResolveActionDefer,
+}
+
+func (e HumanResolveAction) IsValid() bool {
+	switch e {
+	case HumanResolveActionRetry, HumanResolveActionSplit, HumanResolveActionObsolete, HumanResolveActionDefer:
+		return true
+	}
+	return false
+}
+
+func (e HumanResolveAction) String() string {
+	return string(e)
+}
+
+func (e *HumanResolveAction) UnmarshalGQL(v any) error {
+	str, ok := v.(string)
+	if !ok {
+		return fmt.Errorf("enums must be strings")
+	}
+
+	*e = HumanResolveAction(str)
+	if !e.IsValid() {
+		return fmt.Errorf("%s is not a valid HumanResolveAction", str)
+	}
+	return nil
+}
+
+func (e HumanResolveAction) MarshalGQL(w io.Writer) {
+	fmt.Fprint(w, strconv.Quote(e.String()))
+}
+
+func (e *HumanResolveAction) UnmarshalJSON(b []byte) error {
+	s, err := strconv.Unquote(string(b))
+	if err != nil {
+		return err
+	}
+	return e.UnmarshalGQL(s)
+}
+
+func (e HumanResolveAction) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

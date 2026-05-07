@@ -191,9 +191,7 @@ func (r *queryResolver) BeadsBlocked(ctx context.Context, first *int, after *str
 }
 
 // BeadsStatus is the resolver for the beadsStatus field.
-func (r *queryResolver) BeadsStatus(ctx context.Context) (*BeadStatusCounts, error) {
-	panic("not implemented")
-}
+// Implemented in resolver_beads.go.
 
 // BeadDepTree is the resolver for the beadDepTree field.
 func (r *queryResolver) BeadDepTree(ctx context.Context, beadID string) (string, error) {
