@@ -780,6 +780,25 @@ terminal non-success outcome for that bead under the current policy, so the
 existing `blocked`, `deferred`, and `no_progress` loop rules can reason about
 it without a fourth run layer or a separate run type.
 
+### Operator-Facing Output Requirements
+
+When readiness assessment or infrastructure checks stop or degrade dispatch,
+DDx must emit output that allows the operator to act without reading the lint
+implementation or an out-of-band report. The following table specifies the
+required content for each condition. Illustrative examples show intent; exact
+strings, prefix tokens, and formatting details are left to implementation
+tests.
+
+| Condition | Required output content |
+|---|---|
+| **Readiness unavailable** (`hook_unavailable_fail_open`) | Project root and exact checked skill path(s) that are missing or unreadable; which hook(s) cannot be loaded; in WARN-ONLY mode a single warning that processing continues; in BLOCK mode a visible stop message before any claim is made; remediation (`ddx update --force`, `ddx doctor`). *Illustrative:* `warn: bead-lifecycle skill not found at .agents/skills/ddx/bead-lifecycle/SKILL.md; readiness check skipped (WARN-ONLY). Run: ddx update --force && ddx doctor` |
+| **Needs split** (`readiness_decomposed`) | Parent bead id and a plain-language reason the bead is too large; list of child bead ids created with a one-line slice description each; AC mapping showing which parent ACs route to which child ids and which are marked `needs_human` or `non_scope`; the parent's resulting blocked/decomposed status. *Illustrative:* `bead ddx-XXXX blocked: decomposed into ddx-YYYY (auth-flow slice, ACs 1–3) ddx-ZZZZ (UI slice, ACs 4–5); parent blocked` |
+| **Needs refine** (`readiness_rewritten` or `bead_lint_blocked`) | Bead id, lint score, and which rubric criteria failed in plain language; waiver labels already applied and which labels would waive each failed criterion; suggested `ddx bead update` command for each failing criterion; `--force --reason` form for exceptional dispatch with the note that an evidence event will be recorded. *Illustrative:* `bead ddx-XXXX score 5/8: criterion b (root cause at file:line) missing; add with: ddx bead update ddx-XXXX --description '...'` |
+| **Provider exhausted** (`agent_power_unsatisfied`, `blocked_by_passthrough_constraint`) | Which constraint(s) cannot be satisfied and whether each is operator-supplied or DDx policy-derived; operator action options for each constraint (adjust `--harness`, `--provider`, or `--model`; remove a conflicting pin; or accept a lower-power route without the pin); DDx must not suggest removing or widening a pin the operator explicitly set. *Illustrative:* `bead ddx-XXXX blocked: MinPower=top cannot be satisfied under --provider=local; operator action required — remove --provider pin or choose a provider that supports top-tier models` |
+| **Disk/resource exhaustion** (`resource_exhausted`) | Which execution root failed its preflight check (temp worktree root, evidence root, or git worktree registration); free bytes and free inodes when the platform exposes them; bytes/inodes reclaimed by cleanup if cleanup ran; whether the stop is at the hard floor (no new claims) or a soft-floor warning; remediation (free space or set an alternate execution root in `.ddx/config.yaml`). *Illustrative:* `resource_exhausted: /tmp/ddx-exec-wt 12 MiB free (hard floor 100 MiB); cleanup freed 0 bytes; no new beads claimed — free space or set exec_worktree_root in .ddx/config.yaml` |
+
+Exact output strings are enforcement targets for implementation tests, not normative spec text.
+
 ## No Run-Type Catalog
 
 DDx will not introduce additional run kinds beyond `run`, `try`, and `work`.
