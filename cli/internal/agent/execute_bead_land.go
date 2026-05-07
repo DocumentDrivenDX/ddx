@@ -350,6 +350,10 @@ func (RealLandingGitOps) UpdateRefTo(dir, ref, sha, oldSHA string) error {
 }
 
 func (RealLandingGitOps) SyncWorkTreeToHead(dir, fromRev string) error {
+	return syncWorkTreeToHeadExcludingPaths(dir, fromRev, nil)
+}
+
+func syncWorkTreeToHeadExcludingPaths(dir, fromRev string, skipPaths []string) error {
 	// Step 1: sync the index to HEAD. This is required before checkout-index
 	// below will do anything useful, and also keeps subsequent CommitTracker
 	// calls from building stale trees.
@@ -385,9 +389,16 @@ func (RealLandingGitOps) SyncWorkTreeToHead(dir, fromRev string) error {
 	// deleted-in-HEAD (os.Remove) buckets. checkout-index only writes files
 	// that are in the index; it cannot represent a deletion, so we handle
 	// those ourselves.
+	skip := map[string]bool{}
+	for _, path := range skipPaths {
+		skip[filepath.ToSlash(path)] = true
+	}
 	var indexFiles []string
 	var removedFiles []string
 	for _, f := range changed {
+		if skip[filepath.ToSlash(f)] {
+			continue
+		}
 		probe := internalgit.Command(context.Background(), dir, "ls-files", "--error-unmatch", "--", f)
 		if probe.Run() == nil {
 			indexFiles = append(indexFiles, f)
@@ -426,6 +437,7 @@ func syncWorkTreeToHeadGuarded(gitOps LandingGitOps, dir, fromRev string, dirtyB
 			result.CheckoutSyncDeferred = true
 			result.CheckoutSyncDeferredPaths = appendUniqueStrings(result.CheckoutSyncDeferredPaths, overlap...)
 		}
+		_ = syncWorkTreeToHeadExcludingPaths(dir, fromRev, overlap)
 		return
 	}
 	_ = gitOps.SyncWorkTreeToHead(dir, fromRev)
@@ -449,11 +461,24 @@ func checkoutSyncDirtyOverlapPaths(dir, fromRev string, dirtyPaths []string) ([]
 	var overlap []string
 	for _, path := range dirtyPaths {
 		slashPath := filepath.ToSlash(path)
+		if checkoutSyncDeferralIgnoredPath(slashPath) {
+			continue
+		}
 		if changed[slashPath] {
 			overlap = append(overlap, slashPath)
 		}
 	}
 	return overlap, nil
+}
+
+func checkoutSyncDeferralIgnoredPath(path string) bool {
+	if strings.HasPrefix(path, ".ddx/executions/") ||
+		strings.HasPrefix(path, ".ddx/runs/") ||
+		strings.HasPrefix(path, ".ddx/backups/") ||
+		strings.HasPrefix(path, ".ddx/.git-tracker.lock/") {
+		return true
+	}
+	return path == ".ddx/run-state.json" || path == ExecutionCleanupMetadataFileName
 }
 
 func appendUniqueStrings(existing []string, additions ...string) []string {
