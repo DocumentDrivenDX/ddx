@@ -163,48 +163,6 @@ It prints:
 Recovery output must not require reading the lint implementation or an
 out-of-band report to fix an ordinary authoring problem.
 
-### Repair Routing
-
-Readiness assessment routes each unready outcome to a specific repair path.
-The bead-lifecycle workflow skill under the `ddx` skill tree is responsible
-for executing each repair; DDx owns hook timing, evidence placement, and any
-resulting bead mutation.
-
-`needs_refine` — The bead's description, acceptance criteria, labels, parent,
-or governing-artifact references are incomplete but within the safe-improvement
-boundary. DDx invokes the bead-lifecycle **refine** skill, which produces an
-intent-preserving, rubric-grounded update. The refine skill may normalize the
-description into the authoring template, add discovered `file:line` evidence,
-add an obvious test command, or wire deterministic labels and metadata. If the
-refine produces safe edits, DDx applies them through `ddx bead update` paths
-and reclassifies the bead as `actionable_but_rewritten`. Scope changes,
-invented acceptance criteria, and product judgment calls remain out of bounds
-for the refine skill; those cases become `needs_human`.
-
-`needs_split` — The bead is too large to execute atomically. DDx invokes the
-bead-lifecycle **breakdown** skill to decompose the bead into child slices.
-Every parent AC must map to at least one child AC or be explicitly marked
-`needs_human` or `non_scope`; the AC map is written to evidence. DDx files
-child beads through `ddx bead create`, records the decomposition in evidence,
-and blocks the parent. The parent is not executed in the current pass.
-
-`needs_human` — The bead or its governing spec is unclear, contradictory,
-unverifiable, or missing acceptance criteria that DDx cannot safely invent.
-DDx blocks the bead and records a `needs_human` evidence event naming the
-specific AC, spec section, or conflicting requirement that requires human
-resolution. DDx does not claim the bead and does not attempt a repair that
-requires product judgment.
-
-`system_unready` — The execution environment, provider, or preflight check
-cannot support the attempt (for example: no viable provider for the required
-power tier, a routing constraint that cannot be satisfied, or a missing skill
-package). DDx records a structured infrastructure-failure event and routes
-the operator to provider status, resource usage, or preflight remediation.
-**This outcome does not mutate bead quality metadata.** The bead's
-description, acceptance criteria, labels, and quality score are unchanged;
-the failure is recorded against the attempt, not against the bead's authoring
-quality.
-
 ## Consequences
 
 - FEAT-004 owns the label-based waiver storage and the no-new-schema rule.
@@ -241,12 +199,3 @@ quality.
 - `docs/helix/01-frame/features/FEAT-010-task-execution.md` — try/work lifecycle
   and attempt outcomes.
 - `docs/helix/01-frame/features/FEAT-011-skills.md` — DDx skill packaging.
-
-## Closing Notes
-
-This ADR is documentation-only. The repair routing and operator-facing output
-requirements it specifies are normative prose constraints on implementation
-behavior; the exact output strings, prefix tokens, and formatting details are
-enforcement targets for implementation tests rather than normative spec text.
-No new Go test is required as a direct consequence of this ADR unless
-implementation code that generates the referenced output is edited.
