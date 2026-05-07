@@ -1,0 +1,201 @@
+{
+  "attempt_id": "20260507T002126-0572d724",
+  "bead_id": "ddx-4fd71cf3",
+  "base_rev": "398b2caeb3d78afde94295518dcf9a6eb5a27fc8",
+  "created_at": "2026-05-07T00:21:30.051211698Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-4fd71cf3",
+    "title": "artifact-types: ArtifactTypePanel.svelte + detail-view integration + vitest",
+    "description": "PROBLEM\nNo frontend component renders the ArtifactType definitions for an artifact. When an artifact matches a type definition (by prefix), the operator has no UI surface to view the associated template, prompt, and examples. The detail-view of any artifact is missing the type-aware panel.\n\nROOT CAUSE\n- cli/internal/server/frontend/src/routes/ contains artifact detail pages but no ArtifactTypePanel.svelte component.\n- The typeDefinitions resolver (ddx-9ca4b5bf, a dep) provides the data, but nothing in the frontend consumes it.\n- On prefix collision (multiple type definitions matching the same prefix), no selector dropdown or ?typeDef= URL state exists.\n- prefixOf utility at cli/internal/server/frontend/src/lib/artifacts/grouping.ts (from AC #10 of parent) is the expected import source.\n\nPROPOSED FIX\n- Add cli/internal/server/frontend/src/lib/ArtifactTypePanel.svelte:\n  - Tabbed layout: Reference Prompt | Template | Examples tabs (labels neutral, not 'Generate from').\n  - On prefix collision: selector dropdown with ?typeDef= URL round-trip.\n  - Imports prefixOf from artifacts/grouping.ts (single source of truth).\n- Integrate ArtifactTypePanel into the artifact detail-view page.\n- Add vitest unit tests for the component.\n\nNON-SCOPE\n- The typeDefinitions GraphQL resolver (that's ddx-9ca4b5bf, a dep).\n- Generating artifacts from a prompt (not in this bead; labels must say 'Reference Prompt').",
+    "acceptance": "1. ArtifactTypePanel.svelte exists at cli/internal/server/frontend/src/lib/ArtifactTypePanel.svelte.\n2. Artifact detail view shows ArtifactTypePanel for artifacts with matching type definitions from typeDefinitions resolver.\n3. Tabbed layout: Reference Prompt / Template / Examples tabs.\n4. Selector dropdown appears on prefix collision; ?typeDef= URL round-trip preserves selected type on refresh.\n5. ArtifactTypePanel imports prefixOf from artifacts/grouping.ts.\n6. vitest tests cover: single type definition, multi-match collision selector, ?typeDef= URL state.\n7. bun run test green (vitest).\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-43d67aa5",
+    "labels": [
+      "phase:2",
+      "story:17",
+      "area:web",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T00:21:26Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2049424",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-05T19:29:40.486903942Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T192435-3425b75e\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":3785674,\"output_tokens\":32886,\"total_tokens\":3818560,\"cost_usd\":0,\"duration_ms\":297480,\"exit_code\":0}",
+          "created_at": "2026-05-05T19:29:40.726173567Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=3818560 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-05T19:29:51.364320511Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: transport\nattempt_count=1\nresult_rev=951eae298e866b5889a5d80fd7b2be42122d21ce\n\nreviewer: review-error: transport: agent: execute: no viable provider right now: claude quota-exhausted (retry after 2026-05-05T15:34:55-04:00)\nharness=claude\nmodel=claude-opus-4-6\ninput_bytes=9164\noutput_bytes=0\nelapsed_ms=4193",
+          "created_at": "2026-05-05T19:29:56.106240048Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: transport"
+        },
+        {
+          "actor": "erik",
+          "body": "success\nresult_rev=951eae298e866b5889a5d80fd7b2be42122d21ce\nbase_rev=5b292901f6f2f2cf072e448154db20792bc3f093",
+          "created_at": "2026-05-05T19:29:56.331043852Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "success"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-06T01:30:36.474708328Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260506T012835-fefe20e3\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":1261243,\"output_tokens\":11095,\"total_tokens\":1272338,\"cost_usd\":0,\"duration_ms\":118500,\"exit_code\":0}",
+          "created_at": "2026-05-06T01:30:36.703825678Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=1272338 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "The artifact type panel work is already present and the focused Vitest slice passes, but the required full frontend gate `bun run test` fails in an unrelated existing spec: `src/lib/components/D3Graph.contrast.spec.ts` still asserts that `D3Graph.svelte` must not contain `stroke-opacity`, while the current component source still includes `.attr('stroke-opacity', 0.9)`. I did not change that file because it is outside the bead scope. What I verified: - `bun run test:unit -- --run src/lib/artifactTypePanel.test.ts` passes in `cli/internal/server/frontend`. - `cli/internal/server/frontend/src/lib/ArtifactTypePanel.svelte` exists and is already integrated into `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/[artifactId]/+page.svelte`. - The component imports `prefixOf` from `cli/internal/server/frontend/src/lib/artifacts/grouping.ts`. Follow-up needed: - Investigate or triage the unrelated `D3Graph.contrast.spec.ts` failure before rerunning `bun run test` and `lefthook run pre-commit`.",
+          "created_at": "2026-05-06T01:30:37.566997144Z",
+          "kind": "no_changes_needs_investigation",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes_needs_investigation"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: needs_investigation\nreason: The artifact type panel work is already present and the focused Vitest slice passes, but the required full frontend gate `bun run test` fails in an unrelated existing spec: `src/lib/components/D3Graph.contrast.spec.ts` still asserts that `D3Graph.svelte` must not contain `stroke-opacity`, while the current component source still includes `.attr('stroke-opacity', 0.9)`. I did not change that file because it is outside the bead scope.\n\nWhat I verified:\n- `bun run test:unit -- --run src/lib/artifactTypePanel.test.ts` passes in `cli/internal/server/frontend`.\n- `cli/internal/server/frontend/src/lib/ArtifactTypePanel.svelte` exists and is already integrated into `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/[artifactId]/+page.svelte`.\n- The component imports `prefixOf` from `cli/internal/server/frontend/src/lib/artifacts/grouping.ts`.\n\nFollow-up needed:\n- Investigate or triage the unrelated `D3Graph.contrast.spec.ts` failure before rerunning `bun run test` and `lefthook run pre-commit`.\nresult_rev=1482cf091376ccd3def8c4fcc80901581ffdc246\nbase_rev=1482cf091376ccd3def8c4fcc80901581ffdc246",
+          "created_at": "2026-05-06T01:30:38.020345138Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-06T13:47:02.287192255Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-06T13:47:02.55225924Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-06T13:47:02.813975603Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"cheap\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-05-06T13:47:03.055208358Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=3 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-05-06T13:47:03.506560145Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=cheap harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-06T13:49:54.869635221Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=standard harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-06T13:49:55.124392798Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "tier=smart harness= model= probe=no viable provider\nno viable harness found",
+          "created_at": "2026-05-06T13:49:55.346980902Z",
+          "kind": "tier-attempt",
+          "source": "ddx agent execute-loop",
+          "summary": "skipped"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"tiers_attempted\":[{\"tier\":\"cheap\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"standard\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0},{\"tier\":\"smart\",\"status\":\"skipped\",\"cost_usd\":0,\"duration_ms\":0}],\"winning_tier\":\"exhausted\",\"total_cost_usd\":0,\"wasted_cost_usd\":0}",
+          "created_at": "2026-05-06T13:49:55.560306431Z",
+          "kind": "escalation-summary",
+          "source": "ddx agent execute-loop",
+          "summary": "winning_tier=exhausted attempts=3 total_cost_usd=0.0000 wasted_cost_usd=0.0000"
+        },
+        {
+          "actor": "ddx",
+          "body": "execute-loop: all tiers exhausted — no viable provider found",
+          "created_at": "2026-05-06T13:49:55.969208794Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-07T00:21:25.935728186Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T00:21:26.326464458Z",
+      "execute-loop-no-changes-count": 1
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260507T002126-0572d724",
+    "prompt": ".ddx/executions/20260507T002126-0572d724/prompt.md",
+    "manifest": ".ddx/executions/20260507T002126-0572d724/manifest.json",
+    "result": ".ddx/executions/20260507T002126-0572d724/result.json",
+    "checks": ".ddx/executions/20260507T002126-0572d724/checks.json",
+    "usage": ".ddx/executions/20260507T002126-0572d724/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-4fd71cf3-20260507T002126-0572d724"
+  },
+  "prompt_sha": "2ec6d5b88a29610ad4ed9ac1796e879c53651a2e308687366441849e8953a5af"
+}
