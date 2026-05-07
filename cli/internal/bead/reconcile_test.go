@@ -242,6 +242,10 @@ func TestLifecycle_UnjustifiedNoChanges_BadAttemptNotLongCooldown(t *testing.T) 
 	assert.Equal(t, StatusOpen, got.Status)
 	assert.Contains(t, got.Labels, LabelNoChangesUnjustified)
 	assert.NotContains(t, got.Extra, ExtraRetryAfter)
+
+	ready, err := s.ReadyExecution()
+	require.NoError(t, err)
+	assert.Empty(t, ready)
 }
 
 func TestLifecycle_TransientTransport_UsesCooldown(t *testing.T) {

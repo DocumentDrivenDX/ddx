@@ -1426,7 +1426,7 @@ func (s *Store) ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error) {
 			}
 			continue
 		}
-		if hasLabel(b, LabelNeedsInvestigation) || hasLabel(b, LabelNeedsHuman) {
+		if hasLabel(b, LabelNeedsInvestigation) || hasLabel(b, LabelNeedsHuman) || hasNoChangesTriageLabel(b) {
 			out.SkippedNeedsInvestigation = append(out.SkippedNeedsInvestigation, b.ID)
 			continue
 		}
@@ -1485,7 +1485,7 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 			continue
 		}
 		if executionOnly {
-			if hasLabel(b, LabelNeedsInvestigation) || hasLabel(b, LabelNeedsHuman) {
+			if hasLabel(b, LabelNeedsInvestigation) || hasLabel(b, LabelNeedsHuman) || hasNoChangesTriageLabel(b) {
 				continue
 			}
 			if isOrdinaryEpicContainer(b, childCount[b.ID]) {
@@ -1518,6 +1518,10 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 	sortBeadsForQueue(ready)
 
 	return ready, nil
+}
+
+func hasNoChangesTriageLabel(b Bead) bool {
+	return hasLabel(b, LabelNoChangesUnjustified) || hasLabel(b, LabelNoChangesUnverified)
 }
 
 // Blocked returns open beads with at least one unclosed dependency.

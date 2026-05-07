@@ -84,7 +84,9 @@ func (g *PreClaimGuard) Allow(ctx context.Context, beadID string) (bool, string)
 }
 
 // ComplexityGuard delegates to an injected complexity gate. When no gate is
-// configured it warns once and allows the bead to proceed.
+// configured it allows the bead to proceed. The model-backed pre-claim intake
+// hook is now the canonical readiness gate; this compatibility wrapper remains
+// only for older callers that still inject a Guard directly.
 type ComplexityGuard struct {
 	Gate Guard
 	Log  io.Writer
@@ -97,17 +99,10 @@ func NewComplexityGuard(gate Guard, log io.Writer) *ComplexityGuard {
 	return &ComplexityGuard{Gate: gate, Log: log}
 }
 
-// Allow either delegates to the configured gate or fail-opens once when the
+// Allow either delegates to the configured gate or fail-opens silently when the
 // gate is absent.
 func (g *ComplexityGuard) Allow(ctx context.Context, beadID string) (bool, string) {
 	if g == nil || g.Gate == nil {
-		if g != nil {
-			g.once.Do(func() {
-				if g.Log != nil {
-					_, _ = fmt.Fprintln(g.Log, "complexity gate missing; allowing bead")
-				}
-			})
-		}
 		return true, ""
 	}
 	return g.Gate.Allow(ctx, beadID)

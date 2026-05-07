@@ -4,10 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -182,6 +184,49 @@ func TestIntake_NonAtomicSkipsClaim(t *testing.T) {
 	got, err := inner.Get("ddx-0001")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
+}
+
+func TestIntake_ErrorSkipsClaimAndParksCandidate(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+	now := time.Date(2026, 5, 7, 4, 30, 0, 0, time.UTC)
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatal("executor must not run when intake errors")
+			return ExecuteBeadReport{}, nil
+		}),
+		Now: func() time.Time {
+			return now
+		},
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	var log bytes.Buffer
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		Log:  &log,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{}, errors.New("pre-claim intake: empty output")
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, int32(0), atomic.LoadInt32(&store.claimCalls), "intake errors must not claim")
+	assert.Equal(t, 0, result.Attempts)
+	assert.Contains(t, log.String(), "pre-claim intake: pre-claim intake: empty output (skipping "+candidate.ID+")")
+
+	got, err := inner.Get(candidate.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Empty(t, got.Owner)
+	assert.Equal(t, string(PreClaimIntakeError), got.Extra["execute-loop-last-status"])
+	assert.Equal(t, "pre-claim intake: empty output", got.Extra["execute-loop-last-detail"])
+	assert.Equal(t, now.Add(PreClaimIntakeCooldown).Format(time.RFC3339), got.Extra["execute-loop-retry-after"])
 }
 
 func TestIntake_ActionableButRewritten_UpdatesBeforeClaim(t *testing.T) {

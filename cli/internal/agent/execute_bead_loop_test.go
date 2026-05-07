@@ -423,7 +423,7 @@ func TestExecuteBeadWorkerNoChangesStaysOpenAndContinues(t *testing.T) {
 	assert.True(t, sawTriage, "no_changes_unjustified triage event must be appended")
 }
 
-func TestExecuteBeadWorkerNoChangesLabelsWithoutCooldownAcrossRuns(t *testing.T) {
+func TestExecuteBeadWorkerNoChangesUnjustifiedSkippedAcrossRuns(t *testing.T) {
 	store, first, second := newExecuteLoopTestStore(t)
 	callCount := 0
 	now := time.Now().UTC().Truncate(time.Second)
@@ -476,11 +476,11 @@ func TestExecuteBeadWorkerNoChangesLabelsWithoutCooldownAcrossRuns(t *testing.T)
 	require.NotNil(t, secondRun)
 	assert.Equal(t, 1, secondRun.Attempts)
 	require.Len(t, secondRun.Results, 1)
-	assert.Equal(t, first.ID, secondRun.Results[0].BeadID)
+	assert.Equal(t, second.ID, secondRun.Results[0].BeadID)
 
 	gotSecond, err := store.Get(second.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
+	assert.Equal(t, bead.StatusClosed, gotSecond.Status)
 	assert.Equal(t, 2, callCount)
 }
 

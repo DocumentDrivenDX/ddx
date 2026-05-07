@@ -44,7 +44,7 @@ func TestGuard_PreClaim_TwoStrikesSkips(t *testing.T) {
 	}
 }
 
-func TestGuard_Complexity_NilGateWarnsOnce(t *testing.T) {
+func TestGuard_Complexity_NilGateAllowsSilently(t *testing.T) {
 	var buf bytes.Buffer
 	guard := NewComplexityGuard(nil, &buf)
 
@@ -57,7 +57,7 @@ func TestGuard_Complexity_NilGateWarnsOnce(t *testing.T) {
 		t.Fatalf("nil complexity gate should continue to allow beads")
 	}
 
-	if got := strings.Count(buf.String(), "complexity gate missing"); got != 1 {
-		t.Fatalf("expected one warning, got %d in %q", got, buf.String())
+	if got := strings.Count(buf.String(), "complexity gate missing"); got != 0 {
+		t.Fatalf("expected no legacy warning, got %d in %q", got, buf.String())
 	}
 }
