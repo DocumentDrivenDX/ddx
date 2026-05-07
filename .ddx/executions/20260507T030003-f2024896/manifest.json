@@ -1,0 +1,61 @@
+{
+  "attempt_id": "20260507T030003-f2024896",
+  "bead_id": "ddx-cf37253d",
+  "base_rev": "99312ff6a845622e05e30be81e31cb836c3a53c6",
+  "created_at": "2026-05-07T03:00:25.925129882Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cf37253d",
+    "title": "spec: define full DDx temp cleanup in work cycle",
+    "description": "PROBLEM\nThe cleanup/resource epic now has a cleanup manager, operator command, resource preflight, loop-fatal resource_exhausted handling, and periodic work cleanup, but the spec still lets the implementation interpret DDx-owned cleanup too narrowly. The current work cycle cleaned the execution worktree root while DDx-created test/e2e scratch roots accumulated until the host temp filesystem hit 100%.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execution_cleanup.go:202-212 scans only the configured execution temp root and only directories whose names start with ExecuteBeadWtPrefix. DDx-owned e2e/test scratch prefixes are outside that contract.\n- cli/internal/agent/execution_resources.go:13-16 sets the hard free-space floor to 64 MiB and 1024 inodes, which is too low to prevent degraded work-cycle behavior on a shared temp filesystem.\n- cli/internal/agent/execute_bead_loop.go:501-503 and 550-551 run cleanup at startup and pre-claim, but the spec does not require those passes to reclaim all DDx-owned scratch roots or to apply a soft high-water policy before claims.\n- docs/helix/06-iterate/reliability-principles.md:47-54 states DDx-owned resources must be reclaimed, but FEAT-010/SD-025 need explicit temp-prefix scope, thresholds, and work-cycle semantics.\n\nPROPOSED FIX\n- Update FEAT-010 and SD-025 so DDx-owned cleanup includes execution worktrees, DDx-created e2e/test scratch roots, generated test binaries, and run-state/liveness files.\n- Define a conservative scratch-root policy: only DDx-owned prefixes or metadata-marked paths, minimum age/mtime threshold, no live process/liveness, preserve evidence and registered active worktrees.\n- Define work-cycle behavior: ddx work and server-managed workers run one cleanup pass before first claim and before subsequent claims when temp free space is below a soft high-water threshold; if still below the hard floor after cleanup, stop with resource_exhausted.\n- Define operator reporting fields for scratch roots removed, bytes/inodes reclaimed, preserved paths, and blocked warnings.\n\nNON-SCOPE\n- Do not implement code changes in this spec bead.\n- Do not permit broad deletion of arbitrary non-DDx temp directories.\n- Do not change provider quota, routing, or review policy.\n\nDEPS\nDepends on the closed cleanup foundation beads under ddx-f3dfde0d; no new code dependency.",
+    "acceptance": "1. docs/helix/01-frame/features/FEAT-010-task-execution.md defines DDx-owned scratch cleanup scope beyond execution worktrees and names the conservative ownership/liveness rules.\n2. docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md defines soft high-water and hard floor resource behavior for ddx work/server workers before claim.\n3. docs/helix/06-iterate/reliability-principles.md P8 is updated or cross-referenced so leaked DDx test/e2e scratch roots are explicitly in scope.\n4. The spec names expected implementation tests: TestExecutionCleanup_RemovesStaleDDXScratchDirs, TestWorkResourcePreflight_RunsCleanupBelowSoftFloor, and TestWorkResourcePreflight_StopsBelowHardFloorAfterCleanup.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-f3dfde0d",
+    "labels": [
+      "phase:2",
+      "area:docs",
+      "area:agent",
+      "kind:spec",
+      "reliability",
+      "cleanup",
+      "resource-exhaustion",
+      "spec:FEAT-010",
+      "spec:SD-025"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T03:00:03Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1237001",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-07T03:00:03.343804434Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T03:00:03.795295876Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T030003-f2024896",
+    "prompt": ".ddx/executions/20260507T030003-f2024896/prompt.md",
+    "manifest": ".ddx/executions/20260507T030003-f2024896/manifest.json",
+    "result": ".ddx/executions/20260507T030003-f2024896/result.json",
+    "checks": ".ddx/executions/20260507T030003-f2024896/checks.json",
+    "usage": ".ddx/executions/20260507T030003-f2024896/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-cf37253d-20260507T030003-f2024896"
+  },
+  "prompt_sha": "f680d045b8fc1fdc092223e92e5103c989bd0b6f88d9c4c7746ea8de67be570e"
+}
