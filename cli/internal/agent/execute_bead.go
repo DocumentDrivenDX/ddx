@@ -476,6 +476,16 @@ func synthesizeCommitExcludePathspecs(dir string) []string {
 			pathspec:    ":(exclude)" + ExecutionCleanupMetadataFileName,
 			ignoreProbe: ExecutionCleanupMetadataFileName,
 		},
+		{
+			// Tracker-lock coordination dir (.ddx/.git-tracker.lock/{pid,
+			// acquired_at}). Present while withTrackerLock is held — must
+			// not be staged by a SynthesizeCommit running inside the lock
+			// (regression: HEAD-race fix folded SynthesizeCommit into the
+			// locked critical section, exposing this directory to
+			// `git add -A`).
+			pathspec:    ":(exclude).ddx/.git-tracker.lock",
+			ignoreProbe: ".ddx/.git-tracker.lock/pid",
+		},
 	}
 
 	pathspecs := make([]string, 0, len(candidates))
@@ -717,35 +727,47 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 
 	attemptID := GenerateAttemptID()
 	wtPath := executeBeadWorktreePath(projectRoot, beadID, attemptID)
-	if mkErr := os.MkdirAll(filepath.Dir(wtPath), 0o755); mkErr != nil {
-		return nil, fmt.Errorf("creating execute-bead worktree parent dir: %w", mkErr)
-	}
 
-	// Commit beads.jsonl before spawning worktree so the worktree snapshot
-	// includes any bead metadata updates (e.g. spec-id).
-	if err := CommitTracker(projectRoot); err != nil {
+	// Serialize the parent-repo mutating pre-dispatch sequence (tracker
+	// commit, caller-dirt checkpoint, base resolution, worktree creation)
+	// under the tracker lock. Without this, concurrent workers race on the
+	// parent's HEAD ref between unlocked CommitTracker and SynthesizeCommit
+	// and surface as "cannot lock ref 'HEAD': is at X but expected Y" CAS
+	// failures (regression: concurrent `ddx work` against the same project).
+	// The lock is held only across the brief pre-dispatch sequence (~1-2s);
+	// agent execution that follows is fully parallel.
+	var baseRev string
+	if err := withTrackerLock(projectRoot, func() error {
+		if mkErr := os.MkdirAll(filepath.Dir(wtPath), 0o755); mkErr != nil {
+			return fmt.Errorf("creating execute-bead worktree parent dir: %w", mkErr)
+		}
+		// Commit beads.jsonl before spawning worktree so the worktree snapshot
+		// includes any bead metadata updates (e.g. spec-id).
+		if err := commitTrackerLocked(projectRoot); err != nil {
+			return err
+		}
+		// Checkpoint any remaining caller dirt as a real commit on the current
+		// branch (FEAT-012 §22, US-126 AC#1). The new HEAD becomes the effective
+		// base for the worker worktree; caller's edits are preserved as a normal
+		// commit they can `git reset HEAD~` if they want them back uncommitted.
+		if _, err := gitOps.SynthesizeCommit(projectRoot, "chore: checkpoint pre-execute-bead "+attemptID); err != nil {
+			return fmt.Errorf("pre-execute-bead checkpoint: %w", err)
+		}
+		// Resolve base revision after the tracker + checkpoint commits.
+		rev, err := resolveBase(gitOps, projectRoot, runtime.FromRev)
+		if err != nil {
+			return err
+		}
+		baseRev = rev
+		// Create the isolated worktree. Orphan recovery is the parent's responsibility
+		// (call RecoverOrphans before invoking workers).
+		if err := gitOps.WorktreeAdd(projectRoot, wtPath, baseRev); err != nil {
+			_ = os.RemoveAll(wtPath)
+			return fmt.Errorf("creating isolated worktree: %w", err)
+		}
+		return nil
+	}); err != nil {
 		return nil, err
-	}
-
-	// Checkpoint any remaining caller dirt as a real commit on the current
-	// branch (FEAT-012 §22, US-126 AC#1). The new HEAD becomes the effective
-	// base for the worker worktree; caller's edits are preserved as a normal
-	// commit they can `git reset HEAD~` if they want them back uncommitted.
-	if _, err := gitOps.SynthesizeCommit(projectRoot, "chore: checkpoint pre-execute-bead "+attemptID); err != nil {
-		return nil, fmt.Errorf("pre-execute-bead checkpoint: %w", err)
-	}
-
-	// Resolve base revision after the tracker + checkpoint commits.
-	baseRev, err := resolveBase(gitOps, projectRoot, runtime.FromRev)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create the isolated worktree. Orphan recovery is the parent's responsibility
-	// (call RecoverOrphans before invoking workers).
-	if err := gitOps.WorktreeAdd(projectRoot, wtPath, baseRev); err != nil {
-		_ = os.RemoveAll(wtPath)
-		return nil, fmt.Errorf("creating isolated worktree: %w", err)
 	}
 	if err := excludeCleanupMetadataFromWorktreeGit(wtPath); err != nil {
 		_ = gitOps.WorktreeRemove(projectRoot, wtPath)
@@ -1196,8 +1218,23 @@ func populateWorkerStatus(res *ExecuteBeadResult) {
 	res.Detail = ExecuteBeadStatusDetail(res.Status, "", res.Error)
 }
 
-// CommitTracker commits beads.jsonl if it has uncommitted changes.
+// CommitTracker commits beads.jsonl if it has uncommitted changes. Acquires
+// withTrackerLock so concurrent callers serialize on the parent .git index.
+// Callers already holding the lock must use commitTrackerLocked instead —
+// the lock is not re-entrant.
 func CommitTracker(projectRoot string) error {
+	return withTrackerLock(projectRoot, func() error {
+		return commitTrackerLocked(projectRoot)
+	})
+}
+
+// commitTrackerLocked is the body of CommitTracker without the lock
+// acquisition. Callers must hold withTrackerLock(projectRoot) before calling.
+// Used by Run() to fold tracker commit, checkpoint synthesis, and worktree
+// creation into a single critical section so concurrent workers do not race
+// on the parent's HEAD ref (regression: niflheim concurrent `ddx work` hit
+// "cannot lock ref 'HEAD'" between unlocked CommitTracker and SynthesizeCommit).
+func commitTrackerLocked(projectRoot string) error {
 	trackerFile := filepath.Join(projectRoot, ".ddx", "beads.jsonl")
 	info, err := os.Stat(trackerFile)
 	if err != nil {
@@ -1216,42 +1253,38 @@ func CommitTracker(projectRoot string) error {
 	}
 
 	msg := fmt.Sprintf("chore: update tracker (execute-bead %s)", time.Now().UTC().Format("20060102T150405"))
-	// Serialize git add/commit on the primary .git across processes so that
-	// concurrent workers (multiple `ddx work`) do not race on
-	// .git/index.lock. See cli/internal/agent/tracker_lock.go.
-	return withTrackerLock(projectRoot, func() error {
-		// Re-check inside the lock: a sibling worker may have already
-		// committed the tracker changes between our pre-lock check and now.
-		diff, err := internalgit.Command(context.Background(), projectRoot, "diff", "--", ".ddx/beads.jsonl").Output()
-		if err != nil {
-			return fmt.Errorf("checking tracker diff: %w", err)
-		}
-		if strings.TrimSpace(string(diff)) == "" {
-			untracked, err := internalgit.Command(context.Background(), projectRoot, "ls-files", "--others", "--exclude-standard", ".ddx/beads.jsonl").Output()
-			if err != nil {
-				return fmt.Errorf("checking tracker untracked: %w", err)
-			}
-			if strings.TrimSpace(string(untracked)) == "" {
-				return nil
-			}
-		}
 
-		commitOut, err := internalgit.Command(context.Background(), projectRoot, "add", ".ddx/beads.jsonl").CombinedOutput()
+	// Re-check inside the lock: a sibling worker may have already
+	// committed the tracker changes between our pre-lock check and now.
+	diff, err := internalgit.Command(context.Background(), projectRoot, "diff", "--", ".ddx/beads.jsonl").Output()
+	if err != nil {
+		return fmt.Errorf("checking tracker diff: %w", err)
+	}
+	if strings.TrimSpace(string(diff)) == "" {
+		untracked, err := internalgit.Command(context.Background(), projectRoot, "ls-files", "--others", "--exclude-standard", ".ddx/beads.jsonl").Output()
 		if err != nil {
-			return fmt.Errorf("staging tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
+			return fmt.Errorf("checking tracker untracked: %w", err)
 		}
-		// `git commit` would fail with "nothing to commit" if the file's
-		// content is byte-identical to HEAD even though `git diff` saw a
-		// diff (e.g. mode/whitespace race). Bail cleanly in that case.
-		if cached, err := internalgit.Command(context.Background(), projectRoot, "diff", "--cached", "--", ".ddx/beads.jsonl").Output(); err == nil && strings.TrimSpace(string(cached)) == "" {
+		if strings.TrimSpace(string(untracked)) == "" {
 			return nil
 		}
-		commitOut, err = internalgit.Command(context.Background(), projectRoot, "commit", "--no-verify", "-m", msg).CombinedOutput()
-		if err != nil {
-			return fmt.Errorf("committing tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
-		}
+	}
+
+	commitOut, err := internalgit.Command(context.Background(), projectRoot, "add", ".ddx/beads.jsonl").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("staging tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
+	}
+	// `git commit` would fail with "nothing to commit" if the file's
+	// content is byte-identical to HEAD even though `git diff` saw a
+	// diff (e.g. mode/whitespace race). Bail cleanly in that case.
+	if cached, err := internalgit.Command(context.Background(), projectRoot, "diff", "--cached", "--", ".ddx/beads.jsonl").Output(); err == nil && strings.TrimSpace(string(cached)) == "" {
 		return nil
-	})
+	}
+	commitOut, err = internalgit.Command(context.Background(), projectRoot, "commit", "--no-verify", "-m", msg).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("committing tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
+	}
+	return nil
 }
 
 func resolveBase(gitOps GitOps, workDir, fromRev string) (string, error) {
