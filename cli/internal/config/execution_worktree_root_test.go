@@ -39,7 +39,6 @@ func TestExecutionWorktreeRoot_GlobalConfigWhenProjectUnset(t *testing.T) {
 	t.Setenv("HOME", home)
 	projectRoot := t.TempDir()
 
-	writeExecutionRootConfig(t, filepath.Join(projectRoot, ".ddx", "config.yaml"), "")
 	writeExecutionRootConfig(t, filepath.Join(home, ".ddx", "config.yaml"), "global-root")
 
 	got := ExecutionWorktreeRoot(projectRoot)
