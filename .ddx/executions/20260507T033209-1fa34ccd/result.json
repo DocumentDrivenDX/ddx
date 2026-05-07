@@ -1,0 +1,21 @@
+{
+  "bead_id": "ddx-cf37253d",
+  "attempt_id": "20260507T033209-1fa34ccd",
+  "base_rev": "7f67e323603a9e1e3059d1d95f9f274ea55e4d72",
+  "result_rev": "7f67e323603a9e1e3059d1d95f9f274ea55e4d72",
+  "outcome": "task_no_evidence",
+  "status": "no_evidence_produced",
+  "detail": "agent exited without a commit or no_changes_rationale.txt",
+  "reason": "agent exited without a commit or no_changes_rationale.txt",
+  "session_id": "eb-24a4d239",
+  "duration_ms": 157,
+  "exit_code": 0,
+  "error": "agent exited without a commit or no_changes_rationale.txt",
+  "failure_mode": "no_evidence_produced",
+  "execution_dir": ".ddx/executions/20260507T033209-1fa34ccd",
+  "prompt_file": ".ddx/executions/20260507T033209-1fa34ccd/prompt.md",
+  "manifest_file": ".ddx/executions/20260507T033209-1fa34ccd/manifest.json",
+  "result_file": ".ddx/executions/20260507T033209-1fa34ccd/result.json",
+  "started_at": "2026-05-07T03:32:12.187161001Z",
+  "finished_at": "2026-05-07T03:32:12.344428609Z"
+}
