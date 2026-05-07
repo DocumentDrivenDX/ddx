@@ -780,6 +780,35 @@ terminal non-success outcome for that bead under the current policy, so the
 existing `blocked`, `deferred`, and `no_progress` loop rules can reason about
 it without a fourth run layer or a separate run type.
 
+### Failure Reason → Owner Surface
+
+Each failure reason from the ADR-023 taxonomy maps to exactly one subsystem
+that detects and responds to it. No owner surface applies retry, close, block,
+or triage policy to a reason outside its column.
+
+| Reason | Owner surface |
+|---|---|
+| `too_large` | Readiness skill (`BeadReadinessHook`, pre-claim) |
+| `ambiguous_scope` | Readiness skill (`BeadReadinessHook`, pre-claim) |
+| `missing_root_cause_or_current_state` | Readiness skill (`BeadReadinessHook`, pre-claim) |
+| `missing_verification` | Readiness skill (`BeadReadinessHook`, pre-claim) |
+| `missing_code_path_assertion` | Readiness skill (`BeadReadinessHook`, pre-claim) |
+| `missing_dependency_or_parent` | Readiness skill (`BeadReadinessHook`, pre-claim) |
+| `hidden_external_blocker` | Readiness skill → human triage (operator resolves external condition) |
+| `already_satisfied_candidate` | Readiness skill → close policy (verified no-change path in TD-031 §5) |
+| Provider / quota | Provider preflight (`ddx work` startup and `QuotaPauseContract`) |
+| Transport | Provider preflight (fail-open; logged in layer-3 record) |
+| Missing harness | Provider preflight (startup preflight; hard stop before first claim) |
+| ENOSPC | Resource cleanup (`ddx try` pre-claim validation and `ddx work` cleanup manager) |
+| Git lock | Repo lock handling (`LockContentionContract`, exponential backoff) |
+| Worktree / evidence write failure | Resource cleanup (fail-open; `ddx try` records and unclaims) |
+| `tests_red` | Retry policy (repair-cycle if budget remains; else human triage) |
+| `merge_conflict` | Retry policy (re-queue at base revision; no implementer blame) |
+| `review_block` | Close policy blocked (BLOCKING finding prevents close; human triage when budget exhausted) |
+| `no_changes_unverified` | Retry policy (re-queue with `triage:no-changes-unverified` label) |
+| `no_changes_unjustified` | Retry policy (re-queue with `triage:no-changes-unjustified` label) |
+| `already_satisfied` | Close policy (verified; `closed-already-satisfied` transition per TD-031 §5) |
+
 ## No Run-Type Catalog
 
 DDx will not introduce additional run kinds beyond `run`, `try`, and `work`.
