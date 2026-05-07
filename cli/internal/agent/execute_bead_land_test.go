@@ -278,6 +278,136 @@ func TestLand_HappyPath_FastForward(t *testing.T) {
 	}
 }
 
+func TestLand_EvidenceCommitUsesCleanLandingWorktree(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	attemptID := "20260507T000000-cleanwt"
+	evidenceDir := filepath.Join(".ddx", "executions", attemptID)
+	fullDir := filepath.Join(r.dir, evidenceDir)
+	if err := os.MkdirAll(fullDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fullDir, "manifest.json"), []byte(`{"attempt_id":"`+attemptID+`"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature\n", "feat: feature")
+
+	hookMarker := filepath.Join(t.TempDir(), "pre-commit-pwd.txt")
+	hookPath := filepath.Join(r.dir, ".git", "hooks", "pre-commit")
+	hook := fmt.Sprintf("#!/bin/sh\npwd > %s\n", hookMarker)
+	if err := os.MkdirAll(filepath.Dir(hookPath), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(hookPath, []byte(hook), 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-clean-evidence",
+		AttemptID:    attemptID,
+		TargetBranch: "main",
+		EvidenceDir:  filepath.ToSlash(evidenceDir),
+	}
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.EvidenceCommitSHA == "" {
+		t.Fatalf("expected evidence commit")
+	}
+	hookPWDBytes, err := os.ReadFile(hookMarker)
+	if err != nil {
+		t.Fatalf("reading hook marker: %v", err)
+	}
+	hookPWD := strings.TrimSpace(string(hookPWDBytes))
+	if hookPWD == "" {
+		t.Fatal("pre-commit hook did not record its working directory")
+	}
+	if hookPWD == r.dir {
+		t.Fatalf("evidence commit ran in operator checkout %s; want clean landing worktree", hookPWD)
+	}
+}
+
+func TestLand_EvidenceCommitDoesNotIncludePreStagedOperatorFiles(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	attemptID := "20260507T000001-staged"
+	evidenceDir := filepath.Join(".ddx", "executions", attemptID)
+	fullDir := filepath.Join(r.dir, evidenceDir)
+	if err := os.MkdirAll(fullDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fullDir, "manifest.json"), []byte(`{"attempt_id":"`+attemptID+`"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r.writeFile("operator.txt", "operator staged content\n")
+	r.runGit("add", "operator.txt")
+
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature\n", "feat: feature")
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-staged-operator",
+		AttemptID:    attemptID,
+		TargetBranch: "main",
+		EvidenceDir:  filepath.ToSlash(evidenceDir),
+	}
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.EvidenceCommitSHA == "" {
+		t.Fatalf("expected evidence commit")
+	}
+	names := r.runGit("show", "--name-only", "--format=", land.EvidenceCommitSHA)
+	if !strings.Contains(names, filepath.ToSlash(filepath.Join(evidenceDir, "manifest.json"))) {
+		t.Fatalf("evidence commit did not include manifest, names:\n%s", names)
+	}
+	if strings.Contains(names, "operator.txt") {
+		t.Fatalf("evidence commit included pre-staged operator file:\n%s", names)
+	}
+}
+
+func TestLand_DirtyProjectRootDoesNotBlockSuccessfulLand(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	r.writeFile("README.md", "# operator edit\n")
+	r.writeFile("operator-scratch.txt", "scratch\n")
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature\n", "feat: feature")
+
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-dirty-root",
+		AttemptID:    "20260507T000002-dirty",
+		TargetBranch: "main",
+	}
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land with dirty operator checkout: %v", err)
+	}
+	if land.Status != "landed" {
+		t.Fatalf("expected landed, got %q reason=%q", land.Status, land.Reason)
+	}
+	if got := r.resolveRef("refs/heads/main"); got != workerSHA {
+		t.Fatalf("main tip = %s, want worker %s", got, workerSHA)
+	}
+	if content, err := os.ReadFile(filepath.Join(r.dir, "README.md")); err != nil || string(content) != "# operator edit\n" {
+		t.Fatalf("operator tracked edit was not preserved, content=%q err=%v", string(content), err)
+	}
+	if content, err := os.ReadFile(filepath.Join(r.dir, "operator-scratch.txt")); err != nil || string(content) != "scratch\n" {
+		t.Fatalf("operator untracked scratch was not preserved, content=%q err=%v", string(content), err)
+	}
+}
+
 // TestLand_MergeRequired verifies the merge path: the target has advanced
 // since the worker started. Land() creates a merge commit whose parents are
 // [currentTip, workerSHA], and critically the worker's own commit is NOT

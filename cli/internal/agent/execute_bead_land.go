@@ -229,6 +229,11 @@ type LandingGitOps interface {
 	// AddWorktree creates a new worktree at path checked out at rev in dir.
 	AddWorktree(dir, path, rev string) error
 
+	// AddBranchWorktree creates a new worktree at path checked out on branch
+	// in dir. It is used for clean landing finalization when the operator
+	// checkout already has the target branch checked out.
+	AddBranchWorktree(dir, path, branch string) error
+
 	// RemoveWorktree removes the worktree at path in dir (force).
 	RemoveWorktree(dir, path string) error
 
@@ -410,6 +415,14 @@ func (RealLandingGitOps) AddWorktree(dir, path, rev string) error {
 	out, err := internalgit.Command(context.Background(), dir, "worktree", "add", "--force", "--detach", path, rev).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git worktree add %s %s: %s: %w", path, rev, strings.TrimSpace(string(out)), err)
+	}
+	return nil
+}
+
+func (RealLandingGitOps) AddBranchWorktree(dir, path, branch string) error {
+	out, err := internalgit.Command(context.Background(), dir, "worktree", "add", "--force", path, branch).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git worktree add %s %s: %s: %w", path, branch, strings.TrimSpace(string(out)), err)
 	}
 	return nil
 }
@@ -633,6 +646,113 @@ func landEvidence(wd, targetBranch string, req LandRequest, gitOps LandingGitOps
 	result.NewTip = sha
 }
 
+func landingFinalizationWorktree(projectRoot, wd, targetBranch string, gitOps LandingGitOps) (string, func(), error) {
+	if !sameFilesystemPath(projectRoot, wd) {
+		return wd, func() {}, nil
+	}
+	tempWT, err := os.MkdirTemp("", "ddx-land-finalize-*")
+	if err != nil {
+		return "", nil, fmt.Errorf("creating landing finalization worktree: %w", err)
+	}
+	_ = os.RemoveAll(tempWT)
+	if err := gitOps.AddBranchWorktree(wd, tempWT, targetBranch); err != nil {
+		_ = os.RemoveAll(tempWT)
+		return "", nil, fmt.Errorf("adding landing finalization worktree for %s: %w", targetBranch, err)
+	}
+	cleanup := func() {
+		_ = gitOps.RemoveWorktree(wd, tempWT)
+		_ = os.RemoveAll(tempWT)
+	}
+	return tempWT, cleanup, nil
+}
+
+func copyEvidenceDirForLanding(projectRoot, landingWD, relPath string) error {
+	if relPath == "" || sameFilesystemPath(projectRoot, landingWD) {
+		return nil
+	}
+	cleanRel, ok := cleanRelativePath(relPath)
+	if !ok {
+		return fmt.Errorf("invalid evidence path %q", relPath)
+	}
+	src := filepath.Join(projectRoot, cleanRel)
+	dst := filepath.Join(landingWD, cleanRel)
+	info, err := os.Stat(src)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if !info.IsDir() {
+		return nil
+	}
+	if err := os.RemoveAll(dst); err != nil {
+		return err
+	}
+	return filepath.WalkDir(src, func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		info, err := d.Info()
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(target, data, info.Mode().Perm())
+	})
+}
+
+func cleanupProjectEvidenceCopy(projectRoot, relPath string) {
+	cleanRel, ok := cleanRelativePath(relPath)
+	if !ok {
+		return
+	}
+	_ = os.RemoveAll(filepath.Join(projectRoot, cleanRel))
+}
+
+func cleanRelativePath(path string) (string, bool) {
+	if path == "" || filepath.IsAbs(path) {
+		return "", false
+	}
+	clean := filepath.Clean(filepath.FromSlash(path))
+	if clean == "." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) || clean == ".." {
+		return "", false
+	}
+	return clean, true
+}
+
+func sameFilesystemPath(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	absA, err := filepath.Abs(a)
+	if err != nil {
+		absA = filepath.Clean(a)
+	}
+	absB, err := filepath.Abs(b)
+	if err != nil {
+		absB = filepath.Clean(b)
+	}
+	if resolvedA, err := filepath.EvalSymlinks(absA); err == nil {
+		absA = resolvedA
+	}
+	if resolvedB, err := filepath.EvalSymlinks(absB); err == nil {
+		absB = resolvedB
+	}
+	return absA == absB
+}
+
 // Land performs fetch → (ff or merge) → push for a single submission.
 // Callers MUST serialize calls per projectRoot (the server coordinator
 // goroutine provides this). Land() itself takes no internal locks.
@@ -654,6 +774,7 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 	if req.ResultRev == "" || req.ResultRev == req.BaseRev {
 		return &LandResult{Status: "no-changes", Reason: "result_rev == base_rev"}, nil
 	}
+	syncOperatorAfterLand := sameFilesystemPath(projectRoot, wd)
 
 	// Resolve target branch (default to project HEAD).
 	targetBranch := req.TargetBranch
@@ -701,28 +822,35 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 		if err := gitOps.UpdateRefTo(wd, targetRef, req.ResultRev, currentTip); err != nil {
 			return nil, fmt.Errorf("fast-forwarding %s to %s: %w", targetRef, req.ResultRev, err)
 		}
-		// Refresh the main worktree's index + working-tree files so the
-		// operator and subsequent agents see the newly-landed commit's
-		// changes. Pass currentTip as fromRev so only files actually
-		// changed by this commit are restored — unrelated local
-		// modifications (agent-logs, beads.jsonl heartbeat) are preserved.
-		// Non-fatal on error.
-		_ = gitOps.SyncWorkTreeToHead(wd, currentTip)
 		result := &LandResult{
 			Status:            "landed",
 			NewTip:            req.ResultRev,
 			Merged:            false,
 			MergedCommitCount: contribCount,
 		}
-		if preserved, err := preserveIfPostLandGateFails(wd, req, gitOps, targetRef, currentTip, result.NewTip, contribCount); err != nil {
+		finalWD, cleanup, err := landingFinalizationWorktree(projectRoot, wd, targetBranch, gitOps)
+		if err != nil {
+			return nil, err
+		}
+		defer cleanup()
+		if preserved, err := preserveIfPostLandGateFails(finalWD, req, gitOps, targetRef, currentTip, result.NewTip, contribCount); err != nil {
 			return nil, err
 		} else if preserved != nil {
 			return preserved, nil
 		}
 		if req.EvidenceDir != "" {
-			landEvidence(wd, targetBranch, req, gitOps, result)
+			if err := copyEvidenceDirForLanding(projectRoot, finalWD, req.EvidenceDir); err != nil {
+				return nil, fmt.Errorf("copying evidence into landing worktree: %w", err)
+			}
+			landEvidence(finalWD, targetBranch, req, gitOps, result)
+			if result.EvidenceCommitSHA != "" {
+				cleanupProjectEvidenceCopy(projectRoot, req.EvidenceDir)
+			}
 		}
-		landPush(wd, targetBranch, result.NewTip, hasOrigin, gitOps, result)
+		landPush(finalWD, targetBranch, result.NewTip, hasOrigin, gitOps, result)
+		if syncOperatorAfterLand {
+			_ = gitOps.SyncWorkTreeToHead(wd, currentTip)
+		}
 		return result, nil
 	}
 
@@ -767,28 +895,35 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 	if err := gitOps.UpdateRefTo(wd, targetRef, mergeSHA, currentTip); err != nil {
 		return nil, fmt.Errorf("fast-forwarding %s to merge commit %s: %w", targetRef, mergeSHA, err)
 	}
-	// Refresh the main worktree's index + working-tree files. Pass
-	// currentTip as fromRev; the merge commit's tree contains both the
-	// current-tip files and the incoming ResultRev files, so the diff
-	// against currentTip yields exactly the files affected by the merge.
-	// Unrelated local modifications are preserved.
-	_ = gitOps.SyncWorkTreeToHead(wd, currentTip)
-
 	result := &LandResult{
 		Status:            "landed",
 		NewTip:            mergeSHA,
 		Merged:            true,
 		MergedCommitCount: contribCount,
 	}
-	if preserved, err := preserveIfPostLandGateFails(wd, req, gitOps, targetRef, currentTip, result.NewTip, contribCount); err != nil {
+	finalWD, cleanup, err := landingFinalizationWorktree(projectRoot, wd, targetBranch, gitOps)
+	if err != nil {
+		return nil, err
+	}
+	defer cleanup()
+	if preserved, err := preserveIfPostLandGateFails(finalWD, req, gitOps, targetRef, currentTip, result.NewTip, contribCount); err != nil {
 		return nil, err
 	} else if preserved != nil {
 		return preserved, nil
 	}
 	if req.EvidenceDir != "" {
-		landEvidence(wd, targetBranch, req, gitOps, result)
+		if err := copyEvidenceDirForLanding(projectRoot, finalWD, req.EvidenceDir); err != nil {
+			return nil, fmt.Errorf("copying evidence into landing worktree: %w", err)
+		}
+		landEvidence(finalWD, targetBranch, req, gitOps, result)
+		if result.EvidenceCommitSHA != "" {
+			cleanupProjectEvidenceCopy(projectRoot, req.EvidenceDir)
+		}
 	}
-	landPush(wd, targetBranch, result.NewTip, hasOrigin, gitOps, result)
+	landPush(finalWD, targetBranch, result.NewTip, hasOrigin, gitOps, result)
+	if syncOperatorAfterLand {
+		_ = gitOps.SyncWorkTreeToHead(wd, currentTip)
+	}
 	return result, nil
 }
 
