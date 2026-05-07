@@ -181,6 +181,21 @@ func TestDecompositionHook_CatalogUnavailableUsesSmartProfileWithoutMagicPower(t
 	assert.Zero(t, svc.lastReq.MinPower)
 }
 
+func TestDecompositionHook_AcceptsStringConfidence(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"classification":"atomic","confidence":"0.99","reasoning":"ready despite string confidence"}`,
+	}
+
+	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+	got, err := hook(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Equal(t, "ready despite string confidence", got.Detail)
+}
+
 func TestDecompositionHook_SmartProfileUnavailableFallsBackToDefaultProfile(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)

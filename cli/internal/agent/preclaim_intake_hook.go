@@ -33,7 +33,7 @@ type preClaimIntakeAttempt struct {
 
 type preClaimIntakePromptResult struct {
 	Classification string                      `json:"classification"`
-	Confidence     float64                     `json:"confidence,omitempty"`
+	Confidence     any                         `json:"confidence,omitempty"`
 	Reasoning      string                      `json:"reasoning,omitempty"`
 	Rewrite        preClaimIntakePromptRewrite `json:"rewrite,omitempty"`
 }
