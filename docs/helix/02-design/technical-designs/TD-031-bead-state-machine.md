@@ -424,30 +424,6 @@ Loop interaction: readiness and triage run out-of-band of execute-bead. They
 MUST NOT race with an active drain attempt holding the store lock — they
 acquire the same store lock and releases-then-reclaims is not their job.
 
-Queue action ownership under the ADR-023 failure taxonomy:
-
-- **Bead-readiness reasons** (`too_large`, `ambiguous_scope`,
-  `missing_root_cause_or_current_state`, `missing_verification`,
-  `missing_code_path_assertion`, `missing_dependency_or_parent`,
-  `hidden_external_blocker`, `already_satisfied_candidate`): owned by
-  `BeadReadinessHook` pre-claim. These reasons may produce `open → blocked`
-  or a pre-claim stop with remediation output; they never produce a
-  silent cooldown.
-- **System-readiness reasons** (provider/quota, transport, missing harness,
-  ENOSPC, git lock, worktree/evidence write failure): owned by provider
-  preflight, resource cleanup, and lock-contention handling. These reasons
-  must not mutate bead state to `blocked` or add triage labels; they release
-  the claim (`in_progress → open`) and let the drain loop retry or pause.
-- **Post-attempt reasons** (`tests_red`, `merge_conflict`, `review_block`,
-  `no_changes_unverified`, `no_changes_unjustified`, `already_satisfied`):
-  owned by `PostAttemptTriageHook` after evidence exists. These reasons
-  select from the outcome → label / event / Extra mapping in section 5;
-  they do not introduce new rows to that table.
-
-This ownership partitioning is authoritative for this TD. Any bead that
-reclassifies a system-readiness failure as a bead defect, or that applies a
-bead-readiness queue action to a system failure, contradicts this section.
-
 ### 8.3 QuotaPauseContract (ddx-aede917d)
 
 Status transitions used: none. Quota is a worker-state concern, not a
@@ -526,10 +502,6 @@ In practice:
 - A new worker state: amend section 10.
 - A new persisted status: do not start the work; file an ADR-004
   amendment first.
-- A new failure reason or reclassification of an existing reason:
-  amend ADR-023 §Failure Taxonomy and the FEAT-010 owner-surface table
-  in the same PR. Queue action ownership defined in section 8.2 of this
-  TD must remain consistent with the ADR-023 taxonomy.
 
 CI guard: a sibling bead adds a check that any change to
 `bead-record.schema.json` or to the persisted-status enum touches
