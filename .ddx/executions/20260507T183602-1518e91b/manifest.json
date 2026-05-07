@@ -1,0 +1,66 @@
+{
+  "attempt_id": "20260507T183602-1518e91b",
+  "bead_id": "ddx-377ebf92",
+  "base_rev": "910123c01d38d703caa3c4bcc919b1aa296ea499",
+  "created_at": "2026-05-07T18:36:05.215219454Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-377ebf92",
+    "title": "agent-modes spec: document interactive stewardship modes",
+    "description": "PROBLEM\nDDx does not have a written contract that separates broad interactive queue stewardship from worker execution. An agent opened in the repo can interpret queue questions as permission to start edits, while ddx work is meant to pick up execution-ready beads.\n\nROOT CAUSE\nAGENTS.md:1-18 enters bead policy without declaring a default interactive queue-steward mode. docs/helix/01-frame/features/FEAT-010-task-execution.md:18-29 defines ddx run/try/work layers but not the interactive mode boundary around them. docs/helix/01-frame/features/FEAT-011-skills.md:28-32 routes phrases like \"do work\", \"what's on the queue\", and \"what's ready\" through the ddx skill without specifying whether those prompts mean human intervention triage or worker execution.\n\nPROPOSED FIX\nUpdate AGENTS.md, FEAT-010, and FEAT-011 with an explicit mode taxonomy: queue_steward for broad interactive DDx questions, bead_execution for ddx work/try/execute-bead worker prompts, direct_user_implementation for explicit human requests to edit code/docs, and review for read-only review asks. Define precedence so bead_execution supersedes only the queue-steward default, while tracker, merge-policy, and safety instructions remain load-bearing.\n\nNON-SCOPE\n- Implementing CLI behavior beyond static guidance tests.\n- Changing tracker status enums or storage.\n- Starting or managing workers automatically from interactive sessions.\n\nPARENT AND DEPS\nParent: ddx-09d7d787. Dependencies: none.",
+    "acceptance": "1. AGENTS.md contains a Default Interactive Mode section before Bead Policy that routes broad DDx questions to queue_steward and states that execution-ready beads belong to ddx work unless the user explicitly asks for direct implementation.\n2. docs/helix/01-frame/features/FEAT-010-task-execution.md defines queue_steward, bead_execution, direct_user_implementation, and review modes, including DDX_MODE names, precedence, allowed actions, prohibited actions, and worker-capacity suggestion rules.\n3. docs/helix/01-frame/features/FEAT-011-skills.md defines how the ddx skill routes broad interactive prompts versus explicit ddx work/try/bead execution prompts.\n4. Add or update TestDDxAgentModeGuidance_DocContract to assert the guidance names all four modes and includes the ddx work carve-out.\n5. cd cli \u0026\u0026 go test ./cmd/... -run TestDDxAgentModeGuidance_DocContract -count=1 passes.\n6. cd cli \u0026\u0026 go test ./cmd/... passes.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-09d7d787",
+    "labels": [
+      "phase:2",
+      "area:docs",
+      "area:specs",
+      "area:agent",
+      "kind:design",
+      "operator-ux",
+      "queue-steward",
+      "spec:FEAT-010",
+      "spec:FEAT-011"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T18:34:31Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3415517",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Strong bead overall. Title is imperative and names the subsystem and change. Description has PROBLEM, ROOT CAUSE with three file:line references, PROPOSED FIX, NON-SCOPE, and explicit parent/deps. AC is numbered, names a specific test function (TestDDxAgentModeGuidance_DocContract), and closes with both `go test ./cmd/...` and `lefthook run pre-commit` gates. Labels carry phase, area, kind, and spec cross-refs. One gap prevents a full 8: AC item 4 says 'Add or update TestDDxAgentModeGuidance_DocContract' without naming the file. The test command (`go test ./cmd/...`) implies `cli/cmd/` but the agent must infer the filename rather than read it in the bead. For a new test this means the agent must decide a filename on its own, which is a hand-curation risk.\",\"score\":7,\"suggested_fixes\":[\"AC item 4: add the target file path, e.g. 'in cli/cmd/agent_mode_test.go (create if absent)' so the agent does not need to infer the filename from the go test command.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T18:36:02.855297872Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=7"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T18:34:31.317809758Z",
+      "spec-id": "FEAT-010,FEAT-011"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    },
+    {
+      "id": "FEAT-011",
+      "path": "docs/helix/01-frame/features/FEAT-011-skills.md",
+      "title": "Feature: DDx Agent Skills"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T183602-1518e91b",
+    "prompt": ".ddx/executions/20260507T183602-1518e91b/prompt.md",
+    "manifest": ".ddx/executions/20260507T183602-1518e91b/manifest.json",
+    "result": ".ddx/executions/20260507T183602-1518e91b/result.json",
+    "checks": ".ddx/executions/20260507T183602-1518e91b/checks.json",
+    "usage": ".ddx/executions/20260507T183602-1518e91b/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-377ebf92-20260507T183602-1518e91b"
+  },
+  "prompt_sha": "2889a9fe2ab81c3ebf5183db5c010041199b39bc54f85d04afc2b3795beabc2a"
+}
