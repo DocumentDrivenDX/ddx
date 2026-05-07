@@ -664,12 +664,13 @@ func BuildReviewGroupExecuteRequest(impl ImplementerRouting, reviewerHarness, re
 	}
 	correlationID := reviewCorrelationID(correlation)
 	return AgentRunRuntime{
-		HarnessOverride:  reviewerHarness,
-		ModelOverride:    reviewerModel,
-		MinPowerOverride: minPower,
-		Correlation:      correlation,
-		Role:             "reviewer",
-		CorrelationID:    correlationID,
+		HarnessOverride:     reviewerHarness,
+		ModelOverride:       reviewerModel,
+		MinPowerOverride:    minPower,
+		Correlation:         correlation,
+		Role:                "reviewer",
+		CorrelationID:       correlationID,
+		PermissionsOverride: PermissionsReadOnlyReviewer,
 	}
 }
 
