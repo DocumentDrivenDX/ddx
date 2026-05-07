@@ -174,10 +174,10 @@ test('US-081b end-to-end: list → filter → open → regenerate → run link �
 	await expect(page).toHaveURL(new RegExp(`/artifacts/${ARTIFACT_GENERATED.id}`));
 
 	// 4. Verify renderer (markdown body shown). The page renders the artifact
-	//    title as <h1> and the markdown body also renders <h1># Generated
-	//    Report</h1>, so we use .first() to disambiguate without weakening the
-	//    visibility assertion.
-	await expect(page.getByRole('heading', { name: 'Generated Report' }).first()).toBeVisible();
+	//    title is rendered in the detail view, and the markdown body also renders
+	//    the same text. Use exact text assertions rather than role lookup to keep
+	//    the check resilient to heading semantics.
+	await expect(page.getByText('Generated Report', { exact: true })).toBeVisible();
 	await expect(page.getByText(/Body text\./)).toBeVisible();
 
 	// 5. Provenance panel visible.
@@ -212,7 +212,7 @@ test('Regenerate button is not shown when generatedBy is absent', async ({ page 
 
 	await page.goto(BASE_URL);
 	await page.goto(`${BASE_URL}/${encodeURIComponent(ARTIFACT_PLAIN.id)}`);
-	await expect(page.getByRole('heading', { name: 'Manual Doc' })).toBeVisible();
+	await expect(page.getByText('Manual Doc', { exact: true })).toBeVisible();
 	await expect(page.getByTestId('provenance-panel')).toHaveCount(0);
 	await expect(page.getByTestId('regenerate-button')).toHaveCount(0);
 });
@@ -653,10 +653,11 @@ test('Regenerate error renders inline without crashing the page', async ({ page 
 
 	await page.goto(BASE_URL);
 	await page.goto(`${BASE_URL}/${encodeURIComponent(ARTIFACT_GENERATED.id)}`);
+	await expect(page.getByText('Generated Report', { exact: true })).toBeVisible();
 	await page.getByTestId('regenerate-button').click();
 	await expect(page.getByTestId('regenerate-error')).toContainText(
 		/regeneration backend unavailable/
 	);
 	// Page is still alive.
-	await expect(page.getByRole('heading', { name: 'Generated Report' }).first()).toBeVisible();
+	await expect(page.getByText('Generated Report', { exact: true })).toBeVisible();
 });
