@@ -1,0 +1,16 @@
+verification_command: cd cli && go test ./internal/agent/... -run 'TestPreCloseReview' -count=1
+
+Result: the requested pre-close review semantics are already present in the current tree.
+
+Evidence checked:
+- `cli/internal/agent/execute_bead_loop.go` routes successful implementation results through `RunPostMergeReview` before `CloseWithEvidence`.
+- `cli/internal/agent/execute_bead_post_review.go` requires unanimous evidence-backed `APPROVE`, treats evidence-free `APPROVE` as `review_error: unparseable`, and leaves `REQUEST_CHANGES` / `BLOCK` open without reopening.
+- `cli/internal/agent/execute_bead_review_test.go` already contains the pre-close assertions the bead asks for:
+  - `TestPreCloseReview_RequestChangesPreventsClose`
+  - `TestPreCloseReview_BlockPreventsClose`
+  - `TestPreCloseReview_UnanimousApproveCloses`
+  - `TestPreCloseReview_ApproveWithoutEvidenceIsReviewError`
+
+Verified commands:
+- `cd cli && go test ./internal/agent/... -run 'TestPreCloseReview' -count=1`
+- `lefthook run pre-commit`
