@@ -163,6 +163,70 @@ It prints:
 Recovery output must not require reading the lint implementation or an
 out-of-band report to fix an ordinary authoring problem.
 
+## Failure Taxonomy
+
+Failures that occur during bead claim, attempt, and post-attempt triage fall
+into three distinct classes. Every owner surface must correctly classify a
+failure before applying retry, close, block, or triage policy.
+
+### Bead-Readiness Reasons
+
+A bead-readiness reason indicates a deficiency in the bead description,
+acceptance criteria, or metadata — not in the execution substrate.
+`BeadReadinessHook` detects these reasons before claim and before the
+implementation worktree is created.
+
+| Reason | Meaning |
+|---|---|
+| `too_large` | The bead spans unrelated subsystems, has more than ~6 ACs, or would require changes across more than ~5 files in unrelated packages. |
+| `ambiguous_scope` | The description names conflicting or underspecified requirements such that a competent agent cannot safely pick a file to edit without operator clarification. |
+| `missing_root_cause_or_current_state` | The description lacks a `file:line` pointer or equivalent current-state evidence that anchors the proposed change. |
+| `missing_verification` | No AC names a test function, `go test -run` filter, or other verifiable command that confirms the fix. |
+| `missing_code_path_assertion` | ACs exist but none wire to a deterministic assertion (test, lint rule, or schema guard) that would fail if the fix regressed. |
+| `missing_dependency_or_parent` | A stated or implied predecessor bead or spec-id is absent from the dependency graph or the bead's labels. |
+| `hidden_external_blocker` | The work cannot proceed until an out-of-repo condition (API access, upstream release, human decision) is met that the bead does not mention. |
+| `already_satisfied_candidate` | Pre-claim inspection suggests the bead's ACs are already met by the current codebase without any change. |
+
+### System-Readiness Reasons
+
+A system-readiness reason indicates that the execution substrate — not the
+bead — is unfit for a claim or worktree creation. System-readiness failures
+must not be classified as bead defects. DDx records the infrastructure failure
+and, in WARN-ONLY mode, proceeds; in BLOCK mode, it stops without penalizing
+the bead.
+
+| Reason class | Examples |
+|---|---|
+| Provider / quota | No configured AI provider, quota exhausted, API auth failure |
+| Transport | Network unreachable, TLS error, upstream 5xx |
+| Missing harness | Named harness absent from `.ddx/config.yaml` or harness binary not on PATH |
+| ENOSPC | Temporary worktree root or durable evidence root out of bytes or inodes |
+| Git lock | `.git/index.lock`, ref lock held by another process, or `git worktree add` fails due to concurrent operation |
+| Worktree / evidence write failure | `git worktree add` or evidence directory creation fails for reasons other than ENOSPC or lock |
+
+### Post-Attempt Reasons
+
+`PostAttemptTriageHook` produces a post-attempt reason after the attempt has
+produced its owned evidence. These reasons feed retry reporting and operator
+UX; they do not replace the outcome taxonomy in TD-031 §5.
+
+| Reason | Meaning |
+|---|---|
+| `tests_red` | The attempt committed a change but one or more required tests fail against the committed state. |
+| `merge_conflict` | The worktree result could not be merged to the base branch due to conflicting changes. |
+| `review_block` | An adversarial reviewer returned a BLOCKING finding that the implementation did not address. |
+| `no_changes_unverified` | The attempt produced no commit; a `verification_command` was supplied but failed or could not run. |
+| `no_changes_unjustified` | The attempt produced no commit without structured rationale sufficient to prove satisfaction or a durable blocker. |
+| `already_satisfied` | The attempt confirmed (via a passing `verification_command`) that the bead's ACs are already met. |
+
+### Classification Invariant
+
+Infrastructure and system-readiness failures must not be classified as bead
+defects. A quota failure, transport error, git lock, or ENOSPC classified
+as a bead-readiness problem would incorrectly block or downgrade the bead.
+Both `BeadReadinessHook` and `PostAttemptTriageHook` must select from the
+correct class before applying any policy action.
+
 ## Consequences
 
 - FEAT-004 owns the label-based waiver storage and the no-new-schema rule.
