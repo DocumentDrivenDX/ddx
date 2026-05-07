@@ -202,7 +202,7 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
    **Master-detail list view:**
    - Searchable list: full-text across title, description, acceptance, labels
    - Sortable columns: ID, title, status, priority, labels, owner, updated_at
-   - Filterable by status, priority, label, owner
+   - Filterable by status, priority, label, owner, and a `Needs review` lane
    - Click a bead to open detail panel (split pane or slide-over)
    - Detail shows: all fields, dependency tree, execution beads, agent sessions
    - Graph traversal: click a dependency → navigate to that bead's detail
@@ -654,6 +654,19 @@ thresholds.
   me to the originating bead's detail at the same scroll position
 
 **E2E Test:** `beads.spec.ts` — full workflow: open bead with spec-id and parent → click spec link → verify document viewer → press Back → click parent link → verify parent detail → press Back → click run → verify run detail → press Back → verify return to bead detail
+
+### US-082g: Operator Resolves Beads in the Needs Review Lane
+**As an** operator triaging ambiguous work
+**I want** to filter beads that need human review and resolve them from bead detail
+**So that** I can route work to retry, split, obsolete, or defer without losing context
+
+**Acceptance Criteria:**
+- Given a bead is marked `needs_human`, when I choose the `Needs review` filter, then the list shows only beads in that lane and excludes ordinary open beads
+- Given I open a `needs_human` bead, then the detail panel shows the human-review metadata: reason, since, source, suggested action, and summary
+- Given I choose retry, split, obsolete, or defer, then I must enter notes and the decision is recorded in the bead history
+- Given I resolve the bead, then it leaves the `Needs review` filter and the operator decision is visible in the bead history
+
+**E2E Test:** `beads.spec.ts` — full workflow: open bead list → apply Needs review filter → verify lane-only results → open needs_human bead → verify review-resolution panel fields → choose a resolution with notes → verify history entry and lane removal
 
 ### US-083: Developer Edits Document in Browser
 **As a** developer fixing a stale document

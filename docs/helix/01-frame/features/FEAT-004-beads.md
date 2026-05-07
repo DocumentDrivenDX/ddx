@@ -36,9 +36,9 @@ The name follows the `bd` (Dolt-backed) and `br` (SQLite-backed) convention: sho
 1. **Bead CRUD** (`ddx bead create/show/update/close`) — create, read, update, and close work items
 2. **Listing and filtering** (`ddx bead list`) — filter by status, label, or custom predicates
 3. **Dependency DAG** (`ddx bead dep add/remove/tree`) — declare ordering constraints between beads
-4. **Ready queue** (`ddx bead ready`) — list open beads with all dependencies satisfied
+4. **Ready queue** (`ddx bead ready`) — list open beads with all dependencies satisfied, excluding `needs_human`-labeled beads
 5. **Blocked query** (`ddx bead blocked`) — list open beads with unsatisfied dependencies
-6. **Status summary** (`ddx bead status`) — counts of open, closed, blocked, ready beads
+6. **Status summary** (`ddx bead status`) — counts of open, closed, blocked, ready beads, with `needs_human` reported as an open-lane sub-count rather than a new status
 7. **Import** (`ddx bead import`) — ingest beads from `bd`, `br`, or raw JSONL files
 8. **Export** (`ddx bead export`) — write beads as JSONL for interchange with other tools
 9. **Initialization** (`ddx bead init`) — create storage file and directory
@@ -76,6 +76,8 @@ The name follows the `bd` (Dolt-backed) and `br` (SQLite-backed) convention: sho
 | updated | datetime | auto | — | ISO-8601 UTC |
 
 Unknown fields in imported or existing beads are preserved on read/write. This allows HELIX to store `spec-id`, `execution-eligible`, `claimed-at`, `claimed-pid`, `superseded-by`, `replaces`, and DDx-specific queue metadata such as `queue-rank` without extending the core bd/br-compatible schema table.
+
+DDx also uses preserved `Extra` fields for operator-attention metadata on beads in the `needs_human` lane: `needs-human-reason`, `needs-human-since`, `needs-human-source`, `needs-human-suggested-action`, and `needs-human-summary`. The lane marker itself is the `needs_human` label on an otherwise `open` bead. `ddx bead ready` and worker-drain selection skip those beads even when their dependencies are satisfied, while `ddx bead status` keeps them inside the `open` count and may surface an attention sub-count for operators without introducing a new status value.
 
 TD-031 defines how lifecycle actions use the existing carriers: persisted
 bd/br statuses, labels, dependency edges, append-only events, and preserved

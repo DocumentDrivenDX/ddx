@@ -155,21 +155,25 @@ Non-approve reviewer findings are classified before the next action:
   finding is plausibly capability-sensitive.
 - `review_spec_gap` / `review_missing_acceptance` — the bead or governing spec
   is ambiguous, unverifiable, contradictory, or missing acceptance criteria. DDx
-  blocks the bead with `needs_human` and does not ask another implementer to
-  guess.
+  parks the bead in the `needs_human` operator-attention lane, clears the
+  active claim, and does not ask another implementer to guess.
 - `review_too_large` — the result or bead is too broad for bounded review. DDx
   runs the intake/decomposition path, blocks or decomposes the parent, and does
   not re-run the same monolithic implementation attempt.
 - `review_unsafe_or_out_of_scope` — the implementation changed forbidden scope,
   removed checks, weakened behavior, or otherwise needs explicit repair. If the
-  repair is mechanical it follows `review_fixable_gap`; otherwise it blocks with
+  repair is mechanical it follows `review_fixable_gap`; otherwise it parks in
   `needs_human`.
 
 Review errors retry the review path up to `review_max_retries` for the same
 `result_rev` and reviewer slot. On exhaustion, DDx emits
-`review-manual-required`, blocks the bead with `needs_human`, and parks it for
-operator review without closing it. A new implementation result starts a new
-review-error retry scope.
+`review-manual-required`, clears the active claim, parks the bead in
+`needs_human`, and leaves it open for operator review without closing it. This
+terminal lane resolution is the same contract used by `review_spec_gap` and
+`review_missing_acceptance`: the bead remains open, carries the human-review
+context, and waits for an operator decision rather than another automatic
+implementation attempt. A new implementation result starts a new review-error
+retry scope.
 
 Each implementation/review cycle is append-only. A repair attempt creates a new
 cycle record linked to the prior review group (`repair_context_from_review_group`)

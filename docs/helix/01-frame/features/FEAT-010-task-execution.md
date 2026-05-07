@@ -343,13 +343,15 @@ The layer-3 drain evaluates each ready bead through this mechanical sequence:
 5. **Review classification.** Any evidenced `REQUEST_CHANGES` or `BLOCK`
    prevents close. `review_fixable_gap` schedules a repair cycle on the same
    bead when retry budgets allow, injecting the review findings as required
-   repair context and optionally raising `MinPower`. `review_spec_gap`,
+   repair context and optionally raising `MinPower`; it preserves the retry
+   path and does not park the bead in the `needs_human` lane. `review_spec_gap`,
    `review_missing_acceptance`, `review_too_large`, and non-mechanical unsafe or
-   out-of-scope findings block or decompose instead of asking another
-   implementer to guess. Malformed, empty, context-overflow, and transport
-   reviewer failures emit `review-error` scoped to `result_rev` and reviewer
-   slot; after `review_max_retries` they emit `review-manual-required`, block
-   with `needs_human`, and do not close.
+   out-of-scope findings park the bead in the `needs_human` operator-attention
+   lane, clear the active claim, and do not ask another implementer to guess.
+   Malformed, empty, context-overflow, and transport reviewer failures emit
+   `review-error` scoped to `result_rev` and reviewer slot; after
+   `review_max_retries` they emit `review-manual-required`, clear the active
+   claim, park the bead in the `needs_human` lane, and do not close.
 6. **Infrastructure fallback.** Transport, quota, rate-limit, command setup,
    context cancellation, routing preflight rejection, and worker disruption are
    not model-capability failures. They emit structured evidence and either stay
