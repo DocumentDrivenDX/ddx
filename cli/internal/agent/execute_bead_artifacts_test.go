@@ -168,6 +168,16 @@ func TestExecuteBead_ArtifactsCreated(t *testing.T) {
 	}
 }
 
+func TestWriteArtifactJSONCreatesParentDirectory(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".ddx", "executions", "attempt-1", "result.json")
+	if err := writeArtifactJSON(path, map[string]string{"status": "execution_failed"}); err != nil {
+		t.Fatalf("writeArtifactJSON: %v", err)
+	}
+	if _, err := os.Stat(path); err != nil {
+		t.Fatalf("expected result artifact to exist: %v", err)
+	}
+}
+
 // TestExecuteBead_ManifestShape verifies that manifest.json contains the
 // required machine-readable fields and correct top-level structure.
 func TestExecuteBead_ManifestShape(t *testing.T) {
