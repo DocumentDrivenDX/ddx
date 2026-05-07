@@ -257,13 +257,13 @@ func TestPickerPrioritySkip_IncludesQueueRank(t *testing.T) {
 	executor := ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
 		calls.Add(1)
 		if beadID == "ddx-p0-skipped" {
-			// no_changes leaves bead open. The loop adds it to attempted
-			// (line ~480) BEFORE Claim, so on the next iteration the
-			// picker will skip it with reason=in_attempted.
+			// execution_failed leaves the bead open. The loop adds it to
+			// attempted before Claim, so on the next iteration the picker will
+			// skip it with reason=in_attempted.
 			return ExecuteBeadReport{
 				BeadID: beadID,
-				Status: ExecuteBeadStatusNoChanges,
-				Detail: "nothing to do",
+				Status: ExecuteBeadStatusExecutionFailed,
+				Detail: "preflight failed",
 			}, nil
 		}
 		return ExecuteBeadReport{

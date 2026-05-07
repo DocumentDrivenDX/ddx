@@ -206,6 +206,17 @@ func TestDecompositionHook_StrongPowerUnsatisfiedBlocks(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 }
 
+func TestIntakeResultPayload_EmptyOutputPreservesRunnerError(t *testing.T) {
+	_, err := intakeResultPayload(&Result{
+		ExitCode: 1,
+		Output:   "",
+		Error:    "fork/exec /home/erik/.local/bin/claude: argument list too long",
+	})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "argument list too long")
+	assert.NotContains(t, err.Error(), "empty output")
+}
+
 func TestDecompositionHook_ActionableButRewrittenParsesRewrite(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)

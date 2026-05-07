@@ -2,6 +2,7 @@ package bead
 
 import (
 	"fmt"
+	"os"
 	"time"
 )
 
@@ -9,6 +10,12 @@ import (
 // It is registered in the default registry alongside the active "beads"
 // collection and is backed by .ddx/beads-archive.jsonl in the JSONL backend.
 const BeadsArchiveCollection = "beads-archive"
+
+// DefaultArchiveSizeThreshold is the active .ddx/beads.jsonl size above which
+// routine close-time maintenance externalizes closed-bead events and archives
+// eligible closed rows. Keep this in the bead package so CLI and Store paths
+// share one trigger.
+const DefaultArchiveSizeThreshold int64 = 4 * 1024 * 1024
 
 // ArchivePolicy parameterises which closed beads are eligible to move from
 // the active collection to the archive. Defaults match TD-027 §(b).
@@ -208,13 +215,20 @@ func (s *Store) ListWithArchive(status, label string, where map[string]string) (
 	return out, nil
 }
 
-// maybeOpportunisticArchive runs Archive() with default policy if the
-// active set has crossed MinActiveCount. Errors are swallowed: archival is
-// best-effort and must not fail a close-causing mutation. TD-027 §(b)
-// enables this trigger after close mutations.
-func (s *Store) maybeOpportunisticArchive() {
+// maybeOpportunisticMaintenance runs the same size-triggered maintenance as
+// `ddx bead archive` after close-causing mutations: if active beads.jsonl is
+// over the default 4 MiB threshold, closed-bead events are externalized and
+// eligible closed rows move to beads-archive. Errors are swallowed because
+// maintenance must not fail the close that triggered it.
+func (s *Store) maybeOpportunisticMaintenance() {
 	if s.Collection != DefaultCollection {
 		return
 	}
-	_, _ = s.Archive(DefaultArchivePolicy())
+	info, err := os.Stat(s.File)
+	if err != nil || info.Size() <= DefaultArchiveSizeThreshold {
+		return
+	}
+	_, _ = s.ArchiveWithEvents(ArchivePolicy{
+		Statuses: []string{StatusClosed},
+	})
 }

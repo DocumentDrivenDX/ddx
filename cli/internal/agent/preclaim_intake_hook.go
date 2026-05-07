@@ -198,6 +198,12 @@ func intakeResultPayload(result *Result) (string, error) {
 		text = strings.TrimSpace(result.Output)
 	}
 	if text == "" {
+		if strings.TrimSpace(result.Error) != "" {
+			return "", fmt.Errorf("pre-claim intake: runner error: %s", strings.TrimSpace(result.Error))
+		}
+		if result.ExitCode != 0 {
+			return "", fmt.Errorf("pre-claim intake: runner exited with code %d and empty output", result.ExitCode)
+		}
 		return "", fmt.Errorf("pre-claim intake: empty output")
 	}
 	candidate, ok := extractJSONCandidate(text)

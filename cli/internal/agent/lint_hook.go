@@ -167,10 +167,7 @@ func buildPreDispatchLintPrompt(b *bead.Bead) (string, error) {
 		Notes:       strings.TrimSpace(b.Notes),
 	}
 	if len(b.Extra) > 0 {
-		env.Custom = make(map[string]any, len(b.Extra))
-		for k, v := range b.Extra {
-			env.Custom[k] = v
-		}
+		env.Custom = lintPromptCustomFields(b.Extra)
 	}
 
 	body, err := json.MarshalIndent(env, "", "  ")
@@ -199,6 +196,12 @@ func lintResultPayload(result *Result) (string, error) {
 		text = strings.TrimSpace(result.Output)
 	}
 	if text == "" {
+		if strings.TrimSpace(result.Error) != "" {
+			return "", &LintHookError{Kind: LintHookErrorKindDispatchFailure, Err: errors.New(strings.TrimSpace(result.Error))}
+		}
+		if result.ExitCode != 0 {
+			return "", &LintHookError{Kind: LintHookErrorKindDispatchFailure, Err: fmt.Errorf("exit code %d with empty output", result.ExitCode)}
+		}
 		return "", ErrLintHookEmptyOutput
 	}
 	candidate, ok := extractJSONCandidate(text)
@@ -206,6 +209,80 @@ func lintResultPayload(result *Result) (string, error) {
 		return "", &LintHookError{Kind: LintHookErrorKindBadJSON, Err: fmt.Errorf("no JSON object found")}
 	}
 	return candidate, nil
+}
+
+func lintPromptCustomFields(extra map[string]any) map[string]any {
+	if len(extra) == 0 {
+		return nil
+	}
+	out := make(map[string]any, len(extra))
+	for k, v := range extra {
+		key := strings.TrimSpace(k)
+		if key == "" || lintPromptSkipCustomField(key) {
+			continue
+		}
+		if val, ok := lintPromptSafeCustomValue(v); ok {
+			out[key] = val
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+func lintPromptSkipCustomField(key string) bool {
+	switch key {
+	case "events", "events_attachment", "session_id", "closing_commit_sha":
+		return true
+	}
+	for _, prefix := range []string{"claimed-", "execute-loop-", "cancel-"} {
+		if strings.HasPrefix(key, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func lintPromptSafeCustomValue(v any) (any, bool) {
+	switch val := v.(type) {
+	case nil:
+		return nil, true
+	case string:
+		if len(val) > 4096 {
+			return nil, false
+		}
+		return val, true
+	case bool, int, int8, int16, int32, int64, uint, uint8, uint16, uint32, uint64, float32, float64:
+		return val, true
+	case []string:
+		if len(val) > 32 {
+			return nil, false
+		}
+		cp := make([]string, 0, len(val))
+		for _, item := range val {
+			if len(item) > 512 {
+				return nil, false
+			}
+			cp = append(cp, item)
+		}
+		return cp, true
+	case []any:
+		if len(val) > 32 {
+			return nil, false
+		}
+		cp := make([]string, 0, len(val))
+		for _, item := range val {
+			s, ok := item.(string)
+			if !ok || len(s) > 512 {
+				return nil, false
+			}
+			cp = append(cp, s)
+		}
+		return cp, true
+	default:
+		return nil, false
+	}
 }
 
 func hasBeadLifecycleSkill(projectRoot string) bool {

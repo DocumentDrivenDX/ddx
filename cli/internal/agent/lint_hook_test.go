@@ -151,6 +151,39 @@ func TestLintHook_PromptIncludesStandaloneBead(t *testing.T) {
 	assert.Contains(t, prompt, `"waivers_applied"`)
 }
 
+func TestLintHook_PromptOmitsVolatileExecutionFields(t *testing.T) {
+	root := newLintHookTestRoot(t)
+	store, b := newLintHookTestStore(t, root)
+	require.NoError(t, store.Update(b.ID, func(bb *bead.Bead) {
+		bb.Extra["events"] = []map[string]any{
+			{"kind": "execute-bead", "body": strings.Repeat("large runtime event", 1000)},
+		}
+		bb.Extra["events_attachment"] = "ddx-lint-001/events.jsonl"
+		bb.Extra["execute-loop-last-detail"] = strings.Repeat("large last detail", 1000)
+		bb.Extra["claimed-at"] = "2026-05-07T04:00:00Z"
+	}))
+
+	runner := &lintHookRunnerStub{}
+	runner.run = func(opts RunArgs) (*Result, error) {
+		return &Result{
+			ExitCode: 0,
+			Output:   `{"score":9,"rationale":"ready","suggested_fixes":[],"waivers_applied":[]}`,
+		}, nil
+	}
+
+	hook := NewPreDispatchLintHook(root, store, lintHookTestConfig(), nil, runner)
+	_, err := hook(context.Background(), b.ID)
+	require.NoError(t, err)
+
+	prompt := runner.lastOpts.Prompt
+	assert.Contains(t, prompt, `"spec-id": "FEAT-999"`)
+	assert.NotContains(t, prompt, `"events":`)
+	assert.NotContains(t, prompt, `"events_attachment":`)
+	assert.NotContains(t, prompt, `"execute-loop-last-detail":`)
+	assert.NotContains(t, prompt, `"claimed-at":`)
+	assert.NotContains(t, prompt, "large runtime event")
+}
+
 func TestLintHook_AllowsEmptyHarnessForAutoRouting(t *testing.T) {
 	root := newLintHookTestRoot(t)
 	store, b := newLintHookTestStore(t, root)
@@ -222,4 +255,20 @@ func TestLintHook_EmptyOutput_ReturnsInfrastructureError(t *testing.T) {
 	_, err := hook(context.Background(), b.ID)
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrLintHookEmptyOutput)
+}
+
+func TestLintHook_EmptyOutputWithRunnerError_ReturnsDispatchFailure(t *testing.T) {
+	root := newLintHookTestRoot(t)
+	store, b := newLintHookTestStore(t, root)
+
+	runner := &lintHookRunnerStub{}
+	runner.run = func(opts RunArgs) (*Result, error) {
+		return &Result{ExitCode: 1, Output: "", CondensedOutput: "", Error: "argument list too long"}, nil
+	}
+
+	hook := NewPreDispatchLintHook(root, store, lintHookTestConfig(), nil, runner)
+	_, err := hook(context.Background(), b.ID)
+	require.Error(t, err)
+	assert.ErrorIs(t, err, ErrLintHookDispatch)
+	assert.Contains(t, err.Error(), "argument list too long")
 }

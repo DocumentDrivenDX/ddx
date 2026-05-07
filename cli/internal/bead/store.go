@@ -1031,7 +1031,7 @@ func (s *Store) Close(id string) error {
 		return err
 	}
 	_ = s.RemoveClaimHeartbeat(id)
-	s.maybeOpportunisticArchive()
+	s.maybeOpportunisticMaintenance()
 	return nil
 }
 
@@ -1138,7 +1138,7 @@ func (s *Store) CloseWithEvidence(id string, sessionID string, commitSHA string)
 		}
 	}
 	_ = s.RemoveClaimHeartbeat(id)
-	s.maybeOpportunisticArchive()
+	s.maybeOpportunisticMaintenance()
 	return nil
 }
 
