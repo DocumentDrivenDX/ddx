@@ -29,7 +29,7 @@ func TestWorkerManagerStartAndShow(t *testing.T) {
 	m := NewWorkerManager(root)
 
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
-		Harness:  "agent",
+		Harness:  "fiz",
 		Model:    "qwen/qwen3.6",
 		Provider: "openrouter",
 		Once:     true,
@@ -37,7 +37,7 @@ func TestWorkerManagerStartAndShow(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, record.ID)
 	assert.Equal(t, "running", record.State)
-	assert.Equal(t, "agent", record.Harness)
+	assert.Equal(t, "fiz", record.Harness)
 	assert.Equal(t, "qwen/qwen3.6", record.Model)
 	require.NotEmpty(t, record.SpecPath)
 
@@ -195,7 +195,7 @@ func TestWorkerManagerWritesStatusToDisk(t *testing.T) {
 	m := NewWorkerManager(root)
 
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
-		Harness: "agent",
+		Harness: "fiz",
 		Once:    true,
 	})
 	require.NoError(t, err)

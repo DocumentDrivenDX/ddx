@@ -65,7 +65,7 @@ func (s *resolveRouteFailingService) TailSessionLog(_ context.Context, _ string)
 }
 
 func (s *resolveRouteFailingService) ListHarnesses(_ context.Context) ([]agentlib.HarnessInfo, error) {
-	return []agentlib.HarnessInfo{{Name: "agent", Available: true}}, nil
+	return []agentlib.HarnessInfo{{Name: "fiz", Available: true}}, nil
 }
 
 func (s *resolveRouteFailingService) ListProviders(_ context.Context) ([]agentlib.ProviderInfo, error) {
@@ -170,7 +170,7 @@ func TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel(t *testin
 	defer m.StopWatchdog()
 
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
-		Harness: "agent",
+		Harness: "fiz",
 		Model:   "gpt-5.4-mini",
 		Once:    true,
 	})
@@ -187,7 +187,7 @@ func TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel(t *testin
 
 	require.True(t, executeCalled, "worker must reach Execute")
 	assert.False(t, resolveCalled, "worker execution must not call ResolveRoute")
-	assert.Equal(t, "agent", lastReq.Harness, "harness pin must pass through to Execute")
+	assert.Equal(t, "fiz", lastReq.Harness, "harness pin must pass through to Execute")
 	assert.Equal(t, "gpt-5.4-mini", lastReq.Model, "model pin must pass through to Execute")
 }
 

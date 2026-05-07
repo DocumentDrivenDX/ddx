@@ -1822,6 +1822,12 @@ func VerifyCleanWorktree(projectRoot, attemptID string) error {
 }
 
 func excludeCleanupMetadataFromWorktreeGit(wtPath string) error {
+	if _, err := os.Stat(filepath.Join(wtPath, ".git")); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil
+		}
+		return err
+	}
 	out, err := internalgit.Command(context.Background(), wtPath, "rev-parse", "--git-path", "info/exclude").Output()
 	if err != nil {
 		return err

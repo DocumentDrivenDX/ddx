@@ -105,9 +105,9 @@ func TestAgentRunProfileRoutingSelectsViableHarness(t *testing.T) {
 	}
 }
 
-// TestAgentListShowsEmbeddedAgentHarness verifies that ddx agent list includes the
-// embedded 'agent' harness as available (it requires no external binary).
-func TestAgentListShowsEmbeddedAgentHarness(t *testing.T) {
+// TestAgentListShowsEmbeddedFizHarness verifies that ddx agent list includes the
+// embedded 'fiz' harness as available (it requires no external binary).
+func TestAgentListShowsEmbeddedFizHarness(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
 	dir := agentTestDir(t)
@@ -115,13 +115,13 @@ func TestAgentListShowsEmbeddedAgentHarness(t *testing.T) {
 
 	output, err := executeCommand(rootCmd, "agent", "list")
 	require.NoError(t, err)
-	assert.Contains(t, output, "agent", "agent harness must appear in list")
-	assert.Contains(t, output, "ok", "agent harness must be available (embedded)")
+	assert.Contains(t, output, "fiz", "fiz harness must appear in list")
+	assert.Contains(t, output, "ok", "fiz harness must be available (embedded)")
 }
 
-// TestAgentListEmbeddedAgentHarnessJSON verifies the JSON output of agent list
-// includes the 'agent' harness marked as available.
-func TestAgentListEmbeddedAgentHarnessJSON(t *testing.T) {
+// TestAgentListEmbeddedFizHarnessJSON verifies the JSON output of agent list
+// includes the 'fiz' harness marked as available.
+func TestAgentListEmbeddedFizHarnessJSON(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
 	dir := agentTestDir(t)
@@ -140,38 +140,38 @@ func TestAgentListEmbeddedAgentHarnessJSON(t *testing.T) {
 
 	found := false
 	for _, s := range statuses {
-		if s.Name == "agent" {
+		if s.Name == "fiz" {
 			found = true
-			assert.True(t, s.Available, "agent harness must be available (embedded)")
-			assert.Equal(t, "(embedded)", s.Path, "agent harness path must be '(embedded)'")
+			assert.True(t, s.Available, "fiz harness must be available (embedded)")
+			assert.Equal(t, "(embedded)", s.Path, "fiz harness path must be '(embedded)'")
 		}
 	}
-	assert.True(t, found, "agent harness must be in list")
+	assert.True(t, found, "fiz harness must be in list")
 }
 
-// TestAgentCapabilitiesEmbeddedAgent verifies that ddx agent capabilities agent
-// works and reports the embedded agent harness consistently.
-func TestAgentCapabilitiesEmbeddedAgent(t *testing.T) {
+// TestAgentCapabilitiesEmbeddedFiz verifies that ddx agent capabilities fiz
+// works and reports the embedded Fizeau harness consistently.
+func TestAgentCapabilitiesEmbeddedFiz(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
 	dir := agentTestDir(t)
 	rootCmd := NewCommandFactory(dir).NewRootCommand()
 
-	output, err := executeCommand(rootCmd, "agent", "capabilities", "agent")
+	output, err := executeCommand(rootCmd, "agent", "capabilities", "fiz")
 	require.NoError(t, err)
-	assert.Contains(t, output, "Harness: agent")
-	assert.Contains(t, output, "Binary: fiz")
-	assert.Contains(t, output, "harness: agent", "config example should show harness: agent")
+	assert.Contains(t, output, "Harness: fiz")
+	assert.Contains(t, output, "(embedded)")
+	assert.Contains(t, output, "harness: fiz", "config example should show harness: fiz")
 }
 
-// TestAgentCapabilitiesEmbeddedAgentJSON verifies JSON capabilities for the 'agent' harness.
-func TestAgentCapabilitiesEmbeddedAgentJSON(t *testing.T) {
+// TestAgentCapabilitiesEmbeddedFizJSON verifies JSON capabilities for the 'fiz' harness.
+func TestAgentCapabilitiesEmbeddedFizJSON(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
 	dir := agentTestDir(t)
 	rootCmd := NewCommandFactory(dir).NewRootCommand()
 
-	output, err := executeCommand(rootCmd, "agent", "capabilities", "--harness", "agent", "--json")
+	output, err := executeCommand(rootCmd, "agent", "capabilities", "--harness", "fiz", "--json")
 	require.NoError(t, err)
 
 	var caps struct {
@@ -182,10 +182,10 @@ func TestAgentCapabilitiesEmbeddedAgentJSON(t *testing.T) {
 		CostClass string `json:"cost_class"`
 	}
 	require.NoError(t, json.Unmarshal([]byte(output), &caps))
-	assert.Equal(t, "agent", caps.Harness)
+	assert.Equal(t, "fiz", caps.Harness)
 	assert.True(t, caps.Available)
-	assert.Equal(t, "fiz", caps.Binary)
-	assert.True(t, caps.IsLocal, "agent harness must be local (embedded)")
+	assert.Empty(t, caps.Binary)
+	assert.True(t, caps.IsLocal, "fiz harness must be local (embedded)")
 	assert.Equal(t, "local", caps.CostClass)
 }
 
@@ -221,19 +221,19 @@ func TestAgentRunProfileNoViableHarness(t *testing.T) {
 		"error must identify the routing failure cause")
 }
 
-// TestAgentRunHarnessAgentAccepted verifies that --harness agent is accepted as
-// a valid harness name (the stable embedded DDx agent alias).
-func TestAgentRunHarnessAgentAccepted(t *testing.T) {
+// TestAgentRunHarnessFizAccepted verifies that --harness fiz is accepted as
+// the stable embedded Fizeau harness name.
+func TestAgentRunHarnessFizAccepted(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
 	dir := agentTestDir(t)
 	rootCmd := NewCommandFactory(dir).NewRootCommand()
 
-	_, err := executeCommand(rootCmd, "agent", "run", "--harness", "agent", "--text", "test")
+	_, err := executeCommand(rootCmd, "agent", "run", "--harness", "fiz", "--text", "test")
 	// Must not fail with "unknown harness" — the harness is registered.
 	if err != nil {
-		assert.NotContains(t, err.Error(), "unknown harness: agent",
-			"'agent' must be a recognized harness name")
+		assert.NotContains(t, err.Error(), "unknown harness: fiz",
+			"'fiz' must be a recognized harness name")
 	}
 }
 

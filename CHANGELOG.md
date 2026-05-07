@@ -12,14 +12,15 @@ changed-prose command surface, configuration knobs, example findings, and the
 human-writing-support workflow. It also states explicitly that DDx prose
 quality support is not an AI detector and not detector bypass.
 
-### Added: Fizeau v0.10.9 point release
+### Added: Fizeau v0.10.12 point release
 
-DDx now consumes `github.com/DocumentDrivenDX/fizeau v0.10.9`.
+DDx now consumes `github.com/DocumentDrivenDX/fizeau v0.10.12`.
 
 This release carries the sticky route and endpoint utilization evidence
 surfaces that DDx agent routing and observability already consume, including
 route status and session evidence plumbing. No DDx-side contract changes were
-needed beyond the dependency pin refresh.
+needed beyond the dependency pin refresh and test fixture updates for Fizeau's
+canonical embedded `fiz` harness name.
 
 ### Added: MinPower/MaxPower passthrough contract (agent v0.9.25)
 
