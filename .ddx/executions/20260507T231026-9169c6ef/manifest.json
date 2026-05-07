@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260507T231026-9169c6ef",
+  "bead_id": "ddx-b14c4924",
+  "base_rev": "f7fff19bf1f8814636021a43848809b288c5439a",
+  "created_at": "2026-05-07T23:10:30.818513489Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b14c4924",
+    "title": "skills: update bead-lifecycle readiness contract",
+    "description": "PROBLEM\nCLI prompts can use `MODE: intake`, but the bead-lifecycle skill only documents lint, triage, and refine, so readiness/intake behavior is under-specified and can return empty or parser-incompatible output.\n\nROOT CAUSE WITH FILE:LINE\n- `skills/ddx/bead-lifecycle/SKILL.md:16-22` lists only `MODE: lint`, `MODE: triage`, and `MODE: refine`.\n- `.agents/skills/ddx/bead-lifecycle/SKILL.md:16-22`, `.claude/skills/ddx/bead-lifecycle/SKILL.md:16-22`, and `cli/internal/skills/ddx/bead-lifecycle/SKILL.md:16-22` mirror the same missing readiness contract.\n- `cli/internal/agent/preclaim_intake_hook.go:179` builds prompts beginning with `MODE: intake`, which the skill does not define.\n\nPROPOSED FIX\nAdd canonical `MODE: readiness`, define `MODE: intake` as compatibility, add structured readiness reason codes from ADR-023, and preserve existing parser compatibility expectations or explicitly point to the parser-migration bead.\n\nNON-SCOPE\nDo not change Go hook parsing or CLI output.",
+    "acceptance": "1. `skills/ddx/bead-lifecycle/SKILL.md` documents `MODE: readiness`.\n2. It states `MODE: intake` is compatibility for readiness.\n3. It includes reason codes from ADR-023.\n4. It says infra failures must return system readiness findings, not bead-quality findings.\n5. It preserves the current intake JSON compatibility contract or explicitly references the parser-migration bead.\n6. `skills/ddx/SKILL.md` routes “assess bead readiness” to bead-lifecycle.\n7. `.agents`, `.claude`, and `cli/internal/skills` copies are synchronized.\n8. `ddx skills check skills/ddx/SKILL.md skills/ddx/bead-lifecycle/SKILL.md .agents/skills/ddx/SKILL.md .agents/skills/ddx/bead-lifecycle/SKILL.md .claude/skills/ddx/SKILL.md .claude/skills/ddx/bead-lifecycle/SKILL.md cli/internal/skills/ddx/SKILL.md cli/internal/skills/ddx/bead-lifecycle/SKILL.md` validates changed skill files.\n9. `make skill-schema` passes.\n10. `lefthook run pre-commit` passes.",
+    "parent": "ddx-a9d130d0",
+    "labels": [
+      "phase:2",
+      "area:skills",
+      "area:beads",
+      "kind:doc",
+      "reliability",
+      "bead-quality",
+      "adr:023",
+      "spec:FEAT-011"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T23:06:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4097607",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Title (imperative, names subsystem + change), description (PROBLEM / ROOT CAUSE WITH file:line / PROPOSED FIX / NON-SCOPE), labels (phase, area×2, kind, cross-refs adr:023 + spec:FEAT-011), parent + deps, and cold self-test all pass. AC is numbered and each item is independently verifiable. Two criteria fail: (1) No AC item names a Test* function or a `go test -run` filter — `ddx skills check` (AC 8) and `make skill-schema` (AC 9) are not Go test expressions and do not satisfy this requirement. (2) The penultimate AC line must be `cd cli \\u0026\\u0026 go test ./\\u003cpaths\\u003e/... green`; instead AC 9 is `make skill-schema`, violating the required terminal-two-line pattern (go test, then lefthook). Because kind:doc beads often have no changed Go source, no existing *_test.go may be directly relevant, but the rubric does not auto-waive this criterion — the bead must either name a covering test or carry an explicit waiver label.\",\"score\":6,\"suggested_fixes\":[\"Add an AC item: `cd cli \\u0026\\u0026 go test ./internal/skills/... green` (the skills package exercises skill-file loading and would catch regressions even if no new Go code is added). If truly no Go test covers this path, state that explicitly in the AC and add a waiver label such as `waiver:no-go-test` so reviewers can approve consciously.\",\"Reorder the final AC items so the second-to-last line is the `cd cli \\u0026\\u0026 go test` line and the last line is `lefthook run pre-commit passes`. Currently AC 9 is `make skill-schema` and AC 10 is lefthook, which puts a non-go-test gate in the penultimate slot.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T23:10:26.877807587Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=6"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T23:06:58.169330346Z",
+      "spec-id": "ADR-023"
+    }
+  },
+  "governing": [
+    {
+      "id": "ADR-023",
+      "path": "docs/helix/02-design/adr/ADR-023-bead-lifecycle-quality-policy.md",
+      "title": "ADR-023: Bead Lifecycle Quality Policy"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T231026-9169c6ef",
+    "prompt": ".ddx/executions/20260507T231026-9169c6ef/prompt.md",
+    "manifest": ".ddx/executions/20260507T231026-9169c6ef/manifest.json",
+    "result": ".ddx/executions/20260507T231026-9169c6ef/result.json",
+    "checks": ".ddx/executions/20260507T231026-9169c6ef/checks.json",
+    "usage": ".ddx/executions/20260507T231026-9169c6ef/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-b14c4924-20260507T231026-9169c6ef"
+  },
+  "prompt_sha": "53ac413f8d67994b52dfe952400c9c1bfae349f84c9bee7e45ca3536e240f9e9"
+}
