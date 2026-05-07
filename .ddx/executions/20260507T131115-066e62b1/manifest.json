@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260507T131115-066e62b1",
+  "bead_id": "ddx-e32a0f68",
+  "base_rev": "b6e34641dfa83223101ddac826adc8c7e7da93bd",
+  "created_at": "2026-05-07T13:11:17.269376541Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e32a0f68",
+    "title": "agent: add enforceable read-only tool reviewer profile",
+    "description": "PROBLEM\nThe candidate-cycle design requires reviewers to inspect the live attempt worktree efficiently without being able to mutate it. Current reviewer dispatch is not enforced as read-only at the runtime boundary, so moving review into the attempt worktree would depend on prompt wording rather than a hard capability.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead_review.go:623-673 builds reviewer AgentRunRuntime with Role=reviewer and MinPower metadata, but no read-only permission profile or tool restriction is set.\n- cli/internal/agent/execute_bead.go:826-842 sets implementation dispatch PermissionsOverride to unrestricted because implementation runs in an isolated worktree; reviewer dispatch needs the opposite boundary.\n- cli/internal/agent/service_run.go and related dispatch code are the likely boundary where PermissionsOverride / Role / tool access must be translated into Fizeau execution config.\n\nPROPOSED FIX\n- Add an enforceable read-only tool reviewer profile to the agent runtime/dispatch boundary.\n- Ensure reviewer role can read files and run read-only inspection commands if supported, but cannot write files, stage, commit, delete, or run mutating shell commands.\n- Fail closed if a harness cannot enforce read-only reviewer mode, with an operator-visible review-error class rather than silently running unrestricted.\n- Add tests with a fake reviewer that attempts mutation and verify the mutation is rejected or impossible.\n\nNON-SCOPE\n- Do not move review into the attempt worktree in this bead; that is a dependent bead.\n- Do not implement repair cycles.\n- Do not choose concrete provider/model fallback logic.\n\nDEPS\nDepends on the spec bead under this epic so the read-only tool reviewer contract is defined before implementation.",
+    "acceptance": "1. A runtime/config field or permission profile exists for read-only tool reviewer dispatch and is wired through reviewer execution.\n2. TestReviewerRuntime_ReadOnlyProfilePlumbed verifies BuildReviewExecuteRequest or its replacement sets the read-only reviewer profile for Role=reviewer.\n3. TestReviewerRuntime_MutationDenied uses a fake or script reviewer that attempts to write/stage/commit and proves the attempt is rejected or cannot affect the worktree.\n4. TestReviewerRuntime_UnsupportedReadOnlyFailsClosed verifies unsupported enforcement produces a typed review-error instead of unrestricted review.\n5. cd cli \u0026\u0026 go test ./internal/agent/... -run \"TestReviewerRuntime_ReadOnlyProfilePlumbed|TestReviewerRuntime_MutationDenied|TestReviewerRuntime_UnsupportedReadOnlyFailsClosed\" green.\n6. cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... green.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-31e07fdc",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "kind:feature",
+      "reliability",
+      "adr:024",
+      "spec:FEAT-010",
+      "candidate-cycle",
+      "review"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T13:11:14Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2805002",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"All 8 rubric criteria satisfied. (1) Title is imperative and names subsystem + change. (2) Description contains PROBLEM, ROOT CAUSE with three specific file:line anchors (execute_bead_review.go:623-673, execute_bead.go:826-842, service_run.go), PROPOSED FIX with enumerated steps, and NON-SCOPE. Minor hedge ('likely boundary') on service_run.go is acceptable given the proposed-fix section names it explicitly. (3) AC is numbered 1-7, each independently verifiable. (4) Three named Test* functions (TestReviewerRuntime_ReadOnlyProfilePlumbed, TestReviewerRuntime_MutationDenied, TestReviewerRuntime_UnsupportedReadOnlyFailsClosed) satisfy wired-in assertion requirement; AC 2 names a concrete function under test (BuildReviewExecuteRequest). (5) AC 6 is the go test gate and AC 7 is lefthook run pre-commit. (6) Labels carry phase:2, area:agent, kind:feature, adr:024, spec:FEAT-010. (7) Parent ddx-31e07fdc and dep ddx-71073116 are explicit; DEPS prose explains the ordering rationale. (8) Description is self-contained: no /tmp/ paths, no chat references, dep explanation inline.\",\"score\":8,\"suggested_fixes\":[],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T13:11:14.883066356Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=8"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T13:11:14.996310486Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T131115-066e62b1",
+    "prompt": ".ddx/executions/20260507T131115-066e62b1/prompt.md",
+    "manifest": ".ddx/executions/20260507T131115-066e62b1/manifest.json",
+    "result": ".ddx/executions/20260507T131115-066e62b1/result.json",
+    "checks": ".ddx/executions/20260507T131115-066e62b1/checks.json",
+    "usage": ".ddx/executions/20260507T131115-066e62b1/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-e32a0f68-20260507T131115-066e62b1"
+  },
+  "prompt_sha": "10b2d2e04c5dc55151a51fd9d851bad04fe33ff041f65dcae9f4fe1373fe8ea7"
+}
