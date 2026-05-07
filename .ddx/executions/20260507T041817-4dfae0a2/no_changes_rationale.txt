@@ -1,0 +1,26 @@
+The spec changes for bead ddx-cf37253d were already committed in a prior
+execution attempt as commit 92ed74563 ("docs: define DDx temp cleanup scope
+and thresholds [ddx-cf37253d]"). That commit is an ancestor of the current
+base revision 6f771abaf and is present in the main branch.
+
+The commit addressed all four content ACs:
+- AC1: FEAT-010 §"Execution Resource Cleanup" now names DDx-owned cleanup
+  scope beyond execution worktrees (test/e2e scratch roots, generated test
+  binaries, run-state/liveness files) and states the conservative
+  ownership/liveness rules (DDx-owned paths with ownership metadata or known
+  DDx prefixes, minimum age/mtime, no live PID/session liveness).
+- AC2: SD-025 §"Resource preflight and loop-fatal handling" defines the soft
+  high-water threshold trigger and hard floor stop behavior for ddx work and
+  server-managed workers before each claim.
+- AC3: reliability-principles.md P8 was updated to explicitly name leaked
+  DDx test/e2e scratch roots as within the reclamation scope.
+- AC4: Both FEAT-010 and SD-025 name the three expected implementation tests:
+  TestExecutionCleanup_RemovesStaleDDXScratchDirs,
+  TestWorkResourcePreflight_RunsCleanupBelowSoftFloor, and
+  TestWorkResourcePreflight_StopsBelowHardFloorAfterCleanup.
+
+The execution worktree for this attempt was removed by a background cleanup
+process before work could begin. No new changes are needed; the spec is
+already satisfied.
+
+verification_command: git -C /Users/erik/Projects/ddx merge-base --is-ancestor 92ed74563 HEAD && grep -q "DDx-created test/e2e scratch roots" /Users/erik/Projects/ddx/docs/helix/01-frame/features/FEAT-010-task-execution.md && grep -q "high-water threshold" /Users/erik/Projects/ddx/docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md && grep -q "leaked DDx test/e2e" /Users/erik/Projects/ddx/docs/helix/06-iterate/reliability-principles.md && grep -q "TestExecutionCleanup_RemovesStaleDDXScratchDirs" /Users/erik/Projects/ddx/docs/helix/01-frame/features/FEAT-010-task-execution.md

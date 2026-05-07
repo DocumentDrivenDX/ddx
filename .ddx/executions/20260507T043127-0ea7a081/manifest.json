@@ -1,0 +1,99 @@
+{
+  "attempt_id": "20260507T043127-0ea7a081",
+  "bead_id": "ddx-0248f921",
+  "base_rev": "5afce6a0df52d0af440ae5d5c4f355e7a4829595",
+  "created_at": "2026-05-07T04:31:30.835372471Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-0248f921",
+    "title": "Restore ddx run layer-1 command",
+    "description": "The shipped DDx skills now document `ddx run` as the layer-1 task invocation primitive, and workflow skills such as adversarial-review, compare-prompts, benchmark-suite, effort-estimate, and bead-breakdown all instruct agents to run commands like `ddx run --harness codex --min-power 10 --prompt review-target.md`.\n\nActual behavior in the current ddx binary on 2026-05-07:\n- `ddx version` reports Commit bf77ce841, built 2026-05-07T03:42:23Z.\n- `ddx --help` lists `try` and `work`, but no top-level `run`.\n- `ddx run --help` fails with: unknown command \"run\" for \"ddx\".\n- `ddx try --help` says it executes a bead through production machinery and exposes min/max power passthrough.\n- `ddx work --help` says work iterates `ddx try` and owns retry-power policy.\n\nImpact: checked-in/project DDx skills can route agents to a non-existent command, breaking review, comparison, benchmark, effort-estimate, and bead-breakdown workflows. This is especially visible in downstream Fizeau, whose updated DDx skill bundle references `ddx run` repeatedly.\n\nLikely regression: during the routing-boundary cleanup, docs/skills moved from `ddx agent run` to the intended layer-1 `ddx run`, but the actual CLI command target was not added or was dropped before release.\n\nIn scope:\n- CLI command registration for top-level `ddx run` or an explicit compatibility alias to the correct existing layer-1 command.\n- Help text and tests proving `ddx run --help` exists.\n- Compatibility with documented flags used by shipped skills: `--prompt`, `--text` if supported, `--harness`, `--provider`, `--model`, `--model-ref`, `--min-power`, `--max-power`, and persona support if the skills continue to document it.\n- Update shipped skill docs only if the intended command is not `ddx run`.\n\nOut of scope:\n- Changing `ddx try`/`ddx work` queue semantics.\n- Reintroducing DDx-side routing policy; passthrough constraints must remain opaque.",
+    "acceptance": "1. `ddx run --help` exits 0 and describes the layer-1 task invocation command, or shipped skills are updated to stop documenting `ddx run` and use an existing command that actually supports the documented flags.\n2. A CLI test covers command registration for `ddx run`.\n3. Tests cover the documented flag surface used by skills: prompt input, harness/provider/model/model-ref passthrough, min/max power passthrough, and persona behavior or its documented replacement.\n4. `rg \"ddx run\" .agents/skills .claude/skills skills .ddx/plugins` either finds only valid examples backed by the command, or finds no stale references.\n5. The fix preserves the routing-boundary invariant: DDx forwards hard pins/power bounds and does not select, rank, or fallback concrete harness/provider/model values itself.\n6. Relevant CLI tests pass.",
+    "labels": [
+      "area:cli",
+      "area:execution",
+      "area:skills",
+      "kind:bug",
+      "regression",
+      "triage:no-changes-unjustified"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T04:31:17Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1741846",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: empty-output\"}",
+          "created_at": "2026-05-07T04:20:08.26106013Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-07T04:20:16.626727291Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260507T042008-a7cd7f14\",\"bead_id\":\"ddx-0248f921\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-07T04:20:17.339291103Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-05-07T04:20:17.787135734Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt\nresult_rev=6600b1e57214fe10adaaab9d814ec395b2f64e3b\nbase_rev=6600b1e57214fe10adaaab9d814ec395b2f64e3b",
+          "created_at": "2026-05-07T04:20:18.706141033Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Criterion 1 (Title): PASS — imperative verb, names subsystem and change. Criterion 2 (Root cause + file:line): FAIL — root cause narrative identifies the regression window but names no specific file path or line number where the command should be registered (e.g., cli/cmd/run.go or the cobra root). Criterion 3 (Numbered AC with specific test names): PARTIAL — AC items are numbered 1–6, but none name a Test* function or a go test -run filter; AC 2 says 'A CLI test covers command registration' without naming the function. Criterion 4 (Wired-in assertion): FAIL — no specific test function is named in any AC item. Criterion 5 (cd cli \\u0026\\u0026 go test + lefthook gate as final two AC lines): FAIL — AC 6 says 'Relevant CLI tests pass', which is vague and not the required 'cd cli \\u0026\\u0026 go test ./\\u003cpaths\\u003e/... green' + 'lefthook run pre-commit passes' closing lines. Criterion 6 (Labels including phase:N): FAIL — no phase:N label present. Criterion 7 (Parent + Deps explicit): FAIL — no parent bead referenced and no 'no deps' statement. Criterion 8 (Standalone description): PASS — no /tmp references, no chat-session references, includes actual binary version, command output, and verifiable rg command in AC 4.\",\"score\":3,\"suggested_fixes\":[\"Add a specific file:line to the root cause, e.g. 'cli/cmd/root.go:~L42 where subcommands are registered — ddx run is absent from AddCommand calls'.\",\"Name at least one Test* function in the AC, e.g. 'AC 2: TestRunCommandRegistered in cli/cmd/run_test.go' or 'go test -run TestRun ./cmd/...' exits 0.\",\"Replace AC 6 with the two required gate lines: 'cd cli \\u0026\\u0026 go test ./cmd/... green' and 'lefthook run pre-commit passes'.\",\"Add a phase label, e.g. phase:6, matching the current active phase.\",\"Add explicit parent/deps lines, e.g. 'Parent: none. Deps: none.'\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T04:31:17.180659366Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=3"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T04:31:17.312971747Z",
+      "execute-loop-no-changes-count": 1,
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T043127-0ea7a081",
+    "prompt": ".ddx/executions/20260507T043127-0ea7a081/prompt.md",
+    "manifest": ".ddx/executions/20260507T043127-0ea7a081/manifest.json",
+    "result": ".ddx/executions/20260507T043127-0ea7a081/result.json",
+    "checks": ".ddx/executions/20260507T043127-0ea7a081/checks.json",
+    "usage": ".ddx/executions/20260507T043127-0ea7a081/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-0248f921-20260507T043127-0ea7a081"
+  },
+  "prompt_sha": "4dd2c29c0ff100a70d313ae4587212c683341b7849358bd0b9323ed85b2d434e"
+}
