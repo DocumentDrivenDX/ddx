@@ -1,0 +1,127 @@
+{
+  "attempt_id": "20260507T002014-5164f53a",
+  "bead_id": "ddx-d3aca2b7",
+  "base_rev": "40e6521a9d04db0680a557c54c493069779d81c6",
+  "created_at": "2026-05-07T00:20:17.300158258Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d3aca2b7",
+    "title": "test: cover task execution cleanup and resource exhaustion end-to-end",
+    "description": "PROBLEM\nThe cleanup/resource contract needs an end-to-end regression harness, not only isolated unit tests. The May 6 failure crossed command, git worktree, tracker claim, resource classification, and operator-output boundaries: a unit-only suite could still miss the exact behavior where ddx work claims the next bead after ENOSPC.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead.go:686-718 owns real git worktree setup/cleanup, while cli/internal/agent/execute_bead_loop.go:437-530 owns queue drain loop state; existing tests cover many individual branches but not the full resource-exhausted incident path.\n- cli/cmd/try.go:306-342 and cli/cmd/work.go:101 route command contexts into workers, but there is no command-level e2e test proving cleanup/resource failures produce correct operator output and tracker state.\n- cli/internal/agent/run_state_test.go:95-145 tests orphan recovery shapes, but not full DDx temp root cleanup plus registered worktree pruning plus claim safety.\n- docs/helix/01-frame/features/FEAT-010-task-execution.md:449-498 requires cleanup to be inline, loop-level, background, observable, and loop-fatal on resource exhaustion.\n\nPROPOSED FIX\n- Add end-to-end tests that use a temp project, temp DDX_EXEC_WT_DIR, real git worktree commands where feasible, and injectable resource-check failures where filling a filesystem would be unsafe.\n- Verify tracker state after failure: no extra bead claimed, failed bead open/re-claimable, no retry-after cooldown for host resource exhaustion.\n- Verify cleanup state after failure: stale unregistered dirs and stale registered worktrees are removed; active/preserved evidence survives.\n- Verify operator output and loop events contain cleanup summary and resource_exhausted stop reason.\n\nNON-SCOPE\n- Do not create a real ENOSPC by filling /tmp or exhausting inodes in CI.\n- Do not require live harness/model/provider calls.\n- Do not test unrelated production-reachability bead content.",
+    "acceptance": "1. TestWorkResourceExhaustionEndToEnd_StopsBeforeNextClaim runs ddx work against two ready beads with injected resource_exhausted setup failure and verifies only the first bead is touched.\n2. TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWorktrees creates real stale DDx worktrees/dirs under a temp DDX_EXEC_WT_DIR and verifies ddx work or ddx cleanup prunes them safely.\n3. TestTryResourceExhaustionEndToEnd_Reclaimable verifies ddx try on a target bead fails with resource_exhausted, exits non-zero, and leaves the bead open/unclaimed without execute-loop-retry-after.\n4. TestCleanupEndToEnd_PreservesPublishedEvidence verifies complete .ddx/executions and .ddx/runs bundles plus refs/ddx/iterations/* are not removed.\n5. TestBackgroundCleanupEndToEnd_UsesLockAndJitter verifies periodic cleanup can be driven deterministically with fake time and does not run concurrent destructive passes.\n6. The e2e tests use temp directories and injectable fakes rather than consuming real disk/inodes.\n7. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -run \"TestWorkResourceExhaustionEndToEnd|TestWorkCleanupEndToEnd|TestTryResourceExhaustionEndToEnd|TestCleanupEndToEnd|TestBackgroundCleanupEndToEnd\" -count=1 passes.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-f3dfde0d",
+    "labels": [
+      "phase:2",
+      "area:test",
+      "area:agent",
+      "area:cli",
+      "kind:test",
+      "reliability",
+      "spec:FEAT-010",
+      "spec:SD-025",
+      "cleanup",
+      "resource-exhaustion",
+      "e2e"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T00:20:14Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2049424",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-07T00:15:05.440615555Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-07T00:17:28.028934186Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260507T001505-38837f5f\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":1756616,\"output_tokens\":14019,\"total_tokens\":1770635,\"cost_usd\":0,\"duration_ms\":139694,\"exit_code\":0}",
+          "created_at": "2026-05-07T00:17:28.259473919Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=1770635 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260507T001505-38837f5f\",\"bead_id\":\"ddx-d3aca2b7\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-07T00:17:38.562003378Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-07T00:17:39.049044365Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "The diff only adds an execution artifact result file and contains no code, tests, or cleanup/resource-handling changes, so none of the acceptance criteria can be verified as implemented.\nharness=codex\nmodel=gpt-5.4\ninput_bytes=58717\noutput_bytes=1181\nelapsed_ms=12922",
+          "created_at": "2026-05-07T00:18:03.708991715Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"action\":\"re_attempt_with_context\",\"mode\":\"review_block\"}",
+          "created_at": "2026-05-07T00:18:03.933131953Z",
+          "kind": "triage-decision",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block: re_attempt_with_context"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-close review: BLOCK (flagged for human)\nThe diff only adds an execution artifact result file and contains no code, tests, or cleanup/resource-handling changes, so none of the acceptance criteria can be verified as implemented.\nresult_rev=b76ef0fb38a4253aab3bde0aa98102727fc598f4\nbase_rev=c0daa5dc8e5f6caebad5bf8807bfca58bf60e403",
+          "created_at": "2026-05-07T00:18:04.468658443Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-07T00:20:13.836903852Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T00:20:14.284858745Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T002014-5164f53a",
+    "prompt": ".ddx/executions/20260507T002014-5164f53a/prompt.md",
+    "manifest": ".ddx/executions/20260507T002014-5164f53a/manifest.json",
+    "result": ".ddx/executions/20260507T002014-5164f53a/result.json",
+    "checks": ".ddx/executions/20260507T002014-5164f53a/checks.json",
+    "usage": ".ddx/executions/20260507T002014-5164f53a/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-d3aca2b7-20260507T002014-5164f53a"
+  },
+  "prompt_sha": "124749fc169e9a63479e6d1f1724cef0440ef1be8d5280cf27bf4593f2bf5fa1"
+}
