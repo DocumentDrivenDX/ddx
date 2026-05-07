@@ -150,7 +150,7 @@ func dispatchPreClaimIntakePayload(ctx context.Context, projectRoot string, svc 
 		return "", err
 	}
 
-	runtime.ProfileOverride = ""
+	runtime.ProfileOverride = DefaultRoutingProfile
 	return dispatchPreClaimIntakePayloadOnce(ctx, projectRoot, svc, runner, rcfg, runtime)
 }
 

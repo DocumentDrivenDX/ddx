@@ -40,6 +40,7 @@ func TestWorkPlan_CLI_TextOutput(t *testing.T) {
 	// Must include the documented column headers.
 	assert.Contains(t, out, "POS")
 	assert.Contains(t, out, "ID")
+	assert.Contains(t, out, "TITLE")
 	assert.Contains(t, out, "PRI")
 	assert.Contains(t, out, "RANK")
 	assert.Contains(t, out, "UPDATED")
@@ -50,6 +51,8 @@ func TestWorkPlan_CLI_TextOutput(t *testing.T) {
 	// Both bead IDs must appear.
 	assert.Contains(t, out, "ddx-text-001")
 	assert.Contains(t, out, "ddx-text-002")
+	assert.Contains(t, out, "First bead")
+	assert.Contains(t, out, "Second bead")
 	assert.Regexp(t, regexp.MustCompile(`ddx-text-001.*\b3\b`), out)
 }
 

@@ -204,7 +204,7 @@ func TestDecompositionHook_SmartProfileUnavailableFallsBackToDefaultProfile(t *t
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, int32(2), atomic.LoadInt32(&svc.executeCalls))
-	assert.Empty(t, svc.lastReq.Profile)
+	assert.Equal(t, DefaultRoutingProfile, svc.lastReq.Profile)
 	assert.Zero(t, svc.lastReq.MinPower)
 }
 
