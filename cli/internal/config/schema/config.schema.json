@@ -541,6 +541,15 @@
           "type": "integer",
           "description": "Optional local retention policy. Bundles older than this are subject to local pruning while the mirror keeps full history.",
           "minimum": 0
+        },
+        "temp_worktree_root": {
+          "type": "string",
+          "description": "Base directory for isolated execute-bead worktrees. Relative paths in project config resolve against the project root; relative paths in global config resolve against the user's home directory. DDX_EXEC_WT_DIR overrides this value.",
+          "examples": [
+            "~/.cache/ddx/exec-wt",
+            ".ddx/worktrees",
+            "/var/tmp/ddx-exec-wt"
+          ]
         }
       },
       "additionalProperties": false

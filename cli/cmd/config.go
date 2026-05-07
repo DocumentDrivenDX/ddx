@@ -337,8 +337,13 @@ func extractConfigValue(cfg *config.Config, key string) (string, error) {
 			return "", nil
 		}
 		return cfg.Library.Repository.Branch, nil
+	case "executions.temp_worktree_root":
+		if cfg.Executions == nil {
+			return "", nil
+		}
+		return cfg.Executions.TempWorktreeRoot, nil
 	default:
-		return "", fmt.Errorf("unknown configuration key: %s\nValid keys: version, library.path, library.repository.url, library.repository.branch", key)
+		return "", fmt.Errorf("unknown configuration key: %s\nValid keys: version, library.path, library.repository.url, library.repository.branch, executions.temp_worktree_root", key)
 	}
 }
 
@@ -367,8 +372,13 @@ func setConfigValueInStruct(cfg *config.Config, key, value string) error {
 			cfg.Library.Repository = &config.RepositoryConfig{}
 		}
 		cfg.Library.Repository.Branch = value
+	case "executions.temp_worktree_root":
+		if cfg.Executions == nil {
+			cfg.Executions = &config.ExecutionsConfig{}
+		}
+		cfg.Executions.TempWorktreeRoot = value
 	default:
-		return fmt.Errorf("unknown configuration key: %s\nValid keys: library.path, library.repository.url, library.repository.branch", key)
+		return fmt.Errorf("unknown configuration key: %s\nValid keys: library.path, library.repository.url, library.repository.branch, executions.temp_worktree_root", key)
 	}
 	return nil
 }

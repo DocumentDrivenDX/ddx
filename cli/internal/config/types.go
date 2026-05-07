@@ -244,6 +244,9 @@ type CostConfig struct {
 type ExecutionsConfig struct {
 	Mirror     *ExecutionsMirrorConfig `yaml:"mirror,omitempty" json:"mirror,omitempty"`
 	RetainDays int                     `yaml:"retain_days,omitempty" json:"retain_days,omitempty"`
+	// TempWorktreeRoot is the base directory for isolated execute-bead
+	// worktrees. Empty preserves the legacy default under os.TempDir().
+	TempWorktreeRoot string `yaml:"temp_worktree_root,omitempty" json:"temp_worktree_root,omitempty"`
 }
 
 // ExecutionsMirrorConfig describes the out-of-band archive target for

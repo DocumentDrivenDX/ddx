@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/spf13/cobra"
 )
@@ -411,7 +412,7 @@ func scanLocalBeadWorkers(projectRoot string, serverAttemptIDs map[string]bool) 
 		}
 
 		// Check if the worktree for this attempt is still active
-		wtPath := agentLocalWorktreePath(m.BeadID, m.AttemptID)
+		wtPath := agentLocalWorktreePath(projectRoot, m.BeadID, m.AttemptID)
 		if !active[wtPath] {
 			continue
 		}
@@ -436,8 +437,8 @@ func scanLocalBeadWorkers(projectRoot string, serverAttemptIDs map[string]bool) 
 // agentLocalWorktreePath reconstructs the absolute path of an execute-bead
 // worktree for the given bead and attempt IDs. Mirrors executeBeadWorktreePath
 // in internal/agent/execute_bead.go.
-func agentLocalWorktreePath(beadID, attemptID string) string {
-	base := os.Getenv("DDX_EXEC_WT_DIR")
+func agentLocalWorktreePath(projectRoot, beadID, attemptID string) string {
+	base := config.ExecutionWorktreeRoot(projectRoot)
 	if base == "" {
 		base = filepath.Join(os.TempDir(), agent.ExecuteBeadTmpSubdir)
 	}

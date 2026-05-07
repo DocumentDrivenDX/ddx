@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 // ExecutionCleanupMetadataFileName is the filename used to describe ownership
@@ -138,7 +140,7 @@ type ExecutionCleanupManager struct {
 func NewExecutionCleanupManager(projectRoot string, gitOps GitOps) *ExecutionCleanupManager {
 	return &ExecutionCleanupManager{
 		ProjectRoot: projectRoot,
-		TempRoot:    executionCleanupTempRoot(),
+		TempRoot:    executionCleanupTempRoot(projectRoot),
 		GitOps:      gitOps,
 		Now:         time.Now,
 		Probe:       defaultExecutionCleanupLivenessProbe{},
@@ -156,7 +158,7 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 		TempRoot:    m.tempRoot(),
 	}
 	if summary.TempRoot == "" {
-		summary.TempRoot = executionCleanupTempRoot()
+		summary.TempRoot = executionCleanupTempRoot(m.ProjectRoot)
 	}
 	if summary.TempRoot == "" {
 		return summary, errors.New("execution cleanup: temp root is empty")
@@ -411,11 +413,14 @@ func (m *ExecutionCleanupManager) tempRoot() string {
 	if m != nil && m.TempRoot != "" {
 		return m.TempRoot
 	}
-	return executionCleanupTempRoot()
+	if m != nil {
+		return executionCleanupTempRoot(m.ProjectRoot)
+	}
+	return executionCleanupTempRoot("")
 }
 
-func executionCleanupTempRoot() string {
-	base := os.Getenv("DDX_EXEC_WT_DIR")
+func executionCleanupTempRoot(projectRoot string) string {
+	base := config.ExecutionWorktreeRoot(projectRoot)
 	if base == "" {
 		base = filepath.Join(os.TempDir(), ExecuteBeadTmpSubdir)
 	}

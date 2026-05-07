@@ -276,8 +276,8 @@ const (
 
 // executeBeadWorktreePath returns the absolute path where an execute-bead
 // isolated worktree for (beadID, attemptID) should live.
-func executeBeadWorktreePath(beadID, attemptID string) string {
-	base := os.Getenv("DDX_EXEC_WT_DIR")
+func executeBeadWorktreePath(projectRoot, beadID, attemptID string) string {
+	base := config.ExecutionWorktreeRoot(projectRoot)
 	if base == "" {
 		base = filepath.Join(os.TempDir(), ExecuteBeadTmpSubdir)
 	}
@@ -716,7 +716,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	}
 
 	attemptID := GenerateAttemptID()
-	wtPath := executeBeadWorktreePath(beadID, attemptID)
+	wtPath := executeBeadWorktreePath(projectRoot, beadID, attemptID)
 	if mkErr := os.MkdirAll(filepath.Dir(wtPath), 0o755); mkErr != nil {
 		return nil, fmt.Errorf("creating execute-bead worktree parent dir: %w", mkErr)
 	}

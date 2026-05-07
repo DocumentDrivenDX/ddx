@@ -78,7 +78,7 @@ type ExecutionResourcePreflight struct {
 func NewExecutionResourceChecker(projectRoot string, gitOps GitOps) *ExecutionResourcePreflight {
 	return &ExecutionResourcePreflight{
 		ProjectRoot: projectRoot,
-		TempRoot:    executionCleanupTempRoot(),
+		TempRoot:    executionCleanupTempRoot(projectRoot),
 		EvidenceRoots: []string{
 			filepath.Join(projectRoot, ExecuteBeadArtifactDir),
 			filepath.Join(projectRoot, ".ddx", "runs"),
@@ -140,12 +140,12 @@ func (p *ExecutionResourcePreflight) projectRoot() string {
 
 func (p *ExecutionResourcePreflight) tempRoot() string {
 	if p == nil {
-		return executionCleanupTempRoot()
+		return executionCleanupTempRoot("")
 	}
 	if p.TempRoot != "" {
 		return p.TempRoot
 	}
-	return executionCleanupTempRoot()
+	return executionCleanupTempRoot(p.ProjectRoot)
 }
 
 func (p *ExecutionResourcePreflight) evidenceRoots() []string {
