@@ -84,18 +84,13 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 		if rcfg.MinPower() > strongMinPower {
 			strongMinPower = rcfg.MinPower()
 		}
-		if rcfg.MaxPower() > 0 && strongMinPower >= rcfg.MaxPower() {
-			return PreClaimIntakeResult{
-				Outcome: PreClaimIntakeActionableAtomic,
-				Detail:  fmt.Sprintf("pre-claim intake skipped: route pins cannot satisfy intake min_power=%d max_power=%d", strongMinPower, rcfg.MaxPower()),
-			}, nil
-		}
 
 		runtime := AgentRunRuntime{
 			Prompt:          prompt,
 			WorkDir:         projectRoot,
 			PromptSource:    PreClaimIntakePromptSource,
 			ProfileOverride: "smart",
+			ClearMaxPower:   true,
 		}
 		if strongMinPower > 0 {
 			runtime.MinPowerOverride = strongMinPower
@@ -104,8 +99,8 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 		if err != nil {
 			if isStrongPowerUnsatisfiedError(err) {
 				return PreClaimIntakeResult{
-					Outcome: PreClaimIntakeActionableAtomic,
-					Detail:  "pre-claim intake skipped: " + trimDiagnosticPrefix(err.Error(), "pre-claim intake"),
+					Outcome: PreClaimIntakeAmbiguousNeedsHuman,
+					Detail:  "pre-claim intake requires a smart/frontier route but no viable model was available",
 				}, nil
 			}
 			return PreClaimIntakeResult{}, err

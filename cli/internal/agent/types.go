@@ -93,6 +93,10 @@ type AgentRunRuntime struct {
 	// implementer's actual selected power, biasing routing toward a stronger
 	// reviewer model (R4 pairing: reviewer >= impl + 1 power).
 	MinPowerOverride int
+	// ClearMaxPower drops rcfg.MaxPower() for this single invocation. This is
+	// for auxiliary classifier/reviewer-style calls that deliberately want the
+	// strongest viable route instead of the worker attempt's cost cap.
+	ClearMaxPower bool
 }
 
 // Result holds the output of an agent invocation.

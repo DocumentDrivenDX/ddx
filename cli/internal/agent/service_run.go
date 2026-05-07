@@ -187,6 +187,9 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		minPower = runtime.MinPowerOverride
 	}
 	maxPower := rcfg.MaxPower()
+	if runtime.ClearMaxPower {
+		maxPower = 0
+	}
 	if minPower > 0 && maxPower > 0 && minPower >= maxPower {
 		return nil, fmt.Errorf("agent: invalid power bounds: min_power=%d must be less than max_power=%d", minPower, maxPower)
 	}
