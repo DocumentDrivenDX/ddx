@@ -37,24 +37,6 @@ func nextEscalationFloor(l escalationFloorFinder, actualPower int) (int, error) 
 	}
 }
 
-// computeReviewFixableGapRepairMinPower returns the MinPower floor for a
-// bounded repair attempt after a review_fixable_gap classification. It advances
-// one rung above implActualPower on the escalation ladder, skipping
-// no-viable-provider rungs. If the ladder is nil or all rungs above
-// implActualPower are exhausted, the fallback is implActualPower+1 so a repair
-// always requests strictly higher capability than the original attempt.
-//
-// The returned value is a pure MinPower floor — callers must preserve all other
-// routing pins (harness, model, provider, profile) unchanged and must not
-// introduce a MaxPower cap unless the operator has explicitly configured one.
-func computeReviewFixableGapRepairMinPower(l escalationFloorFinder, implActualPower int) int {
-	next, err := nextEscalationFloor(l, implActualPower)
-	if err == nil {
-		return next
-	}
-	return implActualPower + 1
-}
-
 func runEscalatingSingleTierAttempts(
 	ctx context.Context,
 	initialMinPower int,
