@@ -49,6 +49,18 @@ type panicAgentRunner struct {
 }
 
 func (r *panicAgentRunner) Run(opts agent.RunArgs) (*agent.Result, error) {
+	switch opts.PromptSource {
+	case "bead-lifecycle-intake":
+		return &agent.Result{
+			ExitCode: 0,
+			Output:   `{"classification":"atomic","confidence":0.99,"reasoning":"single-slice"}`,
+		}, nil
+	case "bead-lifecycle-lint":
+		return &agent.Result{
+			ExitCode: 0,
+			Output:   `{"score":9,"rationale":"ok","suggested_fixes":[],"waivers_applied":[]}`,
+		}, nil
+	}
 	r.t.Fatalf("agent runner must not run after resource exhaustion: %+v", opts)
 	return nil, nil
 }

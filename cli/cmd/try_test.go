@@ -53,6 +53,7 @@ func runInterruptedTryCommand(t *testing.T) (*bead.Store, string, error) {
 
 	factory := NewCommandFactory(env.Dir)
 	runner := &blockingTryExecutor{started: make(chan struct{})}
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
 	factory.tryExecutorOverride = runner
 	root := factory.NewRootCommand()
 
@@ -89,6 +90,11 @@ func runInterruptedTryCommand(t *testing.T) (*bead.Store, string, error) {
 func (r *tryHookRunnerStub) Run(opts agent.RunArgs) (*agent.Result, error) {
 	r.promptSource = append(r.promptSource, opts.PromptSource)
 	switch opts.PromptSource {
+	case "bead-lifecycle-intake":
+		return &agent.Result{
+			ExitCode: 0,
+			Output:   `{"classification":"atomic","confidence":0.99,"reasoning":"single-slice"}`,
+		}, nil
 	case "bead-lifecycle-lint":
 		return &agent.Result{
 			ExitCode: 0,
