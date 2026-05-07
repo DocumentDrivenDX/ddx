@@ -313,6 +313,15 @@ const (
 	// human judgment, not automated retry. Parked under the same short
 	// cooldown with a kind:land-conflict-needs-human event.
 	ExecuteBeadStatusLandConflictNeedsHuman = "land_conflict_needs_human"
+
+	// ExecuteBeadStatusReviewTerminalBlock is set when a BLOCK review verdict
+	// is classified as a terminal operator-required condition —
+	// review_spec_gap, review_missing_acceptance, review_too_large at depth
+	// cap, or review_unsafe_or_out_of_scope. These classes do not re-enter
+	// the automated retry cycle and do not consume the no-progress retry
+	// budget; the bead is parked with a needs_human label until an operator
+	// intervenes.
+	ExecuteBeadStatusReviewTerminalBlock = "review_terminal_block"
 )
 
 // ClassifyExecuteBeadStatus maps a landing outcome to the supervisor-visible

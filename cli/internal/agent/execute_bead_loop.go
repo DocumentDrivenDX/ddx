@@ -1993,7 +1993,8 @@ func isValidImplementationAttempt(report ExecuteBeadReport) bool {
 	switch report.Status {
 	case ExecuteBeadStatusReviewMalfunction,
 		ExecuteBeadStatusDeclinedNeedsDecomposition,
-		ExecuteBeadStatusLandConflictNeedsHuman:
+		ExecuteBeadStatusLandConflictNeedsHuman,
+		ExecuteBeadStatusReviewTerminalBlock:
 		return false
 	}
 	// Without a BaseRev the implementer never had a commit baseline.

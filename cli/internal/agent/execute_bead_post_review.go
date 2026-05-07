@@ -175,6 +175,11 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 				Source:    "ddx agent execute-loop",
 				CreatedAt: now().UTC(),
 			})
+			_ = in.Store.Update(in.Bead.ID, func(b *bead.Bead) {
+				if !HasBeadLabel(b.Labels, TriageNeedsHumanLabel) {
+					b.Labels = append(b.Labels, TriageNeedsHumanLabel)
+				}
+			})
 			parkUntil := now().UTC().Add(CapLoopCooldown(MaxLoopCooldown))
 			_ = in.Store.SetExecutionCooldown(in.Bead.ID, parkUntil, "review-manual-required", class)
 		} else {
@@ -278,6 +283,14 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			Source:    "ddx agent execute-loop",
 			CreatedAt: now().UTC(),
 		})
+		if terminalClass := classifyTerminalReviewBlock(reviewRes); terminalClass != "" {
+			applyTerminalReviewBlock(in.Store, in.Bead.ID, in.Assignee, now().UTC(), terminalClass, report.ResultRev)
+			report.Status = ExecuteBeadStatusReviewTerminalBlock
+			report.Detail = "pre-close review: terminal " + terminalClass
+			out.Report = report
+			out.Approved = false
+			return out
+		}
 		report.Status = ExecuteBeadStatusReviewBlock
 		report.Detail = "pre-close review: BLOCK (flagged for human)"
 		out.Approved = false
