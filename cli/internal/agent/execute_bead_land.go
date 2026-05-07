@@ -676,6 +676,20 @@ func (RealLandingGitOps) DiffNameOnly(dir, base, tip string) ([]string, error) {
 
 // FetchOriginAncestryCheck implements LandingGitOps.FetchOriginAncestryCheck.
 func (RealLandingGitOps) FetchOriginAncestryCheck(dir, targetBranch string) (PreClaimResult, error) {
+	var result PreClaimResult
+	err := withMainGitLock(dir, func() error {
+		var checkErr error
+		result, checkErr = fetchOriginAncestryCheckLocked(dir, targetBranch)
+		return checkErr
+	})
+	return result, err
+}
+
+func fetchOriginAncestryCheckLocked(dir, targetBranch string) (PreClaimResult, error) {
+	if err := ensureLandingWorktreeReady(dir, targetBranch); err != nil {
+		return PreClaimResult{}, err
+	}
+
 	// Step 1: check for origin remote.
 	out, err := internalgit.Command(context.Background(), dir, "remote", "get-url", "origin").CombinedOutput()
 	if err != nil {
