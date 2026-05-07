@@ -1,0 +1,424 @@
+package agent
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"testing"
+	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestExecuteBeadWorkerConcurrentPreClaimIntakeRunsOncePerBead is AC #1:
+// With two concurrent workers on one ready bead, only the worker that wins
+// Store.Claim invokes the model-backed PreClaimIntakeHook. The loser loses at
+// Claim (picker.claim_race), never reaches intake, and moves on.
+func TestExecuteBeadWorkerConcurrentPreClaimIntakeRunsOncePerBead(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+	only := &bead.Bead{ID: "ddx-concurrent-intake", Title: "concurrent intake", Priority: 0}
+	require.NoError(t, store.Create(only))
+
+	var intakeCalls atomic.Int32
+
+	// Intake hook blocks so that Worker B has time to lose the Claim race
+	// before Worker A's intake returns.
+	intakeStarted := make(chan struct{}, 1)
+	intakeRelease := make(chan struct{})
+
+	makeRuntime := func(assignee string) (config.ResolvedConfig, ExecuteBeadLoopRuntime) {
+		opts := config.TestLoopConfigOpts{Assignee: assignee}
+		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
+		rt := ExecuteBeadLoopRuntime{
+			Once: true,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				intakeCalls.Add(1)
+				select {
+				case intakeStarted <- struct{}{}:
+				default:
+				}
+				select {
+				case <-intakeRelease:
+				case <-ctx.Done():
+				}
+				return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
+			},
+		}
+		return rcfg, rt
+	}
+
+	executor := ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+		return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, ResultRev: "rev"}, nil
+	})
+	workerA := &ExecuteBeadWorker{Store: store, Executor: executor}
+	workerB := &ExecuteBeadWorker{Store: store, Executor: executor}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		rcfg, rt := makeRuntime("worker-a")
+		_, _ = workerA.Run(context.Background(), rcfg, rt)
+	}()
+	go func() {
+		defer wg.Done()
+		rcfg, rt := makeRuntime("worker-b")
+		_, _ = workerB.Run(context.Background(), rcfg, rt)
+	}()
+
+	// Wait for exactly one intake invocation to start, then release it.
+	// If neither starts within 5s the test hangs on wg.Wait and fails via
+	// t.Cleanup timeout rather than silently passing.
+	select {
+	case <-intakeStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("intake hook never started — no worker claimed the bead")
+	}
+	close(intakeRelease)
+	wg.Wait()
+
+	assert.Equal(t, int32(1), intakeCalls.Load(),
+		"only the claiming worker must enter intake; the Claim-loser must not run the model-backed hook")
+}
+
+// TestExecuteBeadWorkerConcurrentPreDispatchLintDoesNotDuplicateEvents is AC #2:
+// Two concurrent workers on the same bead must not append duplicate
+// bead-quality.lint events. With claim-first ordering, only the owning worker
+// appends the lint event; the loser never reaches the lint gate.
+func TestExecuteBeadWorkerConcurrentPreDispatchLintDoesNotDuplicateEvents(t *testing.T) {
+	inner := bead.NewStore(t.TempDir())
+	require.NoError(t, inner.Init())
+	only := &bead.Bead{ID: "ddx-concurrent-lint", Title: "concurrent lint", Priority: 0}
+	require.NoError(t, inner.Create(only))
+
+	// Lint hook blocks to widen the concurrency window.
+	lintStarted := make(chan struct{}, 1)
+	lintRelease := make(chan struct{})
+
+	makeRuntime := func(assignee string) (config.ResolvedConfig, ExecuteBeadLoopRuntime) {
+		opts := config.TestLoopConfigOpts{Assignee: assignee}
+		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
+		rt := ExecuteBeadLoopRuntime{
+			Once: true,
+			PreDispatchLintHook: func(ctx context.Context, beadID string) (LintResult, error) {
+				select {
+				case lintStarted <- struct{}{}:
+				default:
+				}
+				select {
+				case <-lintRelease:
+				case <-ctx.Done():
+				}
+				return LintResult{Score: 9, Rationale: "ready"}, nil
+			},
+		}
+		return rcfg, rt
+	}
+
+	executor := ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+		return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, ResultRev: "rev"}, nil
+	})
+	workerA := &ExecuteBeadWorker{Store: inner, Executor: executor}
+	workerB := &ExecuteBeadWorker{Store: inner, Executor: executor}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		rcfg, rt := makeRuntime("worker-a")
+		_, _ = workerA.Run(context.Background(), rcfg, rt)
+	}()
+	go func() {
+		defer wg.Done()
+		rcfg, rt := makeRuntime("worker-b")
+		_, _ = workerB.Run(context.Background(), rcfg, rt)
+	}()
+
+	select {
+	case <-lintStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("lint hook never started")
+	}
+	close(lintRelease)
+	wg.Wait()
+
+	events, err := inner.Events(only.ID)
+	require.NoError(t, err)
+	var lintEvents []bead.BeadEvent
+	for _, ev := range events {
+		if ev.Kind == "bead-quality.lint" {
+			lintEvents = append(lintEvents, ev)
+		}
+	}
+	assert.Equal(t, 1, len(lintEvents),
+		"exactly one bead-quality.lint event must be appended; concurrent workers must not duplicate it")
+}
+
+// TestPreClaimIntakeRewriteRequiresOwnedReservation is AC #3:
+// With actionable_but_rewritten intake, only the claiming worker applies
+// description/acceptance rewrites. Concurrent losers cannot double-rewrite
+// or append conflicting events because they never reach applyPreClaimIntakeRewrite.
+func TestPreClaimIntakeRewriteRequiresOwnedReservation(t *testing.T) {
+	inner := bead.NewStore(t.TempDir())
+	require.NoError(t, inner.Init())
+
+	original := &bead.Bead{
+		ID:          "ddx-rewrite-concurrent",
+		Title:       "rewrite ownership",
+		Priority:    0,
+		Description: "PROBLEM\noriginal problem\n\nROOT CAUSE\noriginal cause\n\nPROPOSED FIX\noriginal fix\n",
+		Acceptance:  "1. original criterion\n2. name the test",
+	}
+	require.NoError(t, inner.Create(original))
+
+	var rewriteCalls atomic.Int32
+	rewriteStarted := make(chan struct{}, 1)
+	rewriteRelease := make(chan struct{})
+
+	makeRuntime := func(assignee string) (config.ResolvedConfig, ExecuteBeadLoopRuntime) {
+		opts := config.TestLoopConfigOpts{Assignee: assignee}
+		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
+		rt := ExecuteBeadLoopRuntime{
+			Once: true,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				rewriteCalls.Add(1)
+				select {
+				case rewriteStarted <- struct{}{}:
+				default:
+				}
+				select {
+				case <-rewriteRelease:
+				case <-ctx.Done():
+				}
+				return PreClaimIntakeResult{
+					Outcome: PreClaimIntakeActionableButRewritten,
+					Detail:  "safe refinement",
+					Rewrite: PreClaimIntakeRewrite{
+						Description:   "PROBLEM\noriginal problem\n\nROOT CAUSE\noriginal cause\n\nPROPOSED FIX\noriginal fix\n\nAdd explicit validation step.",
+						Acceptance:    "1. original criterion\n2. name the test\n3. lefthook run pre-commit passes",
+						ChangedFields: []string{"description", "acceptance"},
+					},
+				}, nil
+			},
+		}
+		return rcfg, rt
+	}
+
+	executor := ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+		return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, ResultRev: "rev"}, nil
+	})
+	workerA := &ExecuteBeadWorker{Store: inner, Executor: executor}
+	workerB := &ExecuteBeadWorker{Store: inner, Executor: executor}
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		rcfg, rt := makeRuntime("worker-a")
+		_, _ = workerA.Run(context.Background(), rcfg, rt)
+	}()
+	go func() {
+		defer wg.Done()
+		rcfg, rt := makeRuntime("worker-b")
+		_, _ = workerB.Run(context.Background(), rcfg, rt)
+	}()
+
+	select {
+	case <-rewriteStarted:
+	case <-time.After(5 * time.Second):
+		t.Fatal("intake hook never started")
+	}
+	close(rewriteRelease)
+	wg.Wait()
+
+	// Only the claiming worker runs intake and reaches the rewrite path.
+	assert.Equal(t, int32(1), rewriteCalls.Load(),
+		"only the claiming worker must run the rewrite intake hook; concurrent losers must not reach it")
+
+	// The description must be rewritten exactly once: contains the added
+	// text but does not contain it twice (no double-rewrite).
+	got, err := inner.Get(original.ID)
+	require.NoError(t, err)
+	count := strings.Count(got.Description, "Add explicit validation step.")
+	assert.Equal(t, 1, count,
+		"description must be rewritten exactly once; double-rewrite would indicate a concurrent write")
+
+	// Exactly one intake-rewritten event must exist.
+	events, err := inner.Events(original.ID)
+	require.NoError(t, err)
+	var rewriteEvents int
+	for _, ev := range events {
+		if ev.Kind == "intake-rewritten" {
+			rewriteEvents++
+		}
+	}
+	assert.Equal(t, 1, rewriteEvents,
+		"exactly one intake-rewritten event must be recorded; duplicates indicate concurrent rewrite")
+}
+
+// TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim is AC #4:
+// Covers the post-claim outcomes when intake or lint rejects the bead:
+//   - infra error: fail-open, proceed to execution
+//   - ambiguous_needs_human: park bead (needs_human label) and unclaim
+//   - lint-blocked: unclaim bead, no execution
+//   - actionable_atomic: proceed to implementation normally
+func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
+	t.Run("intake_infra_error_proceeds_to_execution", func(t *testing.T) {
+		store, candidate, _ := newExecuteLoopTestStore(t)
+		var execCalled atomic.Int32
+		worker := &ExecuteBeadWorker{
+			Store: store,
+			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+				execCalled.Add(1)
+				return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, ResultRev: "rev"}, nil
+			}),
+		}
+		opts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
+
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once: true,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				return PreClaimIntakeResult{}, fmt.Errorf("intake service timeout")
+			},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		assert.Equal(t, int32(1), execCalled.Load(), "infra error must fail open and proceed to execution")
+		assert.Equal(t, 1, result.Successes)
+
+		got, err := store.Get(candidate.ID)
+		require.NoError(t, err)
+		assert.Equal(t, bead.StatusClosed, got.Status, "bead must be closed after successful execution")
+	})
+
+	t.Run("ambiguous_needs_human_parks_and_unclaims", func(t *testing.T) {
+		store, candidate, _ := newExecuteLoopTestStore(t)
+		var eventSink bytes.Buffer
+		worker := &ExecuteBeadWorker{
+			Store: store,
+			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+				t.Fatal("executor must not run for terminal intake outcomes")
+				return ExecuteBeadReport{}, nil
+			}),
+		}
+		opts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
+
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once:      true,
+			EventSink: &eventSink,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				return PreClaimIntakeResult{
+					Outcome: PreClaimIntakeAmbiguousNeedsHuman,
+					Detail:  "missing root cause with file:line",
+				}, nil
+			},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		assert.Equal(t, 0, result.Attempts, "terminal intake outcome must not count as an attempt")
+
+		// Bead must be back to open (unclaimed) with needs_human label.
+		got, err := store.Get(candidate.ID)
+		require.NoError(t, err)
+		assert.Equal(t, bead.StatusOpen, got.Status, "bead must be unclaimed after terminal intake")
+		assert.Contains(t, got.Labels, bead.LabelNeedsHuman,
+			"terminal intake outcome must park bead with needs_human label")
+
+		// An intake.blocked event must be recorded on the bead.
+		events, err := store.Events(candidate.ID)
+		require.NoError(t, err)
+		var foundBlocked bool
+		for _, ev := range events {
+			if ev.Kind != "intake.blocked" {
+				continue
+			}
+			foundBlocked = true
+			var body map[string]any
+			require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+			assert.Equal(t, string(PreClaimIntakeAmbiguousNeedsHuman), body["intake_outcome"])
+		}
+		assert.True(t, foundBlocked, "an intake.blocked event must be recorded when bead is parked")
+
+		// The event stream must contain pre_claim_intake.blocked.
+		assert.Contains(t, eventSink.String(), "pre_claim_intake.blocked")
+	})
+
+	t.Run("lint_blocked_unclaims_without_execution", func(t *testing.T) {
+		store, candidate, _ := newExecuteLoopTestStore(t)
+		var eventSink bytes.Buffer
+		worker := &ExecuteBeadWorker{
+			Store: store,
+			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+				t.Fatal("executor must not run when lint blocks dispatch")
+				return ExecuteBeadReport{}, nil
+			}),
+		}
+
+		opts := config.TestLoopConfigOpts{
+			Assignee:                           "worker",
+			BeadQualityLintBlockThresholdScore: 7,
+		}
+		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
+
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once:      true,
+			EventSink: &eventSink,
+			PreDispatchLintHook: func(ctx context.Context, beadID string) (LintResult, error) {
+				return LintResult{Score: 4, Rationale: "incomplete AC"}, nil
+			},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		assert.Equal(t, 0, result.Attempts, "lint-blocked must not count as an attempt")
+
+		// Bead must be back to open (unclaimed).
+		got, err := store.Get(candidate.ID)
+		require.NoError(t, err)
+		assert.Equal(t, bead.StatusOpen, got.Status, "bead must be unclaimed after lint block")
+
+		assert.Contains(t, eventSink.String(), "pre_dispatch_lint.blocked")
+	})
+
+	t.Run("actionable_atomic_proceeds_to_implementation", func(t *testing.T) {
+		store, candidate, _ := newExecuteLoopTestStore(t)
+		var execCalled atomic.Int32
+		worker := &ExecuteBeadWorker{
+			Store: store,
+			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+				execCalled.Add(1)
+				return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, ResultRev: "rev"}, nil
+			}),
+		}
+		opts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
+
+		result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once: true,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
+			},
+		})
+		require.NoError(t, err)
+		require.NotNil(t, result)
+
+		assert.Equal(t, int32(1), execCalled.Load(), "actionable_atomic must proceed to implementation")
+		assert.Equal(t, 1, result.Successes)
+
+		got, err := store.Get(candidate.ID)
+		require.NoError(t, err)
+		assert.Equal(t, bead.StatusClosed, got.Status)
+	})
+}

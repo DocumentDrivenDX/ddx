@@ -222,14 +222,15 @@ func TestRoutingPreflightDetailFormat(t *testing.T) {
 		"detail should carry model=qwen3; got %q", detail)
 }
 
-func TestLoop_LintHook_FiresPreClaim(t *testing.T) {
+func TestLoop_LintHook_FiresAfterClaim(t *testing.T) {
 	inner, _, _ := newExecuteLoopTestStore(t)
 	var hookSeen int32
 	store := &claimCountingStore{
 		Store: inner,
 		beforeClaim: func() {
-			if atomic.LoadInt32(&hookSeen) == 0 {
-				t.Fatal("PreDispatchLintHook must run before Claim")
+			// Claim now runs before lint: the hook must NOT have fired yet.
+			if atomic.LoadInt32(&hookSeen) != 0 {
+				t.Fatal("Claim must run before PreDispatchLintHook")
 			}
 		},
 	}
@@ -354,7 +355,9 @@ func TestLintHook_BlockMode_RefusesDispatchOnLowScore(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	assert.Equal(t, int32(0), atomic.LoadInt32(&store.claimCalls), "blocked lint must prevent Claim")
+	// Claim now runs before lint; for lint-blocked the bead is claimed then
+	// immediately unclaimed. claimCalls == 1 but execution does not proceed.
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "claim runs before lint check; blocked lint unclaims")
 	assert.Contains(t, log.String(), "bead-lifecycle")
 	assert.Contains(t, log.String(), "MODE: lint")
 	assert.Contains(t, loop.String(), "pre_dispatch_lint.blocked")

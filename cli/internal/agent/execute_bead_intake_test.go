@@ -95,7 +95,7 @@ func TestIntake_InfrastructureErrorFailsOpen(t *testing.T) {
 	assert.Contains(t, eventSink.String(), "intake service unavailable")
 }
 
-func TestIntake_HookRunsBeforeClaim(t *testing.T) {
+func TestIntake_HookRunsAfterClaim(t *testing.T) {
 	inner, _, _ := newExecuteLoopTestStore(t)
 	var preflightSeen int32
 	var intakeSeen int32
@@ -105,8 +105,9 @@ func TestIntake_HookRunsBeforeClaim(t *testing.T) {
 			if atomic.LoadInt32(&preflightSeen) == 0 {
 				t.Fatal("route preflight must run before Claim")
 			}
-			if atomic.LoadInt32(&intakeSeen) == 0 {
-				t.Fatal("PreClaimIntakeHook must run before Claim")
+			// Claim now happens BEFORE intake: intake must NOT have run yet.
+			if atomic.LoadInt32(&intakeSeen) != 0 {
+				t.Fatal("Claim must run before PreClaimIntakeHook")
 			}
 		},
 	}
@@ -136,6 +137,9 @@ func TestIntake_HookRunsBeforeClaim(t *testing.T) {
 			if atomic.LoadInt32(&preflightSeen) == 0 {
 				t.Fatal("PreClaimIntakeHook must run after route preflight")
 			}
+			if atomic.LoadInt32(&store.claimCalls) == 0 {
+				t.Fatal("PreClaimIntakeHook must run after Claim")
+			}
 			atomic.StoreInt32(&intakeSeen, 1)
 			return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
 		},
@@ -145,7 +149,7 @@ func TestIntake_HookRunsBeforeClaim(t *testing.T) {
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&preflightSeen), "route preflight must run")
 	assert.Equal(t, int32(1), atomic.LoadInt32(&intakeSeen), "intake hook must run")
-	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "Claim must run after preflight and intake")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "Claim must run before intake")
 }
 
 func TestIntake_NonAtomicSkipsClaim(t *testing.T) {
@@ -178,7 +182,10 @@ func TestIntake_NonAtomicSkipsClaim(t *testing.T) {
 	require.NotNil(t, result)
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&intakeCalls))
-	assert.Equal(t, int32(0), atomic.LoadInt32(&store.claimCalls), "non-atomic intake must skip Claim")
+	// Claim now happens before intake; for terminal outcomes the bead is
+	// claimed then immediately unclaimed, so claimCalls == 1 but the bead
+	// returns to StatusOpen and execution does not proceed.
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "claim must run before intake check")
 	assert.Equal(t, 0, result.Attempts)
 
 	got, err := inner.Get("ddx-0001")
@@ -223,7 +230,7 @@ func TestIntake_ErrorContinuesToClaimWithoutParkingCandidate(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "intake errors must not block claim")
 	assert.Equal(t, 1, result.Attempts)
 	assert.Contains(t, log.String(), "pre-claim intake: starting "+candidate.ID)
-	assert.Contains(t, log.String(), "pre-claim intake warning: empty output (continuing to claim "+candidate.ID+")")
+	assert.Contains(t, log.String(), "pre-claim intake warning: empty output (continuing with "+candidate.ID+")")
 	assert.NotContains(t, log.String(), "pre-claim intake: pre-claim intake:")
 
 	got, err := inner.Get(candidate.ID)
@@ -286,26 +293,25 @@ func TestIntake_LogsStartBeforeHookReturns(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls))
 }
 
-func TestIntake_ActionableButRewritten_UpdatesBeforeClaim(t *testing.T) {
+func TestIntake_ActionableButRewritten_UpdatesAfterClaim(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
 		b.Description = "PROBLEM\nlegacy intake is vague\n\nROOT CAUSE\nmissing constraints\n\nPROPOSED FIX\nrewrite the bead\n\nNON-SCOPE\nchange no product semantics\n"
 		b.Acceptance = "1. preserve the original intent\n2. name the verification command"
 	}))
 
-	var claimSawRewrite int32
+	var claimSeenBeforeRewrite int32
 	store := &claimCountingStore{
 		Store: inner,
 		beforeClaim: func() {
+			// Claim now happens BEFORE intake, so the description must NOT
+			// be rewritten yet when beforeClaim is called.
 			got, err := inner.Get(candidate.ID)
 			require.NoError(t, err)
-			if !strings.Contains(got.Description, "Add an explicit validation step.") {
-				t.Fatalf("description must be rewritten before Claim; got %q", got.Description)
+			if strings.Contains(got.Description, "Add an explicit validation step.") {
+				t.Fatalf("description must NOT be rewritten before Claim; got %q", got.Description)
 			}
-			if !strings.Contains(got.Acceptance, "lefthook run pre-commit") {
-				t.Fatalf("acceptance must be rewritten before Claim; got %q", got.Acceptance)
-			}
-			atomic.StoreInt32(&claimSawRewrite, 1)
+			atomic.StoreInt32(&claimSeenBeforeRewrite, 1)
 		},
 	}
 
@@ -344,7 +350,7 @@ func TestIntake_ActionableButRewritten_UpdatesBeforeClaim(t *testing.T) {
 	require.NotNil(t, result)
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "rewritten intake must still proceed to Claim")
-	assert.Equal(t, int32(1), atomic.LoadInt32(&claimSawRewrite), "rewrite must land before Claim")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&claimSeenBeforeRewrite), "claim must happen before rewrite")
 	assert.Equal(t, 1, result.Attempts)
 	assert.Equal(t, 1, result.Successes)
 
@@ -412,7 +418,10 @@ func TestIntake_UnsafeRewriteBlocksForHuman(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	assert.Equal(t, int32(0), atomic.LoadInt32(&store.claimCalls), "unsafe rewrite must not proceed to Claim")
+	// Claim now happens before intake; for unsafe rewrites the bead is
+	// claimed then immediately unclaimed, so claimCalls == 1 but execution
+	// does not proceed and the bead description/acceptance must be unchanged.
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "claim runs before intake check")
 	assert.Contains(t, eventSink.String(), "pre_claim_intake.blocked")
 	assert.Contains(t, eventSink.String(), "ambiguous_needs_human")
 	assert.Equal(t, 0, result.Attempts)

@@ -680,133 +680,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 			continue
 		}
-		// Pre-claim intake runs after routing preflight and before the
-		// existing lint gate so actionability/scope decisions can stop a
-		// bead before we spend work on the claim/execute path.
-		if runtime.PreClaimIntakeHook != nil {
-			if runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake: starting %s\n", candidate.ID)
-			}
-			emit("pre_claim_intake.start", map[string]any{
-				"bead_id": candidate.ID,
-			})
-			emitProgress(runtime.ProgressCh, ProgressEvent{
-				EventID:   "evt-" + randomProgressID(),
-				WorkerID:  runtime.WorkerID,
-				ProjectID: runtime.ProjectRoot,
-				BeadID:    candidate.ID,
-				Phase:     "pre_claim_intake",
-				Heartbeat: true,
-				TS:        now().UTC(),
-				Message:   "pre-claim intake",
-			})
-			intakeResult, intakeErr := runtime.PreClaimIntakeHook(ctx, candidate.ID)
-			intakeOutcome := intakeResult.normalizedOutcome()
-			switch {
-			case intakeErr != nil:
-				warning := trimDiagnosticPrefix(intakeErr.Error(), "pre-claim intake")
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake warning: %s (continuing to claim %s)\n", warning, candidate.ID)
-				}
-				emit("pre_claim_intake.warn", map[string]any{
-					"bead_id": candidate.ID,
-					"outcome": string(PreClaimIntakeError),
-					"detail":  warning,
-				})
-			case intakeOutcome == PreClaimIntakeActionableAtomic:
-				// pass-through
-			case intakeOutcome == PreClaimIntakeActionableButRewritten:
-				if err := applyPreClaimIntakeRewrite(w.Store, candidate.ID, assignee, intakeResult, now().UTC()); err != nil {
-					warning := trimDiagnosticPrefix(err.Error(), "pre-claim intake rewrite")
-					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake rewrite: %s (skipping %s)\n", warning, candidate.ID)
-					}
-					emit("pre_claim_intake.blocked", map[string]any{
-						"bead_id": candidate.ID,
-						"outcome": string(PreClaimIntakeAmbiguousNeedsHuman),
-						"detail":  warning,
-					})
-					if runtime.Once {
-						exitReason = "once_complete"
-						return result, nil
-					}
-					continue
-				}
-			case intakeOutcome == PreClaimIntakeError:
-				warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
-				if warning == "" {
-					warning = "pre-claim intake returned intake_error"
-				}
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake warning: %s (continuing to claim %s)\n", warning, candidate.ID)
-				}
-				emit("pre_claim_intake.warn", map[string]any{
-					"bead_id": candidate.ID,
-					"outcome": string(PreClaimIntakeError),
-					"detail":  warning,
-				})
-			default:
-				warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
-				if warning == "" {
-					warning = string(intakeOutcome)
-				}
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake: %s (skipping %s)\n", warning, candidate.ID)
-				}
-				emit("pre_claim_intake.blocked", map[string]any{
-					"bead_id": candidate.ID,
-					"outcome": string(intakeOutcome),
-					"detail":  warning,
-				})
-				if runtime.Once {
-					exitReason = "once_complete"
-					return result, nil
-				}
-				continue
-			}
-		}
-
-		if runtime.PreDispatchLintHook != nil {
-			lintResult, lintErr := runtime.PreDispatchLintHook(ctx, candidate.ID)
-			lintThreshold := rcfg.BeadQualityLintBlockThresholdScore()
-			appendPreDispatchLintEvent(w.Store, candidate.ID, lintResult, lintErr, lintThreshold, assignee, now().UTC())
-
-			if lintErr != nil {
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "pre-dispatch lint: %v (continuing to claim %s)\n", lintErr, candidate.ID)
-				}
-				emit("pre_dispatch_lint.warn", map[string]any{
-					"bead_id": candidate.ID,
-					"warning": lintErr.Error(),
-				})
-			} else if lintThreshold > 0 && lintResult.Score < lintThreshold {
-				blockMsg := fmt.Sprintf(
-					"pre-dispatch lint blocked dispatch for %s: score=%d below threshold=%d; see bead-lifecycle MODE: lint guidance in .agents/skills/ddx/bead-lifecycle/SKILL.md",
-					candidate.ID, lintResult.Score, lintThreshold,
-				)
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintln(runtime.Log, blockMsg)
-				}
-				emit("pre_dispatch_lint.blocked", map[string]any{
-					"bead_id":          candidate.ID,
-					"score":            lintResult.Score,
-					"threshold_score":  lintThreshold,
-					"skill":            "bead-lifecycle",
-					"skill_path":       ".agents/skills/ddx/bead-lifecycle/SKILL.md",
-					"dispatch_skipped": true,
-					"warning_mode":     false,
-					"rationale":        lintResult.Rationale,
-					"suggested_fixes":  lintResult.SuggestedFixes,
-					"waivers_applied":  lintResult.WaiversApplied,
-				})
-				if runtime.Once {
-					exitReason = "once_complete"
-					return result, nil
-				}
-				continue
-			}
-		}
-
+		// Claim atomically before model-backed intake and lint to prevent
+		// concurrent workers from issuing duplicate model calls or appending
+		// duplicate lint events for the same bead. Terminal non-actionable
+		// outcomes unclaim and park the bead rather than proceeding to execution.
 		if err := w.Store.Claim(candidate.ID, assignee); err != nil {
 			// Another worker won the race for this bead. Emit a structured
 			// claim_race event so concurrent-worker losses are observable
@@ -834,6 +711,143 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				_, _ = fmt.Fprintf(runtime.Log, "\n▶ %s: %s\n", candidate.ID, candidate.Title)
 			} else {
 				_, _ = fmt.Fprintf(runtime.Log, "\n▶ %s\n", candidate.ID)
+			}
+		}
+
+		// Pre-dispatch intake runs after claiming so that only the owning worker
+		// performs model-backed readiness evaluation. Concurrent workers that lose
+		// the claim race skip intake entirely (picker.claim_race above). Terminal
+		// non-actionable outcomes unclaim and park the bead so it does not
+		// re-appear in ReadyExecution until an operator reviews it.
+		if runtime.PreClaimIntakeHook != nil {
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake: starting %s\n", candidate.ID)
+			}
+			emit("pre_claim_intake.start", map[string]any{
+				"bead_id": candidate.ID,
+			})
+			emitProgress(runtime.ProgressCh, ProgressEvent{
+				EventID:   "evt-" + randomProgressID(),
+				WorkerID:  runtime.WorkerID,
+				ProjectID: runtime.ProjectRoot,
+				BeadID:    candidate.ID,
+				Phase:     "pre_claim_intake",
+				Heartbeat: true,
+				TS:        now().UTC(),
+				Message:   "pre-claim intake",
+			})
+			intakeResult, intakeErr := runtime.PreClaimIntakeHook(ctx, candidate.ID)
+			intakeOutcome := intakeResult.normalizedOutcome()
+			switch {
+			case intakeErr != nil:
+				warning := trimDiagnosticPrefix(intakeErr.Error(), "pre-claim intake")
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake warning: %s (continuing with %s)\n", warning, candidate.ID)
+				}
+				emit("pre_claim_intake.warn", map[string]any{
+					"bead_id": candidate.ID,
+					"outcome": string(PreClaimIntakeError),
+					"detail":  warning,
+				})
+			case intakeOutcome == PreClaimIntakeActionableAtomic:
+				// pass-through
+			case intakeOutcome == PreClaimIntakeActionableButRewritten:
+				if err := applyPreClaimIntakeRewrite(w.Store, candidate.ID, assignee, intakeResult, now().UTC()); err != nil {
+					warning := trimDiagnosticPrefix(err.Error(), "pre-claim intake rewrite")
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake rewrite: %s (releasing %s)\n", warning, candidate.ID)
+					}
+					emit("pre_claim_intake.blocked", map[string]any{
+						"bead_id": candidate.ID,
+						"outcome": string(PreClaimIntakeAmbiguousNeedsHuman),
+						"detail":  warning,
+					})
+					_ = w.Store.Unclaim(candidate.ID)
+					if runtime.Once {
+						exitReason = "once_complete"
+						return result, nil
+					}
+					continue
+				}
+			case intakeOutcome == PreClaimIntakeError:
+				warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
+				if warning == "" {
+					warning = "pre-claim intake returned intake_error"
+				}
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake warning: %s (continuing with %s)\n", warning, candidate.ID)
+				}
+				emit("pre_claim_intake.warn", map[string]any{
+					"bead_id": candidate.ID,
+					"outcome": string(PreClaimIntakeError),
+					"detail":  warning,
+				})
+			default:
+				// Terminal non-actionable outcome: park with needs_human label so
+				// ReadyExecution filters this bead until an operator reviews it.
+				warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
+				if warning == "" {
+					warning = string(intakeOutcome)
+				}
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake: %s (releasing %s)\n", warning, candidate.ID)
+				}
+				emit("pre_claim_intake.blocked", map[string]any{
+					"bead_id": candidate.ID,
+					"outcome": string(intakeOutcome),
+					"detail":  warning,
+				})
+				if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, intakeOutcome, intakeResult.Detail, now().UTC()); berr != nil && runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake park error: %v\n", berr)
+				}
+				_ = w.Store.Unclaim(candidate.ID)
+				if runtime.Once {
+					exitReason = "once_complete"
+					return result, nil
+				}
+				continue
+			}
+		}
+
+		if runtime.PreDispatchLintHook != nil {
+			lintResult, lintErr := runtime.PreDispatchLintHook(ctx, candidate.ID)
+			lintThreshold := rcfg.BeadQualityLintBlockThresholdScore()
+			appendPreDispatchLintEvent(w.Store, candidate.ID, lintResult, lintErr, lintThreshold, assignee, now().UTC())
+
+			if lintErr != nil {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "pre-dispatch lint: %v (continuing with %s)\n", lintErr, candidate.ID)
+				}
+				emit("pre_dispatch_lint.warn", map[string]any{
+					"bead_id": candidate.ID,
+					"warning": lintErr.Error(),
+				})
+			} else if lintThreshold > 0 && lintResult.Score < lintThreshold {
+				blockMsg := fmt.Sprintf(
+					"pre-dispatch lint blocked dispatch for %s: score=%d below threshold=%d; see bead-lifecycle MODE: lint guidance in .agents/skills/ddx/bead-lifecycle/SKILL.md",
+					candidate.ID, lintResult.Score, lintThreshold,
+				)
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintln(runtime.Log, blockMsg)
+				}
+				emit("pre_dispatch_lint.blocked", map[string]any{
+					"bead_id":          candidate.ID,
+					"score":            lintResult.Score,
+					"threshold_score":  lintThreshold,
+					"skill":            "bead-lifecycle",
+					"skill_path":       ".agents/skills/ddx/bead-lifecycle/SKILL.md",
+					"dispatch_skipped": true,
+					"warning_mode":     false,
+					"rationale":        lintResult.Rationale,
+					"suggested_fixes":  lintResult.SuggestedFixes,
+					"waivers_applied":  lintResult.WaiversApplied,
+				})
+				_ = w.Store.Unclaim(candidate.ID)
+				if runtime.Once {
+					exitReason = "once_complete"
+					return result, nil
+				}
+				continue
 			}
 		}
 
@@ -1896,6 +1910,28 @@ func classifyLoopReportFailure(report *ExecuteBeadReport) {
 		report.Disrupted = true
 		report.DisruptionReason = FailureModeLockContention
 	}
+}
+
+// parkBeadPostIntakeRejection adds the needs_human label and appends an
+// intake.blocked event so the bead is filtered from ReadyExecution until an
+// operator reviews the intake decision. It does not unclaim — the caller must
+// call Unclaim after this returns (whether or not parking succeeds).
+func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, beadID, actor string, outcome PreClaimIntakeOutcome, detail string, at time.Time) error {
+	if err := addBeadLabel(store, beadID, bead.LabelNeedsHuman); err != nil {
+		return err
+	}
+	body, _ := json.Marshal(map[string]any{
+		"intake_outcome": string(outcome),
+		"detail":         detail,
+	})
+	return store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "intake.blocked",
+		Summary:   string(outcome),
+		Body:      string(body),
+		Actor:     actor,
+		Source:    "ddx agent execute-loop",
+		CreatedAt: at,
+	})
 }
 
 // addBeadLabel mutates the bead in place to add a label idempotently. The
