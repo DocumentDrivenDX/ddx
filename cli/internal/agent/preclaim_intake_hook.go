@@ -86,8 +86,8 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 		}
 		if rcfg.MaxPower() > 0 && strongMinPower >= rcfg.MaxPower() {
 			return PreClaimIntakeResult{
-				Outcome: PreClaimIntakeAmbiguousNeedsHuman,
-				Detail:  fmt.Sprintf("agent_power_unsatisfied: pre-claim intake requires min_power=%d but max_power=%d", strongMinPower, rcfg.MaxPower()),
+				Outcome: PreClaimIntakeActionableAtomic,
+				Detail:  fmt.Sprintf("pre-claim intake skipped: route pins cannot satisfy intake min_power=%d max_power=%d", strongMinPower, rcfg.MaxPower()),
 			}, nil
 		}
 
@@ -104,8 +104,8 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 		if err != nil {
 			if isStrongPowerUnsatisfiedError(err) {
 				return PreClaimIntakeResult{
-					Outcome: PreClaimIntakeAmbiguousNeedsHuman,
-					Detail:  "agent_power_unsatisfied: " + err.Error(),
+					Outcome: PreClaimIntakeActionableAtomic,
+					Detail:  "pre-claim intake skipped: " + trimDiagnosticPrefix(err.Error(), "pre-claim intake"),
 				}, nil
 			}
 			return PreClaimIntakeResult{}, err

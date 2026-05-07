@@ -252,7 +252,7 @@ func TestDecompositionHook_PreservesPassthroughConstraints(t *testing.T) {
 	assert.GreaterOrEqual(t, svc.lastReq.MinPower, 96)
 }
 
-func TestDecompositionHook_StrongPowerUnsatisfiedBlocks(t *testing.T) {
+func TestDecompositionHook_StrongPowerUnsatisfiedSkipsIntake(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
@@ -266,12 +266,12 @@ func TestDecompositionHook_StrongPowerUnsatisfiedBlocks(t *testing.T) {
 	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
 	got, err := hook(context.Background(), b.ID)
 	require.NoError(t, err)
-	assert.Equal(t, PreClaimIntakeAmbiguousNeedsHuman, got.Outcome)
-	assert.Contains(t, got.Detail, "agent_power_unsatisfied")
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Contains(t, got.Detail, "pre-claim intake skipped")
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 }
 
-func TestDecompositionHook_StrongMinPowerAboveMaxPowerBlocksBeforeDispatch(t *testing.T) {
+func TestDecompositionHook_StrongMinPowerAboveMaxPowerSkipsBeforeDispatch(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
@@ -290,11 +290,35 @@ func TestDecompositionHook_StrongMinPowerAboveMaxPowerBlocksBeforeDispatch(t *te
 	hook := NewPreClaimIntakeHook(root, store, rcfg, svc, nil)
 	got, err := hook(context.Background(), b.ID)
 	require.NoError(t, err)
-	assert.Equal(t, PreClaimIntakeAmbiguousNeedsHuman, got.Outcome)
-	assert.Contains(t, got.Detail, "agent_power_unsatisfied")
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Contains(t, got.Detail, "pre-claim intake skipped")
 	assert.Contains(t, got.Detail, "min_power=90")
 	assert.Contains(t, got.Detail, "max_power=8")
 	assert.Equal(t, int32(0), atomic.LoadInt32(&svc.executeCalls), "invalid power envelope must not reach Fizeau")
+}
+
+func TestDecompositionHook_RoutePinsUnsatisfiedSkipsIntake(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+
+	svc := &preClaimIntakeHookServiceStub{
+		executeErr: fmt.Errorf("runner error: ResolveRoute: no viable routing candidate for pins min_power=7 max_power=8: 3 candidates rejected"),
+	}
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
+		Model: "claude-sonnet-4-6",
+	}).Resolve(config.CLIOverrides{
+		Harness:  "claude",
+		MinPower: 7,
+		MaxPower: 8,
+	})
+
+	hook := NewPreClaimIntakeHook(root, store, rcfg, svc, nil)
+	got, err := hook(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Contains(t, got.Detail, "pre-claim intake skipped")
+	assert.Contains(t, got.Detail, "no viable routing candidate for pins")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 }
 
 func TestIntakeResultPayload_EmptyOutputPreservesRunnerError(t *testing.T) {
