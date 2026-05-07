@@ -1,0 +1,2 @@
+LoadState | DELETE | stale initial-violations entry; current tree has no `func LoadState` in `cli/internal/federation`, and production hub persistence uses `LoadStateFrom` from `cli/internal/server/federation_hub.go`.
+SaveState | DELETE | stale initial-violations entry; current tree has no `func SaveState` in `cli/internal/federation`, and production hub persistence uses `SaveStateTo` from `cli/internal/server/federation_hub.go`.
