@@ -1,0 +1,68 @@
+{
+  "attempt_id": "20260507T054628-fc523f66",
+  "bead_id": "ddx-a1ae37ff",
+  "base_rev": "23be1edbd481e99c01c90096348662aa4fdec33b",
+  "created_at": "2026-05-07T05:46:30.325019521Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-a1ae37ff",
+    "title": "agent: scope mechanical --no-verify commits (CommitTracker, AutoCommit) so leftover staged paths can't piggy-back",
+    "description": "PROBLEM\nDuring `ddx work` / `ddx agent execute-bead`, unrelated junk gets swept into mechanical \"tracker\" commits even though hooks correctly reject it on the visible commit path. Concrete instance: commit a2b37a405 (\"chore: update tracker (execute-bead 20260507T043117)\") committed a 12MB `.ddx/backups/beads-20260507T042910.jsonl` plus ~60 other unrelated paths, under a message that's supposed to mean \"I touched .ddx/beads.jsonl and nothing else.\"\n\nROOT CAUSE\nTwo unscoped --no-verify commit sites:\n\n- cli/internal/agent/execute_bead.go:1239-1252 (CommitTracker):\n    git add .ddx/beads.jsonl\n    git commit --no-verify -m msg\n  The git commit is unscoped — it commits everything currently in the index, not just the staged tracker file.\n\n- cli/internal/git/autocommit.go:67-75 (AutoCommit):\n    git add \u003cbasename\u003e\n    git commit --no-verify -m message\n  Same shape. Used by bead create/claim/update/close/migrate/archive.\n\nLeak chain: pre-checkpoint SynthesizeCommit(projectRoot, ...) at execute_bead.go:734 runs `git add -A .` in the parent repo. If lefthook (e.g. large-files) rejects, the index stays populated. The next CommitTracker or AutoCommit runs `git commit --no-verify`, bypassing hooks and committing the leftover index wholesale.\n\n`--no-verify` is intentional for mechanical commits (avoids running go test on every bead status change). Scoping is what's missing.\n\nPROPOSED FIX\n- cli/internal/agent/execute_bead.go:1249 → `git commit --no-verify --only -- .ddx/beads.jsonl -m msg`. `--only -- \u003cpath\u003e` commits that path only and leaves the rest of the index untouched.\n- cli/internal/git/autocommit.go:73 → `git commit --no-verify --only -- \u003cbasename\u003e -m message`.\n- The pre-stage `git add` lines may stay (defense in depth) or be dropped (`--only` stages from working tree implicitly). Either is fine; do not remove the byte-identical-to-HEAD bail at execute_bead.go:1246.\n- Add regression tests (see AC).\n\nNON-SCOPE\n- Removing the existing 12MB blob from git history (force-push decision; out of band).\n- .gitignore entry for .ddx/backups/ (defense-in-depth, may be addressed separately; the invariant being fixed here must not depend on which directories are gitignored).\n- Architectural change to run tracker writes inside the worker worktree (epic-shaped; see INTERSECTIONS).\n- SynthesizeCommit's `git add -A` semantics (intentionally broad, gated by hooks; correct as-is).\n\nINTERSECTIONS\n- ddx-55f05e07 (closed): \"Keep execute-bead checkpoint bases free of unrelated DDx runtime churn\" — same problem class for the checkpoint commit; did not cover --no-verify commits.\n- Architectural follow-up (separate bead, not this one): consider running tracker writes inside the worker worktree so the parent repo is never the commit context for ddx-internal mechanical commits — would make this whole class of leak structurally impossible.",
+    "acceptance": "1. cli/internal/agent/execute_bead.go CommitTracker invokes `git commit --no-verify --only -- .ddx/beads.jsonl -m \u003cmsg\u003e` (path-scoped). Verify by reading the file.\n2. cli/internal/git/autocommit.go AutoCommit invokes `git commit --no-verify --only -- \u003cbasename\u003e -m \u003cmsg\u003e`. Verify by reading the file.\n3. TestCommitTracker_IgnoresUnrelatedStagedPaths (new, cli/internal/agent/): set up a temp git repo with committed .ddx/beads.jsonl, modify it, then `git add` an unrelated 6MB file to the index, call CommitTracker, assert `git show --name-only HEAD` lists only `.ddx/beads.jsonl` AND the unrelated file is still listed by `git diff --cached --name-only`.\n4. TestAutoCommit_IgnoresUnrelatedStagedPaths (new, cli/internal/git/autocommit_test.go): same shape against AutoCommit(\"…/beads.jsonl\", \"beads\", \"test op\", AutoCommit=\"always\").\n5. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/git/... ./cmd/... green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-32b3008e",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:git",
+      "kind:bug",
+      "reliability",
+      "prevention",
+      "observed-failure"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T05:45:37Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1741846",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Strong bead. Title is imperative and names subsystem + change. Root cause cites four specific file:line references (execute_bead.go:1239-1252, execute_bead.go:734, execute_bead.go:1246, autocommit.go:67-75). Proposed fix names exact files and line numbers. Non-scope section is explicit and thorough. AC 3 and AC 4 name specific Test* functions with locations; AC 5 is the required `cd cli \\u0026\\u0026 go test` gate; AC 6 is the lefthook gate. Labels cover phase:2, area:agent, area:git, kind:bug, prevention, observed-failure. One gap: the bead has no `deps` field and no 'no deps' statement in the body — the rubric requires an explicit declaration either way.\",\"score\":7,\"suggested_fixes\":[\"Add an explicit 'Dependencies: none' line to the description (or a deps/blocked-by field) to satisfy the rubric requirement: 'State no deps if there are none.'\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T05:45:37.302067598Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=7"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-07T05:46:27.9942369Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260507T054537-19a90456\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":1,\"output_tokens\":72,\"total_tokens\":73,\"cost_usd\":0,\"duration_ms\":47818,\"exit_code\":143}",
+          "created_at": "2026-05-07T05:46:28.056449115Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=73 model=sonnet"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T05:45:37.405700027Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260507T054628-fc523f66",
+    "prompt": ".ddx/executions/20260507T054628-fc523f66/prompt.md",
+    "manifest": ".ddx/executions/20260507T054628-fc523f66/manifest.json",
+    "result": ".ddx/executions/20260507T054628-fc523f66/result.json",
+    "checks": ".ddx/executions/20260507T054628-fc523f66/checks.json",
+    "usage": ".ddx/executions/20260507T054628-fc523f66/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-a1ae37ff-20260507T054628-fc523f66"
+  },
+  "prompt_sha": "8f6d3d108ff909a9866dbce621b2c363ad69fbc9b10555d9ad4eea5087ba7e99"
+}
