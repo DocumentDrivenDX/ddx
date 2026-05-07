@@ -1,0 +1,149 @@
+{
+  "attempt_id": "20260507T155924-8708c7e2",
+  "bead_id": "ddx-36eb046c",
+  "base_rev": "501791cb0d70c4ba46f5b1938e2df4199e1897f6",
+  "created_at": "2026-05-07T15:59:25.97199947Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-36eb046c",
+    "title": "work: serialize model-backed readiness before claim races",
+    "description": "PROBLEM\n`ddx work` now runs model-backed bead readiness intake and bead-lifecycle lint after selecting a ready bead but before atomically claiming it. With two workers on the same project, both workers can select the same bead, both spend model calls on intake/lint, and both can append pre-dispatch events before one loses `Store.Claim`. If intake returns `actionable_but_rewritten`, the loser can also mutate bead description/acceptance before owning the bead. Atomic `Store.Claim` still prevents duplicate implementation, but it no longer protects the expensive and stateful pre-claim phase.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead_loop.go:686-765 calls `runtime.PreClaimIntakeHook` and handles rewrite/block outcomes before `w.Store.Claim` is attempted.\n- cli/internal/agent/execute_bead_loop.go:768-807 calls `runtime.PreDispatchLintHook` and `appendPreDispatchLintEvent` before the claim, so concurrent workers can append duplicate lint events for the same open bead.\n- cli/internal/agent/execute_bead_loop.go:809-823 only detects the ownership race after intake/lint have already run.\n- cli/internal/agent/preclaim_intake_rewrite.go:39-58 loads and updates bead description/acceptance from the intake rewrite path without a prior worker claim/ownership check.\n- cli/internal/bead/store.go:588-635 makes `ClaimWithOptions` the atomic ownership boundary, but `ReadyExecution` at cli/internal/bead/store.go:1352-1355 only lists candidates and does not reserve them.\n\nPROPOSED FIX\n- Move the expensive/model-backed readiness and lint gates behind an atomic worker reservation, or add an equivalent atomic `ReserveForReadiness` lease that removes the bead from other workers while intake/lint runs.\n- If the chosen design uses ordinary claim before readiness: claim first, start heartbeat, run intake and lint, then unclaim/release on retryable intake errors, park with `needs_human`/triage metadata on terminal readiness outcomes, and continue to implementation only for actionable beads.\n- If the chosen design uses a separate readiness lease: make `ReadyExecution` exclude fresh readiness leases, make stale leases reclaimable, and require rewrite/lint event mutations to verify lease ownership.\n- Ensure `actionable_but_rewritten` applies metadata under the same ownership/lease used by the worker, so concurrent workers cannot double-rewrite or append conflicting events.\n- Preserve the existing atomic `Store.Claim` duplicate-implementation guarantee and existing `picker.claim_race` telemetry for true claim races.\n\nNON-SCOPE\n- Changing the bead-lifecycle rubric or model prompt content.\n- Removing readiness/lint checks entirely.\n- Changing final implementation landing/review semantics.\n\nDEPS\nNo deps. This is a queue safety bug introduced by the current pre-claim intake ordering and can be fixed independently of the parked-bead triage work.",
+    "acceptance": "1. `TestExecuteBeadWorkerConcurrentPreClaimIntakeRunsOncePerBead` starts two workers against one ready bead with a blocking `PreClaimIntakeHook` and proves only one worker enters the model-backed intake for that bead while the other observes it as unavailable or moves on.\n2. `TestExecuteBeadWorkerConcurrentPreDispatchLintDoesNotDuplicateEvents` proves two workers cannot append duplicate `bead-quality.lint` events for the same readiness attempt before ownership is established.\n3. `TestPreClaimIntakeRewriteRequiresOwnedReservation` proves `actionable_but_rewritten` cannot update description/acceptance unless the worker owns the claim/readiness lease, and concurrent losers leave the bead unchanged.\n4. `TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim` covers intake error, ambiguous/needs-human, and lint-block outcomes: retryable errors release the bead or set a bounded cooldown; terminal readiness outcomes park with explicit labels/metadata; actionable beads proceed to implementation.\n5. Existing `TestExecuteBeadWorkerConcurrentWorkersDoNotDoubleExecuteSameBead` and `TestExecuteLoop_TwoWorkersBothClaimP0sBeforeP2s` still pass, preserving duplicate-implementation protection and priority ordering.\n6. WIRED-IN: production `ExecuteBeadWorker.Run` uses the new claim/reservation boundary before invoking `PreClaimIntakeHook`, `applyPreClaimIntakeRewrite`, or `appendPreDispatchLintEvent`.\n7. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... -run \"TestExecuteBeadWorkerConcurrentPreClaim|TestExecuteBeadWorkerConcurrentPreDispatch|TestPreClaimIntakeRewriteRequiresOwnedReservation|TestExecuteBeadWorkerReadinessReject|TestExecuteBeadWorkerConcurrentWorkersDoNotDoubleExecuteSameBead|TestExecuteLoop_TwoWorkersBothClaimP0sBeforeP2s\" -count=1 passes.\n8. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... passes.\n9. lefthook run pre-commit passes.",
+    "parent": "ddx-a9d130d0",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:beads",
+      "kind:bug",
+      "reliability",
+      "bead-quality",
+      "concurrency",
+      "spec:FEAT-010",
+      "adr:023"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T15:58:18Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3065836",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"All 8 rubric criteria satisfied. (1) Title is imperative and names both subsystem (work/agent) and the change (serialize readiness before claim races). (2) Description has explicit PROBLEM, ROOT CAUSE WITH five file:line anchors in execute_bead_loop.go, preclaim_intake_rewrite.go, and store.go, PROPOSED FIX with two concrete design alternatives, and NON-SCOPE. (3) Nine numbered AC items, each verifiable; AC 1–5 name specific Test* functions, AC 7 supplies a full `go test -run` filter covering all new and existing tests. (4) Wired-in assertion present at AC 6 (production ExecuteBeadWorker.Run must use the new boundary). (5) Final two AC lines (8, 9) are exactly `cd cli \\u0026\\u0026 go test ./internal/agent/... ./internal/bead/... passes` and `lefthook run pre-commit passes`. (6) Labels carry phase:2, area:agent, area:beads, kind:bug, spec:FEAT-010, adr:023 — all required categories plus cross-refs. (7) Parent ddx-a9d130d0 stated; deps explicitly declared as none. (8) No /tmp or chat-session references anywhere; description is fully self-contained and gives an agent clear file targets and test names without operator hand-curation.\",\"score\":8,\"suggested_fixes\":[],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T06:31:18.643357852Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=8"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-07T07:07:11.399853892Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260507T063118-85f58780\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":80,\"output_tokens\":68007,\"total_tokens\":68087,\"cost_usd\":4.499928999999999,\"duration_ms\":2149698,\"exit_code\":0}",
+          "created_at": "2026-05-07T07:07:11.47626565Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=68087 cost_usd=4.4999 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260507T063118-85f58780\",\"bead_id\":\"ddx-36eb046c\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-07T07:07:20.46277989Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard model=sonnet harness=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"sonnet\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-07T07:07:20.587243738Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: unparseable\nattempt_count=1\nresult_rev=95c2e54243a47eca18eab82a255cec76af476f31\n\nreviewer output: unparseable JSON verdict: approve verdict without per-AC evidence\nharness=claude\nmodel=opus\ninput_bytes=75506\noutput_bytes=1452\nelapsed_ms=61304",
+          "created_at": "2026-05-07T07:09:30.347004815Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: unparseable"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-close review: review-error: unparseable\nStore.Claim moved before PreClaimIntakeHook/PreDispatchLintHook so the claim itself reserves the bead. Concurrent workers lose at Claim and skip model-backed intake/lint entirely. Terminal intake outcomes park (needs_human + intake.blocked event) and unclaim; lint-blocked unclaims. All six AC test names exist with assertions matching their stated guarantees.\nresult_rev=95c2e54243a47eca18eab82a255cec76af476f31\nbase_rev=b253d4afd89e8841ca8e88d6dfe6ea8bd4be74aa",
+          "created_at": "2026-05-07T07:09:30.418326281Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_malfunction"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Strong bead overall. Title is imperative and names subsystem+change. Description has PROBLEM, ROOT CAUSE with file:line citations, PROPOSED FIX with two alternative designs, NON-SCOPE, and DEPS sections. AC has 9 numbered criteria, at least 3 name specific Test* functions, AC7 is a `go test` filter covering new tests, AC8 is a full package run, AC9 is a lefthook gate, and AC6 explicitly names the WIRED-IN production boundary. Labels include phase, area, kind, reliability, spec, and adr cross-refs. Parent is set. Deps are stated explicitly. One minor gap: AC1-5 are aspirational test names that do not yet exist — the bead is filed before implementation, which is acceptable for a bug bead — but the description's PROPOSED FIX section presents two mutually exclusive design paths without indicating which is preferred, which could cause an autonomous agent to make a structural design choice without operator guidance. This ambiguity slightly increases risk of a wrong-direction execution but does not disqualify the bead.\",\"score\":8,\"suggested_fixes\":[\"In PROPOSED FIX, nominate a preferred design path (e.g., 'Preferred: claim-first with release on retryable errors') so an autonomous agent does not have to choose between the two designs.\",\"Consider adding a concrete file to edit as the starting point (e.g., 'Start in cli/internal/agent/execute_bead_loop.go:686') to meet the self-test criterion fully.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T13:17:55.383587203Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=8"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260507T131757-5b960d10\",\"bead_id\":\"ddx-36eb046c\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-07T13:29:51.801560956Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard model=sonnet harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"7c681820bd48192f64f90dd7bb42aab07e85f527\",\"classification\":\"transport\",\"detail\":\"git rev-parse HEAD: chdir /var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-36eb046c-20260507T131757-5b960d10: no such file or directory: failed to read worktree HEAD: git rev-parse HEAD: chdir /var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-36eb046c-20260507T131757-5b960d10: no such file or directory\",\"rationale\":\"The worktree directory /var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-36eb046c-20260507T131757-5b960d10 did not exist when the post-execution HEAD read was attempted. This is an infrastructure/environment failure — the worktree was never created or was cleaned up before the read — not a code or test failure. The agent spent $1.01 and 711s but the error is pre-execution setup, not implementation. A prior attempt (20260507T063118-85f58780) succeeded at implementation (result_rev=95c2e54) but was blocked by an unparseable review verdict (review_malfunction). The bead itself is implementable and the previous attempt produced a mergeable result.\",\"recommended_action\":\"retry\",\"result_rev\":\"7c681820bd48192f64f90dd7bb42aab07e85f527\",\"session_id\":\"eb-200d212a\",\"status\":\"execution_failed\",\"suggested_amendments\":\"none\",\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-07T13:30:02.649540562Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx agent execute-loop",
+          "summary": "transport: retry"
+        },
+        {
+          "actor": "erik",
+          "body": "git rev-parse HEAD: chdir /var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-36eb046c-20260507T131757-5b960d10: no such file or directory: failed to read worktree HEAD: git rev-parse HEAD: chdir /var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-36eb046c-20260507T131757-5b960d10: no such file or directory\nresult_rev=7c681820bd48192f64f90dd7bb42aab07e85f527\nbase_rev=7c681820bd48192f64f90dd7bb42aab07e85f527\noutcome_reason=transport",
+          "created_at": "2026-05-07T13:30:02.714993613Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Strong bead overall. Title is imperative and names subsystem+change. Description has PROBLEM, ROOT CAUSE WITH FILE:LINE (5 precise citations), PROPOSED FIX with 3 alternative designs spelled out, NON-SCOPE, and DEPS. AC has 9 numbered criteria, all specific and verifiable. Labels include phase, area, kind, spec, and adr cross-refs. Parent is set. Deps are explicit ('No deps'). Two deductions: (1) AC items 1-4 name new test functions that don't yet exist — no existing test or `go test -run` filter is cited as a baseline gate for the new work, which makes the wired-in assertion (AC6) the only production hook; this is acceptable but the bead would benefit from a 'red first' note confirming tests are expected to be written as part of this bead. (2) AC7's `-run` filter uses a partial prefix match (`TestExecuteBeadWorkerConcurrentPreClaim|...`) which will work but the filter string is long and could silently miss a renamed test — minor robustness issue. Both are minor. The bead is self-contained, a cold agent could pick a file to edit and run tests without asking.\",\"score\":8,\"suggested_fixes\":[\"AC: Add a note on AC1-4 clarifying these are new tests to be authored as part of this bead (e.g., 'author and pass' rather than just 'passes'), so the executing agent knows to write them rather than search for them.\",\"AC7: Consider splitting the long -run filter into two separate go test invocations (new tests, existing regression tests) so each is readable and a rename doesn't silently drop coverage.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T15:59:23.930045917Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=8"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T15:58:18.943216339Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T155924-8708c7e2",
+    "prompt": ".ddx/executions/20260507T155924-8708c7e2/prompt.md",
+    "manifest": ".ddx/executions/20260507T155924-8708c7e2/manifest.json",
+    "result": ".ddx/executions/20260507T155924-8708c7e2/result.json",
+    "checks": ".ddx/executions/20260507T155924-8708c7e2/checks.json",
+    "usage": ".ddx/executions/20260507T155924-8708c7e2/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-36eb046c-20260507T155924-8708c7e2"
+  },
+  "prompt_sha": "f4cdc32b33afbd2acb420c360d71a7e95882800ced4f6b54f9367febce9795fe"
+}
