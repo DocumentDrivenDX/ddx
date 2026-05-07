@@ -51,7 +51,7 @@ type ExecuteBeadResult struct {
 	// Format: refs/ddx/iterations/<attempt-id>/<cycle-index>.
 	CandidateRef string `json:"candidate_ref,omitempty"`
 	// CycleIndex is the zero-based repair-cycle index for this candidate.
-	CycleIndex int `json:"cycle_index,omitempty"`
+	CycleIndex          int               `json:"cycle_index,omitempty"`
 	GateResults         []GateCheckResult `json:"gate_results,omitempty"`
 	RequiredExecSummary string            `json:"required_exec_summary,omitempty"`
 	ChecksFile          string            `json:"checks_file,omitempty"`

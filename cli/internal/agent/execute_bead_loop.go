@@ -250,8 +250,8 @@ type ExecuteBeadReport struct {
 	// Format: refs/ddx/iterations/<attempt-id>/<cycle-index>.
 	CandidateRef string `json:"candidate_ref,omitempty"`
 	// CycleIndex is the zero-based repair-cycle index for this candidate.
-	CycleIndex   int    `json:"cycle_index,omitempty"`
-	RetryAfter   string `json:"retry_after,omitempty"`
+	CycleIndex int    `json:"cycle_index,omitempty"`
+	RetryAfter string `json:"retry_after,omitempty"`
 	// NoChangesRationale carries the agent's explanation when status == no_changes.
 	NoChangesRationale string `json:"no_changes_rationale,omitempty"`
 	// ReviewVerdict is the post-merge review verdict (APPROVE, REQUEST_CHANGES,

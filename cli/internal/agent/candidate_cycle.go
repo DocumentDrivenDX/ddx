@@ -145,14 +145,14 @@ type AttemptCycleResult struct {
 // landing. Today they are accepted in the struct but not invoked (non-scope
 // per FEAT-010 candidate-cycle spec).
 type AttemptCycleCoordinator struct {
-	Pass     ImplementationPass
-	Checks   CandidateCheckRunner // nil → skip pre-land checks
-	Reviewer CandidateReviewer    // nil → skip candidate review (future)
-	Repair   RepairPass           // nil → skip repair loops (future)
-	Lander   CandidateLander
-	RefStore    CandidateRefStore  // nil → no ref pinning
-	ProjectRoot string             // required when RefStore non-nil
-	BeadEvents  BeadEventAppender  // nil → no candidate-cycle event emission
+	Pass        ImplementationPass
+	Checks      CandidateCheckRunner // nil → skip pre-land checks
+	Reviewer    CandidateReviewer    // nil → skip candidate review (future)
+	Repair      RepairPass           // nil → skip repair loops (future)
+	Lander      CandidateLander
+	RefStore    CandidateRefStore // nil → no ref pinning
+	ProjectRoot string            // required when RefStore non-nil
+	BeadEvents  BeadEventAppender // nil → no candidate-cycle event emission
 }
 
 // Run executes one attempt cycle: implementation → land. Non-success statuses
