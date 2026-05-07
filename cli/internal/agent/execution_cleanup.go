@@ -31,14 +31,19 @@ type ExecutionCleanupLiveness struct {
 // ExecutionCleanupMetadata records the ownership metadata for one DDx temp
 // execution directory.
 type ExecutionCleanupMetadata struct {
-	ProjectRoot  string                    `json:"project_root,omitempty"`
-	BeadID       string                    `json:"bead_id,omitempty"`
-	AttemptID    string                    `json:"attempt_id,omitempty"`
-	WorktreePath string                    `json:"worktree_path,omitempty"`
-	Registered   bool                      `json:"registered,omitempty"`
-	Preserved    bool                      `json:"preserved,omitempty"`
-	CreatedAt    time.Time                 `json:"created_at,omitempty"`
-	Liveness     *ExecutionCleanupLiveness `json:"liveness,omitempty"`
+	ProjectRoot  string `json:"project_root,omitempty"`
+	BeadID       string `json:"bead_id,omitempty"`
+	AttemptID    string `json:"attempt_id,omitempty"`
+	WorktreePath string `json:"worktree_path,omitempty"`
+	Registered   bool   `json:"registered,omitempty"`
+	Preserved    bool   `json:"preserved,omitempty"`
+	// ActiveCandidateCycle is set by AttemptCycleCoordinator while it holds the
+	// worktree open for candidate evaluation (checks, review, repair). The
+	// cleanup manager preserves any worktree with this flag set so it is never
+	// deleted mid-cycle before the coordinator reaches terminal disposition.
+	ActiveCandidateCycle bool                      `json:"active_candidate_cycle,omitempty"`
+	CreatedAt            time.Time                 `json:"created_at,omitempty"`
+	Liveness             *ExecutionCleanupLiveness `json:"liveness,omitempty"`
 }
 
 // ExecutionCleanupObservation is a structured note emitted by the cleanup
@@ -104,6 +109,9 @@ type defaultExecutionCleanupLivenessProbe struct{}
 func (defaultExecutionCleanupLivenessProbe) IsLive(meta ExecutionCleanupMetadata, runState *RunState, now time.Time) (bool, string) {
 	if meta.Preserved {
 		return true, "preserved metadata"
+	}
+	if meta.ActiveCandidateCycle {
+		return true, "active candidate cycle"
 	}
 	if runState != nil {
 		if meta.WorktreePath != "" && filepath.Clean(runState.WorktreePath) == filepath.Clean(meta.WorktreePath) {
