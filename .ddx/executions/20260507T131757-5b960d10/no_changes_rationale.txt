@@ -1,0 +1,18 @@
+The implementation described in this bead was already present at the base revision (7c681820b) before dispatch.
+
+Investigation:
+- cli/internal/agent/execute_bead_loop.go:687 already calls `w.Store.Claim` BEFORE the `PreClaimIntakeHook` block (line 722), serializing model-backed readiness behind atomic ownership. The comment at line 683-686 documents this exact invariant.
+- All 6 required tests were present and passing in the worktree:
+  - TestExecuteBeadWorkerConcurrentPreClaimIntakeRunsOncePerBead (AC #1)
+  - TestExecuteBeadWorkerConcurrentPreDispatchLintDoesNotDuplicateEvents (AC #2)
+  - TestPreClaimIntakeRewriteRequiresOwnedReservation (AC #3)
+  - TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim (AC #4)
+  - TestExecuteBeadWorkerConcurrentWorkersDoNotDoubleExecuteSameBead (AC #5)
+  - TestExecuteLoop_TwoWorkersBothClaimP0sBeforeP2s (AC #5)
+- AC #6 (production code uses the boundary): verified at execute_bead_loop.go:687.
+
+Blocker: The execution worktree was deleted by another process mid-run (/var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-36eb046c-20260507T131757-5b960d10 no longer exists). No commit was possible.
+
+The fix and all AC tests are present in the main branch and verified below.
+
+verification_command: cd cli && go test ./internal/agent/... ./internal/bead/... -run "TestExecuteBeadWorkerConcurrentPreClaim|TestExecuteBeadWorkerConcurrentPreDispatch|TestPreClaimIntakeRewriteRequiresOwnedReservation|TestExecuteBeadWorkerReadinessReject|TestExecuteBeadWorkerConcurrentWorkersDoNotDoubleExecuteSameBead|TestExecuteLoop_TwoWorkersBothClaimP0sBeforeP2s" -count=1 -timeout 55s

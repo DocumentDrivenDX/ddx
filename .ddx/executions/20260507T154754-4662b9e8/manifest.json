@@ -1,0 +1,115 @@
+{
+  "attempt_id": "20260507T154754-4662b9e8",
+  "bead_id": "ddx-49d8d6cb",
+  "base_rev": "433f5dc1665fff46f43f4c86bdac613337382935",
+  "created_at": "2026-05-07T15:47:57.202418977Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-49d8d6cb",
+    "title": "agent: introduce attempt-cycle coordinator interfaces",
+    "description": "PROBLEM\nThe current execute-bead implementation conflates worktree lifetime, implementation dispatch, artifact writing, landing, and post-merge review across ExecuteBeadWithConfig and the execute loop. Candidate-cycle review/repair needs a coordinator that owns the full live-worktree lifecycle before final land.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead.go:668-680 documents ExecuteBeadWithConfig as the thin worker and says merge/update-ref/gate/preserve are parent responsibilities.\n- cli/internal/agent/execute_bead.go:765-767 removes the worktree via defer inside ExecuteBeadWithConfig, preventing same-worktree review/repair after the function returns.\n- cli/internal/agent/execute_bead_loop.go:888-900 calls agenttry.Attempt around the executor, then handles review later in cli/internal/agent/execute_bead_loop.go:1086-1104.\n- cli/internal/agent/try/attempt.go:146-299 owns generic attempt outcome classification, but not candidate-cycle review/repair.\n\nPROPOSED FIX\n- Introduce narrow interfaces for AttemptCycleCoordinator, ImplementationPass, CandidateRefStore, CandidateCheckRunner, CandidateReviewer, RepairPass, and CandidateLander or equivalent names.\n- Split the implementation pass from terminal worktree cleanup: implementation produces a candidate result inside a live worktree; the coordinator owns cleanup after terminal disposition.\n- Preserve existing no_changes, no_evidence, and execution_failed behavior while creating seams for candidate checks, review, repair, and final land.\n- Add basic cleanup liveness protection for active candidate-cycle worktrees before the deferred removal is moved.\n\nNON-SCOPE\n- Do not yet run pre-land review.\n- Do not yet implement repair classification or repair loops.\n- Do not enable two-slot review.\n\nDEPS\nDepends on the spec bead for vocabulary and on the read-only reviewer profile only for interface shape; this bead may define the coordinator before reviewer execution is moved.",
+    "acceptance": "1. AttemptCycleCoordinator and the pass/check/review/repair/land interfaces (or equivalent names documented in code comments) exist in cli/internal/agent.\n2. ExecuteBeadWithConfig or an extracted ImplementationPass can return a live worktree candidate result without owning terminal cleanup.\n3. TestAttemptCycleCoordinator_SinglePassSuccessStillLands verifies the coordinator can preserve current success behavior without review/repair enabled.\n4. TestAttemptCycleCoordinator_NoChangesBehaviorUnchanged verifies no_changes adjudication remains unchanged.\n5. TestAttemptCycleCoordinator_LiveWorktreeProtected verifies active cycle metadata prevents cleanup from deleting the worktree mid-cycle.\n6. cd cli \u0026\u0026 go test ./internal/agent/... -run \"TestAttemptCycleCoordinator\" green.\n7. cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... green.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-31e07fdc",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "kind:refactor",
+      "reliability",
+      "adr:024",
+      "spec:FEAT-010",
+      "candidate-cycle"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T15:46:51Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3065836",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"All 8 rubric criteria satisfied. (1) Title is imperative, names subsystem (agent) and change (coordinator interfaces). (2) Root cause cites four specific file:line ranges across execute_bead.go, execute_bead_loop.go, and try/attempt.go. (3) AC is numbered 1-8; items 3-5 name three distinct Test* functions; item 6 adds a -run filter. (4) Named tests in AC 3-5 are wired assertions against the specific behaviors introduced. (5) Final two AC lines are `cd cli \\u0026\\u0026 go test ./internal/agent/... ./cmd/... green` and `lefthook run pre-commit passes` — exact required gate. (6) Labels carry phase:2, area:agent, kind:refactor plus cross-refs adr:024 and spec:FEAT-010; extra tags (reliability, candidate-cycle) are benign. (7) Parent ddx-31e07fdc and deps ddx-71073116, ddx-e32a0f68 are explicit. (8) Description is fully self-contained — no /tmp paths, no chat references, no dangling 'see above'; dep bead references resolve to listed deps. One minor issue: AC item 1 hedges with 'or equivalent names documented in code comments', which softens verification determinism and gives the executor an escape hatch that could produce inconsistent interface names across attempts.\",\"score\":8,\"suggested_fixes\":[\"AC item 1: drop 'or equivalent names documented in code comments' and commit to the specific interface names listed in PROPOSED FIX (AttemptCycleCoordinator, ImplementationPass, CandidateRefStore, CandidateCheckRunner, CandidateReviewer, RepairPass, CandidateLander). Deterministic names make the acceptance check unambiguous.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T13:41:28.841691167Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=8"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-07T14:08:24.198099936Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260507T134128-cc3a8d26\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":1472,\"output_tokens\":27231,\"total_tokens\":28703,\"cost_usd\":2.2033015500000004,\"duration_ms\":1612625,\"exit_code\":0}",
+          "created_at": "2026-05-07T14:08:24.2688409Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=28703 cost_usd=2.2033 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260507T134128-cc3a8d26\",\"bead_id\":\"ddx-49d8d6cb\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-07T14:08:33.572945225Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard model=sonnet harness=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"sonnet\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-07T14:08:33.702355077Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: unparseable\nattempt_count=1\nresult_rev=b660b72abf1981bae5f6614be28e4ec63f058676\n\nreviewer output: unparseable JSON verdict: approve verdict without per-AC evidence\nharness=claude\nmodel=opus\ninput_bytes=71960\noutput_bytes=1136\nelapsed_ms=33264",
+          "created_at": "2026-05-07T14:09:58.903746934Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: unparseable"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-close review: review-error: unparseable\nCoordinator and all six interfaces are introduced in candidate_cycle.go; ActiveCandidateCycle flag protects mid-cycle worktrees; all three named tests exist and exercise the required behaviors. Result evidence shows task_succeeded with exit_code 0.\nresult_rev=b660b72abf1981bae5f6614be28e4ec63f058676\nbase_rev=9ceb6abf6450c4730da001c11015d2fb0a4479e3",
+          "created_at": "2026-05-07T14:09:58.970361734Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_malfunction"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Strong bead overall. Title is imperative and names the subsystem and change. Description has PROBLEM, ROOT CAUSE with multiple file:line references, PROPOSED FIX, and NON-SCOPE. Three named Test* functions appear in ACs 3-5, go test green and lefthook in the final two ACs, labels include phase/area/kind plus cross-refs to adr:024 and spec:FEAT-010, and parent plus two explicit deps are present. Two minor gaps prevent a full 8: (1) AC 1 uses 'or equivalent names documented in code comments' which degrades verifiability — an agent can choose arbitrary names and self-certify pass; the canonical interface names listed in PROPOSED FIX should appear directly in the AC. (2) AC 2 ('ExecuteBeadWithConfig or an extracted ImplementationPass can return a live worktree candidate result without owning terminal cleanup') has no dedicated Test* function name, so its contract is implicit in ACs 3-5 rather than independently checkable.\",\"score\":7,\"suggested_fixes\":[\"AC 1: Replace 'or equivalent names documented in code comments' with the exact names from PROPOSED FIX (AttemptCycleCoordinator, ImplementationPass, CandidateRefStore, CandidateCheckRunner, CandidateReviewer, RepairPass, CandidateLander) so pass/fail is deterministic and an agent cannot rename them and still claim success.\",\"AC 2: Add a named test such as TestImplementationPassReturnsLiveWorktreeResult that asserts the pass returns a live-worktree handle without calling worktree cleanup, making the contract independently verifiable rather than relying on the coordinator-level tests in ACs 3-5.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T15:47:52.80210245Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=7"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T15:46:51.140364544Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T154754-4662b9e8",
+    "prompt": ".ddx/executions/20260507T154754-4662b9e8/prompt.md",
+    "manifest": ".ddx/executions/20260507T154754-4662b9e8/manifest.json",
+    "result": ".ddx/executions/20260507T154754-4662b9e8/result.json",
+    "checks": ".ddx/executions/20260507T154754-4662b9e8/checks.json",
+    "usage": ".ddx/executions/20260507T154754-4662b9e8/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-49d8d6cb-20260507T154754-4662b9e8"
+  },
+  "prompt_sha": "2c68cefc8a959c6bf2b7b49cd4450eec39f5b82d3545a004b3ba940763e715f3"
+}
