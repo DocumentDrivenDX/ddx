@@ -84,6 +84,12 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 		if rcfg.MinPower() > strongMinPower {
 			strongMinPower = rcfg.MinPower()
 		}
+		if rcfg.MaxPower() > 0 && strongMinPower >= rcfg.MaxPower() {
+			return PreClaimIntakeResult{
+				Outcome: PreClaimIntakeAmbiguousNeedsHuman,
+				Detail:  fmt.Sprintf("agent_power_unsatisfied: pre-claim intake requires min_power=%d but max_power=%d", strongMinPower, rcfg.MaxPower()),
+			}, nil
+		}
 
 		result, err := dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, AgentRunRuntime{
 			Prompt:           prompt,

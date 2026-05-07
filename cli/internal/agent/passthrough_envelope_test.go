@@ -11,6 +11,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -474,6 +475,24 @@ func TestExecuteOnService_MinMaxPowerReachServiceRequest(t *testing.T) {
 	}
 	if svc.lastReq.MaxPower != 90 {
 		t.Errorf("ServiceExecuteRequest.MaxPower = %d, want 90", svc.lastReq.MaxPower)
+	}
+}
+
+func TestExecuteOnService_InvalidPowerBoundsFailBeforeService(t *testing.T) {
+	svc := &passthroughTestService{}
+	rcfg := resolvedWithPassthrough("claude", "anthropic", "claude-3-7-sonnet", 90, 8)
+
+	_, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "hello",
+	})
+	if err == nil {
+		t.Fatal("expected invalid power bounds error")
+	}
+	if !strings.Contains(err.Error(), "min_power=90 must be less than max_power=8") {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if svc.lastReq.Prompt != "" {
+		t.Fatalf("service should not receive invalid power bounds, got request: %+v", svc.lastReq)
 	}
 }
 
