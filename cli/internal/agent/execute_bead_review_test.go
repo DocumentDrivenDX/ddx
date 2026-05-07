@@ -154,6 +154,7 @@ func TestRunPostMergeReviewChargesReviewCostAndDefersWhenCapTrips(t *testing.T) 
 		preCost      float64
 		reviewCost   float64
 		wantDeferred bool
+		wantApproved bool
 	}{
 		{
 			name:         "normal fit",
@@ -161,6 +162,7 @@ func TestRunPostMergeReviewChargesReviewCostAndDefersWhenCapTrips(t *testing.T) 
 			preCost:      4.0,
 			reviewCost:   1.5,
 			wantDeferred: false,
+			wantApproved: true,
 		},
 		{
 			name:         "review tips over budget",
@@ -168,6 +170,7 @@ func TestRunPostMergeReviewChargesReviewCostAndDefersWhenCapTrips(t *testing.T) 
 			preCost:      4.0,
 			reviewCost:   1.5,
 			wantDeferred: true,
+			wantApproved: false,
 		},
 	}
 	for _, tc := range cases {
@@ -194,7 +197,7 @@ func TestRunPostMergeReviewChargesReviewCostAndDefersWhenCapTrips(t *testing.T) 
 				Assignee:      "worker",
 				ReviewCostCap: tracker,
 			})
-			require.True(t, out.Approved, "APPROVE review should stay approved even when cost tracking trips")
+			assert.Equal(t, tc.wantApproved, out.Approved)
 			require.NoError(t, out.StoreErr)
 			assert.InDelta(t, tc.preCost+tc.reviewCost, tracker.Spent(), 1e-9)
 

@@ -113,7 +113,8 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 	}
 	reviewGroup, reviewErr := runPreCloseReviewGroup(ctx, in.Reviewer, in.Bead.ID, report.ResultRev, implRouting)
 	reviewRes, reviewGroupErr := reducePreCloseReviewGroup(reviewGroup)
-	chargeReviewCost := func() {
+	chargeReviewCost := func() bool {
+		budgetExceeded := false
 		if capTracker := in.ReviewCostCap; capTracker != nil && reviewGroup != nil {
 			deferred := false
 			for _, slot := range reviewGroup.Slots {
@@ -134,9 +135,11 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 						_, _ = fmt.Fprintf(in.Log, "review cost cap deferred (%s %s): %s\n", in.Bead.ID, report.ResultRev, detail)
 					}
 					deferred = true
+					budgetExceeded = true
 				}
 			}
 		}
+		return budgetExceeded
 	}
 	if reviewGroupErr != nil {
 		reviewErr = reviewGroupErr
@@ -211,7 +214,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 		OutputBytes: reviewRes.OutputBytes,
 		ElapsedMS:   reviewRes.DurationMS,
 	}
-	chargeReviewCost()
+	reviewBudgetExceeded := chargeReviewCost()
 	switch reviewRes.Verdict {
 	case VerdictApprove:
 		// Approved: record the verdict event and then close. The close must
@@ -224,6 +227,13 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			Source:    "ddx agent execute-loop",
 			CreatedAt: now().UTC(),
 		})
+		if reviewBudgetExceeded {
+			// Reviewer cost tripped the budget cap; leave bead open so the
+			// loop's BudgetStop can stop the drain before the next claim.
+			out.Report = report
+			out.Approved = false
+			return out
+		}
 		if cerr := in.Store.CloseWithEvidence(in.Bead.ID, report.SessionID, report.ResultRev); cerr != nil {
 			out.Report = report
 			out.StoreErrOp = "CloseWithEvidence"

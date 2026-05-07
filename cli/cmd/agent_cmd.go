@@ -1798,10 +1798,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			)
 			if err == nil {
 				accumulateBilledCost(report)
-				if cappedReport, capped := costCapTripped(); capped {
-					cappedReport.BeadID = beadID
-					return cappedReport, nil
-				}
 			}
 			return report, err
 		}),
