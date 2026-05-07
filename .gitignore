@@ -421,6 +421,7 @@ cli/internal/agent/.ddx/
 .ddx/agent-logs/
 .ddx/workers/
 .ddx/.execute-bead-wt-*/
+.ddx/backups/
 .ddx/executions/*/embedded/
 .ddx/executions/**/scratch/
 .ddx/*.lock
