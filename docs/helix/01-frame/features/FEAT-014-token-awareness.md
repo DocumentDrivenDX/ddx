@@ -441,8 +441,6 @@ manual instrumentation
   rules, and tooltip registry for that view
 - [[MET-001]] (ddx test wall time) — canonical `source: exec` MET artifact for
   projected runtime metrics and evidence formatting
-- MET-002 (cost per closed bead) — canonical `source: external` MET artifact
-  for process-cost reporting that consumes FEAT-014 usage signals
 - provider-native local stores such as `~/.codex/` and `~/.claude/`
 - embedded Fizeau runtime telemetry and session references
 

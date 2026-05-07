@@ -112,8 +112,8 @@ The canonical solution design is [`SD-016`](../../02-design/solution-designs/SD-
 
 - FEAT-004 (beads) — data source
 - FEAT-014 (token awareness) — agent session cost data
-- MET-002 (cost per closed bead) — canonical `source: external` MET artifact
-  for the per-bead cost reporting shape used by this feature
+- [[MET-001]] (ddx test wall time) — canonical `source: exec` MET artifact
+  for the shared metric-artifact cross-reference convention
 
 ## Out of Scope
 
