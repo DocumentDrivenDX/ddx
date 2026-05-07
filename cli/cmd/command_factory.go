@@ -564,6 +564,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newOutdatedCommand())
 	rootCmd.AddCommand(f.newVerifyCommand())
 	rootCmd.AddCommand(f.newJqCommand())
+	rootCmd.AddCommand(f.newRunCommand())
 	rootCmd.AddCommand(f.newWorkCommand())
 	rootCmd.AddCommand(f.newTryCommand())
 	rootCmd.AddCommand(f.newSyncCommand())
