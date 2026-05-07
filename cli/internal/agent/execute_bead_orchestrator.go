@@ -397,15 +397,21 @@ func RecoverOrphans(gitOps GitOps, workDir, beadID string) {
 	}
 	_ = gitOps.WorktreePrune(workDir)
 
-	// Sweep stale run-state left by a crashed worker. We clear it whenever we
-	// just reaped an orphan for this bead, or when run-state points at a bead
-	// whose worktree no longer exists.
-	if state, _ := ReadRunState(workDir); state != nil {
-		if orphanRemoved || state.BeadID == beadID {
-			_ = ClearRunState(workDir)
-		} else if state.WorktreePath != "" {
-			if _, err := os.Stat(state.WorktreePath); os.IsNotExist(err) {
-				_ = ClearRunState(workDir)
+	// Sweep stale run-state left by crashed workers. Per-attempt records are
+	// cleared individually so concurrent attempts for other beads remain visible.
+	if states, _ := ReadRunStates(workDir); len(states) > 0 {
+		for _, state := range states {
+			remove := orphanRemoved && state.BeadID == beadID
+			if !remove && state.BeadID == beadID {
+				remove = true
+			}
+			if !remove && state.WorktreePath != "" {
+				if _, err := os.Stat(state.WorktreePath); os.IsNotExist(err) {
+					remove = true
+				}
+			}
+			if remove {
+				_ = ClearRunStateAttempt(workDir, state.AttemptID)
 			}
 		}
 	}

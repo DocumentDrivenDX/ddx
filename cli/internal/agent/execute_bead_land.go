@@ -475,6 +475,7 @@ func checkoutSyncDeferralIgnoredPath(path string) bool {
 	if strings.HasPrefix(path, ".ddx/executions/") ||
 		strings.HasPrefix(path, ".ddx/runs/") ||
 		strings.HasPrefix(path, ".ddx/backups/") ||
+		strings.HasPrefix(path, ".ddx/run-state/") ||
 		strings.HasPrefix(path, ".ddx/.git-tracker.lock/") {
 		return true
 	}

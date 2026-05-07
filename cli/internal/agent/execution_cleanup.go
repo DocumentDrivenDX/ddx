@@ -184,7 +184,7 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 	}
 
 	registered := map[string]struct{}{}
-	runStateMatchesLiveCandidate := false
+	liveRunStates := map[string]struct{}{}
 	if m.GitOps != nil {
 		paths, err := m.GitOps.WorktreeList(m.ProjectRoot)
 		if err != nil {
@@ -200,10 +200,10 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 		}
 	}
 
-	runState, runStateErr := ReadRunState(m.ProjectRoot)
+	runStates, runStateErr := ReadRunStates(m.ProjectRoot)
 	if runStateErr != nil {
 		summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
-			Path:    runStatePath(m.ProjectRoot),
+			Path:    runStateDirPath(m.ProjectRoot),
 			Class:   "run_state_read",
 			Message: runStateErr.Error(),
 		})
@@ -250,15 +250,11 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 			continue
 		}
 
-		live, reason := probe.IsLive(meta, runState, now())
+		matchedRunState := matchingRunStateForMeta(runStates, meta)
+		live, reason := probe.IsLive(meta, matchedRunState, now())
 		if live {
-			if runState != nil {
-				if meta.WorktreePath != "" && filepath.Clean(runState.WorktreePath) == filepath.Clean(meta.WorktreePath) {
-					runStateMatchesLiveCandidate = true
-				}
-				if meta.AttemptID != "" && runState.AttemptID == meta.AttemptID {
-					runStateMatchesLiveCandidate = true
-				}
+			if matchedRunState != nil {
+				liveRunStates[runStateLiveKey(*matchedRunState)] = struct{}{}
 			}
 			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
 				Path:    path,
@@ -374,40 +370,17 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 
 	// Stale run-state files are removed when they point at an execution
 	// resource that is no longer live.
-	if runState != nil {
-		if !runStateMatchesLiveCandidate {
-			runStatePath := runStatePath(m.ProjectRoot)
-			var runStateBytes int64
-			var runStatePresent bool
-			if info, statErr := os.Stat(runStatePath); statErr == nil {
-				runStatePresent = true
-				runStateBytes = info.Size()
-			}
-			if !m.DryRun {
-				if err := ClearRunState(m.ProjectRoot); err != nil {
-					summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
-						Path:    runStatePath,
-						Class:   "run_state_clear",
-						Message: err.Error(),
-					})
-				}
-			}
-			if runStatePresent {
-				summary.RemovedRunStateFiles++
-				summary.BytesReclaimed += runStateBytes
-				summary.InodesReclaimed++
-				class := "removed_run_state"
-				if m.DryRun {
-					class = "would_remove_run_state"
-				}
-				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
-					Path:    runStatePath,
-					Class:   class,
-					Message: "stale run-state",
-					Bytes:   runStateBytes,
-					Inodes:  1,
-				})
-			}
+	for _, state := range runStates {
+		if _, ok := liveRunStates[runStateLiveKey(state)]; ok {
+			continue
+		}
+		if runStateWorktreeStillExists(state) {
+			continue
+		}
+		if removed, bytes := m.removeStaleRunState(state, &summary); removed {
+			summary.RemovedRunStateFiles++
+			summary.BytesReclaimed += bytes
+			summary.InodesReclaimed++
 		}
 	}
 
@@ -415,6 +388,92 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 	summary.ScannedEvidenceDirs += scanCompleteEvidenceDirs(m.ProjectRoot, ".ddx/runs", "record.json", "", &summary)
 
 	return summary, nil
+}
+
+func matchingRunStateForMeta(states []RunState, meta ExecutionCleanupMetadata) *RunState {
+	for i := range states {
+		state := states[i]
+		if meta.AttemptID != "" && state.AttemptID == meta.AttemptID {
+			return &states[i]
+		}
+		if meta.WorktreePath != "" && state.WorktreePath != "" && filepath.Clean(state.WorktreePath) == filepath.Clean(meta.WorktreePath) {
+			return &states[i]
+		}
+	}
+	return nil
+}
+
+func runStateLiveKey(state RunState) string {
+	if state.AttemptID != "" {
+		return "attempt:" + state.AttemptID
+	}
+	if state.WorktreePath != "" {
+		return "path:" + filepath.Clean(state.WorktreePath)
+	}
+	return "bead:" + state.BeadID
+}
+
+func runStateWorktreeStillExists(state RunState) bool {
+	if state.WorktreePath == "" {
+		return false
+	}
+	_, err := os.Stat(state.WorktreePath)
+	return err == nil
+}
+
+func (m *ExecutionCleanupManager) removeStaleRunState(state RunState, summary *ExecutionCleanupSummary) (bool, int64) {
+	path := runStatePath(m.ProjectRoot)
+	clear := func() error {
+		return ClearRunState(m.ProjectRoot)
+	}
+	if state.AttemptID != "" {
+		if attemptPath, err := runStateAttemptPath(m.ProjectRoot, state.AttemptID); err == nil {
+			path = attemptPath
+			clear = func() error {
+				return ClearRunStateAttempt(m.ProjectRoot, state.AttemptID)
+			}
+		}
+	}
+
+	var bytes int64
+	present := false
+	if info, statErr := os.Stat(path); statErr == nil {
+		present = true
+		bytes = info.Size()
+	} else if os.IsNotExist(statErr) && path != runStatePath(m.ProjectRoot) {
+		path = runStatePath(m.ProjectRoot)
+		if info, legacyErr := os.Stat(path); legacyErr == nil {
+			present = true
+			bytes = info.Size()
+			clear = func() error {
+				return ClearRunState(m.ProjectRoot)
+			}
+		}
+	}
+	if !m.DryRun {
+		if err := clear(); err != nil {
+			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+				Path:    path,
+				Class:   "run_state_clear",
+				Message: err.Error(),
+			})
+		}
+	}
+	if !present {
+		return false, 0
+	}
+	class := "removed_run_state"
+	if m.DryRun {
+		class = "would_remove_run_state"
+	}
+	summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+		Path:    path,
+		Class:   class,
+		Message: "stale run-state",
+		Bytes:   bytes,
+		Inodes:  1,
+	})
+	return true, bytes
 }
 
 func (m *ExecutionCleanupManager) tempRoot() string {

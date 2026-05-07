@@ -1,10 +1,14 @@
 package agent
 
 import (
+	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 func TestRunState_WriteReadCleanupCycle(t *testing.T) {
@@ -88,6 +92,196 @@ func TestRunState_WriteOverwritesExisting(t *testing.T) {
 	}
 	if got.BeadID != "second" || got.AttemptID != "a2" {
 		t.Fatalf("expected overwrite to second, got %+v", *got)
+	}
+}
+
+func TestRunState_MultipleAttemptsDoNotClobber(t *testing.T) {
+	projectRoot := t.TempDir()
+	first := RunState{
+		BeadID:       "ddx-first",
+		AttemptID:    "attempt-one",
+		StartedAt:    time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC),
+		WorktreePath: filepath.Join(projectRoot, "wt-one"),
+	}
+	second := RunState{
+		BeadID:       "ddx-second",
+		AttemptID:    "attempt-two",
+		StartedAt:    time.Date(2026, 5, 7, 12, 1, 0, 0, time.UTC),
+		WorktreePath: filepath.Join(projectRoot, "wt-two"),
+	}
+	if err := WriteRunState(projectRoot, first); err != nil {
+		t.Fatalf("write first: %v", err)
+	}
+	if err := WriteRunState(projectRoot, second); err != nil {
+		t.Fatalf("write second: %v", err)
+	}
+
+	states, err := ReadRunStates(projectRoot)
+	if err != nil {
+		t.Fatalf("ReadRunStates: %v", err)
+	}
+	if len(states) != 2 {
+		t.Fatalf("ReadRunStates len=%d, want 2: %+v", len(states), states)
+	}
+	got := map[string]RunState{}
+	for _, state := range states {
+		got[state.AttemptID] = state
+	}
+	if got["attempt-one"].BeadID != "ddx-first" {
+		t.Fatalf("first attempt clobbered: %+v", got["attempt-one"])
+	}
+	if got["attempt-two"].BeadID != "ddx-second" {
+		t.Fatalf("second attempt missing: %+v", got["attempt-two"])
+	}
+	if _, err := os.Stat(filepath.Join(projectRoot, ".ddx", RunStateDirName, "attempt-one.json")); err != nil {
+		t.Fatalf("first per-attempt file missing: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(projectRoot, ".ddx", RunStateDirName, "attempt-two.json")); err != nil {
+		t.Fatalf("second per-attempt file missing: %v", err)
+	}
+}
+
+func TestRunState_AggregateCompatibilityView(t *testing.T) {
+	projectRoot := t.TempDir()
+	first := RunState{
+		BeadID:       "ddx-first",
+		AttemptID:    "attempt-one",
+		StartedAt:    time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC),
+		RefreshedAt:  time.Date(2026, 5, 7, 12, 0, 10, 0, time.UTC),
+		WorktreePath: filepath.Join(projectRoot, "wt-one"),
+	}
+	second := RunState{
+		BeadID:       "ddx-second",
+		AttemptID:    "attempt-two",
+		StartedAt:    time.Date(2026, 5, 7, 12, 1, 0, 0, time.UTC),
+		RefreshedAt:  time.Date(2026, 5, 7, 12, 1, 10, 0, time.UTC),
+		WorktreePath: filepath.Join(projectRoot, "wt-two"),
+	}
+	if err := WriteRunState(projectRoot, first); err != nil {
+		t.Fatalf("write first: %v", err)
+	}
+	if err := WriteRunState(projectRoot, second); err != nil {
+		t.Fatalf("write second: %v", err)
+	}
+
+	compat, err := ReadRunState(projectRoot)
+	if err != nil {
+		t.Fatalf("ReadRunState: %v", err)
+	}
+	if compat == nil {
+		t.Fatalf("ReadRunState returned nil")
+	}
+	if compat.AttemptID != "attempt-two" {
+		t.Fatalf("compat view attempt=%q, want attempt-two: %+v", compat.AttemptID, *compat)
+	}
+	states, err := ReadRunStates(projectRoot)
+	if err != nil {
+		t.Fatalf("ReadRunStates: %v", err)
+	}
+	if len(states) != 2 {
+		t.Fatalf("compat read destroyed per-attempt state: %+v", states)
+	}
+}
+
+func TestRunState_ClearOneAttemptPreservesOthers(t *testing.T) {
+	projectRoot := t.TempDir()
+	first := RunState{
+		BeadID:       "ddx-first",
+		AttemptID:    "attempt-one",
+		StartedAt:    time.Date(2026, 5, 7, 12, 0, 0, 0, time.UTC),
+		WorktreePath: filepath.Join(projectRoot, "wt-one"),
+	}
+	second := RunState{
+		BeadID:       "ddx-second",
+		AttemptID:    "attempt-two",
+		StartedAt:    time.Date(2026, 5, 7, 12, 1, 0, 0, time.UTC),
+		WorktreePath: filepath.Join(projectRoot, "wt-two"),
+	}
+	if err := WriteRunState(projectRoot, first); err != nil {
+		t.Fatalf("write first: %v", err)
+	}
+	if err := WriteRunState(projectRoot, second); err != nil {
+		t.Fatalf("write second: %v", err)
+	}
+	if err := ClearRunStateAttempt(projectRoot, "attempt-one"); err != nil {
+		t.Fatalf("ClearRunStateAttempt: %v", err)
+	}
+
+	states, err := ReadRunStates(projectRoot)
+	if err != nil {
+		t.Fatalf("ReadRunStates: %v", err)
+	}
+	if len(states) != 1 || states[0].AttemptID != "attempt-two" {
+		t.Fatalf("got states %+v, want only attempt-two", states)
+	}
+	if _, err := os.Stat(filepath.Join(projectRoot, ".ddx", RunStateDirName, "attempt-one.json")); !os.IsNotExist(err) {
+		t.Fatalf("cleared attempt file still present: %v", err)
+	}
+	compat, err := ReadRunState(projectRoot)
+	if err != nil {
+		t.Fatalf("ReadRunState: %v", err)
+	}
+	if compat == nil || compat.AttemptID != "attempt-two" {
+		t.Fatalf("compat after clear = %+v, want attempt-two", compat)
+	}
+}
+
+type runStateRefreshTestRunner struct {
+	projectRoot string
+}
+
+func (r runStateRefreshTestRunner) Run(opts RunArgs) (*Result, error) {
+	ctx := opts.Context
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	deadline := time.NewTimer(2 * time.Second)
+	defer deadline.Stop()
+	var firstRefresh time.Time
+	for {
+		states, err := ReadRunStates(r.projectRoot)
+		if err != nil {
+			return &Result{ExitCode: 1, Error: err.Error()}, err
+		}
+		if len(states) == 1 {
+			state := states[0]
+			if state.SessionID != "" && state.PID != 0 && !state.RefreshedAt.IsZero() && !state.ExpiresAt.IsZero() {
+				if firstRefresh.IsZero() {
+					firstRefresh = state.RefreshedAt
+				} else if state.RefreshedAt.After(firstRefresh) {
+					return &Result{ExitCode: 0}, nil
+				}
+			}
+		}
+		select {
+		case <-ctx.Done():
+			return &Result{ExitCode: 1, Error: ctx.Err().Error()}, ctx.Err()
+		case <-deadline.C:
+			return &Result{ExitCode: 1, Error: "timed out waiting for run-state refresh"}, fmt.Errorf("timed out waiting for run-state refresh")
+		case <-time.After(10 * time.Millisecond):
+		}
+	}
+}
+
+func TestExecuteBead_RefreshesAttemptLiveness(t *testing.T) {
+	oldInterval := RunStateRefreshInterval
+	RunStateRefreshInterval = 20 * time.Millisecond
+	defer func() { RunStateRefreshInterval = oldInterval }()
+
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{Harness: "test-harness"})
+
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, "ddx-int-0001", rcfg, ExecuteBeadRuntime{
+		AgentRunner: runStateRefreshTestRunner{projectRoot: projectRoot},
+	}, &RealGitOps{})
+	if err != nil {
+		t.Fatalf("ExecuteBeadWithConfig: %v", err)
+	}
+	if res == nil || res.AttemptID == "" {
+		t.Fatalf("ExecuteBeadWithConfig result missing attempt id: %+v", res)
+	}
+	if got, err := ReadRunState(projectRoot); err != nil || got != nil {
+		t.Fatalf("run-state after completion: got (%+v, %v), want nil", got, err)
 	}
 }
 

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
+	"strings"
 	"time"
 )
 
@@ -13,10 +15,19 @@ import (
 // the project's .ddx directory.
 const RunStateFileName = "run-state.json"
 
-// RunState is the on-disk record of the currently-executing bead. It is
-// written at execute-bead start and removed on completion (or on orphan
-// recovery of a crashed worker). Operators and HELIX consume this file to
-// observe what is running without polling the bead tracker.
+// RunStateDirName is the .ddx subdirectory containing per-attempt live-state
+// records. The legacy .ddx/run-state.json file remains as a compatibility
+// summary view for older operators.
+const RunStateDirName = "run-state"
+
+// RunStateLivenessTTL is the default expiry window written to refreshed
+// attempt liveness records.
+const RunStateLivenessTTL = 2 * time.Minute
+
+// RunState is the on-disk record of an executing bead attempt. It is written at
+// execute-bead start, refreshed while the agent runs, and removed on completion
+// (or on orphan recovery of a crashed worker). Operators and HELIX consume this
+// state to observe what is running without polling the bead tracker.
 //
 // See CONTRACT-001 §5 (Always-on runtime metrics and provenance).
 type RunState struct {
@@ -26,6 +37,10 @@ type RunState struct {
 	Model        string    `json:"model,omitempty"`
 	StartedAt    time.Time `json:"started_at"`
 	WorktreePath string    `json:"worktree_path"`
+	PID          int       `json:"pid,omitempty"`
+	SessionID    string    `json:"session_id,omitempty"`
+	RefreshedAt  time.Time `json:"refreshed_at,omitempty"`
+	ExpiresAt    time.Time `json:"expires_at,omitempty"`
 }
 
 // runStatePath returns the absolute path of the run-state file for the
@@ -34,16 +49,77 @@ func runStatePath(projectRoot string) string {
 	return filepath.Join(projectRoot, ".ddx", RunStateFileName)
 }
 
-// WriteRunState atomically writes state to .ddx/run-state.json under
-// projectRoot. The write goes to a sibling tmp file and is then renamed into
-// place so readers never observe a partial record.
+func runStateDirPath(projectRoot string) string {
+	return filepath.Join(projectRoot, ".ddx", RunStateDirName)
+}
+
+func runStateAttemptPath(projectRoot, attemptID string) (string, error) {
+	name, err := runStateAttemptFileName(attemptID)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(runStateDirPath(projectRoot), name), nil
+}
+
+func runStateAttemptFileName(attemptID string) (string, error) {
+	attemptID = strings.TrimSpace(attemptID)
+	if attemptID == "" {
+		return "", errors.New("run-state: attempt_id is empty")
+	}
+	if filepath.Base(attemptID) != attemptID || strings.ContainsAny(attemptID, `/\`) {
+		return "", fmt.Errorf("run-state: invalid attempt_id %q", attemptID)
+	}
+	return attemptID + ".json", nil
+}
+
+func normalizeRunState(state RunState) RunState {
+	now := time.Now().UTC()
+	if state.StartedAt.IsZero() {
+		state.StartedAt = now
+	}
+	if state.RefreshedAt.IsZero() {
+		state.RefreshedAt = now
+	}
+	if state.ExpiresAt.IsZero() {
+		state.ExpiresAt = state.RefreshedAt.Add(RunStateLivenessTTL)
+	}
+	if state.PID == 0 {
+		state.PID = os.Getpid()
+	}
+	return state
+}
+
+// WriteRunState atomically writes state to a per-attempt file under
+// .ddx/run-state/ and refreshes .ddx/run-state.json as a legacy compatibility
+// summary. Writes go to sibling tmp files and are then renamed into place so
+// readers never observe a partial record.
 func WriteRunState(projectRoot string, state RunState) error {
 	if projectRoot == "" {
 		return errors.New("WriteRunState: projectRoot is empty")
 	}
-	dir := filepath.Join(projectRoot, ".ddx")
-	if err := os.MkdirAll(dir, 0o755); err != nil {
+	state = normalizeRunState(state)
+	attemptPath, err := runStateAttemptPath(projectRoot, state.AttemptID)
+	if err != nil {
+		return err
+	}
+	ddxDir := filepath.Join(projectRoot, ".ddx")
+	attemptDir := filepath.Dir(attemptPath)
+	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
 		return fmt.Errorf("run-state: mkdir .ddx: %w", err)
+	}
+	if err := os.MkdirAll(attemptDir, 0o755); err != nil {
+		return fmt.Errorf("run-state: mkdir attempts: %w", err)
+	}
+	if err := writeRunStateJSON(attemptPath, state); err != nil {
+		return err
+	}
+	return writeRunStateJSON(runStatePath(projectRoot), state)
+}
+
+func writeRunStateJSON(final string, state RunState) error {
+	dir := filepath.Dir(final)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		return fmt.Errorf("run-state: mkdir: %w", err)
 	}
 	data, err := json.MarshalIndent(state, "", "  ")
 	if err != nil {
@@ -51,7 +127,6 @@ func WriteRunState(projectRoot string, state RunState) error {
 	}
 	data = append(data, '\n')
 
-	final := runStatePath(projectRoot)
 	tmp, err := os.CreateTemp(dir, "run-state-*.json.tmp")
 	if err != nil {
 		return fmt.Errorf("run-state: create tmp: %w", err)
@@ -73,13 +148,33 @@ func WriteRunState(projectRoot string, state RunState) error {
 	return nil
 }
 
-// ReadRunState returns the live run-state for projectRoot, or (nil, nil) when
-// the file does not exist. A malformed file surfaces as an error.
+// ReadRunState returns a compatibility live-state summary for projectRoot, or
+// (nil, nil) when no live attempt exists. A malformed compatibility file
+// surfaces as an error; if the compatibility file is missing, the newest
+// per-attempt record is returned.
 func ReadRunState(projectRoot string) (*RunState, error) {
-	data, err := os.ReadFile(runStatePath(projectRoot))
+	state, err := readRunStateFile(runStatePath(projectRoot))
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return nil, err
+		}
+		states, statesErr := readRunStateAttemptFiles(projectRoot)
+		if statesErr != nil {
+			return nil, statesErr
+		}
+		if latest, ok := latestRunState(states); ok {
+			return &latest, nil
+		}
+		return nil, nil
+	}
+	return state, nil
+}
+
+func readRunStateFile(path string) (*RunState, error) {
+	data, err := os.ReadFile(path)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, err
 		}
 		return nil, err
 	}
@@ -90,9 +185,132 @@ func ReadRunState(projectRoot string) (*RunState, error) {
 	return &s, nil
 }
 
-// ClearRunState removes .ddx/run-state.json. A missing file is not an error.
+// ReadRunStates returns all live attempt records. The per-attempt directory is
+// authoritative; when it is absent or empty, this falls back to the legacy
+// compatibility file so older on-disk state can still be recovered.
+func ReadRunStates(projectRoot string) ([]RunState, error) {
+	states, err := readRunStateAttemptFiles(projectRoot)
+	if err != nil {
+		return nil, err
+	}
+	if len(states) > 0 {
+		return states, nil
+	}
+	state, err := readRunStateFile(runStatePath(projectRoot))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	if state == nil {
+		return nil, nil
+	}
+	return []RunState{*state}, nil
+}
+
+func readRunStateAttemptFiles(projectRoot string) ([]RunState, error) {
+	dir := runStateDirPath(projectRoot)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	var names []string
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		if !strings.HasSuffix(name, ".json") || strings.HasSuffix(name, ".tmp") {
+			continue
+		}
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	states := make([]RunState, 0, len(names))
+	for _, name := range names {
+		state, err := readRunStateFile(filepath.Join(dir, name))
+		if err != nil {
+			return nil, err
+		}
+		if state != nil {
+			states = append(states, *state)
+		}
+	}
+	return states, nil
+}
+
+func latestRunState(states []RunState) (RunState, bool) {
+	if len(states) == 0 {
+		return RunState{}, false
+	}
+	latest := states[0]
+	for _, state := range states[1:] {
+		if runStateNewer(state, latest) {
+			latest = state
+		}
+	}
+	return latest, true
+}
+
+func runStateNewer(a, b RunState) bool {
+	if !a.RefreshedAt.Equal(b.RefreshedAt) {
+		return a.RefreshedAt.After(b.RefreshedAt)
+	}
+	if !a.StartedAt.Equal(b.StartedAt) {
+		return a.StartedAt.After(b.StartedAt)
+	}
+	return a.AttemptID > b.AttemptID
+}
+
+// ClearRunState removes all run-state records, including the compatibility
+// summary and per-attempt files. A missing file or directory is not an error.
 func ClearRunState(projectRoot string) error {
 	err := os.Remove(runStatePath(projectRoot))
+	if err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	entries, err := os.ReadDir(runStateDirPath(projectRoot))
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		if err := os.Remove(filepath.Join(runStateDirPath(projectRoot), entry.Name())); err != nil && !os.IsNotExist(err) {
+			return err
+		}
+	}
+	return nil
+}
+
+// ClearRunStateAttempt removes one attempt record and refreshes the legacy
+// compatibility summary from the newest remaining attempt. Other live attempts
+// are preserved.
+func ClearRunStateAttempt(projectRoot, attemptID string) error {
+	attemptPath, err := runStateAttemptPath(projectRoot, attemptID)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(attemptPath); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	states, err := readRunStateAttemptFiles(projectRoot)
+	if err != nil {
+		return err
+	}
+	if latest, ok := latestRunState(states); ok {
+		return writeRunStateJSON(runStatePath(projectRoot), latest)
+	}
+	err = os.Remove(runStatePath(projectRoot))
 	if err != nil && !os.IsNotExist(err) {
 		return err
 	}

@@ -125,6 +125,11 @@ type BeadCancelStore interface {
 // default. Exposed as a variable so tests can override it.
 var CancelPollInterval = 10 * time.Second
 
+// RunStateRefreshInterval controls how often execute-bead refreshes its
+// per-attempt liveness record while the agent harness is running. Exposed as a
+// variable so tests can shorten it without slowing production attempts.
+var RunStateRefreshInterval = 10 * time.Second
+
 // ExecuteBeadRuntime carries the non-durable plumbing for an execute-bead
 // run: per-invocation intent (FromRev, PromptFile, WorkerID) and
 // non-serializable injection seams (BeadEvents, Service, AgentRunner).
@@ -541,6 +546,7 @@ func preDispatchCheckpointExcludePathspecs(dir string) []string {
 		{pathspec: ":(exclude).ddx/executions", ignoreProbe: ".ddx/executions/.ddx-check-ignore/manifest.json"},
 		{pathspec: ":(exclude).ddx/runs", ignoreProbe: ".ddx/runs/.ddx-check-ignore/record.json"},
 		{pathspec: ":(exclude).ddx/run-state.json", ignoreProbe: ".ddx/run-state.json"},
+		{pathspec: ":(exclude).ddx/run-state", ignoreProbe: ".ddx/run-state/.ddx-check-ignore"},
 		{pathspec: ":(exclude).ddx/.git-tracker.lock", ignoreProbe: ".ddx/.git-tracker.lock/pid"},
 		{pathspec: ":(exclude)" + ExecutionCleanupMetadataFileName, ignoreProbe: ExecutionCleanupMetadataFileName},
 	}
@@ -735,6 +741,32 @@ func appendBeadCostEvidence(appender BeadEventAppender, beadID, attemptID string
 	})
 }
 
+func startRunStateRefresh(ctx context.Context, projectRoot string, state RunState) func() {
+	interval := RunStateRefreshInterval
+	if interval <= 0 {
+		interval = 10 * time.Second
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				_ = WriteRunState(projectRoot, state)
+			}
+		}
+	}()
+	return func() {
+		cancel()
+		<-done
+	}
+}
+
 // appendRateLimitRetryEvent records one rate-limit retry on the bead's
 // event stream per TD-031 §4 / §8.4 RateLimitRetryContract. The event body
 // carries the retry count and wait duration so an audit can reconstruct the
@@ -895,16 +927,17 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// executing without polling the bead tracker (CONTRACT-001 §5). The file
 	// is removed on completion; a crashed worker leaves a stale file that
 	// RecoverOrphans sweeps before the next attempt.
-	_ = WriteRunState(projectRoot, RunState{
+	runState := RunState{
 		BeadID:       beadID,
 		AttemptID:    attemptID,
 		Harness:      rcfg.Harness(),
 		Model:        rcfg.Model(),
 		StartedAt:    time.Now().UTC(),
 		WorktreePath: wtPath,
-	})
+	}
+	_ = WriteRunState(projectRoot, runState)
 	defer func() {
-		_ = ClearRunState(projectRoot)
+		_ = ClearRunStateAttempt(projectRoot, attemptID)
 	}()
 
 	// Repair project-local skill symlinks whose targets do not resolve inside
@@ -947,6 +980,8 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 
 	sessionID := GenerateSessionID()
 	startedAt := time.Now().UTC()
+	runState.SessionID = sessionID
+	_ = WriteRunState(projectRoot, runState)
 
 	runRuntime := AgentRunRuntime{
 		PromptFile: artifacts.PromptAbs,
@@ -977,7 +1012,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	defer dispatchCancel()
 	cancelHonored := startCancelPoll(dispatchCtx, dispatchCancel, beadID, runtime.BeadCancel)
 
+	stopRunStateRefresh := startRunStateRefresh(dispatchCtx, projectRoot, runState)
 	agentResult, agentErr := dispatchAgentRun(dispatchCtx, projectRoot, runtime.Service, runtime.AgentRunner, rcfg, runRuntime)
+	stopRunStateRefresh()
 	finishedAt := time.Now().UTC()
 
 	exitCode := 0

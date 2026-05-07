@@ -307,6 +307,60 @@ func TestExecutionCleanup_PreservesActiveAndPreservedAttempts(t *testing.T) {
 	assert.True(t, hasObservationClass(summary.Observations, "complete_evidence"))
 }
 
+func TestExecutionCleanup_PreservesMultipleRunStateAttempts(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+
+	activeOnePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-active-one-20260506T154739-11112222")
+	activeTwoPath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-active-two-20260506T154739-33334444")
+	stalePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-stale-20260506T154739-55556666")
+
+	writeExecutionCleanupCandidate(t, activeOnePath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-active-one",
+		AttemptID:    "20260506T154739-11112222",
+		WorktreePath: activeOnePath,
+	}, map[string]string{"scratch.txt": "active one\n"})
+	writeExecutionCleanupCandidate(t, activeTwoPath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-active-two",
+		AttemptID:    "20260506T154739-33334444",
+		WorktreePath: activeTwoPath,
+	}, map[string]string{"scratch.txt": "active two\n"})
+	writeExecutionCleanupCandidate(t, stalePath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-stale",
+		AttemptID:    "20260506T154739-55556666",
+		WorktreePath: stalePath,
+	}, map[string]string{"scratch.txt": "stale\n"})
+	require.NoError(t, WriteRunState(projectRoot, RunState{
+		BeadID:       "ddx-active-one",
+		AttemptID:    "20260506T154739-11112222",
+		StartedAt:    time.Now().UTC(),
+		WorktreePath: activeOnePath,
+	}))
+	require.NoError(t, WriteRunState(projectRoot, RunState{
+		BeadID:       "ddx-active-two",
+		AttemptID:    "20260506T154739-33334444",
+		StartedAt:    time.Now().UTC(),
+		WorktreePath: activeTwoPath,
+	}))
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, activeOnePath)
+	assert.DirExists(t, activeTwoPath)
+	assert.NoFileExists(t, stalePath)
+	assert.Equal(t, int64(1), summary.RemovedUnregisteredTempDirs)
+	states, err := ReadRunStates(projectRoot)
+	require.NoError(t, err)
+	assert.Len(t, states, 2)
+}
+
 func TestExecutionCleanup_ReportsSummary(t *testing.T) {
 	projectRoot := setupExecutionCleanupProjectRoot(t)
 	tempRoot := t.TempDir()
