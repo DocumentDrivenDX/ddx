@@ -23,6 +23,8 @@ FEAT-014 normalized signal model.
 `generate-artifact` runs therefore draw from the same FEAT-014 token budget
 accounting as agent work runs, with cost attribution recorded through the run
 evidence model rather than a separate artifact-only ledger.
+See [[MET-001]] for the canonical `source: exec` MET artifact that anchors
+runtime-metric reporting.
 
 ## Problem Statement
 

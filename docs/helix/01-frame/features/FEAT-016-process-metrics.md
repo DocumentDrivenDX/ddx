@@ -19,6 +19,8 @@ DDx tracks process metrics — measures derived from existing stores (beads,
 agent sessions) that help teams understand the economics and efficiency of
 their workflow. Unlike FEAT-010 operational metrics (which you *run* against
 code), process metrics are *computed* from data DDx already collects.
+See [[MET-002]] for the canonical `source: external` MET artifact that
+anchors cost-per-closed-bead reporting.
 
 ## Problem Statement
 
