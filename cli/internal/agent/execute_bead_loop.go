@@ -879,6 +879,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		if report.Detail == "" {
 			report.Detail = ExecuteBeadStatusDetail(report.Status, "", "")
 		}
+		classifyLoopReportFailure(&report)
 		if IsResourceExhaustedStatus(report.Status) {
 			result.Attempts++
 			exitReason = "resource_exhausted"
@@ -1828,15 +1829,51 @@ func formatLoopResult(report ExecuteBeadReport) string {
 			return fmt.Sprintf("no_changes: %s", report.NoChangesRationale)
 		}
 		return "no_changes"
+	case ExecuteBeadStatusNoEvidenceProduced:
+		detail := report.Detail
+		if detail == "" {
+			detail = "agent exited without a commit or no_changes_rationale.txt"
+		}
+		return fmt.Sprintf("no_evidence_produced: %s", detail)
 	default:
 		detail := report.Detail
 		if detail == "" {
 			detail = report.Status
 		}
+		if report.OutcomeReason != "" {
+			return fmt.Sprintf("%s: %s", report.OutcomeReason, detail)
+		}
 		if report.PreserveRef != "" {
 			return fmt.Sprintf("preserved: %s", detail)
 		}
 		return fmt.Sprintf("error: %s", detail)
+	}
+}
+
+func classifyLoopReportFailure(report *ExecuteBeadReport) {
+	if report == nil || report.Status == ExecuteBeadStatusSuccess || report.Status == ExecuteBeadStatusAlreadySatisfied {
+		return
+	}
+	if report.OutcomeReason != "" {
+		return
+	}
+	combined := strings.TrimSpace(strings.Join([]string{
+		report.Detail,
+		report.Error,
+		report.Stderr,
+	}, "\n"))
+	if report.Status == ExecuteBeadStatusNoEvidenceProduced {
+		report.OutcomeReason = FailureModeNoEvidenceProduced
+		return
+	}
+	mode := ClassifyFailureMode(report.Status, 1, combined)
+	if mode == "" || mode == FailureModeUnknown {
+		return
+	}
+	report.OutcomeReason = mode
+	if mode == FailureModeLockContention {
+		report.Disrupted = true
+		report.DisruptionReason = FailureModeLockContention
 	}
 }
 
@@ -1885,7 +1922,7 @@ func shouldSuppressNoProgress(report ExecuteBeadReport) bool {
 
 func isTransientOutcomeReason(reason string) bool {
 	switch reason {
-	case "transport", "quota", "routing", "timeout", "merge_conflict":
+	case "transport", "quota", "routing", "timeout", "merge_conflict", FailureModeLockContention, FailureModeNoViableProvider:
 		return true
 	default:
 		return false

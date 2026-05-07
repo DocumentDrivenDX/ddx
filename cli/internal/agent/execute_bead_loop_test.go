@@ -54,7 +54,7 @@ func TestReport_OutcomeReason_Persists_BesideDisrupted(t *testing.T) {
 }
 
 func TestSuppressNoProgress_HonorsTransientReasons(t *testing.T) {
-	for _, reason := range []string{"transport", "quota", "routing", "timeout", "merge_conflict"} {
+	for _, reason := range []string{"transport", "quota", "routing", "timeout", "merge_conflict", FailureModeLockContention, FailureModeNoViableProvider} {
 		t.Run(reason, func(t *testing.T) {
 			report := ExecuteBeadReport{
 				Status:        ExecuteBeadStatusNoChanges,
@@ -78,6 +78,42 @@ func TestSuppressNoProgress_HonorsTransientReasons(t *testing.T) {
 		ResultRev:     "result",
 		OutcomeReason: "tests_red",
 	}))
+}
+
+func TestClassifyLoopReportFailure_LockContentionIsActionable(t *testing.T) {
+	report := ExecuteBeadReport{
+		Status: ExecuteBeadStatusExecutionFailed,
+		Detail: "staging tracker: fatal: Unable to create '/repo/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository",
+	}
+
+	classifyLoopReportFailure(&report)
+
+	assert.Equal(t, FailureModeLockContention, report.OutcomeReason)
+	assert.True(t, report.Disrupted)
+	assert.Equal(t, FailureModeLockContention, report.DisruptionReason)
+	assert.Equal(t,
+		"lock_contention: staging tracker: fatal: Unable to create '/repo/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository",
+		formatLoopResult(report))
+	assert.False(t, shouldSuppressNoProgress(ExecuteBeadReport{
+		Status:        ExecuteBeadStatusExecutionFailed,
+		BaseRev:       "same",
+		ResultRev:     "same",
+		OutcomeReason: report.OutcomeReason,
+	}))
+}
+
+func TestFormatLoopResult_NoEvidenceShowsContractFailure(t *testing.T) {
+	report := ExecuteBeadReport{
+		Status: ExecuteBeadStatusNoEvidenceProduced,
+		Detail: "agent exited without a commit or no_changes_rationale.txt",
+	}
+
+	classifyLoopReportFailure(&report)
+
+	assert.Equal(t, FailureModeNoEvidenceProduced, report.OutcomeReason)
+	assert.Equal(t,
+		"no_evidence_produced: agent exited without a commit or no_changes_rationale.txt",
+		formatLoopResult(report))
 }
 
 func TestExecuteBeadWorkerSuccessClosesBead(t *testing.T) {
