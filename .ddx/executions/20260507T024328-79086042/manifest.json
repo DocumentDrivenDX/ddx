@@ -1,0 +1,65 @@
+{
+  "attempt_id": "20260507T024328-79086042",
+  "bead_id": "ddx-6f73d300",
+  "base_rev": "82a404038fad97dda63524aa5bb367b27eb72d8a",
+  "created_at": "2026-05-07T02:43:31.892872842Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6f73d300",
+    "title": "spec: define needs-human operator review lane",
+    "description": "PROBLEM\nDDx lacks a first-class operator-attention lane for beads that need human review. A Codex/Claude TUI or the web GUI cannot reliably answer “show me beads needing my attention” and then capture the operator review decision.\n\nROOT CAUSE\ndocs/helix/01-frame/features/FEAT-004-beads.md:39-41 defines ready/status as open/ready/blocked counts only. docs/helix/01-frame/features/FEAT-008-web-ui.md:223-229 defines Ready queue view but no Needs review filter. docs/helix/01-frame/features/FEAT-008-web-ui.md:243-263 defines review actions but not needs_human review intake/resolution in the bead GUI. docs/helix/01-frame/features/FEAT-010-task-execution.md:343-352 and docs/helix/02-design/adr/ADR-024-power-escalation-and-review-routing.md:156-170 say terminal review cases block with needs_human but do not define status, metadata, CLI/TUI discovery, GUI expression, or resolution semantics.\n\nPROPOSED FIX\nAmend FEAT-004, FEAT-008, FEAT-010, and ADR-024 to define needs_human as status=open plus needs_human label and structured reason metadata; skipped by workers; discoverable through CLI/TUI and a Beads list Needs review filter; resolvable through explicit retry/split/obsolete/defer review actions with required notes in CLI and web detail UI.\n\nNON-SCOPE\nImplementation of CLI, GraphQL, web, or worker changes. New bd/br status values. Full artifact-review chat UI.\n\nDEPS\nNo deps; this is the prerequisite spec contract.",
+    "acceptance": "1. docs/helix/01-frame/features/FEAT-004-beads.md defines needs_human lane state, metadata keys, worker-skip semantics, and ready/status count behavior.\n2. docs/helix/01-frame/features/FEAT-008-web-ui.md adds user stories for a Beads list Needs review filter and a bead detail review-resolution panel.\n3. docs/helix/01-frame/features/FEAT-010-task-execution.md specifies terminal review needs_human unclaims while retry/escalate review blocks preserve retry behavior.\n4. docs/helix/02-design/adr/ADR-024-power-escalation-and-review-routing.md aligns review-manual-required and review_spec_gap with operator-attention lane resolution.\n5. Spec names metadata keys needs-human-reason, needs-human-since, needs-human-source, needs-human-suggested-action, and needs-human-summary.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-ac10e7af",
+    "labels": [
+      "phase:2",
+      "area:docs",
+      "area:specs",
+      "area:web",
+      "area:cli",
+      "kind:doc",
+      "reliability",
+      "operator-ux",
+      "needs-human-lane",
+      "adr:024",
+      "spec:FEAT-004",
+      "spec:FEAT-008",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T02:43:28Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2049424",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-07T02:43:28.322901066Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T02:43:28.696338035Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T024328-79086042",
+    "prompt": ".ddx/executions/20260507T024328-79086042/prompt.md",
+    "manifest": ".ddx/executions/20260507T024328-79086042/manifest.json",
+    "result": ".ddx/executions/20260507T024328-79086042/result.json",
+    "checks": ".ddx/executions/20260507T024328-79086042/checks.json",
+    "usage": ".ddx/executions/20260507T024328-79086042/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6f73d300-20260507T024328-79086042"
+  },
+  "prompt_sha": "a8b896dc64c7b83aa132793afd964e0594d14af610573b8a3863fa0fcc05da1e"
+}
