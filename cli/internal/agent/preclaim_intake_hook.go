@@ -100,7 +100,7 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 		if strongMinPower > 0 {
 			runtime.MinPowerOverride = strongMinPower
 		}
-		result, err := dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, runtime)
+		payload, err := dispatchPreClaimIntakePayload(ctx, projectRoot, svc, runner, rcfg, runtime, strongMinPower)
 		if err != nil {
 			if isStrongPowerUnsatisfiedError(err) {
 				return PreClaimIntakeResult{
@@ -108,11 +108,6 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 					Detail:  "agent_power_unsatisfied: " + err.Error(),
 				}, nil
 			}
-			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: dispatch: %w", err)
-		}
-
-		payload, err := intakeResultPayload(result)
-		if err != nil {
 			return PreClaimIntakeResult{}, err
 		}
 
@@ -144,6 +139,27 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: unknown classification %q", out.Classification)
 		}
 	}
+}
+
+func dispatchPreClaimIntakePayload(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime, strongMinPower int) (string, error) {
+	payload, err := dispatchPreClaimIntakePayloadOnce(ctx, projectRoot, svc, runner, rcfg, runtime)
+	if err == nil {
+		return payload, nil
+	}
+	if runtime.ProfileOverride != "smart" || strongMinPower > 0 || !isSmartProfileUnavailableError(err) {
+		return "", err
+	}
+
+	runtime.ProfileOverride = ""
+	return dispatchPreClaimIntakePayloadOnce(ctx, projectRoot, svc, runner, rcfg, runtime)
+}
+
+func dispatchPreClaimIntakePayloadOnce(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (string, error) {
+	result, err := dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, runtime)
+	if err != nil {
+		return "", fmt.Errorf("pre-claim intake: dispatch: %w", err)
+	}
+	return intakeResultPayload(result)
 }
 
 func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bead) (string, error) {
@@ -271,4 +287,15 @@ func isStrongPowerUnsatisfiedError(err error) bool {
 	default:
 		return false
 	}
+}
+
+func isSmartProfileUnavailableError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "tier ≥ smart") ||
+		strings.Contains(msg, "tier >= smart") ||
+		strings.Contains(msg, "profile=smart") ||
+		strings.Contains(msg, "profile smart")
 }

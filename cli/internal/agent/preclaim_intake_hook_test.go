@@ -22,12 +22,16 @@ type preClaimIntakeHookServiceStub struct {
 	lastReq      agentlib.ServiceExecuteRequest
 	listModels   []agentlib.ModelInfo
 	executeErr   error
+	executeFunc  func(agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
 	finalText    string
 }
 
 func (s *preClaimIntakeHookServiceStub) Execute(_ context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 	atomic.AddInt32(&s.executeCalls, 1)
 	s.lastReq = req
+	if s.executeFunc != nil {
+		return s.executeFunc(req)
+	}
 	if s.executeErr != nil {
 		return nil, s.executeErr
 	}
@@ -174,6 +178,33 @@ func TestDecompositionHook_CatalogUnavailableUsesSmartProfileWithoutMagicPower(t
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 	assert.Equal(t, "smart", svc.lastReq.Profile)
+	assert.Zero(t, svc.lastReq.MinPower)
+}
+
+func TestDecompositionHook_SmartProfileUnavailableFallsBackToDefaultProfile(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+
+	svc := &preClaimIntakeHookServiceStub{}
+	svc.executeFunc = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		ch := make(chan agentlib.ServiceEvent, 1)
+		if req.Profile == "smart" {
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":1,"error":"ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ smart"}`)}
+			close(ch)
+			return ch, nil
+		}
+		text := `{"classification":"atomic","confidence":0.99,"reasoning":"fallback-ready"}`
+		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":` + fmt.Sprintf("%q", text) + `}`)}
+		close(ch)
+		return ch, nil
+	}
+
+	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+	got, err := hook(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&svc.executeCalls))
+	assert.Empty(t, svc.lastReq.Profile)
 	assert.Zero(t, svc.lastReq.MinPower)
 }
 
