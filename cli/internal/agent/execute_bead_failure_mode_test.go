@@ -43,6 +43,11 @@ func TestFailureModeClassifyWorker(t *testing.T) {
 		{"timed_out", ExecuteBeadOutcomeTaskFailed, 1,
 			"agent call timed out after 2h", FailureModeTimeout},
 
+		// Worktree loss: infrastructure lost the isolated attempt checkout
+		// before DDx could inspect the result commit.
+		{"worktree_lost_chdir", ExecuteBeadOutcomeTaskFailed, 1,
+			"failed to read worktree HEAD: git rev-parse HEAD: chdir /tmp/ddx-exec-wt/.execute-bead-wt-ddx-test-attempt: no such file or directory", FailureModeWorktreeLost},
+
 		// Merge conflict (worker-visible when orchestrator surfaces it via
 		// Reason/Error). The landing classifier refines this; the worker
 		// classifier recognises the text so a pre-landing result is still
@@ -84,6 +89,14 @@ func TestFailureModeClassifyWorker(t *testing.T) {
 					tc.outcome, tc.exitCode, tc.errMsg, got, tc.want)
 			}
 		})
+	}
+}
+
+func TestFailureModeClassifyWorker_WorktreeLost(t *testing.T) {
+	errText := "failed to read worktree HEAD: git rev-parse HEAD: chdir /tmp/ddx-exec-wt/.execute-bead-wt-ddx-test-attempt: no such file or directory"
+	got := ClassifyFailureMode(ExecuteBeadOutcomeTaskFailed, 1, errText)
+	if got != FailureModeWorktreeLost {
+		t.Fatalf("ClassifyFailureMode worktree loss = %q, want %q", got, FailureModeWorktreeLost)
 	}
 }
 

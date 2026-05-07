@@ -41,6 +41,7 @@ const (
 	FailureModeBlockedByPassthroughConstraint = "blocked_by_passthrough_constraint"
 	FailureModeAgentPowerUnsatisfied          = "agent_power_unsatisfied"
 	FailureModeLockContention                 = "lock_contention"
+	FailureModeWorktreeLost                   = "worktree_lost"
 	FailureModeUnknown                        = "unknown"
 )
 
@@ -77,6 +78,8 @@ func ClassifyFailureMode(outcome string, exitCode int, errMsg string) string {
 	switch {
 	case IsLockContentionError(errMsg):
 		return FailureModeLockContention
+	case IsWorktreeLostError(errMsg):
+		return FailureModeWorktreeLost
 	case containsAny(lower,
 		"passthrough constraint unsatisfiable",
 		"passthrough constraint:",
@@ -169,6 +172,25 @@ func ClassifyFailureMode(outcome string, exitCode int, errMsg string) string {
 		return FailureModeUnknown
 	}
 	return ""
+}
+
+// IsWorktreeLostError reports whether errMsg describes the execute-bead
+// infrastructure losing the isolated attempt worktree before DDx could inspect
+// its HEAD. This deliberately requires both a HEAD/worktree signal and a
+// missing-path signal so generic harness "no such file" errors do not get
+// bucketed as infrastructure loss.
+func IsWorktreeLostError(errMsg string) bool {
+	lower := strings.ToLower(errMsg)
+	hasHeadSignal := containsAny(lower,
+		"failed to read worktree head",
+		"git rev-parse head",
+		"worktree path missing")
+	hasMissingPathSignal := containsAny(lower,
+		"chdir",
+		"no such file or directory",
+		"cannot access",
+		"does not exist")
+	return hasHeadSignal && hasMissingPathSignal
 }
 
 // containsAny reports whether s contains any of the given substrings. s is

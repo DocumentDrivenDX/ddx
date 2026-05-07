@@ -88,5 +88,6 @@ func ReportFromExecuteBeadResult(res *ExecuteBeadResult, tier string) ExecuteBea
 		CostUSD:                     res.CostUSD,
 		DurationMS:                  int64(res.DurationMS),
 		ResourceExhausted:           res.ResourceExhausted,
+		OutcomeReason:               res.FailureMode,
 	}
 }

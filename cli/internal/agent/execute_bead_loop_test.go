@@ -183,7 +183,7 @@ func TestStopCondition_NoProgress_CountsRealImplementationNoCommit(t *testing.T)
 }
 
 func TestSuppressNoProgress_HonorsTransientReasons(t *testing.T) {
-	for _, reason := range []string{"transport", "quota", "routing", "timeout", "merge_conflict", FailureModeLockContention, FailureModeNoViableProvider} {
+	for _, reason := range []string{"transport", "quota", "routing", "timeout", "merge_conflict", FailureModeLockContention, FailureModeNoViableProvider, FailureModeWorktreeLost} {
 		t.Run(reason, func(t *testing.T) {
 			report := ExecuteBeadReport{
 				Status:        ExecuteBeadStatusNoChanges,
@@ -207,6 +207,17 @@ func TestSuppressNoProgress_HonorsTransientReasons(t *testing.T) {
 		ResultRev:     "result",
 		OutcomeReason: "tests_red",
 	}))
+}
+
+func TestExecuteLoop_WorktreeLostDoesNotCountNoProgress(t *testing.T) {
+	report := ExecuteBeadReport{
+		Status:        ExecuteBeadStatusExecutionFailed,
+		BaseRev:       "same",
+		ResultRev:     "same",
+		OutcomeReason: FailureModeWorktreeLost,
+	}
+	assert.False(t, isValidImplementationAttempt(report))
+	assert.False(t, shouldSuppressNoProgress(report))
 }
 
 func TestClassifyLoopReportFailure_LockContentionIsActionable(t *testing.T) {

@@ -1985,6 +1985,7 @@ func isValidImplementationAttempt(report ExecuteBeadReport) bool {
 		FailureModeAgentPowerUnsatisfied,
 		FailureModeBlockedByPassthroughConstraint,
 		FailureModeNoEvidenceProduced,
+		FailureModeWorktreeLost,
 		"needs_human":
 		return false
 	}
@@ -2016,7 +2017,7 @@ func shouldSuppressNoProgress(report ExecuteBeadReport) bool {
 
 func isTransientOutcomeReason(reason string) bool {
 	switch reason {
-	case "transport", "quota", "routing", "timeout", "merge_conflict", FailureModeLockContention, FailureModeNoViableProvider:
+	case "transport", "quota", "routing", "timeout", "merge_conflict", FailureModeLockContention, FailureModeNoViableProvider, FailureModeWorktreeLost:
 		return true
 	default:
 		return false

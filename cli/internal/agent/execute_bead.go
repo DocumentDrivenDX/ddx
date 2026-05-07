@@ -92,16 +92,33 @@ type ExecuteBeadResult struct {
 	// the FailureMode* constants in execute_bead_status.go.
 	FailureMode string `json:"failure_mode,omitempty"`
 
-	ExecutionDir    string        `json:"execution_dir,omitempty"`
-	PromptFile      string        `json:"prompt_file,omitempty"`
-	ManifestFile    string        `json:"manifest_file,omitempty"`
-	ResultFile      string        `json:"result_file,omitempty"`
-	UsageFile       string        `json:"usage_file,omitempty"`
-	Stderr          string        `json:"stderr,omitempty"`
-	RateLimitBudget time.Duration `json:"rate_limit_budget,omitempty"`
+	ExecutionDir       string             `json:"execution_dir,omitempty"`
+	PromptFile         string             `json:"prompt_file,omitempty"`
+	ManifestFile       string             `json:"manifest_file,omitempty"`
+	ResultFile         string             `json:"result_file,omitempty"`
+	UsageFile          string             `json:"usage_file,omitempty"`
+	WorktreePath       string             `json:"worktree_path,omitempty"`
+	AttemptDiagnostics *AttemptDiagnostic `json:"attempt_diagnostics,omitempty"`
+	Stderr             string             `json:"stderr,omitempty"`
+	RateLimitBudget    time.Duration      `json:"rate_limit_budget,omitempty"`
 
 	StartedAt  time.Time `json:"started_at"`
 	FinishedAt time.Time `json:"finished_at"`
+}
+
+// AttemptDiagnostic captures infrastructure state when an attempt cannot be
+// inspected normally. It is intentionally small and JSON-native so result.json
+// remains useful even when the worker worktree has already vanished.
+type AttemptDiagnostic struct {
+	BeadID                 string    `json:"bead_id"`
+	AttemptID              string    `json:"attempt_id"`
+	WorktreePath           string    `json:"worktree_path"`
+	HeadRevError           string    `json:"head_rev_error,omitempty"`
+	WorktreePathExists     bool      `json:"worktree_path_exists"`
+	CleanupMetadataPresent bool      `json:"cleanup_metadata_present"`
+	RunStatePresent        bool      `json:"run_state_present"`
+	RunState               *RunState `json:"run_state,omitempty"`
+	GitWorktreeRegistered  bool      `json:"git_worktree_registered"`
 }
 
 // BeadEventAppender records append-only evidence events on a bead.
@@ -767,6 +784,51 @@ func startRunStateRefresh(ctx context.Context, projectRoot string, state RunStat
 	}
 }
 
+func buildAttemptDiagnostic(projectRoot, wtPath, beadID, attemptID, headRevErr string, gitOps GitOps) *AttemptDiagnostic {
+	diag := &AttemptDiagnostic{
+		BeadID:       beadID,
+		AttemptID:    attemptID,
+		WorktreePath: wtPath,
+		HeadRevError: headRevErr,
+	}
+	if _, err := os.Stat(wtPath); err == nil {
+		diag.WorktreePathExists = true
+	}
+	if _, err := ReadExecutionCleanupMetadata(wtPath); err == nil {
+		diag.CleanupMetadataPresent = true
+	}
+	if states, err := ReadRunStates(projectRoot); err == nil {
+		if state := matchingRunStateForAttempt(states, attemptID, wtPath); state != nil {
+			diag.RunStatePresent = true
+			copied := *state
+			diag.RunState = &copied
+		}
+	}
+	if gitOps != nil {
+		if paths, err := gitOps.WorktreeList(projectRoot); err == nil {
+			for _, path := range paths {
+				if filepath.Clean(path) == filepath.Clean(wtPath) {
+					diag.GitWorktreeRegistered = true
+					break
+				}
+			}
+		}
+	}
+	return diag
+}
+
+func matchingRunStateForAttempt(states []RunState, attemptID, wtPath string) *RunState {
+	for i := range states {
+		if attemptID != "" && states[i].AttemptID == attemptID {
+			return &states[i]
+		}
+		if wtPath != "" && states[i].WorktreePath != "" && filepath.Clean(states[i].WorktreePath) == filepath.Clean(wtPath) {
+			return &states[i]
+		}
+	}
+	return nil
+}
+
 // appendRateLimitRetryEvent records one rate-limit retry on the bead's
 // event stream per TD-031 §4 / §8.4 RateLimitRetryContract. The event body
 // carries the retry count and wait duration so an audit can reconstruct the
@@ -1080,6 +1142,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// Get the HEAD of the worktree after the agent ran.
 	resultRev, revErr := gitOps.HeadRev(wtPath)
 	if revErr != nil {
+		headRevErr := fmt.Sprintf("failed to read worktree HEAD: %v", revErr)
 		res := &ExecuteBeadResult{
 			BeadID:                      beadID,
 			AttemptID:                   attemptID,
@@ -1099,19 +1162,23 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			Tokens:                      tokens,
 			CostUSD:                     costUSD,
 			ExitCode:                    1,
-			Error:                       agentErrMsg,
+			Error:                       strings.TrimSpace(strings.Join([]string{agentErrMsg, headRevErr}, "\n")),
 			Stderr:                      agentStderr,
 			RateLimitBudget:             runtime.RateLimitMaxWait,
-			Reason:                      revErr.Error(), // HeadRev failure; orchestrator prefers this over Error for Reason
+			Reason:                      headRevErr, // HeadRev failure; orchestrator prefers this over Error for Reason
 			ExecutionDir:                artifacts.DirRel,
 			PromptFile:                  artifacts.PromptRel,
 			ManifestFile:                artifacts.ManifestRel,
 			ResultFile:                  artifacts.ResultRel,
+			WorktreePath:                wtPath,
 			StartedAt:                   startedAt,
 			FinishedAt:                  finishedAt,
 			Outcome:                     ExecuteBeadOutcomeTaskFailed,
 		}
 		res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
+		if res.FailureMode == FailureModeWorktreeLost {
+			res.AttemptDiagnostics = buildAttemptDiagnostic(projectRoot, wtPath, beadID, attemptID, headRevErr, gitOps)
+		}
 		populateWorkerStatus(res)
 		_ = writeArtifactJSON(artifacts.ResultAbs, res)
 		return res, fmt.Errorf("failed to read worktree HEAD: %w", revErr)
