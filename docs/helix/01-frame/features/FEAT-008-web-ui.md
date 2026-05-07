@@ -655,7 +655,7 @@ thresholds.
 
 **E2E Test:** `beads.spec.ts` — full workflow: open bead with spec-id and parent → click spec link → verify document viewer → press Back → click parent link → verify parent detail → press Back → click run → verify run detail → press Back → verify return to bead detail
 
-### US-082g: Operator Resolves Beads in the Needs Review Lane
+### US-082h: Operator Resolves Beads in the Needs Review Lane
 **As an** operator triaging ambiguous work
 **I want** to filter beads that need human review and resolve them from bead detail
 **So that** I can route work to retry, split, obsolete, or defer without losing context
@@ -1382,7 +1382,7 @@ outcome, including navigation back.
 | `navigation.spec.ts` | US-094 (via FEAT-021) | Root redirect, project picker, node identity in nav bar |
 | `artifacts.spec.ts` | US-080, US-081b, US-083, US-083a, US-084, US-081a | Browse library → open artifact → render by media type → edit + save → search → follow intra-repo links |
 | `graph.spec.ts` | US-081, US-081c | Open graph → pan/zoom → identify stale nodes → click node → navigate back; graph cross-link from artifact detail; integrity issue expand → apply fix → verify graph reload; non-repairable issue tooltip; stale-issue error |
-| `beads.spec.ts` | US-082, US-082b, US-082c, US-082d, US-082e, US-082f, US-082g, US-085, US-085b, US-085c | Board view, search/filter, execution evidence, review vs spec, re-run, navigate to artifacts, sort/filter with URL state, create/manage, worker progress, delete |
+| `beads.spec.ts` | US-082, US-082b, US-082c, US-082d, US-082e, US-082f, US-082g, US-082h, US-085, US-085b, US-085c | Board view, search/filter, execution evidence, review vs spec, re-run, navigate to artifacts, sort/filter with URL state, needs review lane resolution, create/manage, worker progress, delete |
 | `workers.spec.ts` | US-085b, US-086, US-086a | Worker list, live phase updates via subscription, streaming response text with tool calls |
 | `runs.spec.ts` | US-086b, US-086c | Navigate to runs → filter by layer → drill work→try→run → verify fields at each level → breadcrumb back to list; re-queue try/run/work flows incl. idempotency dedupe and closed-bead block |
 | `providers.spec.ts` | US-087, US-088, US-088b | Provider list with fixture scenarios → detail panel → unknown semantics → Copy JSON → harness cross-link |
