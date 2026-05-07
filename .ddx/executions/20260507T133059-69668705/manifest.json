@@ -1,0 +1,116 @@
+{
+  "attempt_id": "20260507T133059-69668705",
+  "bead_id": "ddx-e32a0f68",
+  "base_rev": "c7efe5f15f226d972d111c16daf73767f4c5111b",
+  "created_at": "2026-05-07T13:31:01.968806381Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-e32a0f68",
+    "title": "agent: add enforceable read-only tool reviewer profile",
+    "description": "PROBLEM\nThe candidate-cycle design requires reviewers to inspect the live attempt worktree efficiently without being able to mutate it. Current reviewer dispatch is not enforced as read-only at the runtime boundary, so moving review into the attempt worktree would depend on prompt wording rather than a hard capability.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead_review.go:623-673 builds reviewer AgentRunRuntime with Role=reviewer and MinPower metadata, but no read-only permission profile or tool restriction is set.\n- cli/internal/agent/execute_bead.go:826-842 sets implementation dispatch PermissionsOverride to unrestricted because implementation runs in an isolated worktree; reviewer dispatch needs the opposite boundary.\n- cli/internal/agent/service_run.go and related dispatch code are the likely boundary where PermissionsOverride / Role / tool access must be translated into Fizeau execution config.\n\nPROPOSED FIX\n- Add an enforceable read-only tool reviewer profile to the agent runtime/dispatch boundary.\n- Ensure reviewer role can read files and run read-only inspection commands if supported, but cannot write files, stage, commit, delete, or run mutating shell commands.\n- Fail closed if a harness cannot enforce read-only reviewer mode, with an operator-visible review-error class rather than silently running unrestricted.\n- Add tests with a fake reviewer that attempts mutation and verify the mutation is rejected or impossible.\n\nNON-SCOPE\n- Do not move review into the attempt worktree in this bead; that is a dependent bead.\n- Do not implement repair cycles.\n- Do not choose concrete provider/model fallback logic.\n\nDEPS\nDepends on the spec bead under this epic so the read-only tool reviewer contract is defined before implementation.",
+    "acceptance": "1. A runtime/config field or permission profile exists for read-only tool reviewer dispatch and is wired through reviewer execution.\n2. TestReviewerRuntime_ReadOnlyProfilePlumbed verifies BuildReviewExecuteRequest or its replacement sets the read-only reviewer profile for Role=reviewer.\n3. TestReviewerRuntime_MutationDenied uses a fake or script reviewer that attempts to write/stage/commit and proves the attempt is rejected or cannot affect the worktree.\n4. TestReviewerRuntime_UnsupportedReadOnlyFailsClosed verifies unsupported enforcement produces a typed review-error instead of unrestricted review.\n5. cd cli \u0026\u0026 go test ./internal/agent/... -run \"TestReviewerRuntime_ReadOnlyProfilePlumbed|TestReviewerRuntime_MutationDenied|TestReviewerRuntime_UnsupportedReadOnlyFailsClosed\" green.\n6. cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... green.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-31e07fdc",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "kind:feature",
+      "reliability",
+      "adr:024",
+      "spec:FEAT-010",
+      "candidate-cycle",
+      "review"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T13:30:03Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2819058",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"All 8 rubric criteria satisfied. (1) Title is imperative and names subsystem + change. (2) Description contains PROBLEM, ROOT CAUSE with three specific file:line anchors (execute_bead_review.go:623-673, execute_bead.go:826-842, service_run.go), PROPOSED FIX with enumerated steps, and NON-SCOPE. Minor hedge ('likely boundary') on service_run.go is acceptable given the proposed-fix section names it explicitly. (3) AC is numbered 1-7, each independently verifiable. (4) Three named Test* functions (TestReviewerRuntime_ReadOnlyProfilePlumbed, TestReviewerRuntime_MutationDenied, TestReviewerRuntime_UnsupportedReadOnlyFailsClosed) satisfy wired-in assertion requirement; AC 2 names a concrete function under test (BuildReviewExecuteRequest). (5) AC 6 is the go test gate and AC 7 is lefthook run pre-commit. (6) Labels carry phase:2, area:agent, kind:feature, adr:024, spec:FEAT-010. (7) Parent ddx-31e07fdc and dep ddx-71073116 are explicit; DEPS prose explains the ordering rationale. (8) Description is self-contained: no /tmp/ paths, no chat references, dep explanation inline.\",\"score\":8,\"suggested_fixes\":[],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T13:11:14.883066356Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=8"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-07T13:24:17.952146069Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260507T131115-066e62b1\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":24,\"output_tokens\":21724,\"total_tokens\":21748,\"cost_usd\":1.3074569,\"duration_ms\":780679,\"exit_code\":0}",
+          "created_at": "2026-05-07T13:24:18.01936585Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=21748 cost_usd=1.3075 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260507T131115-066e62b1\",\"bead_id\":\"ddx-e32a0f68\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-07T13:24:28.939467006Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard model=sonnet harness=claude"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"sonnet\",\"resolved_provider\":\"claude\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-07T13:24:29.06117557Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "erik",
+          "body": "failure_class=review-error: unparseable\nattempt_count=1\nresult_rev=bc984557a447ad1ab768f826572061b1ae8a0dee\n\nreviewer output: unparseable JSON verdict: approve verdict without per-AC evidence\nharness=claude\nmodel=opus\ninput_bytes=65022\noutput_bytes=1539\nelapsed_ms=72429",
+          "created_at": "2026-05-07T13:26:51.036825789Z",
+          "kind": "review-error",
+          "source": "ddx agent execute-loop",
+          "summary": "review-error: unparseable"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-close review: review-error: unparseable\nRead-only reviewer profile (PermissionsReadOnlyReviewer) is plumbed via BuildReviewGroupExecuteRequest and enforced fail-closed at RunWithConfigViaService for harnesses outside the readOnlyCapableHarnesses allowlist. All three required tests are present; previous result.json reports task_succeeded.\nresult_rev=bc984557a447ad1ab768f826572061b1ae8a0dee\nbase_rev=b6e34641dfa83223101ddac826adc8c7e7da93bd",
+          "created_at": "2026-05-07T13:26:51.101686708Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_malfunction"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"All 8 rubric criteria satisfied. Title is imperative and names subsystem + change. Description provides PROBLEM, ROOT CAUSE with two concrete file:line references (execute_bead_review.go:623-673, execute_bead.go:826-842), PROPOSED FIX, and NON-SCOPE. AC items 2-4 each name a specific TestReviewerRuntime_* function; AC5 wires those names into a -run filter; AC6-7 supply the full cd-cli go test sweep and lefthook gate. Labels carry phase, area, kind, reliability, adr:024, and spec:FEAT-010 cross-refs. Parent (ddx-31e07fdc) and dep (ddx-71073116) are explicit. Description is self-contained with no /tmp or chat references. Minor: service_run.go is cited without a line number and qualified as 'likely boundary', but the two concrete line-range references give an agent enough footing to begin; this does not fail the criterion.\",\"score\":8,\"suggested_fixes\":[\"Consider adding a line number or grep anchor for the service_run.go reference, or explicitly mark it speculative so the agent knows to search rather than jump directly.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T13:30:59.099555225Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=8"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T13:30:03.435631594Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T133059-69668705",
+    "prompt": ".ddx/executions/20260507T133059-69668705/prompt.md",
+    "manifest": ".ddx/executions/20260507T133059-69668705/manifest.json",
+    "result": ".ddx/executions/20260507T133059-69668705/result.json",
+    "checks": ".ddx/executions/20260507T133059-69668705/checks.json",
+    "usage": ".ddx/executions/20260507T133059-69668705/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-e32a0f68-20260507T133059-69668705"
+  },
+  "prompt_sha": "ef0ce4af0e3eb0a7368e287baf2404cc35c8cee6b3b6e806a3a93cff2194892d"
+}
