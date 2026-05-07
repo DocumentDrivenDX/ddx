@@ -71,6 +71,14 @@ func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.Re
 
 	harness := rcfg.Passthrough().Harness
 
+	effectivePerms := runtime.PermissionsOverride
+	if effectivePerms == "" {
+		effectivePerms = rcfg.Permissions()
+	}
+	if err := ValidateReadOnlyReviewerDispatch(harness, effectivePerms); err != nil {
+		return nil, err
+	}
+
 	if harness == "virtual" || harness == "script" {
 		sessionLogDir := runtime.SessionLogDirOverride
 		if sessionLogDir == "" {
