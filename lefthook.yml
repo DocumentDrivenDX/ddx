@@ -47,7 +47,7 @@ pre-commit:
 
     git-config-health:
       run: "sh scripts/git-config-health.sh"
-      fail_text: "Local Git config is invalid. Run 'git config --unset core.worktree'."
+      fail_text: "Local Git config is invalid. Unset core.worktree/core.hooksPath and rerun lefthook install --reset-hooks-path."
 
     beads-tracker-health:
       run: "sh scripts/beads-tracker-health.sh"

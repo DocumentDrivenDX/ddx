@@ -93,7 +93,7 @@ The doctor helps identify and resolve:
 
 	cmd.Flags().BoolP("verbose", "v", false, "Show detailed diagnostic output")
 	cmd.Flags().Bool("plugins", false, "Audit installed plugins for manifest and skill issues")
-	cmd.Flags().Bool("fix", false, "Automatically remediate detected git-repo corruption (core.bare/core.worktree)")
+	cmd.Flags().Bool("fix", false, "Automatically remediate detected git-repo corruption (core.bare/core.worktree/core.hooksPath)")
 
 	return cmd
 }

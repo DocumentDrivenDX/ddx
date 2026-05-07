@@ -159,6 +159,34 @@ func TestCheckGitRepoHealthFixUnsetsRedirectedCoreWorktree(t *testing.T) {
 	}
 }
 
+// TestCheckGitRepoHealthDetectsLocalHooksPath verifies stale local
+// core.hooksPath detection and --fix remediation. A local hooksPath causes
+// lefthook to print "Skipping hook sync" and can leave stale hooks active.
+func TestCheckGitRepoHealthDetectsLocalHooksPath(t *testing.T) {
+	dir := t.TempDir()
+	initTestRepo(t, dir)
+
+	set := exec.Command("git", "config", "core.hooksPath", ".git/hooks")
+	set.Dir = dir
+	set.Env = gitpkg.CleanEnv()
+	require.NoError(t, set.Run())
+
+	issues := checkGitRepoHealth(dir, false)
+	assert.True(t, hasIssueType(issues, "git_local_hooks_path"),
+		"expected git_local_hooks_path issue, got: %+v", issues)
+
+	issues = checkGitRepoHealth(dir, true)
+	assert.True(t, hasIssueType(issues, "git_local_hooks_path"),
+		"issue should still be reported under --fix (as fixed)")
+
+	get := exec.Command("git", "config", "--local", "--get", "core.hooksPath")
+	get.Dir = dir
+	get.Env = gitpkg.CleanEnv()
+	if err := get.Run(); err == nil {
+		t.Fatalf("core.hooksPath should be unset after --fix")
+	}
+}
+
 // TestPreCommitDDXValidateFailsOnCoreWorktreeRedirect verifies the pre-commit
 // guard used by lefthook fails when local config points the primary checkout
 // at a different worktree.
@@ -191,6 +219,28 @@ func TestPreCommitDDXValidateFailsOnCoreWorktreeRedirect(t *testing.T) {
 	require.NoError(t, readErr)
 	assert.Contains(t, string(lefthook), "git-config-health:")
 	assert.Contains(t, string(lefthook), "sh scripts/git-config-health.sh")
+}
+
+// TestPreCommitGitConfigHealthFailsOnCoreHooksPath verifies the pre-commit
+// guard fails before lefthook can silently continue with stale hook-path config.
+func TestPreCommitGitConfigHealthFailsOnCoreHooksPath(t *testing.T) {
+	dir := t.TempDir()
+	initTestRepo(t, dir)
+
+	set := exec.Command("git", "config", "core.hooksPath", ".git/hooks")
+	set.Dir = dir
+	set.Env = gitpkg.CleanEnv()
+	require.NoError(t, set.Run())
+
+	script, absErr := filepath.Abs(filepath.Join("..", "..", "scripts", "git-config-health.sh"))
+	require.NoError(t, absErr)
+	cmd := exec.Command("sh", script)
+	cmd.Dir = dir
+	cmd.Env = append(gitpkg.CleanEnv(), "DDX_GIT_CONFIG_HEALTH_ROOT="+dir)
+	out, err := cmd.CombinedOutput()
+	require.Error(t, err, "hook guard should fail on local core.hooksPath")
+	assert.Contains(t, string(out), "Invalid local git config: core.hooksPath=.git/hooks")
+	assert.Contains(t, string(out), "git config --unset-all --local core.hooksPath")
 }
 
 // TestCheckGitRepoHealthCleanRepo verifies a clean repo produces no corruption

@@ -108,7 +108,7 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 		allGood = false
 	}
 
-	// Check 4b: Git Repo Health (core.bare / core.worktree corruption)
+	// Check 4b: Git Repo Health (core.bare / core.worktree / core.hooksPath corruption)
 	fmt.Print("✓ Checking Git Repo Health... ")
 	repoIssues := checkGitRepoHealth(f.WorkingDir, fix)
 	if len(repoIssues) == 0 {
@@ -719,10 +719,11 @@ func installedEntryRootCandidate(entry registry.InstalledEntry) string {
 // checkGitRepoHealth detects git-repo corruption from prior ddx incidents:
 //  1. core.bare=true on a repo that has a working tree (not actually bare)
 //  2. Stray core.worktree that does not match the actual toplevel
-//  3. extensions.worktreeConfig not enabled (warning only)
+//  3. Local core.hooksPath that prevents lefthook from managing hook sync
+//  4. extensions.worktreeConfig not enabled (warning only)
 //
-// If fix is true, conditions (1) and (2) are remediated with `git config --unset`.
-// (3) is always a warning — never auto-fixed, since enabling per-worktree config
+// If fix is true, conditions (1), (2), and (3) are remediated with git config unset.
+// (4) is always a warning — never auto-fixed, since enabling per-worktree config
 // is a user-facing choice.
 func checkGitRepoHealth(workingDir string, fix bool) []DiagnosticIssue {
 	var issues []DiagnosticIssue
@@ -771,6 +772,10 @@ func checkGitRepoHealth(workingDir string, fix bool) []DiagnosticIssue {
 	}
 	gitConfigUnset := func(key string) error {
 		c := gitpkg.Command(ctx, workingDir, "config", "--local", "--unset", key)
+		return c.Run()
+	}
+	gitConfigUnsetAll := func(key string) error {
+		c := gitpkg.Command(ctx, workingDir, "config", "--local", "--unset-all", key)
 		return c.Run()
 	}
 
@@ -829,7 +834,28 @@ func checkGitRepoHealth(workingDir string, fix bool) []DiagnosticIssue {
 		}
 	}
 
-	// (3) extensions.worktreeConfig not enabled → warning only.
+	// (3) Local core.hooksPath interferes with lefthook's hook-path sync.
+	if hooksPathVal, ok := gitConfigValue("core.hooksPath"); ok && hooksPathVal != "" {
+		desc := fmt.Sprintf("core.hooksPath=%q is set locally; lefthook may skip hook-path sync and run stale hooks", hooksPathVal)
+		rem := []string{
+			"git config --unset-all --local core.hooksPath",
+			"lefthook install --reset-hooks-path",
+		}
+		if fix {
+			if err := gitConfigUnsetAll("core.hooksPath"); err == nil {
+				desc += " — removed"
+			} else {
+				desc += fmt.Sprintf(" — unset failed: %v", err)
+			}
+		}
+		issues = append(issues, DiagnosticIssue{
+			Type:        "git_local_hooks_path",
+			Description: desc,
+			Remediation: rem,
+		})
+	}
+
+	// (4) extensions.worktreeConfig not enabled → warning only.
 	val, ok := gitConfigValue("extensions.worktreeConfig")
 	if !ok || val != "true" {
 		issues = append(issues, DiagnosticIssue{
