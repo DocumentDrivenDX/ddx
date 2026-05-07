@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260507T053646-29b9f4df",
+  "bead_id": "ddx-71073116",
+  "base_rev": "60d3dd62105da83c0c5a18ceebdafb303a460150",
+  "created_at": "2026-05-07T05:36:53.810656858Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-71073116",
+    "title": "spec: define candidate-cycle review and repair pipeline",
+    "description": "PROBLEM\nThe candidate-cycle review/repair pipeline is not specified with enough precision for independent implementation beads. The current docs say review and repair should happen, but do not define the vocabulary, same-worktree lifecycle, candidate ref retention, read-only reviewer capability, transitional single-slot review allowance, or terminal dispositions.\n\nROOT CAUSE WITH FILE:LINE\n- docs/helix/01-frame/features/FEAT-010-task-execution.md:337-356 describes adversarial pre-close review and repair outcomes, but it does not state that review should run pre-land in the still-live attempt worktree.\n- docs/helix/02-design/adr/ADR-024-power-escalation-and-review-routing.md:96-185 defines pre-close review policy, but still allows interpretation as post-land review and does not define read-only tool reviewer mechanics.\n- docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md:231 mentions pre-close review as a close prerequisite, but does not define candidate-cycle events such as candidate-pinned, repair-cycle-started, approved-land-conflict, or repair-cycle-exhausted.\n- docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md:310-354 discusses review evidence assembly, but does not clarify canonical bounded evidence versus supplemental same-worktree read-only access.\n\nPROPOSED FIX\n- Update FEAT-010 to define the layer-2 candidate-cycle pipeline: create worktree, implementation pass, project-root candidate ref, candidate checks, same-worktree read-only review, repair loop, final land, close/preserve/park, cleanup.\n- Update ADR-024 to choose read-only tool reviewer as the review capability model and define same-worktree repair as append-only.\n- Update FEAT-022/TD-033 references so bounded evidence remains canonical even when reviewer workdir is the attempt worktree.\n- Update TD-031 with candidate-cycle event names, terminal dispositions, budgets, and claim/cooldown behavior.\n- Add an explicit transitional allowance for single-slot review until the two-slot bead lands, with a removal condition.\n\nNON-SCOPE\n- No Go implementation changes.\n- No new CLI flags.\n- No manual edits to .ddx/beads.jsonl.\n\nINTERSECTIONS\n- ddx-639af4ef currently covers repair-cycle policy at a high level; this bead supersedes its ambiguous post-land framing by specifying the candidate-cycle pipeline.\n- ddx-9228a484 covers retry budgets; this bead names the budget axes so implementation can be decomposed safely.",
+    "acceptance": "1. docs/helix/01-frame/features/FEAT-010-task-execution.md defines the candidate, cycle, repair cycle, candidate ref, read-only tool reviewer, and terminal disposition vocabulary.\n2. FEAT-010 documents the exact candidate-cycle sequence and states review runs before land in the still-live attempt worktree.\n3. docs/helix/02-design/adr/ADR-024-power-escalation-and-review-routing.md selects read-only tool reviewer as the capability model and states repair commits are append-only with no reset/amend/squash/rebase.\n4. docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md defines candidate-pinned, candidate-checks-failed, review-request-changes, repair-cycle-started, approved-land-conflict, repair-cycle-exhausted, review-manual-required, and final-result-landed events.\n5. docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md states bounded evidence is canonical and same-worktree access is supplemental/read-only.\n6. The docs name repair_max_cycles and review_max_retries_per_candidate as distinct from cost, rate-limit/provider, and no-progress budgets.\n7. cd cli \u0026\u0026 go test ./cmd/... -run \"TestDocAuditCommand\" green.\n8. ddx doc audit exits 0.\n9. lefthook run pre-commit passes.",
+    "parent": "ddx-31e07fdc",
+    "labels": [
+      "phase:2",
+      "area:docs",
+      "area:specs",
+      "kind:doc",
+      "reliability",
+      "adr:024",
+      "spec:FEAT-010",
+      "candidate-cycle"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T05:36:44Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2030199",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Strong bead overall — clear title, well-structured description with file:line root cause, numbered AC, present labels, and a cold-readable file list. Two rubric criteria are unmet: (1) AC ordering: the penultimate item (AC8) is `ddx doc audit exits 0` rather than the required `cd cli \\u0026\\u0026 go test ./\\u003cpaths\\u003e/... green`; the go-test line is AC7, breaking the mandatory final-two pattern (`go test` → `lefthook`). (2) Deps not declared: the description names ddx-639af4ef and ddx-9228a484 as 'intersections' but never states whether they are blocking deps or not; the rubric requires an explicit statement (deps list or 'no deps') in the bead body.\",\"score\":6,\"suggested_fixes\":[\"Reorder AC so the go-test line immediately precedes lefthook: move 'ddx doc audit exits 0' to AC7, 'cd cli \\u0026\\u0026 go test ./cmd/... -run TestDocAuditCommand green' to AC8, 'lefthook run pre-commit passes' to AC9.\",\"Add an explicit deps statement to the description — e.g., 'DEPS: none (ddx-639af4ef and ddx-9228a484 are informational cross-references, not blocking dependencies)' — so the executing agent does not need to infer ordering from the intersections prose.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T05:36:44.416258845Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=6"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T05:36:44.53288879Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T053646-29b9f4df",
+    "prompt": ".ddx/executions/20260507T053646-29b9f4df/prompt.md",
+    "manifest": ".ddx/executions/20260507T053646-29b9f4df/manifest.json",
+    "result": ".ddx/executions/20260507T053646-29b9f4df/result.json",
+    "checks": ".ddx/executions/20260507T053646-29b9f4df/checks.json",
+    "usage": ".ddx/executions/20260507T053646-29b9f4df/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-71073116-20260507T053646-29b9f4df"
+  },
+  "prompt_sha": "d5b93ed11cf57db8b7d06b0282e3833891590ffa596ea031fd0345b004b23c9e"
+}
