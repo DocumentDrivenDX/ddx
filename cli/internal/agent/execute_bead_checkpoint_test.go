@@ -20,6 +20,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func runNoopExecuteBeadForCheckpoint(t *testing.T, projectRoot, beadID string) *ExecuteBeadResult {
+	t.Helper()
+
+	dirFile := filepath.Join(t.TempDir(), "directive.txt")
+	writeDirectiveFile(t, dirFile, []string{})
+
+	runner := NewRunner(Config{})
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script"})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+		AgentRunner: runner,
+	}, &RealGitOps{})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	return res
+}
+
 // TestExecuteBead_DirtyParentTree_CheckpointCommitted seeds a repo, makes the
 // parent worktree dirty (one tracked-modified file, one untracked file),
 // runs ExecuteBead, and asserts that:
@@ -114,4 +130,58 @@ func TestExecuteBead_CleanParentTree_NoSpuriousCheckpoint(t *testing.T) {
 		assert.NotContains(t, log, "checkpoint pre-execute-bead",
 			"clean parent tree must not produce a checkpoint commit")
 	}
+}
+
+func TestExecuteBead_PreDispatchCheckpointBypassesHooks(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0001"
+
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "caller-dirt.txt"), []byte("dirty\n"), 0o644))
+
+	markerPath := filepath.Join(projectRoot, "hook-invoked.txt")
+	hookPath := filepath.Join(projectRoot, ".git", "hooks", "pre-commit")
+	hook := "#!/bin/sh\nprintf invoked > " + markerPath + "\nexit 42\n"
+	require.NoError(t, os.MkdirAll(filepath.Dir(hookPath), 0o755))
+	require.NoError(t, os.WriteFile(hookPath, []byte(hook), 0o755))
+
+	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	res := runNoopExecuteBeadForCheckpoint(t, projectRoot, beadID)
+	require.NotEqual(t, headBefore, res.BaseRev, "dirty caller worktree should still become the worker base")
+
+	_, statErr := os.Stat(markerPath)
+	require.True(t, os.IsNotExist(statErr), "pre-dispatch checkpoint must not invoke parent pre-commit hook")
+	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:caller-dirt.txt"), "dirty")
+}
+
+func TestExecuteBead_PreDispatchCheckpointExcludesDDXBackups(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0001"
+
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "caller-dirt.txt"), []byte("dirty\n"), 0o644))
+	backupRel := filepath.Join(".ddx", "backups", "large.jsonl")
+	backupPath := filepath.Join(projectRoot, backupRel)
+	require.NoError(t, os.MkdirAll(filepath.Dir(backupPath), 0o755))
+	require.NoError(t, os.WriteFile(backupPath, []byte("backup\n"), 0o644))
+	runGitInteg(t, projectRoot, "add", "-f", backupRel)
+
+	runNoopExecuteBeadForCheckpoint(t, projectRoot, beadID)
+
+	_, err := runGitIntegOutput(projectRoot, "show", "HEAD:.ddx/backups/large.jsonl")
+	require.Error(t, err, "pre-dispatch checkpoint must not include DDx backup artifacts")
+}
+
+func TestExecuteBead_PreDispatchCheckpointExcludesExecutionEvidence(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0001"
+
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "caller-dirt.txt"), []byte("dirty\n"), 0o644))
+	evidenceRel := filepath.Join(".ddx", "executions", "manual-attempt", "manifest.json")
+	evidencePath := filepath.Join(projectRoot, evidenceRel)
+	require.NoError(t, os.MkdirAll(filepath.Dir(evidencePath), 0o755))
+	require.NoError(t, os.WriteFile(evidencePath, []byte(`{"attempt":"manual"}`+"\n"), 0o644))
+
+	runNoopExecuteBeadForCheckpoint(t, projectRoot, beadID)
+
+	_, err := runGitIntegOutput(projectRoot, "show", "HEAD:.ddx/executions/manual-attempt/manifest.json")
+	require.Error(t, err, "pre-dispatch checkpoint must not include execution evidence artifacts")
 }

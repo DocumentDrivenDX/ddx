@@ -451,6 +451,109 @@ func (r *RealGitOps) SynthesizeCommit(dir, msg string) (bool, error) {
 	return true, nil
 }
 
+// checkpointPreDispatchDirt captures caller worktree changes as a commit on
+// the current branch without using the caller checkout's real index or commit
+// hooks. This keeps the execute-bead base semantics from FEAT-012 §22 while
+// avoiding parent-checkout hook failures before the isolated worker worktree
+// exists.
+func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
+	if err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--is-inside-work-tree").Run(); err != nil {
+		return false, nil
+	}
+	headOut, err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--verify", "HEAD").Output()
+	if err != nil {
+		return false, nil
+	}
+	head := strings.TrimSpace(string(headOut))
+	if head == "" {
+		return false, nil
+	}
+
+	indexFile, err := os.CreateTemp("", "ddx-pre-dispatch-index-*")
+	if err != nil {
+		return false, fmt.Errorf("creating temp checkpoint index: %w", err)
+	}
+	indexPath := indexFile.Name()
+	_ = indexFile.Close()
+	_ = os.Remove(indexPath)
+	defer func() { _ = os.Remove(indexPath) }()
+
+	gitWithIndex := func(args ...string) ([]byte, error) {
+		cmd := internalgit.Command(context.Background(), projectRoot, args...)
+		cmd.Env = append(cmd.Env, "GIT_INDEX_FILE="+indexPath)
+		return cmd.CombinedOutput()
+	}
+
+	if out, err := gitWithIndex("read-tree", "HEAD"); err != nil {
+		return false, fmt.Errorf("initializing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+
+	addArgs := []string{"add", "-A", "--", "."}
+	addArgs = append(addArgs, preDispatchCheckpointExcludePathspecs(projectRoot)...)
+	if out, err := gitWithIndex(addArgs...); err != nil {
+		return false, fmt.Errorf("staging checkpoint changes: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+
+	changedOut, err := gitWithIndex("diff", "--cached", "--name-only")
+	if err != nil {
+		return false, fmt.Errorf("checking checkpoint diff: %w", err)
+	}
+	if len(bytes.TrimSpace(changedOut)) == 0 {
+		return false, nil
+	}
+
+	treeOut, err := gitWithIndex("write-tree")
+	if err != nil {
+		return false, fmt.Errorf("writing checkpoint tree: %s: %w", strings.TrimSpace(string(treeOut)), err)
+	}
+	tree := strings.TrimSpace(string(treeOut))
+	msg := "chore: checkpoint pre-execute-bead " + attemptID
+	commitOut, err := internalgit.Command(context.Background(), projectRoot,
+		"-c", "user.name=ddx-checkpoint",
+		"-c", "user.email=checkpoint@ddx.local",
+		"commit-tree", tree, "-p", head, "-m", msg,
+	).CombinedOutput()
+	if err != nil {
+		return false, fmt.Errorf("creating checkpoint commit: %s: %w", strings.TrimSpace(string(commitOut)), err)
+	}
+	commit := strings.TrimSpace(string(commitOut))
+
+	refOut, _ := internalgit.Command(context.Background(), projectRoot, "symbolic-ref", "-q", "HEAD").Output()
+	ref := strings.TrimSpace(string(refOut))
+	if ref == "" {
+		ref = "HEAD"
+	}
+	if out, err := internalgit.Command(context.Background(), projectRoot, "update-ref", ref, commit, head).CombinedOutput(); err != nil {
+		return false, fmt.Errorf("advancing checkpoint ref: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	if out, err := internalgit.Command(context.Background(), projectRoot, "read-tree", "HEAD").CombinedOutput(); err != nil {
+		return false, fmt.Errorf("syncing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err)
+	}
+	return true, nil
+}
+
+func preDispatchCheckpointExcludePathspecs(dir string) []string {
+	candidates := []struct {
+		pathspec    string
+		ignoreProbe string
+	}{
+		{pathspec: ":(exclude).ddx/backups", ignoreProbe: ".ddx/backups/.ddx-check-ignore"},
+		{pathspec: ":(exclude).ddx/executions", ignoreProbe: ".ddx/executions/.ddx-check-ignore/manifest.json"},
+		{pathspec: ":(exclude).ddx/runs", ignoreProbe: ".ddx/runs/.ddx-check-ignore/record.json"},
+		{pathspec: ":(exclude).ddx/run-state.json", ignoreProbe: ".ddx/run-state.json"},
+		{pathspec: ":(exclude).ddx/.git-tracker.lock", ignoreProbe: ".ddx/.git-tracker.lock/pid"},
+		{pathspec: ":(exclude)" + ExecutionCleanupMetadataFileName, ignoreProbe: ExecutionCleanupMetadataFileName},
+	}
+	pathspecs := make([]string, 0, len(candidates))
+	for _, c := range candidates {
+		if isGitIgnored(dir, c.ignoreProbe) {
+			continue
+		}
+		pathspecs = append(pathspecs, c.pathspec)
+	}
+	return pathspecs
+}
+
 func synthesizeCommitExcludePathspecs(dir string) []string {
 	candidates := []struct {
 		pathspec    string
@@ -747,10 +850,10 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			return err
 		}
 		// Checkpoint any remaining caller dirt as a real commit on the current
-		// branch (FEAT-012 §22, US-126 AC#1). The new HEAD becomes the effective
-		// base for the worker worktree; caller's edits are preserved as a normal
-		// commit they can `git reset HEAD~` if they want them back uncommitted.
-		if _, err := gitOps.SynthesizeCommit(projectRoot, "chore: checkpoint pre-execute-bead "+attemptID); err != nil {
+		// branch (FEAT-012 §22, US-126 AC#1). Use a temp-index commit-tree path
+		// here so parent checkout hooks and runtime artifacts cannot fail the
+		// dispatch before the isolated worker worktree exists.
+		if _, err := checkpointPreDispatchDirt(projectRoot, attemptID); err != nil {
 			return fmt.Errorf("pre-execute-bead checkpoint: %w", err)
 		}
 		// Resolve base revision after the tracker + checkpoint commits.
