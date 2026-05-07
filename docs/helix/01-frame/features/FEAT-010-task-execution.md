@@ -485,12 +485,25 @@ platform exposes inode counts. If validation fails, `ddx try` runs one
 immediate DDx-scoped cleanup pass, re-checks, and then either proceeds or
 returns `resource_exhausted` without claiming the bead.
 
+`ddx work` and server-managed workers use the same cleanup manager before the
+first claim and before later claims whenever temp free space drops below a soft
+high-water threshold. If cleanup does not restore the temp roots above the hard
+floor, the loop stops visibly with `resource_exhausted` and claims no more
+beads.
+
 After an attempt starts, Layer 2 removes the isolated worktree when the result
 has been merged, explicitly preserved, classified as no-changes/no-evidence, or
 interrupted through the cooperative shutdown path. Failed setup must remove any
 partial unregistered directory it created. A worktree may remain only when DDx
 records an explicit preserve decision with evidence pointing at the retained
 path or ref.
+
+DDx-owned cleanup scope includes execution worktrees, DDx-created test and e2e
+scratch roots, generated test binaries, and run-state or liveness files. The
+cleanup manager may delete only DDx-owned paths with ownership metadata or
+known DDx prefixes, minimum age/mtime satisfied, and no live PID/session
+liveness. It must preserve published evidence, registered active worktrees,
+and anything outside DDx-owned roots.
 
 Layer 3 owns loop cleanup. `ddx work` runs cleanup:
 
@@ -515,6 +528,10 @@ events. Passes that reclaim significant bytes or inodes emit an operator-visible
 summary such as `cleanup: removed 37 stale ddx worktrees, freed 14210 inodes`.
 Resource exhaustion after cleanup is a hard visible stop message and a layer-3
 `resource_exhausted` disposition.
+
+Cleanup reporting includes scratch roots removed, bytes and inodes reclaimed,
+preserved paths, and blocked warnings so operators can see why cleanup stopped
+short.
 
 ### Long-running default (`--poll-interval`)
 
@@ -703,11 +720,19 @@ new workflow cannot be expressed as a composition over `run` / `try` /
     budget, and retention settings are configurable in
     `.ddx/config.yaml`.
 14. **Execution cleanup** — `ddx try` and `ddx work` remove stale DDx-owned
-    execution worktrees and liveness files through inline, loop, and background
-    cleanup paths without deleting preserved attempts or published evidence.
+    execution worktrees, DDx-created test/e2e scratch roots, generated test
+    binaries, and liveness files through inline, loop, and background cleanup
+    paths without deleting preserved attempts or published evidence.
 15. **Resource preflight** — `ddx try` validates writable execution roots and
     free bytes/inodes before claim; failed validation may trigger one cleanup
-    retry and then returns `resource_exhausted` without claiming.
+    retry, and `ddx work` / server-managed workers run cleanup before claim
+    whenever temp free space drops below a soft high-water threshold. If the
+    temp roots remain below the hard floor after cleanup, the loop returns
+    `resource_exhausted` without claiming.
+
+Expected implementation tests include `TestExecutionCleanup_RemovesStaleDDXScratchDirs`,
+`TestWorkResourcePreflight_RunsCleanupBelowSoftFloor`, and
+`TestWorkResourcePreflight_StopsBelowHardFloorAfterCleanup`.
 
 ### Non-Functional
 

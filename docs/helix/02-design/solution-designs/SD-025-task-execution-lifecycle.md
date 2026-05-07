@@ -221,6 +221,12 @@ temporary execution directory records enough ownership to answer:
 During the legacy migration window, the manager handles both
 `.ddx/executions/<attempt-id>` and `.ddx/runs/<run-id>` evidence, but it treats
 complete evidence bundles as durable data rather than scratch.
+DDx-owned cleanup scope also includes DDx-created test and e2e scratch roots,
+generated test binaries, and run-state or liveness files. A path is eligible
+for deletion only when ownership metadata or a recognized DDx prefix is
+present, the configured minimum age or mtime threshold has passed, and no live
+PID/session liveness remains. The manager preserves published evidence and
+registered active worktrees.
 
 ### Entry points
 
@@ -251,6 +257,9 @@ The manager may delete:
   metadata identify DDx ownership and whose liveness is absent or stale
 - registered git worktrees under DDx temp roots whose owning attempt is
   terminal or whose liveness marker is stale
+- DDx-created test and e2e scratch roots that satisfy the same ownership,
+  age, and liveness rules
+- generated test binaries and run-state or liveness files that are DDx-owned
 - stale heartbeat/liveness files for dead PIDs or expired sessions
 - partial setup directories that never reached atomic evidence publication
 - old non-preserved scratch data past configured retention
@@ -273,6 +282,11 @@ free inodes when inode data is available. If preflight fails, `ddx try` runs one
 immediate cleanup pass and repeats the check. If the check still fails, the
 attempt returns `resource_exhausted` without claiming the bead.
 
+`ddx work` and server-managed workers perform the same cleanup pass before the
+first claim and before any later claim when temp free space falls below a soft
+high-water threshold. If the temp roots remain below the hard floor after that
+cleanup, the loop records host exhaustion and stops claiming new beads.
+
 If resource exhaustion occurs after a claim or during worktree setup,
 `ddx try` records whatever partial evidence is available, removes any partial
 unregistered directory it created, releases the claim if the bead did not close,
@@ -287,6 +301,10 @@ Cleanup output is structured. Routine passes are trace/debug or worker events.
 Passes that reclaim meaningful bytes or inodes emit an operator-visible summary
 including counts. Failures include path, class, and whether the failure blocked
 progress.
+
+Expected implementation tests include `TestExecutionCleanup_RemovesStaleDDXScratchDirs`,
+`TestWorkResourcePreflight_RunsCleanupBelowSoftFloor`, and
+`TestWorkResourcePreflight_StopsBelowHardFloorAfterCleanup`.
 
 ## Drill-Down Query Model
 

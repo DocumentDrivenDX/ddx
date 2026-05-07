@@ -45,9 +45,11 @@ If a sub-agent succeeds where the bead's auto-prompt failed, the BEAD failed (no
 ## P8: DDx-Owned Resources Must Be Reclaimed
 
 Every DDx-created temporary execution resource has an owner, liveness signal,
-retention policy, and cleanup path. `ddx try` cleans up one attempt inline;
-`ddx work` cleans up between attempts and on graceful shutdown; long-running
-workers also run conservative background cleanup with a lock and jitter.
+retention policy, and cleanup path. That scope includes leaked DDx test/e2e
+scratch roots, execution worktrees, generated test binaries, and run-state or
+liveness files. `ddx try` cleans up one attempt inline; `ddx work` cleans up
+between attempts and on graceful shutdown; long-running workers also run
+conservative background cleanup with a lock and jitter.
 
 Host-level resource exhaustion is not a bead failure and not model
 no-progress. If bytes, inodes, writability, or git worktree registration are
