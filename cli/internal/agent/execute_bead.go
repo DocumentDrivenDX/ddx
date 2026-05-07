@@ -1487,7 +1487,7 @@ func commitTrackerLocked(projectRoot string) error {
 	if cached, err := internalgit.Command(context.Background(), projectRoot, "diff", "--cached", "--", ".ddx/beads.jsonl").Output(); err == nil && strings.TrimSpace(string(cached)) == "" {
 		return nil
 	}
-	commitOut, err = internalgit.Command(context.Background(), projectRoot, "commit", "--no-verify", "-m", msg).CombinedOutput()
+	commitOut, err = internalgit.Command(context.Background(), projectRoot, "commit", "--no-verify", "--only", "-m", msg, "--", ".ddx/beads.jsonl").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("committing tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
 	}

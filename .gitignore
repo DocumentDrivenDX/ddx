@@ -430,6 +430,7 @@ cli/internal/agent/.ddx/
 .ddx/server/
 .ddx/hooks/
 .ddx/run-state.json
+.ddx/run-state/
 .ddx/exec-runs.d/
 .ddx/tsnet/
 .helix-logs/

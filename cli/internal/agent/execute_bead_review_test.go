@@ -336,7 +336,10 @@ func TestPreCloseReview_BlockPreventsClose(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, 0, result.Successes)
 	assert.Equal(t, 1, result.Failures)
-	assert.Equal(t, ExecuteBeadStatusReviewBlock, result.LastFailureStatus)
+	// First non-terminal BLOCK is classified as review_fixable_gap (one repair
+	// cycle scheduled). A second BLOCK on the same result_rev falls through to
+	// review_block; this test covers the first-BLOCK path.
+	assert.Equal(t, ExecuteBeadStatusReviewFixableGap, result.LastFailureStatus)
 
 	got, err := store.Get(first.ID)
 	require.NoError(t, err)
@@ -355,18 +358,18 @@ func TestPreCloseReview_BlockPreventsClose(t *testing.T) {
 
 	require.Len(t, result.Results, 1)
 	assert.Equal(t, "BLOCK", result.Results[0].ReviewVerdict)
-	assert.Equal(t, ExecuteBeadStatusReviewBlock, result.Results[0].Status)
+	assert.Equal(t, ExecuteBeadStatusReviewFixableGap, result.Results[0].Status)
 
 	events, err = store.Events(first.ID)
 	require.NoError(t, err)
 	found := false
 	for _, ev := range events {
-		if ev.Kind == "execute-bead" && ev.Summary == ExecuteBeadStatusReviewBlock {
+		if ev.Kind == "execute-bead" && ev.Summary == ExecuteBeadStatusReviewFixableGap {
 			assert.Contains(t, ev.Body, "AC#3 regression test missing")
 			found = true
 		}
 	}
-	assert.True(t, found, "expected execute-bead review_block event with rationale")
+	assert.True(t, found, "expected execute-bead review_fixable_gap event with rationale")
 }
 
 func TestPreCloseReview_UnanimousApproveCloses(t *testing.T) {

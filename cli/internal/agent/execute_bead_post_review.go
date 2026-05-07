@@ -43,11 +43,18 @@ type PostMergeReviewInput struct {
 // the review path encountered a non-fatal Store error the caller is expected
 // to route StoreErr through its outcome-error handler
 // (handleOutcomeStoreError on ExecuteBeadWorker), keyed by StoreErrOp.
+//
+// RepairContext is non-nil when the BLOCK verdict was classified as a fixable
+// gap and exactly one repair cycle has been scheduled for this result_rev.
+// The caller should run a repair attempt with MinPower above
+// RepairContext.ImplementerActualPower while preserving all explicit
+// harness/model/provider/profile pins from the original attempt.
 type PostMergeReviewOutput struct {
-	Report     ExecuteBeadReport
-	Approved   bool
-	StoreErrOp string
-	StoreErr   error
+	Report        ExecuteBeadReport
+	Approved      bool
+	StoreErrOp    string
+	StoreErr      error
+	RepairContext *RepairContextFromReviewGroup
 }
 
 // RunPostMergeReview executes the post-merge review state machine for a
@@ -289,6 +296,27 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			report.Detail = "pre-close review: terminal " + terminalClass
 			out.Report = report
 			out.Approved = false
+			return out
+		}
+		// Non-terminal BLOCK: schedule one bounded repair cycle (review_fixable_gap).
+		// If a repair cycle has already been scheduled for this result_rev, fall
+		// through to the regular BLOCK triage path so the policy cannot loop.
+		if !hasReviewFixableGapRepairScheduled(in.Store, in.Bead.ID, report.ResultRev) {
+			groupID := ""
+			if reviewGroup != nil {
+				groupID = reviewGroup.Bundle.GroupID
+			}
+			repairCtx := scheduleReviewFixableGapRepair(
+				in.Store, in.Bead.ID, in.Assignee, now().UTC(),
+				groupID, report.ResultRev,
+				strings.TrimSpace(reviewRes.Rationale),
+				report.ActualPower,
+			)
+			report.Status = ExecuteBeadStatusReviewFixableGap
+			report.Detail = "pre-close review: review_fixable_gap"
+			out.Report = report
+			out.Approved = false
+			out.RepairContext = repairCtx
 			return out
 		}
 		report.Status = ExecuteBeadStatusReviewBlock

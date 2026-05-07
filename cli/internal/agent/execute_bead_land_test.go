@@ -332,7 +332,7 @@ func TestLand_EvidenceCommitUsesCleanLandingWorktree(t *testing.T) {
 	}
 }
 
-func TestLand_EvidenceCommitDoesNotIncludePreStagedOperatorFiles(t *testing.T) {
+func TestLand_StagedOperatorFilesBlockLanding(t *testing.T) {
 	r := newLandTestRepo(t)
 	ops := RealLandingGitOps{}
 
@@ -359,18 +359,63 @@ func TestLand_EvidenceCommitDoesNotIncludePreStagedOperatorFiles(t *testing.T) {
 		EvidenceDir:  filepath.ToSlash(evidenceDir),
 	}
 	land, err := Land(r.dir, req, ops)
+	if err == nil {
+		t.Fatalf("Land succeeded with staged operator file; result=%+v", land)
+	}
+	if !strings.Contains(err.Error(), "staged changes") {
+		t.Fatalf("Land error = %v, want staged changes error", err)
+	}
+	if got := r.resolveRef("refs/heads/main"); got != r.baseSHA {
+		t.Fatalf("main advanced despite staged operator file: got %s want %s", got, r.baseSHA)
+	}
+	cached := r.runGit("diff", "--cached", "--name-only")
+	if strings.TrimSpace(cached) != "operator.txt" {
+		t.Fatalf("staged operator file was not preserved in index: %q", cached)
+	}
+}
+
+func TestLand_EvidenceCommitFailurePreservesAndRestoresTarget(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	attemptID := "20260507T000003-noevidence"
+	evidenceDir := filepath.Join(".ddx", "executions", attemptID)
+	fullDir := filepath.Join(r.dir, evidenceDir, "embedded")
+	if err := os.MkdirAll(fullDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fullDir, "agent.jsonl"), []byte(`{"event":"ignored"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature\n", "feat: feature")
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-evidence-failure",
+		AttemptID:    attemptID,
+		TargetBranch: "main",
+		EvidenceDir:  filepath.ToSlash(evidenceDir),
+	}
+	land, err := Land(r.dir, req, ops)
 	if err != nil {
 		t.Fatalf("Land: %v", err)
 	}
-	if land.EvidenceCommitSHA == "" {
-		t.Fatalf("expected evidence commit")
+	if land == nil || land.Status != "preserved" {
+		t.Fatalf("expected preserved land result, got %+v", land)
 	}
-	names := r.runGit("show", "--name-only", "--format=", land.EvidenceCommitSHA)
-	if !strings.Contains(names, filepath.ToSlash(filepath.Join(evidenceDir, "manifest.json"))) {
-		t.Fatalf("evidence commit did not include manifest, names:\n%s", names)
+	if !strings.Contains(land.Reason, "evidence commit failed") {
+		t.Fatalf("preserve reason = %q, want evidence failure", land.Reason)
 	}
-	if strings.Contains(names, "operator.txt") {
-		t.Fatalf("evidence commit included pre-staged operator file:\n%s", names)
+	if land.PreserveRef == "" {
+		t.Fatalf("expected preserve ref")
+	}
+	if got := r.resolveRef("refs/heads/main"); got != r.baseSHA {
+		t.Fatalf("main was not restored after evidence failure: got %s want %s", got, r.baseSHA)
+	}
+	if got := r.resolveRef(land.PreserveRef); got != workerSHA {
+		t.Fatalf("preserve ref = %s, want worker %s", got, workerSHA)
 	}
 }
 
