@@ -77,7 +77,7 @@ The name follows the `bd` (Dolt-backed) and `br` (SQLite-backed) convention: sho
 
 Unknown fields in imported or existing beads are preserved on read/write. This allows HELIX to store `spec-id`, `execution-eligible`, `claimed-at`, `claimed-pid`, `superseded-by`, `replaces`, and DDx-specific queue metadata such as `queue-rank` without extending the core bd/br-compatible schema table.
 
-DDx also uses preserved `Extra` fields for operator-attention metadata on beads in the `needs_human` lane: `needs-human-reason`, `needs-human-since`, `needs-human-source`, `needs-human-suggested-action`, and `needs-human-summary`. The lane marker itself is the `needs_human` label on an otherwise `open` bead. `ddx bead ready` and worker-drain selection skip those beads even when their dependencies are satisfied, while `ddx bead status` keeps them inside the `open` count and may surface an attention sub-count for operators without introducing a new status value.
+DDx also uses preserved `Extra` fields for operator-attention metadata on beads in the `needs_human` lane: `needs-human-reason`, `needs-human-since`, `needs-human-source`, `needs-human-suggested-action`, and `needs-human-summary`. The lane state is an otherwise `open` bead with the `needs_human` label and those metadata fields. `ddx bead ready` and worker-drain selection skip those beads even when their dependencies are satisfied, while `ddx bead status` keeps them inside the `open` count and may surface an attention sub-count for operators without introducing a new status value.
 
 TD-031 defines how lifecycle actions use the existing carriers: persisted
 bd/br statuses, labels, dependency edges, append-only events, and preserved

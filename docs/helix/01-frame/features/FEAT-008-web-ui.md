@@ -661,8 +661,8 @@ thresholds.
 **So that** I can route work to retry, split, obsolete, or defer without losing context
 
 **Acceptance Criteria:**
-- Given a bead is marked `needs_human`, when I choose the `Needs review` filter, then the list shows only beads in that lane and excludes ordinary open beads
-- Given I open a `needs_human` bead, then the detail panel shows the human-review metadata: reason, since, source, suggested action, and summary
+- Given a bead is marked `needs_human`, when I choose the `Needs review` filter, then the Beads list shows only beads in that lane and excludes ordinary open beads
+- Given I open a `needs_human` bead, then the detail panel shows a dedicated review-resolution panel with the human-review metadata: reason, since, source, suggested action, and summary
 - Given I choose retry, split, obsolete, or defer, then I must enter notes and the decision is recorded in the bead history
 - Given I resolve the bead, then it leaves the `Needs review` filter and the operator decision is visible in the bead history
 

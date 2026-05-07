@@ -351,7 +351,9 @@ The layer-3 drain evaluates each ready bead through this mechanical sequence:
    Malformed, empty, context-overflow, and transport reviewer failures emit
    `review-error` scoped to `result_rev` and reviewer slot; after
    `review_max_retries` they emit `review-manual-required`, clear the active
-   claim, park the bead in the `needs_human` lane, and do not close.
+   claim, park the bead in the `needs_human` lane, and do not close. The
+   `review_fixable_gap` path stays on the automatic retry track instead of
+   converting into operator review.
 6. **Infrastructure fallback.** Transport, quota, rate-limit, command setup,
    context cancellation, routing preflight rejection, and worker disruption are
    not model-capability failures. They emit structured evidence and either stay

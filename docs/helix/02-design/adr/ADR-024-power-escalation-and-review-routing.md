@@ -156,7 +156,9 @@ Non-approve reviewer findings are classified before the next action:
 - `review_spec_gap` / `review_missing_acceptance` — the bead or governing spec
   is ambiguous, unverifiable, contradictory, or missing acceptance criteria. DDx
   parks the bead in the `needs_human` operator-attention lane, clears the
-  active claim, and does not ask another implementer to guess.
+  active claim, and does not ask another implementer to guess. The operator
+  resolves that lane by retry, split, obsolete, or defer actions recorded in
+  the bead history.
 - `review_too_large` — the result or bead is too broad for bounded review. DDx
   runs the intake/decomposition path, blocks or decomposes the parent, and does
   not re-run the same monolithic implementation attempt.
@@ -173,7 +175,8 @@ terminal lane resolution is the same contract used by `review_spec_gap` and
 `review_missing_acceptance`: the bead remains open, carries the human-review
 context, and waits for an operator decision rather than another automatic
 implementation attempt. A new implementation result starts a new review-error
-retry scope.
+retry scope, while `review_fixable_gap` continues through the normal repair
+retry path instead of entering the operator lane.
 
 Each implementation/review cycle is append-only. A repair attempt creates a new
 cycle record linked to the prior review group (`repair_context_from_review_group`)
