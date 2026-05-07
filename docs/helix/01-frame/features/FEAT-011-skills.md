@@ -72,9 +72,10 @@ skills/ddx/
 │   ├── work.md             # draining the queue, execute-bead, verify + close
 │   ├── review.md           # bead-review (AC grade) + quorum code review
 │   ├── agents.md           # harness/profile dispatch, personas
+│   ├── interactive.md      # default queue-steward conversation workflow
 │   └── status.md           # queue state, doctor, health checks
 ├── evals/
-│   └── routing.jsonl       # ~15 phrase→expected-routing fixtures
+│   └── routing.jsonl       # phrase→mode/reference/action fixtures
 ├── bead-breakdown/
 │   └── SKILL.md            # workflow skill composition over ddx bead create
 ├── replay-bead/
@@ -109,7 +110,7 @@ Frontmatter is the portable-safe minimum — `name` + `description` only.
 ```yaml
 ---
 name: ddx
-description: Operates the DDx toolkit for document-driven development. Covers beads (work items), the queue, executions, agents, harnesses, personas, reviews, spec-id. Use when the user says "do work", "drain the queue", "run the next bead", "execute a bead", "review this", "check against spec", "what's on the queue", "what's ready", "create a bead", "file this as work", "run an agent", "dispatch", "use a persona", "how am I doing", "ddx doctor", or mentions any ddx CLI command.
+description: Operates the DDx toolkit for document-driven development. Covers beads (work items), the queue, executions, agents, harnesses, personas, reviews, spec-id. Use when the user says "do work", "drain the queue", "run the next bead", "execute a bead", "review this", "review with fresh eyes", "fold in this guidance", "review again", "break this down into specs and beads", "make this testable", "check against spec", "what's on the queue", "what's ready", "what's blocking the queue", "create a bead", "file this as work", "run an agent", "dispatch", "use a persona", "how am I doing", "ddx doctor", or mentions any ddx CLI command.
 ---
 ```
 
@@ -132,41 +133,50 @@ Claude does not reliably auto-chase reference links; the router in
 > be grounded in the reference file's guidance, not this overview
 > alone."
 
-### Interactive mode routing
+### Interactive-steward routing
 
-When the `ddx` skill activates in an interactive session, the harness must
-route the request to the appropriate mode before taking action.
+`reference/interactive.md` is the first stop for broad conversational DDx
+prompts that combine queue orientation, planning, review, guidance folding,
+spec alignment, and bead breakdown. It delegates to `status.md`, `review.md`,
+`beads.md`, and `work.md` instead of duplicating their domain guidance.
 
-**Broad interactive phrases → `queue_steward`**
+Router precedence is load-bearing:
 
-Phrases like "do work", "what's on the queue", "what's ready",
-"how am I doing", "drain the queue", "any beads ready?",
-"check the tracker", "ddx doctor" trigger `queue_steward` mode:
-survey and advise only. Do not start worker execution from this trigger.
+1. Explicit worker commands such as `ddx work`, `ddx try <id>`, "execute bead
+   `<id>`", or "start the worker" route to `bead_execution` and `work.md`.
+2. Broad prompts such as "what's blocking the queue", "review with fresh
+   eyes", "fold in this guidance", "review again", "make this testable", and
+   "break this down into specs and beads" route to `interactive-steward` and
+   `interactive.md`.
+3. Explicit code/doc edit requests such as "fix this bug" or "update this
+   file" route to `direct_user_implementation`.
+4. Explicit review-only requests route to `review` and remain read-only unless
+   the user asks for fixes.
 
-**Explicit execution phrases → `bead_execution`**
+`interactive.md` defines phase output contracts:
 
-Phrases like "run the next bead", "execute bead `<id>`",
-"`ddx work`", "`ddx try <id>`", "execute-loop", or
-"start the worker" trigger `bead_execution` mode:
-the agent (or `ddx work`) owns the full layer-2 / layer-3 lifecycle.
+- `orient` returns `QueueFacts`. It probes `ddx work focus --help`; if the
+  command is unavailable, it falls back to `ddx bead status`, `ddx bead blocked`,
+  `ddx bead ready`, and targeted `ddx bead show`. If `ddx work focus` exists
+  but fails, the steward reports that failure.
+- `plan` returns `SessionBrief`.
+- `fresh-eyes review` returns `Findings` and `Verdict`. Multi-harness
+  adversarial review is consent-gated unless explicitly requested.
+- `fold guidance` returns `Accepted`, `Rejected`, `Unresolved`, and a revised
+  plan.
+- `align specs` returns `SpecDeltas`.
+- `breakdown` returns filed bead IDs, parent/dependency edges, named tests, and
+  verification commands.
 
-**Explicit implementation asks → `direct_user_implementation`**
-
-Phrases like "fix this bug", "update this file", "implement X"
-that name a specific code or doc change without referencing the bead queue
-trigger `direct_user_implementation` mode.
-
-**Review asks → `review`**
-
-Phrases like "review this PR", "grade this bead", "check against spec",
-"is this AC-complete?" trigger `review` mode.
-
-The distinction between `queue_steward` and `bead_execution` is critical:
-"do work" in an interactive session means _survey and advise_; running
-`ddx work` or an explicit execute-bead directive means _execute_. The
-routing table in `skills/ddx/reference/work.md` carries the authoritative
-phrase list aligned with `skills/ddx/evals/routing.jsonl`.
+The route fixtures under `skills/ddx/evals/routing.jsonl` assert a stable row
+schema: `phrase`, `mode`, `references`, `queue_commands`,
+`tracker_mutation_allowed`, `code_edits_allowed`, and
+`expected_next_action`. The evaluation driver consumes those fields directly;
+it must not keep validating only the legacy `expected_reference` /
+`expected_cli` pair after the richer schema lands. Negative fixtures are
+required: "what should I work on next" routes to `interactive-steward` with no
+code edits, whereas "implement the top ready bead" is direct implementation only
+because the implementation verb is explicit.
 
 ### Nested workflow skills
 
@@ -219,6 +229,13 @@ wording, which remains only as an implementation detail for older hooks.
   copy under `cli/internal/skills/ddx/`. Because `go:embed` cannot
   traverse upward, a `make copy-skills` target rsyncs
   `skills/ddx/` → `cli/internal/skills/ddx/` before every build.
+  That target covers only the embedded copy.
+- Source skill edits that affect shipped interactive behavior must also refresh
+  the project-local copies under `.agents/skills/ddx/`, `.claude/skills/ddx/`,
+  and `.ddx/skills/ddx/` through `ddx init` / `ddx update` behavior or an
+  explicit repo-local sync command. Tests must compare touched files across all
+  five shipped paths so a green `make copy-skills` cannot mask stale project
+  copies.
 - The five shipped `ddx` skill paths are:
   `skills/ddx/` (source), `cli/internal/skills/ddx/` (embedded copy),
   `.agents/skills/ddx/` (Codex/agentskills project copy),
@@ -237,6 +254,10 @@ may have added content. `ddx init` uses marker-delimited injection:
 This project uses DDx. Use the `ddx` skill for beads, work, review,
 agents, and status.
 
+(default interactive sessions use interactive-steward / queue-steward; explicit
+`ddx work` and `ddx try` prompts use bead_execution only for executing bead AC;
+tracker, merge, commit, safety, and verification policy still apply)
+
 (tracker/merge policy follows)
 <!-- DDX-AGENTS:END -->
 ```
@@ -250,12 +271,12 @@ command phrasing). Re-running `ddx init` updates the block in place.
 Anthropic's skill-authoring guidance treats evaluations as
 load-bearing, not optional. The repo ships:
 
-- `skills/ddx/evals/routing.jsonl` — ~15 rows, each a user phrase +
-  expected reference file + expected CLI invocation, covering every
-  intent-router entry and edge phrasings.
-- `scripts/eval-skill.sh` — driver that runs each row against
-  `--harness claude` and `--harness codex` and verifies routing.
-  `--validate` mode does agentskills.io spec conformance.
+- `skills/ddx/evals/routing.jsonl` — at least 15 rows, each a user phrase plus
+  mode, references, queue commands, mutation permissions, and expected next
+  action, covering every intent-router entry and edge phrasing.
+- `scripts/eval-skill.sh` — driver that validates the fixture schema, runs each
+  row against `--harness claude` and `--harness codex`, and verifies the richer
+  routing contract. `--validate` mode does agentskills.io spec conformance.
 - `make eval-skill` in CI on PRs that touch `skills/ddx/`.
 
 ## Requirements
@@ -276,10 +297,24 @@ load-bearing, not optional. The repo ships:
 6. `ddx update` refreshes `.claude/skills/ddx/` and removes stale
    dirs.
 7. `skills/ddx/evals/routing.jsonl` contains at least 15 rows, each
-   passing against `claude` and `codex` harnesses via
-   `make eval-skill`.
+   passing the richer route schema and then passing against `claude` and
+   `codex` harnesses via `make eval-skill`.
 8. `SKILL.md` passes `scripts/eval-skill.sh --validate` (agentskills.io
    spec conformance).
+9. `reference/interactive.md` is present in every shipped skill copy and defines
+   the interactive-steward loop, phase output contracts, mutation policy,
+   consent-gated adversarial review, and `ddx work focus` fallback behavior.
+10. Generated AGENTS guidance uses the same precedence as the skill: broad
+    interactive prompts route to `interactive-steward`, explicit worker prompts
+    route to `bead_execution`, and `DDX_MODE=bead_execution` never overrides
+    tracker, merge, safety, commit, or verification policy.
+11. `scripts/eval-skill.sh` consumes the interactive routing fields
+    (`mode`, `references`, `queue_commands`, `tracker_mutation_allowed`,
+    `code_edits_allowed`, `expected_next_action`) instead of relying only on
+    the legacy `expected_reference` / `expected_cli` fields.
+12. Tests or validation commands prove touched files match across
+    `skills/ddx/`, `cli/internal/skills/ddx/`, `.agents/skills/ddx/`,
+    `.claude/skills/ddx/`, and `.ddx/skills/ddx/`.
 
 ### Non-Functional
 
@@ -305,6 +340,29 @@ skills-compatible harness
   and `--harness codex`.
 - Each intent-router entry in `SKILL.md` has at least one matching
   row in `routing.jsonl`.
+- Each row includes `mode`, `references`, `queue_commands`,
+  `tracker_mutation_allowed`, `code_edits_allowed`, and
+  `expected_next_action`, and the eval driver validates those fields.
+- Route fixtures cover "review with fresh eyes", "fold in this guidance",
+  "review again", "break this down into specs and beads", "make this testable",
+  "what should I work on next", "implement the top ready bead", and
+  `ddx work --once`.
+
+### US-110a: Interactive steward supports multi-turn planning
+**As a** user steering a DDx project interactively
+**I want** broad planning/review/breakdown phrases to follow a standard steward
+loop
+**So that** I do not have to retype "fresh-eyes review", "fold guidance",
+"align specs", and "make testable beads" instructions every turn
+
+**Acceptance Criteria:**
+- `reference/interactive.md` documents the session brief fields and phase output
+  contracts for orient, plan, fresh-eyes review, fold guidance, align specs, and
+  breakdown.
+- "Fresh eyes" defaults to local structured review; adversarial multi-harness
+  review is suggested and consent-gated unless explicitly requested.
+- Durable bead/spec outputs inline the accepted session brief and never rely on
+  chat history or `/tmp` files.
 
 ### US-111: Skill stays under the token budget
 **As a** harness loading the `ddx` skill
