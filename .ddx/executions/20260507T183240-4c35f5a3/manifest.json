@@ -1,0 +1,63 @@
+{
+  "attempt_id": "20260507T183240-4c35f5a3",
+  "bead_id": "ddx-c2a66f45",
+  "base_rev": "c4fccce38b1dae05b2e1b8103f30d658b77cfa53",
+  "created_at": "2026-05-07T18:32:42.41935069Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c2a66f45",
+    "title": "review: block terminal review classes without no-progress accounting",
+    "description": "PROBLEM\nPre-close review now prevents close on REQUEST_CHANGES and BLOCK, but terminal review classes are not first-class operator-blocking outcomes. Spec gaps, missing acceptance criteria, too-large-at-depth-cap, unsafe/out-of-scope changes, and exhausted review errors need to park the bead with needs_human metadata and must not consume no-progress budget.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead_post_review.go:141-197 handles reviewer errors by appending review-error or review-manual-required events and setting review_malfunction, but it does not classify exhausted review errors into a stable operator-required stop class.\n- cli/internal/agent/execute_bead_post_review.go:233-277 records REQUEST_CHANGES/BLOCK and applies the generic review triage decision, but it does not map findings to review_spec_gap, review_missing_acceptance, review_too_large, or review_unsafe_or_out_of_scope classes.\n- cli/internal/agent/execute_bead_loop.go:1262-1275 can still apply no-progress cooldown logic after non-success outcomes unless those outcomes are separately suppressed.\n- cli/internal/agent/execute_bead_loop.go:1964-1987 has no terminal-review exclusion vocabulary.\n\nPROPOSED FIX\n- Add a review terminal classification helper for pre-close review outcomes.\n- Map review_spec_gap, review_missing_acceptance, review_too_large at depth cap, review_unsafe_or_out_of_scope, and exhausted review_error to blocked needs_human/operator-required metadata.\n- Ensure these terminal review classes append structured review/operator events, unclaim or park the bead consistently, and do not increment no-progress/no_changes budget.\n- Preserve the existing APPROVE close path and the existing malformed-review bounded retry behavior until the retry cap is exhausted.\n- Leave review_fixable_gap repair scheduling to the sibling repair bead.\n\nNON-SCOPE\n- Do not implement repair cycles in this bead.\n- Do not change reviewer prompt content except for any minimal schema labels needed by tests.\n- Do not change cost-cap behavior.\n\nDEPS\nDepends on ddx-89ab3fda for Blocked stop vocabulary and ddx-224ffcd2 for no-progress-ineligible review outcomes.",
+    "acceptance": "1. A production review terminal classifier maps review_spec_gap, review_missing_acceptance, review_too_large at depth cap, review_unsafe_or_out_of_scope, and exhausted review_error into blocked needs_human/operator-required outcomes.\n2. TestReviewTerminalClassifications_BlockWithoutNoProgress covers all terminal classes and proves no no-progress/no_changes budget is incremented.\n3. TestReviewTerminalClassifications_ExhaustedReviewErrorNeedsHuman covers review_error retry exhaustion and the emitted review-manual-required/operator metadata.\n4. Existing TestBoundedReviewRetry_NthFailureEmitsManualRequired, TestPreCloseReview_RequestChangesPreventsClose, and TestPreCloseReview_BlockPreventsClose still pass.\n5. APPROVE review behavior remains unchanged: TestPreCloseReview_UnanimousApproveCloses still passes.\n6. cd cli \u0026\u0026 go test ./internal/agent/... -run \"TestReviewTerminalClassifications|TestBoundedReviewRetry|TestPreCloseReview\" -count=1 passes.\n7. cd cli \u0026\u0026 go test ./internal/agent/... passes.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-5cb6e6cd",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "area:review",
+      "area:work",
+      "kind:fix",
+      "reliability",
+      "adr:024",
+      "spec:FEAT-010",
+      "split-from:ddx-9228a484"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T18:31:57Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3302926",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Strong bead overall. Title is imperative and names subsystem+change. Description has PROBLEM, ROOT CAUSE with file:line references, PROPOSED FIX, and NON-SCOPE. Acceptance criteria are numbered, verifiable, include specific TestXxx names, and end with go test + lefthook gates. Labels cover phase, story, area, kind, reliability, adr, spec, and split-from. Parent is set. Deps are explicit and named with rationale in the description body.\\n\\nTwo minor gaps preventing a 9:\\n1. AC item 6 names a -run filter that covers three test groups but does not explicitly name TestReviewTerminalClassifications_BlockWithoutNoProgress and TestReviewTerminalClassifications_ExhaustedReviewErrorNeedsHuman by their full names in the filter string — the filter regex 'TestReviewTerminalClassifications' implicitly covers them, which is fine, but AC items 2-3 name those functions and AC-6 should echo them explicitly for traceability.\\n2. The description does not state 'no deps' or confirm dep direction unambiguously for ddx-89ab3fda — it says 'Depends on' in the DEPS section (good) but the deps array lists both deps without ordering notes; a competent agent could infer the order from the text, so this is minor.\\n\\nNo blocking issues. A sub-agent given only this bead body can identify the files to edit (execute_bead_post_review.go, execute_bead_loop.go), the test names to write, and the gate to pass without asking.\",\"score\":8,\"suggested_fixes\":[\"In AC item 6, expand the -run filter to explicitly include all named test functions: -run 'TestReviewTerminalClassifications_BlockWithoutNoProgress|TestReviewTerminalClassifications_ExhaustedReviewErrorNeedsHuman|TestBoundedReviewRetry|TestPreCloseReview' to match the functions called out in AC 2-5.\",\"Optional: add a one-line DEPS ordering note confirming ddx-89ab3fda must merge before ddx-224ffcd2 (or vice versa) if there is a sequencing constraint, so the executing agent does not need to infer it.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T18:32:40.057349447Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=8"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T18:31:57.49811423Z",
+      "spec-id": "FEAT-010",
+      "split-from": "ddx-9228a484"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T183240-4c35f5a3",
+    "prompt": ".ddx/executions/20260507T183240-4c35f5a3/prompt.md",
+    "manifest": ".ddx/executions/20260507T183240-4c35f5a3/manifest.json",
+    "result": ".ddx/executions/20260507T183240-4c35f5a3/result.json",
+    "checks": ".ddx/executions/20260507T183240-4c35f5a3/checks.json",
+    "usage": ".ddx/executions/20260507T183240-4c35f5a3/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-c2a66f45-20260507T183240-4c35f5a3"
+  },
+  "prompt_sha": "f82493af5cd3df53adaa66e4b320ff2888fdf58262356d86197bb55297ea17ca"
+}
