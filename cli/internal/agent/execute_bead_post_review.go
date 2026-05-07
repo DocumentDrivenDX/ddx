@@ -18,6 +18,24 @@ import (
 // policy's chosen action after a non-APPROVE review verdict.
 const triageDecisionEventKind = "triage-decision"
 
+// ReviewFixableGapEventKind is the event kind appended when a review verdict
+// is classified as review_fixable_gap (REQUEST_CHANGES or non-terminal BLOCK).
+// The event body encodes the repair context so the caller can schedule exactly
+// one bounded repair cycle with MinPower above the implementer's actual power.
+const ReviewFixableGapEventKind = "review-fixable-gap"
+
+// RepairContextFromReviewGroup encodes the per-result-rev context returned
+// when a review_fixable_gap (REQUEST_CHANGES or non-terminal BLOCK) is
+// detected. The caller must schedule exactly one bounded repair cycle using
+// ImplActualPower as the floor for the repair's MinPower request; all other
+// routing pins (harness, model, provider, profile) must be forwarded unchanged.
+type RepairContextFromReviewGroup struct {
+	ReviewGroupID   string `json:"review_group_id,omitempty"`
+	ResultRev       string `json:"result_rev"`
+	ImplActualPower int    `json:"impl_actual_power"`
+	Rationale       string `json:"rationale,omitempty"`
+}
+
 // PostMergeReviewInput bundles the data RunPostMergeReview needs from its
 // caller — historically the execute-bead loop body, now the per-attempt
 // pipeline owned by try.Attempt (ddx-a921ff01 C3). The fields mirror what
@@ -43,11 +61,17 @@ type PostMergeReviewInput struct {
 // the review path encountered a non-fatal Store error the caller is expected
 // to route StoreErr through its outcome-error handler
 // (handleOutcomeStoreError on ExecuteBeadWorker), keyed by StoreErrOp.
+//
+// RepairContext, when non-nil, signals that review_fixable_gap was detected and
+// the caller should schedule exactly one bounded repair attempt with MinPower
+// above RepairContext.ImplActualPower. The review-fixable-gap event has already
+// been recorded; the caller must not re-record it.
 type PostMergeReviewOutput struct {
-	Report     ExecuteBeadReport
-	Approved   bool
-	StoreErrOp string
-	StoreErr   error
+	Report        ExecuteBeadReport
+	Approved      bool
+	StoreErrOp    string
+	StoreErr      error
+	RepairContext *RepairContextFromReviewGroup
 }
 
 // RunPostMergeReview executes the post-merge review state machine for a
@@ -297,6 +321,31 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 	}
 	if reviewRes.Verdict == VerdictBlock || reviewRes.Verdict == VerdictRequestChanges {
 		_ = applyReviewTriageDecision(in.Store, in.Bead.ID, in.Assignee, now().UTC(), report.Tier)
+
+		// Schedule one bounded repair cycle for review_fixable_gap. The cycle is
+		// capped at one per result_rev: if a prior review-fixable-gap event already
+		// exists for this result_rev, no second repair is scheduled.
+		if countPriorRepairCycles(in.Store, in.Bead.ID, report.ResultRev) == 0 {
+			groupID := ""
+			if reviewGroup != nil {
+				groupID = reviewGroup.Bundle.GroupID
+			}
+			repairCtx := RepairContextFromReviewGroup{
+				ReviewGroupID:   groupID,
+				ResultRev:       report.ResultRev,
+				ImplActualPower: report.ActualPower,
+				Rationale:       reviewRes.Rationale,
+			}
+			_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
+				Kind:      ReviewFixableGapEventKind,
+				Summary:   "review_fixable_gap",
+				Body:      reviewFixableGapEventBody(repairCtx),
+				Actor:     in.Assignee,
+				Source:    "ddx agent execute-loop",
+				CreatedAt: now().UTC(),
+			})
+			out.RepairContext = &repairCtx
+		}
 	}
 
 	out.Report = report
@@ -517,4 +566,39 @@ func nextEscalatedTier(current string) escalation.ModelTier {
 	default:
 		return escalation.TierStandard
 	}
+}
+
+// countPriorRepairCycles returns the number of review-fixable-gap events
+// already recorded for beadID with the given resultRev. Used to enforce the
+// one-cycle-per-result-rev repair cap.
+func countPriorRepairCycles(store ExecuteBeadLoopStore, beadID, resultRev string) int {
+	events, _ := store.Events(beadID)
+	n := 0
+	for _, ev := range events {
+		if ev.Kind == ReviewFixableGapEventKind && strings.Contains(ev.Body, "result_rev="+resultRev) {
+			n++
+		}
+	}
+	return n
+}
+
+// reviewFixableGapEventBody builds the structured body for a
+// ReviewFixableGapEventKind event. The body encodes review_group_id (when
+// known), result_rev, impl_actual_power, and the reviewer's rationale so the
+// repair executor has enough context to target its next attempt.
+func reviewFixableGapEventBody(rc RepairContextFromReviewGroup) string {
+	parts := make([]string, 0, 4)
+	if rc.ReviewGroupID != "" {
+		parts = append(parts, "review_group_id="+rc.ReviewGroupID)
+	}
+	parts = append(parts, "result_rev="+rc.ResultRev)
+	parts = append(parts, fmt.Sprintf("impl_actual_power=%d", rc.ImplActualPower))
+	if rc.Rationale != "" {
+		rationale := rc.Rationale
+		if len(rationale) > 500 {
+			rationale = rationale[:500] + "..."
+		}
+		parts = append(parts, "rationale="+rationale)
+	}
+	return strings.Join(parts, "\n")
 }
