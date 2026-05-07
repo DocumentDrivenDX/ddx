@@ -192,10 +192,18 @@ func (w *ExecuteBeadWorker) runPostAttemptTriage(ctx context.Context, candidate 
 		}
 		return report
 	}
-	if strings.TrimSpace(triage.Classification) == "" {
+	triage = normalizeTriageResult(triage)
+	hasWarnings := len(triage.DecodeWarnings) > 0 || triage.Malformed
+	classificationRecognized := isRecognizedTriageClassification(triage.Classification)
+	if hasWarnings && runtime.Log != nil {
+		_, _ = fmt.Fprintf(runtime.Log, "post-attempt triage warning (%s %s): %s (continuing)\n", candidate.ID, report.Status, formatTriageWarnings(triage.DecodeWarnings))
+	}
+	if !classificationRecognized && !hasWarnings {
 		return report
 	}
-	report.OutcomeReason = triage.Classification
+	if classificationRecognized {
+		report.OutcomeReason = triage.Classification
+	}
 	recordPostAttemptTriageEvent(w.Store, candidate.ID, report, triage, assignee, now().UTC())
 	return report
 }

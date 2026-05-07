@@ -21,6 +21,7 @@ const (
 	postAttemptTriageSkillName    = "bead-lifecycle"
 	maxTriageEventBodyBytes       = 4096
 	maxTriageEventCount           = 8
+	maxTriageWarningExcerptBytes  = 512
 	defaultSessionLogExcerptBytes = 4096
 )
 
@@ -119,21 +120,19 @@ func NewPostAttemptTriageHook(projectRoot string, store BeadReader, rcfg config.
 			return TriageResult{}, fmt.Errorf("triage hook: dispatch: %w", err)
 		}
 
-		payload, err := triageResultPayload(result)
+		text, err := triageResultOutput(result)
 		if err != nil {
 			return TriageResult{}, err
 		}
 
-		var out TriageResult
-		if err := json.Unmarshal([]byte(payload), &out); err != nil {
-			return TriageResult{}, fmt.Errorf("triage hook: decode result: %w", err)
+		payload, ok := extractJSONCandidate(text)
+		if !ok {
+			return malformedTriageResult("output", "no JSON object found", text), nil
 		}
-		out.Classification = strings.TrimSpace(out.Classification)
-		out.RecommendedAction = strings.TrimSpace(out.RecommendedAction)
-		out.Rationale = strings.TrimSpace(out.Rationale)
-		out.SuggestedAmendments = strings.TrimSpace(out.SuggestedAmendments)
-		if out.Classification == "" {
-			return TriageResult{}, fmt.Errorf("triage hook: missing classification")
+
+		out := decodeTriageResult(payload)
+		if len(out.DecodeWarnings) > 0 {
+			out.Malformed = true
 		}
 		return out, nil
 	}
@@ -202,8 +201,9 @@ func buildPostAttemptTriagePrompt(ctx context.Context, projectRoot string, b *be
 	sb.WriteString("MODE: triage\n")
 	sb.WriteString("You are the bead-lifecycle skill (" + postAttemptTriageSkillName + "). Classify the outcome of the attempt and return exactly one JSON object.\n")
 	sb.WriteString("Return structured JSON with the fields classification, recommended_action, rationale, suggested_amendments, suggested_followup_beads.\n")
-	sb.WriteString("Required output shape example: {\"classification\":\"transport\",\"recommended_action\":\"retry\",\"rationale\":\"transient\",\"suggested_amendments\":\"none\",\"suggested_followup_beads\":[]}\n")
-	sb.WriteString("Use stable machine-readable classifications such as transport, quota, routing, timeout, merge_conflict, tests_red, needs_decomposition, needs_human, or success.\n")
+	sb.WriteString("Required output shape example: {\"classification\":\"transport\",\"recommended_action\":\"release_claim_retry\",\"rationale\":\"transient provider failure\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}\n")
+	sb.WriteString("Array fields must be arrays; use [] when none are needed.\n")
+	sb.WriteString("Use only the documented classifications and recommended_action values from the skill contract.\n")
 	sb.WriteString("Do not wrap the answer in markdown or prose.\n\n")
 	sb.WriteString("```json\n")
 	sb.Write(body)
@@ -211,7 +211,7 @@ func buildPostAttemptTriagePrompt(ctx context.Context, projectRoot string, b *be
 	return sb.String(), nil
 }
 
-func triageResultPayload(result *Result) (string, error) {
+func triageResultOutput(result *Result) (string, error) {
 	if result == nil {
 		return "", fmt.Errorf("triage hook: empty runner result")
 	}
@@ -222,45 +222,300 @@ func triageResultPayload(result *Result) (string, error) {
 	if text == "" {
 		return "", fmt.Errorf("triage hook: empty output")
 	}
-	candidate, ok := extractJSONCandidate(text)
-	if !ok {
-		return "", fmt.Errorf("triage hook: no JSON object found")
-	}
-	return candidate, nil
+	return text, nil
 }
 
 func recordPostAttemptTriageEvent(store BeadEventAppender, beadID string, report ExecuteBeadReport, triage TriageResult, actor string, createdAt time.Time) {
-	if store == nil || beadID == "" || strings.TrimSpace(triage.Classification) == "" {
+	if store == nil || beadID == "" {
 		return
+	}
+	triage = normalizeTriageResult(triage)
+	hasClassification := triage.Classification != ""
+	hasWarnings := len(triage.DecodeWarnings) > 0 || triage.Malformed
+	if !hasClassification && !hasWarnings {
+		return
+	}
+	amendments := triage.SuggestedAmendments
+	if amendments == nil {
+		amendments = []TriageAmendment{}
+	}
+	followups := triage.SuggestedFollowupBeads
+	if followups == nil {
+		followups = []FollowupBead{}
 	}
 	body := map[string]any{
 		"classification":           triage.Classification,
 		"recommended_action":       triage.RecommendedAction,
 		"rationale":                triage.Rationale,
-		"suggested_amendments":     triage.SuggestedAmendments,
-		"suggested_followup_beads": triage.SuggestedFollowupBeads,
+		"suggested_amendments":     amendments,
+		"suggested_followup_beads": followups,
 		"status":                   report.Status,
 		"detail":                   report.Detail,
 		"base_rev":                 report.BaseRev,
 		"result_rev":               report.ResultRev,
 		"session_id":               report.SessionID,
 	}
+	if len(triage.DecodeWarnings) > 0 {
+		body["decode_warnings"] = triage.DecodeWarnings
+	}
+	if triage.Malformed {
+		body["malformed"] = true
+	}
 	encoded, err := json.Marshal(body)
 	if err != nil {
 		return
 	}
+	kind := "bead-quality.triage"
 	summary := triage.Classification
-	if triage.RecommendedAction != "" {
+	if !isRecognizedTriageClassification(triage.Classification) {
+		kind = "bead-quality.triage-warning"
+		summary = "malformed triage output"
+		if triage.Classification != "" {
+			summary = "unusable triage classification: " + triage.Classification
+		} else if len(triage.DecodeWarnings) > 0 && triage.DecodeWarnings[0].Warning != "" {
+			summary = triage.DecodeWarnings[0].Warning
+		}
+	} else if triage.RecommendedAction != "" {
 		summary = triage.Classification + ": " + triage.RecommendedAction
+		if len(triage.DecodeWarnings) > 0 {
+			summary += fmt.Sprintf(" (warnings=%d)", len(triage.DecodeWarnings))
+		}
 	}
 	_ = store.AppendEvent(beadID, bead.BeadEvent{
-		Kind:      "bead-quality.triage",
+		Kind:      kind,
 		Summary:   summary,
 		Body:      string(encoded),
 		Actor:     actor,
 		Source:    "ddx agent execute-loop",
 		CreatedAt: createdAt.UTC(),
 	})
+}
+
+type triageResultRaw struct {
+	Classification         string          `json:"classification,omitempty"`
+	RecommendedAction      string          `json:"recommended_action,omitempty"`
+	Rationale              string          `json:"rationale,omitempty"`
+	SuggestedAmendments    json.RawMessage `json:"suggested_amendments,omitempty"`
+	SuggestedFollowupBeads json.RawMessage `json:"suggested_followup_beads,omitempty"`
+}
+
+func decodeTriageResult(payload string) TriageResult {
+	var raw triageResultRaw
+	if err := json.Unmarshal([]byte(payload), &raw); err != nil {
+		return malformedTriageResult("json", "invalid JSON object", payload)
+	}
+
+	out := TriageResult{
+		Classification:    strings.TrimSpace(raw.Classification),
+		RecommendedAction: strings.TrimSpace(raw.RecommendedAction),
+		Rationale:         strings.TrimSpace(raw.Rationale),
+	}
+	out.SuggestedAmendments = []TriageAmendment{}
+	out.SuggestedFollowupBeads = []FollowupBead{}
+
+	amendments, warnings := decodeTriageAmendments(raw.SuggestedAmendments)
+	out.SuggestedAmendments = amendments
+	out.DecodeWarnings = append(out.DecodeWarnings, warnings...)
+
+	followups, warnings := decodeTriageFollowupBeads(raw.SuggestedFollowupBeads)
+	out.SuggestedFollowupBeads = followups
+	out.DecodeWarnings = append(out.DecodeWarnings, warnings...)
+
+	out = normalizeTriageResult(out)
+	out = addTriageRequiredFieldWarnings(out)
+	return out
+}
+
+func normalizeTriageResult(in TriageResult) TriageResult {
+	in.Classification = strings.TrimSpace(in.Classification)
+	in.RecommendedAction = strings.TrimSpace(in.RecommendedAction)
+	in.Rationale = strings.TrimSpace(in.Rationale)
+	if in.SuggestedAmendments == nil {
+		in.SuggestedAmendments = []TriageAmendment{}
+	}
+	if in.SuggestedFollowupBeads == nil {
+		in.SuggestedFollowupBeads = []FollowupBead{}
+	}
+	if in.Classification != "" && !isRecognizedTriageClassification(in.Classification) {
+		in.DecodeWarnings = appendTriageDecodeWarning(in.DecodeWarnings, newTriageDecodeWarning("classification", "unknown classification", in.Classification))
+	}
+	if in.RecommendedAction != "" && !isRecognizedTriageRecommendedAction(in.RecommendedAction) {
+		in.DecodeWarnings = appendTriageDecodeWarning(in.DecodeWarnings, newTriageDecodeWarning("recommended_action", "unknown recommended_action", in.RecommendedAction))
+	}
+	if len(in.DecodeWarnings) > 0 {
+		in.Malformed = true
+	}
+	return in
+}
+
+func addTriageRequiredFieldWarnings(in TriageResult) TriageResult {
+	if strings.TrimSpace(in.Classification) == "" {
+		in.DecodeWarnings = appendTriageDecodeWarning(in.DecodeWarnings, newTriageDecodeWarning("classification", "missing classification", ""))
+	}
+	if strings.TrimSpace(in.RecommendedAction) == "" {
+		in.DecodeWarnings = appendTriageDecodeWarning(in.DecodeWarnings, newTriageDecodeWarning("recommended_action", "missing recommended_action", ""))
+	}
+	if len(in.DecodeWarnings) > 0 {
+		in.Malformed = true
+	}
+	return in
+}
+
+func decodeTriageAmendments(raw json.RawMessage) ([]TriageAmendment, []TriageDecodeWarning) {
+	if isEmptyTriageRaw(raw) {
+		return []TriageAmendment{}, nil
+	}
+	if s, ok := decodeTriageString(raw); ok {
+		if isTriageEmptySentinel(s) {
+			return []TriageAmendment{}, nil
+		}
+		return []TriageAmendment{}, []TriageDecodeWarning{newTriageDecodeWarning("suggested_amendments", "expected array; got string; dropped field", s)}
+	}
+	var out []TriageAmendment
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return []TriageAmendment{}, []TriageDecodeWarning{newTriageDecodeWarning("suggested_amendments", "expected array; dropped malformed field", string(raw))}
+	}
+	if out == nil {
+		out = []TriageAmendment{}
+	}
+	return out, nil
+}
+
+func decodeTriageFollowupBeads(raw json.RawMessage) ([]FollowupBead, []TriageDecodeWarning) {
+	if isEmptyTriageRaw(raw) {
+		return []FollowupBead{}, nil
+	}
+	if s, ok := decodeTriageString(raw); ok {
+		if isTriageEmptySentinel(s) {
+			return []FollowupBead{}, nil
+		}
+		return []FollowupBead{}, []TriageDecodeWarning{newTriageDecodeWarning("suggested_followup_beads", "expected array; got string; dropped field", s)}
+	}
+	var out []FollowupBead
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return []FollowupBead{}, []TriageDecodeWarning{newTriageDecodeWarning("suggested_followup_beads", "expected array; dropped malformed field", string(raw))}
+	}
+	if out == nil {
+		out = []FollowupBead{}
+	}
+	return out, nil
+}
+
+func malformedTriageResult(field, warning, raw string) TriageResult {
+	return TriageResult{
+		SuggestedAmendments:    []TriageAmendment{},
+		SuggestedFollowupBeads: []FollowupBead{},
+		DecodeWarnings:         []TriageDecodeWarning{newTriageDecodeWarning(field, warning, raw)},
+		Malformed:              true,
+	}
+}
+
+func newTriageDecodeWarning(field, warning, raw string) TriageDecodeWarning {
+	return TriageDecodeWarning{
+		Field:      field,
+		Warning:    warning,
+		RawExcerpt: triageWarningExcerpt(raw),
+	}
+}
+
+func appendTriageDecodeWarning(warnings []TriageDecodeWarning, next TriageDecodeWarning) []TriageDecodeWarning {
+	for _, existing := range warnings {
+		if existing.Field == next.Field && existing.Warning == next.Warning && existing.RawExcerpt == next.RawExcerpt {
+			return warnings
+		}
+	}
+	return append(warnings, next)
+}
+
+func triageWarningExcerpt(raw string) string {
+	raw = strings.TrimSpace(raw)
+	if raw == "" {
+		return ""
+	}
+	raw = strings.Join(strings.Fields(raw), " ")
+	if len(raw) <= maxTriageWarningExcerptBytes {
+		return raw
+	}
+	const marker = "...[truncated]"
+	limit := maxTriageWarningExcerptBytes - len(marker)
+	if limit <= 0 {
+		return raw[:maxTriageWarningExcerptBytes]
+	}
+	return raw[:limit] + marker
+}
+
+func formatTriageWarnings(warnings []TriageDecodeWarning) string {
+	if len(warnings) == 0 {
+		return "malformed triage output"
+	}
+	first := warnings[0]
+	if first.Field != "" && first.Warning != "" {
+		return first.Field + ": " + first.Warning
+	}
+	if first.Warning != "" {
+		return first.Warning
+	}
+	return "malformed triage output"
+}
+
+func isEmptyTriageRaw(raw json.RawMessage) bool {
+	trimmed := strings.TrimSpace(string(raw))
+	return trimmed == "" || trimmed == "null"
+}
+
+func decodeTriageString(raw json.RawMessage) (string, bool) {
+	var s string
+	if err := json.Unmarshal(raw, &s); err != nil {
+		return "", false
+	}
+	return strings.TrimSpace(s), true
+}
+
+func isTriageEmptySentinel(s string) bool {
+	switch strings.ToLower(strings.TrimSpace(s)) {
+	case "", "none", "n/a", "na", "null":
+		return true
+	default:
+		return false
+	}
+}
+
+func isRecognizedTriageClassification(classification string) bool {
+	switch strings.TrimSpace(classification) {
+	case "already_satisfied",
+		"no_changes_unverified",
+		"no_changes_unjustified",
+		"needs_investigation",
+		"decomposed",
+		"blocked",
+		"superseded",
+		"routing",
+		"quota",
+		"transport",
+		"tests_red",
+		"merge_conflict",
+		"review_block",
+		"timeout",
+		"recoverable":
+		return true
+	default:
+		return false
+	}
+}
+
+func isRecognizedTriageRecommendedAction(action string) bool {
+	switch strings.TrimSpace(action) {
+	case "close_already_satisfied",
+		"release_claim_retry",
+		"release_claim_needs_investigation",
+		"release_claim_mark_blocked",
+		"release_claim_mark_superseded",
+		"release_claim_wait_retry",
+		"close_decomposed_or_mark_execution_ineligible":
+		return true
+	default:
+		return false
+	}
 }
 
 func clampTriageEvent(ev bead.BeadEvent) bead.BeadEvent {

@@ -12,11 +12,28 @@ type LintResult struct {
 // TriageResult is the structured outcome returned by the post-attempt bead
 // lifecycle triage hook.
 type TriageResult struct {
-	Classification         string         `json:"classification,omitempty"`
-	RecommendedAction      string         `json:"recommended_action,omitempty"`
-	Rationale              string         `json:"rationale,omitempty"`
-	SuggestedAmendments    string         `json:"suggested_amendments,omitempty"`
-	SuggestedFollowupBeads []FollowupBead `json:"suggested_followup_beads,omitempty"`
+	Classification         string                `json:"classification,omitempty"`
+	RecommendedAction      string                `json:"recommended_action,omitempty"`
+	Rationale              string                `json:"rationale,omitempty"`
+	SuggestedAmendments    []TriageAmendment     `json:"suggested_amendments,omitempty"`
+	SuggestedFollowupBeads []FollowupBead        `json:"suggested_followup_beads,omitempty"`
+	DecodeWarnings         []TriageDecodeWarning `json:"decode_warnings,omitempty"`
+	Malformed              bool                  `json:"malformed,omitempty"`
+}
+
+// TriageAmendment describes a targeted bead amendment suggested by
+// post-attempt triage.
+type TriageAmendment struct {
+	Target    string `json:"target,omitempty"`
+	Amendment string `json:"amendment,omitempty"`
+}
+
+// TriageDecodeWarning preserves non-fatal model-output contract issues so
+// operators can review bad triage responses without blocking queue progress.
+type TriageDecodeWarning struct {
+	Field      string `json:"field,omitempty"`
+	Warning    string `json:"warning,omitempty"`
+	RawExcerpt string `json:"raw_excerpt,omitempty"`
 }
 
 // FollowupBead describes an execution-ready child or follow-up bead suggested
