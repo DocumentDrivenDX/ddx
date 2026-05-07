@@ -141,6 +141,25 @@ func TestFindProjectRoot(t *testing.T) {
 		root := FindProjectRoot(nonGit)
 		assert.Equal(t, nonGit, root)
 	})
+
+	t.Run("prefers physical root over core.worktree redirect", func(t *testing.T) {
+		linked := filepath.Join(filepath.Dir(repoDir), "redirected-wt")
+		runGitInDir(t, repoDir, "worktree", "add", "--detach", linked, "HEAD")
+		runGitInDir(t, repoDir, "config", "core.worktree", linked)
+
+		raw := exec.Command("git", "rev-parse", "--show-toplevel")
+		raw.Dir = repoDir
+		raw.Env = scrubbedGitEnv()
+		rawOut, err := raw.Output()
+		require.NoError(t, err)
+		assert.Equal(t, linked, strings.TrimSpace(string(rawOut)))
+
+		root := FindProjectRoot(repoDir)
+		assert.Equal(t, repoDir, root)
+
+		linkedRoot := FindProjectRoot(linked)
+		assert.Equal(t, linked, linkedRoot)
+	})
 }
 
 // TestFindNearestDDxWorkspace_LinkedWorktreePrefersPrimary verifies that

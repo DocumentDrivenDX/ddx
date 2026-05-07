@@ -254,7 +254,7 @@ may have added content. `ddx init` uses marker-delimited injection:
 This project uses DDx. Use the `ddx` skill for beads, work, review,
 agents, and status.
 
-(default interactive sessions use interactive-steward / queue-steward; explicit
+(default interactive sessions use interactive-steward / `queue_steward`; explicit
 `ddx work` and `ddx try` prompts use bead_execution only for executing bead AC;
 tracker, merge, commit, safety, and verification policy still apply)
 

@@ -103,6 +103,96 @@ func TestCheckGitRepoHealthDetectsStrayCoreWorktree(t *testing.T) {
 	}
 }
 
+// TestCheckGitRepoHealthDetectsPrimaryCheckoutCoreWorktreeRedirect verifies
+// the incident shape where the primary checkout's .git/config redirects Git
+// commands to a different worktree path.
+func TestCheckGitRepoHealthDetectsPrimaryCheckoutCoreWorktreeRedirect(t *testing.T) {
+	dir := t.TempDir()
+	initTestRepo(t, dir)
+
+	redirect := filepath.Join(t.TempDir(), "redirected-worktree")
+	add := exec.Command("git", "worktree", "add", "--detach", redirect, "HEAD")
+	add.Dir = dir
+	add.Env = gitpkg.CleanEnv()
+	require.NoError(t, add.Run())
+
+	set := exec.Command("git", "config", "core.worktree", redirect)
+	set.Dir = dir
+	set.Env = gitpkg.CleanEnv()
+	require.NoError(t, set.Run())
+
+	issues := checkGitRepoHealth(dir, false)
+	assert.True(t, hasIssueType(issues, "git_stray_core_worktree"),
+		"expected git_stray_core_worktree issue, got: %+v", issues)
+}
+
+// TestCheckGitRepoHealthFixUnsetsRedirectedCoreWorktree verifies --fix removes
+// the redirect and a subsequent health check no longer reports the corruption.
+func TestCheckGitRepoHealthFixUnsetsRedirectedCoreWorktree(t *testing.T) {
+	dir := t.TempDir()
+	initTestRepo(t, dir)
+
+	redirect := filepath.Join(t.TempDir(), "redirected-worktree")
+	add := exec.Command("git", "worktree", "add", "--detach", redirect, "HEAD")
+	add.Dir = dir
+	add.Env = gitpkg.CleanEnv()
+	require.NoError(t, add.Run())
+
+	set := exec.Command("git", "config", "core.worktree", redirect)
+	set.Dir = dir
+	set.Env = gitpkg.CleanEnv()
+	require.NoError(t, set.Run())
+
+	issues := checkGitRepoHealth(dir, true)
+	assert.True(t, hasIssueType(issues, "git_stray_core_worktree"),
+		"expected git_stray_core_worktree issue, got: %+v", issues)
+
+	issues = checkGitRepoHealth(dir, false)
+	assert.False(t, hasIssueType(issues, "git_stray_core_worktree"),
+		"core.worktree redirect should be gone after --fix, got: %+v", issues)
+
+	get := exec.Command("git", "config", "--local", "--get", "core.worktree")
+	get.Dir = dir
+	get.Env = gitpkg.CleanEnv()
+	if err := get.Run(); err == nil {
+		t.Fatalf("core.worktree should be unset after --fix")
+	}
+}
+
+// TestPreCommitDDXValidateFailsOnCoreWorktreeRedirect verifies the pre-commit
+// guard used by lefthook fails when local config points the primary checkout
+// at a different worktree.
+func TestPreCommitDDXValidateFailsOnCoreWorktreeRedirect(t *testing.T) {
+	dir := t.TempDir()
+	initTestRepo(t, dir)
+
+	redirect := filepath.Join(t.TempDir(), "redirected-worktree")
+	add := exec.Command("git", "worktree", "add", "--detach", redirect, "HEAD")
+	add.Dir = dir
+	add.Env = gitpkg.CleanEnv()
+	require.NoError(t, add.Run())
+
+	set := exec.Command("git", "config", "core.worktree", redirect)
+	set.Dir = dir
+	set.Env = gitpkg.CleanEnv()
+	require.NoError(t, set.Run())
+
+	script, absErr := filepath.Abs(filepath.Join("..", "..", "scripts", "git-config-health.sh"))
+	require.NoError(t, absErr)
+	cmd := exec.Command("sh", script)
+	cmd.Dir = dir
+	cmd.Env = append(gitpkg.CleanEnv(), "DDX_GIT_CONFIG_HEALTH_ROOT="+dir)
+	out, err := cmd.CombinedOutput()
+	require.Error(t, err, "hook guard should fail on redirected core.worktree")
+	assert.Contains(t, string(out), "Invalid local git config: core.worktree=")
+	assert.Contains(t, string(out), "git config --unset core.worktree")
+
+	lefthook, readErr := os.ReadFile(filepath.Join("..", "..", "lefthook.yml"))
+	require.NoError(t, readErr)
+	assert.Contains(t, string(lefthook), "git-config-health:")
+	assert.Contains(t, string(lefthook), "sh scripts/git-config-health.sh")
+}
+
 // TestCheckGitRepoHealthCleanRepo verifies a clean repo produces no corruption
 // issues (only the optional worktreeConfig warning at most).
 func TestCheckGitRepoHealthCleanRepo(t *testing.T) {

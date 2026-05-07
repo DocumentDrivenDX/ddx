@@ -45,6 +45,10 @@ pre-commit:
         exit 0
       fail_text: "Merge conflict markers found. Resolve conflicts before committing."
 
+    git-config-health:
+      run: "sh scripts/git-config-health.sh"
+      fail_text: "Local Git config is invalid. Run 'git config --unset core.worktree'."
+
     # Debug statements - using ripgrep if available, fallback to grep
     # Note: Disabled because CLI applications legitimately use fmt.Print for output
     # debug-go:

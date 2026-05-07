@@ -30,7 +30,52 @@ func FindProjectRoot(startDir string) string {
 	if root == "" {
 		return startDir
 	}
+	if physical := physicalGitRoot(startDir); physical != "" && !samePath(physical, root) {
+		return physical
+	}
 	return root
+}
+
+// physicalGitRoot walks upward on disk until it finds a .git directory or
+// linked-worktree .git file. This intentionally bypasses git's configured
+// worktree resolution so a corrupted local core.worktree cannot redirect ddx
+// away from the checkout the operator actually invoked.
+func physicalGitRoot(startDir string) string {
+	current, err := filepath.Abs(startDir)
+	if err != nil {
+		return ""
+	}
+	for {
+		if _, statErr := os.Stat(filepath.Join(current, ".git")); statErr == nil {
+			return current
+		}
+		parent := filepath.Dir(current)
+		if parent == current {
+			return ""
+		}
+		current = parent
+	}
+}
+
+func samePath(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	cleanA, err := filepath.Abs(a)
+	if err != nil {
+		cleanA = filepath.Clean(a)
+	}
+	cleanB, err := filepath.Abs(b)
+	if err != nil {
+		cleanB = filepath.Clean(b)
+	}
+	if resolvedA, err := filepath.EvalSymlinks(cleanA); err == nil {
+		cleanA = resolvedA
+	}
+	if resolvedB, err := filepath.EvalSymlinks(cleanB); err == nil {
+		cleanB = resolvedB
+	}
+	return cleanA == cleanB
 }
 
 // FindNearestDDxWorkspace walks up from startDir to find the nearest ancestor
