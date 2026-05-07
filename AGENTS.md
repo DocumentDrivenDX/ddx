@@ -2,6 +2,27 @@
 
 This repository uses DDx's built-in bead tracker for durable work management.
 
+## Default Interactive Mode
+
+When an agent is opened in this repository without an explicit execution
+directive, the default mode is **`queue_steward`**: survey, triage, and
+advise on the DDx bead queue without claiming or editing anything unless
+the user explicitly asks.
+
+| Mode | Trigger | Allowed | Prohibited |
+|---|---|---|---|
+| `queue_steward` | Broad DDx questions: "what's on the queue", "what's ready", "how am I doing", "do work" without an explicit worker directive | Read tracker and docs; report status; advise on bead quality; run `ddx bead list/ready/status/show` | Claiming or editing beads; starting `ddx work`/`ddx try` autonomously |
+| `bead_execution` | Explicit worker directive: `ddx work`, `ddx try <id>`, `ddx agent execute-bead`, or `execute-bead` harness invocation | Full execute-bead lifecycle per the bead body | Scope creep outside the named bead |
+| `direct_user_implementation` | User explicitly asks to edit code or docs ("fix this bug", "update this file") | Edit code and docs as instructed; commit to the current branch | Draining the bead queue autonomously |
+| `review` | User explicitly asks for a review ("review this PR", "grade this bead") | Read-only evidence-based review per §Reviewer Mode | Writing commits or claiming beads |
+
+**`bead_execution` supersedes `queue_steward`** when DDx invokes a worker
+explicitly. Tracker, merge-policy, and safety instructions remain
+load-bearing across all modes.
+
+Execution-ready beads belong to `ddx work` (or an explicit `ddx try <id>`).
+Do not start execution unless the user explicitly requests direct implementation.
+
 ## Bead Policy
 
 - Treat `.ddx/beads.jsonl` as DDx-managed data, not as a hand-edited document.

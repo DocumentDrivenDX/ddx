@@ -37,6 +37,43 @@ names should make the DDx-owned workflow boundary explicit.
 generator edits the repo) with `produces_artifact: <id>` metadata. It is
 not a fourth layer — it is a labeled invocation at an existing layer.
 
+## Agent Interaction Modes
+
+DDx defines four named agent interaction modes (`DDX_MODE`) to separate
+broad interactive queue stewardship from worker execution. The mode governs
+what an agent opened in a DDx project is permitted to do.
+
+| DDX_MODE | Description | Allowed actions | Prohibited actions |
+|---|---|---|---|
+| `queue_steward` | Default interactive mode. Surveys, triages, and advises on the queue without claiming or executing beads. | Read tracker and docs; report status; advise on bead quality; suggest readiness fixes; run `ddx bead list/ready/status/show`. | Claiming beads; creating isolated worktrees; starting `ddx work` or `ddx try` without an explicit user directive. |
+| `bead_execution` | Worker mode. Executes one or more beads from the queue in isolated worktrees. | Full FEAT-010 layer-2 / layer-3 lifecycle: worktree creation, bead attempt, merge or preserve, evidence bundle. | Scope creep outside the named bead; switching to direct implementation without a bead. |
+| `direct_user_implementation` | Human-directed implementation. The user has explicitly asked the agent to edit code or docs, bypassing the bead queue. | Edit code and docs as instructed; commit to the current branch. | Starting autonomous queue drain; claiming beads autonomously. |
+| `review` | Read-only review. Grades an existing implementation against AC or specs. | Read code, docs, and evidence; return a structured verdict with per-AC findings. | Writing commits; claiming beads; modifying the tracker. |
+
+### Precedence
+
+`bead_execution` supersedes `queue_steward` when DDx invokes a worker
+explicitly (via `ddx work`, `ddx try <id>`, or `ddx agent execute-bead`).
+`direct_user_implementation` supersedes `queue_steward` when the user
+explicitly asks for code or doc edits unrelated to the queue. `review`
+supersedes `queue_steward` when the user explicitly requests a graded review
+pass.
+
+Tracker instructions, merge-policy, and safety rules in AGENTS.md are
+load-bearing in every mode and are never overridden by mode selection.
+
+### Worker-capacity suggestion rules
+
+An agent in `queue_steward` mode may suggest running `ddx work` or point
+the operator to worker-capacity settings when:
+
+- The queue contains execution-ready beads that have not been attempted.
+- The queue is blocked and operator action is required.
+- The operator asks "why isn't anything running?" or a similar capacity question.
+
+The agent must not autonomously start `ddx work` from `queue_steward` mode.
+Suggesting the command or explaining the conditions is the correct action.
+
 ## Problem Statement
 
 **Current situation:** DDx has accreted two independent run-storage shapes

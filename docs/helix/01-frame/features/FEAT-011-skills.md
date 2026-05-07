@@ -132,6 +132,42 @@ Claude does not reliably auto-chase reference links; the router in
 > be grounded in the reference file's guidance, not this overview
 > alone."
 
+### Interactive mode routing
+
+When the `ddx` skill activates in an interactive session, the harness must
+route the request to the appropriate mode before taking action.
+
+**Broad interactive phrases → `queue_steward`**
+
+Phrases like "do work", "what's on the queue", "what's ready",
+"how am I doing", "drain the queue", "any beads ready?",
+"check the tracker", "ddx doctor" trigger `queue_steward` mode:
+survey and advise only. Do not start worker execution from this trigger.
+
+**Explicit execution phrases → `bead_execution`**
+
+Phrases like "run the next bead", "execute bead `<id>`",
+"`ddx work`", "`ddx try <id>`", "execute-loop", or
+"start the worker" trigger `bead_execution` mode:
+the agent (or `ddx work`) owns the full layer-2 / layer-3 lifecycle.
+
+**Explicit implementation asks → `direct_user_implementation`**
+
+Phrases like "fix this bug", "update this file", "implement X"
+that name a specific code or doc change without referencing the bead queue
+trigger `direct_user_implementation` mode.
+
+**Review asks → `review`**
+
+Phrases like "review this PR", "grade this bead", "check against spec",
+"is this AC-complete?" trigger `review` mode.
+
+The distinction between `queue_steward` and `bead_execution` is critical:
+"do work" in an interactive session means _survey and advise_; running
+`ddx work` or an explicit execute-bead directive means _execute_. The
+routing table in `skills/ddx/reference/work.md` carries the authoritative
+phrase list aligned with `skills/ddx/evals/routing.jsonl`.
+
 ### Nested workflow skills
 
 Subagent orchestration remains harness-specific (Claude Code has
