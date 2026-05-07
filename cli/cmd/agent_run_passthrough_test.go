@@ -297,7 +297,7 @@ func TestDDxWork_WiresPreClaimIntakeHook(t *testing.T) {
 			return ch, nil
 		case "triage":
 			ch := make(chan agentlib.ServiceEvent, 1)
-			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"success\",\"recommended_action\":\"none\",\"rationale\":\"ok\",\"suggested_amendments\":\"none\",\"suggested_followup_beads\":[]}"}`)}
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"already_satisfied\",\"recommended_action\":\"close_already_satisfied\",\"rationale\":\"ok\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}"}`)}
 			close(ch)
 			return ch, nil
 		default:

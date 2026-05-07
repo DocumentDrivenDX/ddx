@@ -103,7 +103,7 @@ func (r *tryHookRunnerStub) Run(opts agent.RunArgs) (*agent.Result, error) {
 	case "bead-lifecycle-triage":
 		return &agent.Result{
 			ExitCode: 0,
-			Output:   `{"classification":"transport","recommended_action":"retry","rationale":"transient","suggested_amendments":"none","suggested_followup_beads":[]}`,
+			Output:   `{"classification":"transport","recommended_action":"release_claim_retry","rationale":"transient","suggested_amendments":[],"suggested_followup_beads":[]}`,
 		}, nil
 	default:
 		r.t.Fatalf("unexpected prompt source: %q", opts.PromptSource)

@@ -53,8 +53,9 @@ func (f *fakeLandingGitOps) UpdateRefTo(_, ref, sha, _ string) error {
 	return nil
 }
 
-func (f *fakeLandingGitOps) AddWorktree(_, _, _ string) error   { return nil }
-func (f *fakeLandingGitOps) HeadRevAt(_ string) (string, error) { return "newTip123", nil }
+func (f *fakeLandingGitOps) AddWorktree(_, _, _ string) error       { return nil }
+func (f *fakeLandingGitOps) AddBranchWorktree(_, _, _ string) error { return nil }
+func (f *fakeLandingGitOps) HeadRevAt(_ string) (string, error)     { return "newTip123", nil }
 
 func (f *fakeLandingGitOps) MergeInto(_, _, _ string) error {
 	// Decide based on current pending outcome whether the merge should fail.
@@ -88,6 +89,7 @@ func (o *outcomeGitOps) RemoveWorktree(_, _ string) error       { return nil }
 func (o *outcomeGitOps) CountCommits(_, _, _ string) int        { return 2 }
 func (o *outcomeGitOps) CurrentBranch(_ string) (string, error) { return "main", nil }
 func (o *outcomeGitOps) AddWorktree(_, _, _ string) error       { return nil }
+func (o *outcomeGitOps) AddBranchWorktree(_, _, _ string) error { return nil }
 func (o *outcomeGitOps) HeadRevAt(_ string) (string, error)     { return "mergedTip", nil }
 func (o *outcomeGitOps) FetchOriginAncestryCheck(_, _ string) (agent.PreClaimResult, error) {
 	return agent.PreClaimResult{Action: "no-origin"}, nil

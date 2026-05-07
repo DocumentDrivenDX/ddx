@@ -50,7 +50,7 @@ func (s *workerIntakeServiceStub) Execute(_ context.Context, req agentlib.Servic
 	case "lint":
 		finalText = `{"score":9,"rationale":"ok","suggested_fixes":[],"waivers_applied":[]}`
 	case "triage":
-		finalText = `{"classification":"success","recommended_action":"none","rationale":"ok","suggested_amendments":"none","suggested_followup_beads":[]}`
+		finalText = `{"classification":"already_satisfied","recommended_action":"close_already_satisfied","rationale":"ok","suggested_amendments":[],"suggested_followup_beads":[]}`
 	}
 
 	ch := make(chan agentlib.ServiceEvent, 1)
