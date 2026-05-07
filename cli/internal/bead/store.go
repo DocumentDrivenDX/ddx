@@ -1355,27 +1355,6 @@ func (s *Store) ReadyExecution() ([]Bead, error) {
 	return s.readyFiltered(true)
 }
 
-// NeedsHuman returns non-closed beads carrying the needs_human label, sorted
-// by queue order. Worker drain skips these beads; they are surfaced here for
-// operator attention via CLI and web.
-func (s *Store) NeedsHuman() ([]Bead, error) {
-	beads, err := s.ReadAll()
-	if err != nil {
-		return nil, err
-	}
-	var out []Bead
-	for _, b := range beads {
-		if b.Status == StatusClosed {
-			continue
-		}
-		if hasLabel(b, LabelNeedsHuman) {
-			out = append(out, b)
-		}
-	}
-	sortBeadsForQueue(out)
-	return out, nil
-}
-
 // ReadyExecutionBreakdown classifies dependency-ready beads by the reason
 // they are NOT execution-eligible: lifecycle-blocked statuses, epic
 // containers, retry cooldown, execution-eligible=false, or superseded. It's
@@ -1840,22 +1819,7 @@ func (s *Store) Status() (*StatusCounts, error) {
 		}
 	}
 
-	needsHuman, err := s.NeedsHuman()
-	if err != nil {
-		return nil, err
-	}
-	workerReady, err := s.ReadyExecution()
-	if err != nil {
-		return nil, err
-	}
-
-	counts := &StatusCounts{
-		Total:       len(all),
-		Ready:       len(ready),
-		Blocked:     len(blocked),
-		NeedsHuman:  len(needsHuman),
-		WorkerReady: len(workerReady),
-	}
+	counts := &StatusCounts{Total: len(all), Ready: len(ready), Blocked: len(blocked)}
 	for _, b := range all {
 		switch b.Status {
 		case StatusOpen:
