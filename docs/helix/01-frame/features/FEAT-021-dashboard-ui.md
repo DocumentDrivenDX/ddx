@@ -26,7 +26,8 @@ and shareable.
 The dashboard UI is implemented as a SvelteKit application with graphql-request for
 GraphQL data fetching. Every page uses `+page.ts` load functions to fetch data
 from the `/graphql` endpoint defined in SD-022. The shared run-detail surface
-uses the FEAT-008/FEAT-010 tab structure:
+uses the FEAT-008/FEAT-010 tab structure, and FEAT-019 drill-down links land
+on the same tab strip:
 
 - `work` → `overview`
 - `try` → `overview`, `prompt`, `response`, `tools`, `evidence`
@@ -228,9 +229,10 @@ Layer-aware run detail for a single `work`, `try`, or `run` record. Work
 records show child try attempts, try records show child layer-1 runs, and
 layer-1 runs show prompt/config summary, selected harness/provider/model,
 power bounds, cost/token/duration signals, evidence links, and produced
-artifact links. The tab strip is layer-aware: `work` shows `overview`; `try`
-shows `overview`, `prompt`, `response`, `tools`, and `evidence`; `run`
-shows `overview`, `prompt`, `response`, `session`, `tools`, and `evidence`.
+artifact links. The tab strip is layer-aware and shared across FEAT-008,
+FEAT-010, and FEAT-019: `work` shows `overview`; `try` shows `overview`,
+`prompt`, `response`, `tools`, and `evidence`; `run` shows `overview`,
+`prompt`, `response`, `session`, `tools`, and `evidence`.
 
 **GraphQL Query:** `run` by id with project filter per FEAT-010.
 
@@ -248,13 +250,14 @@ The global navigation bar shows:
 Sessions and Executions are no longer top-level activity tabs. The unified
 Runs view (this feature + FEAT-008 §5) carries layer chips (`work`, `try`,
 `run`) and an inline row-expansion pane that surfaces what those tabs used
-to show — `work` shows `overview` only plus queue inputs and child run
-links; `try` shows `overview`, `prompt`, `response`, `tools`, and
-`evidence`; `run` shows `overview`, `prompt`, `response`, `session`,
-`tools`, and `evidence`. Legacy URLs (`/sessions`, `/executions`,
-`/executions/[id]`) respond with 302 redirects (NOT 301) to the matching
-filtered Runs URL with all query params preserved and a `Sunset` header set
-for the deprecation window.
+to show, using the shared `work` / `try` / `run` tab strip described above:
+`work` shows `overview` only plus queue inputs and child run links; `try`
+shows `overview`, `prompt`, `response`, `tools`, and `evidence`; `run`
+shows `overview`, `prompt`, `response`, `session`, `tools`, and
+`evidence`. Legacy URLs (`/sessions`, `/executions`, `/executions/[id]`)
+respond with 302 redirects (NOT 301) to the matching filtered Runs URL with
+all query params preserved and a `Sunset` header set for the deprecation
+window.
 
 The project picker changes the `:projectId` segment in-place while preserving
 the current page tab. So switching project while on the Graph tab navigates to

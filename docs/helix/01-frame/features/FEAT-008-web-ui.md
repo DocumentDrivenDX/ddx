@@ -82,7 +82,7 @@ project-scoped tabs in the global navigation, in this order:
 | Beads | `beads` | Bead list / kanban / ready / detail (US-082*) |
 | Artifacts | `artifacts` | Artifact browser (US-080, US-081b, US-083) |
 | Graph | `graph` | Document dependency graph (US-081, US-081c) |
-| Runs | `runs` | Layer-aware run history with `work` / `try` / `run` chips, row expansion into the shared layer-aware run-detail tabs, and re-queue (US-086b, US-086c) |
+| Runs | `runs` | Layer-aware run history with `work` / `try` / `run` chips, row expansion into the shared `work` / `try` / `run` run-detail tab strip, and re-queue (US-086b, US-086c) |
 | Workers | `workers` | Live + recent worker processes for this project (US-085b, US-086, US-086a) |
 | Personas | `personas` | Persona browser + role bindings (US-097) |
 | Plugins | `plugins` | Plugin registry + install/uninstall (US-098) |
@@ -293,7 +293,8 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
      adapter when row counts exceed 1k.
    - Inline row expansion is **layer-aware** and opens the shared tabbed
      run-detail surface (replaces the retired Sessions and Executions
-     top-level activity tabs and uses the shared layer-aware tab strip):
+     top-level activity tabs and uses the shared `work` / `try` / `run`
+     tab strip):
      - `layer=work` row expands to queue inputs, selected beads, stop
        condition, retry/defer decisions, and child try-attempt links in
        chronological order. The detail panel exposes the `overview` tab only.

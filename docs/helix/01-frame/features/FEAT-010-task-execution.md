@@ -833,7 +833,9 @@ project-scoped identity of the inspection:
 ### Layer-to-substrate mapping for the Runs UI
 
 The web Runs view (FEAT-008 §5, FEAT-021) renders three layer chips
-backed by the unified substrate plus the legacy detail backings:
+backed by the unified substrate plus the legacy detail backings. The
+shared run-detail tab strip is the canonical drill-down surface used by
+FEAT-008, FEAT-019, and FEAT-021:
 
 | Chip | Substrate row | Detail backing for row expansion |
 |---|---|---|
@@ -845,6 +847,12 @@ backed by the unified substrate plus the legacy detail backings:
 agent log` invocations) surface as synthesized `layer=run` Runs rows
 keyed by session id, so no agent-session row is dropped during the
 Sessions/Executions tab retirement.
+
+The shared tab strip is:
+
+- `work` → `overview`
+- `try` → `overview`, `prompt`, `response`, `tools`, `evidence`
+- `run` → `overview`, `prompt`, `response`, `session`, `tools`, `evidence`
 
 ## User Stories
 

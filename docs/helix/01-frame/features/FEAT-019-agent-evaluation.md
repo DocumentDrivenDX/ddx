@@ -56,8 +56,10 @@ FEAT-019 is a child of FEAT-010. Comparison, replay, and benchmark records
 are stored in the FEAT-010 run substrate. FEAT-019 defines the storage schema
 extensions (`type: comparison`, `type: replay`, `type: benchmark`) and owns
 the web UI surfaces that display those records, including the tabbed
-project-scoped run-detail surface used for drill-down. It does not own worktree
-management, run lifecycle, or dispatch mechanics.
+project-scoped run-detail surface used for drill-down. That shared tab strip
+is the same `work` / `try` / `run` structure described in FEAT-010 and exposed
+through FEAT-008 and FEAT-021. It does not own worktree management, run
+lifecycle, or dispatch mechanics.
 
 When an evaluation record links into a preserved `try` or `run`, the shared
 project-scoped run-detail surface from FEAT-008/FEAT-010 is the canonical
