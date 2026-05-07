@@ -163,6 +163,59 @@ It prints:
 Recovery output must not require reading the lint implementation or an
 out-of-band report to fix an ordinary authoring problem.
 
+### Readiness Outcome Routing
+
+Readiness assessment produces four outcomes that each require a distinct repair
+path and operator message. DDx routes each outcome to the appropriate skill and
+surfaces actionable guidance; implementations must satisfy the content
+requirements specified in FEAT-010 §Operator-Facing Output Requirements.
+Exact message strings are non-normative here and are left to implementation
+tests.
+
+**`needs_refine`**: The bead has actionable intent but carries authoring gaps
+such as missing `file:line` evidence, a vague description, or unnormalized
+format. DDx routes to the bead-lifecycle refine skill, which applies safe
+intent-preserving improvements and re-evaluates the bead before claim. The
+operator sees a plain-language summary of each applied change and the revised
+readiness score. Illustrative operator output:
+
+> Bead ddx-abc12345 refined before claim: added `cli/internal/bead/quality.go:87`,
+> normalized description. Score: 7/8 (was 5/8). Proceeding.
+
+**`needs_split`**: The bead is too broad for a single atomic attempt. DDx routes
+to the bead-breakdown skill, which decomposes the bead into focused child beads,
+maps every parent AC to at least one child AC or an explicit `needs_human` /
+`non_scope` marker, and writes the AC map in evidence. The parent is blocked
+with the decomposition result. Illustrative operator output:
+
+> Bead ddx-abc12345 decomposed: ddx-child001 (AC 1–3), ddx-child002 (AC 4–6).
+> AC map: .ddx/runs/<run-id>/decomposition.json. Parent blocked.
+
+**`needs_human`**: The bead is ambiguous, contradictory, missing a governing
+artifact, or requires a product decision DDx cannot safely make. DDx blocks the
+bead with a `needs_human` label and writes evidence identifying the specific
+ambiguity. DDx does not invent acceptance criteria, change scope, or choose
+between conflicting requirements. Illustrative operator output:
+
+> Bead ddx-abc12345 blocked (needs_human): AC 3 and AC 5 conflict on flag
+> behavior. Operator action: resolve conflict in bead body, then re-open.
+
+**`system_unready`**: The execution environment is unfit — provider quota
+exhausted, disk or inode space below the hard floor, or a required preflight
+check failed. The bead itself is not at fault. DDx records structured
+environmental evidence and surfaces remediation guidance. It does **not**
+mutate bead quality metadata (score, rubric state, or quality labels); bead
+readiness state is unchanged. Illustrative operator output:
+
+> Provider quota exhausted. No bead quality metadata changed.
+> Retry after quota resets or configure an alternate provider in .ddx/config.yaml.
+
+> Disk below hard floor (1.2 GB free, need 2 GB). No bead quality metadata
+> changed. Run: ddx work cleanup --aggressive
+
+> Preflight failed: bead-lifecycle skill missing at .agents/skills/ddx/bead-lifecycle/.
+> No bead quality metadata changed. Run: ddx update --force && ddx doctor
+
 ## Consequences
 
 - FEAT-004 owns the label-based waiver storage and the no-new-schema rule.
@@ -199,3 +252,11 @@ out-of-band report to fix an ordinary authoring problem.
 - `docs/helix/01-frame/features/FEAT-010-task-execution.md` — try/work lifecycle
   and attempt outcomes.
 - `docs/helix/01-frame/features/FEAT-011-skills.md` — DDx skill packaging.
+
+## Notes
+
+This revision is documentation-only: no new Go implementation tests are required
+for these specification amendments. Exact operator-facing message strings are
+non-normative in this document and are the responsibility of the implementing
+beads. Doc-only waiver applies per
+`docs/helix/06-iterate/bead-authoring-template.md` criterion (c)/(d) skip.

@@ -780,6 +780,50 @@ terminal non-success outcome for that bead under the current policy, so the
 existing `blocked`, `deferred`, and `no_progress` loop rules can reason about
 it without a fourth run layer or a separate run type.
 
+### Operator-Facing Output Requirements
+
+The following output content is required for non-actionable readiness outcomes
+and execution-blocking stop conditions. Exact message strings are
+non-normative; they are specified and tested by implementing beads. These
+requirements exist so implementations can be audited against this spec.
+Illustrative examples are in ADR-023 §Readiness Outcome Routing.
+
+**Readiness unavailable** (`hook_unavailable_fail_open`): The operator message
+must include:
+- notification that the readiness hook could not run
+- the specific failure reason (skill file missing, process crash, output parse error)
+- the exact checked path(s)
+- remediation: `ddx update --force && ddx doctor`
+
+**Needs refine** (`readiness_rewritten`): The operator message must include:
+- the bead id
+- each safe change applied (e.g., `file:line` added, format normalized)
+- the revised readiness score alongside the prior score
+- whether the bead is proceeding to claim or is still blocked after refinement
+
+**Needs split** (`readiness_decomposed`): The operator message must include:
+- the bead id and the reason it was decomposed
+- the child bead ids created
+- a summary mapping parent ACs to child beads
+- the path to the written AC map evidence file
+
+**Provider exhausted**: The operator message must include:
+- notification that no viable provider or quota tier remains for the current request
+- which provider or tier was exhausted (without leaking credentials)
+- remediation: retry after quota reset or update `.ddx/config.yaml`
+- explicit statement that no bead quality metadata was mutated
+
+**Disk/resource exhaustion** (`resource_exhausted`): The operator message must
+include:
+- which execution root is below the hard floor and the measured free bytes/inodes
+- notification that the drain has stopped claiming new beads
+- remediation: run cleanup (e.g., `ddx work cleanup --aggressive`) or free space
+- explicit statement that no bead quality metadata was mutated
+
+**Documentation-only note:** These operator-facing output requirements are spec
+prose. No new Go tests are required for this spec update; implementation tests
+for exact message content are the responsibility of the implementing beads.
+
 ## No Run-Type Catalog
 
 DDx will not introduce additional run kinds beyond `run`, `try`, and `work`.
