@@ -112,7 +112,7 @@ func TestPromptIngressOversize(t *testing.T) {
 		installSmallPromptCap(t)
 		fixture := writeOversizeFixture(t)
 		svc := &promptIngressStubAgent{}
-		rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "agent"}).Resolve(config.CLIOverrides{})
+		rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "agent"})
 		_, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
 			PromptFile: fixture,
 		})

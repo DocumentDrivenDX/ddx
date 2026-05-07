@@ -110,10 +110,10 @@ func (s *passthroughTestService) UsageReport(ctx context.Context, opts agentlib.
 // harness/provider/model/minPower/maxPower and no other overrides.
 func resolvedWithPassthrough(harness, provider, model string, minPower, maxPower int) config.ResolvedConfig {
 	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Harness: harness,
-		Model:   model,
+		Model: model,
 	})
 	return cfg.Resolve(config.CLIOverrides{
+		Harness:  harness,
 		Provider: provider,
 		MinPower: minPower,
 		MaxPower: maxPower,

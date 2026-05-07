@@ -93,9 +93,6 @@ func NewPreDispatchLintHook(projectRoot string, store BeadReader, rcfg config.Re
 				return LintResult{}, &LintHookError{Kind: LintHookErrorKindCanceled, Err: err}
 			}
 		}
-		if strings.TrimSpace(rcfg.Harness()) == "" {
-			return LintResult{}, ErrLintHookMissingHarness
-		}
 		if !hasBeadLifecycleSkill(projectRoot) {
 			return LintResult{}, ErrLintHookMissingSkill
 		}

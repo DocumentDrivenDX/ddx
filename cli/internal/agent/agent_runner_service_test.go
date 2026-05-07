@@ -171,9 +171,8 @@ func TestAgentExecution_UsesFizeauServicePathOnly(t *testing.T) {
 	})
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Harness: "agent",
-		Model:   "claude-sonnet-4-6",
-	}).Resolve(config.CLIOverrides{})
+		Model: "claude-sonnet-4-6",
+	}).Resolve(config.CLIOverrides{Harness: "agent"})
 
 	result, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
 		Prompt: "hello",

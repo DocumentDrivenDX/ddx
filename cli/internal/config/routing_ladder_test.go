@@ -25,7 +25,6 @@ routing:
 
 func TestAgentConfigParsesEndpointBlocks(t *testing.T) {
 	raw := `
-harness: claude
 endpoints:
   - type: lmstudio
     host: vidar

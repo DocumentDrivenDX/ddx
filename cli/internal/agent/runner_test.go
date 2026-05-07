@@ -27,7 +27,7 @@ func TestRunLMStudioDispatchesThroughEmbeddedAgent(t *testing.T) {
 	// Invoke with explicit --harness lmstudio. Without AgentProvider set,
 	// RunAgent will fail to resolve a provider — that's fine; the check
 	// is that the exec path is NEVER reached.
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "lmstudio"}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "lmstudio"})
 	_, _ = runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "hello"})
 
 	// The mockExecutor's ExecuteInDir records the last binary it was
@@ -43,7 +43,7 @@ func TestRunOpenRouterDispatchesThroughEmbeddedAgent(t *testing.T) {
 	mock := &mockExecutor{output: "should not be called"}
 	r := newTestRunner(mock)
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "openrouter"}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "openrouter"})
 	_, _ = runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "hello"})
 
 	if mock.lastBinary != "" {

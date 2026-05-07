@@ -94,8 +94,8 @@ func installStubService(t *testing.T, stub *stubAgentService) {
 	t.Cleanup(func() { agent.SetServiceRunFactory(nil) })
 }
 
-// minimalProjectDir creates a project dir with a clean .ddx/config.yaml that
-// has no agent.harness pin so flag values drive routing.
+// minimalProjectDir creates a project dir with a clean .ddx/config.yaml so
+// flag values drive routing.
 func minimalProjectDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
@@ -257,9 +257,9 @@ func TestWorkSharesSamePassthroughPlumbing(t *testing.T) {
 }
 
 // AC #6 / regression guard ddx-c4231775: ddx work with a config that pins
-// agent.harness and agent.model must NOT inject those values into Execute when
-// no CLI flags are supplied — the silent mini-model bug (axon project routed
-// to openrouter/gpt-5.4-mini).
+// agent.model must NOT inject that value into Execute when no CLI flags are
+// supplied — the silent mini-model bug (axon project routed to
+// openrouter/gpt-5.4-mini).
 func TestWorkCleanConfigNoModelInjected(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
@@ -274,7 +274,7 @@ func TestWorkCleanConfigNoModelInjected(t *testing.T) {
 		},
 	})
 
-	// Build a project dir with agent.harness and agent.model pins in config.
+	// Build a project dir with an agent.model pin in config.
 	dir := t.TempDir()
 	t.Setenv("HOME", dir)
 	ddxDir := filepath.Join(dir, ".ddx")
@@ -286,7 +286,6 @@ library:
     url: "https://example.com/lib"
     branch: "main"
 agent:
-  harness: claude
   model: openrouter/gpt-5.4-mini
 `
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfg), 0o644))
@@ -301,10 +300,10 @@ agent:
 	root := NewCommandFactory(dir).NewRootCommand()
 	_, _ = executeCommand(root, "work", "--once")
 
-	// ddx work must NOT inject config agent.harness / agent.model; both fields
-	// must be empty in the Execute request when no CLI flags are provided.
+	// ddx work must NOT inject config agent.model, and harness remains empty
+	// when no --harness flag is provided.
 	assert.Empty(t, capturedReq.Harness,
-		"ddx work must not inject config agent.harness into Execute (ddx-c4231775)")
+		"ddx work must not inject a durable harness into Execute")
 	assert.Empty(t, capturedReq.Model,
 		"ddx work must not inject config agent.model into Execute (ddx-c4231775)")
 }

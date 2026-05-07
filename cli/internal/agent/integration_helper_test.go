@@ -171,10 +171,9 @@ func scriptHarnessExecutor(t *testing.T, projectRoot, directivePath string) Exec
 	repoMu := landMutexFor(projectRoot)
 
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
-		Harness: "script",
-		Model:   directivePath,
+		Model: directivePath,
 	})
-	rcfg := cfg.Resolve(config.CLIOverrides{})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script"})
 
 	return ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
 		repoMu.Lock()

@@ -111,9 +111,8 @@ func writeDirectives(t *testing.T, content string) string {
 func runScript(t *testing.T, workDir, directivePath string, corr map[string]string) (*Result, error) {
 	t.Helper()
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Harness: "script",
-		Model:   directivePath,
-	}).Resolve(config.CLIOverrides{})
+		Model: directivePath,
+	}).Resolve(config.CLIOverrides{Harness: "script"})
 	return RunWithConfigViaService(context.Background(), workDir, rcfg, AgentRunRuntime{
 		WorkDir:     workDir,
 		Correlation: corr,

@@ -301,9 +301,8 @@ func TestRunViaServiceWithAppendsOneSessionIndexRow(t *testing.T) {
 	embeddedLogDir := filepath.Join(workDir, ExecuteBeadArtifactDir, "attempt-1", "embedded")
 	svc := &passthroughTestService{}
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Harness: "agent",
-		Model:   "fake-model",
-	}).Resolve(config.CLIOverrides{})
+		Model: "fake-model",
+	}).Resolve(config.CLIOverrides{Harness: "agent"})
 	_, err := executeOnService(context.Background(), svc, workDir, rcfg, AgentRunRuntime{
 		Prompt:                "hello",
 		SessionLogDirOverride: embeddedLogDir,

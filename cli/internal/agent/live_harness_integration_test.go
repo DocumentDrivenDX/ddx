@@ -39,9 +39,8 @@ func TestIntegration_CodexEcho(t *testing.T) {
 	}
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Harness: "codex",
 		Timeout: 30 * time.Second,
-	}).Resolve(config.CLIOverrides{})
+	}).Resolve(config.CLIOverrides{Harness: "codex"})
 	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{
 		Prompt: `print("hello from codex integration test")`,
 	})
@@ -56,9 +55,8 @@ func TestIntegration_ClaudeEcho(t *testing.T) {
 	}
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Harness: "claude",
 		Timeout: 60 * time.Second,
-	}).Resolve(config.CLIOverrides{})
+	}).Resolve(config.CLIOverrides{Harness: "claude"})
 	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{
 		Prompt: "Respond with exactly: INTEGRATION_TEST_OK",
 	})
@@ -73,9 +71,8 @@ func TestIntegration_OpencodeEcho(t *testing.T) {
 	}
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Harness: "opencode",
 		Timeout: 60 * time.Second,
-	}).Resolve(config.CLIOverrides{})
+	}).Resolve(config.CLIOverrides{Harness: "opencode"})
 	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{
 		Prompt: "Respond with exactly: INTEGRATION_TEST_OK",
 	})
@@ -106,9 +103,8 @@ func TestIntegration_PiEcho(t *testing.T) {
 	}
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Harness: "pi",
 		Timeout: 60 * time.Second,
-	}).Resolve(config.CLIOverrides{})
+	}).Resolve(config.CLIOverrides{Harness: "pi"})
 	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{
 		Prompt: "Respond with exactly: INTEGRATION_TEST_OK",
 	})
@@ -133,9 +129,8 @@ func TestIntegration_GeminiEcho(t *testing.T) {
 	// Gemini has slow initialization (skill loading), so use a longer timeout
 	r := NewRunner(Config{SessionLogDir: t.TempDir()})
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Harness: "gemini",
 		Timeout: 180 * time.Second,
-	}).Resolve(config.CLIOverrides{})
+	}).Resolve(config.CLIOverrides{Harness: "gemini"})
 	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{
 		Prompt: "Respond with exactly: INTEGRATION_TEST_OK",
 	})

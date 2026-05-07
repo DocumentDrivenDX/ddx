@@ -46,8 +46,7 @@ func NewTestConfigForLoop(opts TestLoopConfigOpts) *Config {
 			},
 		},
 		Agent: &AgentConfig{
-			Harness: opts.Harness,
-			Model:   opts.Model,
+			Model: opts.Model,
 		},
 		Workers: &WorkersConfig{
 			NoProgressCooldown:      opts.NoProgressCooldown.String(),
@@ -86,7 +85,6 @@ func NewTestConfigForRun(opts TestRunConfigOpts) *Config {
 	return &Config{
 		Version: "1.0",
 		Agent: &AgentConfig{
-			Harness:       opts.Harness,
 			Model:         opts.Model,
 			TimeoutMS:     int(opts.Timeout / time.Millisecond),
 			SessionLogDir: opts.SessionLogDir,
@@ -121,8 +119,7 @@ func NewTestConfigForBead(opts TestBeadConfigOpts) *Config {
 	cfg := &Config{
 		Version: "1.0",
 		Agent: &AgentConfig{
-			Harness: opts.Harness,
-			Model:   opts.Model,
+			Model: opts.Model,
 		},
 	}
 	if opts.Mirror != nil {
@@ -138,6 +135,7 @@ func NewTestConfigForBead(opts TestBeadConfigOpts) *Config {
 // at Resolve time only.
 func TestBeadOverrides(opts TestBeadConfigOpts) CLIOverrides {
 	return CLIOverrides{
+		Harness:  opts.Harness,
 		Provider: opts.Provider,
 		ModelRef: opts.ModelRef,
 		Effort:   opts.Effort,
@@ -152,6 +150,7 @@ func TestBeadOverrides(opts TestBeadConfigOpts) CLIOverrides {
 func TestLoopOverrides(opts TestLoopConfigOpts) CLIOverrides {
 	return CLIOverrides{
 		Assignee: opts.Assignee,
+		Harness:  opts.Harness,
 		Profile:  opts.Profile,
 		MinTier:  opts.MinTier,
 		MaxTier:  opts.MaxTier,

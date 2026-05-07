@@ -230,7 +230,6 @@ func (w *WorkersConfig) ResolveHeartbeatInterval() time.Duration {
 // WorkerDefaultSpec mirrors the knobs a one-click "+ Add worker" dispatch
 // honours. Any field left unset falls back to the built-in `ddx work` defaults.
 type WorkerDefaultSpec struct {
-	Harness string `yaml:"harness,omitempty" json:"harness,omitempty"`
 	Profile string `yaml:"profile,omitempty" json:"profile,omitempty"`
 	Effort  string `yaml:"effort,omitempty" json:"effort,omitempty"`
 }
@@ -294,7 +293,6 @@ type GitConfig struct {
 
 // AgentConfig represents agent service configuration in .ddx/config.yaml
 type AgentConfig struct {
-	Harness         string              `yaml:"harness,omitempty" json:"harness,omitempty"`
 	Model           string              `yaml:"model,omitempty" json:"model,omitempty"`
 	Models          map[string]string   `yaml:"models,omitempty" json:"models,omitempty"`
 	ReasoningLevels map[string][]string `yaml:"reasoning_levels,omitempty" json:"reasoning_levels,omitempty"`

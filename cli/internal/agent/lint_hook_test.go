@@ -78,8 +78,8 @@ func newLintHookTestStore(t *testing.T, root string) (*bead.Store, *bead.Bead) {
 }
 
 func lintHookTestConfig() config.ResolvedConfig {
-	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "codex"})
-	return cfg.Resolve(config.CLIOverrides{})
+	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{})
+	return cfg.Resolve(config.CLIOverrides{Harness: "codex"})
 }
 
 func TestLintHook_UsesRunnerLibrary(t *testing.T) {
@@ -149,6 +149,25 @@ func TestLintHook_PromptIncludesStandaloneBead(t *testing.T) {
 	assert.Contains(t, prompt, `"rationale"`)
 	assert.Contains(t, prompt, `"suggested_fixes"`)
 	assert.Contains(t, prompt, `"waivers_applied"`)
+}
+
+func TestLintHook_AllowsEmptyHarnessForAutoRouting(t *testing.T) {
+	root := newLintHookTestRoot(t)
+	store, b := newLintHookTestStore(t, root)
+
+	runner := &lintHookRunnerStub{}
+	runner.run = func(opts RunArgs) (*Result, error) {
+		return &Result{
+			ExitCode: 0,
+			Output:   `{"score":8,"rationale":"auto route","suggested_fixes":[],"waivers_applied":[]}`,
+		}, nil
+	}
+
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{})
+	got, err := NewPreDispatchLintHook(root, store, rcfg, nil, runner)(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 8, got.Score)
+	assert.Empty(t, runner.lastOpts.Harness, "empty harness must pass through as auto-routing")
 }
 
 func TestLintHook_BadJSON_ReturnsInfrastructureError(t *testing.T) {

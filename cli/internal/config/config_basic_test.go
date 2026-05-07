@@ -228,7 +228,6 @@ library:
     url: "https://github.com/test/repo"
     branch: "main"
 agent:
-  harness: codex
   model: o3-mini
   models:
     claude: claude-sonnet-4-20250514
@@ -272,6 +271,25 @@ agent:
 `)
 	err = validator.Validate(content)
 	assert.NoError(t, err, "config with agent.virtual.normalize should pass schema validation")
+}
+
+func TestSchemaValidation_AgentHarnessRejected(t *testing.T) {
+	t.Parallel()
+	validator, err := NewValidator()
+	require.NoError(t, err)
+
+	content := []byte(`version: "1.0"
+library:
+  path: "./library"
+  repository:
+    url: "https://github.com/test/repo"
+    branch: "main"
+agent:
+  harness: codex
+`)
+	err = validator.Validate(content)
+	assert.Error(t, err, "agent.harness is not durable project config")
+	assert.Contains(t, err.Error(), "harness")
 }
 
 func TestSchemaValidation_ServerSection(t *testing.T) {

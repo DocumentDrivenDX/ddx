@@ -29,7 +29,7 @@ func TestAgentCompareDispatchUsesConfigResolve(t *testing.T) {
 	t.Setenv("DDX_VIRTUAL_RESPONSES",
 		`[{"prompt_match":"hello","response":"compare-arm-response"}]`)
 
-	dir := agentTestDirWithHarness(t, "virtual")
+	dir := agentTestDir(t)
 	rootCmd := NewCommandFactory(dir).NewRootCommand()
 	output, err := executeCommand(rootCmd, "agent", "run",
 		"--compare",

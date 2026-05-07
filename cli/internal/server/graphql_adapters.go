@@ -85,9 +85,6 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 	// for this project so the "+ Add worker" button can refuse cleanly.
 	if wc := loadWorkersConfig(projectRoot); wc != nil {
 		if spec := wc.DefaultSpec; spec != nil {
-			if req.Harness == "" {
-				req.Harness = spec.Harness
-			}
 			if req.Profile == "" {
 				req.Profile = spec.Profile
 			}

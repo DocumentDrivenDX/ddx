@@ -28,10 +28,9 @@ func TestExecuteBead_RoutingEvidenceRecorded(t *testing.T) {
 	gitOps := &RealGitOps{}
 
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
-		Harness: "script",
-		Model:   dirFile,
+		Model: dirFile,
 	})
-	rcfg := cfg.Resolve(config.CLIOverrides{})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script"})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		BeadEvents:  beadStore,
 		AgentRunner: runner,
@@ -80,10 +79,9 @@ func TestExecuteBead_RoutingEvidenceNoAppenderIsNoop(t *testing.T) {
 	gitOps := &RealGitOps{}
 
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
-		Harness: "script",
-		Model:   dirFile,
+		Model: dirFile,
 	})
-	rcfg := cfg.Resolve(config.CLIOverrides{})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script"})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		BeadEvents:  nil,
 		AgentRunner: runner,
@@ -111,10 +109,9 @@ func TestExecuteBead_RoutingEvidenceWithCommit(t *testing.T) {
 	orchGitOps := &RealOrchestratorGitOps{}
 
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
-		Harness: "script",
-		Model:   dirFile,
+		Model: dirFile,
 	})
-	rcfg := cfg.Resolve(config.CLIOverrides{})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "script"})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		BeadEvents:  beadStore,
 		AgentRunner: runner,

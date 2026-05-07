@@ -49,10 +49,7 @@ func TestExecuteBead_DirtyParentTree_CheckpointCommitted(t *testing.T) {
 	writeDirectiveFile(t, dirFile, []string{})
 
 	runner := NewRunner(Config{})
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
-		Harness: "script",
-		Model:   dirFile,
-	}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script"})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: runner,
 	}, &RealGitOps{})
@@ -99,10 +96,7 @@ func TestExecuteBead_CleanParentTree_NoSpuriousCheckpoint(t *testing.T) {
 	writeDirectiveFile(t, dirFile, []string{})
 
 	runner := NewRunner(Config{})
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
-		Harness: "script",
-		Model:   dirFile,
-	}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script"})
 	_, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: runner,
 	}, &RealGitOps{})

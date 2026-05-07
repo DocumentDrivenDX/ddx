@@ -132,10 +132,9 @@ func newPreClaimIntakeHookTestStore(t *testing.T, root string) (*bead.Store, *be
 
 func intakeHookTestConfig() config.ResolvedConfig {
 	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Harness: "claude",
-		Model:   "claude-sonnet-4-6",
+		Model: "claude-sonnet-4-6",
 	})
-	return cfg.Resolve(config.CLIOverrides{})
+	return cfg.Resolve(config.CLIOverrides{Harness: "claude"})
 }
 
 func TestDecompositionHook_UsesStrongMinPower(t *testing.T) {
@@ -172,9 +171,9 @@ func TestDecompositionHook_PreservesPassthroughConstraints(t *testing.T) {
 	}
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Harness: "claude",
-		Model:   "claude-sonnet-4-6",
+		Model: "claude-sonnet-4-6",
 	}).Resolve(config.CLIOverrides{
+		Harness:  "claude",
 		Provider: "anthropic",
 	})
 

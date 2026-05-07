@@ -32,17 +32,6 @@ library:
 	return dir
 }
 
-// agentTestDirWithHarness creates a temp dir with a DDx config specifying a harness.
-func agentTestDirWithHarness(t *testing.T, harness string) string {
-	t.Helper()
-	dir := t.TempDir()
-	ddxDir := filepath.Join(dir, ".ddx")
-	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
-	cfg := "version: \"1.0\"\nlibrary:\n  path: \".ddx/plugins/ddx\"\n  repository:\n    url: \"https://example.com/lib\"\n    branch: \"main\"\nagent:\n  harness: " + harness + "\n"
-	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfg), 0o644))
-	return dir
-}
-
 // TestAgentRunProfileFlagWithVirtualHarness verifies that --profile is accepted as a
 // valid flag and does not interfere with an explicit --harness virtual invocation.
 func TestAgentRunProfileFlagWithVirtualHarness(t *testing.T) {
@@ -50,7 +39,7 @@ func TestAgentRunProfileFlagWithVirtualHarness(t *testing.T) {
 	// Inject a virtual response for "hello"
 	t.Setenv("DDX_VIRTUAL_RESPONSES", `[{"prompt_match":"hello","response":"hi from virtual"}]`)
 
-	dir := agentTestDirWithHarness(t, "virtual")
+	dir := agentTestDir(t)
 	rootCmd := NewCommandFactory(dir).NewRootCommand()
 	output, err := executeCommand(rootCmd, "agent", "run",
 		"--harness", "virtual",
@@ -161,7 +150,7 @@ func TestAgentCapabilitiesEmbeddedFiz(t *testing.T) {
 	require.NoError(t, err)
 	assert.Contains(t, output, "Harness: fiz")
 	assert.Contains(t, output, "(embedded)")
-	assert.Contains(t, output, "harness: fiz", "config example should show harness: fiz")
+	assert.NotContains(t, output, "harness: fiz", "config example must not advertise durable harness pins")
 }
 
 // TestAgentCapabilitiesEmbeddedFizJSON verifies JSON capabilities for the 'fiz' harness.
@@ -243,7 +232,7 @@ func TestAgentRunOutputText(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	t.Setenv("DDX_VIRTUAL_RESPONSES", `[{"prompt_match":"hello","response":"plain text response"}]`)
 
-	dir := agentTestDirWithHarness(t, "virtual")
+	dir := agentTestDir(t)
 	rootCmd := NewCommandFactory(dir).NewRootCommand()
 	output, err := executeCommand(rootCmd, "agent", "run",
 		"--harness", "virtual",
@@ -259,7 +248,7 @@ func TestAgentRunOutputTextIsDefault(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	t.Setenv("DDX_VIRTUAL_RESPONSES", `[{"prompt_match":"hello","response":"default output"}]`)
 
-	dir := agentTestDirWithHarness(t, "virtual")
+	dir := agentTestDir(t)
 	rootCmd := NewCommandFactory(dir).NewRootCommand()
 	output, err := executeCommand(rootCmd, "agent", "run",
 		"--harness", "virtual",
@@ -275,7 +264,7 @@ func TestAgentRunOutputJSONResult(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	t.Setenv("DDX_VIRTUAL_RESPONSES", `[{"prompt_match":"hello","response":"the answer"}]`)
 
-	dir := agentTestDirWithHarness(t, "virtual")
+	dir := agentTestDir(t)
 	rootCmd := NewCommandFactory(dir).NewRootCommand()
 	output, err := executeCommand(rootCmd, "agent", "run",
 		"--harness", "virtual",
@@ -301,7 +290,7 @@ func TestAgentRunOutputJSONFlag(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	t.Setenv("DDX_VIRTUAL_RESPONSES", `[{"prompt_match":"hello","response":"json alias"}]`)
 
-	dir := agentTestDirWithHarness(t, "virtual")
+	dir := agentTestDir(t)
 	rootCmd := NewCommandFactory(dir).NewRootCommand()
 	output, err := executeCommand(rootCmd, "agent", "run",
 		"--harness", "virtual",
@@ -325,7 +314,7 @@ func TestAgentRunOutputSessionJSONL(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	t.Setenv("DDX_VIRTUAL_RESPONSES", `[{"prompt_match":"hello","response":"raw session output"}]`)
 
-	dir := agentTestDirWithHarness(t, "virtual")
+	dir := agentTestDir(t)
 	rootCmd := NewCommandFactory(dir).NewRootCommand()
 	output, err := executeCommand(rootCmd, "agent", "run",
 		"--harness", "virtual",
@@ -342,7 +331,7 @@ func TestAgentRunOutputInvalidValue(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	t.Setenv("DDX_VIRTUAL_RESPONSES", `[{"prompt_match":"hello","response":"x"}]`)
 
-	dir := agentTestDirWithHarness(t, "virtual")
+	dir := agentTestDir(t)
 	rootCmd := NewCommandFactory(dir).NewRootCommand()
 	_, err := executeCommand(rootCmd, "agent", "run",
 		"--harness", "virtual",

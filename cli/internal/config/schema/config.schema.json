@@ -287,15 +287,6 @@
       "type": "object",
       "description": "Agent service configuration",
       "properties": {
-        "harness": {
-          "type": "string",
-          "description": "Default harness name (e.g., codex, claude, gemini)",
-          "examples": [
-            "codex",
-            "claude",
-            "gemini"
-          ]
-        },
         "model": {
           "type": "string",
           "description": "Global model override for agent invocation",
@@ -574,10 +565,6 @@
           "type": "object",
           "description": "Default worker spec used by + Add worker on the workers overview. Any field left unset falls back to `ddx work` defaults.",
           "properties": {
-            "harness": {
-              "type": "string",
-              "description": "Default harness name. Empty leaves routing to the agent profile."
-            },
             "profile": {
               "type": "string",
               "description": "Default routing profile (e.g. default, cheap, fast, smart)."

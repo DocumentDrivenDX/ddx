@@ -64,8 +64,8 @@ func newTriageHookTestStore(t *testing.T, root string) (*bead.Store, *bead.Bead)
 }
 
 func triageHookTestConfig() config.ResolvedConfig {
-	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "codex"})
-	return cfg.Resolve(config.CLIOverrides{})
+	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{})
+	return cfg.Resolve(config.CLIOverrides{Harness: "codex"})
 }
 
 func TestTriageHook_UsesRunnerLibrary(t *testing.T) {

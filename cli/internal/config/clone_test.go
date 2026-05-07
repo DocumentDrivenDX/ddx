@@ -8,7 +8,6 @@ func TestAgentConfigClone(t *testing.T) {
 	}
 
 	src := &AgentConfig{
-		Harness:         "claude",
 		Model:           "claude-opus",
 		Models:          map[string]string{"smart": "claude-opus"},
 		ReasoningLevels: map[string][]string{"smart": {"high"}},
@@ -137,17 +136,17 @@ func TestWorkersConfigClone(t *testing.T) {
 	maxCount := 4
 	src := &WorkersConfig{
 		MaxCount:    &maxCount,
-		DefaultSpec: &WorkerDefaultSpec{Harness: "claude", Profile: "fast"},
+		DefaultSpec: &WorkerDefaultSpec{Profile: "fast"},
 	}
 
 	dst := src.Clone()
 	*dst.MaxCount = 99
-	dst.DefaultSpec.Harness = "X"
+	dst.DefaultSpec.Profile = "slow"
 
 	if *src.MaxCount != 4 {
 		t.Fatalf("source MaxCount mutated: %d", *src.MaxCount)
 	}
-	if src.DefaultSpec.Harness != "claude" {
-		t.Fatalf("source DefaultSpec.Harness mutated: %q", src.DefaultSpec.Harness)
+	if src.DefaultSpec.Profile != "fast" {
+		t.Fatalf("source DefaultSpec.Profile mutated: %q", src.DefaultSpec.Profile)
 	}
 }

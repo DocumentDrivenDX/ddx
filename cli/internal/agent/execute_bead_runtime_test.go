@@ -30,10 +30,10 @@ func TestExecuteBeadRuntimeDelegation(t *testing.T) {
 	const beadID = "ddx-rt-delegation-01"
 
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
-		Harness: "claude",
-		Model:   "claude-test-model",
+		Model: "claude-test-model",
 	})
 	rcfg := cfg.Resolve(config.CLIOverrides{
+		Harness:  "claude",
 		Provider: "anthropic",
 		ModelRef: "claude-mref",
 		Effort:   "high",
@@ -95,15 +95,14 @@ func TestExecutionsMirrorFromConfig(t *testing.T) {
 	async := false
 
 	cfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
-		Harness: "claude",
-		Model:   "claude-test-model",
+		Model: "claude-test-model",
 		Mirror: &config.ExecutionsMirrorConfig{
 			Kind:  "local",
 			Path:  filepath.Join(mirrorRoot, "{attempt_id}"),
 			Async: &async,
 		},
 	})
-	rcfg := cfg.Resolve(config.CLIOverrides{})
+	rcfg := cfg.Resolve(config.CLIOverrides{Harness: "claude"})
 
 	if rcfg.MirrorConfig() == nil {
 		t.Fatal("ResolvedConfig.MirrorConfig() must be non-nil after Resolve")

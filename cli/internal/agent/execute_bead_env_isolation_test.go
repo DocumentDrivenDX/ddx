@@ -146,9 +146,7 @@ func TestExecuteBead_GitDirContaminatedEnv_LeavesOuterBareRepoUntouched(t *testi
 	gitOps := &RealGitOps{}
 	orchGitOps := &RealOrchestratorGitOps{}
 
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{
-		Harness: "script",
-	}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{Harness: "script"})
 	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
 		AgentRunner: envIsoRunner{},
 	}, gitOps)

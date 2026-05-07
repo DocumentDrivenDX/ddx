@@ -119,11 +119,10 @@ func TestValidateResolve(t *testing.T) {
 		assert.Empty(t, rcfg.ContextBudget())
 	})
 
-	t.Run("agent config supplies harness/model fallback", func(t *testing.T) {
+	t.Run("agent config supplies model fallback", func(t *testing.T) {
 		cfg := &NewConfig{
 			Version: "1.0",
 			Agent: &AgentConfig{
-				Harness:     "claude",
 				Model:       "claude-opus",
 				Permissions: "ask",
 				TimeoutMS:   5000,
@@ -131,7 +130,7 @@ func TestValidateResolve(t *testing.T) {
 		}
 		rcfg := cfg.Resolve(CLIOverrides{})
 
-		assert.Equal(t, "claude", rcfg.Harness())
+		assert.Empty(t, rcfg.Harness())
 		assert.Equal(t, "claude-opus", rcfg.Model())
 		assert.Equal(t, "ask", rcfg.Permissions())
 		assert.Equal(t, 5*time.Second, rcfg.Timeout())
@@ -141,7 +140,6 @@ func TestValidateResolve(t *testing.T) {
 		cfg := &NewConfig{
 			Version: "1.0",
 			Agent: &AgentConfig{
-				Harness:     "claude",
 				Model:       "claude-opus",
 				Permissions: "ask",
 			},

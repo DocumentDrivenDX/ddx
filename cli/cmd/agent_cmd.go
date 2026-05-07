@@ -516,17 +516,14 @@ func (f *CommandFactory) newAgentCapabilitiesCommand() *cobra.Command {
 			if harness == "" && len(args) > 0 {
 				harness = args[0]
 			}
-			// Load config to determine default harness + detect model overrides.
+			// Load config to detect model overrides. Harness selection is a
+			// per-invocation passthrough, not durable project config.
 			cfg, _ := config.LoadWithWorkingDir(f.WorkingDir)
-			var configHarness, configModel string
+			var configModel string
 			var configModels map[string]string
 			if cfg != nil && cfg.Agent != nil {
-				configHarness = cfg.Agent.Harness
 				configModel = cfg.Agent.Model
 				configModels = cfg.Agent.Models
-			}
-			if harness == "" {
-				harness = configHarness
 			}
 
 			caps, err := agent.CapabilitiesViaService(cmd.Context(), f.WorkingDir, harness)
@@ -591,7 +588,7 @@ func (f *CommandFactory) newAgentCapabilitiesCommand() *cobra.Command {
 				}
 				_ = tw.Flush()
 			}
-			fmt.Fprintf(cmd.OutOrStdout(), "\nConfig example (~/.ddx.yml):\n  agent:\n    models:\n      %s: <model-name>\n    harness: %s\n", harness, harness)
+			fmt.Fprintf(cmd.OutOrStdout(), "\nConfig example (~/.ddx.yml):\n  agent:\n    models:\n      %s: <model-name>\n", harness)
 			return nil
 		},
 	}
@@ -1618,7 +1615,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	// SD-024 Stage 1: dispatch flows through LoadAndResolve + RunWithConfig
 	// so .ddx/config.yaml's durable knobs (review_max_retries,
 	// no_progress_cooldown, max_no_changes_before_close, heartbeat_interval,
-	// agent.harness/model/permissions, etc.) reach the running loop without
+	// agent.model/permissions, etc.) reach the running loop without
 	// per-knob CLI plumbing. CLI flag values feed CLIOverrides which win
 	// over the on-disk config when set.
 	overrides := config.CLIOverrides{
@@ -2086,7 +2083,7 @@ func resolveWorktree(repoRoot, name string) (string, error) {
 }
 
 // projectHasRoutingConfig reports whether the project at projectRoot has a
-// .ddx/config.yaml that supplies routing inputs (agent.harness, agent.model,
+// .ddx/config.yaml that supplies routing inputs (agent.model,
 // or agent.endpoints). When false, ddx work falls through to the global agent
 // config defaults instead of demanding per-project flags. Tracks ddx-b790449b
 // AC1.
@@ -2103,7 +2100,7 @@ func projectHasRoutingConfig(projectRoot string) bool {
 		return false
 	}
 	a := cfg.Agent
-	if strings.TrimSpace(a.Harness) != "" || strings.TrimSpace(a.Model) != "" {
+	if strings.TrimSpace(a.Model) != "" {
 		return true
 	}
 	if len(a.Endpoints) > 0 {

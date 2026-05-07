@@ -24,7 +24,6 @@ library:
     url: "https://example.com/lib"
     branch: "main"
 agent:
-  harness: codex
   model: gpt-5.4
   reasoning_levels:
     codex:
@@ -41,7 +40,7 @@ agent:
 	t.Setenv("PATH", binDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 
 	rootCmd := NewCommandFactory(dir).NewRootCommand()
-	output, err := executeCommand(rootCmd, "agent", "capabilities", "--json")
+	output, err := executeCommand(rootCmd, "agent", "capabilities", "codex", "--json")
 	require.NoError(t, err)
 
 	var caps struct {
@@ -77,8 +76,6 @@ library:
   repository:
     url: "https://example.com/lib"
     branch: "main"
-agent:
-  harness: codex
 `
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(config), 0o644))
 
@@ -94,7 +91,7 @@ agent:
 	require.Contains(t, output, "(default)")
 	require.Contains(t, output, "Config example (~/.ddx.yml):")
 	require.Contains(t, output, "codex: <model-name>")
-	require.Contains(t, output, "harness: codex")
+	require.NotContains(t, output, "harness: codex")
 }
 
 func TestAgentCapabilitiesCommandTextConfigOverride(t *testing.T) {
@@ -112,7 +109,6 @@ library:
     url: "https://example.com/lib"
     branch: "main"
 agent:
-  harness: codex
   models:
     codex: gpt-5.4
 `

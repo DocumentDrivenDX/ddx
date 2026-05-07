@@ -329,7 +329,6 @@ func TestResolveDeepCopy(t *testing.T) {
 	mirrorAsync := true
 	cfg := &NewConfig{
 		Agent: &AgentConfig{
-			Harness: "claude",
 			Models: map[string]string{
 				"smart": "claude-opus",
 			},
@@ -388,7 +387,6 @@ library:
     url: https://github.com/example/repo
     branch: main
 agent:
-  harness: claude
   permissions: unrestricted
 `
 	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(yaml), 0o644); err != nil {
@@ -399,8 +397,8 @@ agent:
 	if err != nil {
 		t.Fatalf("LoadAndResolve: %v", err)
 	}
-	if got := rcfg.Harness(); got != "claude" {
-		t.Fatalf("Harness = %q, want claude (from .ddx/config.yaml)", got)
+	if got := rcfg.Harness(); got != "" {
+		t.Fatalf("Harness = %q, want empty", got)
 	}
 	if got := rcfg.Permissions(); got != "unrestricted" {
 		t.Fatalf("Permissions = %q, want unrestricted", got)
@@ -422,8 +420,7 @@ library:
   repository:
     url: https://github.com/example/repo
     branch: main
-agent:
-  harness: claude
+agent: {}
 `
 	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(yaml), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
@@ -495,23 +492,20 @@ func TestResolvedConfigReasoningLevelsAccessor(t *testing.T) {
 	}
 }
 
-// TestOpaquePassthroughBlocksConfigHarnessModel is the regression guard for
+// TestOpaquePassthroughBlocksConfigModel is the regression guard for
 // ddx-c4231775: when OpaquePassthrough=true, Resolve must not fall back to
-// agent.harness / agent.model from .ddx/config.yaml even if the CLI flags are
-// empty. This is the historical silent-injection bug (axon project routed to
-// openrouter/gpt-5.4-mini because config.agent.model leaked into Execute).
-func TestOpaquePassthroughBlocksConfigHarnessModel(t *testing.T) {
+// agent.model from .ddx/config.yaml when the CLI model flag is empty.
+func TestOpaquePassthroughBlocksConfigModel(t *testing.T) {
 	cfg := &NewConfig{
 		Agent: &AgentConfig{
-			Harness: "claude",
-			Model:   "openrouter/gpt-5.4-mini",
+			Model: "openrouter/gpt-5.4-mini",
 		},
 	}
 
 	// Without OpaquePassthrough the config values are applied normally.
 	normalRcfg := cfg.Resolve(CLIOverrides{})
-	if got := normalRcfg.Harness(); got != "claude" {
-		t.Fatalf("baseline Harness = %q, want claude", got)
+	if got := normalRcfg.Harness(); got != "" {
+		t.Fatalf("baseline Harness = %q, want empty", got)
 	}
 	if got := normalRcfg.Model(); got != "openrouter/gpt-5.4-mini" {
 		t.Fatalf("baseline Model = %q, want openrouter/gpt-5.4-mini", got)
@@ -519,9 +513,6 @@ func TestOpaquePassthroughBlocksConfigHarnessModel(t *testing.T) {
 
 	// With OpaquePassthrough the config values must be suppressed.
 	opaqueRcfg := cfg.Resolve(CLIOverrides{OpaquePassthrough: true})
-	if got := opaqueRcfg.Harness(); got != "" {
-		t.Fatalf("opaque Harness = %q, want empty (config must not inject)", got)
-	}
 	if got := opaqueRcfg.Model(); got != "" {
 		t.Fatalf("opaque Model = %q, want empty (config must not inject)", got)
 	}

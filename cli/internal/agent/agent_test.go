@@ -213,9 +213,8 @@ func TestBuildArgsPermissionsFlagOverridesConfig(t *testing.T) {
 	r.Config.Permissions = "safe"
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Harness:     "codex",
 		Permissions: "unrestricted",
-	}).Resolve(config.CLIOverrides{})
+	}).Resolve(config.CLIOverrides{Harness: "codex"})
 	_, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "task"})
 	require.NoError(t, err)
 	assert.Contains(t, mock.lastArgs, "--dangerously-bypass-approvals-and-sandbox",
@@ -227,9 +226,7 @@ func TestBuildArgsPermissionsConfigDefault(t *testing.T) {
 	mock := &mockExecutor{output: "ok"}
 	r := newTestRunner(mock)
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Harness: "codex",
-	}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "codex"})
 	_, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "task"})
 	require.NoError(t, err)
 	for _, arg := range mock.lastArgs {
@@ -244,7 +241,7 @@ func TestRunWithMockExecutor(t *testing.T) {
 	mock := &mockExecutor{output: "agent output here\n"}
 	r := newTestRunner(mock)
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "codex"}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "codex"})
 	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "do stuff"})
 	require.NoError(t, err)
 	assert.Equal(t, "codex", mock.lastBinary)
@@ -256,7 +253,7 @@ func TestRunStdinMode(t *testing.T) {
 	mock := &mockExecutor{output: "ok"}
 	r := newTestRunner(mock)
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "gemini"}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "gemini"})
 	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "hello via stdin"})
 	require.NoError(t, err)
 	assert.Equal(t, "gemini", mock.lastBinary)
@@ -271,7 +268,7 @@ func TestRunPromptFile(t *testing.T) {
 	mock := &mockExecutor{output: "done"}
 	r := newTestRunner(mock)
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "codex"}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "codex"})
 	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{PromptFile: tmpFile})
 	require.NoError(t, err)
 	assert.Equal(t, "done", result.Output)
@@ -284,7 +281,7 @@ func TestRunModelResolution(t *testing.T) {
 	r := newTestRunner(mock)
 	r.Config.Models = map[string]string{"codex": "gpt-5.4"}
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "codex"}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "codex"})
 	_, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "test"})
 	require.NoError(t, err)
 	assert.Contains(t, mock.lastArgs, "-m")
@@ -305,7 +302,7 @@ func TestRunModelOverride(t *testing.T) {
 	r := newTestRunner(mock)
 	r.Config.Models = map[string]string{"codex": "gpt-5.4"}
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "codex", Model: "gpt-4o"}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Model: "gpt-4o"}).Resolve(config.CLIOverrides{Harness: "codex"})
 	_, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "test"})
 	require.NoError(t, err)
 	assert.Contains(t, mock.lastArgs, "gpt-4o")
@@ -316,7 +313,7 @@ func TestRunNonZeroExit(t *testing.T) {
 	mock := &mockExecutor{output: "partial output", exitCode: 1}
 	r := newTestRunner(mock)
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "codex"}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "codex"})
 	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "fail"})
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.ExitCode)
@@ -325,7 +322,7 @@ func TestRunNonZeroExit(t *testing.T) {
 
 func TestRunUnknownHarness(t *testing.T) {
 	r := NewRunner(Config{})
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "nonexistent"}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "nonexistent"})
 	_, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "test"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown harness")
@@ -333,7 +330,7 @@ func TestRunUnknownHarness(t *testing.T) {
 
 func TestRunEmptyPrompt(t *testing.T) {
 	r := newTestRunner(&mockExecutor{})
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "codex"}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "codex"})
 	_, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "prompt is required")
@@ -451,7 +448,7 @@ func TestSessionLogging(t *testing.T) {
 	r := newTestRunner(mock)
 	r.Config.SessionLogDir = logDir
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "codex"}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "codex"})
 	_, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "test prompt"})
 	require.NoError(t, err)
 
@@ -609,7 +606,7 @@ func TestRunWithUnknownModelWarns(t *testing.T) {
 	mock := &mockExecutor{output: "ok"}
 	r := newTestRunner(mock)
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "codex", Model: "gpt-99-turbo"}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Model: "gpt-99-turbo"}).Resolve(config.CLIOverrides{Harness: "codex"})
 	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "test"})
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -620,7 +617,7 @@ func TestRunWithUnknownEffortWarns(t *testing.T) {
 	mock := &mockExecutor{output: "ok"}
 	r := newTestRunner(mock)
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "codex"}).Resolve(config.CLIOverrides{Effort: "turbo"})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "codex", Effort: "turbo"})
 	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "test"})
 	require.NoError(t, err)
 	assert.NotNil(t, result)
@@ -708,7 +705,7 @@ func TestRunOpencodeWithMockExecutor(t *testing.T) {
 	mock := &mockExecutor{output: `{"result":"done"}`}
 	r := newTestRunner(mock)
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "opencode"}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "opencode"})
 	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "do something"})
 	require.NoError(t, err)
 	assert.Equal(t, "opencode", mock.lastBinary)
@@ -723,7 +720,7 @@ func TestRunOpencodeWorkDir(t *testing.T) {
 	mock := &mockExecutor{output: "ok"}
 	r := newTestRunner(mock)
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "opencode"}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "opencode"})
 	_, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{
 		Prompt:  "test",
 		WorkDir: "/tmp/myproject",
@@ -814,7 +811,7 @@ func TestRunPiWithMockExecutor(t *testing.T) {
 	mock := &mockExecutor{output: `{"response": "Pi response text"}`}
 	r := newTestRunner(mock)
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "pi"}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "pi"})
 	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "hello"})
 	require.NoError(t, err)
 	assert.Equal(t, "pi", mock.lastBinary)
@@ -829,9 +826,8 @@ func TestRunPiWithModelAndEffort(t *testing.T) {
 	r := newTestRunner(mock)
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Harness: "pi",
-		Model:   "pi-minimax",
-	}).Resolve(config.CLIOverrides{Effort: "high"})
+		Model: "pi-minimax",
+	}).Resolve(config.CLIOverrides{Harness: "pi", Effort: "high"})
 	_, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "task"})
 	require.NoError(t, err)
 	assert.Contains(t, mock.lastArgs, "--model")
@@ -914,7 +910,7 @@ func TestRunGeminiWithMockExecutor(t *testing.T) {
 	mock := &mockExecutor{output: "Gemini response text"}
 	r := newTestRunner(mock)
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{Harness: "gemini"}).Resolve(config.CLIOverrides{})
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Harness: "gemini"})
 	result, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "hello"})
 	require.NoError(t, err)
 	assert.Equal(t, "gemini", mock.lastBinary)
@@ -929,9 +925,8 @@ func TestRunGeminiWithModel(t *testing.T) {
 	r := newTestRunner(mock)
 
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Harness: "gemini",
-		Model:   "gemini-2.5",
-	}).Resolve(config.CLIOverrides{})
+		Model: "gemini-2.5",
+	}).Resolve(config.CLIOverrides{Harness: "gemini"})
 	_, err := runnerRunWithConfig(r, context.Background(), rcfg, AgentRunRuntime{Prompt: "task"})
 	require.NoError(t, err)
 	assert.Contains(t, mock.lastArgs, "-m")

@@ -23,7 +23,7 @@ func TestAgentQuorumDispatchUsesConfigResolve(t *testing.T) {
 	t.Setenv("DDX_VIRTUAL_RESPONSES",
 		`[{"prompt_match":"hello","response":"quorum-arm-response"}]`)
 
-	dir := agentTestDirWithHarness(t, "virtual")
+	dir := agentTestDir(t)
 	rootCmd := NewCommandFactory(dir).NewRootCommand()
 	output, err := executeCommand(rootCmd, "agent", "run",
 		"--quorum", "unanimous",

@@ -126,7 +126,8 @@ func (c *capturingActionDispatcher) StopWorker(ctx context.Context, id string) (
 //     drives observable loop behavior on the GraphQL path.
 //
 // Configured values:
-//   - .ddx/config.yaml: review_max_retries: 5, agent.harness: claude
+//   - .ddx/config.yaml: review_max_retries: 5
+//   - StartWorkerInput: harness: claude
 //   - fixture: FailUntilCall=4 (attempts 1-4 return reviewer error,
 //     attempt 5 returns APPROVE)
 func TestReviewRetryThresholdFromConfigGraphQL(t *testing.T) {
@@ -145,8 +146,7 @@ func TestReviewRetryThresholdFromConfigGraphQL(t *testing.T) {
 
 	// Real on-disk .ddx/config.yaml — this is the file the GraphQL
 	// dispatch path's config.LoadAndResolve call reads. The presence of
-	// review_max_retries: 5 (and a non-default agent.profile) is the
-	// entire premise of the test.
+	// review_max_retries: 5 is the entire config premise of the test.
 	cfgYAML := `version: "1.0"
 library:
   path: ./library
@@ -154,8 +154,6 @@ library:
     url: https://github.com/example/repo
     branch: main
 review_max_retries: 5
-agent:
-  harness: claude
 `
 	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfgYAML), 0o644))
 
@@ -172,7 +170,7 @@ agent:
 	}
 	mr := &mutationResolver{Resolver: resolver}
 
-	res, err := mr.StartWorker(context.Background(), StartWorkerInput{ProjectID: ""})
+	res, err := mr.StartWorker(context.Background(), StartWorkerInput{ProjectID: "", Harness: strPtr(harnessCfg)})
 	require.NoError(t, err, "StartWorker must succeed against a valid on-disk config")
 	require.NotNil(t, res)
 	require.Len(t, dispatcher.calls, 1, "StartWorker must dispatch exactly once")
@@ -181,9 +179,7 @@ agent:
 	assert.Equal(t, projectRoot, got.projectRoot,
 		"resolver must dispatch against the resolved project root")
 	assert.Equal(t, harnessCfg, got.args["harness"],
-		"resolved harness from .ddx/config.yaml (agent.harness=%s) must "+
-			"reach the dispatcher args via LoadAndResolve, proving the "+
-			"resolver no longer ignores on-disk config",
+		"input harness override (%s) must reach dispatcher args via LoadAndResolve",
 		harnessCfg)
 	assert.Equal(t, "smart", got.args["profile"],
 		"with no agent.profile configured and no input override, the "+
