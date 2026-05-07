@@ -684,40 +684,47 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		// existing lint gate so actionability/scope decisions can stop a
 		// bead before we spend work on the claim/execute path.
 		if runtime.PreClaimIntakeHook != nil {
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake: starting %s\n", candidate.ID)
+			}
+			emit("pre_claim_intake.start", map[string]any{
+				"bead_id": candidate.ID,
+			})
+			emitProgress(runtime.ProgressCh, ProgressEvent{
+				EventID:   "evt-" + randomProgressID(),
+				WorkerID:  runtime.WorkerID,
+				ProjectID: runtime.ProjectRoot,
+				BeadID:    candidate.ID,
+				Phase:     "pre_claim_intake",
+				Heartbeat: true,
+				TS:        now().UTC(),
+				Message:   "pre-claim intake",
+			})
 			intakeResult, intakeErr := runtime.PreClaimIntakeHook(ctx, candidate.ID)
 			intakeOutcome := intakeResult.normalizedOutcome()
 			switch {
 			case intakeErr != nil:
-				warning := intakeErr.Error()
+				warning := trimDiagnosticPrefix(intakeErr.Error(), "pre-claim intake")
 				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake: %v (skipping %s)\n", intakeErr, candidate.ID)
+					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake warning: %s (continuing to claim %s)\n", warning, candidate.ID)
 				}
-				emit("pre_claim_intake.blocked", map[string]any{
+				emit("pre_claim_intake.warn", map[string]any{
 					"bead_id": candidate.ID,
 					"outcome": string(PreClaimIntakeError),
 					"detail":  warning,
 				})
-				result.Results = append(result.Results, ExecuteBeadReport{
-					BeadID: candidate.ID,
-					Status: string(PreClaimIntakeError),
-					Detail: warning,
-				})
-				if runtime.Once {
-					exitReason = "once_complete"
-					return result, nil
-				}
-				continue
 			case intakeOutcome == PreClaimIntakeActionableAtomic:
 				// pass-through
 			case intakeOutcome == PreClaimIntakeActionableButRewritten:
 				if err := applyPreClaimIntakeRewrite(w.Store, candidate.ID, assignee, intakeResult, now().UTC()); err != nil {
+					warning := trimDiagnosticPrefix(err.Error(), "pre-claim intake rewrite")
 					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake rewrite: %v (skipping %s)\n", err, candidate.ID)
+						_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake rewrite: %s (skipping %s)\n", warning, candidate.ID)
 					}
 					emit("pre_claim_intake.blocked", map[string]any{
 						"bead_id": candidate.ID,
 						"outcome": string(PreClaimIntakeAmbiguousNeedsHuman),
-						"detail":  err.Error(),
+						"detail":  warning,
 					})
 					if runtime.Once {
 						exitReason = "once_complete"
@@ -726,36 +733,30 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					continue
 				}
 			case intakeOutcome == PreClaimIntakeError:
-				warning := intakeResult.Detail
+				warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
 				if warning == "" {
 					warning = "pre-claim intake returned intake_error"
+				}
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake warning: %s (continuing to claim %s)\n", warning, candidate.ID)
+				}
+				emit("pre_claim_intake.warn", map[string]any{
+					"bead_id": candidate.ID,
+					"outcome": string(PreClaimIntakeError),
+					"detail":  warning,
+				})
+			default:
+				warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
+				if warning == "" {
+					warning = string(intakeOutcome)
 				}
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake: %s (skipping %s)\n", warning, candidate.ID)
 				}
 				emit("pre_claim_intake.blocked", map[string]any{
 					"bead_id": candidate.ID,
-					"outcome": string(PreClaimIntakeError),
-					"detail":  warning,
-				})
-				result.Results = append(result.Results, ExecuteBeadReport{
-					BeadID: candidate.ID,
-					Status: string(PreClaimIntakeError),
-					Detail: warning,
-				})
-				if runtime.Once {
-					exitReason = "once_complete"
-					return result, nil
-				}
-				continue
-			default:
-				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake: %s (skipping %s)\n", intakeOutcome, candidate.ID)
-				}
-				emit("pre_claim_intake.blocked", map[string]any{
-					"bead_id": candidate.ID,
 					"outcome": string(intakeOutcome),
-					"detail":  intakeResult.Detail,
+					"detail":  warning,
 				})
 				if runtime.Once {
 					exitReason = "once_complete"
@@ -2151,6 +2152,21 @@ func ReviewErrorEventBody(class string, attemptCount int, resultRev, message str
 // loop accumulator.
 func ReviewCostDeferredEventBody(resultRev string, reviewCostUSD, spentUSD, maxCostUSD float64) string {
 	return fmt.Sprintf("result_rev=%s\nreview_cost_usd=%.4f\nspent_usd=%.4f\nmax_cost_usd=%.4f", resultRev, reviewCostUSD, spentUSD, maxCostUSD)
+}
+
+func trimDiagnosticPrefix(message, prefix string) string {
+	message = strings.TrimSpace(message)
+	prefix = strings.TrimSpace(prefix)
+	if message == "" || prefix == "" {
+		return message
+	}
+	for {
+		next := strings.TrimSpace(strings.TrimPrefix(message, prefix+":"))
+		if next == message {
+			return message
+		}
+		message = next
+	}
 }
 
 func sleepWithContext(ctx context.Context, d time.Duration) error {

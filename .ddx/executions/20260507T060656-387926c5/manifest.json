@@ -1,0 +1,100 @@
+{
+  "attempt_id": "20260507T060656-387926c5",
+  "bead_id": "ddx-71073116",
+  "base_rev": "839bf94bc5fbc1b513be77d2943eec03dfae1d41",
+  "created_at": "2026-05-07T06:06:58.317031633Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-71073116",
+    "title": "spec: define candidate-cycle review and repair pipeline",
+    "description": "PROBLEM\nThe candidate-cycle review/repair pipeline is not specified with enough precision for independent implementation beads. The current docs say review and repair should happen, but do not define the vocabulary, same-worktree lifecycle, candidate ref retention, read-only reviewer capability, transitional single-slot review allowance, or terminal dispositions.\n\nROOT CAUSE WITH FILE:LINE\n- docs/helix/01-frame/features/FEAT-010-task-execution.md:337-356 describes adversarial pre-close review and repair outcomes, but it does not state that review should run pre-land in the still-live attempt worktree.\n- docs/helix/02-design/adr/ADR-024-power-escalation-and-review-routing.md:96-185 defines pre-close review policy, but still allows interpretation as post-land review and does not define read-only tool reviewer mechanics.\n- docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md:231 mentions pre-close review as a close prerequisite, but does not define candidate-cycle events such as candidate-pinned, repair-cycle-started, approved-land-conflict, or repair-cycle-exhausted.\n- docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md:310-354 discusses review evidence assembly, but does not clarify canonical bounded evidence versus supplemental same-worktree read-only access.\n\nPROPOSED FIX\n- Update FEAT-010 to define the layer-2 candidate-cycle pipeline: create worktree, implementation pass, project-root candidate ref, candidate checks, same-worktree read-only review, repair loop, final land, close/preserve/park, cleanup.\n- Update ADR-024 to choose read-only tool reviewer as the review capability model and define same-worktree repair as append-only.\n- Update FEAT-022/TD-033 references so bounded evidence remains canonical even when reviewer workdir is the attempt worktree.\n- Update TD-031 with candidate-cycle event names, terminal dispositions, budgets, and claim/cooldown behavior.\n- Add an explicit transitional allowance for single-slot review until the two-slot bead lands, with a removal condition.\n\nNON-SCOPE\n- No Go implementation changes.\n- No new CLI flags.\n- No manual edits to .ddx/beads.jsonl.\n\nINTERSECTIONS\n- ddx-639af4ef currently covers repair-cycle policy at a high level; this bead supersedes its ambiguous post-land framing by specifying the candidate-cycle pipeline.\n- ddx-9228a484 covers retry budgets; this bead names the budget axes so implementation can be decomposed safely.\n\nDEPS\nNone. ddx-639af4ef and ddx-9228a484 are informational cross-references/intersections, not blocking dependencies for this spec-definition bead.",
+    "acceptance": "1. docs/helix/01-frame/features/FEAT-010-task-execution.md defines the candidate, cycle, repair cycle, candidate ref, read-only tool reviewer, and terminal disposition vocabulary.\n2. FEAT-010 documents the exact candidate-cycle sequence and states review runs before land in the still-live attempt worktree.\n3. docs/helix/02-design/adr/ADR-024-power-escalation-and-review-routing.md selects read-only tool reviewer as the capability model and states repair commits are append-only with no reset/amend/squash/rebase.\n4. docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md defines candidate-pinned, candidate-checks-failed, review-request-changes, repair-cycle-started, approved-land-conflict, repair-cycle-exhausted, review-manual-required, and final-result-landed events.\n5. docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md states bounded evidence is canonical and same-worktree access is supplemental/read-only.\n6. The docs name repair_max_cycles and review_max_retries_per_candidate as distinct from cost, rate-limit/provider, and no-progress budgets.\n7. ddx doc audit exits 0.\n8. cd cli \u0026\u0026 go test ./cmd/... -run \"TestDocAuditCommand\" green.\n9. lefthook run pre-commit passes.",
+    "parent": "ddx-31e07fdc",
+    "labels": [
+      "phase:2",
+      "area:docs",
+      "area:specs",
+      "kind:doc",
+      "reliability",
+      "adr:024",
+      "spec:FEAT-010",
+      "candidate-cycle"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T06:06:55Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2292665",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Strong bead overall — clear title, well-structured description with file:line root cause, numbered AC, present labels, and a cold-readable file list. Two rubric criteria are unmet: (1) AC ordering: the penultimate item (AC8) is `ddx doc audit exits 0` rather than the required `cd cli \\u0026\\u0026 go test ./\\u003cpaths\\u003e/... green`; the go-test line is AC7, breaking the mandatory final-two pattern (`go test` → `lefthook`). (2) Deps not declared: the description names ddx-639af4ef and ddx-9228a484 as 'intersections' but never states whether they are blocking deps or not; the rubric requires an explicit statement (deps list or 'no deps') in the bead body.\",\"score\":6,\"suggested_fixes\":[\"Reorder AC so the go-test line immediately precedes lefthook: move 'ddx doc audit exits 0' to AC7, 'cd cli \\u0026\\u0026 go test ./cmd/... -run TestDocAuditCommand green' to AC8, 'lefthook run pre-commit passes' to AC9.\",\"Add an explicit deps statement to the description — e.g., 'DEPS: none (ddx-639af4ef and ddx-9228a484 are informational cross-references, not blocking dependencies)' — so the executing agent does not need to infer ordering from the intersections prose.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T05:36:44.416258845Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=6"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"git rev-parse HEAD: chdir /var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-71073116-20260507T053646-29b9f4df: no such file or directory: context canceled\",\"harness\":\"claude\",\"model\":\"sonnet\",\"reason\":\"context_canceled\"}",
+          "created_at": "2026-05-07T05:46:27.370179667Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "context_canceled"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260507T053646-29b9f4df\",\"bead_id\":\"ddx-71073116\",\"rejected_route_pins\":null,\"requested_tier\":\"cheap\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-07T05:46:27.441325698Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=cheap model=sonnet harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "git rev-parse HEAD: chdir /var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-71073116-20260507T053646-29b9f4df: no such file or directory: context canceled\nresult_rev=60d3dd62105da83c0c5a18ceebdafb303a460150\nbase_rev=60d3dd62105da83c0c5a18ceebdafb303a460150",
+          "created_at": "2026-05-07T05:46:27.56782575Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Two rubric violations: (1) AC final-two ordering — the go-test gate is at position #7 but the rubric requires it second-to-last; the actual final two lines are 'ddx doc audit exits 0' (#8) and 'lefthook run pre-commit passes' (#9). The rubric mandates `cd cli \\u0026\\u0026 go test ...` at second-to-last. (2) Deps not declared — the description cites ddx-639af4ef and ddx-9228a484 as intersecting beads but does not classify them as blocking or non-blocking; the bead carries no deps field and no explicit 'no deps' statement. Everything else passes: title is imperative and names the subsystem; description contains PROBLEM / ROOT CAUSE with four distinct file:line anchors / PROPOSED FIX / NON-SCOPE sections; all AC items are numbered and individually verifiable; TestDocAuditCommand is named; labels carry phase:2, area:docs, area:specs, kind:doc, adr:024, and spec:FEAT-010; parent ddx-31e07fdc is set; file paths resolve within docs/helix/ in the ddx repo so a cold agent can locate files without asking.\",\"score\":6,\"suggested_fixes\":[\"Reorder AC so the go-test gate is second-to-last. Move the ddx-doc-audit check to an earlier position (e.g., #7), shift go test to #8, and keep lefthook at #9: '8. cd cli \\u0026\\u0026 go test ./cmd/... -run \\\"TestDocAuditCommand\\\" green.' '9. lefthook run pre-commit passes.'\",\"Add an explicit deps declaration. If ddx-639af4ef and ddx-9228a484 must land before this bead executes, list them as blocking deps. If they are informational only, add 'Deps: none' in the description body so an autonomous agent does not have to infer blocking status from the Intersections prose.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T06:00:49.422708888Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=6"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Strong spec bead overall. Title is imperative and names subsystem + change. Description has PROBLEM, ROOT CAUSE with multiple precise file:line anchors, PROPOSED FIX, NON-SCOPE, and INTERSECTIONS. ACs are numbered, at least one names a Test* function (TestDocAuditCommand in AC 8), and the final two ACs are the go test + lefthook gate. Labels carry phase/area/kind and cross-refs (adr:024, spec:FEAT-010). Parent is set and DEPS section explicitly states none with rationale. Description is standalone with no /tmp or chat references. One deduction: AC 7 references 'ddx doc audit' as a runnable command, but that command does not appear in the CLI command overview in CLAUDE.md. If the command does not exist, AC 7 is unverifiable within the stated non-scope ('No Go implementation changes'), which could stall an autonomous agent.\",\"score\":7,\"suggested_fixes\":[\"AC 7: Replace 'ddx doc audit exits 0' with a concrete verifiable check that does not depend on a potentially nonexistent command — e.g., a grep/find assertion that all referenced files contain the required vocabulary terms, or remove AC 7 if TestDocAuditCommand in AC 8 already exercises the same invariant. If 'ddx doc audit' is a real command, cite the implementing source file so the agent can verify it exists before running it.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T06:06:55.640350733Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=7"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T06:06:55.793308977Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T060656-387926c5",
+    "prompt": ".ddx/executions/20260507T060656-387926c5/prompt.md",
+    "manifest": ".ddx/executions/20260507T060656-387926c5/manifest.json",
+    "result": ".ddx/executions/20260507T060656-387926c5/result.json",
+    "checks": ".ddx/executions/20260507T060656-387926c5/checks.json",
+    "usage": ".ddx/executions/20260507T060656-387926c5/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-71073116-20260507T060656-387926c5"
+  },
+  "prompt_sha": "2252b3402f8ddb2f0999fd4bb5abf8dbc1c3649f13e230f864a3e098bfc54ee1"
+}

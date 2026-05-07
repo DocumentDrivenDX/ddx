@@ -87,8 +87,8 @@ func NewPostAttemptTriageHook(projectRoot string, store BeadReader, rcfg config.
 		if store == nil {
 			return TriageResult{}, fmt.Errorf("triage hook: bead reader required")
 		}
-		if !hasBeadLifecycleSkill(projectRoot) {
-			return TriageResult{}, fmt.Errorf("triage hook: skill missing: bead-lifecycle")
+		if err := ensureBeadLifecycleSkill(projectRoot); err != nil {
+			return TriageResult{}, fmt.Errorf("triage hook: %w", err)
 		}
 
 		b, err := store.Get(beadID)

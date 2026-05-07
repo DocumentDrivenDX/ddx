@@ -63,8 +63,8 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 		if strings.TrimSpace(projectRoot) == "" {
 			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: project root required")
 		}
-		if !hasBeadLifecycleSkill(projectRoot) {
-			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: skill missing: bead-lifecycle")
+		if err := ensureBeadLifecycleSkill(projectRoot); err != nil {
+			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: %w", err)
 		}
 		if store == nil {
 			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: bead reader required")

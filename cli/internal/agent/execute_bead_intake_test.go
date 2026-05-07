@@ -87,10 +87,10 @@ func TestIntake_InfrastructureErrorFailsOpen(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	assert.Equal(t, int32(0), atomic.LoadInt32(&store.claimCalls), "intake_error must not claim")
-	assert.Equal(t, 0, result.Attempts)
-	assert.Equal(t, 0, result.Successes)
-	assert.Contains(t, eventSink.String(), "pre_claim_intake.blocked")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "intake infra errors must fail open and continue to Claim")
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
+	assert.Contains(t, eventSink.String(), "pre_claim_intake.warn")
 	assert.Contains(t, eventSink.String(), "intake_error")
 	assert.Contains(t, eventSink.String(), "intake service unavailable")
 }
@@ -186,7 +186,7 @@ func TestIntake_NonAtomicSkipsClaim(t *testing.T) {
 	assert.Equal(t, bead.StatusOpen, got.Status)
 }
 
-func TestIntake_ErrorSkipsClaimWithoutParkingCandidate(t *testing.T) {
+func TestIntake_ErrorContinuesToClaimWithoutParkingCandidate(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	store := &claimCountingStore{Store: inner}
 	now := time.Date(2026, 5, 7, 4, 30, 0, 0, time.UTC)
@@ -194,8 +194,12 @@ func TestIntake_ErrorSkipsClaimWithoutParkingCandidate(t *testing.T) {
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			t.Fatal("executor must not run when intake errors")
-			return ExecuteBeadReport{}, nil
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-intake-error-open",
+				ResultRev: "abc456",
+			}, nil
 		}),
 		Now: func() time.Time {
 			return now
@@ -216,21 +220,70 @@ func TestIntake_ErrorSkipsClaimWithoutParkingCandidate(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	assert.Equal(t, int32(0), atomic.LoadInt32(&store.claimCalls), "intake errors must not claim")
-	assert.Equal(t, 0, result.Attempts)
-	assert.Contains(t, log.String(), "pre-claim intake: pre-claim intake: empty output (skipping "+candidate.ID+")")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "intake errors must not block claim")
+	assert.Equal(t, 1, result.Attempts)
+	assert.Contains(t, log.String(), "pre-claim intake: starting "+candidate.ID)
+	assert.Contains(t, log.String(), "pre-claim intake warning: empty output (continuing to claim "+candidate.ID+")")
+	assert.NotContains(t, log.String(), "pre-claim intake: pre-claim intake:")
 
 	got, err := inner.Get(candidate.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, got.Status)
-	assert.Empty(t, got.Owner)
+	assert.Equal(t, bead.StatusClosed, got.Status)
 	assert.NotContains(t, got.Extra, "execute-loop-last-status")
 	assert.NotContains(t, got.Extra, "execute-loop-last-detail")
 	assert.NotContains(t, got.Extra, "execute-loop-retry-after")
-	require.Len(t, result.Results, 1)
-	assert.Equal(t, candidate.ID, result.Results[0].BeadID)
-	assert.Equal(t, string(PreClaimIntakeError), result.Results[0].Status)
-	assert.Equal(t, "pre-claim intake: empty output", result.Results[0].Detail)
+}
+
+func TestIntake_LogsStartBeforeHookReturns(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-intake-start",
+				ResultRev: "abc789",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	started := make(chan struct{})
+	release := make(chan struct{})
+	done := make(chan error, 1)
+	var log bytes.Buffer
+	var eventSink bytes.Buffer
+
+	go func() {
+		_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once:      true,
+			Log:       &log,
+			EventSink: &eventSink,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				close(started)
+				<-release
+				return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
+			},
+		})
+		done <- err
+	}()
+
+	select {
+	case <-started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("intake hook did not start")
+	}
+	assert.Contains(t, log.String(), "pre-claim intake: starting "+candidate.ID)
+	assert.Contains(t, eventSink.String(), "pre_claim_intake.start")
+
+	close(release)
+	require.NoError(t, <-done)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls))
 }
 
 func TestIntake_ActionableButRewritten_UpdatesBeforeClaim(t *testing.T) {

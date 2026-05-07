@@ -12,6 +12,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
+	"github.com/DocumentDrivenDX/ddx/internal/skills"
 	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
@@ -93,8 +94,8 @@ func NewPreDispatchLintHook(projectRoot string, store BeadReader, rcfg config.Re
 				return LintResult{}, &LintHookError{Kind: LintHookErrorKindCanceled, Err: err}
 			}
 		}
-		if !hasBeadLifecycleSkill(projectRoot) {
-			return LintResult{}, ErrLintHookMissingSkill
+		if err := ensureBeadLifecycleSkill(projectRoot); err != nil {
+			return LintResult{}, &LintHookError{Kind: LintHookErrorKindMissingSkill, Err: err}
 		}
 		if store == nil {
 			return LintResult{}, &LintHookError{Kind: LintHookErrorKindDispatchFailure, Err: fmt.Errorf("bead reader required")}
@@ -299,6 +300,19 @@ func hasBeadLifecycleSkill(projectRoot string) bool {
 		}
 	}
 	return false
+}
+
+func ensureBeadLifecycleSkill(projectRoot string) error {
+	if hasBeadLifecycleSkill(projectRoot) {
+		return nil
+	}
+	if err := skills.Install(skills.SkillFiles, projectRoot, skills.Options{Force: true}); err != nil {
+		return fmt.Errorf("skill missing: bead-lifecycle; auto-install failed: %w; run `ddx update --force` from the project root", err)
+	}
+	if hasBeadLifecycleSkill(projectRoot) {
+		return nil
+	}
+	return fmt.Errorf("skill missing: bead-lifecycle; run `ddx update --force` from the project root")
 }
 
 func isUnknownHarnessError(err error) bool {
