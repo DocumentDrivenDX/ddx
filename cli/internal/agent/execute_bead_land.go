@@ -170,6 +170,15 @@ type LandResult struct {
 	// created after the main land. When set, NewTip points at this commit
 	// (not at the original agent commit or merge commit).
 	EvidenceCommitSHA string
+
+	// CheckoutSyncDeferred is true when the target ref advanced but DDx left
+	// the operator checkout files untouched because dirty local paths overlap
+	// files changed by the new target tip.
+	CheckoutSyncDeferred bool
+
+	// CheckoutSyncDeferredPaths lists the dirty paths that caused checkout sync
+	// to be skipped.
+	CheckoutSyncDeferredPaths []string
 }
 
 // PreClaimResult is the outcome of a FetchOriginAncestryCheck call.
@@ -408,6 +417,58 @@ func (RealLandingGitOps) SyncWorkTreeToHead(dir, fromRev string) error {
 	}
 
 	return nil
+}
+
+func syncWorkTreeToHeadGuarded(gitOps LandingGitOps, dir, fromRev string, dirtyBefore []string, result *LandResult) {
+	overlap, err := checkoutSyncDirtyOverlapPaths(dir, fromRev, dirtyBefore)
+	if err == nil && len(overlap) > 0 {
+		if result != nil {
+			result.CheckoutSyncDeferred = true
+			result.CheckoutSyncDeferredPaths = appendUniqueStrings(result.CheckoutSyncDeferredPaths, overlap...)
+		}
+		return
+	}
+	_ = gitOps.SyncWorkTreeToHead(dir, fromRev)
+}
+
+func checkoutSyncDirtyOverlapPaths(dir, fromRev string, dirtyPaths []string) ([]string, error) {
+	if fromRev == "" || len(dirtyPaths) == 0 {
+		return nil, nil
+	}
+	diffOut, diffErr := internalgit.Command(context.Background(), dir, "diff", "--name-only", fromRev, "HEAD").CombinedOutput()
+	if diffErr != nil {
+		return nil, diffErr
+	}
+	changed := map[string]bool{}
+	for _, path := range strings.Fields(strings.TrimSpace(string(diffOut))) {
+		changed[filepath.ToSlash(path)] = true
+	}
+	if len(changed) == 0 {
+		return nil, nil
+	}
+	var overlap []string
+	for _, path := range dirtyPaths {
+		slashPath := filepath.ToSlash(path)
+		if changed[slashPath] {
+			overlap = append(overlap, slashPath)
+		}
+	}
+	return overlap, nil
+}
+
+func appendUniqueStrings(existing []string, additions ...string) []string {
+	seen := make(map[string]bool, len(existing)+len(additions))
+	for _, value := range existing {
+		seen[value] = true
+	}
+	for _, value := range additions {
+		if seen[value] {
+			continue
+		}
+		seen[value] = true
+		existing = append(existing, value)
+	}
+	return existing
 }
 
 func (RealLandingGitOps) AddWorktree(dir, path, rev string) error {
@@ -790,6 +851,10 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 		return &LandResult{Status: "no-changes", Reason: "result_rev == base_rev"}, nil
 	}
 	syncOperatorAfterLand := sameFilesystemPath(projectRoot, wd)
+	var operatorDirtyBeforeLand []string
+	if syncOperatorAfterLand {
+		operatorDirtyBeforeLand = dirtyWorktreePaths(wd)
+	}
 
 	// Resolve target branch (default to project HEAD).
 	targetBranch := req.TargetBranch
@@ -848,7 +913,7 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 			return nil, err
 		}
 		defer cleanup()
-		if preserved, err := preserveIfPostLandGateFails(finalWD, req, gitOps, targetRef, currentTip, result.NewTip, contribCount); err != nil {
+		if preserved, err := preserveIfPostLandGateFails(finalWD, req, gitOps, targetRef, currentTip, result.NewTip, contribCount, nil); err != nil {
 			return nil, err
 		} else if preserved != nil {
 			return preserved, nil
@@ -864,7 +929,7 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 		}
 		landPush(finalWD, targetBranch, result.NewTip, hasOrigin, gitOps, result)
 		if syncOperatorAfterLand {
-			_ = gitOps.SyncWorkTreeToHead(wd, currentTip)
+			syncWorkTreeToHeadGuarded(gitOps, wd, currentTip, operatorDirtyBeforeLand, result)
 		}
 		return result, nil
 	}
@@ -921,7 +986,7 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 		return nil, err
 	}
 	defer cleanup()
-	if preserved, err := preserveIfPostLandGateFails(finalWD, req, gitOps, targetRef, currentTip, result.NewTip, contribCount); err != nil {
+	if preserved, err := preserveIfPostLandGateFails(finalWD, req, gitOps, targetRef, currentTip, result.NewTip, contribCount, nil); err != nil {
 		return nil, err
 	} else if preserved != nil {
 		return preserved, nil
@@ -937,12 +1002,12 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 	}
 	landPush(finalWD, targetBranch, result.NewTip, hasOrigin, gitOps, result)
 	if syncOperatorAfterLand {
-		_ = gitOps.SyncWorkTreeToHead(wd, currentTip)
+		syncWorkTreeToHeadGuarded(gitOps, wd, currentTip, operatorDirtyBeforeLand, result)
 	}
 	return result, nil
 }
 
-func preserveIfPostLandGateFails(wd string, req LandRequest, gitOps LandingGitOps, targetRef, preLandTip, landedTip string, contribCount int) (*LandResult, error) {
+func preserveIfPostLandGateFails(wd string, req LandRequest, gitOps LandingGitOps, targetRef, preLandTip, landedTip string, contribCount int, dirtyBefore []string) (*LandResult, error) {
 	if len(req.PostLandCommand) == 0 {
 		return nil, nil
 	}
@@ -958,18 +1023,19 @@ func preserveIfPostLandGateFails(wd string, req LandRequest, gitOps LandingGitOp
 	if revertErr := gitOps.UpdateRefTo(wd, targetRef, preLandTip, landedTip); revertErr != nil {
 		return nil, fmt.Errorf("restoring %s to %s after post-land gate failed: %w", targetRef, preLandTip, revertErr)
 	}
-	_ = gitOps.SyncWorkTreeToHead(wd, landedTip)
 
 	reason := fmt.Sprintf("post-land gate failed: %s: %v", strings.Join(req.PostLandCommand, " "), err)
 	if trimmed := strings.TrimSpace(output); trimmed != "" {
 		reason += ": " + truncatePostLandGateOutput(trimmed)
 	}
-	return &LandResult{
+	result := &LandResult{
 		Status:            "preserved",
 		PreserveRef:       preserveRef,
 		Reason:            reason,
 		MergedCommitCount: contribCount,
-	}, nil
+	}
+	syncWorkTreeToHeadGuarded(gitOps, wd, landedTip, dirtyBefore, result)
+	return result, nil
 }
 
 func runPostLandCommand(wd string, command []string) (string, error) {
@@ -1241,6 +1307,7 @@ func isPushAutoMergeConflict(err error) bool {
 //   - The local target ref is at newTip and not yet pushed.
 //   - hasOrigin is true.
 func landPushAutoRecover(wd, targetBranch, newTip string, gitOps LandingGitOps) (recovered bool, mergeSHA string, err error) {
+	dirtyBefore := dirtyWorktreePaths(wd)
 	if fetchErr := gitOps.FetchBranch(wd, "origin", targetBranch); fetchErr != nil {
 		return false, "", fmt.Errorf("auto-recovery fetch origin %s: %w", targetBranch, fetchErr)
 	}
@@ -1276,7 +1343,7 @@ func landPushAutoRecover(wd, targetBranch, newTip string, gitOps LandingGitOps) 
 	if updErr := gitOps.UpdateRefTo(wd, targetRef, mergeSHA, newTip); updErr != nil {
 		return false, "", fmt.Errorf("auto-recovery advance %s to %s: %w", targetRef, mergeSHA, updErr)
 	}
-	_ = gitOps.SyncWorkTreeToHead(wd, newTip)
+	syncWorkTreeToHeadGuarded(gitOps, wd, newTip, dirtyBefore, nil)
 	if pushErr := gitOps.PushFFOnly(wd, "origin", mergeSHA, targetBranch); pushErr != nil {
 		return false, "", fmt.Errorf("auto-recovery retry push: %w", pushErr)
 	}
@@ -1295,6 +1362,7 @@ func landPushAutoRecover(wd, targetBranch, newTip string, gitOps LandingGitOps) 
 // git error) — the caller should escalate to a focused conflict-resolve agent.
 // The target branch is never modified on error.
 func LandConflictAutoRecover(wd, preserveRef string, gitOps LandingGitOps) (string, error) {
+	dirtyBefore := dirtyWorktreePaths(wd)
 	targetBranch, err := gitOps.CurrentBranch(wd)
 	if err != nil {
 		return "", fmt.Errorf("resolving target branch: %w", err)
@@ -1340,7 +1408,7 @@ func LandConflictAutoRecover(wd, preserveRef string, gitOps LandingGitOps) (stri
 	if updErr := gitOps.UpdateRefTo(wd, targetRef, mergeSHA, currentTip); updErr != nil {
 		return "", fmt.Errorf("advancing %s to %s: %w", targetRef, mergeSHA, updErr)
 	}
-	_ = gitOps.SyncWorkTreeToHead(wd, currentTip)
+	syncWorkTreeToHeadGuarded(gitOps, wd, currentTip, dirtyBefore, nil)
 	return mergeSHA, nil
 }
 
@@ -1378,6 +1446,17 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 			res.Reason = PushConflictReasonPrefix + " " + land.PushError
 		} else if land.PushFailed {
 			res.Reason = PushFailedReasonPrefix + " " + land.PushError
+		}
+		if land.CheckoutSyncDeferred {
+			detail := "checkout_sync_deferred"
+			if len(land.CheckoutSyncDeferredPaths) > 0 {
+				detail += ": " + strings.Join(land.CheckoutSyncDeferredPaths, ", ")
+			}
+			if res.Reason == "" {
+				res.Reason = detail
+			} else {
+				res.Reason += "; " + detail
+			}
 		}
 		// NewTip reflects the ref actually on the target branch (either
 		// ResultRev on the ff path or the merge commit SHA on the merge path).

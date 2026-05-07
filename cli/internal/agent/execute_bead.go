@@ -362,8 +362,8 @@ func dirtyWorktreePaths(dir string) []string {
 	var paths []string
 	seen := map[string]bool{}
 	for _, line := range strings.Split(string(out), "\n") {
-		line = strings.TrimSpace(line)
-		if line == "" || len(line) < 4 {
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" || len(line) < 4 {
 			continue
 		}
 		path := strings.TrimSpace(line[3:])

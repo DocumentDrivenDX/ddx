@@ -408,6 +408,78 @@ func TestLand_DirtyProjectRootDoesNotBlockSuccessfulLand(t *testing.T) {
 	}
 }
 
+func TestLand_SyncDeferredWhenOperatorCheckoutDirtyOverlap(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	r.writeFile("README.md", "# operator edit\n")
+	workerSHA := r.commitOn(r.baseSHA, "README.md", "# worker edit\n", "feat: worker readme")
+
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-dirty-overlap",
+		AttemptID:    "20260507T000003-overlap",
+		TargetBranch: "main",
+	}
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.Status != "landed" {
+		t.Fatalf("expected landed, got %q reason=%q", land.Status, land.Reason)
+	}
+	if !land.CheckoutSyncDeferred {
+		t.Fatalf("expected checkout sync to be deferred for dirty overlap")
+	}
+	if len(land.CheckoutSyncDeferredPaths) != 1 || land.CheckoutSyncDeferredPaths[0] != "README.md" {
+		t.Fatalf("deferred paths = %v, want [README.md]", land.CheckoutSyncDeferredPaths)
+	}
+	content, err := os.ReadFile(filepath.Join(r.dir, "README.md"))
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	if string(content) != "# operator edit\n" {
+		t.Fatalf("dirty operator README was overwritten: %q", string(content))
+	}
+
+	res := &ExecuteBeadResult{Outcome: ExecuteBeadOutcomeTaskSucceeded}
+	ApplyLandResultToExecuteBeadResult(res, land)
+	if !strings.Contains(res.Reason, "checkout_sync_deferred: README.md") {
+		t.Fatalf("ExecuteBeadResult reason %q does not expose checkout sync deferral", res.Reason)
+	}
+}
+
+func TestLand_SyncCleanCheckoutStillUpdatesFiles(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature\n", "feat: feature")
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-clean-sync",
+		AttemptID:    "20260507T000004-cleansync",
+		TargetBranch: "main",
+	}
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.CheckoutSyncDeferred {
+		t.Fatalf("clean checkout unexpectedly deferred sync: %v", land.CheckoutSyncDeferredPaths)
+	}
+	content, err := os.ReadFile(filepath.Join(r.dir, "feature.txt"))
+	if err != nil {
+		t.Fatalf("feature.txt not synced into clean checkout: %v", err)
+	}
+	if string(content) != "feature\n" {
+		t.Fatalf("feature.txt content = %q, want feature", string(content))
+	}
+}
+
 // TestLand_MergeRequired verifies the merge path: the target has advanced
 // since the worker started. Land() creates a merge commit whose parents are
 // [currentTip, workerSHA], and critically the worker's own commit is NOT
@@ -1080,6 +1152,62 @@ func TestLand_PushAutoRecovery_RaceWithRemoteResolved(t *testing.T) {
 	}
 }
 
+func TestLand_PushAutoRecoveryDoesNotSyncDirtyProjectRoot(t *testing.T) {
+	r := newLandTestRepoWithOrigin(t)
+	ops := RealLandingGitOps{}
+
+	sideDir, err := os.MkdirTemp("", "land-side-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(sideDir)
+	runCmd := func(dir string, args ...string) {
+		c := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		out, cerr := c.CombinedOutput()
+		if cerr != nil {
+			t.Fatalf("git %s: %s: %v", strings.Join(args, " "), string(out), cerr)
+		}
+	}
+	runCmd("", "clone", r.origin, sideDir)
+	runCmd(sideDir, "config", "user.name", "Side")
+	runCmd(sideDir, "config", "user.email", "side@test.local")
+	if err := os.WriteFile(filepath.Join(sideDir, "remote-only.txt"), []byte("remote\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runCmd(sideDir, "add", "-A")
+	runCmd(sideDir, "commit", "-m", "remote: side-clone advance")
+	runCmd(sideDir, "push", "origin", "main")
+
+	r.writeFile("README.md", "# operator edit\n")
+	workerSHA := r.commitOn(r.baseSHA, "README.md", "# worker edit\n", "feat: worker readme")
+
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-land-push-dirty",
+		AttemptID:    "20260507T000005-pushdirty",
+		TargetBranch: "main",
+	}
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if !land.PushRecovered {
+		t.Fatalf("expected push auto-recovery")
+	}
+	if !land.CheckoutSyncDeferred {
+		t.Fatalf("expected checkout sync deferral after push auto-recovery")
+	}
+	content, err := os.ReadFile(filepath.Join(r.dir, "README.md"))
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	if string(content) != "# operator edit\n" {
+		t.Fatalf("dirty operator README was overwritten during push auto-recovery: %q", string(content))
+	}
+}
+
 // TestLand_PushAutoRecovery_UnresolvableConflictReportsPushConflict verifies
 // AC #3 + #5 of ddx-a458af7c: when origin advanced with overlapping changes
 // the auto-merge cannot resolve, Land() reports PushConflict (distinct from
@@ -1214,6 +1342,31 @@ func TestLandConflictAutoRecover_OrtResolvesCleanly(t *testing.T) {
 	}
 	if parents[1] != iterSHA {
 		t.Errorf("merge parent[1] = %s, want iterSHA %s", parents[1], iterSHA)
+	}
+}
+
+func TestLand_PreserveRecoveryDoesNotSyncDirtyProjectRoot(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	iterSHA := r.commitOn(r.baseSHA, "README.md", "# recovered iteration\n", "iter: update readme")
+	preserveRef := "refs/ddx/iterations/ddx-land-recover/20260507T000006-" + r.baseSHA[:12]
+	r.runGit("update-ref", preserveRef, iterSHA)
+
+	r.writeFile("README.md", "# operator edit\n")
+	newTip, err := LandConflictAutoRecover(r.dir, preserveRef, ops)
+	if err != nil {
+		t.Fatalf("LandConflictAutoRecover: %v", err)
+	}
+	if newTip == "" {
+		t.Fatal("expected recovered tip")
+	}
+	content, err := os.ReadFile(filepath.Join(r.dir, "README.md"))
+	if err != nil {
+		t.Fatalf("read README.md: %v", err)
+	}
+	if string(content) != "# operator edit\n" {
+		t.Fatalf("dirty operator README was overwritten during preserved recovery: %q", string(content))
 	}
 }
 
