@@ -89,6 +89,13 @@ func (r *landTestRepo) resolveRef(ref string) string {
 	return r.runGit("rev-parse", ref)
 }
 
+func (r *landTestRepo) syncWorkTreeFrom(fromRev string) {
+	r.t.Helper()
+	if err := syncWorkTreeToHeadExcludingPaths(r.dir, fromRev, nil); err != nil {
+		r.t.Fatalf("sync worktree from %s: %v", fromRev, err)
+	}
+}
+
 // commitOn creates a detached-head commit at baseSHA in a throwaway worktree
 // and returns the new commit SHA. The commit is reachable via object store
 // but not via any branch in the main repo, simulating what a worker worktree
@@ -539,6 +546,7 @@ func TestLand_MergeRequired(t *testing.T) {
 	// Meanwhile, a sibling lands a commit on main directly.
 	siblingSHA := r.commitOn(r.baseSHA, "sibling.txt", "sibling-content\n", "feat: sibling")
 	r.runGit("update-ref", "refs/heads/main", siblingSHA)
+	r.syncWorkTreeFrom(r.baseSHA)
 
 	// Now land the worker's result. currentTip = siblingSHA != baseSHA → merge.
 	req := LandRequest{
@@ -606,6 +614,7 @@ func TestLand_MergeConflict(t *testing.T) {
 	// commit into this tip will conflict.
 	siblingSHA := r.commitOn(r.baseSHA, "feature.txt", "sibling-version\n", "feat: sibling")
 	r.runGit("update-ref", "refs/heads/main", siblingSHA)
+	r.syncWorkTreeFrom(r.baseSHA)
 
 	req := LandRequest{
 		WorktreeDir:  r.dir,

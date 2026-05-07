@@ -901,8 +901,9 @@ func sameFilesystemPath(a, b string) bool {
 }
 
 // Land performs fetch → (ff or merge) → push for a single submission.
-// Callers MUST serialize calls per projectRoot (the server coordinator
-// goroutine provides this). Land() itself takes no internal locks.
+// It serializes primary-checkout git operations with the process-shared
+// main-git lock so separate ddx work processes cannot interleave landing with
+// tracker commits or pre-dispatch checkpoint/ref updates.
 //
 // projectRoot is the directory containing the project's .git. req.WorktreeDir,
 // when non-empty, is used as the git working directory for all commands; when
