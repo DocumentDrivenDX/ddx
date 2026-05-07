@@ -1,6 +1,6 @@
 ---
 ddx:
-  id: TD-035
+  id: TD-038
   depends_on:
     - TD-026
     - TD-029
@@ -88,9 +88,9 @@ The reference benchmark is `BenchmarkArtifactsSearch_500Fixture` in
 - The benchmark must continue to report p50, p95, and p99 so regressions
   are visible when the budget is reviewed.
 
-The budget is intended to protect the linear scan path while body search
-remains in-process. If a future index replaces the scan, the benchmark
-stays as the compatibility baseline until a new TD supersedes it.
+The budget protects the linear scan path while body search remains
+in-process. If a future index replaces the scan, this benchmark stays as
+the compatibility baseline until a new TD supersedes it.
 
 ## Implementation Boundary
 
