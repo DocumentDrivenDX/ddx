@@ -1,0 +1,121 @@
+{
+  "attempt_id": "20260507T025728-4481ae09",
+  "bead_id": "ddx-6f73d300",
+  "base_rev": "7637557389586d0b8f854d96102bdf749cf47cae",
+  "created_at": "2026-05-07T02:57:31.575858896Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6f73d300",
+    "title": "spec: define needs-human operator review lane",
+    "description": "PROBLEM\nDDx lacks a first-class operator-attention lane for beads that need human review. A Codex/Claude TUI or the web GUI cannot reliably answer “show me beads needing my attention” and then capture the operator review decision.\n\nROOT CAUSE\ndocs/helix/01-frame/features/FEAT-004-beads.md:39-41 defines ready/status as open/ready/blocked counts only. docs/helix/01-frame/features/FEAT-008-web-ui.md:223-229 defines Ready queue view but no Needs review filter. docs/helix/01-frame/features/FEAT-008-web-ui.md:243-263 defines review actions but not needs_human review intake/resolution in the bead GUI. docs/helix/01-frame/features/FEAT-010-task-execution.md:343-352 and docs/helix/02-design/adr/ADR-024-power-escalation-and-review-routing.md:156-170 say terminal review cases block with needs_human but do not define status, metadata, CLI/TUI discovery, GUI expression, or resolution semantics.\n\nPROPOSED FIX\nAmend FEAT-004, FEAT-008, FEAT-010, and ADR-024 to define needs_human as status=open plus needs_human label and structured reason metadata; skipped by workers; discoverable through CLI/TUI and a Beads list Needs review filter; resolvable through explicit retry/split/obsolete/defer review actions with required notes in CLI and web detail UI.\n\nNON-SCOPE\nImplementation of CLI, GraphQL, web, or worker changes. New bd/br status values. Full artifact-review chat UI.\n\nDEPS\nNo deps; this is the prerequisite spec contract.",
+    "acceptance": "1. docs/helix/01-frame/features/FEAT-004-beads.md defines needs_human lane state, metadata keys, worker-skip semantics, and ready/status count behavior.\n2. docs/helix/01-frame/features/FEAT-008-web-ui.md adds user stories for a Beads list Needs review filter and a bead detail review-resolution panel.\n3. docs/helix/01-frame/features/FEAT-010-task-execution.md specifies terminal review needs_human unclaims while retry/escalate review blocks preserve retry behavior.\n4. docs/helix/02-design/adr/ADR-024-power-escalation-and-review-routing.md aligns review-manual-required and review_spec_gap with operator-attention lane resolution.\n5. Spec names metadata keys needs-human-reason, needs-human-since, needs-human-source, needs-human-suggested-action, and needs-human-summary.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-ac10e7af",
+    "labels": [
+      "phase:2",
+      "area:docs",
+      "area:specs",
+      "area:web",
+      "area:cli",
+      "kind:doc",
+      "reliability",
+      "operator-ux",
+      "needs-human-lane",
+      "adr:024",
+      "spec:FEAT-004",
+      "spec:FEAT-008",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T02:57:28Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1237001",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-07T02:43:28.322901066Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-07T02:45:46.748441637Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260507T024328-79086042\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":992426,\"output_tokens\":14323,\"total_tokens\":1006749,\"cost_usd\":0,\"duration_ms\":134850,\"exit_code\":0}",
+          "created_at": "2026-05-07T02:45:46.972503085Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=1006749 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"escalation_count\":0,\"fallback_chain\":[],\"final_tier\":\"\",\"requested_profile\":\"\",\"requested_tier\":\"\",\"resolved_model\":\"gpt-5.4-mini\",\"resolved_provider\":\"codex\",\"resolved_tier\":\"\"}",
+          "created_at": "2026-05-07T02:45:53.504777403Z",
+          "kind": "routing",
+          "source": "ddx agent execute-loop",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "The diff only adds execution artifacts and contains no spec-document changes, so none of the bead’s required FEAT/ADR amendments are implemented or reviewable from this patch.\nharness=codex\nmodel=gpt-5.4\ninput_bytes=62909\noutput_bytes=1151\nelapsed_ms=16124",
+          "created_at": "2026-05-07T02:46:21.205865263Z",
+          "kind": "review",
+          "source": "ddx agent execute-loop",
+          "summary": "BLOCK"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"action\":\"re_attempt_with_context\",\"mode\":\"review_block\"}",
+          "created_at": "2026-05-07T02:46:21.619899087Z",
+          "kind": "triage-decision",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block: re_attempt_with_context"
+        },
+        {
+          "actor": "erik",
+          "body": "pre-close review: BLOCK (flagged for human)\nThe diff only adds execution artifacts and contains no spec-document changes, so none of the bead’s required FEAT/ADR amendments are implemented or reviewable from this patch.\nresult_rev=5dc8321a96e57e9debfb2440799a5a842ace9fb2\nbase_rev=82a404038fad97dda63524aa5bb367b27eb72d8a",
+          "created_at": "2026-05-07T02:46:22.259962147Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "review_block"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: missing-harness\"}",
+          "created_at": "2026-05-07T02:57:27.959981492Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T02:57:28.336187278Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T025728-4481ae09",
+    "prompt": ".ddx/executions/20260507T025728-4481ae09/prompt.md",
+    "manifest": ".ddx/executions/20260507T025728-4481ae09/manifest.json",
+    "result": ".ddx/executions/20260507T025728-4481ae09/result.json",
+    "checks": ".ddx/executions/20260507T025728-4481ae09/checks.json",
+    "usage": ".ddx/executions/20260507T025728-4481ae09/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6f73d300-20260507T025728-4481ae09"
+  },
+  "prompt_sha": "e801aa59812e91937103822a22a739624aab6b614565fff2884d79d8749571e2"
+}
