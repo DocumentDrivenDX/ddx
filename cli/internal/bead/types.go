@@ -192,13 +192,77 @@ const (
 	MaxPriority     = 4
 )
 
+// Extra field keys for the needs_human operator-attention lane.
+const (
+	ExtraNeedsHumanReason          = "needs-human-reason"
+	ExtraNeedsHumanSince           = "needs-human-since"
+	ExtraNeedsHumanSource          = "needs-human-source"
+	ExtraNeedsHumanSuggestedAction = "needs-human-suggested-action"
+	ExtraNeedsHumanSummary         = "needs-human-summary"
+)
+
+// NeedsHumanMeta holds the structured metadata attached to beads in the
+// needs_human operator-attention lane. All fields are optional strings stored
+// in Extra under the ExtraNeedsHuman* keys.
+type NeedsHumanMeta struct {
+	Reason          string
+	Since           string
+	Source          string
+	SuggestedAction string
+	Summary         string
+}
+
+// GetNeedsHumanMeta reads the five needs-human Extra keys from b and returns
+// them as a NeedsHumanMeta value. Missing or non-string keys return "".
+func GetNeedsHumanMeta(b Bead) NeedsHumanMeta {
+	if b.Extra == nil {
+		return NeedsHumanMeta{}
+	}
+	str := func(key string) string {
+		if v, ok := b.Extra[key].(string); ok {
+			return v
+		}
+		return ""
+	}
+	return NeedsHumanMeta{
+		Reason:          str(ExtraNeedsHumanReason),
+		Since:           str(ExtraNeedsHumanSince),
+		Source:          str(ExtraNeedsHumanSource),
+		SuggestedAction: str(ExtraNeedsHumanSuggestedAction),
+		Summary:         str(ExtraNeedsHumanSummary),
+	}
+}
+
+// SetNeedsHumanMeta writes the five needs-human Extra keys from m into b.
+// Empty string values delete the corresponding key so that cleared fields do
+// not linger in the persisted record.
+func SetNeedsHumanMeta(b *Bead, m NeedsHumanMeta) {
+	if b.Extra == nil {
+		b.Extra = make(map[string]any)
+	}
+	setOrDel := func(key, val string) {
+		if val != "" {
+			b.Extra[key] = val
+		} else {
+			delete(b.Extra, key)
+		}
+	}
+	setOrDel(ExtraNeedsHumanReason, m.Reason)
+	setOrDel(ExtraNeedsHumanSince, m.Since)
+	setOrDel(ExtraNeedsHumanSource, m.Source)
+	setOrDel(ExtraNeedsHumanSuggestedAction, m.SuggestedAction)
+	setOrDel(ExtraNeedsHumanSummary, m.Summary)
+}
+
 // StatusCounts holds aggregate counts for a bead store.
 type StatusCounts struct {
-	Open    int `json:"open"`
-	Closed  int `json:"closed"`
-	Blocked int `json:"blocked"`
-	Ready   int `json:"ready"`
-	Total   int `json:"total"`
+	Open        int `json:"open"`
+	Closed      int `json:"closed"`
+	Blocked     int `json:"blocked"`
+	Ready       int `json:"ready"`
+	Total       int `json:"total"`
+	NeedsHuman  int `json:"needs_human"`
+	WorkerReady int `json:"worker_ready"`
 }
 
 // Blocker kinds surfaced through BlockedAll. These strings are part of the
