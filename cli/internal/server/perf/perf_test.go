@@ -28,20 +28,27 @@ func TestGraphQLPerfMatrix_Baseline(t *testing.T) {
 	f := BuildBeadFixture(t, spec)
 	report := RunMatrix(t, f, DefaultIterations)
 
+	// Race detector overhead (5-10x sync cost) invalidates microbenchmark
+	// percentile budgets. Under -race we still want the matrix to run and
+	// log the measurements, but the strict p95 gates are skipped — they are
+	// meaningful only in non-race builds. Lefthook's full-tests runs `go
+	// test -race -cover ./...`, which would otherwise gate pushes on a
+	// detector artefact rather than a real regression.
+	enforceBudgets := !raceEnabled
 	for _, r := range report.Targets {
 		switch r.Name {
 		case "bead":
-			if r.InProcess.P95 > 50 {
+			if enforceBudgets && r.InProcess.P95 > 50 {
 				t.Errorf("bead(id:) in-process p95=%.2fms > 50ms budget", r.InProcess.P95)
 			}
-			if r.HTTP != nil && r.HTTP.P95 > 200 {
+			if enforceBudgets && r.HTTP != nil && r.HTTP.P95 > 200 {
 				t.Errorf("bead(id:) HTTP p95=%.2fms > 200ms budget", r.HTTP.P95)
 			}
 		case "beadsByProject":
-			if r.InProcess.P95 > 75 {
+			if enforceBudgets && r.InProcess.P95 > 75 {
 				t.Errorf("beadsByProject in-process p95=%.2fms > 75ms budget", r.InProcess.P95)
 			}
-			if r.HTTP != nil && r.HTTP.P95 > 250 {
+			if enforceBudgets && r.HTTP != nil && r.HTTP.P95 > 250 {
 				t.Errorf("beadsByProject HTTP p95=%.2fms > 250ms budget", r.HTTP.P95)
 			}
 		}
