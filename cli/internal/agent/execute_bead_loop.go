@@ -100,13 +100,6 @@ const LandConflictCooldown = 15 * time.Minute
 // worker.
 const StoreErrorCooldown = 5 * time.Minute
 
-// PreClaimIntakeCooldown is the short retry pause applied when the
-// model-backed readiness/intake hook itself fails. This is infrastructure
-// noise, not an implementer attempt, so the loop must not claim the bead; the
-// pause prevents multiple workers from hammering the same broken pre-claim
-// path.
-const PreClaimIntakeCooldown = 5 * time.Minute
-
 // ProviderUnavailableCooldown is the retry pause for route/provider outages
 // where no configured tier can currently run the bead. This is transient
 // scheduler state, not bead quality evidence, so it must not become a durable
@@ -696,20 +689,18 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			switch {
 			case intakeErr != nil:
 				warning := intakeErr.Error()
-				retryAfter := now().UTC().Add(PreClaimIntakeCooldown)
-				if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, string(PreClaimIntakeError), warning); err != nil {
-					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
-					})
-				}
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake: %v (skipping %s)\n", intakeErr, candidate.ID)
 				}
 				emit("pre_claim_intake.blocked", map[string]any{
-					"bead_id":     candidate.ID,
-					"outcome":     string(PreClaimIntakeError),
-					"detail":      warning,
-					"retry_after": retryAfter.Format(time.RFC3339),
+					"bead_id": candidate.ID,
+					"outcome": string(PreClaimIntakeError),
+					"detail":  warning,
+				})
+				result.Results = append(result.Results, ExecuteBeadReport{
+					BeadID: candidate.ID,
+					Status: string(PreClaimIntakeError),
+					Detail: warning,
 				})
 				if runtime.Once {
 					exitReason = "once_complete"
@@ -739,20 +730,18 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				if warning == "" {
 					warning = "pre-claim intake returned intake_error"
 				}
-				retryAfter := now().UTC().Add(PreClaimIntakeCooldown)
-				if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, string(PreClaimIntakeError), warning); err != nil {
-					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-						return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
-					})
-				}
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake: %s (skipping %s)\n", warning, candidate.ID)
 				}
 				emit("pre_claim_intake.blocked", map[string]any{
-					"bead_id":     candidate.ID,
-					"outcome":     string(PreClaimIntakeError),
-					"detail":      warning,
-					"retry_after": retryAfter.Format(time.RFC3339),
+					"bead_id": candidate.ID,
+					"outcome": string(PreClaimIntakeError),
+					"detail":  warning,
+				})
+				result.Results = append(result.Results, ExecuteBeadReport{
+					BeadID: candidate.ID,
+					Status: string(PreClaimIntakeError),
+					Detail: warning,
 				})
 				if runtime.Once {
 					exitReason = "once_complete"

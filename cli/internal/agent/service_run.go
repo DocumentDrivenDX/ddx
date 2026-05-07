@@ -170,6 +170,11 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		model = pt.Model
 	}
 
+	profile := runtime.ProfileOverride
+	if profile == "" {
+		profile = rcfg.Profile()
+	}
+
 	permissions := runtime.PermissionsOverride
 	if permissions == "" {
 		permissions = rcfg.Permissions()
@@ -189,7 +194,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	req := agentlib.ServiceExecuteRequest{
 		Prompt:          promptText,
 		Model:           model,
-		Profile:         rcfg.Profile(),
+		Profile:         profile,
 		Provider:        pt.Provider,
 		Harness:         harness,
 		ModelRef:        rcfg.ModelRef(),

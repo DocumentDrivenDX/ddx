@@ -91,12 +91,16 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 			}, nil
 		}
 
-		result, err := dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, AgentRunRuntime{
-			Prompt:           prompt,
-			WorkDir:          projectRoot,
-			PromptSource:     PreClaimIntakePromptSource,
-			MinPowerOverride: strongMinPower,
-		})
+		runtime := AgentRunRuntime{
+			Prompt:          prompt,
+			WorkDir:         projectRoot,
+			PromptSource:    PreClaimIntakePromptSource,
+			ProfileOverride: "smart",
+		}
+		if strongMinPower > 0 {
+			runtime.MinPowerOverride = strongMinPower
+		}
+		result, err := dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, runtime)
 		if err != nil {
 			if isStrongPowerUnsatisfiedError(err) {
 				return PreClaimIntakeResult{
@@ -239,25 +243,20 @@ func normalizePreClaimIntakeRewriteFields(fields []string) []string {
 	return out
 }
 
-const defaultStrongSplitterMinPower = 90
-
 func resolveStrongSplitterMinPower(ctx context.Context, projectRoot string, svc agentlib.FizeauService) int {
 	if svc == nil {
-		return defaultStrongSplitterMinPower
+		return 0
 	}
 
 	models, err := svc.ListModels(ctx, agentlib.ModelFilter{})
 	if err != nil {
-		return defaultStrongSplitterMinPower
+		return 0
 	}
 	maxPower := 0
 	for _, m := range models {
 		if m.Power > maxPower {
 			maxPower = m.Power
 		}
-	}
-	if maxPower <= 0 {
-		return defaultStrongSplitterMinPower
 	}
 	return maxPower
 }

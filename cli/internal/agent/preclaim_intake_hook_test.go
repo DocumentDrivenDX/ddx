@@ -156,7 +156,25 @@ func TestDecompositionHook_UsesStrongMinPower(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 	assert.Contains(t, svc.lastReq.Prompt, "MODE: intake")
 	assert.Equal(t, root, svc.lastReq.WorkDir)
+	assert.Equal(t, "smart", svc.lastReq.Profile)
 	assert.GreaterOrEqual(t, svc.lastReq.MinPower, 94)
+}
+
+func TestDecompositionHook_CatalogUnavailableUsesSmartProfileWithoutMagicPower(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"classification":"atomic","confidence":0.99,"reasoning":"single-slice"}`,
+	}
+
+	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+	got, err := hook(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
+	assert.Equal(t, "smart", svc.lastReq.Profile)
+	assert.Zero(t, svc.lastReq.MinPower)
 }
 
 func TestDecompositionHook_PreservesPassthroughConstraints(t *testing.T) {
@@ -184,6 +202,7 @@ func TestDecompositionHook_PreservesPassthroughConstraints(t *testing.T) {
 	assert.Equal(t, "claude", svc.lastReq.Harness)
 	assert.Equal(t, "anthropic", svc.lastReq.Provider)
 	assert.Equal(t, "claude-sonnet-4-6", svc.lastReq.Model)
+	assert.Equal(t, "smart", svc.lastReq.Profile)
 	assert.GreaterOrEqual(t, svc.lastReq.MinPower, 96)
 }
 

@@ -186,7 +186,7 @@ func TestIntake_NonAtomicSkipsClaim(t *testing.T) {
 	assert.Equal(t, bead.StatusOpen, got.Status)
 }
 
-func TestIntake_ErrorSkipsClaimAndParksCandidate(t *testing.T) {
+func TestIntake_ErrorSkipsClaimWithoutParkingCandidate(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	store := &claimCountingStore{Store: inner}
 	now := time.Date(2026, 5, 7, 4, 30, 0, 0, time.UTC)
@@ -224,9 +224,13 @@ func TestIntake_ErrorSkipsClaimAndParksCandidate(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)
-	assert.Equal(t, string(PreClaimIntakeError), got.Extra["execute-loop-last-status"])
-	assert.Equal(t, "pre-claim intake: empty output", got.Extra["execute-loop-last-detail"])
-	assert.Equal(t, now.Add(PreClaimIntakeCooldown).Format(time.RFC3339), got.Extra["execute-loop-retry-after"])
+	assert.NotContains(t, got.Extra, "execute-loop-last-status")
+	assert.NotContains(t, got.Extra, "execute-loop-last-detail")
+	assert.NotContains(t, got.Extra, "execute-loop-retry-after")
+	require.Len(t, result.Results, 1)
+	assert.Equal(t, candidate.ID, result.Results[0].BeadID)
+	assert.Equal(t, string(PreClaimIntakeError), result.Results[0].Status)
+	assert.Equal(t, "pre-claim intake: empty output", result.Results[0].Detail)
 }
 
 func TestIntake_ActionableButRewritten_UpdatesBeforeClaim(t *testing.T) {

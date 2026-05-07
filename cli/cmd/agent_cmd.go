@@ -1627,6 +1627,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		Profile:           profile,
 		Effort:            effort,
 		MinPower:          minPower,
+		MaxPower:          maxPower,
 		OpaquePassthrough: treatPassthroughAsOpaque,
 	}
 	rcfg, err := config.LoadAndResolve(projectRoot, overrides)

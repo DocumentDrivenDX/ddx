@@ -265,6 +265,7 @@ func TestDDxWork_WiresPreClaimIntakeHook(t *testing.T) {
 
 	var mu sync.Mutex
 	modes := make([]string, 0, 4)
+	var intakeReq agentlib.ServiceExecuteRequest
 	stub := installExecuteCapturingStub(t)
 	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 		mode := "execute"
@@ -278,6 +279,9 @@ func TestDDxWork_WiresPreClaimIntakeHook(t *testing.T) {
 		}
 		mu.Lock()
 		modes = append(modes, mode)
+		if mode == "intake" {
+			intakeReq = req
+		}
 		mu.Unlock()
 
 		switch mode {
@@ -306,13 +310,17 @@ func TestDDxWork_WiresPreClaimIntakeHook(t *testing.T) {
 
 	dir := setupWorkIntakeFixture(t)
 	root := NewCommandFactory(dir).NewRootCommand()
-	_, _ = executeCommand(root, "work", "--once")
+	_, _ = executeCommand(root, "work", "--once", "--max-power", "8")
 
 	mu.Lock()
 	got := append([]string(nil), modes...)
+	gotIntakeReq := intakeReq
 	mu.Unlock()
 	require.GreaterOrEqual(t, len(got), 1, "work must invoke the intake hook")
 	assert.Equal(t, "intake", got[0], "plain ddx work must run pre-claim intake before claim")
+	assert.Equal(t, "smart", gotIntakeReq.Profile)
+	assert.Zero(t, gotIntakeReq.MinPower)
+	assert.Equal(t, 8, gotIntakeReq.MaxPower)
 	assert.GreaterOrEqual(t, len(got), 2, "work must continue past intake to later execution stages")
 }
 
