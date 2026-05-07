@@ -33,8 +33,9 @@ package agent
 // A merge commit preserves both histories — the worker's original commit
 // (parent = BaseRev) and the target's prior tip — losslessly.
 //
-// The coordinator owning the goroutine provides the serialization guarantee,
-// so Land() itself does not take any locks.
+// The in-process coordinator serializes submissions inside one process. Land()
+// also takes the process-shared main-git lock so separate `ddx work` processes
+// cannot interleave target-ref updates, evidence commits, or checkout sync.
 
 import (
 	"bytes"
@@ -443,6 +444,47 @@ func syncWorkTreeToHeadGuarded(gitOps LandingGitOps, dir, fromRev string, dirtyB
 	_ = gitOps.SyncWorkTreeToHead(dir, fromRev)
 }
 
+func ensureLandingWorktreeReady(dir, targetBranch string) error {
+	if !isInsideGitWorktree(dir) {
+		return nil
+	}
+	branchOut, err := internalgit.Command(context.Background(), dir, "branch", "--show-current").CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("checking landing branch: %s: %w", strings.TrimSpace(string(branchOut)), err)
+	}
+	branch := strings.TrimSpace(string(branchOut))
+	if branch == "" {
+		return fmt.Errorf("landing worktree is detached; expected branch %q", targetBranch)
+	}
+	if targetBranch != "" && branch != targetBranch {
+		return fmt.Errorf("landing branch mismatch: on %q, want %q", branch, targetBranch)
+	}
+	return waitForEmptyGitIndex(dir, 2*time.Second)
+}
+
+func isInsideGitWorktree(dir string) bool {
+	out, err := internalgit.Command(context.Background(), dir, "rev-parse", "--is-inside-work-tree").CombinedOutput()
+	return err == nil && strings.TrimSpace(string(out)) == "true"
+}
+
+func waitForEmptyGitIndex(dir string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for {
+		if err := internalgit.Command(context.Background(), dir, "diff", "--cached", "--quiet").Run(); err == nil {
+			return nil
+		}
+		if time.Now().After(deadline) {
+			stagedOut, _ := internalgit.Command(context.Background(), dir, "diff", "--cached", "--name-status").CombinedOutput()
+			staged := strings.TrimSpace(string(stagedOut))
+			if staged == "" {
+				staged = "unknown staged changes"
+			}
+			return fmt.Errorf("landing worktree has staged changes after waiting %s:\n%s", timeout, staged)
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+}
+
 func checkoutSyncDirtyOverlapPaths(dir, fromRev string, dirtyPaths []string) ([]string, error) {
 	if fromRev == "" || len(dirtyPaths) == 0 {
 		return nil, nil
@@ -712,25 +754,28 @@ func landIterationRef(beadID, attemptID, tip string) string {
 // evidence directory into the target branch. Called after the main land (ff or
 // merge) succeeds and before the push. The evidence commit is a normal child of
 // result.NewTip — the agent's original commit SHA is not amended.
-//
-// Best-effort: only works when HEAD is a symbolic ref to targetBranch (the
-// normal case for server workers and CLI users). When HEAD is detached or
-// points elsewhere, the evidence commit is silently skipped.
-func landEvidence(wd, targetBranch string, req LandRequest, gitOps LandingGitOps, result *LandResult) {
+func landEvidence(wd, targetBranch string, req LandRequest, gitOps LandingGitOps, result *LandResult) error {
 	branch, err := gitOps.CurrentBranch(wd)
-	if err != nil || branch != targetBranch {
-		return
+	if err != nil {
+		return fmt.Errorf("evidence commit branch check: %w", err)
+	}
+	if branch != targetBranch {
+		return fmt.Errorf("evidence commit branch mismatch: on %q, want %q", branch, targetBranch)
 	}
 	if err := gitOps.StageDir(wd, req.EvidenceDir); err != nil {
-		return
+		return fmt.Errorf("stage evidence: %w", err)
 	}
 	msg := fmt.Sprintf("chore: add execution evidence [%s]", shortAttempt(req.AttemptID))
 	sha, err := gitOps.CommitStaged(wd, msg)
-	if err != nil || sha == "" {
-		return
+	if err != nil {
+		return fmt.Errorf("commit evidence: %w", err)
+	}
+	if sha == "" {
+		return fmt.Errorf("commit evidence: no staged evidence files under %s", req.EvidenceDir)
 	}
 	result.EvidenceCommitSHA = sha
 	result.NewTip = sha
+	return nil
 }
 
 func landingFinalizationWorktree(projectRoot, wd, targetBranch string, gitOps LandingGitOps) (string, func(), error) {
@@ -864,6 +909,16 @@ func sameFilesystemPath(a, b string) bool {
 // empty, projectRoot is used. Both usually refer to the same dir — the field
 // is kept for forward compatibility with multi-clone topologies.
 func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResult, error) {
+	var result *LandResult
+	err := withMainGitLock(projectRoot, func() error {
+		var landErr error
+		result, landErr = landLocked(projectRoot, req, gitOps)
+		return landErr
+	})
+	return result, err
+}
+
+func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResult, error) {
 	if gitOps == nil {
 		gitOps = RealLandingGitOps{}
 	}
@@ -890,6 +945,9 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 			return nil, fmt.Errorf("resolving target branch: %w", err)
 		}
 		targetBranch = br
+	}
+	if err := ensureLandingWorktreeReady(wd, targetBranch); err != nil {
+		return nil, err
 	}
 	targetRef := "refs/heads/" + targetBranch
 
@@ -948,10 +1006,10 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 			if err := copyEvidenceDirForLanding(projectRoot, finalWD, req.EvidenceDir); err != nil {
 				return nil, fmt.Errorf("copying evidence into landing worktree: %w", err)
 			}
-			landEvidence(finalWD, targetBranch, req, gitOps, result)
-			if result.EvidenceCommitSHA != "" {
-				cleanupProjectEvidenceCopy(projectRoot, req.EvidenceDir)
+			if err := landEvidence(finalWD, targetBranch, req, gitOps, result); err != nil {
+				return preserveAfterEvidenceFailure(finalWD, req, gitOps, targetRef, currentTip, result.NewTip, contribCount, nil, err)
 			}
+			cleanupProjectEvidenceCopy(projectRoot, req.EvidenceDir)
 		}
 		landPush(finalWD, targetBranch, result.NewTip, hasOrigin, gitOps, result)
 		if syncOperatorAfterLand {
@@ -1021,10 +1079,10 @@ func Land(projectRoot string, req LandRequest, gitOps LandingGitOps) (*LandResul
 		if err := copyEvidenceDirForLanding(projectRoot, finalWD, req.EvidenceDir); err != nil {
 			return nil, fmt.Errorf("copying evidence into landing worktree: %w", err)
 		}
-		landEvidence(finalWD, targetBranch, req, gitOps, result)
-		if result.EvidenceCommitSHA != "" {
-			cleanupProjectEvidenceCopy(projectRoot, req.EvidenceDir)
+		if err := landEvidence(finalWD, targetBranch, req, gitOps, result); err != nil {
+			return preserveAfterEvidenceFailure(finalWD, req, gitOps, targetRef, currentTip, result.NewTip, contribCount, nil, err)
 		}
+		cleanupProjectEvidenceCopy(projectRoot, req.EvidenceDir)
 	}
 	landPush(finalWD, targetBranch, result.NewTip, hasOrigin, gitOps, result)
 	if syncOperatorAfterLand {
@@ -1058,6 +1116,26 @@ func preserveIfPostLandGateFails(wd string, req LandRequest, gitOps LandingGitOp
 		Status:            "preserved",
 		PreserveRef:       preserveRef,
 		Reason:            reason,
+		MergedCommitCount: contribCount,
+	}
+	syncWorkTreeToHeadGuarded(gitOps, wd, landedTip, dirtyBefore, result)
+	return result, nil
+}
+
+func preserveAfterEvidenceFailure(wd string, req LandRequest, gitOps LandingGitOps, targetRef, preLandTip, landedTip string, contribCount int, dirtyBefore []string, evidenceErr error) (*LandResult, error) {
+	preserveRef := landIterationRef(req.BeadID, req.AttemptID, preLandTip)
+	if upErr := gitOps.UpdateRefTo(wd, preserveRef, req.ResultRev, ""); upErr != nil {
+		return nil, fmt.Errorf("preserving %s after evidence commit failure: %w", preserveRef, upErr)
+	}
+	if landedTip != "" {
+		if revertErr := gitOps.UpdateRefTo(wd, targetRef, preLandTip, landedTip); revertErr != nil {
+			return nil, fmt.Errorf("restoring %s to %s after evidence commit failed: %w", targetRef, preLandTip, revertErr)
+		}
+	}
+	result := &LandResult{
+		Status:            "preserved",
+		PreserveRef:       preserveRef,
+		Reason:            "evidence commit failed: " + evidenceErr.Error(),
 		MergedCommitCount: contribCount,
 	}
 	syncWorkTreeToHeadGuarded(gitOps, wd, landedTip, dirtyBefore, result)

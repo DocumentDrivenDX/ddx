@@ -108,6 +108,41 @@ func TestTrackerCommit_ConcurrentSafety(t *testing.T) {
 	}
 }
 
+func TestTrackerCommit_OnlyCommitsTrackerPath(t *testing.T) {
+	root := initTrackerRepo(t)
+	tracker := filepath.Join(root, ".ddx", "beads.jsonl")
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "operator.txt"), []byte("operator staged\n"), 0o644))
+	cmd := exec.Command("git", "add", "operator.txt")
+	cmd.Dir = root
+	cmd.Env = scrubbedGitEnvInteg()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("git add operator.txt: %v\n%s", err, out)
+	}
+
+	require.NoError(t, os.WriteFile(tracker, []byte(`{"id":"ddx-only-tracker"}`+"\n"), 0o644))
+	require.NoError(t, CommitTracker(root))
+
+	show := exec.Command("git", "show", "--name-only", "--format=", "HEAD")
+	show.Dir = root
+	show.Env = scrubbedGitEnvInteg()
+	out, err := show.CombinedOutput()
+	require.NoError(t, err, "git show HEAD: %s", out)
+	names := strings.Fields(string(out))
+	if len(names) != 1 || names[0] != ".ddx/beads.jsonl" {
+		t.Fatalf("tracker commit touched %v, want only .ddx/beads.jsonl", names)
+	}
+
+	cached := exec.Command("git", "diff", "--cached", "--name-only")
+	cached.Dir = root
+	cached.Env = scrubbedGitEnvInteg()
+	cachedOut, err := cached.CombinedOutput()
+	require.NoError(t, err, "git diff --cached --name-only: %s", cachedOut)
+	if strings.TrimSpace(string(cachedOut)) != "operator.txt" {
+		t.Fatalf("pre-staged operator file was not preserved in index: %q", string(cachedOut))
+	}
+}
+
 // TestTrackerCommit_StaleLockRecovery verifies that a stale lock left behind
 // by a crashed prior process (acquired_at older than trackerLockStaleAge,
 // pid pointing at a non-existent process) is forcibly broken so a later

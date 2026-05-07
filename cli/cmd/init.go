@@ -28,6 +28,8 @@ var initGitignoreRules = []string{
 	".ddx/*.tmp",
 	".ddx/server.env",
 	".ddx/server/",
+	".ddx/run-state.json",
+	".ddx/run-state/",
 	// DDx tracked evidence — explicitly un-ignored under executions/
 	"!.ddx/executions/",
 	"!.ddx/executions/*/",
