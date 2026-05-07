@@ -53,6 +53,135 @@ func TestReport_OutcomeReason_Persists_BesideDisrupted(t *testing.T) {
 	assert.Contains(t, event.Body, "predicted_cost_usd_per_1k_tokens=0.012345 source=catalog")
 }
 
+// TestStopCondition_NoProgress_IgnoresIntakeRoutingReviewAndOperatorStates
+// verifies that isValidImplementationAttempt and shouldSuppressNoProgress both
+// return false (no no-progress budget consumed) for every non-implementation
+// outcome class: intake block, decomposition, claim race, routing preflight,
+// quota, transport, auth/tool setup, review error, needs_human, and operator-
+// required states. These outcomes should not trigger the no-progress cooldown.
+func TestStopCondition_NoProgress_IgnoresIntakeRoutingReviewAndOperatorStates(t *testing.T) {
+	cases := []struct {
+		name   string
+		report ExecuteBeadReport
+	}{
+		{
+			name: "intake_block",
+			report: ExecuteBeadReport{
+				Status:        ExecuteBeadStatusExecutionFailed,
+				OutcomeReason: "intake_block",
+				BaseRev:       "abc123",
+				ResultRev:     "abc123",
+			},
+		},
+		{
+			name: "decomposition",
+			report: ExecuteBeadReport{
+				Status:    ExecuteBeadStatusDeclinedNeedsDecomposition,
+				BaseRev:   "abc123",
+				ResultRev: "abc123",
+			},
+		},
+		{
+			name: "claim_race",
+			report: ExecuteBeadReport{
+				Status:        ExecuteBeadStatusExecutionFailed,
+				OutcomeReason: "claim_race",
+				BaseRev:       "abc123",
+				ResultRev:     "abc123",
+			},
+		},
+		{
+			name: "routing_preflight",
+			report: ExecuteBeadReport{
+				Status:           ExecuteBeadStatusExecutionFailed,
+				OutcomeReason:    "preflight_failed",
+				Disrupted:        true,
+				DisruptionReason: "preflight_rejected",
+				BaseRev:          "abc123",
+				ResultRev:        "abc123",
+			},
+		},
+		{
+			name: "quota",
+			report: ExecuteBeadReport{
+				Status:        ExecuteBeadStatusExecutionFailed,
+				OutcomeReason: "quota",
+				BaseRev:       "abc123",
+				ResultRev:     "abc123",
+			},
+		},
+		{
+			name: "transport",
+			report: ExecuteBeadReport{
+				Status:        ExecuteBeadStatusExecutionFailed,
+				OutcomeReason: "transport",
+				BaseRev:       "abc123",
+				ResultRev:     "abc123",
+			},
+		},
+		{
+			name: "auth_tool_setup",
+			report: ExecuteBeadReport{
+				Status:        ExecuteBeadStatusExecutionFailed,
+				OutcomeReason: FailureModeAuthError,
+				BaseRev:       "abc123",
+				ResultRev:     "abc123",
+			},
+		},
+		{
+			name: "review_error",
+			report: ExecuteBeadReport{
+				Status:    ExecuteBeadStatusReviewMalfunction,
+				BaseRev:   "abc123",
+				ResultRev: "abc123",
+			},
+		},
+		{
+			name: "needs_human",
+			report: ExecuteBeadReport{
+				Status:        ExecuteBeadStatusExecutionFailed,
+				OutcomeReason: "needs_human",
+				BaseRev:       "abc123",
+				ResultRev:     "abc123",
+			},
+		},
+		{
+			name: "operator_required",
+			report: ExecuteBeadReport{
+				Status:    ExecuteBeadStatusLandConflictNeedsHuman,
+				BaseRev:   "abc123",
+				ResultRev: "abc123",
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.False(t, isValidImplementationAttempt(tc.report),
+				"isValidImplementationAttempt must return false for %s", tc.name)
+			assert.False(t, shouldSuppressNoProgress(tc.report),
+				"shouldSuppressNoProgress must return false for %s", tc.name)
+		})
+	}
+}
+
+// TestStopCondition_NoProgress_CountsRealImplementationNoCommit verifies that
+// a genuine implementation attempt that produced no commit (base_rev ==
+// result_rev, no system/operator classifier) is recognised as a valid
+// no-progress case: isValidImplementationAttempt returns true and
+// shouldSuppressNoProgress returns true so the no-progress cooldown fires.
+func TestStopCondition_NoProgress_CountsRealImplementationNoCommit(t *testing.T) {
+	report := ExecuteBeadReport{
+		BeadID:    "ddx-test",
+		Status:    ExecuteBeadStatusNoChanges,
+		BaseRev:   "feedface00112233",
+		ResultRev: "feedface00112233",
+	}
+	assert.True(t, isValidImplementationAttempt(report),
+		"isValidImplementationAttempt must return true for genuine implementation no-commit")
+	assert.True(t, shouldSuppressNoProgress(report),
+		"shouldSuppressNoProgress must return true for genuine implementation no-commit with same revisions")
+}
+
 func TestSuppressNoProgress_HonorsTransientReasons(t *testing.T) {
 	for _, reason := range []string{"transport", "quota", "routing", "timeout", "merge_conflict", FailureModeLockContention, FailureModeNoViableProvider} {
 		t.Run(reason, func(t *testing.T) {

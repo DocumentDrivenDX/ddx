@@ -1961,17 +1961,53 @@ func clearExecuteLoopNoChangesMetadata(store ExecuteBeadLoopStore, beadID string
 	})
 }
 
-func shouldSuppressNoProgress(report ExecuteBeadReport) bool {
+// isValidImplementationAttempt reports whether the given report came from a
+// real implementation attempt — one where the implementer had checkout context
+// established and a result that can be compared against the base revision for
+// no-progress accounting. Returns false for system failures, infrastructure
+// issues, intake/scheduling outcomes, review/operator-managed states, and
+// other non-implementation outcomes that should not consume the no-progress
+// retry budget or trigger long cooldowns.
+func isValidImplementationAttempt(report ExecuteBeadReport) bool {
 	if report.Disrupted {
-		// ddx-5b3e57f4: a worker-disrupted attempt is not evidence the model
-		// could not make progress. Skip the 6h no-progress cooldown so the
-		// bead is immediately re-claimable by the next worker.
 		return false
 	}
 	if isTransientOutcomeReason(report.OutcomeReason) {
 		return false
 	}
-	if report.BaseRev == "" || report.ResultRev == "" {
+	// Extended system-failure and non-implementation outcome reasons.
+	switch report.OutcomeReason {
+	case "preflight_failed",
+		"intake_block",
+		"claim_race",
+		FailureModeAuthError,
+		FailureModeHarnessNotInstalled,
+		FailureModeAgentPowerUnsatisfied,
+		FailureModeBlockedByPassthroughConstraint,
+		FailureModeNoEvidenceProduced,
+		"needs_human":
+		return false
+	}
+	// Operator/review status codes where the implementer did not run a full
+	// implementation pass.
+	switch report.Status {
+	case ExecuteBeadStatusReviewMalfunction,
+		ExecuteBeadStatusDeclinedNeedsDecomposition,
+		ExecuteBeadStatusLandConflictNeedsHuman:
+		return false
+	}
+	// Without a BaseRev the implementer never had a commit baseline.
+	if report.BaseRev == "" {
+		return false
+	}
+	return true
+}
+
+func shouldSuppressNoProgress(report ExecuteBeadReport) bool {
+	if !isValidImplementationAttempt(report) {
+		return false
+	}
+	if report.ResultRev == "" {
 		return false
 	}
 	return report.BaseRev == report.ResultRev
