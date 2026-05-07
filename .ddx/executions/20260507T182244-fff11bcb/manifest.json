@@ -1,0 +1,95 @@
+{
+  "attempt_id": "20260507T182244-fff11bcb",
+  "bead_id": "ddx-b1cf1f6b",
+  "base_rev": "b04f5f727ec1df2c80e2cb86614347155c77a0f5",
+  "created_at": "2026-05-07T18:22:47.131790224Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b1cf1f6b",
+    "title": "work: route cost-cap stops through StopCondition and audit consumers",
+    "description": "PROBLEM\nC9 requires budget/cost-cap stops to use the same durable stop policy as other drain exits. Today implementer cost and reviewer cost are accumulated in related but separate places, and the cost-cap stop is represented as a synthetic execution_failed report returned from the executor closure instead of a Budget StopCondition.\n\nROOT CAUSE WITH FILE:LINE\n- cli/cmd/agent_cmd.go:1659-1694 builds costCap, accumulateBilledCost, and costCapTripped as local closures in runAgentExecuteLoopImpl.\n- cli/cmd/agent_cmd.go:1789-1813 checks the cap inside the ExecuteBeadWorker executor closure and returns a fabricated ExecuteBeadReport when the cap is tripped.\n- cli/internal/agent/execute_bead_post_review.go:116-139 charges reviewer slot cost to ReviewCostCap and emits review-cost-deferred, but that path does not feed a first-class Budget stop decision before close eligibility.\n- cli/internal/agent/execute_bead_post_review.go:214-227 charges review cost immediately before the APPROVE close path, leaving no shared work-layer decision point between cost accumulation and CloseWithEvidence.\n\nPROPOSED FIX\n- Route max-cost decisions through the StopCondition Budget path introduced by ddx-89ab3fda.\n- Keep local and subscription provider exclusion behavior from cli/cmd/agent_cmd.go:1663-1681.\n- Charge implementer cost and reviewer group cost to the same budget accumulator before evaluating close eligibility.\n- If reviewer cost trips the cap before close, record the existing review-cost-deferred evidence and leave the bead open instead of closing through APPROVE.\n- Preserve the existing operator-facing max-cost message text unless tests intentionally update it.\n- Commit a downstream-consumer audit at .ddx/executions/\u003crun-id\u003e/cost-cap-consumers.md listing cost-cap/maximum-cost event and detail-string consumers found with rg.\n\nNON-SCOPE\n- Do not alter no-progress accounting.\n- Do not implement review repair cycles or MinPower repair escalation.\n- Do not change Fizeau pricing/model catalog behavior.\n\nDEPS\nDepends on ddx-89ab3fda so Budget is a typed StopCondition before cost-cap behavior is rewired.",
+    "acceptance": "1. Budget stops produced by --max-cost flow through the StopCondition Budget helper rather than being represented only as a synthetic executor failure report.\n2. Reviewer group cost is charged to the same budget accumulator before close eligibility; TestStopCondition_BudgetAfterReviewCostPreventsClose covers an APPROVE review whose reviewer cost trips the cap and proves CloseWithEvidence is not called.\n3. TestStopCondition_BudgetAfterImplementerCostStopsBeforeNextClaim covers implementer cost tripping the cap and proves the next bead is not claimed.\n4. Existing TestExecuteLoopCostCap_ShortCircuitsAfterCap and TestExecuteLoopCostCap_LocalProvidersDoNotCount still pass.\n5. The audit report .ddx/executions/\u003crun-id\u003e/cost-cap-consumers.md is committed and lists every rg hit for \"cost cap\", \"max-cost\", \"review-cost-deferred\", and \"execution_failed:max-cost\" under cli/, docs/, .agents/skills/, and .claude/skills/.\n6. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -run \"TestStopCondition_Budget|TestExecuteLoopCostCap|TestRunPostMergeReviewChargesReviewCost\" -count=1 passes.\n7. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... passes.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-5cb6e6cd",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "area:cost",
+      "area:work",
+      "kind:refactor",
+      "reliability",
+      "adr:024",
+      "spec:FEAT-010",
+      "split-from:ddx-9228a484"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T18:21:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3415517",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"All 8 rubric criteria pass. (1) Title is imperative and names subsystem + change. (2) Description contains PROBLEM, ROOT CAUSE with specific file:line references (agent_cmd.go:1659-1694, :1789-1813, execute_bead_post_review.go:116-139, :214-227), PROPOSED FIX, and NON-SCOPE. (3) AC is numbered and verifiable; items 2, 3, 4 name specific Test* functions; item 6 includes a -run filter; items 7 and 8 are the required `cd cli \\u0026\\u0026 go test` and `lefthook run pre-commit` gate lines. (4) Labels include phase:2, area:agent/cost/work, kind:refactor, adr:024, spec:FEAT-010. (5) Parent ddx-5cb6e6cd is explicit. (6) Dep ddx-89ab3fda is explicit with a rationale sentence in DEPS section. (7) No /tmp paths; evidence file targets .ddx/executions/\\u003crun-id\\u003e/ per convention. (8) Cold-read self-test passes: file paths, line numbers, and test names give a sub-agent a clear starting point with no operator hand-curation required.\",\"score\":8,\"suggested_fixes\":[],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T17:57:18.282834117Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=8"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260507T175720-d57edc41\",\"bead_id\":\"ddx-b1cf1f6b\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-07T18:16:42.108707774Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard model=sonnet harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"base_rev\":\"a7aee500e8996c00cc48b4fe961033fb84e30d98\",\"classification\":\"transport\",\"detail\":\"git rev-parse HEAD: chdir /var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-b1cf1f6b-20260507T175720-d57edc41: no such file or directory: failed to read worktree HEAD: git rev-parse HEAD: chdir /var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-b1cf1f6b-20260507T175720-d57edc41: no such file or directory\",\"rationale\":\"The worktree directory /var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-b1cf1f6b-20260507T175720-d57edc41 did not exist when the post-execution HEAD read was attempted. result_rev equals base_rev, confirming no commits landed. The $4.10 spend and 19-minute duration suggest the agent ran but the worktree was evicted (tmpfs purge, OS reboot, or OOM sweep) before the merge phase could read HEAD. This is an infrastructure/transport failure unrelated to bead correctness or test failures.\",\"recommended_action\":\"retry\",\"result_rev\":\"a7aee500e8996c00cc48b4fe961033fb84e30d98\",\"session_id\":\"eb-0cfd622c\",\"status\":\"execution_failed\",\"suggested_amendments\":\"none\",\"suggested_followup_beads\":[]}",
+          "created_at": "2026-05-07T18:16:53.930547882Z",
+          "kind": "bead-quality.triage",
+          "source": "ddx agent execute-loop",
+          "summary": "transport: retry"
+        },
+        {
+          "actor": "erik",
+          "body": "git rev-parse HEAD: chdir /var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-b1cf1f6b-20260507T175720-d57edc41: no such file or directory: failed to read worktree HEAD: git rev-parse HEAD: chdir /var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-b1cf1f6b-20260507T175720-d57edc41: no such file or directory\nresult_rev=a7aee500e8996c00cc48b4fe961033fb84e30d98\nbase_rev=a7aee500e8996c00cc48b4fe961033fb84e30d98\noutcome_reason=transport",
+          "created_at": "2026-05-07T18:16:53.99974789Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"All 8 rubric criteria pass. (1) Title is imperative and names subsystems (agent/cost/work) plus the change. (2) Description has PROBLEM, ROOT CAUSE with four specific file:line citations, PROPOSED FIX with actionable steps, and a clear NON-SCOPE block. (3) AC is numbered 1-8; AC2 and AC3 name new TestStopCondition_* functions, AC4 names two existing TestExecuteLoopCostCap_* tests, AC6 supplies a precise -run filter, AC7 is the full suite gate, AC8 is the lefthook gate — both required terminal lines are present. (4) Labels carry phase:2, area:*, kind:refactor, and cross-refs adr:024, spec:FEAT-010, split-from:ddx-9228a484. (5) Parent ddx-5cb6e6cd and dep ddx-89ab3fda are explicit, with a prose rationale for the dep. (6) No /tmp or out-of-repo paths; evidence target is .ddx/executions/\\u003crun-id\\u003e/cost-cap-consumers.md. (7) Root cause section has four file:line anchors covering both cmd and internal/agent. (8) AC2 and AC3 wire new assertions directly to named Test* functions, providing a verifiable gate for the new behavior.\",\"score\":8,\"suggested_fixes\":[],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T18:22:42.803699177Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=8"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T18:21:58.964952464Z",
+      "spec-id": "FEAT-010",
+      "split-from": "ddx-9228a484"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T182244-fff11bcb",
+    "prompt": ".ddx/executions/20260507T182244-fff11bcb/prompt.md",
+    "manifest": ".ddx/executions/20260507T182244-fff11bcb/manifest.json",
+    "result": ".ddx/executions/20260507T182244-fff11bcb/result.json",
+    "checks": ".ddx/executions/20260507T182244-fff11bcb/checks.json",
+    "usage": ".ddx/executions/20260507T182244-fff11bcb/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-b1cf1f6b-20260507T182244-fff11bcb"
+  },
+  "prompt_sha": "ccb7da910462aa784976044350499582c16014ac9a053f00f5cef2033562f3de"
+}
