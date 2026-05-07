@@ -1730,29 +1730,11 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			return agent.ExecuteBeadReport{}, execErr
 		}
 		if res != nil && agent.IsResourceExhaustedStatus(res.Status) {
-			return agent.ExecuteBeadReport{
-				BeadID:                      res.BeadID,
-				AttemptID:                   res.AttemptID,
-				WorkerID:                    res.WorkerID,
-				Harness:                     res.Harness,
-				Provider:                    res.Provider,
-				Model:                       res.Model,
-				ActualPower:                 res.ActualPower,
-				PredictedPower:              res.PredictedPower,
-				PredictedSpeedTPS:           res.PredictedSpeedTPS,
-				PredictedCostUSDPer1kTokens: res.PredictedCostUSDPer1kTokens,
-				PredictedCostSource:         res.PredictedCostSource,
-				Status:                      res.Status,
-				Detail:                      res.Detail,
-				SessionID:                   res.SessionID,
-				BaseRev:                     res.BaseRev,
-				ResultRev:                   res.ResultRev,
-				PreserveRef:                 res.PreserveRef,
-				NoChangesRationale:          res.NoChangesRationale,
-				CostUSD:                     res.CostUSD,
-				DurationMS:                  int64(res.DurationMS),
-				ResourceExhausted:           res.ResourceExhausted,
-			}, nil
+			return agent.ReportFromExecuteBeadResult(res, ""), nil
+		}
+		if execErr != nil {
+			agent.MarkResultExecutionError(res, execErr)
+			return agent.ReportFromExecuteBeadResult(res, ""), nil
 		}
 		if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
 			targetBead, _ := store.Get(beadID)
@@ -1765,8 +1747,9 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			)
 			if landErr == nil {
 				agent.ApplyLandResultToExecuteBeadResult(res, landRes)
-			} else if execErr == nil {
-				execErr = landErr
+			} else {
+				agent.MarkResultLandError(projectRoot, res, landErr)
+				return agent.ReportFromExecuteBeadResult(res, ""), nil
 			}
 		} else if res != nil && res.ResultRev == res.BaseRev {
 			res.Outcome = "no-changes"
@@ -1775,31 +1758,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			res.Outcome = "preserved"
 			res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
 		}
-		if execErr != nil {
-			return agent.ExecuteBeadReport{}, execErr
-		}
-		return agent.ExecuteBeadReport{
-			BeadID:                      res.BeadID,
-			AttemptID:                   res.AttemptID,
-			WorkerID:                    res.WorkerID,
-			Harness:                     res.Harness,
-			Provider:                    res.Provider,
-			Model:                       res.Model,
-			ActualPower:                 res.ActualPower,
-			PredictedPower:              res.PredictedPower,
-			PredictedSpeedTPS:           res.PredictedSpeedTPS,
-			PredictedCostUSDPer1kTokens: res.PredictedCostUSDPer1kTokens,
-			PredictedCostSource:         res.PredictedCostSource,
-			Status:                      res.Status,
-			Detail:                      res.Detail,
-			SessionID:                   res.SessionID,
-			BaseRev:                     res.BaseRev,
-			ResultRev:                   res.ResultRev,
-			PreserveRef:                 res.PreserveRef,
-			NoChangesRationale:          res.NoChangesRationale,
-			CostUSD:                     res.CostUSD,
-			DurationMS:                  int64(res.DurationMS),
-		}, nil
+		return agent.ReportFromExecuteBeadResult(res, ""), nil
 	}
 
 	var ladderOnce sync.Once

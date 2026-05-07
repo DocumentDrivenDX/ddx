@@ -256,6 +256,13 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 			if execErr != nil && res == nil {
 				return agent.ExecuteBeadReport{}, execErr
 			}
+			if res != nil && agent.IsResourceExhaustedStatus(res.Status) {
+				return agent.ReportFromExecuteBeadResult(res, string(inferredTier)), nil
+			}
+			if execErr != nil {
+				agent.MarkResultExecutionError(res, execErr)
+				return agent.ReportFromExecuteBeadResult(res, string(inferredTier)), nil
+			}
 			if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
 				targetBead, _ := store.Get(execBeadID)
 				landRes, _, landErr := agent.SubmitWithPreMergeChecks(
@@ -267,8 +274,9 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				)
 				if landErr == nil {
 					agent.ApplyLandResultToExecuteBeadResult(res, landRes)
-				} else if execErr == nil {
-					execErr = landErr
+				} else {
+					agent.MarkResultLandError(projectRoot, res, landErr)
+					return agent.ReportFromExecuteBeadResult(res, string(inferredTier)), nil
 				}
 			} else if res != nil && res.ResultRev == res.BaseRev {
 				res.Outcome = "no-changes"
@@ -277,32 +285,11 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				res.Outcome = "preserved"
 				res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
 			}
-			if execErr != nil {
-				return agent.ExecuteBeadReport{}, execErr
-			}
 			tierStr := ""
 			if inferredTier != "" {
 				tierStr = string(inferredTier)
 			}
-			return agent.ExecuteBeadReport{
-				BeadID:             res.BeadID,
-				AttemptID:          res.AttemptID,
-				WorkerID:           res.WorkerID,
-				Harness:            res.Harness,
-				Provider:           res.Provider,
-				Model:              res.Model,
-				ActualPower:        res.ActualPower,
-				Tier:               tierStr,
-				Status:             res.Status,
-				Detail:             res.Detail,
-				SessionID:          res.SessionID,
-				BaseRev:            res.BaseRev,
-				ResultRev:          res.ResultRev,
-				PreserveRef:        res.PreserveRef,
-				NoChangesRationale: res.NoChangesRationale,
-				CostUSD:            res.CostUSD,
-				DurationMS:         int64(res.DurationMS),
-			}, nil
+			return agent.ReportFromExecuteBeadResult(res, tierStr), nil
 		})
 	}
 

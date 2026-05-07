@@ -321,6 +321,9 @@ func (RealLandingGitOps) ResolveRef(dir, ref string) (string, error) {
 }
 
 func (RealLandingGitOps) UpdateRefTo(dir, ref, sha, oldSHA string) error {
+	if ref == "HEAD" {
+		return fmt.Errorf("refusing to update HEAD directly; landing must target a concrete ref")
+	}
 	args := []string{"update-ref", ref, sha}
 	if oldSHA != "" {
 		args = append(args, oldSHA)
