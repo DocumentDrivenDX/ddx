@@ -87,10 +87,10 @@ func TestIntake_InfrastructureErrorFailsOpen(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "intake_error must fail open to Claim")
-	assert.Equal(t, 1, result.Attempts)
-	assert.Equal(t, 1, result.Successes)
-	assert.Contains(t, eventSink.String(), "pre_claim_intake.warn")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&store.claimCalls), "intake_error must not claim")
+	assert.Equal(t, 0, result.Attempts)
+	assert.Equal(t, 0, result.Successes)
+	assert.Contains(t, eventSink.String(), "pre_claim_intake.blocked")
 	assert.Contains(t, eventSink.String(), "intake_error")
 	assert.Contains(t, eventSink.String(), "intake service unavailable")
 }

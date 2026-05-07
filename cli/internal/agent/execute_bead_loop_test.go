@@ -1093,19 +1093,18 @@ func TestExecuteBeadWorkerCustomSatisfactionCheckerLeavesBeadOpenWhenUnresolved(
 	assert.NotContains(t, got.Extra, "execute-loop-retry-after")
 }
 
-// TestExecuteBeadWorkerNoChangesDoesNotStarveQueue verifies that a bead with
-// repeated no_changes results cannot prevent other ready beads from being
-// executed across multiple queue passes. Under NoChangesContract the
-// no-changes bead stays open across passes (no count-based close); other
-// beads run unblocked.
+// TestExecuteBeadWorkerNoChangesDoesNotStarveQueue verifies that a bead with a
+// bad no_changes result cannot prevent other ready beads from being executed in
+// the current queue pass. After the first bad attempt, the unjustified triage
+// label removes the bead from future execution-ready scans.
 func TestExecuteBeadWorkerNoChangesDoesNotStarveQueue(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
-	// Three beads: one that always returns no_changes (no cooldown), two that succeed.
-	// Not supplying BaseRev/ResultRev means shouldSuppressNoProgress returns false,
-	// so no retry-after is written and the bead stays immediately retryable between
-	// passes. This keeps the test deterministic without mocking time.
+	// Three beads: one that returns no_changes, two that succeed. Not supplying
+	// BaseRev/ResultRev means shouldSuppressNoProgress returns false, so no
+	// retry-after is written; the triage label is what removes it from future
+	// execution-ready scans.
 	ncBead := &bead.Bead{ID: "ddx-nc10", Title: "Always no-changes", Priority: 0}
 	work1 := &bead.Bead{ID: "ddx-wk11", Title: "Work bead 1", Priority: 1}
 	work2 := &bead.Bead{ID: "ddx-wk12", Title: "Work bead 2", Priority: 2}
@@ -1166,13 +1165,13 @@ func TestExecuteBeadWorkerNoChangesDoesNotStarveQueue(t *testing.T) {
 	assert.Equal(t, bead.StatusClosed, w2.Status)
 	assert.Equal(t, bead.StatusOpen, nc.Status, "ncBead must stay open after first no_changes")
 
-	// Pass 2: only ncBead remains; under NoChangesContract there is no
-	// count-based close — the bead stays open with the unjustified label.
+	// Pass 2: only ncBead remains open, but the unjustified label keeps it out
+	// of ReadyExecution.
 	result2, err := worker.Run(context.Background(), rcfg, runtime)
 	require.NoError(t, err)
-	assert.Equal(t, 1, result2.Attempts)
+	assert.Equal(t, 0, result2.Attempts)
 	assert.Equal(t, 0, result2.Successes)
-	assert.Equal(t, 1, result2.Failures)
+	assert.Equal(t, 0, result2.Failures)
 
 	nc, _ = store.Get(ncBead.ID)
 	assert.Equal(t, bead.StatusOpen, nc.Status, "ncBead stays open under NoChangesContract")
@@ -1369,6 +1368,9 @@ func TestExecuteBeadWorkerNoChangesUnjustifiedKeepsOpenWithoutLongCooldown(t *te
 	assert.Contains(t, got.Labels, NoChangesLabelUnjustified)
 	_, hasRetry := got.Extra["execute-loop-retry-after"]
 	assert.False(t, hasRetry, "unjustified no_changes must not set execute-loop-retry-after by default")
+	ready, err := store.ReadyExecution()
+	require.NoError(t, err)
+	assert.Empty(t, ready, "unjustified no_changes must require triage before another worker can claim it")
 
 	events, err := store.Events(b.ID)
 	require.NoError(t, err)
