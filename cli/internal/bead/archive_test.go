@@ -3,6 +3,8 @@ package bead
 import (
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -247,44 +249,38 @@ func TestArchiveListWithArchiveIncludesBoth(t *testing.T) {
 func TestArchiveOpportunisticTriggerOnClose(t *testing.T) {
 	s, dir := archiveTestStore(t)
 	old := time.Now().UTC().Add(-60 * 24 * time.Hour)
-	// Seed two old closed beads and one open bead. The open bead will be
-	// closed via Store.Close(), which must opportunistically archive the
-	// already-eligible old ones (we lower MinActiveCount via a custom policy
-	// path: the default 2000 is too high to fire here, so we simulate the
-	// trigger by invoking Archive() with a 0 floor immediately after Close).
-	require.NoError(t, s.WriteAll([]Bead{
-		closedBeadAt("ddx-old1", "old1", old),
-		closedBeadAt("ddx-old2", "old2", old),
-		{
-			ID:        "ddx-target",
-			Title:     "to close",
-			Status:    StatusOpen,
-			Priority:  2,
-			IssueType: DefaultType,
-			CreatedAt: old,
-			UpdatedAt: old,
-		},
-	}))
+	padding := strings.Repeat("x", 4096)
+	beads := make([]Bead, 0, 1101)
+	for i := 0; i < 1100; i++ {
+		b := closedBeadAt("ddx-old-"+strconv.Itoa(i), "old", old)
+		b.Description = padding
+		beads = append(beads, b)
+	}
+	beads = append(beads, Bead{
+		ID:          "ddx-target",
+		Title:       "to close",
+		Status:      StatusOpen,
+		Priority:    2,
+		IssueType:   DefaultType,
+		CreatedAt:   old,
+		UpdatedAt:   old,
+		Description: padding,
+	})
+	require.NoError(t, s.WriteAll(beads))
+	info, err := os.Stat(filepath.Join(dir, "beads.jsonl"))
+	require.NoError(t, err)
+	require.Greater(t, info.Size(), DefaultArchiveSizeThreshold)
 
 	require.NoError(t, s.Close("ddx-target"))
-
-	// Force an archival pass with a 0 floor to confirm the wiring is
-	// correct end-to-end. (Default policy's 2000-record floor is the
-	// production guardrail, not something we exercise in unit tests.)
-	policy := DefaultArchivePolicy()
-	policy.MinActiveCount = 0
-	moved, err := s.Archive(policy)
-	require.NoError(t, err)
-	assert.ElementsMatch(t, []string{"ddx-old1", "ddx-old2"}, moved)
 
 	_, err = os.Stat(filepath.Join(dir, BeadsArchiveCollection+".jsonl"))
 	require.NoError(t, err)
 
-	// The just-closed bead should remain in the active collection because
-	// its closed_at is fresh.
 	active, err := s.ReadAll()
 	require.NoError(t, err)
-	require.Len(t, active, 1)
-	assert.Equal(t, "ddx-target", active[0].ID)
-	assert.Equal(t, StatusClosed, active[0].Status)
+	assert.Empty(t, active, "close-time maintenance should drain eligible closed rows once the active file crosses the size threshold")
+
+	target, err := s.GetWithArchive("ddx-target")
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, target.Status)
 }

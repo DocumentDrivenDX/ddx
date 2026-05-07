@@ -9,11 +9,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// DefaultArchiveSizeThreshold is the default size of .ddx/beads.jsonl above
-// which `ddx bead archive` will move closed beads into the archive partner.
-// Per ADR-004 step 4 the threshold is 4MB.
-const DefaultArchiveSizeThreshold int64 = 4 * 1024 * 1024
-
 func (f *CommandFactory) newBeadArchiveCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "archive",
@@ -21,7 +16,7 @@ func (f *CommandFactory) newBeadArchiveCommand() *cobra.Command {
 		Long: `Move closed beads from .ddx/beads.jsonl into .ddx/beads-archive.jsonl.
 
 By default this command archives closed beads only, and only when the active
-beads.jsonl is larger than ` + fmt.Sprintf("%d", DefaultArchiveSizeThreshold) + ` bytes (4MB). Each archived bead's inline
+beads.jsonl is larger than ` + fmt.Sprintf("%d", bead.DefaultArchiveSizeThreshold) + ` bytes (4MB). Each archived bead's inline
 events are externalized into its attachment sidecar at
 .ddx/attachments/<id>/events.jsonl.
 
@@ -37,7 +32,7 @@ duplicate that an interrupted run could leave behind.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
 
-			threshold := DefaultArchiveSizeThreshold
+			threshold := bead.DefaultArchiveSizeThreshold
 			if cmd.Flags().Changed("max-size") {
 				v, _ := cmd.Flags().GetInt64("max-size")
 				threshold = v
@@ -119,7 +114,7 @@ duplicate that an interrupted run could leave behind.`,
 			return nil
 		},
 	}
-	cmd.Flags().Int64("max-size", DefaultArchiveSizeThreshold, "Size threshold in bytes for active beads.jsonl; archive only runs when the file exceeds this (0 disables the gate)")
+	cmd.Flags().Int64("max-size", bead.DefaultArchiveSizeThreshold, "Size threshold in bytes for active beads.jsonl; archive only runs when the file exceeds this (0 disables the gate)")
 	cmd.Flags().Duration("older-than", 0, "Only archive closed beads whose last update is older than this duration (e.g. 720h)")
 	cmd.Flags().Int("max-count", 0, "Maximum number of beads to archive in this run (0 = unlimited)")
 	cmd.Flags().Bool("json", false, "Output as JSON")
