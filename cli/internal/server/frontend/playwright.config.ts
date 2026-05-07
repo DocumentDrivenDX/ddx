@@ -25,7 +25,8 @@ const bootCommand = [
 	`(cd "${FRONTEND_DIR}" && bun run build >&2)`,
 	`TMP=$(mktemp -d -t ddx-e2e-XXXXXX)`,
 	`cp -R "${FIXTURE_DIR}/." "$TMP/"`,
-	`(cd "${CLI_PKG_DIR}" && go build -o "$TMP/ddx" .)`,
+	// Build deterministically so VCS metadata does not block fixture boot.
+	`(cd "${CLI_PKG_DIR}" && go build -buildvcs=false -o "$TMP/ddx" .)`,
 	`cd "$TMP"`,
 	`DDX_OPERATOR_PROMPT_ALLOWLIST=localhost exec ./ddx server --tsnet=false --addr=127.0.0.1 --port=${PORT}`
 ].join(' && ');
