@@ -192,6 +192,8 @@ Review and triage events:
 
 - `review-block` — reviewer raised a BLOCKING finding
 - `review-pass` — reviewer cleared the change
+- `review-request-changes` — one or more reviewer slots returned a structured
+  `REQUEST_CHANGES` verdict; body carries the review group id and per-AC findings
 - `review-fixable-gap` — reviewer found an implementation/test gap that can be
   repaired by another automated cycle
 - `review-too-large` — reviewer or readiness found the bead/result too broad for a
@@ -204,6 +206,24 @@ Review and triage events:
 - `triage-overflow` — decomposition reached the depth cap
 - `triage-ambiguous` — readiness could not safely clarify the bead
 - `auto-triage` — TriageContract: triage path mutated labels/status
+
+Candidate-cycle events (FEAT-010 candidate-cycle pipeline):
+
+- `candidate-pinned` — layer 2 pinned a candidate ref for the current cycle's
+  `result_rev` before dispatching reviewers; body carries `candidate_ref`,
+  `cycle_index`, and `attempt_id`
+- `candidate-checks-failed` — post-run verification (tests, lint, gates) failed
+  against the candidate; body carries check command and exit status
+- `repair-cycle-started` — a repair cycle has been initiated in the still-live
+  worktree; body carries `cycle_index`, `repair_context_from_review_group`, and
+  `attempt_id`
+- `repair-cycle-exhausted` — `repair_max_cycles` was reached for this attempt;
+  bead moves to the `needs_human` lane
+- `approved-land-conflict` — the candidate received unanimous `APPROVE` but merge
+  to the base branch conflicted; bead is re-queued at its base revision without
+  blame on the implementer or reviewer
+- `final-result-landed` — the approved candidate has been merged to the base
+  branch; immediately precedes the `closed-merged` lifecycle event
 
 Each event SHOULD include `kind`, `actor`, `created_at`, and a free-form
 `body` (TD-004 schema). Drain events SHOULD additionally include the

@@ -317,6 +317,83 @@ prompt includes the prior review group's findings as required repair context.
 The prior cycle remains immutable so operators can answer what changed, why the
 first result was rejected, and why the final result passed.
 
+### Candidate-Cycle Pipeline
+
+A **candidate** is the stable commit produced by one implementation pass and
+pinned as the subject of the review gate before land. A candidate exists when
+the implementation produces at least one commit and post-run checks have been
+attempted.
+
+A **candidate ref** is a project-root git ref
+(`refs/ddx/iterations/<attempt-id>/<cycle-index>`) that pins the candidate
+commit so reviewers can inspect a stable revision even after worktree cleanup.
+
+A **cycle** is one implementation pass plus its associated review gate: one
+implementation pass that produces a candidate, the read-only tool reviewer gate
+run against that candidate in the still-live worktree, and the resulting
+disposition (land, repair, or stop).
+
+A **repair cycle** is a cycle triggered when the prior cycle's review verdict is
+`review_fixable_gap`. The repair implementation runs in the same still-live
+attempt worktree and is **append-only** — no `git reset`, `git commit --amend`,
+`git squash`, or `git rebase` against the prior candidate is permitted. The
+repair prompt includes the prior review group's findings as required context.
+
+A **read-only tool reviewer** is a reviewer agent that runs in the still-live
+attempt worktree with access to read-only filesystem tools (file reads,
+searches) but no write tools. The bounded evidence bundle assembled per FEAT-022
+is the canonical review input; same-worktree read-only tool access is
+supplemental and does not override the bounded bundle. The reviewer cannot
+create commits or modify worktree state.
+
+**Terminal dispositions** for a candidate-cycle attempt:
+- `landed` — candidate was approved and merged to the base branch.
+- `preserved` — candidate is approved but land was deferred; worktree retained.
+- `parked` — repair budget exhausted without approval; bead moved to `needs_human`.
+- `conflicted` — approved candidate failed to land due to merge conflict; bead
+  returned to `open` for re-attempt with a fresh `base_rev`.
+- `budget-stopped` — drain-level cost or no-progress budget tripped; worktree
+  preserved with evidence.
+
+**Candidate-cycle sequence** (in the still-live attempt worktree, before land):
+
+1. Create isolated worktree from `base_rev`.
+2. Run implementation pass; collect `base_rev`, `result_rev`, run ids,
+   verification output, and cost facts.
+3. Pin candidate ref; emit `candidate-pinned`.
+4. Run candidate checks (post-run tests, lint, gates). Failure emits
+   `candidate-checks-failed`; plausibly capability-sensitive failures are
+   eligible for a repair cycle when `repair_max_cycles` allows.
+5. Dispatch read-only tool reviewers in the still-live worktree, **before land**.
+   Record `review_group_id`, reviewer run ids, per-AC verdict, and cost.
+6. On unanimous `APPROVE`: land, emit `final-result-landed`, close bead, clean up.
+7. On `REQUEST_CHANGES` / `BLOCK` classified `review_fixable_gap` within
+   `repair_max_cycles`: emit `repair-cycle-started`, run append-only repair in
+   same worktree, return to step 3.
+8. On `repair_max_cycles` exhausted: emit `repair-cycle-exhausted`, preserve
+   worktree, park bead in `needs_human`.
+9. On approved candidate that fails to land (merge conflict): emit
+   `approved-land-conflict`, release claim, return bead to `open`.
+
+**Budget axes** (each is distinct from cost, rate-limit/provider, and
+no-progress budgets):
+
+- **`repair_max_cycles`** — maximum repair cycles per attempt. Exhaustion fires
+  `repair-cycle-exhausted` and parks the bead in `needs_human`; it does not
+  consume the no-progress counter.
+- **`review_max_retries_per_candidate`** — maximum reviewer retry attempts for a
+  single candidate ref when reviewer invocations fail. Exhaustion fires
+  `review-manual-required`. A new candidate ref (next repair cycle or fresh
+  `ddx try`) resets this counter independently; it is strictly per-candidate.
+
+These axes do not interact with the drain-level cost cap (FEAT-014), the
+rate-limit retry budget internal to a single attempt, or the no-progress counter
+tracking consecutive attempts with no commit.
+
+**Transitional single-slot allowance.** Until the two-slot quorum reviewer bead
+lands, a single reviewer slot satisfies the review gate. The removal condition
+is the landing of the bead that implements two-slot quorum aggregation.
+
 ### Escalation, fallback, retry, and review decision tree
 
 The layer-3 drain evaluates each ready bead through this mechanical sequence:
@@ -335,25 +412,28 @@ The layer-3 drain evaluates each ready bead through this mechanical sequence:
    no-changes may close only after the required verification evidence exists;
    otherwise no-changes outcomes follow TD-031.
 4. **Adversarial pre-close review.** Review is enabled by default. For every
-   close-eligible `result_rev`, layer 2 dispatches two no-tool reviewer runs
-   with `role=reviewer`, a stronger `MinPower` floor than the implementer, and
-   correlation metadata (`review_group_id`, `result_rev`, reviewer slot, and
-   implementer route facts). Close is permitted only when the aggregate review
-   is unanimous `APPROVE` with per-AC evidence.
+   close-eligible `result_rev`, layer 2 pins a candidate ref and dispatches two
+   read-only tool reviewer runs **in the still-live attempt worktree, before
+   land**, each carrying `role=reviewer`, a stronger `MinPower` floor than the
+   implementer, and correlation metadata (`review_group_id`, `result_rev`,
+   reviewer slot, and implementer route facts). The bounded evidence bundle is
+   the canonical review input; same-worktree read-only tool access is
+   supplemental. Close is permitted only when the aggregate review is unanimous
+   `APPROVE` with per-AC evidence.
 5. **Review classification.** Any evidenced `REQUEST_CHANGES` or `BLOCK`
    prevents close. `review_fixable_gap` schedules a repair cycle on the same
-   bead when retry budgets allow, injecting the review findings as required
-   repair context and optionally raising `MinPower`; it preserves the retry
-   path and does not park the bead in the `needs_human` lane. `review_spec_gap`,
-   `review_missing_acceptance`, `review_too_large`, and non-mechanical unsafe or
-   out-of-scope findings park the bead in the `needs_human` operator-attention
-   lane, clear the active claim, and do not ask another implementer to guess.
-   Malformed, empty, context-overflow, and transport reviewer failures emit
-   `review-error` scoped to `result_rev` and reviewer slot; after
-   `review_max_retries` they emit `review-manual-required`, clear the active
-   claim, park the bead in the `needs_human` lane, and do not close. The
-   `review_fixable_gap` path stays on the automatic retry track instead of
-   converting into operator review.
+   bead when `repair_max_cycles` allows, injecting the review findings as
+   required repair context and optionally raising `MinPower`; it preserves the
+   retry path and does not park the bead in the `needs_human` lane.
+   `review_spec_gap`, `review_missing_acceptance`, `review_too_large`, and
+   non-mechanical unsafe or out-of-scope findings park the bead in the
+   `needs_human` operator-attention lane, clear the active claim, and do not ask
+   another implementer to guess. Malformed, empty, context-overflow, and
+   transport reviewer failures emit `review-error` scoped to `result_rev` and
+   reviewer slot; after `review_max_retries_per_candidate` they emit
+   `review-manual-required`, clear the active claim, park the bead in the
+   `needs_human` lane, and do not close. The `review_fixable_gap` path stays on
+   the automatic retry track instead of converting into operator review.
 6. **Infrastructure fallback.** Transport, quota, rate-limit, command setup,
    context cancellation, routing preflight rejection, and worker disruption are
    not model-capability failures. They emit structured evidence and either stay

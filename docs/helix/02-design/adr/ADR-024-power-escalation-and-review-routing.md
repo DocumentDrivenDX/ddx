@@ -107,8 +107,16 @@ commit may already exist in git so the reviewer can inspect a stable
 `result_rev`; the bead is not closed until the review gate approves that result.
 
 The default gate dispatches two independent reviewer invocations. Each reviewer
-runs in TD-033 no-tool reviewer mode over the same bounded evidence bundle and
-must return a structured verdict with per-acceptance-criterion evidence.
+runs as a **read-only tool reviewer** in the still-live attempt worktree, before
+land. The bounded evidence bundle (candidate diff, acceptance criteria, governing
+artifacts) is the canonical review input; same-worktree read-only tool access
+(file reads, searches) is supplemental and does not override the bounded bundle.
+The reviewer cannot write files or create commits. Each reviewer must return a
+structured verdict with per-acceptance-criterion evidence.
+
+**Transitional single-slot allowance.** Until the two-slot quorum reviewer
+implementation lands, a single reviewer slot satisfies the gate. The removal
+condition is the landing of the bead that implements two-slot quorum aggregation.
 
 DDx requests a reviewer that is stronger than the implementer by using the
 implementer's actual power as evidence and setting reviewer `MinPower` to a
@@ -167,22 +175,27 @@ Non-approve reviewer findings are classified before the next action:
   repair is mechanical it follows `review_fixable_gap`; otherwise it parks in
   `needs_human`.
 
-Review errors retry the review path up to `review_max_retries` for the same
-`result_rev` and reviewer slot. On exhaustion, DDx emits
-`review-manual-required`, clears the active claim, parks the bead in
+Review errors retry the review path up to `review_max_retries_per_candidate` for
+the same candidate ref (`result_rev`) and reviewer slot. On exhaustion, DDx
+emits `review-manual-required`, clears the active claim, parks the bead in
 `needs_human`, and leaves it open for operator review without closing it. This
 terminal lane resolution is the same contract used by `review_spec_gap` and
 `review_missing_acceptance`: the bead remains open, carries the human-review
 context, and waits for an operator decision rather than another automatic
-implementation attempt. A new implementation result starts a new review-error
-retry scope, while `review_fixable_gap` continues through the normal repair
-retry path instead of entering the operator lane.
+implementation attempt. A new candidate ref (from a repair cycle or a fresh
+`ddx try`) resets this counter independently; it is strictly per-candidate. A
+new implementation result starts a new review-error retry scope, while
+`review_fixable_gap` continues through the normal repair retry path counted
+against `repair_max_cycles` instead of entering the operator lane.
 
-Each implementation/review cycle is append-only. A repair attempt creates a new
-cycle record linked to the prior review group (`repair_context_from_review_group`)
-and records its own `base_rev`, `result_rev`, implementer run ids, verification
-output, reviewer run ids, aggregate verdict, retry/decomposition/block decision,
-and cost summary. No cycle overwrites prior evidence.
+Each implementation/review cycle is append-only. Repair commits in the worktree
+are also append-only — no `git reset`, `git commit --amend`, `git squash`, or
+`git rebase` against the prior candidate is permitted in a repair cycle. A
+repair attempt creates a new cycle record linked to the prior review group
+(`repair_context_from_review_group`) and records its own `base_rev`,
+`result_rev`, implementer run ids, verification output, reviewer run ids,
+aggregate verdict, retry/decomposition/block decision, and cost summary. No
+cycle overwrites prior evidence.
 
 ### Cost Accounting
 
@@ -205,7 +218,7 @@ budget stop instead of disguising the stop as model failure.
   no-progress handling, adversarial review aggregation, review retry scopes, and
   budget stops.
 - FEAT-014 owns normalized usage, cost, cost-class, and freshness semantics.
-- FEAT-022 and TD-033 own review evidence assembly and no-tool reviewer mode.
+- FEAT-022 and TD-033 own review evidence assembly and read-only tool reviewer mode.
 - DDx routing lint should treat concrete route mutation in `run`, `try`, or
   `work` policy as a regression.
 

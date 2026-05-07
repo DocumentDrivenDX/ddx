@@ -113,6 +113,17 @@ byte accounting on every review and grading attempt.
      markers. Appropriate when the call must guarantee the agent saw
      specific evidence.
 
+2a. **Bounded evidence bundle is canonical; same-worktree access is
+    supplemental.** When the review gate runs in the still-live attempt
+    worktree (per the FEAT-010 candidate-cycle pipeline), the bounded evidence
+    bundle assembled by this feature remains the canonical and sufficient review
+    input. Read-only same-worktree tool access (file reads, directory searches)
+    is supplemental: it may provide additional context but does not substitute
+    for or override the bounded bundle. This invariant applies regardless of
+    whether the reviewer's working directory is the attempt worktree. The bounded
+    bundle alone must be sufficient for a verdict; any finding that requires
+    same-worktree access to reach is advisory, not a gate requirement.
+
 3. **Repo-wide invariant (no unbounded prompts).** No code path may produce
    a value that ends up as an agent-invocation prompt, as a text response
    from a server handler that carries library, execution, diff, session,
