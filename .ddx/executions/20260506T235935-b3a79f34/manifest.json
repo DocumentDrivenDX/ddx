@@ -1,0 +1,53 @@
+{
+  "attempt_id": "20260506T235935-b3a79f34",
+  "bead_id": "ddx-66c98cde",
+  "base_rev": "6e534706a15fb81596a7488710732a98ff73e169",
+  "created_at": "2026-05-06T23:59:37.806243024Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-66c98cde",
+    "title": "work: keep provider outages retryable instead of triage-parked",
+    "description": "PROBLEM\nA transient route/provider outage parked 23 open beads behind `triage:needs-investigation`. Their latest actionable event was `execute-bead summary=execution_failed` with detail/body `execute-loop: all tiers exhausted — no viable provider found`. Once routing recovered, these beads remained excluded from `ddx work` until an operator manually removed the triage label.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead_status.go:103-108 already classifies `no viable harness`, `no harness configured`, `failed to initialize routing service`, and `no viable provider` as FailureModeNoViableProvider.\n- cli/internal/agent/try/attempt.go:496-499 and cli/internal/agent/ratelimit_retry.go:137-142 explicitly exclude `no viable provider` from rate-limit retry handling, so this path does not get the bounded HTTP-429 retry treatment.\n- cli/internal/agent/execute_bead_loop.go:1191-1195 runs post-attempt triage for non-preserved execution failures and can then suppress progress with cooldown/triage metadata. In the observed queue, that produced durable `triage:needs-investigation` labels for transient provider outages.\n\nPROPOSED FIX\nHandle FailureModeNoViableProvider as a retryable transport outage, not a needs-investigation condition. A no-viable-provider attempt should unclaim the bead and either set a short retry cooldown or leave it retryable according to the existing retry policy, but it must not add or preserve `triage:needs-investigation` solely because routing was unavailable. `ddx work` diagnostics should distinguish provider outage from human-investigation blockers.\n\nIN-SCOPE FILES\n- cli/internal/agent/execute_bead_loop.go\n- cli/internal/agent/execute_bead_status.go\n- cli/internal/agent/execute_bead_loop_test.go\n- cli/internal/bead/reconcile.go and reconcile tests if stale labels need cleanup semantics\n\nNON-SCOPE\n- Do not treat quota exhaustion as HTTP 429 rate-limit retry; keep the current rate-limit contract boundary.\n- Do not remove `triage:needs-investigation` for genuine `status: needs_investigation` no_changes rationales.\n- Do not change Fizeau routing or model selection.",
+    "acceptance": "1. TestExecuteBeadWorker_NoViableProviderDoesNotAddNeedsInvestigation verifies an execution_failed report classified as FailureModeNoViableProvider leaves the bead open/retryable without `triage:needs-investigation`.\n2. TestExecuteBeadWorker_NoViableProviderUsesRetryableTransportPolicy verifies the bead is unclaimed and either has the intended short retry cooldown or is immediately retryable per the chosen policy; it must not be parked as human investigation.\n3. TestReconcile_NoViableProviderClearsStaleNeedsInvestigation verifies a bead whose latest event is no-viable-provider has stale `triage:needs-investigation` removed by reconcile/cleanup if that path owns cleanup.\n4. TestExecuteBeadWorker_NeedsInvestigationRationaleStillParks verifies genuine `status: needs_investigation` no_changes behavior is unchanged.\n5. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... -run \"TestExecuteBeadWorker_NoViableProvider|TestReconcile_NoViableProvider|TestExecuteBeadWorker_NeedsInvestigationRationaleStillParks\" -count=1 passes.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-f3dfde0d",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:routing",
+      "area:beads",
+      "kind:bug",
+      "reliability",
+      "prevention",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-06T23:42:19Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3635533",
+      "closing_commit_sha": "11fcb2259633adc8e50e7d1304591c26455a89c6",
+      "events_attachment": "ddx-66c98cde/events.jsonl",
+      "execute-loop-heartbeat-at": "2026-05-06T23:42:19.844925606Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260506T235935-b3a79f34",
+    "prompt": ".ddx/executions/20260506T235935-b3a79f34/prompt.md",
+    "manifest": ".ddx/executions/20260506T235935-b3a79f34/manifest.json",
+    "result": ".ddx/executions/20260506T235935-b3a79f34/result.json",
+    "checks": ".ddx/executions/20260506T235935-b3a79f34/checks.json",
+    "usage": ".ddx/executions/20260506T235935-b3a79f34/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-66c98cde-20260506T235935-b3a79f34"
+  },
+  "prompt_sha": "a72f05c02afa6fa0c6e417af1e3ede93d491caea794dc24577c099ed0703fd43"
+}
