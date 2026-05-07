@@ -51,13 +51,17 @@ type ExecuteBeadLoopRuntime struct {
 	// the model. Any non-nil error stops the worker before any bead is
 	// claimed; DDx does NOT duplicate the upstream allow-list.
 	RoutePreflight func(ctx context.Context, harness, model string) error
-	Once           bool
-	PollInterval   time.Duration
-	NoReview       bool
-	LabelFilter    string
-	SessionID      string
-	WorkerID       string
-	ProjectRoot    string
+	// BudgetStop, when non-nil, is checked before selecting the next bead. It
+	// lets CLI/server callers surface already-tripped budget state as a typed
+	// work-layer StopCondition before any new bead is claimed.
+	BudgetStop   func() (ExecuteBeadReport, bool)
+	Once         bool
+	PollInterval time.Duration
+	NoReview     bool
+	LabelFilter  string
+	SessionID    string
+	WorkerID     string
+	ProjectRoot  string
 	// TargetBeadID, when non-empty, restricts nextCandidate to only return the
 	// named bead from the execution-ready queue. Used by `ddx try <bead-id>`
 	// to dispatch a single specific bead through the same claim → executor →
@@ -502,11 +506,19 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	defer cleanupStop()
 	_, _, _ = runExecutionCleanupPass(ctx, runtime.ProjectRoot, runtime.CleanupRunner, cleanupLog, emit, "startup")
 	// exitReason is populated as the loop exits to surface a structured reason
-	// in the loop.end event (ddx-dc157075 AC #4). Recognized values: "sigterm",
-	// "sigint", "fatal_config", "preflight_failed", "once_complete",
-	// "explicit_poll_zero". The "providers_exhausted" slot is reserved for
-	// ddx-aede917d (quota pause).
+	// in the loop.end event (ddx-dc157075 AC #4). Work-owned terminal reasons
+	// are classified through work.StopCondition; fatal_config,
+	// preflight_failed, resource_exhausted, and future provider exhaustion are
+	// still subsystem-specific exits.
 	exitReason := ""
+	applyStop := func(input work.StopInput) bool {
+		decision, ok := work.ClassifyStop(input)
+		if !ok {
+			return false
+		}
+		exitReason = decision.ExitReason
+		return true
+	}
 	if runtime.RoutePreflight != nil {
 		if rerr := runtime.RoutePreflight(ctx, harness, model); rerr != nil {
 			detail := fmt.Sprintf("routing preflight rejected (harness=%s model=%s): %s",
@@ -555,16 +567,24 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		// bead as soon as the current Execute returned, ignoring the cancel.
 		if err := ctx.Err(); err != nil {
 			if exitReason == "" {
-				switch err {
-				case context.Canceled:
-					exitReason = "sigint"
-				case context.DeadlineExceeded:
-					exitReason = "sigterm"
-				default:
-					exitReason = "context_cancelled"
-				}
+				applyStop(work.StopInput{ContextErr: err})
 			}
 			return result, err
+		}
+		if runtime.BudgetStop != nil {
+			if budgetReport, stopped := runtime.BudgetStop(); stopped {
+				applyStop(work.StopInput{Budget: true})
+				if budgetReport.Status == "" {
+					budgetReport.Status = ExecuteBeadStatusExecutionFailed
+				}
+				if budgetReport.Detail != "" && runtime.Log != nil {
+					_, _ = fmt.Fprintln(runtime.Log, budgetReport.Detail)
+				}
+				result.Failures++
+				result.LastFailureStatus = budgetReport.Status
+				result.Results = append(result.Results, budgetReport)
+				return result, nil
+			}
 		}
 
 		candidate, skips, ok, err := w.nextCandidate(ctx, result.Results[resultsResetIdx:], []work.Guard{complexityGuard, preclaimGuard}, runtime.LabelFilter, runtime.TargetBeadID)
@@ -603,31 +623,18 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					}
 				}
 			}
-			if runtime.PollInterval <= 0 {
-				// Legacy "drain-and-exit" semantics: operator either passed
-				// --once (handled at end-of-iteration) or explicitly set
-				// --poll-interval=0. ddx-dc157075: with default --poll-interval
-				// flipped to 30s in CLI/server, this path now only fires for
-				// the explicit opt-out case.
-				if runtime.Once {
-					exitReason = "once_complete"
-				} else {
-					exitReason = "explicit_poll_zero"
-				}
+			if applyStop(work.StopInput{
+				NoReadyWork:  true,
+				Once:         runtime.Once,
+				PollInterval: runtime.PollInterval,
+			}) {
 				return result, nil
 			}
-			// --once with poll-interval > 0: an empty queue still means there
-			// is no work to pick, and --once explicitly asked for at-most-one.
-			// Returning here preserves the operator-visible "drain and stop"
-			// semantics of --once even when the long-running default applies.
-			if runtime.Once {
-				exitReason = "once_complete"
-				return result, nil
-			}
-			// Long-running drain (poll-interval > 0): emit a transient
-			// "no_ready_work" event so server-managed workers can surface this
-			// as an idle substate (ddx-dc157075 AC #5) instead of treating it
-			// as terminal.
+			// Long-running drain (poll-interval > 0): an empty queue is idle,
+			// not terminal. --once and explicit poll-zero exits are classified
+			// above through work.StopCondition. Emit a transient "no_ready_work"
+			// event so server-managed workers can surface this as an idle substate
+			// (ddx-dc157075 AC #5) instead of treating it as terminal.
 			emit("loop.idle", map[string]any{
 				"reason":        "no_ready_work",
 				"poll_interval": runtime.PollInterval.String(),
@@ -648,14 +655,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			resultsResetIdx = len(result.Results)
 			if err := sleepOrWake(ctx, runtime.PollInterval, runtime.WakeCh); err != nil {
 				if exitReason == "" {
-					switch err {
-					case context.Canceled:
-						exitReason = "sigint"
-					case context.DeadlineExceeded:
-						exitReason = "sigterm"
-					default:
-						exitReason = "context_cancelled"
-					}
+					applyStop(work.StopInput{ContextErr: err})
 				}
 				return result, err
 			}
@@ -764,7 +764,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					})
 					_ = w.Store.Unclaim(candidate.ID)
 					if runtime.Once {
-						exitReason = "once_complete"
+						applyStop(work.StopInput{Once: true})
 						return result, nil
 					}
 					continue
@@ -802,7 +802,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				_ = w.Store.Unclaim(candidate.ID)
 				if runtime.Once {
-					exitReason = "once_complete"
+					applyStop(work.StopInput{Once: true})
 					return result, nil
 				}
 				continue
@@ -844,7 +844,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				})
 				_ = w.Store.Unclaim(candidate.ID)
 				if runtime.Once {
-					exitReason = "once_complete"
+					applyStop(work.StopInput{Once: true})
 					return result, nil
 				}
 				continue
@@ -1353,7 +1353,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 
 		if runtime.Once {
-			exitReason = "once_complete"
+			applyStop(work.StopInput{Once: true})
 			return result, nil
 		}
 	}

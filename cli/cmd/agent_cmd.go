@@ -1787,13 +1787,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		Store:    store,
 		Reviewer: reviewer,
 		Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
-			// Stop AT THE START of each new bead claim if the cost cap has
-			// already tripped — otherwise we'd burn one extra attempt before
-			// halting the queue.
-			if cappedReport, capped := costCapTripped(); capped {
-				cappedReport.BeadID = beadID
-				return cappedReport, nil
-			}
 			report, err := runEscalatingSingleTierAttempts(
 				ctx,
 				rcfg.MinPower(),
@@ -1829,6 +1822,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		PreClaimIntakeHook:    intakeHook,
 		PreDispatchLintHook:   lintHook,
 		PostAttemptTriageHook: triageHook,
+		BudgetStop:            costCapTripped,
 		NoReview:              noReview,
 		TargetBeadID:          tryTargetBeadID,
 		ReviewCostCap:         costCap,
