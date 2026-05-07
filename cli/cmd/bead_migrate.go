@@ -78,7 +78,9 @@ the migration via 'ddx bead export | diff'.`,
 				}
 				ext, arch = st.EventsExternalized, st.Archived
 				if st.Changed() {
-					f.beadAutoCommit(fmt.Sprintf("migrate: externalize=%d archive=%d", ext, arch))
+					if _, err := f.beadAutoCommit(fmt.Sprintf("migrate: externalize=%d archive=%d", ext, arch)); err != nil {
+						return err
+					}
 				}
 			}
 			stats := migrateStatsView{EventsExternalized: ext, Archived: arch, DryRun: dryRun}

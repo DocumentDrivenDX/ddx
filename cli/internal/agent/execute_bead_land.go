@@ -718,7 +718,22 @@ func cleanupProjectEvidenceCopy(projectRoot, relPath string) {
 	if !ok {
 		return
 	}
-	_ = os.RemoveAll(filepath.Join(projectRoot, cleanRel))
+	evidenceRoot := filepath.Join(projectRoot, cleanRel)
+	embeddedDir := filepath.Join(evidenceRoot, "embedded")
+	if info, err := os.Stat(embeddedDir); err == nil && info.IsDir() {
+		entries, err := os.ReadDir(evidenceRoot)
+		if err != nil {
+			return
+		}
+		for _, entry := range entries {
+			if entry.Name() == "embedded" {
+				continue
+			}
+			_ = os.RemoveAll(filepath.Join(evidenceRoot, entry.Name()))
+		}
+		return
+	}
+	_ = os.RemoveAll(evidenceRoot)
 }
 
 func cleanRelativePath(path string) (string, bool) {

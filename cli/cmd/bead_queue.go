@@ -36,8 +36,8 @@ func (f *CommandFactory) newBeadQueueTopCommand() *cobra.Command {
 			if err := f.beadStore().QueueTop(args[0]); err != nil {
 				return err
 			}
-			f.beadAutoCommit("queue top " + args[0])
-			return nil
+			_, err := f.beadAutoCommit("queue top " + args[0])
+			return err
 		},
 	}
 }
@@ -65,8 +65,8 @@ func (f *CommandFactory) newBeadQueueMoveCommand() *cobra.Command {
 					return err
 				}
 			}
-			f.beadAutoCommit("queue move " + args[0])
-			return nil
+			_, err := f.beadAutoCommit("queue move " + args[0])
+			return err
 		},
 	}
 	cmd.Flags().String("before", "", "Place the bead before another bead in the same priority bucket")
@@ -83,8 +83,8 @@ func (f *CommandFactory) newBeadQueueClearCommand() *cobra.Command {
 			if err := f.beadStore().QueueClear(args[0]); err != nil {
 				return err
 			}
-			f.beadAutoCommit("queue clear " + args[0])
-			return nil
+			_, err := f.beadAutoCommit("queue clear " + args[0])
+			return err
 		},
 	}
 }

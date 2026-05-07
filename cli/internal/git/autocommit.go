@@ -16,6 +16,10 @@ type AutoCommitConfig struct {
 	// The default (empty string) is treated as "never".
 	AutoCommit   string
 	CommitPrefix string
+	// IncludeStaged commits all staged changes in addition to the target file.
+	// Use this only for workflows where pre-staged work is intentionally part
+	// of the same checkpoint, such as closing a bead with staged implementation.
+	IncludeStaged bool
 }
 
 // AutoCommit stages and commits a file with a structured message.
@@ -70,7 +74,13 @@ func AutoCommit(filePath string, artifactID string, operation string, cfg AutoCo
 	}
 
 	// Commit with --no-verify because these are mechanical commits.
-	commitCmd := Command(ctx, repoDir, "commit", "--no-verify", "-m", message)
+	commitArgs := []string{"commit", "--no-verify", "-m", message}
+	if !cfg.IncludeStaged {
+		// Limit the commit to the target path so unrelated staged work stays
+		// staged for its intended commit.
+		commitArgs = append(commitArgs, "--only", "--", filepath.Base(filePath))
+	}
+	commitCmd := Command(ctx, repoDir, commitArgs...)
 	if out, err := commitCmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git commit failed: %w\n%s", err, string(out))
 	}

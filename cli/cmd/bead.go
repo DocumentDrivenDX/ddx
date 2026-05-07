@@ -71,11 +71,18 @@ Examples:
 	return cmd
 }
 
-// beadAutoCommit commits .ddx/beads.jsonl if git.auto_commit is "always".
+// beadAutoCommit commits .ddx/beads.jsonl when configured by git.auto_commit.
 // The operation string describes what happened (e.g. "create ddx-abc123").
-// Errors are silently ignored — auto-commit is best-effort.
 // When a commit lands, the resulting SHA is returned.
-func (f *CommandFactory) beadAutoCommit(operation string) string {
+func (f *CommandFactory) beadAutoCommit(operation string) (string, error) {
+	return f.beadAutoCommitWithMode(operation, false)
+}
+
+func (f *CommandFactory) beadAutoCommitIncludingStaged(operation string) (string, error) {
+	return f.beadAutoCommitWithMode(operation, true)
+}
+
+func (f *CommandFactory) beadAutoCommitWithMode(operation string, includeStaged bool) (string, error) {
 	workspaceRoot := f.beadWorkspaceRoot()
 	if workspaceRoot == "" {
 		workspaceRoot = f.WorkingDir
@@ -83,18 +90,22 @@ func (f *CommandFactory) beadAutoCommit(operation string) string {
 
 	cfg, err := config.LoadWithWorkingDir(workspaceRoot)
 	if err != nil {
-		return ""
+		return "", fmt.Errorf("load config for bead auto-commit: %w", err)
 	}
 	if cfg.Git == nil {
-		return ""
+		return "", nil
 	}
 	acCfg := gitpkg.AutoCommitConfig{
-		AutoCommit:   cfg.Git.AutoCommit,
-		CommitPrefix: cfg.Git.CommitPrefix,
+		AutoCommit:    cfg.Git.AutoCommit,
+		CommitPrefix:  cfg.Git.CommitPrefix,
+		IncludeStaged: includeStaged,
 	}
 	beadsFile := filepath.Join(workspaceRoot, ".ddx", "beads.jsonl")
-	sha, _ := gitpkg.AutoCommit(beadsFile, "beads", operation, acCfg)
-	return sha
+	sha, err := gitpkg.AutoCommit(beadsFile, "beads", operation, acCfg)
+	if err != nil {
+		return "", fmt.Errorf("auto-commit beads tracker after %s: %w", operation, err)
+	}
+	return sha, nil
 }
 
 func (f *CommandFactory) resolveCommitSHA(commitSHA string) (string, error) {
@@ -304,7 +315,9 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 			if err := s.Create(b); err != nil {
 				return err
 			}
-			f.beadAutoCommit("create " + b.ID)
+			if _, err := f.beadAutoCommit("create " + b.ID); err != nil {
+				return err
+			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s\n", b.ID)
 			return nil
 		},
@@ -463,14 +476,18 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 				if err := s.Claim(args[0], assignee); err != nil {
 					return err
 				}
-				f.beadAutoCommit("claim " + args[0])
+				if _, err := f.beadAutoCommit("claim " + args[0]); err != nil {
+					return err
+				}
 				return nil
 			}
 			if unclaim, _ := cmd.Flags().GetBool("unclaim"); unclaim {
 				if err := s.Unclaim(args[0]); err != nil {
 					return err
 				}
-				f.beadAutoCommit("unclaim " + args[0])
+				if _, err := f.beadAutoCommit("unclaim " + args[0]); err != nil {
+					return err
+				}
 				return nil
 			}
 
@@ -577,7 +594,9 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 			}); err != nil {
 				return err
 			}
-			f.beadAutoCommit("update " + args[0])
+			if _, err := f.beadAutoCommit("update " + args[0]); err != nil {
+				return err
+			}
 			return nil
 		},
 	}
@@ -725,7 +744,10 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 				return err
 			}
 
-			landedSHA := f.beadAutoCommit("close " + args[0])
+			landedSHA, err := f.beadAutoCommitIncludingStaged("close " + args[0])
+			if err != nil {
+				return err
+			}
 			if commitSHA == "" && landedSHA != "" {
 				if f.commitIsMetadataOnlyTrackerBackfill(landedSHA) {
 					if isReviewCloseBead(target) {
@@ -741,7 +763,11 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 						}); err != nil {
 							return err
 						}
-						if followupSHA := f.beadAutoCommit("close " + args[0]); followupSHA == "" {
+						followupSHA, err := f.beadAutoCommit("close " + args[0])
+						if err != nil {
+							return err
+						}
+						if followupSHA == "" {
 							return fmt.Errorf("close %s: failed to auto-commit closing provenance", args[0])
 						}
 					}
@@ -758,7 +784,11 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 					}); err != nil {
 						return err
 					}
-					if followupSHA := f.beadAutoCommit("close " + args[0]); followupSHA == "" {
+					followupSHA, err := f.beadAutoCommit("close " + args[0])
+					if err != nil {
+						return err
+					}
+					if followupSHA == "" {
 						return fmt.Errorf("close %s: failed to auto-commit closing provenance", args[0])
 					}
 				}
@@ -787,7 +817,9 @@ notes, and records a reopen event in the bead's event log.`,
 			if err := s.Reopen(args[0], reason, appendNotes); err != nil {
 				return err
 			}
-			f.beadAutoCommit("reopen " + args[0])
+			if _, err := f.beadAutoCommit("reopen " + args[0]); err != nil {
+				return err
+			}
 			return nil
 		},
 	}
@@ -1008,7 +1040,9 @@ tracker. It never edits .ddx/beads.jsonl directly.`,
 				}
 			}
 			if apply {
-				f.beadAutoCommit("reconcile lifecycle metadata")
+				if _, err := f.beadAutoCommit("reconcile lifecycle metadata"); err != nil {
+					return err
+				}
 			}
 			return nil
 		},
@@ -1068,7 +1102,9 @@ func (f *CommandFactory) newBeadDepCommand() *cobra.Command {
 			if err := f.beadStore().DepAdd(args[0], args[1]); err != nil {
 				return err
 			}
-			f.beadAutoCommit("dep-add " + args[0])
+			if _, err := f.beadAutoCommit("dep-add " + args[0]); err != nil {
+				return err
+			}
 			return nil
 		},
 	})
@@ -1081,7 +1117,9 @@ func (f *CommandFactory) newBeadDepCommand() *cobra.Command {
 			if err := f.beadStore().DepRemove(args[0], args[1]); err != nil {
 				return err
 			}
-			f.beadAutoCommit("dep-remove " + args[0])
+			if _, err := f.beadAutoCommit("dep-remove " + args[0]); err != nil {
+				return err
+			}
 			return nil
 		},
 	})
@@ -1125,7 +1163,9 @@ func (f *CommandFactory) newBeadImportCommand() *cobra.Command {
 				return err
 			}
 			if n > 0 {
-				f.beadAutoCommit(fmt.Sprintf("import %d beads", n))
+				if _, err := f.beadAutoCommit(fmt.Sprintf("import %d beads", n)); err != nil {
+					return err
+				}
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Imported %d beads\n", n)
 			return nil
@@ -1328,7 +1368,9 @@ Use this command instead of editing the magic Extra key directly:
 			}); err != nil {
 				return err
 			}
-			f.beadAutoCommit("cooldown clear " + args[0])
+			if _, err := f.beadAutoCommit("cooldown clear " + args[0]); err != nil {
+				return err
+			}
 			if cleared {
 				fmt.Fprintf(cmd.OutOrStdout(), "Cleared cooldown on %s\n", args[0])
 			} else {

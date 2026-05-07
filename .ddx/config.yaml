@@ -26,6 +26,9 @@ library:
 update_check:
     enabled: true
     frequency: 24h
+git:
+    auto_commit: always
+    commit_prefix: chore
 agent:
     endpoints:
         - type: lmstudio
