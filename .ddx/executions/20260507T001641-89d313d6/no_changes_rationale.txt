@@ -1,0 +1,7 @@
+verification_command: cd cli && go test ./internal/bead/... ./internal/agent/... ./cmd/... -run "TestReadyExecutionBreakdown_ClassifiesEpicClosureCandidates|TestExecuteBeadWorkerEvaluatesCompletedEpicForClosure|TestWorkPlan_ShowsCompletedEpicClosureCandidate|TestExecuteBeadWorkerEpicIsNotOrdinaryWork" -count=1 && lefthook run pre-commit
+
+The bead's acceptance criteria are already satisfied in the current worktree:
+- `cli/internal/bead/store.go` classifies completed epic containers separately via `SkippedEpicClosureCandidates` and keeps open-child epics in `SkippedEpics`.
+- `cli/internal/agent/execute_bead_loop.go` copies both classifications into `NoReadyWorkDetail` without dispatching the normal executor for epics.
+- `cli/cmd/agent_cmd.go` and `cli/cmd/work_plan_test.go` render the completed-epic closure-candidate distinction in `ddx work plan` output.
+- The acceptance-focused test slice and `lefthook run pre-commit` both pass unchanged.
