@@ -1,0 +1,49 @@
+{
+  "attempt_id": "20260508T220332-580fb5f5",
+  "bead_id": "ddx-76cf71f4",
+  "base_rev": "63160f71e551517c3821175fb105dc158a8c59c7",
+  "created_at": "2026-05-08T22:03:35.643677291Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-76cf71f4",
+    "title": "cmd: parse execute-loop flags into ExecuteLoopSpec",
+    "description": "PROBLEM\nThe execute-loop/work CLI path still extracts each flag into local variables and threads those values through bespoke inline logic. The root bead requires a single cobra-to-spec conversion so execution fields are not re-maintained at every boundary.\n\nROOT CAUSE\ncli/cmd/agent_cmd.go:1582-1605 reads ProjectRoot/from/routing/review/cost/timeout/power flags into local variables, then cli/cmd/agent_cmd.go:1759-1777 manually projects a subset into config.CLIOverrides and ExecuteBeadRuntime. Control-plane flags are mixed with execution fields in the same RunE body.\n\nPROPOSED FIX\n- Add parseExecuteLoopSpec(cmd, treatPassthroughAsOpaque) returning (executeloop.ExecuteLoopSpec, executeloop.DispatchOptions, error).\n- Make runAgentExecuteLoopImpl call parseExecuteLoopSpec once, then use the spec for inline execution inputs and the dispatch options for --json/--local behavior.\n- Keep current ADR-022 behavior: cli/cmd/agent_cmd.go:1509-1511 says execute-loop always runs inline and --local is a deprecated no-op. If a live HTTP submit helper still exists, make it accept and marshal ExecuteLoopSpec directly; otherwise do not resurrect server-submit mode.\n- Preserve ddx try behavior: tryTargetBeadID still forces Once true and FromRev still reaches ExecuteBeadRuntime.\n\nNON-SCOPE\n- Do not change route validation semantics or auto-infer tier behavior.\n- Do not change server REST/GraphQL handlers; separate children own those transports.\n- Do not reshape LabelFilter.",
+    "acceptance": "1. parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (executeloop.ExecuteLoopSpec, executeloop.DispatchOptions, error) exists in cli/cmd/agent_cmd.go (or a helper file).\n2. parseExecuteLoopSpec is the only code in cli/cmd/agent_cmd.go that calls cmd.Flags().Get* for execute-loop/work execution flags.\n3. runAgentExecuteLoopImpl calls parseExecuteLoopSpec once and uses the returned spec for execution inputs.\n4. ADR-022 inline-only behavior preserved: execute-loop always runs inline; --local is a deprecated no-op.\n5. ddx try behavior preserved: tryTargetBeadID still forces Once=true and FromRev reaches ExecuteBeadRuntime.\n6. TestParseExecuteLoopFlags_AllFlagsPopulateSpec verifies all execution flags are parsed into ExecuteLoopSpec fields.\n7. TestParseExecuteLoopFlags_OnceFlag verifies --once sets Once=true.\n8. cd cli \u0026\u0026 go test ./cmd/... green.\n9. lefthook run pre-commit passes.",
+    "parent": "ddx-29058e2a",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:server",
+      "kind:refactor",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-08T22:03:27Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2388105",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no viable routing candidate: 3 candidates rejected\"}",
+          "created_at": "2026-05-08T22:03:32.036262699Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-08T22:03:27.245380121Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260508T220332-580fb5f5",
+    "prompt": ".ddx/executions/20260508T220332-580fb5f5/prompt.md",
+    "manifest": ".ddx/executions/20260508T220332-580fb5f5/manifest.json",
+    "result": ".ddx/executions/20260508T220332-580fb5f5/result.json",
+    "checks": ".ddx/executions/20260508T220332-580fb5f5/checks.json",
+    "usage": ".ddx/executions/20260508T220332-580fb5f5/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-76cf71f4-20260508T220332-580fb5f5"
+  },
+  "prompt_sha": "3619c985a0d3a379b36e17caad32a9eb6d81ac2242e716b942224a88b0b37985"
+}

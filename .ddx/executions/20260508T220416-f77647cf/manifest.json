@@ -1,0 +1,61 @@
+{
+  "attempt_id": "20260508T220416-f77647cf",
+  "bead_id": "ddx-c2a66f45-wt-53f8c8b8",
+  "base_rev": "9695fef09616580395e617c4f615cd69107f1ffe",
+  "created_at": "2026-05-08T22:04:19.760588244Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c2a66f45-wt-53f8c8b8",
+    "title": "agent guidance: generate interactive-steward AGENTS block",
+    "description": "PROBLEM\nDDx-generated AGENTS.md guidance is the first instruction surface Codex-style agents read in a repo. FEAT-011 now requires the generated block to repeat interactive-steward precedence, but the generator still emits only generic DDx skill, files-to-commit, conventions, and merge-policy guidance.\n\nROOT CAUSE\ndocs/helix/01-frame/features/FEAT-011-skills.md:237-257 specifies that the marker-delimited AGENTS block should say default interactive sessions use interactive-steward / queue-steward, explicit ddx work and ddx try prompts use bead_execution only for executing bead AC, and tracker/merge/commit/safety/verification policy still applies. cli/cmd/init.go:606-658 builds the generated AGENTS block and currently has no Default Interactive Mode or DDX_MODE precedence guidance. cli/cmd/init_test.go:152-220 tests merge/create/append behavior but not the interactive-steward content.\n\nPROPOSED FIX\nUpdate the generated AGENTS block emitted by ddx init and ddx update to include the interactive-steward default, DDX_MODE precedence, mutation policy, and worker carve-out. Keep marker-delimited merge semantics unchanged and add tests asserting that reruns preserve user content while refreshing the managed block.\n\nIN-SCOPE FILES\n- cli/cmd/init.go\n- cli/cmd/init_test.go\n- AGENTS.md only if regenerating or aligning the repository's managed block is part of the implementation\n\nOUT-OF-SCOPE\n- DDx skill reference content and route fixtures; handled by the interactive-steward skill bead.\n- Implementing ddx work focus.\n- Changing ddx work/try execution behavior.\n- Editing tracker storage by hand.\n\nPARENT AND DEPS\nParent: ddx-09d7d787. Dependencies: ddx-377ebf92 and the interactive-steward skill reference bead.",
+    "acceptance": "1. ddxAgentsBlock in cli/cmd/init.go includes a Default Interactive Mode section that names queue_steward / interactive-steward, bead_execution, direct_user_implementation, and review.\n2. The generated block states that DDX_MODE=bead_execution overrides only the interactive queue-steward default and never overrides tracker, merge, commit, safety, or verification policy.\n3. The generated block states that read/plan/review/fold are non-mutating by default; tracker mutation requires explicit durable-output verbs; code edits require explicit implementation intent or bead_execution.\n4. TestGenerateAgentsMD_IncludesInteractiveStewardGuidance asserts generated AGENTS.md content includes interactive-steward, DDX_MODE=bead_execution, mutation policy, and the tracker/merge/safety carve-out.\n5. Existing TestGenerateAgentsMD_MergesWithMarkers, TestGenerateAgentsMD_CreatesWhenMissing, and TestGenerateAgentsMD_AppendsWhenMarkersAbsent still pass and prove user content is preserved and markers are not duplicated.\n6. cd cli \u0026\u0026 go test ./cmd/... -run \"TestGenerateAgentsMD_IncludesInteractiveStewardGuidance|TestGenerateAgentsMD_MergesWithMarkers|TestGenerateAgentsMD_CreatesWhenMissing|TestGenerateAgentsMD_AppendsWhenMarkersAbsent\" -count=1 passes.\n7. cd cli \u0026\u0026 go test ./cmd/... passes.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-09d7d787",
+    "labels": [
+      "phase:2",
+      "area:cli",
+      "area:agent",
+      "area:skills",
+      "kind:feature",
+      "operator-ux",
+      "queue-steward",
+      "interactive-steward",
+      "spec:FEAT-011"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-08T22:04:11Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2388105",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no viable routing candidate: 3 candidates rejected\"}",
+          "created_at": "2026-05-08T22:04:16.362767506Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-08T22:04:11.444326652Z",
+      "spec-id": "FEAT-011"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-011",
+      "path": "docs/helix/01-frame/features/FEAT-011-skills.md",
+      "title": "Feature: DDx Agent Skills"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260508T220416-f77647cf",
+    "prompt": ".ddx/executions/20260508T220416-f77647cf/prompt.md",
+    "manifest": ".ddx/executions/20260508T220416-f77647cf/manifest.json",
+    "result": ".ddx/executions/20260508T220416-f77647cf/result.json",
+    "checks": ".ddx/executions/20260508T220416-f77647cf/checks.json",
+    "usage": ".ddx/executions/20260508T220416-f77647cf/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-c2a66f45-wt-53f8c8b8-20260508T220416-f77647cf"
+  },
+  "prompt_sha": "5e0488a3449ceb9a486fd295e82bf281d964a24f5d05b10b59fc0d0f79bcc9d7"
+}
