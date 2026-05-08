@@ -5,6 +5,8 @@
 DDx invokes task execution through the upstream Fizeau service. DDx does not
 choose harnesses, providers, endpoints, or models on the normal work path. It
 describes the work, requests an abstract power level, and lets Fizeau route.
+Fizeau owns provider/model discovery, alias resolution, fuzzy matching of raw
+model strings, transcript/session rendering, and all route-side errors.
 
 ## Power bounds
 
@@ -42,10 +44,10 @@ ddx run --min-power 10 --model qwen3.6-27b --prompt task.md
 
 DDx sends these values to Fizeau unchanged. DDx does not validate them,
 score them, use them for queue policy, rewrite them on retry, or use them as a
-fallback mechanism. If the values conflict with requested power bounds or
-availability, Fizeau owns the typed error or actual route. DDx stops on
-hard-pin exhaustion; it does not remove pins, widen pins, call `ResolveRoute`,
-or retry in a loop.
+fallback mechanism. Fizeau owns any fuzzy matching, alias resolution, provider
+fallback, or typed error for those raw strings. DDx stops on hard-pin
+exhaustion; it does not remove pins, widen pins, call `ResolveRoute`, or retry
+in a loop.
 
 ## Execution layering
 
