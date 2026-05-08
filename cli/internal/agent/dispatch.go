@@ -30,8 +30,8 @@ import (
 //
 // Override fields on runtime (HarnessOverride, ModelOverride,
 // PermissionsOverride, SessionLogDirOverride) take precedence over the
-// matching rcfg accessors when non-empty, so callers can pin one knob for
-// a single invocation without re-resolving the full ResolvedConfig.
+// matching rcfg accessors when non-empty, so callers can override one knob
+// for a single invocation without re-resolving the full ResolvedConfig.
 func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (*Result, error) {
 	if runner != nil {
 		return runner.Run(buildRunArgsFromConfig(ctx, rcfg, runtime))
@@ -69,16 +69,20 @@ func dispatchViaResolvedConfig(ctx context.Context, projectRoot string, svc agen
 // a single invocation without re-resolving the full ResolvedConfig.
 func buildRunArgsFromConfig(ctx context.Context, rcfg config.ResolvedConfig, runtime AgentRunRuntime) RunArgs {
 	harness := runtime.HarnessOverride
-	if harness == "" {
+	if harness == "" && !runtime.ClearRoutingPins {
 		harness = rcfg.Harness()
 	}
 	model := runtime.ModelOverride
-	if model == "" {
+	if model == "" && !runtime.ClearRoutingPins {
 		model = rcfg.Model()
 	}
 	modelRef := runtime.ModelRefOverride
-	if modelRef == "" {
+	if modelRef == "" && !runtime.ClearRoutingPins {
 		modelRef = rcfg.ModelRef()
+	}
+	provider := ""
+	if !runtime.ClearRoutingPins {
+		provider = rcfg.Provider()
 	}
 	permissions := runtime.PermissionsOverride
 	if permissions == "" {
@@ -100,7 +104,7 @@ func buildRunArgsFromConfig(ctx context.Context, rcfg config.ResolvedConfig, run
 	opts.Role = runtime.Role
 	opts.CorrelationID = runtime.CorrelationID
 	opts.Model = model
-	opts.Provider = rcfg.Provider()
+	opts.Provider = provider
 	opts.ModelRef = modelRef
 	opts.Effort = rcfg.Effort()
 	opts.Timeout = rcfg.Timeout()

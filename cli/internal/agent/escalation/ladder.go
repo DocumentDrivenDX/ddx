@@ -34,14 +34,14 @@ func (e *NoViableProviderError) Error() string {
 }
 
 // Ladder is a MinPower-only escalation ladder. It enumerates the distinct
-// power tiers present in a model catalog, sorted ascending, and tracks
+// power tiers present in a fizeau model listing, sorted ascending, and tracks
 // which tiers have at least one viable model.
 type Ladder struct {
 	tiers     []int
 	viableSet map[int]struct{}
 }
 
-// NewLadder constructs a Ladder from a model catalog. Models with Power<=0
+// NewLadder constructs a Ladder from fizeau model metadata. Models with Power<=0
 // are ignored as unrated. A model contributes to the viable set when it is
 // both Available and AutoRoutable; non-viable tiers remain present in the
 // ladder so Next can report a typed NoViableProviderError when one is hit.

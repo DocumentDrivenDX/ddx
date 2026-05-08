@@ -502,7 +502,7 @@ func TestTriageHook_HookError_DoesNotCreateDefaultCooldown(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestPostAttemptTriageHook_ClearsImplementationRoutingPins(t *testing.T) {
+func TestPostAttemptTriageHook_DispatchesWithCheapestProfile(t *testing.T) {
 	root := newTriageHookTestRoot(t)
 	store, b := newTriageHookTestStore(t, root)
 
@@ -535,7 +535,11 @@ func TestPostAttemptTriageHook_ClearsImplementationRoutingPins(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "transport", got.Classification)
-	assert.Empty(t, svc.lastReq.Profile, "triage dispatch must not inherit implementation profile pins")
+	assert.Equal(t, "cheap", svc.lastReq.Profile)
+	assert.Empty(t, svc.lastReq.Harness)
+	assert.Empty(t, svc.lastReq.Provider)
+	assert.Empty(t, svc.lastReq.Model)
+	assert.Empty(t, svc.lastReq.ModelRef)
 	assert.Zero(t, svc.lastReq.MinPower, "triage dispatch must not inherit implementation min_power pins")
 	assert.Zero(t, svc.lastReq.MaxPower, "triage dispatch must not inherit implementation max_power pins")
 }

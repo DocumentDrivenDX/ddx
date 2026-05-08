@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 )
 
@@ -45,13 +44,7 @@ func (r *DefaultBeadReviewer) ReviewGroup(ctx context.Context, beadID, resultRev
 	}
 
 	reviewHarness := r.Harness
-	if reviewHarness == "" {
-		reviewHarness = impl.Harness
-	}
-	reviewModel := r.Model
-	if reviewModel == "" && reviewHarness != "" {
-		reviewModel = ResolveModelTier(reviewHarness, SelectReviewerTier(escalation.TierSmart))
-	}
+	reviewProfile := r.reviewerProfileForDispatch(ctx, impl)
 
 	out := &ReviewGroupResult{
 		BeadID:    beadID,
@@ -67,14 +60,15 @@ func (r *DefaultBeadReviewer) ReviewGroup(ctx context.Context, beadID, resultRev
 	}
 
 	for reviewerIndex := 0; reviewerIndex < 2; reviewerIndex++ {
-		slotRuntime := BuildReviewGroupExecuteRequest(impl, reviewHarness, reviewModel, ReviewGroupDispatchMeta{
+		slotRuntime := BuildReviewGroupExecuteRequest(impl, reviewHarness, reviewProfile, ReviewGroupDispatchMeta{
 			GroupID:       groupID,
 			ReviewerIndex: reviewerIndex,
 		})
+		reviewRouteLabel := r.applyExplicitReviewerPins(&slotRuntime)
 		slotRuntime.PromptFile = artifacts.PromptAbs
 		slotRuntime.WorkDir = r.ProjectRoot
 
-		slotResult, slotErr := r.reviewGroupSlot(ctx, b, impl, resultRev, built, artifacts, reviewHarness, reviewModel, slotRuntime, caps.MaxPromptBytes)
+		slotResult, slotErr := r.reviewGroupSlot(ctx, b, impl, resultRev, built, artifacts, reviewHarness, reviewRouteLabel, slotRuntime, caps.MaxPromptBytes)
 		slot := ReviewGroupSlotResult{
 			ReviewerIndex: reviewerIndex,
 			Runtime:       slotRuntime,

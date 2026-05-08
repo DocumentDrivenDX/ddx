@@ -91,12 +91,14 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 		}
 
 		runtime := AgentRunRuntime{
-			Prompt:        prompt,
-			WorkDir:       projectRoot,
-			PromptSource:  PreClaimIntakePromptSource,
-			ClearProfile:  true,
-			ClearMinPower: true,
-			ClearMaxPower: true,
+			Prompt:           prompt,
+			WorkDir:          projectRoot,
+			PromptSource:     PreClaimIntakePromptSource,
+			ProfileOverride:  selectProfileForDispatch(ctx, projectRoot, svc, runner, SelectStrongestProfile),
+			ClearRoutingPins: true,
+			ClearProfile:     true,
+			ClearMinPower:    true,
+			ClearMaxPower:    true,
 		}
 		payload, err := dispatchPreClaimIntakePayload(ctx, projectRoot, svc, runner, rcfg, runtime)
 		if err != nil {

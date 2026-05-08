@@ -26,7 +26,7 @@ type RouteFlags struct {
 	Profile     string // --profile: default, cheap, fast, smart
 	Model       string // --model: logical ref or exact pin
 	Provider    string // --provider: explicit provider name
-	ModelRef    string // --model-ref: catalog model reference
+	ModelRef    string // --model-ref: opaque model reference for Fizeau
 	Harness     string // --harness: forced harness override
 	Effort      string // --effort: low, medium, high
 	Permissions string // --permissions: safe, supervised, unrestricted
@@ -46,7 +46,7 @@ type RunArgs struct {
 	Correlation   map[string]string
 	Model         string
 	Provider      string // explicit provider name (e.g. "vidar", "openrouter"); bypasses default provider selection
-	ModelRef      string // catalog model-ref (e.g. "code-medium"); resolved via the model catalog
+	ModelRef      string // opaque model-ref (e.g. "code-medium"); resolved by Fizeau
 	Effort        string
 	Timeout       time.Duration // idle (inactivity) timeout; nonzero overrides Config.TimeoutMS
 	WallClock     time.Duration // absolute wall-clock cap; nonzero overrides Config.WallClockMS
@@ -78,18 +78,20 @@ type AgentRunRuntime struct {
 	RequiresTools         bool
 	SessionLogDirOverride string
 	// HarnessOverride, ModelOverride, ModelRefOverride, ProfileOverride, and
-	// PermissionsOverride let a caller
-	// pin one of the durable knobs from rcfg for this single invocation
-	// without re-resolving the full ResolvedConfig. SD-024 step B22d-d:
-	// execute-bead pins permissions=unrestricted; the post-merge reviewer
-	// pins harness/model to the reviewer-tier selection.
+	// PermissionsOverride let a caller override one durable knob from rcfg for
+	// this single invocation without re-resolving the full ResolvedConfig.
+	// SD-024 step B22d-d: execute-bead sets permissions=unrestricted; hidden
+	// lifecycle calls use profile-only routing hints sourced from fizeau.
 	HarnessOverride     string
 	ModelOverride       string
 	ModelRefOverride    string
 	ProfileOverride     string
 	PermissionsOverride string
-	Role                string
-	CorrelationID       string
+	// ClearRoutingPins drops rcfg Harness/Provider/Model/ModelRef passthrough for
+	// hidden DDx lifecycle calls. Explicit runtime overrides still win.
+	ClearRoutingPins bool
+	Role             string
+	CorrelationID    string
 	// MinPowerOverride, when > 0, overrides rcfg.MinPower() for this single
 	// invocation. Used by the post-merge reviewer to pin MinPower above the
 	// implementer's actual selected power, biasing routing toward a stronger
@@ -104,8 +106,8 @@ type AgentRunRuntime struct {
 	// strongest viable route instead of the worker attempt's cost cap.
 	ClearMaxPower bool
 	// ClearProfile drops rcfg.Profile() for this single invocation. Auxiliary
-	// calls that pin ModelRefOverride should not inherit a profile constraint
-	// from the worker attempt.
+	// calls select their own fizeau profile hints instead of inheriting the
+	// worker attempt's profile.
 	ClearProfile bool
 }
 
@@ -387,8 +389,8 @@ type BurnSummary struct {
 // RouteRequest is the normalized routing ask built from CLI flags and config.
 type RouteRequest struct {
 	Profile         string // default, cheap, fast, smart
-	ModelRef        string // logical catalog ref or alias
-	ModelPin        string // exact concrete model string (bypasses catalog policy)
+	ModelRef        string // logical model ref or alias resolved by Fizeau
+	ModelPin        string // exact concrete model string passthrough
 	Effort          string // low, medium, high, etc.
 	Permissions     string // safe, supervised, unrestricted
 	HarnessOverride string // forces routing to one harness only
@@ -397,9 +399,9 @@ type RouteRequest struct {
 // CandidatePlan is a routing evaluation result for one harness.
 type CandidatePlan struct {
 	Harness               string         `json:"harness"`
-	Surface               string         `json:"surface,omitempty"`          // catalog surface: embedded-openai, embedded-anthropic, codex, claude
+	Surface               string         `json:"surface,omitempty"`          // Fizeau surface: embedded-openai, embedded-anthropic, codex, claude
 	RequestedRef          string         `json:"requested_ref,omitempty"`    // profile or model ref from the request
-	CanonicalTarget       string         `json:"canonical_target,omitempty"` // resolved catalog canonical target
+	CanonicalTarget       string         `json:"canonical_target,omitempty"` // resolved upstream canonical target
 	ConcreteModel         string         `json:"concrete_model,omitempty"`   // concrete model string to pass to harness
 	SupportsEffort        bool           `json:"supports_effort"`
 	SupportsPermissions   bool           `json:"supports_permissions"`

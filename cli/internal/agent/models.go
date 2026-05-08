@@ -4,40 +4,17 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 )
 
-// harnessToSurface maps harness names to their catalog surface identifier.
-// This is the only place harness→surface is declared; all model resolution
-// goes through BuiltinCatalog using the surface name.
-var harnessToSurface = map[string]string{
-	"codex":    "codex",
-	"claude":   "claude",
-	"agent":    "embedded-openai",
-	"opencode": "claude",
-}
-
-// ResolveModelTier returns the concrete model for a given harness and tier
-// by looking up the tier profile in BuiltinCatalog for the harness's surface.
-func ResolveModelTier(harness string, tier escalation.ModelTier) string {
-	surface, ok := harnessToSurface[harness]
-	if !ok {
-		return ""
-	}
-	model, _ := BuiltinCatalog.Resolve(string(tier), surface)
-	return model
-}
-
 // BenchmarkArm defines one arm in a benchmark run.
 type BenchmarkArm struct {
 	Label   string               `json:"label"`
 	Harness string               `json:"harness"`
 	Tier    escalation.ModelTier `json:"tier"`
-	Model   string               `json:"model,omitempty"` // explicit override; empty = resolve from tier
+	Model   string               `json:"model,omitempty"` // explicit override; empty = no DDx-side model resolution
 }
 
-// ResolveArm fills in the model from the tier if not explicitly set.
+// ResolveArm no longer resolves tier to a DDx-side concrete model.
+// Benchmark callers must set Model explicitly when they want a pin.
 func (a *BenchmarkArm) ResolveArm() {
-	if a.Model == "" {
-		a.Model = ResolveModelTier(a.Harness, a.Tier)
-	}
 }
 
 // BenchmarkArmsToCompare converts a slice of BenchmarkArms into a

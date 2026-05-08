@@ -12,8 +12,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
 func containsString(slice []string, s string) bool {
@@ -29,7 +27,6 @@ func containsString(slice []string, s string) bool {
 type Runner struct {
 	registry *harnessRegistry
 	Config   Config
-	Catalog  *Catalog     // model catalog for routing; defaults to BuiltinCatalog
 	Executor Executor     // injected; defaults to OSExecutor
 	LookPath LookPathFunc // injected; defaults to exec.LookPath
 
@@ -51,24 +48,9 @@ func NewRunner(cfg Config) *Runner {
 	if cfg.SessionLogDir == "" {
 		cfg.SessionLogDir = DefaultLogDir
 	}
-	// Build the effective catalog in precedence order (lowest to highest priority):
-	//   1. Built-in seed (DefaultModelCatalogYAML — deterministic fallback for smart/standard/cheap)
-	//   2. Shared Fizeau catalog (~/.config/fizeau/models.yaml — authoritative when installed)
-	//   3. User overrides (~/.ddx/model-catalog.yaml — user wins over shared and built-in)
-	catalog := BuiltinCatalog.Clone()
-	if svc, err := agentlib.New(agentlib.ServiceOptions{}); err == nil {
-		ApplyCatalogFromService(context.Background(), catalog, svc)
-	}
-	if path := DefaultModelCatalogPath(); path != "" {
-		if yml, err := LoadModelCatalogYAML(path); err == nil && yml != nil {
-			ApplyModelCatalogYAML(catalog, yml)
-		}
-	}
-
 	r := &Runner{
 		registry: newHarnessRegistry(),
 		Config:   cfg,
-		Catalog:  catalog,
 		Executor: &OSExecutor{},
 		LookPath: DefaultLookPath,
 	}
@@ -139,14 +121,6 @@ func (r *Runner) Run(opts RunArgs) (*Result, error) {
 	}
 
 	model := r.resolveModel(opts, harnessName)
-
-	// Warn on deprecated explicit model pin.
-	if model != "" {
-		cat := r.catalog()
-		if dp, deprecated := cat.CheckDeprecatedPin(model, harness.Surface); deprecated {
-			fmt.Fprintf(os.Stderr, "agent: model %q is deprecated; use %q instead\n", model, dp.ReplacedBy)
-		}
-	}
 
 	// Warn on unknown model
 	if model != "" && len(harness.Models) > 0 && !containsString(harness.Models, model) {

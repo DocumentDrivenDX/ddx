@@ -169,18 +169,23 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	pt := rcfg.Passthrough()
 
 	harness := runtime.HarnessOverride
-	if harness == "" {
+	if harness == "" && !runtime.ClearRoutingPins {
 		harness = pt.Harness
 	}
 
 	model := runtime.ModelOverride
-	if model == "" {
+	if model == "" && !runtime.ClearRoutingPins {
 		model = pt.Model
 	}
 
 	modelRef := runtime.ModelRefOverride
-	if modelRef == "" {
+	if modelRef == "" && !runtime.ClearRoutingPins {
 		modelRef = rcfg.ModelRef()
+	}
+
+	provider := pt.Provider
+	if runtime.ClearRoutingPins {
+		provider = ""
 	}
 
 	profile := runtime.ProfileOverride
@@ -193,7 +198,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		permissions = rcfg.Permissions()
 	}
 
-	providerTimeout := ResolveProviderRequestTimeout(workDir, pt.Provider, model, rcfg.ProviderRequestTimeout())
+	providerTimeout := ResolveProviderRequestTimeout(workDir, provider, model, rcfg.ProviderRequestTimeout())
 
 	minPower := rcfg.MinPower()
 	if runtime.MinPowerOverride > 0 {
@@ -214,7 +219,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		Prompt:          promptText,
 		Model:           model,
 		Profile:         profile,
-		Provider:        pt.Provider,
+		Provider:        provider,
 		Harness:         harness,
 		ModelRef:        modelRef,
 		Reasoning:       agentlib.Reasoning(rcfg.Effort()),
@@ -314,7 +319,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	entry := SessionIndexEntryFromResult(workDir, SessionIndexInputs{
 		Harness:     harness,
 		Model:       model,
-		Provider:    pt.Provider,
+		Provider:    provider,
 		Effort:      rcfg.Effort(),
 		Correlation: runtime.Correlation,
 	}, result, start, finishedAt)

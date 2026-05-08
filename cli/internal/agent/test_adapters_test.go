@@ -3,7 +3,6 @@ package agent
 import (
 	"context"
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -34,38 +33,6 @@ func (f beadReviewGroupFunc) ReviewBead(ctx context.Context, beadID, resultRev s
 
 func (f beadReviewGroupFunc) ReviewGroup(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewGroupResult, error) {
 	return f(ctx, beadID, resultRev, impl)
-}
-
-// catalogKnownOnAnySurface reports whether ref has a mapping on at least one
-// surface of the catalog. Test-only helper: production callers use Resolve.
-func catalogKnownOnAnySurface(c *Catalog, ref string) bool {
-	if c == nil {
-		return false
-	}
-	for _, surface := range []string{"agent", "claude", "codex", "gemini", "lmstudio", "openrouter", "opencode", "pi"} {
-		if _, ok := c.Resolve(ref, surface); ok {
-			return true
-		}
-	}
-	return false
-}
-
-// catalogEntry returns the full catalog entry for a ref. Test-only helper.
-func catalogEntry(c *Catalog, ref string) (CatalogEntry, bool) {
-	if c == nil {
-		return CatalogEntry{}, false
-	}
-	e, ok := c.entries[ref]
-	return e, ok
-}
-
-// catalogIsBlockedModelID reports whether a concrete model ID is blocked.
-// Test-only helper.
-func catalogIsBlockedModelID(c *Catalog, id string) bool {
-	if c == nil {
-		return false
-	}
-	return c.blockedModelIDs[id]
 }
 
 // runnerRunWithConfig is the test-only equivalent of the retired
@@ -137,16 +104,9 @@ func runnerValidateForExecuteLoop(r *Runner, harnessName, model, _provider, _mod
 	if harnessName == "" {
 		return nil
 	}
-	h, name, err := r.resolveHarness(RunArgs{Harness: harnessName})
+	_, _, err := r.resolveHarness(RunArgs{Harness: harnessName})
 	if err != nil {
 		return err
-	}
-	if model != "" {
-		cat := r.catalog()
-		if dp, deprecated := cat.CheckDeprecatedPin(model, h.Surface); deprecated {
-			fmt.Fprintf(os.Stderr, "execute-loop: model %q is deprecated for harness %q; use %q instead\n",
-				model, name, dp.ReplacedBy)
-		}
 	}
 	return nil
 }

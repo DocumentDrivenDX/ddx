@@ -42,8 +42,8 @@ func TestExecuteBead_ConcurrentWorkers_NoHEADRefRace(t *testing.T) {
 		dirFiles[i] = dirFile
 	}
 
-	// Build runners up front: NewRunner is not goroutine-safe during catalog
-	// construction.
+	// Build runners up front so worker goroutines do not share construction-time
+	// setup.
 	runners := make([]AgentRunner, n)
 	rcfgs := make([]config.ResolvedConfig, n)
 	for i := 0; i < n; i++ {

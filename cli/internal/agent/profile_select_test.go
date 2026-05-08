@@ -1,0 +1,207 @@
+package agent
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"testing"
+	"time"
+
+	agentlib "github.com/DocumentDrivenDX/fizeau"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestSelectCheapestProfile_LowestBandWithAvailableModel(t *testing.T) {
+	snap := ProfileSnapshot{
+		Profiles: []agentlib.ProfileInfo{
+			{Name: "standard", MinPower: 7, MaxPower: 8},
+			{Name: "cheap", MinPower: 5, MaxPower: 5},
+			{Name: "too-low", MinPower: 1, MaxPower: 2},
+		},
+		Models: []agentlib.ModelInfo{
+			{ID: "standard-model", Power: 7, Available: true, AutoRoutable: true},
+			{ID: "cheap-model", Power: 5, Available: true, AutoRoutable: true},
+		},
+	}
+
+	assert.Equal(t, "cheap", SelectCheapestProfile(snap))
+}
+
+func TestSelectStrongestProfile_HighestBandWithAvailableModel(t *testing.T) {
+	snap := ProfileSnapshot{
+		Profiles: []agentlib.ProfileInfo{
+			{Name: "cheap", MinPower: 5, MaxPower: 5},
+			{Name: "standard", MinPower: 7, MaxPower: 8},
+			{Name: "smart", MinPower: 9, MaxPower: 10},
+		},
+		Models: []agentlib.ModelInfo{
+			{ID: "cheap-model", Power: 5, Available: true, AutoRoutable: true},
+			{ID: "standard-model", Power: 7, Available: true, AutoRoutable: true},
+			{ID: "smart-model", Power: 10, Available: true, AutoRoutable: true},
+		},
+	}
+
+	assert.Equal(t, "smart", SelectStrongestProfile(snap))
+}
+
+func TestSelectStrongestProfileAbove_RespectsFloor(t *testing.T) {
+	snap := ProfileSnapshot{
+		Profiles: []agentlib.ProfileInfo{
+			{Name: "standard", MinPower: 7, MaxPower: 8},
+			{Name: "smart", MinPower: 9, MaxPower: 10},
+		},
+		Models: []agentlib.ModelInfo{
+			{ID: "standard-model", Power: 8, Available: true, AutoRoutable: true},
+			{ID: "smart-model", Power: 9, Available: true, AutoRoutable: true},
+		},
+	}
+
+	assert.Equal(t, "smart", SelectStrongestProfileAbove(snap, 9))
+	assert.Empty(t, SelectStrongestProfileAbove(snap, 11))
+}
+
+func TestSelectProfile_ReturnsEmptyWhenNothingSatisfies(t *testing.T) {
+	snap := ProfileSnapshot{
+		Profiles: []agentlib.ProfileInfo{
+			{Name: "cheap", MinPower: 5, MaxPower: 5},
+			{Name: "smart", MinPower: 9, MaxPower: 10},
+		},
+		Models: []agentlib.ModelInfo{
+			{ID: "offline", Power: 10, Available: false, AutoRoutable: true},
+			{ID: "exact-only", Power: 10, Available: true, AutoRoutable: true, ExactPinOnly: true},
+		},
+	}
+
+	assert.Empty(t, SelectCheapestProfile(snap))
+	assert.Empty(t, SelectStrongestProfile(snap))
+	assert.Empty(t, SelectStrongestProfileAbove(snap, 1))
+}
+
+func TestLoadProfileSnapshot_MemoizesAndStaleOnError(t *testing.T) {
+	resetProfileSnapshotCacheForTest(t)
+	now := time.Unix(1000, 0)
+	oldNow := profileSnapshotNow
+	profileSnapshotNow = func() time.Time { return now }
+	t.Cleanup(func() { profileSnapshotNow = oldNow })
+
+	svc := &profileSnapshotServiceStub{
+		profiles: []agentlib.ProfileInfo{{Name: "cheap", MinPower: 5, MaxPower: 5}},
+		models:   []agentlib.ModelInfo{{ID: "cheap-model", Power: 5, Available: true, AutoRoutable: true}},
+	}
+
+	first, err := LoadProfileSnapshot(context.Background(), svc)
+	require.NoError(t, err)
+	assert.Equal(t, "cheap", first.Profiles[0].Name)
+
+	second, err := LoadProfileSnapshot(context.Background(), svc)
+	require.NoError(t, err)
+	assert.Equal(t, first, second)
+	assert.Equal(t, 1, svc.profileCalls)
+	assert.Equal(t, 1, svc.modelCalls)
+
+	now = now.Add(profileSnapshotCacheWindow + time.Second)
+	svc.err = fmt.Errorf("service unavailable")
+	stale, err := LoadProfileSnapshot(context.Background(), svc)
+	require.NoError(t, err)
+	assert.Equal(t, first, stale)
+	assert.Equal(t, 2, svc.profileCalls)
+	assert.Equal(t, 1, svc.modelCalls)
+}
+
+func resetProfileSnapshotCacheForTest(t *testing.T) {
+	t.Helper()
+	profileSnapshotCacheMu.Lock()
+	old := profileSnapshotCache
+	profileSnapshotCache = map[string]profileSnapshotCacheEntry{}
+	profileSnapshotCacheMu.Unlock()
+	t.Cleanup(func() {
+		profileSnapshotCacheMu.Lock()
+		profileSnapshotCache = old
+		profileSnapshotCacheMu.Unlock()
+	})
+}
+
+type profileSnapshotServiceStub struct {
+	profiles     []agentlib.ProfileInfo
+	models       []agentlib.ModelInfo
+	err          error
+	profileCalls int
+	modelCalls   int
+}
+
+func (s *profileSnapshotServiceStub) Execute(context.Context, agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+	ch := make(chan agentlib.ServiceEvent)
+	close(ch)
+	return ch, nil
+}
+
+func (s *profileSnapshotServiceStub) ResolveRoute(context.Context, agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
+	return nil, nil
+}
+
+func (s *profileSnapshotServiceStub) TailSessionLog(context.Context, string) (<-chan agentlib.ServiceEvent, error) {
+	ch := make(chan agentlib.ServiceEvent)
+	close(ch)
+	return ch, nil
+}
+
+func (s *profileSnapshotServiceStub) ListHarnesses(context.Context) ([]agentlib.HarnessInfo, error) {
+	return nil, nil
+}
+
+func (s *profileSnapshotServiceStub) ListProviders(context.Context) ([]agentlib.ProviderInfo, error) {
+	return nil, nil
+}
+
+func (s *profileSnapshotServiceStub) ListModels(context.Context, agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
+	s.modelCalls++
+	if s.err != nil {
+		return nil, s.err
+	}
+	return append([]agentlib.ModelInfo(nil), s.models...), nil
+}
+
+func (s *profileSnapshotServiceStub) ListProfiles(context.Context) ([]agentlib.ProfileInfo, error) {
+	s.profileCalls++
+	if s.err != nil {
+		return nil, s.err
+	}
+	return append([]agentlib.ProfileInfo(nil), s.profiles...), nil
+}
+
+func (s *profileSnapshotServiceStub) ResolveProfile(context.Context, string) (*agentlib.ResolvedProfile, error) {
+	return nil, nil
+}
+
+func (s *profileSnapshotServiceStub) ProfileAliases(context.Context) (map[string]string, error) {
+	return nil, nil
+}
+
+func (s *profileSnapshotServiceStub) HealthCheck(context.Context, agentlib.HealthTarget) error {
+	return nil
+}
+
+func (s *profileSnapshotServiceStub) RecordRouteAttempt(context.Context, agentlib.RouteAttempt) error {
+	return nil
+}
+
+func (s *profileSnapshotServiceStub) RouteStatus(context.Context) (*agentlib.RouteStatusReport, error) {
+	return nil, nil
+}
+
+func (s *profileSnapshotServiceStub) ListSessionLogs(context.Context) ([]agentlib.SessionLogEntry, error) {
+	return nil, nil
+}
+
+func (s *profileSnapshotServiceStub) WriteSessionLog(context.Context, string, io.Writer) error {
+	return nil
+}
+
+func (s *profileSnapshotServiceStub) ReplaySession(context.Context, string, io.Writer) error {
+	return nil
+}
+
+func (s *profileSnapshotServiceStub) UsageReport(context.Context, agentlib.UsageReportOptions) (*agentlib.UsageReport, error) {
+	return nil, nil
+}

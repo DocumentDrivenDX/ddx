@@ -161,8 +161,7 @@ func landMutexFor(projectRoot string) *sync.Mutex {
 func scriptHarnessExecutor(t *testing.T, projectRoot, directivePath string) ExecuteBeadExecutorFunc {
 	t.Helper()
 	// Build Runner once at executor-construction time so concurrent goroutine
-	// calls do not race on BuiltinCatalog (NewRunner is not goroutine-safe
-	// during catalog construction).
+	// calls share a stable test runner instance.
 	runner := NewRunner(Config{})
 	gitOps := &RealGitOps{}
 	orchGitOps := &RealOrchestratorGitOps{}

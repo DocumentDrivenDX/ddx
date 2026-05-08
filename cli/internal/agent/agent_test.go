@@ -65,6 +65,19 @@ func newTestRunner(exec *mockExecutor) *Runner {
 	return r
 }
 
+func TestRunner_ConstructsWithoutCatalog(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+	catalogPath := filepath.Join(homeDir, ".ddx", "model-catalog.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(catalogPath), 0o755))
+	require.NoError(t, os.WriteFile(catalogPath, []byte("updated_at: 2026-01-01T00:00:00Z\n"), 0o644))
+
+	r := NewRunner(Config{})
+	require.NotNil(t, r)
+	assert.Equal(t, DefaultHarness, r.Config.Harness)
+	assert.NotNil(t, r.Executor)
+}
+
 // --- Harness config tests ---
 
 func TestRegistryBuiltinHarnesses(t *testing.T) {

@@ -281,8 +281,8 @@ func TestIntegration_ScriptHarness_FiveConcurrentBeads_AllLanded(t *testing.T) {
 		dirFiles[i] = dirFile
 	}
 
-	// Build per-bead executors before spawning goroutines to avoid races on
-	// BuiltinCatalog (NewRunner is not goroutine-safe during catalog construction).
+	// Build per-bead executors before spawning goroutines so the test harness
+	// setup does not interleave with worker execution.
 	// scriptHarnessExecutor uses landMutexFor(projectRoot) to serialize Land() calls,
 	// mimicking the production LandCoordinator (ddx-8746d8a6).
 	beadExecutors := make(map[string]ExecuteBeadExecutorFunc, n)

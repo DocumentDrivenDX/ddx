@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,10 +29,15 @@ func TestBuildReviewExecuteRequest(t *testing.T) {
 			"session_id": "sess-1",
 		},
 	}
-	got := BuildReviewExecuteRequest(impl, "claude", "claude-opus-4-7")
+	got := BuildReviewExecuteRequest(impl, "claude", "review-strong")
 
 	assert.Equal(t, "claude", got.HarnessOverride)
-	assert.Equal(t, "claude-opus-4-7", got.ModelOverride)
+	assert.Empty(t, got.ModelOverride)
+	assert.Empty(t, got.ModelRefOverride)
+	assert.Equal(t, "review-strong", got.ProfileOverride)
+	assert.True(t, got.ClearRoutingPins)
+	assert.True(t, got.ClearProfile)
+	assert.True(t, got.ClearMaxPower)
 	assert.Equal(t, 71, got.MinPowerOverride, "MinPower must be impl.ActualPower+1 (R4 pairing)")
 	assert.Equal(t, "reviewer", got.Role, "Role=reviewer must be set so the dispatch request is tagged correctly")
 	assert.Equal(t, "ddx-pairing-1", got.CorrelationID, "single-review correlation ID should be derived from bead_id when no review_group_id is present")
@@ -47,13 +53,21 @@ func TestBuildReviewExecuteRequest(t *testing.T) {
 	assert.Equal(t, "70", got.Correlation["impl_actual_power"])
 }
 
+func TestReviewerDispatch_UsesProfileNotModelRef(t *testing.T) {
+	got := BuildReviewExecuteRequest(ImplementerRouting{Harness: "claude"}, "", "review-strong")
+	assert.Empty(t, got.HarnessOverride)
+	assert.Empty(t, got.ModelOverride)
+	assert.Empty(t, got.ModelRefOverride)
+	assert.Equal(t, "review-strong", got.ProfileOverride)
+}
+
 // TestBuildReviewExecuteRequest_ZeroPowerLeavesMinPowerZero verifies the
 // edge case where the implementer's actual power was not reported (e.g., a
 // virtual harness or a routing decision missing components.power). MinPower
 // should remain zero so the reviewer falls back to rcfg.MinPower() rather
 // than pinning to a synthetic +1 above zero.
 func TestBuildReviewExecuteRequest_ZeroPowerLeavesMinPowerZero(t *testing.T) {
-	got := BuildReviewExecuteRequest(ImplementerRouting{}, "claude", "claude-opus")
+	got := BuildReviewExecuteRequest(ImplementerRouting{}, "claude", "review-strong")
 	assert.Zero(t, got.MinPowerOverride)
 }
 
@@ -100,7 +114,6 @@ func TestReviewBead_HappyPath_DifferentProvider_NoDegradedEvent(t *testing.T) {
 		BeadStore:   store,
 		BeadEvents:  events,
 		Harness:     "claude",
-		Model:       "claude-opus-4-7",
 		Runner: &reviewRunnerStub{result: &Result{
 			Harness:     "claude",
 			Provider:    "anthropic", // different from implementer
@@ -140,7 +153,6 @@ func TestReviewBead_DegradedPath_SameProvider_EmitsEvent(t *testing.T) {
 		BeadStore:   store,
 		BeadEvents:  events,
 		Harness:     "claude",
-		Model:       "claude-opus-4-7",
 		Runner: &reviewRunnerStub{result: &Result{
 			Harness:     "claude",
 			Provider:    "anthropic",
@@ -185,14 +197,11 @@ func TestReviewBead_DegradedPath_SameProvider_EmitsEvent(t *testing.T) {
 	assert.Contains(t, body, "min_power_requested=71")
 }
 
-// TestReviewBead_DefaultsToImplementerHarness verifies the CLI contract:
-// an unset reviewer harness follows the implementation harness instead of
-// forcing a project-specific default.
-func TestReviewBead_DefaultsToImplementerHarness(t *testing.T) {
+func TestReviewBead_DoesNotInheritImplementerHarness(t *testing.T) {
 	projectRoot, head, store := reviewPairingTestSetup(t)
 
 	stub := &reviewRunnerStub{result: &Result{
-		// Empty Harness/Provider in the result so we observe the inferred default.
+		// Empty Harness/Provider in the result so we observe the dispatched default.
 		Output: reviewerOutputApprove,
 	}}
 	reviewer := &DefaultBeadReviewer{
@@ -208,5 +217,47 @@ func TestReviewBead_DefaultsToImplementerHarness(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	assert.Equal(t, "codex", res.ReviewerHarness)
+	assert.Empty(t, res.ReviewerHarness)
+}
+
+func TestPostMergeReviewer_DispatchesWithStrongestAboveImplPowerAndNoModelPin(t *testing.T) {
+	projectRoot, head, store := reviewPairingTestSetup(t)
+	svc := &passthroughTestService{
+		listProfiles: []agentlib.ProfileInfo{
+			{Name: "standard", MinPower: 7, MaxPower: 8},
+			{Name: "smart", MinPower: 9, MaxPower: 10},
+			{Name: "frontier", MinPower: 71, MaxPower: 80},
+		},
+		listModels: []agentlib.ModelInfo{
+			{ID: "standard-model", Power: 8, Available: true, AutoRoutable: true},
+			{ID: "smart-model", Power: 10, Available: true, AutoRoutable: true},
+			{ID: "frontier-model", Power: 72, Available: true, AutoRoutable: true},
+		},
+		executeEvents: []agentlib.ServiceEvent{
+			{
+				Type: "final",
+				Data: []byte(`{"status":"success","final_text":"{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}"}`),
+			},
+		},
+	}
+	reviewer := &DefaultBeadReviewer{
+		ProjectRoot: projectRoot,
+		BeadStore:   store,
+		Service:     svc,
+	}
+
+	res, err := reviewer.ReviewBead(context.Background(), "ddx-pairing", head, ImplementerRouting{
+		Harness:     "codex",
+		Provider:    "openai",
+		Model:       "gpt-5",
+		ActualPower: 70,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "frontier", svc.lastReq.Profile)
+	assert.Equal(t, 71, svc.lastReq.MinPower)
+	assert.Empty(t, svc.lastReq.Model)
+	assert.Empty(t, svc.lastReq.ModelRef)
+	assert.Empty(t, svc.lastReq.Harness)
+	assert.Empty(t, svc.lastReq.Provider)
 }
