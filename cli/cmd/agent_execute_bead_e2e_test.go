@@ -34,10 +34,19 @@ func TestExecuteBeadContextBudgetFromConfig(t *testing.T) {
 		mainHeadRev: "aaaa1111",
 		wtHeadRev:   "aaaa1111", // no-changes outcome — keeps the run minimal
 	}
+	var prompt string
 	runner := &fakeAgentRunner{result: &agent.Result{
 		ExitCode: 0,
 		Harness:  "mock-harness",
 	}}
+	runner.sideEffect = func(opts agent.RunArgs) error {
+		body, err := os.ReadFile(opts.PromptFile)
+		if err != nil {
+			return err
+		}
+		prompt = string(body)
+		return nil
+	}
 	f := newExecuteBeadFactory(t, git, runner)
 
 	cfg := `version: "1.0"
@@ -55,9 +64,8 @@ evidence_caps:
 
 	require.NotEmpty(t, runner.last.PromptFile,
 		"agent runner must receive the synthesized prompt file path")
-	body, err := os.ReadFile(runner.last.PromptFile)
-	require.NoError(t, err, "synthesized prompt artifact must be readable")
-	prompt := string(body)
+	require.NotEmpty(t, prompt,
+		"synthesized prompt artifact must be readable during dispatch")
 
 	assert.Contains(t, prompt, "No governing references.",
 		"minimal-budget prompt must include the short minimal marker")

@@ -1804,11 +1804,17 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	}
 
 	cliLandingOps := agent.RealLandingGitOps{}
+	progressLog := cmd.OutOrStdout()
+	cleanupLog := cmd.ErrOrStderr()
+	if asJSON {
+		progressLog = io.Discard
+		cleanupLog = io.Discard
+	}
 	result, err := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
 		Once:                  once,
 		PollInterval:          pollInterval,
-		Log:                   cmd.OutOrStdout(),
-		CleanupLog:            cmd.ErrOrStderr(),
+		Log:                   progressLog,
+		CleanupLog:            cleanupLog,
 		EventSink:             loopSink,
 		WorkerID:              resolveClaimAssignee(),
 		ProjectRoot:           projectRoot,
