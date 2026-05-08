@@ -39,12 +39,12 @@ type Report struct {
 	Status                      string
 	Detail                      string
 	SessionID                   string
-	BaseRev           string
-	ResultRev         string
-	ImplementationRev string
-	LandedRev         string
-	EvidenceRev       string
-	PreserveRef       string
+	BaseRev                     string
+	ResultRev                   string
+	ImplementationRev           string
+	LandedRev                   string
+	EvidenceRev                 string
+	PreserveRef                 string
 	RetryAfter                  string
 	NoChangesRationale          string
 	ReviewVerdict               string

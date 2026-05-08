@@ -1469,9 +1469,9 @@ func TestApplyLandResult_PreservesImplementationRevAndSetsLandedRev(t *testing.T
 		ResultRev: workerSHA,
 	}
 	land := &LandResult{
-		Status:  "landed",
-		NewTip:  branchTip,
-		Merged:  false,
+		Status: "landed",
+		NewTip: branchTip,
+		Merged: false,
 	}
 
 	ApplyLandResultToExecuteBeadResult(res, land)
@@ -1532,8 +1532,8 @@ func TestBuildLandRequest_UsesImplementationRevNotEvidenceRev(t *testing.T) {
 		BeadID:            "ddx-test",
 		AttemptID:         "20260101T000000-deadbeef",
 		BaseRev:           "base1111base2222base3333base4444base5555",
-		ResultRev:         landedSHA,   // already rewritten to branch tip
-		ImplementationRev: implSHA,     // original worker commit
+		ResultRev:         landedSHA, // already rewritten to branch tip
+		ImplementationRev: implSHA,   // original worker commit
 		LandedRev:         landedSHA,
 		EvidenceRev:       evidenceSHA,
 		ExecutionDir:      ".ddx/executions/20260101T000000-deadbeef",
