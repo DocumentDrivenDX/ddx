@@ -53,6 +53,47 @@ type preClaimReadinessPromptResult struct {
 	Rewrite preClaimIntakePromptRewrite `json:"rewrite,omitempty"`
 }
 
+type preClaimReadinessClassificationPromptResult struct {
+	Classification    string                            `json:"classification"`
+	Tractability      string                            `json:"tractability,omitempty"`
+	Score             int                               `json:"score,omitempty"`
+	Rationale         string                            `json:"rationale,omitempty"`
+	Detail            string                            `json:"detail,omitempty"`
+	Reasoning         string                            `json:"reasoning,omitempty"`
+	ReadinessChecks   []preClaimReadinessCheck          `json:"readiness_checks,omitempty"`
+	SuggestedFixes    []preClaimReadinessSuggestedFix   `json:"suggested_fixes,omitempty"`
+	SuggestedChildren []preClaimReadinessSuggestedChild `json:"suggested_child_beads,omitempty"`
+	WaiversApplied    []preClaimReadinessWaiver         `json:"waivers_applied,omitempty"`
+	Rewrite           preClaimIntakePromptRewrite       `json:"rewrite,omitempty"`
+}
+
+type preClaimReadinessCheck struct {
+	Reason                 string `json:"reason,omitempty"`
+	Verdict                string `json:"verdict,omitempty"`
+	Evidence               string `json:"evidence,omitempty"`
+	CheckableBeforeAttempt bool   `json:"checkable_before_attempt,omitempty"`
+}
+
+type preClaimReadinessSuggestedFix struct {
+	Target string `json:"target,omitempty"`
+	Fix    string `json:"fix,omitempty"`
+}
+
+type preClaimReadinessSuggestedChild struct {
+	Title       string   `json:"title,omitempty"`
+	Description string   `json:"description,omitempty"`
+	Acceptance  []string `json:"acceptance,omitempty"`
+	Labels      []string `json:"labels,omitempty"`
+	Parent      string   `json:"parent,omitempty"`
+	Deps        []string `json:"deps,omitempty"`
+}
+
+type preClaimReadinessWaiver struct {
+	Reason   string   `json:"reason,omitempty"`
+	Criteria []string `json:"criteria,omitempty"`
+	Evidence string   `json:"evidence,omitempty"`
+}
+
 // NewPreClaimIntakeHook constructs the bead-intake complexity gate used
 // before claim in the work / execute-loop paths. The hook evaluates the bead
 // using the repository's triage prompt and returns one of the typed intake
@@ -241,8 +282,17 @@ func normalizePreClaimIntakeRewriteFields(fields []string) []string {
 // readiness schema (outcome field), converting both into the same decision model.
 func decodePreClaimIntakePayloadResult(payload string) (PreClaimIntakeResult, error) {
 	var probe struct {
-		Classification string `json:"classification"`
-		Outcome        string `json:"outcome"`
+		Classification  string `json:"classification"`
+		Outcome         string `json:"outcome"`
+		Tractability    string `json:"tractability"`
+		Rationale       string `json:"rationale"`
+		Score           *int   `json:"score"`
+		ReadinessChecks []struct {
+			Reason string `json:"reason,omitempty"`
+		} `json:"readiness_checks"`
+		SuggestedFixes []struct {
+			Target string `json:"target,omitempty"`
+		} `json:"suggested_fixes"`
 	}
 	if err := json.Unmarshal([]byte(payload), &probe); err != nil {
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode result: %w", err)
@@ -251,9 +301,32 @@ func decodePreClaimIntakePayloadResult(payload string) (PreClaimIntakeResult, er
 		return decodeCanonicalReadinessPayload(payload)
 	}
 	if probe.Classification != "" {
+		if isReadinessClassificationPayload(probe.Classification, probe.Tractability, probe.Rationale, probe.Score, len(probe.ReadinessChecks), len(probe.SuggestedFixes)) {
+			return decodeReadinessClassificationPayload(payload)
+		}
 		return decodeLegacyIntakePayload(payload)
 	}
 	return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: missing classification or outcome field")
+}
+
+func isReadinessClassificationPayload(classification, tractability, rationale string, score *int, checkCount, fixCount int) bool {
+	switch strings.ToLower(strings.TrimSpace(classification)) {
+	case ReadinessClassificationSystemUnready,
+		"readiness_error",
+		"intake_error",
+		ReadinessClassificationNeedsRefine,
+		ReadinessClassificationNeedsSplit,
+		ReadinessClassificationNeedsHuman:
+		return true
+	case "ready":
+		return strings.TrimSpace(tractability) != "" ||
+			strings.TrimSpace(rationale) != "" ||
+			score != nil ||
+			checkCount > 0 ||
+			fixCount > 0
+	default:
+		return false
+	}
 }
 
 func decodeCanonicalReadinessPayload(payload string) (PreClaimIntakeResult, error) {
@@ -276,17 +349,110 @@ func decodeCanonicalReadinessPayload(payload string) (PreClaimIntakeResult, erro
 	case "actionable_but_rewritten":
 		return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableButRewritten, Detail: detail, Rewrite: rewrite}, nil
 	case "too_large_decomposed":
-		return PreClaimIntakeResult{Outcome: PreClaimIntakeTooLargeDecomposed, Detail: detail}, nil
+		return PreClaimIntakeResult{Outcome: PreClaimIntakeTooLargeDecomposed, Reason: ReadinessReasonTooLarge, Detail: detail}, nil
 	case "ambiguous_needs_human":
-		return PreClaimIntakeResult{Outcome: PreClaimIntakeAmbiguousNeedsHuman, Detail: detail}, nil
+		return PreClaimIntakeResult{Outcome: PreClaimIntakeAmbiguousNeedsHuman, Reason: ReadinessReasonAmbiguousScope, Detail: detail}, nil
 	case "readiness_error", "system_unready":
 		// system_unready maps to fail-open/skip per ADR-023/FEAT-010 policy
-		return PreClaimIntakeResult{Outcome: PreClaimIntakeError, Detail: detail}, nil
+		classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, detail)
+		return PreClaimIntakeResult{
+			Outcome:      PreClaimIntakeError,
+			Reason:       classified.Reason,
+			SystemReason: classified.SystemReason,
+			Detail:       detail,
+		}, nil
 	case "":
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: missing outcome")
 	default:
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: unknown readiness outcome %q: expected one of actionable_atomic, actionable_but_rewritten, too_large_decomposed, ambiguous_needs_human, readiness_error, system_unready", out.Outcome)
 	}
+}
+
+func decodeReadinessClassificationPayload(payload string) (PreClaimIntakeResult, error) {
+	var out preClaimReadinessClassificationPromptResult
+	if err := json.Unmarshal([]byte(payload), &out); err != nil {
+		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode readiness classification result: %w", err)
+	}
+	reasons := failedReadinessReasons(out.ReadinessChecks)
+	detail := firstNonEmptyReadinessDetail(out.Rationale, out.Detail, out.Reasoning)
+	classified := ClassifyReadiness(out.Classification, reasons, detail)
+	if detail == "" {
+		detail = readinessCheckEvidence(out.ReadinessChecks)
+	}
+	detail = readinessDetailWithReason(classified, detail)
+
+	rewrite := PreClaimIntakeRewrite{
+		Description:   strings.TrimSpace(out.Rewrite.Description),
+		Acceptance:    strings.TrimSpace(out.Rewrite.Acceptance),
+		ChangedFields: normalizePreClaimIntakeRewriteFields(out.Rewrite.ChangedFields),
+	}
+	result := PreClaimIntakeResult{
+		Outcome:      classified.IntakeOutcome,
+		Reason:       classified.Reason,
+		SystemReason: classified.SystemReason,
+		Detail:       detail,
+	}
+	if classified.Classification == ReadinessClassificationNeedsRefine && hasPreClaimIntakeRewrite(rewrite) {
+		result.Outcome = PreClaimIntakeActionableButRewritten
+		result.Rewrite = rewrite
+	}
+	return result, nil
+}
+
+func failedReadinessReasons(checks []preClaimReadinessCheck) []string {
+	reasons := make([]string, 0, len(checks))
+	for _, check := range checks {
+		verdict := strings.ToLower(strings.TrimSpace(check.Verdict))
+		if verdict != "fail" {
+			continue
+		}
+		if reason := strings.TrimSpace(check.Reason); reason != "" {
+			reasons = append(reasons, reason)
+		}
+	}
+	return reasons
+}
+
+func readinessCheckEvidence(checks []preClaimReadinessCheck) string {
+	for _, check := range checks {
+		if strings.ToLower(strings.TrimSpace(check.Verdict)) != "fail" {
+			continue
+		}
+		if evidence := strings.TrimSpace(check.Evidence); evidence != "" {
+			return evidence
+		}
+	}
+	return ""
+}
+
+func readinessDetailWithReason(classified ReadinessClassificationResult, detail string) string {
+	detail = strings.TrimSpace(detail)
+	reason := strings.TrimSpace(classified.Reason)
+	if reason == "" {
+		return detail
+	}
+	if detail == "" {
+		return reason
+	}
+	if strings.Contains(strings.ToLower(detail), strings.ToLower(reason)) {
+		return detail
+	}
+	return reason + ": " + detail
+}
+
+func firstNonEmptyReadinessDetail(values ...string) string {
+	for _, value := range values {
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
+}
+
+func hasPreClaimIntakeRewrite(rewrite PreClaimIntakeRewrite) bool {
+	return strings.TrimSpace(rewrite.Description) != "" ||
+		strings.TrimSpace(rewrite.Acceptance) != "" ||
+		len(rewrite.ChangedFields) > 0
 }
 
 func decodeLegacyIntakePayload(payload string) (PreClaimIntakeResult, error) {

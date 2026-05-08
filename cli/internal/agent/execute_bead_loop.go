@@ -186,6 +186,9 @@ func (w *ExecuteBeadWorker) runPostAttemptTriage(ctx context.Context, candidate 
 	if hook == nil {
 		return report
 	}
+	if isDeterministicSystemOutcomeReason(report.OutcomeReason) {
+		return report
+	}
 	triage, err := hook(ctx, candidate.ID, report)
 	if err != nil {
 		if runtime.Log != nil {
@@ -764,13 +767,16 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			switch {
 			case intakeErr != nil:
 				warning := trimDiagnosticPrefix(intakeErr.Error(), "pre-claim intake")
+				classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, warning)
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log, "readiness check unavailable: %s (continuing with %s)\n", warning, candidate.ID)
 				}
 				emit("pre_claim_intake.warn", map[string]any{
-					"bead_id": candidate.ID,
-					"outcome": string(PreClaimIntakeError),
-					"detail":  warning,
+					"bead_id":       candidate.ID,
+					"outcome":       string(PreClaimIntakeError),
+					"reason":        classified.Reason,
+					"system_reason": classified.SystemReason,
+					"detail":        warning,
 				})
 			case intakeOutcome == PreClaimIntakeActionableAtomic:
 				// pass-through
@@ -800,13 +806,22 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				if warning == "" {
 					warning = "readiness check returned intake_error"
 				}
+				reason := intakeResult.Reason
+				systemReason := intakeResult.SystemReason
+				if reason == "" && systemReason == "" {
+					classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, warning)
+					reason = classified.Reason
+					systemReason = classified.SystemReason
+				}
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log, "readiness check unavailable: %s (continuing with %s)\n", warning, candidate.ID)
 				}
 				emit("pre_claim_intake.warn", map[string]any{
-					"bead_id": candidate.ID,
-					"outcome": string(PreClaimIntakeError),
-					"detail":  warning,
+					"bead_id":       candidate.ID,
+					"outcome":       string(PreClaimIntakeError),
+					"reason":        reason,
+					"system_reason": systemReason,
+					"detail":        warning,
 				})
 			default:
 				// Terminal non-actionable outcome: park with needs_human label so
@@ -821,6 +836,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				emit("pre_claim_intake.blocked", map[string]any{
 					"bead_id": candidate.ID,
 					"outcome": string(intakeOutcome),
+					"reason":  intakeResult.Reason,
 					"detail":  warning,
 				})
 				if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, intakeOutcome, intakeResult.Detail, now().UTC()); berr != nil && runtime.Log != nil {
@@ -841,6 +857,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			appendPreDispatchLintEvent(w.Store, candidate.ID, lintResult, lintErr, lintThreshold, assignee, now().UTC())
 
 			if lintErr != nil {
+				classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, lintErr.Error())
 				if runtime.Log != nil {
 					var lhe *LintHookError
 					if errors.As(lintErr, &lhe) && lhe.Kind == LintHookErrorKindMissingHarness {
@@ -850,8 +867,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					}
 				}
 				emit("pre_dispatch_lint.warn", map[string]any{
-					"bead_id": candidate.ID,
-					"warning": lintErr.Error(),
+					"bead_id":       candidate.ID,
+					"warning":       lintErr.Error(),
+					"reason":        classified.Reason,
+					"system_reason": classified.SystemReason,
 				})
 			} else if lintThreshold > 0 && lintResult.Score < lintThreshold {
 				blockMsg := fmt.Sprintf(
@@ -2010,6 +2029,34 @@ func classifyLoopReportFailure(report *ExecuteBeadReport) {
 		report.Error,
 		report.Stderr,
 	}, "\n"))
+	if system := ClassifyReadiness("", nil, combined); system.SystemReason != "" {
+		switch system.SystemReason {
+		case ReadinessSystemReasonQuota:
+			report.OutcomeReason = "quota"
+		case ReadinessSystemReasonTransport:
+			report.OutcomeReason = "transport"
+			report.Disrupted = true
+			report.DisruptionReason = "transport_error"
+		case ReadinessSystemReasonResourceExhausted:
+			report.OutcomeReason = ReadinessSystemReasonResourceExhausted
+			report.Disrupted = true
+			report.DisruptionReason = ReadinessSystemReasonResourceExhausted
+		case ReadinessSystemReasonRepoConcurrency:
+			report.OutcomeReason = FailureModeLockContention
+			report.Disrupted = true
+			report.DisruptionReason = FailureModeLockContention
+		case ReadinessSystemReasonRouting:
+			mode := ClassifyFailureMode(report.Status, 1, combined)
+			if mode == "" || mode == FailureModeUnknown {
+				report.OutcomeReason = "routing"
+			} else {
+				report.OutcomeReason = mode
+			}
+		default:
+			report.OutcomeReason = "recoverable"
+		}
+		return
+	}
 	if report.Status == ExecuteBeadStatusNoEvidenceProduced {
 		report.OutcomeReason = FailureModeNoEvidenceProduced
 		return
@@ -2099,6 +2146,8 @@ func isValidImplementationAttempt(report ExecuteBeadReport) bool {
 		FailureModeBlockedByPassthroughConstraint,
 		FailureModeNoEvidenceProduced,
 		FailureModeWorktreeLost,
+		ReadinessSystemReasonResourceExhausted,
+		ReadinessSystemReasonRepoConcurrency,
 		"needs_human":
 		return false
 	}
@@ -2130,7 +2179,12 @@ func shouldSuppressNoProgress(report ExecuteBeadReport) bool {
 
 func isTransientOutcomeReason(reason string) bool {
 	switch reason {
-	case "transport", "quota", "routing", "timeout", "merge_conflict", FailureModeLockContention, FailureModeNoViableProvider, FailureModeWorktreeLost:
+	case "transport", "quota", "routing", "timeout", "merge_conflict",
+		ReadinessSystemReasonResourceExhausted,
+		ReadinessSystemReasonRepoConcurrency,
+		FailureModeLockContention,
+		FailureModeNoViableProvider,
+		FailureModeWorktreeLost:
 		return true
 	default:
 		return false

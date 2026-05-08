@@ -17,9 +17,11 @@ const (
 // PreClaimIntakeResult is the typed decision returned by the intake hook.
 // Detail carries the human-readable rationale or infra failure context.
 type PreClaimIntakeResult struct {
-	Outcome PreClaimIntakeOutcome `json:"outcome,omitempty"`
-	Detail  string                `json:"detail,omitempty"`
-	Rewrite PreClaimIntakeRewrite `json:"rewrite,omitempty"`
+	Outcome      PreClaimIntakeOutcome `json:"outcome,omitempty"`
+	Reason       string                `json:"reason,omitempty"`
+	SystemReason string                `json:"system_reason,omitempty"`
+	Detail       string                `json:"detail,omitempty"`
+	Rewrite      PreClaimIntakeRewrite `json:"rewrite,omitempty"`
 }
 
 // PreClaimIntakeRewrite carries intent-preserving bead edits returned by the
