@@ -140,7 +140,7 @@ func intakeHookTestConfig() config.ResolvedConfig {
 	return cfg.Resolve(config.CLIOverrides{Harness: "claude"})
 }
 
-func TestDecompositionHook_UsesStrongMinPower(t *testing.T) {
+func TestDecompositionHook_UsesImplementationRoutingPath(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
@@ -164,7 +164,7 @@ func TestDecompositionHook_UsesStrongMinPower(t *testing.T) {
 	assert.Contains(t, svc.lastReq.Prompt, "MODE: intake")
 	assert.Equal(t, root, svc.lastReq.WorkDir)
 	assert.Empty(t, svc.lastReq.ModelRef)
-	assert.Equal(t, "smart", svc.lastReq.Profile)
+	assert.Empty(t, svc.lastReq.Profile)
 	assert.Zero(t, svc.lastReq.MinPower)
 }
 
@@ -258,7 +258,7 @@ func TestDecompositionHook_PreservesPassthroughConstraints(t *testing.T) {
 	assert.Equal(t, "anthropic", svc.lastReq.Provider)
 	assert.Equal(t, "claude-sonnet-4-6", svc.lastReq.Model)
 	assert.Empty(t, svc.lastReq.ModelRef)
-	assert.Equal(t, "smart", svc.lastReq.Profile)
+	assert.Empty(t, svc.lastReq.Profile)
 	assert.Zero(t, svc.lastReq.MinPower)
 }
 
@@ -282,7 +282,7 @@ func TestDecompositionHook_StrongPowerUnsatisfiedReturnsIntakeError(t *testing.T
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 }
 
-func TestDecompositionHook_ClearsMaxPowerForSmartIntake(t *testing.T) {
+func TestDecompositionHook_InheritsImplementationPowerBounds(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
@@ -296,8 +296,8 @@ func TestDecompositionHook_ClearsMaxPowerForSmartIntake(t *testing.T) {
 	}
 	svc.executeFunc = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 		assert.Zero(t, req.MinPower)
-		assert.Equal(t, "smart", req.Profile)
-		assert.Zero(t, req.MaxPower, "pre-claim intake must not inherit worker max_power")
+		assert.Empty(t, req.Profile)
+		assert.Equal(t, 8, req.MaxPower, "pre-claim intake should use the same max_power path as implementation dispatch")
 		ch := make(chan agentlib.ServiceEvent, 1)
 		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"atomic\",\"confidence\":0.99,\"reasoning\":\"frontier-ready\"}"}`)}
 		close(ch)

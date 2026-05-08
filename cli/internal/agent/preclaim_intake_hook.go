@@ -88,16 +88,12 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: build prompt: %w", err)
 		}
 
-		profile, selectedSvc := selectProfileForAuxiliaryDispatch(ctx, projectRoot, svc, runner, SelectStrongestProfile)
 		runtime := AgentRunRuntime{
-			Prompt:          prompt,
-			WorkDir:         projectRoot,
-			PromptSource:    PreClaimIntakePromptSource,
-			ProfileOverride: profile,
-			ClearProfile:    true,
-			ClearMaxPower:   true,
+			Prompt:       prompt,
+			WorkDir:      projectRoot,
+			PromptSource: PreClaimIntakePromptSource,
 		}
-		payload, err := dispatchPreClaimIntakePayload(ctx, projectRoot, selectedSvc, runner, rcfg, runtime)
+		payload, err := dispatchPreClaimIntakePayload(ctx, projectRoot, svc, runner, rcfg, runtime)
 		if err != nil {
 			return PreClaimIntakeResult{
 				Outcome: PreClaimIntakeError,

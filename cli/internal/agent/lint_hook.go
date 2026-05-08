@@ -125,13 +125,10 @@ func NewPreDispatchLintHook(projectRoot string, store BeadReader, rcfg config.Re
 			return LintResult{}, &LintHookError{Kind: LintHookErrorKindDispatchFailure, Err: err}
 		}
 
-		profile, selectedSvc := selectProfileForAuxiliaryDispatch(ctx, projectRoot, svc, runner, SelectCheapestProfile)
-		result, err := dispatchViaResolvedConfig(ctx, projectRoot, selectedSvc, runner, rcfg, AgentRunRuntime{
-			Prompt:          prompt,
-			WorkDir:         projectRoot,
-			PromptSource:    "bead-lifecycle-lint",
-			ProfileOverride: profile,
-			ClearProfile:    true,
+		result, err := dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, AgentRunRuntime{
+			Prompt:       prompt,
+			WorkDir:      projectRoot,
+			PromptSource: "bead-lifecycle-lint",
 		})
 		if err != nil {
 			switch {

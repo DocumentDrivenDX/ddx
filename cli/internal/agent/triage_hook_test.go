@@ -502,7 +502,7 @@ func TestTriageHook_HookError_DoesNotCreateDefaultCooldown(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestPostAttemptTriageHook_ClearsProfileSoDefaultPowerBoundsDoNotApply(t *testing.T) {
+func TestPostAttemptTriageHook_UsesImplementationRoutingProfile(t *testing.T) {
 	root := newTriageHookTestRoot(t)
 	store, b := newTriageHookTestStore(t, root)
 
@@ -535,5 +535,5 @@ func TestPostAttemptTriageHook_ClearsProfileSoDefaultPowerBoundsDoNotApply(t *te
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "transport", got.Classification)
-	assert.Equal(t, "cheap", svc.lastReq.Profile, "triage dispatch should choose a cheap service profile instead of forwarding the default profile")
+	assert.Equal(t, "default", svc.lastReq.Profile, "triage dispatch should use the same resolved profile as implementation dispatch")
 }
