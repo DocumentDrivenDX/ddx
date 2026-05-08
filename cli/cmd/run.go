@@ -173,7 +173,10 @@ func (f *CommandFactory) runRun(cmd *cobra.Command, args []string) error {
 	case "json-result":
 		enc := json.NewEncoder(cmd.OutOrStdout())
 		enc.SetIndent("", "  ")
-		return enc.Encode(result)
+		if err := enc.Encode(result); err != nil {
+			return err
+		}
+		return runResultError(result)
 	case "session-jsonl":
 		if result.CondensedOutput != "" {
 			fmt.Fprint(cmd.OutOrStdout(), result.CondensedOutput)
@@ -189,6 +192,13 @@ func (f *CommandFactory) runRun(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("unknown --output value %q (valid: text, json-result, session-jsonl)", outputFmt)
 	}
 
+	return runResultError(result)
+}
+
+func runResultError(result *agent.Result) error {
+	if result == nil {
+		return nil
+	}
 	if result.ExitCode != 0 {
 		msg := fmt.Sprintf("agent exited with code %d", result.ExitCode)
 		if result.Error != "" {

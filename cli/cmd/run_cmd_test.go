@@ -133,6 +133,30 @@ func TestRunDoesNotCallResolveRoute(t *testing.T) {
 	}
 }
 
+func TestRunJSONFinalErrorExitsNonZero(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	stub := installExecuteCapturingStub(t)
+	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		ch := make(chan agentlib.ServiceEvent, 1)
+		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":0,"error":"ResolveRoute: no viable routing candidate: 3 candidates rejected"}`)}
+		close(ch)
+		return ch, nil
+	}
+
+	dir := minimalProjectDir(t)
+	root := NewCommandFactory(dir).NewRootCommand()
+	out, err := executeCommand(root, "run",
+		"--text", "hello",
+		"--json",
+		"--timeout", "5s",
+	)
+	require.Error(t, err)
+	assert.Contains(t, out, `"exit_code": 1`)
+	assert.Contains(t, out, `"error": "ResolveRoute: no viable routing candidate: 3 candidates rejected"`)
+	assert.Contains(t, err.Error(), "agent exited with code 1")
+}
+
 // TestRunPersonaInjectsBodyIntoPrompt verifies AC3: ddx run --persona loads
 // the named persona and prepends its body to the prompt dispatched to Execute.
 func TestRunPersonaInjectsBodyIntoPrompt(t *testing.T) {
