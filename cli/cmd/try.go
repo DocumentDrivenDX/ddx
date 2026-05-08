@@ -104,6 +104,15 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 
 	projectFlag, _ := cmd.Flags().GetString("project")
 	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
+
+	// Preflight: warn once per process for degraded project-local skill layout.
+	// Runs before claim/worktree setup so the operator sees the warning before
+	// any bead state changes.
+	preflightResult := checkProjectRuntimePreflight(projectRoot)
+	f.preflightWarnOnce.Do(func() {
+		emitPreflightWarning(cmd.ErrOrStderr(), preflightResult)
+	})
+
 	fromRev, _ := cmd.Flags().GetString("from")
 	harness, _ := cmd.Flags().GetString("harness")
 	model, _ := cmd.Flags().GetString("model")
