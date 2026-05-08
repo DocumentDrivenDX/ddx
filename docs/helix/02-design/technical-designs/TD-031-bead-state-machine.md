@@ -204,6 +204,10 @@ Review and triage events:
   exhausted automatic recovery and require operator action
 - `triage-decomposed` — readiness or review decomposed a parent into child beads
 - `triage-overflow` — decomposition reached the depth cap
+- `triage-rewritten` / `intake-rewritten` — readiness applied a validated
+  replacement rewrite or metadata update before claim; body carries changed
+  fields, rationale, before/after hashes or attachment pointers, and preservation
+  evidence
 - `triage-ambiguous` — readiness could not safely clarify the bead
 - `auto-triage` — TriageContract: triage path mutated labels/status
 
@@ -400,10 +404,20 @@ wording only; the product concept is bead readiness assessment.
 Status transitions used:
 
 - `in_progress → open` when releasing stale claims.
+- `open → open` when readiness applies a validated replacement rewrite or
+  metadata-only safe improvement before implementation. The bead remains
+  execution-ready unless a later readiness decision parks it.
 - `open → blocked` when triage decides a bead has an unmet hard
   precondition.
 - `open → blocked` when readiness decomposes a parent, reaches decomposition depth
   overflow, or finds ambiguity that cannot be safely rewritten.
+
+For successful replacement rewrites, the bead body may be materially shorter or
+longer than the original when prompt fitness requires it. Preservation is proven
+by the `triage-rewritten` / `intake-rewritten` evidence record and durable
+anchors, not by keeping old text inside the prompt body. For rejected rewrites,
+readiness parks the bead with `needs_human` instead of releasing it back into
+the execution-ready lane.
 
 Labels added: `triage`, `needs_human`, `blocked-on-upstream:<id>`,
 `decomposed`, `needs-human-decomposition`, `triage:spec-gap`,

@@ -176,11 +176,14 @@ decomposition.
 The readiness assessment result is one of:
 
 - `actionable_atomic` — claim and execute normally.
-- `actionable_but_rewritten` — DDx applied safe, intent-preserving bead updates
-  such as formatting the description into the authoring template, adding
-  discovered file:line evidence, adding an obvious test command, or wiring
-  deterministic labels/parent/deps. The update is recorded through `ddx bead`
-  mutation paths before claim.
+- `actionable_but_rewritten` — DDx applied a validated replacement rewrite or
+  metadata update that makes the bead more execution-ready before claim. Safe
+  rewrites may replace noisy, stale, duplicated, or brittle description text
+  with a fit-for-purpose bead body instead of appending more prompt burden. They may
+  also format the description into the authoring template, add discovered
+  file:line evidence, add an obvious test command, or wire deterministic
+  labels/parent/deps. The mutation is recorded through `ddx bead` paths before
+  claim, with before/after hashes and enough evidence to audit the replacement.
 - `too_large_decomposed` — DDx created child beads, mapped every parent AC to
   child ACs or an explicit `needs_human` / `non_scope` marker, blocked the
   parent, and did not execute the parent.
@@ -192,9 +195,23 @@ The readiness assessment result is one of:
   candidate for the current pass but must not park it behind a cooldown unless a
   retryable time-based class is recorded.
 
-Safe rewrites may clarify existing intent; they must not invent product
-behavior, choose between conflicting requirements, change scope, or guess a
-missing governing artifact. Those cases become `ambiguous_needs_human`.
+Safe rewrites are validated against durable context, not against a vague
+"same spirit" comparison to the prior bead text. The prior bead can itself be
+the problem: it may contain stale line numbers, duplicated history, chat-shaped
+noise, or contradictory wording. A safe replacement must preserve explicit
+commitments that remain valid, especially acceptance criteria, non-scope, named
+files/tests, dependencies, and governing artifact references; it must either
+carry forward durable root-cause evidence or replace it with current file:line
+evidence from the repository or governing artifact. The original text is kept in
+readiness evidence, not copied into the replacement body. Rewrites must optimize
+prompt fitness rather than raw length: expanding a one-line underspecified bead
+is safe when the added durable context is required for execution, and compressing
+a noisy bead is safe when explicit commitments remain preserved.
+
+Readiness must reject the rewrite and park the bead as `ambiguous_needs_human`
+when preservation cannot be proven from durable anchors. It must not invent
+product behavior, choose between conflicting requirements, change scope, delete
+unresolved constraints, or guess a missing governing artifact.
 
 `PostAttemptTriageHook` runs after the attempt has produced its local evidence:
 agent result, commit/no-commit state, no-changes rationale if any, post-run
@@ -436,11 +453,14 @@ is the landing of the bead that implements two-slot quorum aggregation.
 The layer-3 drain evaluates each ready bead through this mechanical sequence:
 
 1. **Eligibility and readiness.** Pick a dependency-ready candidate. Run the
-   readiness gate. Safe rewrites happen before claim. Too-large work
-   is decomposed before an implementation attempt. Ambiguous or underspecified
-   work is blocked with `needs_human`. Readiness infrastructure failure records
-   evidence and follows the configured fail-open/factory-mode policy; it never
-   creates an unexplained cooldown.
+   readiness gate. Validated replacement rewrites happen before claim and should
+   leave a clearer implementation prompt, expanding underspecified beads or
+   compressing noisy/stale beads as the durable context requires; original text
+   is preserved in readiness evidence for audit. Too-large work is decomposed
+   before an implementation attempt. Ambiguous or underspecified work is blocked
+   with `needs_human`. Readiness infrastructure failure records evidence and
+   follows the configured fail-open/factory-mode policy; it never creates an
+   unexplained cooldown.
 2. **Claim.** Claim only an `actionable_atomic` or safely rewritten bead. Claim
    races skip the bead for the current pass without cooldown.
 3. **Primary implementation cycle.** Run one layer-2 implementation attempt.

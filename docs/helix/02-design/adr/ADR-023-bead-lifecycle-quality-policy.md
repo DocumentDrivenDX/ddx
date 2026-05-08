@@ -137,11 +137,31 @@ infrastructure failures.
 
 Bead readiness assessment may update a bead before execution only when the
 update is intent-preserving and grounded in durable context. Safe improvements
-include normalizing the description into the authoring template, adding
-discovered file:line evidence, adding an obvious subsystem test command, and
-wiring deterministic labels, parent, or dependencies. Readiness must block for
-human input instead of inventing acceptance criteria, changing scope, choosing
-between conflicting requirements, or guessing a missing governing artifact.
+include validated replacement rewrites of the description, normalizing the bead
+body into the authoring template, adding discovered file:line evidence, adding
+an obvious subsystem test command, and wiring deterministic labels, parent, or
+dependencies.
+
+Validated replacement is preferred over append-only amendment when replacement
+would make the bead a better implementation prompt. Prompt fitness is part of
+the quality policy: readiness should leave the next agent enough durable context
+to execute without dragging along stale, duplicated, or chat-shaped noise. A
+one-line vague bead may need to expand into a standalone task; a noisy bead may
+need to shrink. The original bead text remains auditable through the readiness
+event and before/after hashes; it does not have to be embedded verbatim in the
+replacement prompt body.
+
+The validator proves preservation from durable anchors rather than asking
+whether the new bead is merely "in the spirit" of the old one. Acceptance
+criteria, non-scope, governing artifact references, dependencies, named
+files/tests, and still-valid root-cause evidence are explicit commitments and
+must be preserved or replaced with current durable evidence. If the old bead
+contains contradictions, stale anchors, or missing product choices, readiness may
+remove the confusing wording only when the replacement clearly marks the
+unresolved part as `needs_human` or preserves it as an explicit constraint.
+Readiness must block for human input instead of inventing acceptance criteria,
+changing scope, choosing between conflicting requirements, deleting unresolved
+constraints, or guessing a missing governing artifact.
 
 If readiness finds the bead too broad, it decomposes before claim. Every parent AC
 must map to at least one child AC or be explicitly marked `needs_human` or

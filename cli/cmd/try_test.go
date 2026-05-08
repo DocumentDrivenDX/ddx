@@ -333,6 +333,9 @@ func TestTryInterrupt_DoesNotReportOperatorCancel(t *testing.T) {
 // TestTry_FlagsPlumbThrough verifies that routing flags (--harness, --model)
 // reach the executor. We capture the resolved config in the stub executor.
 func TestTry_FlagsPlumbThrough(t *testing.T) {
+	// Isolate from ~/.config/fizeau/config.yaml so the pre-dispatch lint hook
+	// does not dispatch to real providers (HTTP or exec-based) during the test.
+	t.Setenv("HOME", t.TempDir())
 	env := NewTestEnvironment(t)
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init())
@@ -352,6 +355,7 @@ func TestTry_FlagsPlumbThrough(t *testing.T) {
 
 	factory := NewCommandFactory(env.Dir)
 	factory.tryExecutorOverride = stubExecutor
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
 	root := factory.NewRootCommand()
 
 	// The --harness and --model flags are passthrough — they reach the runtime

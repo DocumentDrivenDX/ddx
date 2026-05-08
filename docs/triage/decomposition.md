@@ -14,16 +14,29 @@ and prior attempt history to classify it as:
 
 - **actionable_atomic** — a single coherent unit of work; proceeds to Claim
   normally.
-- **actionable_but_rewritten** — the gate made safe, intent-preserving bead
-  updates through `ddx bead update`; proceeds to Claim after the mutation.
+- **actionable_but_rewritten** — the gate made a validated replacement rewrite
+  or other safe, intent-preserving bead update through `ddx bead update`;
+  proceeds to Claim after the mutation.
 - **too_large_decomposed** — multiple independent deliverables; the gate files
   child beads, records the AC map, and blocks the parent.
 - **ambiguous_needs_human** — needs human clarification; the gate sets
   `execution-eligible=false` or `blocked`, and adds `needs_human`.
 
-Safe rewrites may add durable evidence, normalize the bead body, or wire obvious
-metadata. They must not invent product behavior, change scope, choose between
-conflicting requirements, or guess a missing governing artifact.
+Safe rewrites may replace the bead body when the replacement is clearer,
+execution-ready, and validated against durable anchors. The gate should not
+append clarifying noise simply to satisfy preservation: the output bead is the
+next agent's prompt, so prompt fitness is part of correctness. Some replacements
+expand a vague one-line bead into a standalone task; others compress noisy or
+stale prose. The original text is retained in readiness evidence with
+before/after hashes.
+
+Validated preservation is based on explicit commitments and durable context:
+acceptance criteria, non-scope, governing artifact references, dependencies,
+named files/tests, and still-valid root-cause evidence. The gate may replace
+stale line numbers or chat-shaped prose with current section anchors or file:line
+evidence. It must not invent product behavior, change scope, choose between
+conflicting requirements, delete unresolved constraints, or guess a missing
+governing artifact.
 
 The same decomposition policy is also used as a post-attempt safety net. If an
 implementation attempt returns `no_changes_needs_investigation` or an equivalent
@@ -151,7 +164,7 @@ production, always wire a `ComplexityGate` via `NewComplexityGate`.
 
 | Event kind              | When                                       | Body                          |
 |-------------------------|--------------------------------------------|-------------------------------|
-| `triage-rewritten`      | Safe bead improvement applied              | `{fields, rationale}`         |
+| `triage-rewritten`      | Safe bead replacement/update applied       | `{fields, rationale, before, after}` |
 | `triage-decomposed`     | Parent split into children                 | `{child_ids, rationale, ac_map}` |
 | `triage-overflow`       | Bead at depth cap, blocked                 | `{depth, max}`                |
 | `triage-ambiguous`      | Gate returned ambiguous classification     | `{confidence, reasoning}`     |
