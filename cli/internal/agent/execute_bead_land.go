@@ -845,6 +845,9 @@ func copyEvidenceDirForLanding(projectRoot, landingWD, relPath string) error {
 	if !ok {
 		return fmt.Errorf("invalid evidence path %q", relPath)
 	}
+	if evidenceDirHasTrackedFiles(landingWD, cleanRel) {
+		return nil
+	}
 	src := filepath.Join(projectRoot, cleanRel)
 	dst := filepath.Join(landingWD, cleanRel)
 	info, err := os.Stat(src)
