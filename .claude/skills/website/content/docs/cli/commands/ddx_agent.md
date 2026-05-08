@@ -5,33 +5,29 @@ generated: true
 
 ## ddx agent
 
-Invoke AI agents with harness dispatch, quorum, and session logging
+Agent diagnostics and legacy command namespace
 
 ### Synopsis
 
-Unified interface for dispatching work to AI coding agents.
+The `ddx agent` namespace is for diagnostics, catalogs, logs, metrics, provider
+health, and legacy compatibility pages.
 
-Supports multiple harnesses (codex, claude, gemini, etc.) with output capture,
-token tracking, session logging, and multi-agent quorum.
+Normal execution uses the layered public commands:
 
-The embedded DDx agent harness is named 'agent' and is always available without
-installing external binaries. Use --harness agent or --profile cheap to route to it.
+1. `ddx run` invokes the agent once.
+2. `ddx try` wraps one bead attempt around `ddx run`.
+3. `ddx work` wraps queue selection, retry ownership, and tracking around
+   `ddx try`.
 
-Profile routing (--profile default|cheap|fast|smart) selects the best available harness
-and model automatically. Workflow tools should prefer --profile over --harness to
-stay decoupled from harness installation details.
+DDx does not choose concrete model/provider routes. It may pass explicit
+operator-supplied harness, provider, or model values through to the agent for a
+debugging pass; otherwise it requests a power range and the agent routes.
 
 Examples:
-  ddx agent run --profile default --prompt task.md
-  ddx agent run --profile cheap --prompt task.md
-  ddx agent run --profile smart --prompt task.md
-  ddx agent run --profile smart --model gpt-5.4   # explicit override; avoid by default
-  ddx agent run --harness agent --prompt task.md
-  ddx agent run --harness codex --prompt task.md
-  ddx agent run --quorum majority --harnesses codex,claude --prompt task.md
   ddx agent list
   ddx agent capabilities agent
-  ddx agent capabilities codex
+  ddx agent models
+  ddx agent providers
   ddx agent doctor
   ddx agent log
 
@@ -56,23 +52,23 @@ ddx agent [flags]
 ### SEE ALSO
 
 * [ddx](/docs/cli/commands/ddx/)	 - Document-Driven Development eXperience - AI development toolkit
-* [ddx agent benchmark](/docs/cli/commands/ddx_agent_benchmark/)	 - Run a benchmark suite comparing agent harnesses
+* [ddx agent benchmark](/docs/cli/commands/ddx_agent_benchmark/)	 - Removed; use the compare-prompts skill
 * [ddx agent capabilities](/docs/cli/commands/ddx_agent_capabilities/)	 - Show agent model and reasoning-level capabilities
-* [ddx agent catalog](/docs/cli/commands/ddx_agent_catalog/)	 - Manage the model catalog (tier assignments)
+* [ddx agent catalog](/docs/cli/commands/ddx_agent_catalog/)	 - Inspect agent model power metadata
 * [ddx agent check](/docs/cli/commands/ddx_agent_check/)	 - Probe provider runtime availability (liveness, model inventory)
 * [ddx agent condense](/docs/cli/commands/ddx_agent_condense/)	 - Filter raw agent output to progress-relevant lines
 * [ddx agent doctor](/docs/cli/commands/ddx_agent_doctor/)	 - Check agent harness health
-* [ddx agent execute-bead](/docs/cli/commands/ddx_agent_execute-bead/)	 - Run an agent on one bead in an isolated worktree, then land the result
-* [ddx agent execute-loop](/docs/cli/commands/ddx_agent_execute-loop/)	 - Drain the single-project execution-ready bead queue
-* [ddx agent executions](/docs/cli/commands/ddx_agent_executions/)	 - Manage execute-bead execution bundles (.ddx/executions/)
+* [ddx agent execute-bead](/docs/cli/commands/ddx_agent_execute-bead/)	 - Removed; use ddx try
+* [ddx agent execute-loop](/docs/cli/commands/ddx_agent_execute-loop/)	 - Removed; use ddx work
+* [ddx agent executions](/docs/cli/commands/ddx_agent_executions/)	 - Manage execution evidence bundles (.ddx/executions/)
 * [ddx agent list](/docs/cli/commands/ddx_agent_list/)	 - List available agent harnesses
 * [ddx agent log](/docs/cli/commands/ddx_agent_log/)	 - Show agent session history
 * [ddx agent metrics](/docs/cli/commands/ddx_agent_metrics/)	 - Analytics over agent execution evidence
 * [ddx agent models](/docs/cli/commands/ddx_agent_models/)	 - List models for a configured provider
 * [ddx agent providers](/docs/cli/commands/ddx_agent_providers/)	 - List configured providers with live status
-* [ddx agent replay](/docs/cli/commands/ddx_agent_replay/)	 - Replay a bead with a different agent harness or model
+* [ddx agent replay](/docs/cli/commands/ddx_agent_replay/)	 - Removed; use the replay-bead skill
 * [ddx agent route-status](/docs/cli/commands/ddx_agent_route-status/)	 - Show routing table, recent decisions, and active health cooldowns
-* [ddx agent run](/docs/cli/commands/ddx_agent_run/)	 - Invoke an agent with a prompt
+* [ddx agent run](/docs/cli/commands/ddx_agent_run/)	 - Removed; use ddx run
 * [ddx agent usage](/docs/cli/commands/ddx_agent_usage/)	 - Show per-harness token and cost summary
 * [ddx agent workers](/docs/cli/commands/ddx_agent_workers/)	 - Show running agent workers and their current bead
 

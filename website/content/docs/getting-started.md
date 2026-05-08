@@ -127,7 +127,7 @@ the zero-config flow above is the default path.
 ## Run Agents
 
 ```bash
-ddx agent run --harness claude --prompt task.md
+ddx run --harness claude --prompt task.md
 ddx agent usage
 ```
 
