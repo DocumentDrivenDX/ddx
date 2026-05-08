@@ -1,8 +1,11 @@
 package agent
 
 import (
+	"context"
 	"testing"
+	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -141,4 +144,26 @@ func TestReadinessClassification_DecodesReadinessSchema(t *testing.T) {
 	assert.Equal(t, PreClaimIntakeAmbiguousNeedsHuman, refine.Outcome)
 	assert.Equal(t, ReadinessReasonMissingVerification, refine.Reason)
 	assert.Empty(t, refine.SystemReason)
+}
+
+func TestReadinessClassification_DeterministicSystemReasonBypassesModelTriage(t *testing.T) {
+	worker := &ExecuteBeadWorker{}
+	report := ExecuteBeadReport{
+		BeadID:        "ddx-system",
+		Status:        ExecuteBeadStatusNoChanges,
+		OutcomeReason: "quota",
+		BaseRev:       "same",
+		ResultRev:     "same",
+	}
+
+	called := false
+	got := worker.runPostAttemptTriage(context.Background(), bead.Bead{ID: "ddx-system"}, report, ExecuteBeadLoopRuntime{
+		PostAttemptTriageHook: func(ctx context.Context, beadID string, report ExecuteBeadReport) (TriageResult, error) {
+			called = true
+			return TriageResult{Classification: "needs_investigation", RecommendedAction: "release_claim_needs_investigation"}, nil
+		},
+	}, "worker", time.Now)
+
+	assert.False(t, called, "deterministic system reasons must not be overwritten by model triage")
+	assert.Equal(t, "quota", got.OutcomeReason)
 }
