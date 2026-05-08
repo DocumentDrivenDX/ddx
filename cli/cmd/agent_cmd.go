@@ -1749,11 +1749,15 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				agent.MarkResultLandError(projectRoot, res, landErr)
 				return agent.ReportFromExecuteBeadResult(res, ""), nil
 			}
+		} else if res != nil && (res.Outcome == agent.ExecuteBeadOutcomeTaskFailed || res.ExitCode != 0) {
+			if res.ResultRev != "" && res.ResultRev != res.BaseRev {
+				res.Outcome = "preserved"
+			} else {
+				res.Outcome = "error"
+			}
+			res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
 		} else if res != nil && res.ResultRev == res.BaseRev {
 			res.Outcome = "no-changes"
-			res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
-		} else if res != nil && res.ExitCode != 0 {
-			res.Outcome = "preserved"
 			res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
 		}
 		return agent.ReportFromExecuteBeadResult(res, ""), nil

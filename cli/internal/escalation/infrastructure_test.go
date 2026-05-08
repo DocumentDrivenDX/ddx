@@ -24,6 +24,7 @@ func TestIsInfrastructureFailure(t *testing.T) {
 		{"escalatable + rate limit is infrastructure (operator-fixable)", "execution_failed", "429 Too Many Requests: rate limit reached", true},
 		{"escalatable + auth failure is infrastructure", "execution_failed", "401 Unauthorized: invalid api key", true},
 		{"escalatable + binary missing is infrastructure", "execution_failed", `exec: "claude": executable file not found in $PATH`, true},
+		{"escalatable + fizeau routing failure is infrastructure", "execution_failed", "ResolveRoute: no viable routing candidate: 3 candidates rejected", true},
 		{"case-insensitive match", "execution_failed", "BAD GATEWAY", true},
 		{"no_changes never infrastructure regardless of detail", "no_changes", "agent ran fine, no edits", false},
 		{"post_run_check_failed: gate failure is not infrastructure", "post_run_check_failed", "gate verify-tests exited with status 1", false},

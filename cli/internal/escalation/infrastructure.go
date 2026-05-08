@@ -43,6 +43,11 @@ var InfrastructureFailurePatterns = []string{
 	"command not found",
 	"executable file not found",
 	"no such file or directory",
+	// Upstream routing/service selection failures
+	"resolveroute:",
+	"no viable routing candidate",
+	"no live provider supports",
+	"no candidate satisfying local endpoint",
 }
 
 // IsInfrastructureFailure reports whether the given failure status + detail

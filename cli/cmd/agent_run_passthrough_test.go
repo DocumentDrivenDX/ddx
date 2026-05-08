@@ -378,7 +378,7 @@ func TestDDxWork_WiresPreClaimIntakeHook(t *testing.T) {
 	assert.Equal(t, "intake", got[0], "plain ddx work must run pre-claim intake before claim")
 	assert.Empty(t, gotIntakeReq.Profile)
 	assert.Zero(t, gotIntakeReq.MinPower)
-	assert.Equal(t, 8, gotIntakeReq.MaxPower, "intake dispatch should use the same max_power path as implementation dispatch")
+	assert.Zero(t, gotIntakeReq.MaxPower, "intake dispatch must not inherit implementation power bounds")
 	assert.GreaterOrEqual(t, len(got), 2, "work must continue past intake to later execution stages")
 }
 
