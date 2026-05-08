@@ -785,11 +785,31 @@ func landEvidence(wd, targetBranch string, req LandRequest, gitOps LandingGitOps
 		return fmt.Errorf("commit evidence: %w", err)
 	}
 	if sha == "" {
-		return fmt.Errorf("commit evidence: no staged evidence files under %s", req.EvidenceDir)
+		// Evidence already committed in the working tree (worktree-origin path):
+		// the bundle was committed inside the attempt worktree as part of ResultRev
+		// so it is present at HEAD when the landing finalization worktree is checked
+		// out. No trailing commit needed; verify tracked files exist then accept.
+		if !evidenceDirHasTrackedFiles(wd, req.EvidenceDir) {
+			return fmt.Errorf("commit evidence: no staged evidence files under %s", req.EvidenceDir)
+		}
+		headSHA, headErr := gitOps.HeadRevAt(wd)
+		if headErr != nil {
+			return fmt.Errorf("evidence already committed, reading HEAD: %w", headErr)
+		}
+		result.EvidenceCommitSHA = headSHA
+		return nil
 	}
 	result.EvidenceCommitSHA = sha
 	result.NewTip = sha
 	return nil
+}
+
+// evidenceDirHasTrackedFiles reports whether any files under dirRel are tracked
+// in git at wd. Used by landEvidence to distinguish "nothing staged because
+// already committed" from "nothing staged because evidence is absent."
+func evidenceDirHasTrackedFiles(wd, dirRel string) bool {
+	out, err := internalgit.Command(context.Background(), wd, "ls-files", "--", filepath.FromSlash(dirRel)).Output()
+	return err == nil && len(strings.TrimSpace(string(out))) > 0
 }
 
 func landingFinalizationWorktree(projectRoot, wd, targetBranch string, gitOps LandingGitOps) (string, func(), error) {
