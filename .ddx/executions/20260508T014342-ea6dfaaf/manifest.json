@@ -1,0 +1,61 @@
+{
+  "attempt_id": "20260508T014342-ea6dfaaf",
+  "bead_id": "ddx-f812c929",
+  "base_rev": "f6b3002f0f8673eb66712317273f5768026525df",
+  "created_at": "2026-05-08T01:43:49.626077226Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f812c929",
+    "title": "agent: recover malformed tracker lock paths",
+    "description": "PROBLEM\nA malformed `.ddx/.git-tracker.lock` path can stop `ddx work` before it claims any bead. The observed incident was a zero-byte regular file at `.ddx/.git-tracker.lock`; `ddx work` then printed repeated lines like `pre-claim hook: tracker lock timeout (max elapsed, owner pid: unknown) (skipping ddx-...)` for every ready candidate.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/tracker_lock.go:130 calls `os.Mkdir(lockDir, 0o755)` and treats every failure as ordinary lock contention.\n- cli/internal/agent/tracker_lock.go:139-149 only calls `breakStaleTrackerLock(lockDir)` and then sleeps/retries. That stale path only understands a lock directory with `pid` and `acquired_at` sidecars, so a regular file at the lock path is never classified or removed.\n- cli/internal/agent/tracker_lock.go:156-161 reports `owner pid: unknown` by trying to read `lockDir/pid`, which is impossible when `lockDir` is a regular file.\n- docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md:499-522 now specifies the required filesystem-shape contract: `.ddx/.git-tracker.lock` is a lock directory; malformed non-directories must be classified before retry/backoff and must not masquerade as `owner pid: unknown` contention.\n\nPROPOSED FIX\n- In cli/internal/agent/tracker_lock.go, classify `os.Mkdir(lockDir)` failures immediately using `os.Lstat(lockDir)`.\n- Only enter retry/backoff after the existing path is confirmed to be a directory that represents real lock contention.\n- Preserve existing directory stale-lock recovery for old `pid`/`acquired_at` sidecars.\n- If `Lstat` shows the lock path disappeared after the failed mkdir, retry acquisition immediately.\n- If `Lstat` shows an exact regular file older than `trackerLockStaleAge`, remove it with `os.Remove` only, then retry acquisition immediately.\n- If `Lstat` shows a fresh regular file, fail fast with a malformed-lock diagnostic that names `.ddx/.git-tracker.lock` and says a lock directory was expected.\n- If `Lstat` shows a symlink, socket, device, or other special file, fail fast and do not remove it.\n- Update owner diagnostics so real lock-directory timeouts report `owner pid: \u003cpid\u003e` or `owner pid: missing`; malformed paths must not fall through to `owner pid: unknown`.\n\nNON-SCOPE\n- Do not change the lock path.\n- Do not add a new bead status, label, worker state, or event kind.\n- Do not change claim semantics, queue ranking, or pre-claim hook policy.\n- Do not use `os.RemoveAll` for malformed non-directory paths.\n- Do not remove symlinks or special filesystem objects.\n- Do not mutate the active server pre-claim hook bead ddx-f6fd75e7; this is a sibling lock primitive hardening bead.\n\nPARENT + DEPS\nParent: ddx-5cb6e6cd. No deps.\nINTERSECTIONS\n- ddx-da11a34a introduced the main-git/tracker lock and retry policy; this bead hardens that primitive against malformed ignored lock paths.\n- ddx-f6fd75e7 is an active sibling about server pre-claim error propagation. This bead must not expand into that server policy work.",
+    "acceptance": "1. TestTrackerCommit_MalformedRegularFileLockRecovery creates an old regular file at `.ddx/.git-tracker.lock`, proves acquisition removes it with single-path removal and commits tracker changes successfully.\n2. TestTrackerCommit_MalformedFreshRegularFileFailsFast creates a fresh regular file at `.ddx/.git-tracker.lock`, uses a policy whose retry budget would otherwise wait at least 1s, proves `withTrackerLockPolicy` returns a malformed-lock error in under 100ms, and proves the file remains in place.\n3. TestTrackerCommit_MalformedSymlinkLockFailsFast creates a symlink at `.ddx/.git-tracker.lock` when the platform permits symlink creation, proves acquisition fails fast, and proves the symlink target is not removed; skip this test when symlink creation is unsupported.\n4. TestTrackerCommit_MissingOwnerDoesNotReportUnknown holds a real lock directory without a `pid` sidecar and proves timeout diagnostics say `owner pid: missing`, not `owner pid: unknown`.\n5. TestTrackerCommit_StaleLockRecovery and TestTrackerCommit_RetryBackoffPolicy still pass, proving normal stale-directory recovery and real contention retry behavior are unchanged.\n6. `cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestTrackerCommit_(Malformed|MissingOwner|StaleLockRecovery|RetryBackoffPolicy)' -count=1` passes.\n7. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/...` passes.\n8. `lefthook run pre-commit` passes.",
+    "parent": "ddx-5cb6e6cd",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:git",
+      "kind:bug",
+      "reliability",
+      "prevention",
+      "observed-failure",
+      "spec:TD-031",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-08T01:42:41Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1033746",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"All 8 criteria satisfied. (1) Title is imperative and names subsystem + change. (2) Root cause provides four specific file:line references (tracker_lock.go:130, :139-149, :156-161, TD-031:499-522). (3) AC names five distinct TestTrackerCommit_* functions plus an explicit -run filter covering each case. (4) Each AC item specifies a concrete verifiable assertion (proves removal, proves file remains, proves symlink not removed, proves diagnostic text). (5) AC-6 gives the exact `cd cli \\u0026\\u0026 go test ./internal/agent/... -run '...' -count=1` invocation, AC-7 broadens to full agent+cmd packages, AC-8 requires lefthook gate. (6) Labels carry phase:2, area:agent, area:git, kind:bug, reliability, prevention, observed-failure, spec:TD-031, spec:FEAT-010 — all required cross-refs present. (7) Parent ddx-5cb6e6cd explicit; deps declared as none. (8) Description is fully self-contained: no /tmp paths, no chat-history references, INTERSECTIONS section inlines relevant sibling-bead context inline.\",\"score\":8,\"suggested_fixes\":[],\"waivers_applied\":[]}",
+          "created_at": "2026-05-08T01:43:42.013243082Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=8"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-08T01:42:41.449459881Z",
+      "spec-id": "TD-031"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-031",
+      "path": "docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md",
+      "title": "Technical Design: Bead State Machine and Naming-Role Decisions"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260508T014342-ea6dfaaf",
+    "prompt": ".ddx/executions/20260508T014342-ea6dfaaf/prompt.md",
+    "manifest": ".ddx/executions/20260508T014342-ea6dfaaf/manifest.json",
+    "result": ".ddx/executions/20260508T014342-ea6dfaaf/result.json",
+    "checks": ".ddx/executions/20260508T014342-ea6dfaaf/checks.json",
+    "usage": ".ddx/executions/20260508T014342-ea6dfaaf/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-f812c929-20260508T014342-ea6dfaaf"
+  },
+  "prompt_sha": "8d5e5374598d0724e702ddda70c3d5e7cdf416cf2a731a789220ff8426a673fe"
+}
