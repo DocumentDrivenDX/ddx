@@ -2063,3 +2063,41 @@ func TestExecuteBeadWorkerEndToEndThreeBeadDrain(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, gotC.Status)
 }
+
+// TestZeroConfigWork_NoConfigDoesNotEmitUnderSpecified asserts that running
+// the loop with no intake or lint hooks (zero-config) produces operator log
+// output that does not expose stale complexity/intake/lint terminology.
+func TestZeroConfigWork_NoConfigDoesNotEmitUnderSpecified(t *testing.T) {
+	inner, _, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-zero-cfg",
+				ResultRev: "abc111",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	var logBuf bytes.Buffer
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		Log:  &logBuf,
+		// No PreClaimIntakeHook, no PreDispatchLintHook — zero-config path.
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	logOut := logBuf.String()
+	assert.NotContains(t, logOut, "complexity gate missing")
+	assert.NotContains(t, logOut, "pre-claim intake")
+	assert.NotContains(t, logOut, "pre-dispatch lint")
+	assert.Equal(t, 1, result.Successes, "zero-config loop must still execute beads")
+}
