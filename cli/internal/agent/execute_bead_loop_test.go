@@ -256,6 +256,63 @@ func TestFormatLoopResult_NoEvidenceShowsContractFailure(t *testing.T) {
 		formatLoopResult(report))
 }
 
+func TestFormatLoopResultLine_SuccessUsesSuccessMarker(t *testing.T) {
+	success := ExecuteBeadReport{
+		Status:    ExecuteBeadStatusSuccess,
+		ResultRev: "deadbeefcafebabe",
+	}
+	alreadySatisfied := ExecuteBeadReport{
+		Status: ExecuteBeadStatusAlreadySatisfied,
+	}
+
+	assert.Equal(t, "✓ ddx-result → merged (deadbeef)", formatLoopResultLine("ddx-result", success))
+	assert.Equal(t, "✓ ddx-result → already_satisfied", formatLoopResultLine("ddx-result", alreadySatisfied))
+}
+
+func TestFormatLoopResultLine_FailuresDoNotUseSuccessMarker(t *testing.T) {
+	cases := []ExecuteBeadReport{
+		{Status: ExecuteBeadStatusExecutionFailed, Detail: "provider failed"},
+		{Status: ExecuteBeadStatusPostRunCheckFailed, Detail: "tests failed"},
+		{Status: ExecuteBeadStatusNoEvidenceProduced, Detail: "no evidence"},
+		{Status: ExecuteBeadStatusPreservedNeedsReview, Detail: "preserved for review"},
+		{Status: ExecuteBeadStatusNoChanges, NoChangesRationale: "blocked by stale test"},
+	}
+
+	for _, report := range cases {
+		t.Run(report.Status, func(t *testing.T) {
+			assert.NotRegexp(t, `^✓\b`, formatLoopResultLine("ddx-result", report))
+		})
+	}
+}
+
+func TestExecuteBeadLoop_LogLineDoesNotUseSuccessMarkerForReviewError(t *testing.T) {
+	store, _, _ := newExecuteLoopTestStore(t)
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID: beadID,
+				Status: ExecuteBeadStatusExecutionFailed,
+				Detail: "pre-close review: review-error: transport",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	var logBuf bytes.Buffer
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		Log:  &logBuf,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.NotRegexp(t, `^✓`, logBuf.String())
+	assert.Contains(t, logBuf.String(), "pre-close review: review-error: transport")
+}
+
 func TestExecuteBeadWorkerSuccessClosesBead(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	worker := &ExecuteBeadWorker{

@@ -1380,7 +1380,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		})
 
 		if runtime.Log != nil {
-			_, _ = fmt.Fprintf(runtime.Log, "✓ %s → %s\n", candidate.ID, formatLoopResult(report))
+			_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
 		}
 
 		if runtime.Once {
@@ -1913,6 +1913,21 @@ func formatLoopResult(report ExecuteBeadReport) string {
 			return fmt.Sprintf("preserved: %s", detail)
 		}
 		return fmt.Sprintf("error: %s", detail)
+	}
+}
+
+func formatLoopResultLine(beadID string, report ExecuteBeadReport) string {
+	return fmt.Sprintf("%s %s → %s", loopResultMarker(report), beadID, formatLoopResult(report))
+}
+
+func loopResultMarker(report ExecuteBeadReport) string {
+	switch report.Status {
+	case ExecuteBeadStatusSuccess, ExecuteBeadStatusAlreadySatisfied:
+		return "✓"
+	case ExecuteBeadStatusNoChanges, ExecuteBeadStatusResourceExhausted:
+		return "•"
+	default:
+		return "✗"
 	}
 }
 
