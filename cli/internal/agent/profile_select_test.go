@@ -113,7 +113,7 @@ func resetProfileSnapshotCacheForTest(t *testing.T) {
 	t.Helper()
 	profileSnapshotCacheMu.Lock()
 	old := profileSnapshotCache
-	profileSnapshotCache = map[string]profileSnapshotCacheEntry{}
+	profileSnapshotCache = map[agentlib.FizeauService]profileSnapshotCacheEntry{}
 	profileSnapshotCacheMu.Unlock()
 	t.Cleanup(func() {
 		profileSnapshotCacheMu.Lock()

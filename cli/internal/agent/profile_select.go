@@ -2,7 +2,6 @@ package agent
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"reflect"
 	"sort"
@@ -16,7 +15,7 @@ const profileSnapshotCacheWindow = 30 * time.Second
 
 var (
 	profileSnapshotCacheMu sync.Mutex
-	profileSnapshotCache   = map[string]profileSnapshotCacheEntry{}
+	profileSnapshotCache   = map[agentlib.FizeauService]profileSnapshotCacheEntry{}
 	profileSnapshotNow     = time.Now
 )
 
@@ -39,17 +38,21 @@ func LoadProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (Profi
 	if svc == nil {
 		return ProfileSnapshot{}, nil
 	}
-	key := profileSnapshotCacheKey(svc)
+	key, cacheable := profileSnapshotCacheKey(svc)
 	now := profileSnapshotNow()
 
-	profileSnapshotCacheMu.Lock()
-	if entry, ok := profileSnapshotCache[key]; ok && now.Sub(entry.loadedAt) < profileSnapshotCacheWindow {
-		snap := cloneProfileSnapshot(entry.snap)
+	var last profileSnapshotCacheEntry
+	var hadLast bool
+	if cacheable {
+		profileSnapshotCacheMu.Lock()
+		if entry, ok := profileSnapshotCache[key]; ok && now.Sub(entry.loadedAt) < profileSnapshotCacheWindow {
+			snap := cloneProfileSnapshot(entry.snap)
+			profileSnapshotCacheMu.Unlock()
+			return snap, nil
+		}
+		last, hadLast = profileSnapshotCache[key]
 		profileSnapshotCacheMu.Unlock()
-		return snap, nil
 	}
-	last, hadLast := profileSnapshotCache[key]
-	profileSnapshotCacheMu.Unlock()
 
 	profiles, err := svc.ListProfiles(ctx)
 	if err != nil {
@@ -70,23 +73,20 @@ func LoadProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (Profi
 		Profiles: append([]agentlib.ProfileInfo(nil), profiles...),
 		Models:   append([]agentlib.ModelInfo(nil), models...),
 	}
-	profileSnapshotCacheMu.Lock()
-	profileSnapshotCache[key] = profileSnapshotCacheEntry{snap: cloneProfileSnapshot(snap), loadedAt: now}
-	profileSnapshotCacheMu.Unlock()
+	if cacheable {
+		profileSnapshotCacheMu.Lock()
+		profileSnapshotCache[key] = profileSnapshotCacheEntry{snap: cloneProfileSnapshot(snap), loadedAt: now}
+		profileSnapshotCacheMu.Unlock()
+	}
 	return snap, nil
 }
 
-func profileSnapshotCacheKey(svc agentlib.FizeauService) string {
-	v := reflect.ValueOf(svc)
-	if !v.IsValid() {
-		return "<nil>"
+func profileSnapshotCacheKey(svc agentlib.FizeauService) (agentlib.FizeauService, bool) {
+	t := reflect.TypeOf(svc)
+	if t == nil || !t.Comparable() {
+		return nil, false
 	}
-	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr, reflect.Slice, reflect.UnsafePointer:
-		return fmt.Sprintf("%s:%x", v.Type(), v.Pointer())
-	default:
-		return fmt.Sprintf("%T:%v", svc, svc)
-	}
+	return svc, true
 }
 
 func cloneProfileSnapshot(snap ProfileSnapshot) ProfileSnapshot {
