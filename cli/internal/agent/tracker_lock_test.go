@@ -143,6 +143,159 @@ func TestTrackerCommit_OnlyCommitsTrackerPath(t *testing.T) {
 	}
 }
 
+// TestTrackerCommit_MalformedRegularFileLockRecovery verifies that a stale
+// regular file at the lock path (as opposed to the expected directory) is
+// removed with single-path removal and that CommitTracker then succeeds.
+func TestTrackerCommit_MalformedRegularFileLockRecovery(t *testing.T) {
+	root := initTrackerRepo(t)
+	tracker := filepath.Join(root, ".ddx", "beads.jsonl")
+
+	lockPath := trackerLockPath(root)
+	require.NoError(t, os.WriteFile(lockPath, []byte("stale"), 0o644))
+	// Back-date the mtime so it exceeds trackerLockStaleAge.
+	staleTime := time.Now().Add(-2 * trackerLockStaleAge)
+	require.NoError(t, os.Chtimes(lockPath, staleTime, staleTime))
+
+	require.NoError(t, os.WriteFile(tracker, []byte(`{"id":"ddx-malformed-regular"}`+"\n"), 0o644))
+
+	if err := CommitTracker(root); err != nil {
+		t.Fatalf("CommitTracker failed to recover from malformed stale regular file: %v", err)
+	}
+
+	// Lock path must be gone after recovery (removed, then replaced by a dir, then dir removed).
+	if _, err := os.Lstat(lockPath); !os.IsNotExist(err) {
+		t.Fatalf("lock path was not cleaned up after stale regular-file recovery: lstat err = %v", err)
+	}
+
+	cmd := exec.Command("git", "show", "HEAD:.ddx/beads.jsonl")
+	cmd.Dir = root
+	cmd.Env = scrubbedGitEnvInteg()
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git show HEAD:.ddx/beads.jsonl: %s", out)
+	if !strings.Contains(string(out), "ddx-malformed-regular") {
+		t.Fatalf("tracker commit did not land: HEAD contents = %q", string(out))
+	}
+}
+
+// TestTrackerCommit_MalformedFreshRegularFileFailsFast verifies that a fresh
+// regular file at the lock path causes fail-fast (< 100ms) without consuming
+// the retry budget and that the file is left in place.
+func TestTrackerCommit_MalformedFreshRegularFileFailsFast(t *testing.T) {
+	root := initTrackerRepo(t)
+
+	lockPath := trackerLockPath(root)
+	require.NoError(t, os.WriteFile(lockPath, []byte("fresh"), 0o644))
+
+	policy := LockRetryPolicy{
+		InitialBackoff: 500 * time.Millisecond,
+		MaxBackoff:     1 * time.Second,
+		Multiplier:     2.0,
+		MaxRetries:     100,
+		MaxElapsed:     60 * time.Second,
+	}
+
+	start := time.Now()
+	err := withTrackerLockPolicy(root, policy, func() error { return nil })
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatalf("expected malformed-lock error, got nil")
+	}
+	if elapsed >= 100*time.Millisecond {
+		t.Fatalf("expected fail-fast (< 100ms), took %v; err = %v", elapsed, err)
+	}
+	if !strings.Contains(err.Error(), "malformed") {
+		t.Fatalf("expected malformed-lock diagnostic, got: %v", err)
+	}
+
+	// Fresh file must remain in place.
+	info, statErr := os.Lstat(lockPath)
+	if statErr != nil {
+		t.Fatalf("fresh regular file was unexpectedly removed: %v", statErr)
+	}
+	if !info.Mode().IsRegular() {
+		t.Fatalf("lock path is no longer a regular file: mode = %v", info.Mode())
+	}
+}
+
+// TestTrackerCommit_MalformedSymlinkLockFailsFast verifies that a symlink at
+// the lock path causes fail-fast without removing the symlink or its target.
+// Skipped on platforms that do not support symlink creation.
+func TestTrackerCommit_MalformedSymlinkLockFailsFast(t *testing.T) {
+	root := initTrackerRepo(t)
+	lockPath := trackerLockPath(root)
+
+	targetPath := lockPath + ".target"
+	require.NoError(t, os.WriteFile(targetPath, []byte("target"), 0o644))
+	if err := os.Symlink(targetPath, lockPath); err != nil {
+		t.Skipf("symlink creation unsupported on this platform: %v", err)
+	}
+
+	policy := LockRetryPolicy{
+		InitialBackoff: 500 * time.Millisecond,
+		MaxBackoff:     1 * time.Second,
+		Multiplier:     2.0,
+		MaxRetries:     100,
+		MaxElapsed:     60 * time.Second,
+	}
+
+	start := time.Now()
+	err := withTrackerLockPolicy(root, policy, func() error { return nil })
+	elapsed := time.Since(start)
+
+	if err == nil {
+		t.Fatalf("expected malformed-lock error for symlink, got nil")
+	}
+	if elapsed >= 100*time.Millisecond {
+		t.Fatalf("expected fail-fast (< 100ms), took %v; err = %v", elapsed, err)
+	}
+	if !strings.Contains(err.Error(), "malformed") {
+		t.Fatalf("expected malformed-lock diagnostic, got: %v", err)
+	}
+
+	// Symlink must remain in place.
+	if _, err := os.Lstat(lockPath); err != nil {
+		t.Fatalf("symlink was removed: %v", err)
+	}
+	// Symlink target must remain in place.
+	if _, err := os.Stat(targetPath); err != nil {
+		t.Fatalf("symlink target was removed: %v", err)
+	}
+}
+
+// TestTrackerCommit_MissingOwnerDoesNotReportUnknown verifies that a real lock
+// directory without a pid sidecar reports "owner pid: missing" (not "unknown")
+// in the timeout diagnostic.
+func TestTrackerCommit_MissingOwnerDoesNotReportUnknown(t *testing.T) {
+	root := initTrackerRepo(t)
+
+	lockDir := trackerLockPath(root)
+	require.NoError(t, os.MkdirAll(lockDir, 0o755))
+	// Write a fresh acquired_at so age-based stale detection does not fire.
+	require.NoError(t, os.WriteFile(filepath.Join(lockDir, "acquired_at"),
+		[]byte(time.Now().UTC().Format(time.RFC3339)), 0o644))
+	// Deliberately omit the pid sidecar.
+	defer os.RemoveAll(lockDir)
+
+	policy := LockRetryPolicy{
+		InitialBackoff: 1 * time.Millisecond,
+		MaxBackoff:     1 * time.Millisecond,
+		Multiplier:     1.0,
+		MaxRetries:     1,
+	}
+
+	err := withTrackerLockPolicy(root, policy, func() error { return nil })
+	if err == nil {
+		t.Fatalf("expected lock timeout error, got nil")
+	}
+	if strings.Contains(err.Error(), "owner pid: unknown") {
+		t.Fatalf("diagnostic must not say 'owner pid: unknown', got: %v", err)
+	}
+	if !strings.Contains(err.Error(), "owner pid: missing") {
+		t.Fatalf("diagnostic must say 'owner pid: missing', got: %v", err)
+	}
+}
+
 // TestTrackerCommit_StaleLockRecovery verifies that a stale lock left behind
 // by a crashed prior process (acquired_at older than trackerLockStaleAge,
 // pid pointing at a non-existent process) is forcibly broken so a later
