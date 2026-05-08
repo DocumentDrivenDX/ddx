@@ -45,8 +45,8 @@ specifications. The PRD stays at the user- and capability-level:
 - FEAT-006 defines the layer-1 Fizeau execution boundary: the `ddx run`
   consumer-side wrapper that powers one invocation per CONTRACT-003; DDx sends
   request facts and explicit operator passthrough constraints, while Fizeau
-  owns routing, provider/model discovery, concrete route selection, fuzzy model
-  matching, and the inner session-log shape
+  owns routing, provider/model discovery, concrete routing decisions,
+  model alias/constraint resolution, and the inner session-log shape
 - FEAT-007 defines the artifact graph and staleness model: sidecar-aware
   scanner; `media_type` field; `generated_by` edge with a separate provenance
   staleness rule (does not cascade like `depends_on`); 100% read endpoints for

@@ -157,8 +157,8 @@ For example:
 ddx run --min-power 10 --model qwen36 --prompt task.md
 ```
 
-DDx forwards `qwen36` verbatim. Fizeau owns any fuzzy matching, alias
-resolution, provider fallback, or typed error returned for that raw string.
+DDx forwards `qwen36` verbatim. Fizeau owns any alias or constraint matching,
+provider fallback, or typed error returned for that raw string.
 DDx passes the raw string unchanged.
 
 These fields must not leak into DDx routing policy:

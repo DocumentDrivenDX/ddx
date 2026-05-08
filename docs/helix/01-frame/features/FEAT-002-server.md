@@ -257,7 +257,7 @@ status/debug signal model. They are read-only; all signal data is derived from
 provider-native sources, agent-reported catalog/status data, and DDx-observed
 metrics, never fabricated. Unknown values are surfaced as `unknown`, not
 omitted. These endpoints do not participate in `ddx run` / `ddx try` /
-`ddx work` route selection.
+`ddx work` routing decisions.
 
 26. `GET /api/providers` — list all configured harnesses with current routing availability, auth/health state, quota/headroom, and signal freshness; not scoped to a project (provider config is host+user global, shared across projects). Response is an array of provider summary objects.
 27. `GET /api/providers/:harness` — detail for one harness: full routing signal snapshot, per-model quota/headroom when available, historical usage summary (last 7d / 30d), recent latency/success rates, burn estimate, and freshness timestamps with source attribution.
