@@ -8,13 +8,15 @@ description: Operates the DDx toolkit for document-driven development. Covers be
 DDx (Document-Driven Development eXperience) is a CLI platform for
 document-driven development. It ships a bead tracker (portable work
 items with acceptance criteria), a task-execution boundary (DDx
-orchestrates work while Fizeau owns provider/model routing, alias
-resolution, fuzzy matching of raw model strings, catalog lookups, and
-transcript/session rendering), a persona system (bindable AI
-personalities), a library registry (plugins with prompts, templates,
-personas), and git-aware synchronization. This skill makes any
-skills-compatible coding agent (Claude Code, OpenAI Codex, Gemini
-CLI, etc.) understand and operate the DDx surface correctly.
+forwards raw passthrough constraints for harness, provider, model,
+model-ref, and profile while power travels as `MinPower`/`MaxPower`
+bounds; Fizeau owns concrete routing, provider/model discovery,
+aliases, fuzzy matching, catalog lookups, and transcript/session
+rendering), a persona system (bindable AI personalities), a library
+registry (plugins with prompts, templates, personas), and git-aware
+synchronization. This skill makes any skills-compatible coding agent
+(Claude Code, OpenAI Codex, Gemini CLI, etc.) understand and operate
+the DDx surface correctly.
 
 ## How this skill works
 
@@ -46,7 +48,7 @@ exact definitions.
   `success` or `already_satisfied`.
 - **Run** — one task invocation atom. `ddx run` calls Fizeau `Execute`
   once with prompt/config, `MinPower`/`MaxPower` bounds, and optional
-  passthrough constraints.
+  raw passthrough constraints.
 - **Try** — one bead attempt in an isolated worktree. `ddx try <id>` wraps
   `ddx run` with bead prompt resolution, evidence capture, and merge/preserve
   finalization.

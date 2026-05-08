@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent check
 
+Archived reference for the retired `ddx agent` namespace.
+
 Probe provider runtime availability (liveness, model inventory)
 
 ### Synopsis

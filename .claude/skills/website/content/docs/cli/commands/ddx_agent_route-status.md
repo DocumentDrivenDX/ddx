@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent route-status
 
+Archived reference for the retired `ddx agent` namespace.
+
 Show routing table, recent decisions, and active health cooldowns
 
 ### Synopsis

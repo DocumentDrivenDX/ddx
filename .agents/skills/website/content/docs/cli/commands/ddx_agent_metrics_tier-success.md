@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent metrics tier-success
 
+Archived reference for the retired `ddx agent` namespace.
+
 Report success rate per harness/model tier from execution evidence
 
 ### Synopsis

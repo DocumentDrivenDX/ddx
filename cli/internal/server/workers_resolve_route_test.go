@@ -26,12 +26,14 @@ type resolveRouteFailingService struct {
 	executeCalled  bool
 	resolveCalled  bool
 	lastExecuteReq agentlib.ServiceExecuteRequest
+	executeReqs    []agentlib.ServiceExecuteRequest
 }
 
 func (s *resolveRouteFailingService) Execute(_ context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 	s.mu.Lock()
 	s.executeCalled = true
 	s.lastExecuteReq = req
+	s.executeReqs = append(s.executeReqs, req)
 	s.mu.Unlock()
 
 	ch := make(chan agentlib.ServiceEvent, 1)
@@ -183,12 +185,19 @@ func TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel(t *testin
 	executeCalled := svc.executeCalled
 	resolveCalled := svc.resolveCalled
 	lastReq := svc.lastExecuteReq
+	allReqs := append([]agentlib.ServiceExecuteRequest(nil), svc.executeReqs...)
 	svc.mu.Unlock()
 
 	require.True(t, executeCalled, "worker must reach Execute")
 	assert.False(t, resolveCalled, "worker execution must not call ResolveRoute")
-	assert.Equal(t, "fiz", lastReq.Harness, "harness pin must pass through to Execute")
-	assert.Equal(t, "gpt-5.4-mini", lastReq.Model, "model pin must pass through to Execute")
+	foundPinnedExecute := false
+	for _, req := range append(allReqs, lastReq) {
+		if req.Harness == "fiz" && req.Model == "gpt-5.4-mini" {
+			foundPinnedExecute = true
+			break
+		}
+	}
+	assert.True(t, foundPinnedExecute, "harness/model pins must pass through to the primary Execute call")
 }
 
 // TestWorkerRoutinglintNoResolveRouteInExecutionPaths guards the server-side

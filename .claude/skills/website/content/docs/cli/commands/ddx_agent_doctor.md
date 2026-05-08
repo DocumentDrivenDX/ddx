@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent doctor
 
+Archived reference for the retired `ddx agent` namespace.
+
 Check agent harness health
 
 ```

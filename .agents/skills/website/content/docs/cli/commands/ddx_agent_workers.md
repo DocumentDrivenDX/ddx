@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent workers
 
+Archived reference for the retired `ddx agent` namespace.
+
 Show running agent workers and their current bead
 
 ### Synopsis

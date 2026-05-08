@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent benchmark
 
+Archived reference for the retired `ddx agent` namespace.
+
 Run a benchmark suite comparing agent harnesses
 
 ### Synopsis

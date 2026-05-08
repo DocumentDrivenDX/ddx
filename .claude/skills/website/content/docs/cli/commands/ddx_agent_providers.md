@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent providers
 
+Archived reference for the retired `ddx agent` namespace.
+
 List configured providers with live status
 
 ### Synopsis

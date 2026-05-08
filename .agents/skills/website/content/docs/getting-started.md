@@ -7,8 +7,6 @@ next: /docs/concepts
 
 Get DDx installed and start tracking work in under 5 minutes.
 
-{{< asciinema src="07-quickstart" cols="100" rows="30" >}}
-
 ## Install
 
 Run the install script to set up DDx globally:
@@ -59,11 +57,15 @@ ddx bead list
 ddx bead ready
 ```
 
-## Run Agents
+## Run Work
+
+Use `ddx run` for one prompt, `ddx try` for one bead, and `ddx work` for
+queue-driven work:
 
 ```bash
-ddx agent run --harness claude --prompt task.md
-ddx agent usage
+ddx run --prompt task.md
+ddx try ddx-abc123
+ddx work
 ```
 
 ## Update

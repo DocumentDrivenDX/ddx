@@ -5,6 +5,10 @@ generated: true
 
 ## ddx agent execute-bead
 
+Archived reference for the retired `ddx agent` namespace.
+
+Use `ddx try` for current single-bead execution and `ddx work` for queue-driven execution.
+
 Run an agent on one bead in an isolated worktree, then land the result
 
 ### Synopsis
@@ -21,10 +25,8 @@ The worker classifies its outcome as one of:
 The orchestrator then applies landing logic (merge, gate evaluation, preserve)
 and the final result reflects both the worker and landing decisions.
 
-For normal queue-driven work use "ddx agent execute-loop", which claims
-ready beads, calls this command, and closes or unclaims each bead based on
-the result. Reach for execute-bead directly only to debug or re-run a
-specific bead.
+This page is retained as archived command-reference material. Use `ddx try`
+for one specific bead attempt and `ddx work` for queue-driven execution.
 
 Result status is reported on the "status:" line and is one of:
   success                          — merged (or preserved with --no-merge)
@@ -35,8 +37,8 @@ Result status is reported on the "status:" line and is one of:
   execution_failed                 — agent or harness error
   structural_validation_failed     — bead or prompt inputs invalid
 
-execute-loop closes the bead with session/commit evidence only on success
-(and already_satisfied); every other status leaves the bead open and
+Current queue execution closes the bead with session/commit evidence only on
+success (and already_satisfied); every other status leaves the bead open and
 unclaimed for a later attempt.
 
 ```

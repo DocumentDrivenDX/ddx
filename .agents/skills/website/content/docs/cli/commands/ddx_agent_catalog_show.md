@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent catalog show
 
+Archived reference for the retired `ddx agent` namespace.
+
 Show the current model catalog (tier→surface→model assignments)
 
 ```

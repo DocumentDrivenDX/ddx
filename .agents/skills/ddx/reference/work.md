@@ -25,8 +25,9 @@ ddx work
 
 `ddx work` drains the queue by picking ready beads and invoking `ddx try`.
 `ddx try` wraps `ddx run`, which is the single agent invocation primitive. DDx
-owns queue iteration, attempt evidence, and retry policy; the upstream agent
-owns provider/model routing.
+owns queue iteration, attempt evidence, and retry policy; Fizeau owns concrete
+routing, provider/model discovery, alias resolution, fuzzy matching, catalog
+lookups, and transcript/session rendering.
 
 Flags worth knowing:
 
@@ -34,9 +35,11 @@ Flags worth knowing:
 - `--poll-interval <dur>` — continuous worker mode; wait between
   iterations.
 - `--min-power <n>` / `--max-power <n>` — requested agent power bounds.
-- `--top-power` — choose a `MinPower` threshold from the agent catalog.
-- `--harness <name>` / `--provider <name>` / `--model <ref>` — passthrough
-  constraints only. DDx sends them unchanged and does not route on them.
+- `--top-power` — choose a `MinPower` threshold from the service's reported
+  power bands.
+- `--harness <name>` / `--provider <name>` / `--model <ref>` / `--model-ref
+  <ref>` / `--profile <name>` — passthrough constraints only. DDx sends them
+  unchanged and does not route on them.
 
 ## Primitive: `ddx try`
 
@@ -131,9 +134,9 @@ that exercise the new code:
   an audit trail (evidence commits, heartbeats). Use only
   `git merge --ff-only` or `--no-ff`; never squash/rebase/filter.
 - **Running passthrough pins without a reason**: power-bound dispatch lets the
-  agent choose an appropriate route. Use `--harness`, `--provider`, or
-  `--model` only for explicit operator constraints, bug repros, or controlled
-  tests.
+  agent choose an appropriate route. Use `--harness`, `--provider`, `--model`,
+  `--model-ref`, or `--profile` only for explicit operator constraints, bug
+  repros, or controlled tests.
 - **Parallel workers on the same claimed bead**: the tracker
   guards against this via claim semantics, but don't try to defeat
   it — each claim represents an in-flight attempt.
@@ -146,6 +149,8 @@ ddx work --once                             # one bead, then stop
 ddx work --poll-interval 30s                # continuous worker
 ddx work --min-power 10                     # request stronger attempts
 ddx work --harness claude                   # passthrough constraint
+ddx work --model-ref qwen/qwen3.6-27b        # passthrough constraint
+ddx work --profile default                  # passthrough constraint
 
 ddx try <id>                                # one bead attempt
 ddx try <id> --from <rev>                   # override base commit

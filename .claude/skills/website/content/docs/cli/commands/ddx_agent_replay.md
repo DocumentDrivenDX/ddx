@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent replay
 
+Archived reference for the retired `ddx agent` namespace.
+
 Replay a bead with a different agent harness or model
 
 ### Synopsis

@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent log
 
+Archived reference for the retired `ddx agent` namespace.
+
 Show agent session history
 
 ```

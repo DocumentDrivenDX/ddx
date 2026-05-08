@@ -22,3 +22,33 @@ func TestClean(t *testing.T) {
 	dir := analysistest.TestData()
 	analysistest.Run(t, dir, Analyzer, "clean")
 }
+
+func TestRoutinglint_ForbidsRetiredCatalogIdentifiers(t *testing.T) {
+	want := []string{
+		"BuiltinCatalog",
+		"DefaultModelCatalogPath",
+		"LoadModelCatalogYAML",
+		"ApplyModelCatalogYAML",
+		"DefaultModelCatalogYAML",
+		"CheckDeprecatedPin",
+	}
+	for _, ident := range want {
+		if _, ok := forbiddenIdents[ident]; !ok {
+			t.Fatalf("missing forbidden identifier %q", ident)
+		}
+	}
+}
+
+func TestRoutinglint_ForbidsRetiredProfileShadowingSymbols(t *testing.T) {
+	want := []string{
+		"ResolveModelTier",
+		"resolveStrongSplitterMinPower",
+		"isStrongPowerUnsatisfiedError",
+		"isSmartRouteUnavailableError",
+	}
+	for _, ident := range want {
+		if _, ok := forbiddenIdents[ident]; !ok {
+			t.Fatalf("missing forbidden identifier %q", ident)
+		}
+	}
+}

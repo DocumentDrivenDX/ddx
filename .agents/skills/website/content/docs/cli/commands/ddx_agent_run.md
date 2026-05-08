@@ -5,6 +5,10 @@ generated: true
 
 ## ddx agent run
 
+Archived reference for the retired `ddx agent` namespace.
+
+Use `ddx run`, `ddx try`, `ddx work`, or the review workflow skills for current workflows.
+
 Invoke an agent with a prompt
 
 ```

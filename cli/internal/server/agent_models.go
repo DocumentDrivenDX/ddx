@@ -1,10 +1,5 @@
 package server
 
-// Agent model/catalog/capabilities endpoints — FEAT-006 read-coverage gap.
-// Adds /api/agent/models, /api/agent/catalog, /api/agent/capabilities HTTP
-// routes and corresponding ddx_agent_models, ddx_agent_catalog,
-// ddx_agent_capabilities MCP tools.
-
 import (
 	"context"
 	"encoding/json"
@@ -15,8 +10,6 @@ import (
 	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
-// ---- Response types ----
-
 // AgentModelsProvider is one provider entry returned by GET /api/agent/models.
 type AgentModelsProvider struct {
 	Provider     string               `json:"provider"`
@@ -25,23 +18,6 @@ type AgentModelsProvider struct {
 	DefaultModel string               `json:"default_model,omitempty"`
 	Models       []agentlib.ModelInfo `json:"models"`
 }
-
-// AgentCatalogResponse is the response shape for GET /api/agent/catalog.
-type AgentCatalogResponse struct {
-	Source    string                      `json:"source"` // "file" | "built-in"
-	Path      string                      `json:"path,omitempty"`
-	UpdatedAt string                      `json:"updated_at,omitempty"`
-	Tiers     map[string]AgentCatalogTier `json:"tiers"`
-	Models    []agent.ModelEntryYAML      `json:"models"`
-}
-
-// AgentCatalogTier is one tier entry in the catalog response.
-type AgentCatalogTier struct {
-	Description string            `json:"description"`
-	Surfaces    map[string]string `json:"surfaces"`
-}
-
-// ---- HTTP handlers ----
 
 // handleAgentModels serves GET /api/agent/models.
 // Query params:
@@ -125,57 +101,6 @@ func (s *Server) handleAgentModels(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleAgentCatalog serves GET /api/agent/catalog.
-// Returns the effective model catalog (file or built-in defaults).
-func (s *Server) handleAgentCatalog(w http.ResponseWriter, r *http.Request) {
-	path := agent.DefaultModelCatalogPath()
-	cat, err := agent.LoadModelCatalogYAML(path)
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
-		return
-	}
-
-	source := "built-in"
-	var pathOut string
-	var updatedAt string
-
-	if cat == nil {
-		cat = agent.DefaultModelCatalogYAML()
-	} else {
-		source = "file"
-		pathOut = path
-	}
-
-	if !cat.UpdatedAt.IsZero() {
-		updatedAt = cat.UpdatedAt.UTC().Format(time.RFC3339)
-	}
-
-	tiers := make(map[string]AgentCatalogTier, len(cat.Tiers))
-	for tierName, tierDef := range cat.Tiers {
-		surfaces := make(map[string]string, len(tierDef.Surfaces))
-		for k, v := range tierDef.Surfaces {
-			surfaces[k] = v
-		}
-		tiers[tierName] = AgentCatalogTier{
-			Description: tierDef.Description,
-			Surfaces:    surfaces,
-		}
-	}
-
-	models := cat.Models
-	if models == nil {
-		models = []agent.ModelEntryYAML{}
-	}
-
-	writeJSON(w, http.StatusOK, AgentCatalogResponse{
-		Source:    source,
-		Path:      pathOut,
-		UpdatedAt: updatedAt,
-		Tiers:     tiers,
-		Models:    models,
-	})
-}
-
 // handleAgentCapabilities serves GET /api/agent/capabilities.
 // Query param: harness (optional; defaults to configured default harness).
 func (s *Server) handleAgentCapabilities(w http.ResponseWriter, r *http.Request) {
@@ -217,8 +142,6 @@ func (s *Server) handleAgentCapabilities(w http.ResponseWriter, r *http.Request)
 	}
 	writeJSON(w, http.StatusOK, caps)
 }
-
-// ---- MCP tool implementations ----
 
 func (s *Server) mcpAgentModels(workingDir, providerName string, showAll bool) mcpToolResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
@@ -276,8 +199,8 @@ func (s *Server) mcpAgentModels(workingDir, providerName string, showAll bool) m
 			break
 		}
 	}
-	if prov.Name == "" {
-		return mcpToolResult{Content: []mcpContent{mcpText("provider not found: " + name)}, IsError: true}
+	if prov.Name == "" && name != "" {
+		prov.Name = name
 	}
 
 	models, _ := svc.ListModels(ctx, agentlib.ModelFilter{Provider: prov.Name})
@@ -292,68 +215,16 @@ func (s *Server) mcpAgentModels(workingDir, providerName string, showAll bool) m
 		Models:       models,
 	})
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{mcpText("{}")}}
+		return mcpToolResult{Content: []mcpContent{mcpText(`{"error":"marshal failed"}`)}, IsError: true}
 	}
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
-func (s *Server) mcpAgentCatalog() mcpToolResult {
-	path := agent.DefaultModelCatalogPath()
-	cat, err := agent.LoadModelCatalogYAML(path)
-	if err != nil {
-		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
-	}
-
-	source := "built-in"
-	var pathOut string
-	var updatedAt string
-
-	if cat == nil {
-		cat = agent.DefaultModelCatalogYAML()
-	} else {
-		source = "file"
-		pathOut = path
-	}
-
-	if !cat.UpdatedAt.IsZero() {
-		updatedAt = cat.UpdatedAt.UTC().Format(time.RFC3339)
-	}
-
-	tiers := make(map[string]AgentCatalogTier, len(cat.Tiers))
-	for tierName, tierDef := range cat.Tiers {
-		surfaces := make(map[string]string, len(tierDef.Surfaces))
-		for k, v := range tierDef.Surfaces {
-			surfaces[k] = v
-		}
-		tiers[tierName] = AgentCatalogTier{
-			Description: tierDef.Description,
-			Surfaces:    surfaces,
-		}
-	}
-
-	models := cat.Models
-	if models == nil {
-		models = []agent.ModelEntryYAML{}
-	}
-
-	data, err := json.Marshal(AgentCatalogResponse{
-		Source:    source,
-		Path:      pathOut,
-		UpdatedAt: updatedAt,
-		Tiers:     tiers,
-		Models:    models,
-	})
-	if err != nil {
-		return mcpToolResult{Content: []mcpContent{mcpText("{}")}}
-	}
-	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
-}
-
-func (s *Server) mcpAgentCapabilities(workingDir, harnessName string) mcpToolResult {
+func (s *Server) mcpAgentCapabilities(workingDir, harness string) mcpToolResult {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	if harnessName == "" {
+	if harness == "" {
 		svc, err := agent.NewServiceFromWorkDir(workingDir)
 		if err != nil {
 			return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
@@ -364,24 +235,23 @@ func (s *Server) mcpAgentCapabilities(workingDir, harnessName string) mcpToolRes
 		}
 		for _, h := range infos {
 			if h.Available {
-				harnessName = h.Name
+				harness = h.Name
 				break
 			}
 		}
 	}
 
-	if harnessName == "" {
-		return mcpToolResult{Content: []mcpContent{mcpText("harness required: no harness specified and no available harness found")}, IsError: true}
+	if harness == "" {
+		return mcpToolResult{Content: []mcpContent{mcpText(`{"error":"harness required: no harness specified and no available harness found"}`)}, IsError: true}
 	}
 
-	caps, err := agent.CapabilitiesViaService(ctx, workingDir, harnessName)
+	caps, err := agent.CapabilitiesViaService(ctx, workingDir, harness)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}
-
 	data, err := json.Marshal(caps)
 	if err != nil {
-		return mcpToolResult{Content: []mcpContent{mcpText("{}")}}
+		return mcpToolResult{Content: []mcpContent{mcpText(`{"error":"marshal failed"}`)}, IsError: true}
 	}
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }

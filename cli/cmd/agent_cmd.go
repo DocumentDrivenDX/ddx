@@ -80,7 +80,6 @@ Examples:
 	cmd.AddCommand(f.newAgentExecuteBeadCommand())
 	cmd.AddCommand(f.newAgentExecutionsCommand())
 	cmd.AddCommand(f.newAgentWorkersCommand())
-	cmd.AddCommand(f.newAgentCatalogCommand())
 	cmd.AddCommand(f.newAgentProvidersCommand())
 	cmd.AddCommand(f.newAgentModelsCommand())
 	cmd.AddCommand(f.newAgentCheckCommand())
@@ -1213,106 +1212,6 @@ Examples:
 	cmd.Flags().String("suite", "", "Path to benchmark suite JSON file (required)")
 	cmd.Flags().String("output", "", "Path to save results as JSON")
 	cmd.Flags().Bool("json", false, "Output results as JSON")
-	return cmd
-}
-
-func (f *CommandFactory) newAgentCatalogCommand() *cobra.Command {
-	cmd := &cobra.Command{
-		Use:   "catalog",
-		Short: "Manage the model catalog (tier assignments)",
-	}
-
-	// catalog show: print current effective catalog.
-	showCmd := &cobra.Command{
-		Use:   "show",
-		Short: "Show the current model catalog (tier→surface→model assignments)",
-		RunE: func(cmd *cobra.Command, args []string) error {
-			path := agent.DefaultModelCatalogPath()
-			cat, err := agent.LoadModelCatalogYAML(path)
-			if err != nil {
-				return fmt.Errorf("load catalog: %w", err)
-			}
-			if cat == nil {
-				cat = agent.DefaultModelCatalogYAML()
-				fmt.Fprintf(cmd.OutOrStdout(), "(built-in defaults — no catalog at %s)\n\n", path)
-			} else {
-				fmt.Fprintf(cmd.OutOrStdout(), "Catalog: %s (updated %s)\n\n", path, cat.UpdatedAt.Format("2006-01-02"))
-			}
-
-			// Tiers
-			for _, tier := range []string{"smart", "standard", "cheap"} {
-				def, ok := cat.Tiers[tier]
-				if !ok {
-					continue
-				}
-				fmt.Fprintf(cmd.OutOrStdout(), "[%s] %s\n", tier, def.Description)
-				for surface, model := range def.Surfaces {
-					fmt.Fprintf(cmd.OutOrStdout(), "  %-20s %s\n", surface, model)
-				}
-			}
-
-			// Blocked models
-			var blocked []string
-			for _, m := range cat.Models {
-				if m.Blocked {
-					blocked = append(blocked, m.ID)
-				}
-			}
-			if len(blocked) > 0 {
-				fmt.Fprintf(cmd.OutOrStdout(), "\nBlocked models (routing never selects these):\n")
-				for _, id := range blocked {
-					fmt.Fprintf(cmd.OutOrStdout(), "  %s\n", id)
-				}
-			}
-
-			// Reachability warnings (ddx-5538aa5b AC#4): for each tier surface,
-			// probe the agent service to see whether the catalog model resolves
-			// to a healthy route. A tier with zero reachable surfaces would
-			// produce "no viable provider" in queue work; surface that gap
-			// here so users discover it before invoking the queue.
-			projectFlag, _ := cmd.Flags().GetString("project")
-			projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
-			svc, svcErr := agent.NewServiceFromWorkDir(projectRoot)
-			if svcErr == nil && svc != nil {
-				ctx := cmd.Context()
-				if ctx == nil {
-					ctx = context.Background()
-				}
-				var warnings []string
-				for _, tier := range []string{"smart", "standard", "cheap"} {
-					def, ok := cat.Tiers[tier]
-					if !ok || len(def.Surfaces) == 0 {
-						continue
-					}
-					anyReachable := false
-					var perSurface []string
-					for surface, model := range def.Surfaces {
-						_, err := svc.ResolveRoute(ctx, agentlib.RouteRequest{
-							Model: model,
-						})
-						if err == nil {
-							anyReachable = true
-							break
-						}
-						perSurface = append(perSurface, fmt.Sprintf("    %s (%s): %v", surface, model, err))
-					}
-					if !anyReachable {
-						warnings = append(warnings, fmt.Sprintf("  [%s] no surface resolves to a healthy route:\n%s", tier, strings.Join(perSurface, "\n")))
-					}
-				}
-				if len(warnings) > 0 {
-					fmt.Fprintf(cmd.OutOrStdout(), "\nWarning: tiers with no reachable provider:\n")
-					for _, w := range warnings {
-						fmt.Fprintln(cmd.OutOrStdout(), w)
-					}
-				}
-			}
-			return nil
-		},
-	}
-	showCmd.Flags().String("project", "", "Project root (default: current directory)")
-
-	cmd.AddCommand(showCmd)
 	return cmd
 }
 

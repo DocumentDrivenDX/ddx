@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent catalog
 
+Archived reference for the retired `ddx agent` namespace.
+
 Manage the model catalog (tier assignments)
 
 ### Options

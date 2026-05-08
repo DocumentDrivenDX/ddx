@@ -52,7 +52,7 @@ Examples:
 	cmd.Flags().String("harness", "", "Harness constraint (passthrough; not validated by ddx run)")
 	cmd.Flags().String("model", "", "Model constraint (passthrough; not validated by ddx run)")
 	cmd.Flags().String("provider", "", "Provider constraint (passthrough; not validated by ddx run)")
-	cmd.Flags().String("model-ref", "", "Model catalog reference, e.g. code-medium (passthrough)")
+	cmd.Flags().String("model-ref", "", "Model reference passthrough, e.g. code-medium; resolved by Fizeau")
 	cmd.Flags().Int("min-power", 0, "Minimum model power required (0 = unconstrained)")
 	cmd.Flags().Int("max-power", 0, "Maximum model power allowed (0 = unconstrained)")
 	cmd.Flags().String("persona", "", "Persona name; body is prepended to the prompt as a system-prompt addendum")

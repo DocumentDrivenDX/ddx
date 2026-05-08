@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent condense
 
+Archived reference for the retired `ddx agent` namespace.
+
 Filter raw agent output to progress-relevant lines
 
 ### Synopsis

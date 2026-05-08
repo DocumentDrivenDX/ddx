@@ -85,7 +85,7 @@ Exit codes:
 	cmd.Flags().String("model", "", "Model constraint (passthrough; ddx try does not validate)")
 	cmd.Flags().String("profile", "", "Routing profile: default, cheap, fast, or smart (empty = unconstrained; let the agent service choose)")
 	cmd.Flags().String("provider", "", "Provider constraint (passthrough; ddx try does not validate)")
-	cmd.Flags().String("model-ref", "", "Model catalog reference (e.g. code-medium); resolved via the model catalog")
+	cmd.Flags().String("model-ref", "", "Model reference passthrough (e.g. code-medium); resolved by Fizeau")
 	cmd.Flags().String("effort", "", "Effort level")
 	cmd.Flags().Bool("no-review", false, "Skip post-merge review (break-glass: requires --no-review-i-know-what-im-doing)")
 	cmd.Flags().Bool("no-review-i-know-what-im-doing", false, "Break-glass acknowledgement required when using --no-review")

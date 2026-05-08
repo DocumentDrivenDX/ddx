@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent executions fetch
 
+Archived reference for the retired `ddx agent` namespace.
+
 Pull a mirrored execution bundle back to .ddx/executions/<attempt-id>/
 
 ### Synopsis

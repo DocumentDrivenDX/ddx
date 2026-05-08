@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent metrics cost-efficiency
 
+Archived reference for the retired `ddx agent` namespace.
+
 Report total cost to close each bead, including failed escalation attempts
 
 ### Synopsis

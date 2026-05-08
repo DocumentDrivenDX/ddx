@@ -69,7 +69,7 @@ work runs inline in the current process; per ADR-022 there is no separate
 	cmd.Flags().String("model", "", "Model constraint (passthrough; ddx work does not validate)")
 	cmd.Flags().String("profile", "", "Routing profile: default, cheap, fast, or smart (empty = unconstrained; let the agent service choose)")
 	cmd.Flags().String("provider", "", "Provider constraint (passthrough; ddx work does not validate)")
-	cmd.Flags().String("model-ref", "", "Model catalog reference (e.g. code-medium); resolved via the model catalog")
+	cmd.Flags().String("model-ref", "", "Model reference passthrough (e.g. code-medium); resolved by Fizeau")
 	cmd.Flags().String("effort", "", "Effort level")
 	cmd.Flags().Bool("once", false, "Process at most one ready bead")
 	cmd.Flags().Duration("poll-interval", 0, "Poll interval for continuous scanning; zero drains current ready work and exits. Set 30s to keep the worker alive across empty polls.")

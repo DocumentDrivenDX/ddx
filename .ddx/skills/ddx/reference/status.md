@@ -60,7 +60,7 @@ ddx version         # CLI version
 
 Fizeau diagnostics go further into the execution service: which
 harnesses are discoverable, whether provider credentials are present,
-and whether the model catalog loads.
+and whether routing metadata loads.
 
 ## Is the project drifted from upstream?
 

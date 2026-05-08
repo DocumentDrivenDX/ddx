@@ -5,7 +5,9 @@ generated: true
 
 ## ddx agent
 
-Invoke AI agents with harness dispatch, quorum, and session logging
+Archived reference for the retired `ddx agent` namespace.
+
+Use `ddx run`, `ddx try`, `ddx work`, or the review workflow skills for current workflows.
 
 ### Synopsis
 

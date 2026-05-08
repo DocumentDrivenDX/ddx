@@ -64,4 +64,8 @@ layout: hextra-home
 
 ## See It In Action
 
-{{< asciinema src="07-quickstart" cols="100" rows="30" >}}
+```bash
+ddx init
+ddx bead ready
+ddx work
+```

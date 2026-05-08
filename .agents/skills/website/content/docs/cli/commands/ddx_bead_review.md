@@ -20,10 +20,10 @@ The prompt includes:
 By default the commit is taken from the bead's closing_commit_sha field.
 Use --from-rev to override.
 
-Pipe the output into ddx agent run:
+Run the generated prompt through the layer-1 invocation command:
 
-  ddx bead review <id> | ddx agent run --prompt @-
-  ddx bead review <id> --output /tmp/review.md && ddx agent run --prompt /tmp/review.md
+  ddx bead review <id> --output /tmp/review.md
+  ddx run --prompt /tmp/review.md
 
 ```
 ddx bead review <id> [flags]

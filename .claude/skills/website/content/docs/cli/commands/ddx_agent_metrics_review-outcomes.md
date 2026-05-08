@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent metrics review-outcomes
 
+Archived reference for the retired `ddx agent` namespace.
+
 Report post-merge review verdicts per originating tier
 
 ### Synopsis

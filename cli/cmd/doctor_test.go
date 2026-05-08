@@ -47,6 +47,33 @@ func TestDoctor_FlagsLegacySymlinks(t *testing.T) {
 	}
 }
 
+func TestDoctor_WarnsOnLegacyModelCatalogFile(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	legacyCatalogPath := filepath.Join(homeDir, ".ddx", "model-catalog.yaml")
+	if err := os.MkdirAll(filepath.Dir(legacyCatalogPath), 0o755); err != nil {
+		t.Fatalf("mkdir legacy catalog dir: %v", err)
+	}
+	if err := os.WriteFile(legacyCatalogPath, []byte("updated_at: 2026-01-01T00:00:00Z\n"), 0o644); err != nil {
+		t.Fatalf("write legacy catalog: %v", err)
+	}
+
+	issue := checkLegacyModelCatalogFile()
+	if issue == nil {
+		t.Fatal("expected legacy model catalog issue, got nil")
+	}
+	if issue.Type != "legacy_model_catalog" {
+		t.Fatalf("issue.Type = %q, want legacy_model_catalog", issue.Type)
+	}
+	if !strings.Contains(issue.Description, "Legacy DDx-side model catalog file") {
+		t.Fatalf("unexpected issue description: %q", issue.Description)
+	}
+	if !strings.Contains(issue.Remediation[0], legacyCatalogPath) {
+		t.Fatalf("issue remediation missing catalog path; got %v", issue.Remediation)
+	}
+}
+
 // TestCheckPackageJSONLocations_NoPkgJSON verifies no issues when no package.json exists.
 func TestCheckPackageJSONLocations_NoPkgJSON(t *testing.T) {
 	workDir := t.TempDir()

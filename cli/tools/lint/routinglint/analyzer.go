@@ -71,6 +71,12 @@ var Analyzer = &analysis.Analyzer{
 // forbiddenIdents is the closed list of compensating-routing
 // identifiers retired by ddx-3bd7396a. Reintroduction is a CI failure.
 var forbiddenIdents = map[string]string{
+	"BuiltinCatalog":                "DDx-side routing catalog retired by ddx-cd641910",
+	"DefaultModelCatalogPath":       "DDx-side model catalog path retired by ddx-cd641910",
+	"LoadModelCatalogYAML":          "DDx-side model catalog loader retired by ddx-cd641910",
+	"ApplyModelCatalogYAML":         "DDx-side model catalog overlay retired by ddx-cd641910",
+	"DefaultModelCatalogYAML":       "DDx-side model catalog seed retired by ddx-cd641910",
+	"CheckDeprecatedPin":            "DDx-side catalog pin check retired by ddx-cd641910",
 	"ResolveProfileLadder":          "tier-ladder resolver retired by ddx-3bd7396a — DDx must not re-implement profile-to-preference mapping",
 	"ResolveTierModelRef":           "tier-model resolver retired by ddx-3bd7396a — DDx must not re-implement exact-pin filtering",
 	"ResolveProfileLadderCallCount": "test seam for the retired tier-ladder resolver — also retired by ddx-3bd7396a",
@@ -80,6 +86,10 @@ var forbiddenIdents = map[string]string{
 	"retryByPassthrough":            "using passthrough values in retry policy violates the passthrough envelope contract (ddx-20047dd5)",
 	"endpointByPassthrough":         "using passthrough values in endpoint selection violates the passthrough envelope contract (ddx-20047dd5)",
 	"catalogThresholdForHarness":    "using harness in catalog threshold evaluation violates the passthrough envelope contract (ddx-20047dd5)",
+	"ResolveModelTier":              "DDx-side model tier resolution retired by ddx-ef81fa60",
+	"resolveStrongSplitterMinPower": "DDx-side strong-power trick retired by ddx-ef81fa60",
+	"isStrongPowerUnsatisfiedError": "DDx-side routing error substring retry retired by ddx-ef81fa60",
+	"isSmartRouteUnavailableError":  "DDx-side routing error substring retry retired by ddx-ef81fa60",
 }
 
 // forbiddenLiterals is the closed list of CLI flag and config-key

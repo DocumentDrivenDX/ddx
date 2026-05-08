@@ -98,6 +98,18 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 		fmt.Println("⚠️  Configuration Issues (non-critical)")
 	}
 
+	// Check 3b: Legacy DDx-side model catalog file.
+	fmt.Print("✓ Checking Legacy Model Catalog... ")
+	if legacyCatalog := checkLegacyModelCatalogFile(); legacyCatalog != nil {
+		fmt.Println("⚠️  Legacy DDx-side model catalog found")
+		for _, r := range legacyCatalog.Remediation {
+			fmt.Printf("   💡 %s\n", r)
+		}
+		issues = append(issues, *legacyCatalog)
+	} else {
+		fmt.Println("✅ No legacy DDx-side model catalog file")
+	}
+
 	// Check 4: Git Installation
 	fmt.Print("✓ Checking Git... ")
 	if checkGit() {
@@ -432,6 +444,28 @@ func isInPath() bool {
 func checkConfiguration() bool {
 	_, err := config.Load()
 	return err == nil
+}
+
+func checkLegacyModelCatalogFile() *DiagnosticIssue {
+	homeDir, err := os.UserHomeDir()
+	if err != nil || homeDir == "" {
+		return nil
+	}
+	path := filepath.Join(homeDir, ".ddx", "model-catalog.yaml")
+	if _, err := os.Stat(path); err != nil {
+		return nil
+	}
+	return &DiagnosticIssue{
+		Type:        "legacy_model_catalog",
+		Description: "Legacy DDx-side model catalog file is still present",
+		Remediation: []string{
+			fmt.Sprintf("Remove %s", path),
+			"Use the upstream agent service routing model instead of the retired DDx-side catalog file",
+		},
+		SystemInfo: map[string]string{
+			"path": path,
+		},
+	}
 }
 
 // checkGit verifies git is available

@@ -848,12 +848,10 @@ func (s *Server) routes() {
 	scoped("POST /api/projects/{project}/beads/{id}/cancel", s.handleCancelBead)
 	scoped("POST /api/projects/{project}/beads/{id}/deps", s.handleBeadDeps)
 
-	// Agent model/catalog/capabilities — legacy + project-scoped (FEAT-006)
+	// Agent model/capabilities status surfaces — legacy + project-scoped (FEAT-006)
 	legacy("GET /api/agent/models", s.handleAgentModels)
-	legacy("GET /api/agent/catalog", s.handleAgentCatalog)
 	legacy("GET /api/agent/capabilities", s.handleAgentCapabilities)
 	scoped("GET /api/projects/{project}/agent/models", s.handleAgentModels)
-	scoped("GET /api/projects/{project}/agent/catalog", s.handleAgentCatalog)
 	scoped("GET /api/projects/{project}/agent/capabilities", s.handleAgentCapabilities)
 
 	// Execution dispatch — legacy
@@ -3373,14 +3371,6 @@ func (s *Server) mcpTools() []mcpTool {
 			},
 		},
 		{
-			Name:        "ddx_agent_catalog",
-			Description: "Show the current model catalog (tier→surface→model assignments and model metadata)",
-			InputSchema: map[string]any{
-				"type":       "object",
-				"properties": map[string]any{},
-			},
-		},
-		{
 			Name:        "ddx_agent_capabilities",
 			Description: "Show model and reasoning-level capabilities for a harness",
 			InputSchema: map[string]any{
@@ -3745,8 +3735,6 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 	case "ddx_provider_show":
 		harness, _ := call.Arguments["harness"].(string)
 		return s.mcpProviderShow(harness)
-	case "ddx_agent_catalog":
-		return s.mcpAgentCatalog()
 	case "ddx_list_plugins":
 		return s.mcpListPlugins()
 	}

@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent usage
 
+Archived reference for the retired `ddx agent` namespace.
+
 Show per-harness token and cost summary
 
 ```

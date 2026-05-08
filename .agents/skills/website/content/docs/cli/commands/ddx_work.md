@@ -9,17 +9,13 @@ Work the bead execution queue
 
 ### Synopsis
 
-work is the primary operator-facing surface for draining the bead
-execution queue. It is an alias for "ddx agent execute-loop" — all flags
-and behavior are identical.
+`ddx work` is the primary operator-facing surface for draining the bead
+execution queue. It claims the next execution-ready bead, runs the bead
+execution workflow from the project root, records the structured result,
+and continues until no unattempted ready work remains.
 
-execute-loop is the primary queue-driven execution surface. It scans the
-target project's execution-ready bead queue, claims the next ready bead,
-runs "ddx agent execute-bead" on it from the project root, records the
-structured result, and continues until no unattempted ready work remains.
-
-Reach for execute-loop by default. Use "ddx agent execute-bead" directly
-only as the primitive for debugging or re-running one specific bead.
+Use `ddx try` when you want to execute one bead directly. Use `ddx work`
+when you want the queue worker to keep advancing ready work.
 
 Planning and document-only beads are valid execution targets — any bead
 with unmet acceptance criteria and no blocking deps is eligible.
@@ -35,13 +31,13 @@ Close semantics (per execute-bead result status):
 
 Only success (and already_satisfied) closes the bead. Every other status
 leaves the bead open and unclaimed so a later attempt can try again. Each
-attempt is appended to the bead as an execute-bead event (status, detail,
-base_rev, result_rev, preserve_ref, retry_after), and the underlying agent
-session log is recorded under the execute-bead agent-log path.
+attempt is appended to the bead as an execution event (status, detail,
+base_rev, result_rev, preserve_ref, retry_after), and the underlying
+session log is recorded with the attempt.
 
-By default execute-loop submits to the running ddx server as a background
-worker and returns immediately. Use --local to run inline in the current
-process.
+`ddx work` runs inline in the current process. Per ADR-022 there is no
+separate submit-to-server mode; the legacy --local flag is accepted only as a
+deprecated no-op.
 
 Project targeting (multi-project servers):
   --project <path>    target a specific project root (absolute path or name)
@@ -64,16 +60,16 @@ ddx work [flags]
   ddx work
 
   # Pick one ready bead, execute it, and stop
-  ddx work --profile default --once
+  ddx work --once
 
   # Run continuously as a bounded queue worker
   ddx work --poll-interval 30s
 
-  # Force a specific harness/model for a debugging pass
+  # Forward harness/model as passthrough constraints for a debugging pass
   ddx work --once --harness agent --model minimax/minimax-m2.7
 
-  # Run inline in the current process
-  ddx work --local --once
+  # Constrain power bounds while leaving concrete routing to Fizeau
+  ddx work --once --min-power 40 --max-power 90
 ```
 
 ### Options
@@ -90,7 +86,7 @@ ddx work [flags]
       --max-tier string                Maximum tier for auto-escalation: cheap, standard, or smart (default: smart)
       --min-tier string                Minimum tier for auto-escalation: cheap, standard, or smart (default: cheap)
       --model string                   Model override
-      --model-ref string               Model catalog reference (e.g. code-medium); resolved via the model catalog
+      --model-ref string               Model reference passthrough; resolved by Fizeau
       --no-adaptive-min-tier           Disable adaptive min-tier promotion based on trailing cheap-tier success rate
       --no-review                      Skip post-merge review (e.g. for doc-only beads or tight iteration loops)
       --once                           Process at most one ready bead

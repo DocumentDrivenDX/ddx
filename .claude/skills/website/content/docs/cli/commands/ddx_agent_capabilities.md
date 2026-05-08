@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent capabilities
 
+Archived reference for the retired `ddx agent` namespace.
+
 Show agent model and reasoning-level capabilities
 
 ```

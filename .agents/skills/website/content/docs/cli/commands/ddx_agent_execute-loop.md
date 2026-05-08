@@ -5,17 +5,18 @@ generated: true
 
 ## ddx agent execute-loop
 
-Drain the single-project execution-ready bead queue
+Archived reference for the retired `ddx agent` namespace.
+
+Use `ddx work` for current queue-driven execution and `ddx try` for single-bead runs.
+
+Retired compatibility command for queue-driven bead execution
 
 ### Synopsis
 
-execute-loop is the primary queue-driven execution surface. It scans the
-target project's execution-ready bead queue, claims the next ready bead,
-runs "ddx agent execute-bead" on it from the project root, records the
-structured result, and continues until no unattempted ready work remains.
+This page is retained as archived command-reference material. Use `ddx work`
+for current queue-driven execution.
 
-Reach for execute-loop by default. Use "ddx agent execute-bead" directly
-only as the primitive for debugging or re-running one specific bead.
+For one specific bead attempt, use `ddx try <bead-id>`.
 
 Planning and document-only beads are valid execution targets — any bead
 with unmet acceptance criteria and no blocking deps is eligible.

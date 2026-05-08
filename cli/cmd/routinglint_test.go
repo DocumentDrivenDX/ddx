@@ -23,8 +23,8 @@ var routinglintExecutionFunctions = []string{
 
 // TestRoutinglintNoResolveRouteInExecutionPaths verifies that execution-path
 // functions in agent_cmd.go do not call .ResolveRoute(). Status/debug
-// surfaces (newAgentCatalogCommand, newAgentRouteStatusCommand, etc.) are
-// allowed to call ResolveRoute and are not scanned by this lint.
+// surfaces (newAgentRouteStatusCommand, etc.) are allowed to call ResolveRoute
+// and are not scanned by this lint.
 func TestRoutinglintNoResolveRouteInExecutionPaths(t *testing.T) {
 	fset := token.NewFileSet()
 	f, err := parser.ParseFile(fset, "agent_cmd.go", nil, 0)
@@ -64,10 +64,10 @@ func TestRoutinglintNoResolveRouteInExecutionPaths(t *testing.T) {
 }
 
 // TestRoutinglintNonStatusFilesDoNotCallResolveRoute verifies that non-test
-// cmd/ source files other than agent_cmd.go (which hosts the allowed catalog
-// health-check) do not call .ResolveRoute().
+// cmd/ source files other than status/introspection surfaces do not call
+// .ResolveRoute().
 func TestRoutinglintNonStatusFilesDoNotCallResolveRoute(t *testing.T) {
-	// agent_cmd.go hosts the catalog-show health check, a status surface.
+	// agent_cmd.go and agent_route_status.go host status/introspection surfaces.
 	// All other non-test .go files in cmd/ must not call ResolveRoute.
 	allowedFiles := map[string]bool{
 		"agent_cmd.go":          true,

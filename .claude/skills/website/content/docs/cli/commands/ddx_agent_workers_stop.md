@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent workers stop
 
+Archived reference for the retired `ddx agent` namespace.
+
 Gracefully stop running agent workers
 
 ### Synopsis

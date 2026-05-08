@@ -77,7 +77,7 @@ unclaimed for a later attempt.`,
 	cmd.Flags().String("harness", "", "Agent harness to use")
 	cmd.Flags().String("model", "", "Model override")
 	cmd.Flags().String("provider", "", "Provider name (e.g. vidar, openrouter); selects a named provider from config")
-	cmd.Flags().String("model-ref", "", "Model catalog reference (e.g. code-medium); resolved via the model catalog")
+	cmd.Flags().String("model-ref", "", "Model reference passthrough (e.g. code-medium); resolved by Fizeau")
 	cmd.Flags().String("effort", "", "Effort level")
 	cmd.Flags().String("context-budget", "", "Context budget for prompt: empty (full), minimal (omit large governing docs for cheap-tier)")
 	cmd.Flags().String("prompt", "", "Prompt file path (auto-generated from bead if omitted)")

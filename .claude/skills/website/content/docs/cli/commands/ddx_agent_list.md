@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent list
 
+Archived reference for the retired `ddx agent` namespace.
+
 List available agent harnesses
 
 ```

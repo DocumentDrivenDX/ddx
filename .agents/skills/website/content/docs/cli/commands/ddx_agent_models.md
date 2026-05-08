@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent models
 
+Archived reference for the retired `ddx agent` namespace.
+
 List models for a configured provider
 
 ```

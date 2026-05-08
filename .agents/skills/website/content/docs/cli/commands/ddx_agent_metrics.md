@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent metrics
 
+Archived reference for the retired `ddx agent` namespace.
+
 Analytics over agent execution evidence
 
 ### Synopsis

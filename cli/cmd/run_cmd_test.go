@@ -30,6 +30,17 @@ func TestRunCommandHelp(t *testing.T) {
 	assert.Contains(t, out, "run", "help output must describe the run command")
 }
 
+// TestRunCommandRegisteredInRoot verifies AC2: the root command exposes run.
+func TestRunCommandRegisteredInRoot(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	root := NewCommandFactory(minimalProjectDir(t)).NewRootCommand()
+	runCmd, _, err := root.Find([]string{"run"})
+	require.NoError(t, err, "root command must register ddx run")
+	require.NotNil(t, runCmd, "root command must expose ddx run")
+	assert.Equal(t, "run", runCmd.Use)
+}
+
 // TestRunPassthroughHarnessModelProviderToExecute verifies AC3: ddx run
 // forwards --harness, --model, and --provider to ServiceExecuteRequest without
 // calling ResolveRoute (CONTRACT-003).

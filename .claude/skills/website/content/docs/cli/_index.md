@@ -47,14 +47,12 @@ ddx exec result <run-id>
 ddx exec log <run-id>
 ```
 
-### Agent Dispatch
+### Workflow Skills
 
 ```bash
-ddx agent run --harness claude --prompt file.md
-ddx agent run --quorum majority --harnesses codex,claude --text "Review this"
-ddx agent list
-ddx agent usage
-ddx agent capabilities claude
+ddx run --prompt task.md       # one layer-1 invocation
+ddx try ddx-abc123             # one bead attempt
+ddx work                       # drain the ready queue
 ```
 
 ### Package Registry

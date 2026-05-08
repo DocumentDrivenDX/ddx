@@ -5,6 +5,8 @@ generated: true
 
 ## ddx agent executions
 
+Archived reference for the retired `ddx agent` namespace.
+
 Manage execute-bead execution bundles (.ddx/executions/)
 
 ### Synopsis
