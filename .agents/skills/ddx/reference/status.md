@@ -1,5 +1,20 @@
 # Status — Queue State and Health
 
+## Mode note
+
+This reference covers **direct queue queries and health checks** (`queue_steward`
+and `interactive-steward` orient phase). Use it for:
+
+- "What's on the queue?" "What's ready?" "Is DDx healthy?" "Sync status?"
+
+If the user is asking a **broad planning or orientation question** — "what should
+I work on next?", "what's blocking the queue?" — see `reference/interactive.md`
+first. The interactive steward uses these commands to build `QueueFacts` but
+does not instruct manual ready-bead implementation; `ddx work` is the queue
+worker.
+
+---
+
 Three distinct intents live here. They answer different questions
 and have different commands; call them by intent, not
 interchangeably.
@@ -17,7 +32,9 @@ ddx bead list       # all beads (filter with --status, --label, --where)
 
 Typical answers:
 
-- "What should I work on next?" → `ddx bead ready` (top of list).
+- "What should I work on next?" → See `reference/interactive.md` for the
+  interactive-steward planning workflow. The steward uses `ddx bead ready` to
+  build `QueueFacts` but will not instruct you to manually implement ready beads.
 - "Why isn't bead X moving?" → `ddx bead show <id>` for full state;
   `ddx bead dep tree <id>` to see what it depends on.
 - "How many beads are open right now?" → `ddx bead status`.
@@ -28,6 +45,7 @@ Typical answers:
 
 ```bash
 ddx doctor          # environment, config, install validation
+# Fizeau diagnostics, if exposed by the project, remain separate from DDx.
 ddx version         # CLI version
 ```
 
@@ -42,8 +60,7 @@ ddx version         # CLI version
 
 Fizeau diagnostics go further into the execution service: which
 harnesses are discoverable, whether provider credentials are present,
-and whether the model catalog loads. DDx forwards raw model strings
-unchanged; Fizeau does the matching.
+and whether the model catalog loads.
 
 ## Is the project drifted from upstream?
 

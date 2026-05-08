@@ -644,7 +644,7 @@
     },
     "triage": {
       "type": "object",
-      "description": "Post-attempt triage decision policy used by the drain loop after each terminal event. Distinct from agent.triage (the pre-claim complexity gate).",
+      "description": "Post-attempt triage decision policy used by the drain loop after each terminal event. Distinct from agent.triage (the bead readiness decomposition gate).",
       "properties": {
         "policies": {
           "type": "object",
