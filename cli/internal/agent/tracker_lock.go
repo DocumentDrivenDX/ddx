@@ -136,17 +136,47 @@ func withTrackerLockPolicy(projectRoot string, policy LockRetryPolicy, fn func()
 			break
 		}
 
-		if breakStaleTrackerLock(lockDir) {
-			continue
+		// Classify what exists at lockDir before deciding to sleep or fail.
+		// Per TD-031 §8.5: only a confirmed lock directory enters retry/backoff;
+		// malformed paths are operator diagnostics, not lock contention.
+		info, statErr := os.Lstat(lockDir)
+		if statErr != nil {
+			if os.IsNotExist(statErr) {
+				// Path disappeared between Mkdir and Lstat (race). Retry immediately.
+				continue
+			}
+			return fmt.Errorf("tracker lock stat: %w", statErr)
 		}
 
-		if attempt >= policy.MaxRetries {
-			return lockTimeoutError(lockDir, "max retries")
+		switch {
+		case info.Mode().IsDir():
+			// Real lock directory. Apply existing stale-owner policy.
+			if breakStaleTrackerLock(lockDir) {
+				continue
+			}
+			if attempt >= policy.MaxRetries {
+				return lockTimeoutError(lockDir, "max retries")
+			}
+			if policy.MaxElapsed > 0 && time.Since(start) >= policy.MaxElapsed {
+				return lockTimeoutError(lockDir, "max elapsed")
+			}
+			time.Sleep(policy.step(attempt))
+
+		case info.Mode().IsRegular():
+			// Malformed: lock path must be a directory, not a regular file.
+			if time.Since(info.ModTime()) > trackerLockStaleAge {
+				// Stale regular file: remove with single-path removal and retry immediately.
+				if rmErr := os.Remove(lockDir); rmErr != nil && !os.IsNotExist(rmErr) {
+					return fmt.Errorf("tracker lock: remove malformed stale file %s: %w", lockDir, rmErr)
+				}
+				continue
+			}
+			return fmt.Errorf("tracker lock: malformed lock path %s is a regular file; a lock directory was expected — remove it manually to recover", lockDir)
+
+		default:
+			// Symlink, socket, device, or other special filesystem object. Do not remove.
+			return fmt.Errorf("tracker lock: malformed lock path %s has type %v; a lock directory was expected — inspect and remove it manually to recover", lockDir, info.Mode().Type())
 		}
-		if policy.MaxElapsed > 0 && time.Since(start) >= policy.MaxElapsed {
-			return lockTimeoutError(lockDir, "max elapsed")
-		}
-		time.Sleep(policy.step(attempt))
 	}
 
 	defer os.RemoveAll(lockDir)
@@ -154,7 +184,7 @@ func withTrackerLockPolicy(projectRoot string, policy LockRetryPolicy, fn func()
 }
 
 func lockTimeoutError(lockDir, why string) error {
-	owner := "unknown"
+	owner := "missing"
 	if pidData, perr := os.ReadFile(filepath.Join(lockDir, "pid")); perr == nil && len(pidData) > 0 {
 		owner = strings.TrimSpace(string(pidData))
 	}
