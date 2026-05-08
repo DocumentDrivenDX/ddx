@@ -57,26 +57,26 @@ ddx bead export
 
 ## Queue Work
 
-Drain the bead execution queue. `ddx work` is an alias for
-`ddx agent execute-loop`; all flags pass through.
+Primary execution surface for draining the bead queue end-to-end.
 
 ```bash
 ddx work                    # drain the bead execution queue
+ddx try <id>                # attempt one bead in an isolated worktree
+ddx run --prompt <file>     # invoke the agent once
 ```
 
-## Agent Service
+## Agent Diagnostics
 
-Invoke AI agents against prompts, run multi-agent consensus, or execute a
-bead end-to-end in an isolated worktree.
+Inspect harness health, session logs, routing, and provider availability.
+The `ddx agent` namespace is a diagnostics surface; use `ddx run`, `ddx try`,
+and `ddx work` for execution.
 
 ```bash
-ddx agent run --harness=<name> --prompt <file>
-ddx agent run --quorum=majority --harnesses=a,b
-ddx agent execute-bead <id> [--from <rev>] [--no-merge]
-ddx agent execute-loop          # drain bead queue (prefer `ddx work`)
-ddx agent list                  # available harnesses
-ddx agent doctor                # harness health check
-ddx agent log                   # session history
+ddx agent list              # available harnesses
+ddx agent doctor            # harness health check
+ddx agent log               # session history
+ddx agent capabilities      # model and reasoning-level capabilities
+ddx agent providers         # configured providers with live status
 ```
 
 ## Resource Commands

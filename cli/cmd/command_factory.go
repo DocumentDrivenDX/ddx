@@ -78,6 +78,15 @@ type CommandFactory struct {
 	// resource preflight used by ddx try and ddx work.
 	resourceCheckerOverride agent.ExecutionResourceChecker
 
+	// preflightWarnOnce ensures the project-local skill layout warning fires at
+	// most once per process for long-running entrypoints (work, try).
+	preflightWarnOnce sync.Once
+
+	// serverListenAndServeOverride, when non-nil, replaces srv.ListenAndServeTLS
+	// in the server RunE. Used by tests to verify server startup behavior without
+	// actually binding to a port.
+	serverListenAndServeOverride func(string, string) error
+
 	// Custom viper instance for isolation
 	viperInstance *viper.Viper
 

@@ -31,7 +31,7 @@ ddx agent metrics [flags]
 
 ### SEE ALSO
 
-* [ddx agent](/docs/cli/commands/ddx_agent/)	 - Invoke AI agents with harness dispatch, quorum, and session logging
+* [ddx agent](/docs/cli/commands/ddx_agent/)	 - Agent diagnostics and legacy command namespace
 * [ddx agent metrics cost-efficiency](/docs/cli/commands/ddx_agent_metrics_cost-efficiency/)	 - Report total cost to close each bead, including failed escalation attempts
 * [ddx agent metrics review-outcomes](/docs/cli/commands/ddx_agent_metrics_review-outcomes/)	 - Report post-merge review verdicts per originating tier
 * [ddx agent metrics tier-success](/docs/cli/commands/ddx_agent_metrics_tier-success/)	 - Report success rate per harness/model tier from execution evidence

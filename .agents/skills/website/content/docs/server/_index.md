@@ -135,10 +135,36 @@ AI agents can connect to `ddx server` via MCP (Streamable HTTP at `POST /mcp`). 
 
 AI clients and the web UI use the GraphQL endpoint at `POST /graphql`. The schema covers all types available via REST. Use [GraphiQL](http://127.0.0.1:8080/graphiql) to explore the schema interactively.
 
+## Node Identity and Multi-Node Dashboard
+
+Each `ddx server` instance acquires a stable **node identity** at startup,
+derived from `DDX_NODE_NAME` (falling back to the hostname). The node id is
+persisted across restarts, and the server maintains a registry of every
+project it has been asked to serve — including projects registered by CLI
+commands running in other terminals on the same machine. The server writes
+an address file so the CLI can find it without configuration. See
+**FEAT-020** for the node-state and project-registry specification.
+
+Built on top of node identity, the **multi-node dashboard UI** surfaces
+everything happening on the node. Every view embeds node, project, and page
+in the URL, so a combined cross-project bead queue, run history, or a
+project-scoped artifact browser is bookmarkable and shareable. Run records
+preserve the `work` → `try` → `run` hierarchy from the run architecture
+rather than flattening to agent sessions. See **FEAT-021** for the
+dashboard URL structure and view specifications.
+
+```
+/nodes/:nodeId                        → node overview (health, project list)
+/nodes/:nodeId/beads                  → combined bead queue (all projects)
+/nodes/:nodeId/runs                   → combined run history (all projects)
+/nodes/:nodeId/projects/:projectId/…  → project-scoped views
+```
+
 ## Architecture
 
 - **Single binary** — server and web UI (SvelteKit) are embedded in the `ddx` CLI
-- **Stateless** — reads from filesystem on each request, no database
+- **Stateless reads** — documents and beads are read from the filesystem on each request
+- **Stateful node identity** — node id, address file, and project registry persist across restarts (FEAT-020)
 - **Localhost by default** — binds to `127.0.0.1` for security
-- **File-backed** — all data comes from git-tracked files (`.ddx/beads.jsonl`, library docs, agent logs)
+- **File-backed** — all data comes from git-tracked files (`.ddx/beads.jsonl`, library docs, agent logs); cross-machine alignment is handled by `ddx sync` (see [Architecture → Multi-Machine Sync](../concepts/architecture/#multi-machine-sync))
 - **Web UI stack** — SvelteKit (Svelte 5, `adapter-static`) + GraphQL (Houdini client) + Bun; built to static files and embedded via `//go:embed`
