@@ -103,5 +103,19 @@ work runs inline in the current process; per ADR-022 there is no separate
 // branch on those values. Retry-power policy (min-power / max-power) is owned
 // by this layer.
 func (f *CommandFactory) runWork(cmd *cobra.Command, args []string) error {
+	projectFlag, _ := cmd.Flags().GetString("project")
+	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
+
+	// Preflight: warn once per process for degraded project-local skill layout.
+	// Suppressed in JSON mode to avoid corrupting machine-readable output
+	// (stderr and stdout are merged by some test helpers and log aggregators).
+	asJSON, _ := cmd.Flags().GetBool("json")
+	if !asJSON {
+		preflightResult := checkProjectRuntimePreflight(projectRoot)
+		f.preflightWarnOnce.Do(func() {
+			emitPreflightWarning(cmd.ErrOrStderr(), preflightResult)
+		})
+	}
+
 	return f.runAgentExecuteLoopImpl(cmd, true, "")
 }
