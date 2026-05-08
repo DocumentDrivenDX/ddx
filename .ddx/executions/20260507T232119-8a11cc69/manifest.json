@@ -1,0 +1,82 @@
+{
+  "attempt_id": "20260507T232119-8a11cc69",
+  "bead_id": "ddx-ece97605",
+  "base_rev": "6f61ebce6d1ea723f813bb4871c459083a8f537c",
+  "created_at": "2026-05-07T23:21:23.171437093Z",
+  "requested": {
+    "prompt": "synthesized",
+    "min_power": 5
+  },
+  "bead": {
+    "id": "ddx-ece97605",
+    "title": "repair: schedule one bounded review-fixable repair cycle",
+    "description": "PROBLEM\nFixable review findings currently stop the bead after review instead of scheduling a bounded repair cycle. The old escalation bead ddx-cfedee8e is marked superseded because this scope belongs in C9, but C9 was too broad. This split slice owns exactly one review_fixable_gap repair cycle plus the MinPower bump needed for that repair attempt.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead_post_review.go:233-277 records REQUEST_CHANGES/BLOCK and applies review triage, but it does not schedule a repair attempt with the review context.\n- cli/internal/agent/execute_bead_post_review.go:283-353 reduces the review group to one verdict but does not return a repair_context_from_review_group payload to the attempt path.\n- cli/cmd/agent_execute_loop_escalation.go:40-68 escalates MinPower for repeated implementation failures, not for review_fixable_gap repair attempts.\n- cli/cmd/agent_cmd.go:1699-1715 already rebuilds per-attempt config with a requested MinPower while preserving explicit harness/model/provider/profile pins; the repair path needs to reuse that property instead of mutating pins.\n- cli/internal/agent/execute_bead_review_group.go:69-94 records reviewer slots and review_group_id, which is the source data the repair context should reference.\n\nPROPOSED FIX\n- Introduce a review_fixable_gap classification distinct from terminal review classes.\n- When review_fixable_gap is returned, prevent close, append review-fixable-gap evidence, and schedule exactly one bounded repair cycle using repair_context_from_review_group.\n- Raise MinPower for the repair attempt above the implementer's actual power using the available ladder/model catalog, but preserve explicit harness/model/provider/profile pins and do not add a MaxPower cap.\n- Ensure spec_gap, missing_acceptance, too_large at depth cap, unsafe/out_of_scope, and exhausted review_error remain terminal operator-required states from ddx-c2a66f45 rather than repair attempts.\n- Stop after one repair cycle per candidate/result unless a later bead explicitly extends the policy.\n\nNON-SCOPE\n- Do not implement candidate refs or same-worktree repair persistence; candidate ref retention is tracked by ddx-7cb3153d and the candidate-cycle epic.\n- Do not change the reviewer prompt beyond schema fields needed to classify fixable vs terminal findings.\n- Do not change general implementation-failure escalation beyond the repair attempt.\n\nDEPS\nDepends on ddx-c2a66f45 for terminal review classification. This bead supersedes the executable scope of ddx-cfedee8e.",
+    "acceptance": "1. review_fixable_gap prevents CloseWithEvidence, records a review-fixable-gap event, and schedules one bounded repair cycle with repair_context_from_review_group.\n2. TestPreCloseReviewFixableGap_PreventsCloseAndSchedulesRepair covers the close-prevention, event body, repair context, and one-cycle scheduling behavior.\n3. TestRetryPolicy_ReviewFixableGapRaisesMinPowerAndPreservesPins proves the repair attempt raises MinPower above the implementer actual power while preserving explicit harness/model/provider/profile pins and leaving MaxPower unset unless the operator explicitly set it.\n4. TestRetryPolicy_ReviewFixableGapStopsAfterOneRepairCycle proves the policy cannot loop indefinitely on the same review_group_id/result_rev.\n5. Terminal review classes from ddx-c2a66f45 do not schedule repair; TestReviewTerminalClassifications_BlockWithoutNoProgress still passes.\n6. Existing TestEscalationLadder_WiredIntoExecutor and TestZeroConfigEscalationIntegration_RealLadderAdvancesMinPower still pass.\n7. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -run \"TestPreCloseReviewFixableGap|TestRetryPolicy_ReviewFixableGap|TestReviewTerminalClassifications|TestEscalationLadder|TestZeroConfigEscalation\" -count=1 passes.\n8. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... passes.\n9. lefthook run pre-commit passes.",
+    "parent": "ddx-5cb6e6cd",
+    "labels": [
+      "phase:2",
+      "story:10",
+      "area:agent",
+      "area:review",
+      "area:routing",
+      "kind:feature",
+      "reliability",
+      "adr:024",
+      "spec:FEAT-010",
+      "split-from:ddx-9228a484",
+      "supersedes:ddx-cfedee8e"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T22:51:12Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4097785",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"All 8 rubric criteria pass. Title is imperative and names subsystem + change. Description has structured PROBLEM / ROOT CAUSE WITH FILE:LINE (5 precise file:line ranges) / PROPOSED FIX / NON-SCOPE sections. AC is numbered with 9 items; items 2-6 name specific Test* functions; item 7 supplies a -run filter with -count=1; items 8-9 are exactly the required `cd cli \\u0026\\u0026 go test` green gate and `lefthook run pre-commit passes` closing lines. Labels carry phase:2, area:*, kind:feature, adr:024, spec:FEAT-010, plus split-from and supersedes cross-refs. Parent (ddx-5cb6e6cd) and dep (ddx-c2a66f45) are both explicit; the description DEPS block explains the relationship. No /tmp references, no chat references. Cold-read test passes: an agent can identify which files to open, which lines to change, and which tests to run without operator hand-curation.\",\"score\":8,\"suggested_fixes\":[],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T22:52:23.719819686Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=8"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-07T23:21:15.695449688Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260507T225223-babc31f9\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":4,\"output_tokens\":357,\"total_tokens\":361,\"cost_usd\":4.409449799999998,\"duration_ms\":1727970,\"exit_code\":0}",
+          "created_at": "2026-05-07T23:21:15.755259345Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=361 cost_usd=4.4094 model=sonnet"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T22:51:12.195741392Z",
+      "spec-id": "FEAT-010",
+      "split-from": "ddx-9228a484",
+      "supersedes": "ddx-cfedee8e"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T232119-8a11cc69",
+    "prompt": ".ddx/executions/20260507T232119-8a11cc69/prompt.md",
+    "manifest": ".ddx/executions/20260507T232119-8a11cc69/manifest.json",
+    "result": ".ddx/executions/20260507T232119-8a11cc69/result.json",
+    "checks": ".ddx/executions/20260507T232119-8a11cc69/checks.json",
+    "usage": ".ddx/executions/20260507T232119-8a11cc69/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-ece97605-20260507T232119-8a11cc69"
+  },
+  "prompt_sha": "7c38b2f848d45e94f95a07c0d75940e3eda460b059d58f66e0a9e769b25ae287"
+}

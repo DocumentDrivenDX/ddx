@@ -617,6 +617,8 @@ func TestInitGitignoreRules(t *testing.T) {
 	assert.Contains(t, content, ".ddx/exec-runs.d/", ".ddx/exec-runs.d/ must be ignored")
 	assert.Contains(t, content, ".ddx/server.env", ".ddx/server.env must be ignored")
 	assert.Contains(t, content, ".ddx/server/", ".ddx/server/ must be ignored")
+	assert.Contains(t, content, ".ddx/run-state.json", ".ddx/run-state.json must be ignored")
+	assert.Contains(t, content, ".ddx/run-state/", ".ddx/run-state/ must be ignored")
 	assert.Contains(t, content, ".ddx/executions/*/embedded/", "embedded runtime state must be ignored")
 
 	// Execution evidence must be explicitly un-ignored

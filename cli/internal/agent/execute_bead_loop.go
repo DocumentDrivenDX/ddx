@@ -246,7 +246,12 @@ type ExecuteBeadReport struct {
 	BaseRev                     string        `json:"base_rev,omitempty"`
 	ResultRev                   string        `json:"result_rev,omitempty"`
 	PreserveRef                 string        `json:"preserve_ref,omitempty"`
-	RetryAfter                  string        `json:"retry_after,omitempty"`
+	// CandidateRef is the project-root git ref pinned before checks and review.
+	// Format: refs/ddx/iterations/<attempt-id>/<cycle-index>.
+	CandidateRef string `json:"candidate_ref,omitempty"`
+	// CycleIndex is the zero-based repair-cycle index for this candidate.
+	CycleIndex int    `json:"cycle_index,omitempty"`
+	RetryAfter string `json:"retry_after,omitempty"`
 	// NoChangesRationale carries the agent's explanation when status == no_changes.
 	NoChangesRationale string `json:"no_changes_rationale,omitempty"`
 	// ReviewVerdict is the post-merge review verdict (APPROVE, REQUEST_CHANGES,

@@ -1355,6 +1355,27 @@ func (s *Store) ReadyExecution() ([]Bead, error) {
 	return s.readyFiltered(true)
 }
 
+// NeedsHuman returns open beads that carry the needs_human label, sorted by
+// queue order. These beads require operator attention before a worker can
+// resume them.
+func (s *Store) NeedsHuman() ([]Bead, error) {
+	beads, err := s.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+	var result []Bead
+	for _, b := range beads {
+		if b.Status != StatusOpen {
+			continue
+		}
+		if hasLabel(b, LabelNeedsHuman) {
+			result = append(result, b)
+		}
+	}
+	sortBeadsForQueue(result)
+	return result, nil
+}
+
 // ReadyExecutionBreakdown classifies dependency-ready beads by the reason
 // they are NOT execution-eligible: lifecycle-blocked statuses, epic
 // containers, retry cooldown, execution-eligible=false, or superseded. It's
@@ -1794,6 +1815,14 @@ func (s *Store) Status() (*StatusCounts, error) {
 	if err != nil {
 		return nil, err
 	}
+	workerReady, err := s.ReadyExecution()
+	if err != nil {
+		return nil, err
+	}
+	needsHuman, err := s.NeedsHuman()
+	if err != nil {
+		return nil, err
+	}
 
 	// Pull in archive partner so totals survive `bead migrate` — the archive
 	// only carries closed beads, so Ready/Blocked aren't affected.
@@ -1819,7 +1848,13 @@ func (s *Store) Status() (*StatusCounts, error) {
 		}
 	}
 
-	counts := &StatusCounts{Total: len(all), Ready: len(ready), Blocked: len(blocked)}
+	counts := &StatusCounts{
+		Total:       len(all),
+		Ready:       len(ready),
+		Blocked:     len(blocked),
+		WorkerReady: len(workerReady),
+		NeedsHuman:  len(needsHuman),
+	}
 	for _, b := range all {
 		switch b.Status {
 		case StatusOpen:

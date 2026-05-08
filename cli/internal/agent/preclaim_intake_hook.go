@@ -44,6 +44,15 @@ type preClaimIntakePromptRewrite struct {
 	ChangedFields []string `json:"changed_fields,omitempty"`
 }
 
+// preClaimReadinessPromptResult is the canonical readiness JSON schema returned
+// by skills that use the FEAT-010/ADR-023 outcome vocabulary.
+type preClaimReadinessPromptResult struct {
+	Outcome string                      `json:"outcome"`
+	Reason  string                      `json:"reason,omitempty"`
+	Detail  string                      `json:"detail,omitempty"`
+	Rewrite preClaimIntakePromptRewrite `json:"rewrite,omitempty"`
+}
+
 // NewPreClaimIntakeHook constructs the bead-intake complexity gate used
 // before claim in the work / execute-loop paths. The hook evaluates the bead
 // using the repository's triage prompt and returns one of the typed intake
@@ -106,33 +115,7 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 			return PreClaimIntakeResult{}, err
 		}
 
-		var out preClaimIntakePromptResult
-		if err := json.Unmarshal([]byte(payload), &out); err != nil {
-			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode result: %w", err)
-		}
-
-		switch strings.ToLower(strings.TrimSpace(out.Classification)) {
-		case "atomic":
-			return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic, Detail: strings.TrimSpace(out.Reasoning)}, nil
-		case "rewritten":
-			return PreClaimIntakeResult{
-				Outcome: PreClaimIntakeActionableButRewritten,
-				Detail:  strings.TrimSpace(out.Reasoning),
-				Rewrite: PreClaimIntakeRewrite{
-					Description:   strings.TrimSpace(out.Rewrite.Description),
-					Acceptance:    strings.TrimSpace(out.Rewrite.Acceptance),
-					ChangedFields: normalizePreClaimIntakeRewriteFields(out.Rewrite.ChangedFields),
-				},
-			}, nil
-		case "decomposable":
-			return PreClaimIntakeResult{Outcome: PreClaimIntakeTooLargeDecomposed, Detail: strings.TrimSpace(out.Reasoning)}, nil
-		case "ambiguous":
-			return PreClaimIntakeResult{Outcome: PreClaimIntakeAmbiguousNeedsHuman, Detail: strings.TrimSpace(out.Reasoning)}, nil
-		case "":
-			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: missing classification")
-		default:
-			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: unknown classification %q", out.Classification)
-		}
+		return decodePreClaimIntakePayloadResult(payload)
 	}
 }
 
@@ -293,4 +276,86 @@ func isSmartProfileUnavailableError(err error) bool {
 		strings.Contains(msg, "tier >= smart") ||
 		strings.Contains(msg, "profile=smart") ||
 		strings.Contains(msg, "profile smart")
+}
+
+// decodePreClaimIntakePayloadResult decodes a JSON payload into a PreClaimIntakeResult.
+// It accepts both the legacy intake schema (classification field) and the canonical
+// readiness schema (outcome field), converting both into the same decision model.
+func decodePreClaimIntakePayloadResult(payload string) (PreClaimIntakeResult, error) {
+	var probe struct {
+		Classification string `json:"classification"`
+		Outcome        string `json:"outcome"`
+	}
+	if err := json.Unmarshal([]byte(payload), &probe); err != nil {
+		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode result: %w", err)
+	}
+	if probe.Outcome != "" {
+		return decodeCanonicalReadinessPayload(payload)
+	}
+	if probe.Classification != "" {
+		return decodeLegacyIntakePayload(payload)
+	}
+	return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: missing classification or outcome field")
+}
+
+func decodeCanonicalReadinessPayload(payload string) (PreClaimIntakeResult, error) {
+	var out preClaimReadinessPromptResult
+	if err := json.Unmarshal([]byte(payload), &out); err != nil {
+		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode readiness result: %w", err)
+	}
+	detail := strings.TrimSpace(out.Reason)
+	if detail == "" {
+		detail = strings.TrimSpace(out.Detail)
+	}
+	rewrite := PreClaimIntakeRewrite{
+		Description:   strings.TrimSpace(out.Rewrite.Description),
+		Acceptance:    strings.TrimSpace(out.Rewrite.Acceptance),
+		ChangedFields: normalizePreClaimIntakeRewriteFields(out.Rewrite.ChangedFields),
+	}
+	switch strings.ToLower(strings.TrimSpace(out.Outcome)) {
+	case "actionable_atomic":
+		return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic, Detail: detail}, nil
+	case "actionable_but_rewritten":
+		return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableButRewritten, Detail: detail, Rewrite: rewrite}, nil
+	case "too_large_decomposed":
+		return PreClaimIntakeResult{Outcome: PreClaimIntakeTooLargeDecomposed, Detail: detail}, nil
+	case "ambiguous_needs_human":
+		return PreClaimIntakeResult{Outcome: PreClaimIntakeAmbiguousNeedsHuman, Detail: detail}, nil
+	case "readiness_error", "system_unready":
+		// system_unready maps to fail-open/skip per ADR-023/FEAT-010 policy
+		return PreClaimIntakeResult{Outcome: PreClaimIntakeError, Detail: detail}, nil
+	case "":
+		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: missing outcome")
+	default:
+		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: unknown readiness outcome %q: expected one of actionable_atomic, actionable_but_rewritten, too_large_decomposed, ambiguous_needs_human, readiness_error, system_unready", out.Outcome)
+	}
+}
+
+func decodeLegacyIntakePayload(payload string) (PreClaimIntakeResult, error) {
+	var out preClaimIntakePromptResult
+	if err := json.Unmarshal([]byte(payload), &out); err != nil {
+		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode result: %w", err)
+	}
+	switch strings.ToLower(strings.TrimSpace(out.Classification)) {
+	case "atomic":
+		return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic, Detail: strings.TrimSpace(out.Reasoning)}, nil
+	case "rewritten":
+		return PreClaimIntakeResult{
+			Outcome: PreClaimIntakeActionableButRewritten,
+			Detail:  strings.TrimSpace(out.Reasoning),
+			Rewrite: PreClaimIntakeRewrite{
+				Description:   strings.TrimSpace(out.Rewrite.Description),
+				Acceptance:    strings.TrimSpace(out.Rewrite.Acceptance),
+				ChangedFields: normalizePreClaimIntakeRewriteFields(out.Rewrite.ChangedFields),
+			},
+		}, nil
+	case "decomposable":
+		return PreClaimIntakeResult{Outcome: PreClaimIntakeTooLargeDecomposed, Detail: strings.TrimSpace(out.Reasoning)}, nil
+	case "ambiguous":
+		return PreClaimIntakeResult{Outcome: PreClaimIntakeAmbiguousNeedsHuman, Detail: strings.TrimSpace(out.Reasoning)}, nil
+	case "":
+		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: missing classification")
+	default:
+		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: unknown classification %q", out.Classification)
+	}
 }

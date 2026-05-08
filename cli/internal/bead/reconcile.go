@@ -13,12 +13,69 @@ const (
 	ExtraExecutionElig   = "execution-eligible"
 	ExtraExecutionReason = "execution-skip-reason"
 
+	ExtraNeedsHumanReason          = "needs-human-reason"
+	ExtraNeedsHumanSince           = "needs-human-since"
+	ExtraNeedsHumanSource          = "needs-human-source"
+	ExtraNeedsHumanSuggestedAction = "needs-human-suggested-action"
+	ExtraNeedsHumanSummary         = "needs-human-summary"
+
 	LabelNoChangesUnverified      = "triage:no-changes-unverified"
 	LabelNoChangesUnjustified     = "triage:no-changes-unjustified"
 	LabelNeedsInvestigation       = "triage:needs-investigation"
 	LabelNeedsHuman               = "needs_human"
 	LabelReconciledNoChangesState = "reconciled:no-changes-state"
 )
+
+// NeedsHumanMeta holds operator-attention metadata for a bead in the needs_human lane.
+type NeedsHumanMeta struct {
+	Reason          string `json:"reason,omitempty"`
+	Since           string `json:"since,omitempty"`
+	Source          string `json:"source,omitempty"`
+	SuggestedAction string `json:"suggested_action,omitempty"`
+	Summary         string `json:"summary,omitempty"`
+}
+
+// GetNeedsHumanMeta reads needs-human metadata from a bead's Extra map.
+func GetNeedsHumanMeta(b Bead) NeedsHumanMeta {
+	if b.Extra == nil {
+		return NeedsHumanMeta{}
+	}
+	return NeedsHumanMeta{
+		Reason:          extraStringVal(b.Extra, ExtraNeedsHumanReason),
+		Since:           extraStringVal(b.Extra, ExtraNeedsHumanSince),
+		Source:          extraStringVal(b.Extra, ExtraNeedsHumanSource),
+		SuggestedAction: extraStringVal(b.Extra, ExtraNeedsHumanSuggestedAction),
+		Summary:         extraStringVal(b.Extra, ExtraNeedsHumanSummary),
+	}
+}
+
+// SetNeedsHumanMeta writes needs-human metadata into a bead's Extra map.
+// Empty string values delete the corresponding key.
+func SetNeedsHumanMeta(b *Bead, m NeedsHumanMeta) {
+	if b.Extra == nil {
+		b.Extra = make(map[string]any)
+	}
+	setOrDeleteExtra(b.Extra, ExtraNeedsHumanReason, m.Reason)
+	setOrDeleteExtra(b.Extra, ExtraNeedsHumanSince, m.Since)
+	setOrDeleteExtra(b.Extra, ExtraNeedsHumanSource, m.Source)
+	setOrDeleteExtra(b.Extra, ExtraNeedsHumanSuggestedAction, m.SuggestedAction)
+	setOrDeleteExtra(b.Extra, ExtraNeedsHumanSummary, m.Summary)
+}
+
+func extraStringVal(m map[string]any, key string) string {
+	if s, ok := m[key].(string); ok {
+		return s
+	}
+	return ""
+}
+
+func setOrDeleteExtra(m map[string]any, key, val string) {
+	if val == "" {
+		delete(m, key)
+	} else {
+		m[key] = val
+	}
+}
 
 var noChangesManagementKeys = []string{
 	ExtraRetryAfter,
