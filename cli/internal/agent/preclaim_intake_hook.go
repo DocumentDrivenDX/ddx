@@ -58,10 +58,9 @@ type preClaimReadinessPromptResult struct {
 // using the repository's triage prompt and returns one of the typed intake
 // outcomes so the loop can decide whether to claim or skip the candidate.
 //
-// The hook preserves operator-supplied passthrough constraints. When the
-// resolved route cannot satisfy the strong splitter floor, it returns an
-// actionable-but-blocking result with agent_power_unsatisfied in the detail so
-// the loop can skip the bead instead of attempting weak decomposition.
+// The hook preserves operator-supplied passthrough constraints. Route/power
+// failures are infrastructure failures, not bead-readiness decisions, so they
+// return intake_error and let the loop use its fail-open readiness path.
 func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner) func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 	return func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 		if ctx != nil {
@@ -95,11 +94,12 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 		}
 
 		runtime := AgentRunRuntime{
-			Prompt:          prompt,
-			WorkDir:         projectRoot,
-			PromptSource:    PreClaimIntakePromptSource,
-			ProfileOverride: "smart",
-			ClearMaxPower:   true,
+			Prompt:           prompt,
+			WorkDir:          projectRoot,
+			PromptSource:     PreClaimIntakePromptSource,
+			ModelRefOverride: "smart",
+			ClearProfile:     true,
+			ClearMaxPower:    true,
 		}
 		if strongMinPower > 0 {
 			runtime.MinPowerOverride = strongMinPower
@@ -108,8 +108,8 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 		if err != nil {
 			if isStrongPowerUnsatisfiedError(err) {
 				return PreClaimIntakeResult{
-					Outcome: PreClaimIntakeAmbiguousNeedsHuman,
-					Detail:  "pre-claim intake requires a smart/frontier route but no viable model was available",
+					Outcome: PreClaimIntakeError,
+					Detail:  preClaimIntakeRouteUnavailableDetail(err),
 				}, nil
 			}
 			return PreClaimIntakeResult{}, err
@@ -124,12 +124,25 @@ func dispatchPreClaimIntakePayload(ctx context.Context, projectRoot string, svc 
 	if err == nil {
 		return payload, nil
 	}
-	if runtime.ProfileOverride != "smart" || strongMinPower > 0 || !isSmartProfileUnavailableError(err) {
+	if runtime.ModelRefOverride != "smart" || strongMinPower > 0 || !isSmartRouteUnavailableError(err) {
 		return "", err
 	}
 
-	runtime.ProfileOverride = DefaultRoutingProfile
+	runtime.ModelRefOverride = ""
 	return dispatchPreClaimIntakePayloadOnce(ctx, projectRoot, svc, runner, rcfg, runtime)
+}
+
+func preClaimIntakeRouteUnavailableDetail(err error) string {
+	detail := ""
+	if err != nil {
+		detail = strings.TrimSpace(err.Error())
+	}
+	detail = trimDiagnosticPrefix(detail, "pre-claim intake")
+	detail = strings.TrimPrefix(strings.TrimSpace(detail), "dispatch: ")
+	if detail == "" {
+		return "readiness route unavailable"
+	}
+	return "readiness route unavailable: " + detail
 }
 
 func dispatchPreClaimIntakePayloadOnce(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (string, error) {
@@ -269,7 +282,7 @@ func isStrongPowerUnsatisfiedError(err error) bool {
 	}
 }
 
-func isSmartProfileUnavailableError(err error) bool {
+func isSmartRouteUnavailableError(err error) bool {
 	if err == nil {
 		return false
 	}
@@ -277,7 +290,10 @@ func isSmartProfileUnavailableError(err error) bool {
 	return strings.Contains(msg, "tier ≥ smart") ||
 		strings.Contains(msg, "tier >= smart") ||
 		strings.Contains(msg, "profile=smart") ||
-		strings.Contains(msg, "profile smart")
+		strings.Contains(msg, "profile smart") ||
+		strings.Contains(msg, "model_ref=smart") ||
+		strings.Contains(msg, "model-ref smart") ||
+		strings.Contains(msg, `model ref "smart"`)
 }
 
 // decodePreClaimIntakePayloadResult decodes a JSON payload into a PreClaimIntakeResult.

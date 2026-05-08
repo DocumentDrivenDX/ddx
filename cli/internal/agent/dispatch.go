@@ -76,6 +76,10 @@ func buildRunArgsFromConfig(ctx context.Context, rcfg config.ResolvedConfig, run
 	if model == "" {
 		model = rcfg.Model()
 	}
+	modelRef := runtime.ModelRefOverride
+	if modelRef == "" {
+		modelRef = rcfg.ModelRef()
+	}
 	permissions := runtime.PermissionsOverride
 	if permissions == "" {
 		permissions = rcfg.Permissions()
@@ -97,7 +101,7 @@ func buildRunArgsFromConfig(ctx context.Context, rcfg config.ResolvedConfig, run
 	opts.CorrelationID = runtime.CorrelationID
 	opts.Model = model
 	opts.Provider = rcfg.Provider()
-	opts.ModelRef = rcfg.ModelRef()
+	opts.ModelRef = modelRef
 	opts.Effort = rcfg.Effort()
 	opts.Timeout = rcfg.Timeout()
 	opts.WallClock = rcfg.WallClock()

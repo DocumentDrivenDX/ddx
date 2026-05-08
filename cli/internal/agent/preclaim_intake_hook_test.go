@@ -135,9 +135,7 @@ func newPreClaimIntakeHookTestStore(t *testing.T, root string) (*bead.Store, *be
 }
 
 func intakeHookTestConfig() config.ResolvedConfig {
-	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Model: "claude-sonnet-4-6",
-	})
+	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{})
 	return cfg.Resolve(config.CLIOverrides{Harness: "claude"})
 }
 
@@ -160,11 +158,12 @@ func TestDecompositionHook_UsesStrongMinPower(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 	assert.Contains(t, svc.lastReq.Prompt, "MODE: intake")
 	assert.Equal(t, root, svc.lastReq.WorkDir)
-	assert.Equal(t, "smart", svc.lastReq.Profile)
+	assert.Equal(t, "smart", svc.lastReq.ModelRef)
+	assert.Empty(t, svc.lastReq.Profile)
 	assert.GreaterOrEqual(t, svc.lastReq.MinPower, 94)
 }
 
-func TestDecompositionHook_CatalogUnavailableUsesSmartProfileWithoutMagicPower(t *testing.T) {
+func TestDecompositionHook_CatalogUnavailableUsesSmartModelRefWithoutMagicPower(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
@@ -177,7 +176,8 @@ func TestDecompositionHook_CatalogUnavailableUsesSmartProfileWithoutMagicPower(t
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
-	assert.Equal(t, "smart", svc.lastReq.Profile)
+	assert.Equal(t, "smart", svc.lastReq.ModelRef)
+	assert.Empty(t, svc.lastReq.Profile)
 	assert.Zero(t, svc.lastReq.MinPower)
 }
 
@@ -196,15 +196,15 @@ func TestDecompositionHook_AcceptsStringConfidence(t *testing.T) {
 	assert.Equal(t, "ready despite string confidence", got.Detail)
 }
 
-func TestDecompositionHook_SmartProfileUnavailableFallsBackToDefaultProfile(t *testing.T) {
+func TestDecompositionHook_SmartModelRefUnavailableFallsBackToAutoRoute(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
 	svc := &preClaimIntakeHookServiceStub{}
 	svc.executeFunc = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 		ch := make(chan agentlib.ServiceEvent, 1)
-		if req.Profile == "smart" {
-			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":1,"error":"ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ smart"}`)}
+		if req.ModelRef == "smart" {
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":1,"error":"ResolveRoute: no live provider supports model_ref=smart"}`)}
 			close(ch)
 			return ch, nil
 		}
@@ -219,7 +219,8 @@ func TestDecompositionHook_SmartProfileUnavailableFallsBackToDefaultProfile(t *t
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, int32(2), atomic.LoadInt32(&svc.executeCalls))
-	assert.Equal(t, DefaultRoutingProfile, svc.lastReq.Profile)
+	assert.Empty(t, svc.lastReq.ModelRef)
+	assert.Empty(t, svc.lastReq.Profile)
 	assert.Zero(t, svc.lastReq.MinPower)
 }
 
@@ -248,11 +249,12 @@ func TestDecompositionHook_PreservesPassthroughConstraints(t *testing.T) {
 	assert.Equal(t, "claude", svc.lastReq.Harness)
 	assert.Equal(t, "anthropic", svc.lastReq.Provider)
 	assert.Equal(t, "claude-sonnet-4-6", svc.lastReq.Model)
-	assert.Equal(t, "smart", svc.lastReq.Profile)
+	assert.Equal(t, "smart", svc.lastReq.ModelRef)
+	assert.Empty(t, svc.lastReq.Profile)
 	assert.GreaterOrEqual(t, svc.lastReq.MinPower, 96)
 }
 
-func TestDecompositionHook_StrongPowerUnsatisfiedBlocksForHuman(t *testing.T) {
+func TestDecompositionHook_StrongPowerUnsatisfiedReturnsIntakeError(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
@@ -266,8 +268,9 @@ func TestDecompositionHook_StrongPowerUnsatisfiedBlocksForHuman(t *testing.T) {
 	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
 	got, err := hook(context.Background(), b.ID)
 	require.NoError(t, err)
-	assert.Equal(t, PreClaimIntakeAmbiguousNeedsHuman, got.Outcome)
-	assert.Contains(t, got.Detail, "smart/frontier route")
+	assert.Equal(t, PreClaimIntakeError, got.Outcome)
+	assert.Contains(t, got.Detail, "readiness route unavailable")
+	assert.Contains(t, got.Detail, "passthrough constraint unsatisfiable")
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 }
 
@@ -303,7 +306,7 @@ func TestDecompositionHook_ClearsMaxPowerForSmartIntake(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls), "pre-claim intake must still dispatch when the worker has a low max_power")
 }
 
-func TestDecompositionHook_RoutePinsUnsatisfiedAfterClearingMaxBlocks(t *testing.T) {
+func TestDecompositionHook_RoutePinsUnsatisfiedAfterClearingMaxReturnsIntakeError(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
@@ -321,9 +324,9 @@ func TestDecompositionHook_RoutePinsUnsatisfiedAfterClearingMaxBlocks(t *testing
 	hook := NewPreClaimIntakeHook(root, store, rcfg, svc, nil)
 	got, err := hook(context.Background(), b.ID)
 	require.NoError(t, err)
-	assert.Equal(t, PreClaimIntakeAmbiguousNeedsHuman, got.Outcome)
-	assert.Contains(t, got.Detail, "smart/frontier route")
-	assert.NotContains(t, got.Detail, "min_power=7 max_power=8")
+	assert.Equal(t, PreClaimIntakeError, got.Outcome)
+	assert.Contains(t, got.Detail, "readiness route unavailable")
+	assert.Contains(t, got.Detail, "min_power=7 max_power=8")
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 }
 
@@ -340,8 +343,8 @@ func TestIntakeResultPayload_EmptyOutputPreservesRunnerError(t *testing.T) {
 
 func TestPreClaimReadiness_DecodesLegacyIntakeJSON(t *testing.T) {
 	tests := []struct {
-		name       string
-		payload    string
+		name        string
+		payload     string
 		wantOutcome PreClaimIntakeOutcome
 		wantDetail  string
 	}{

@@ -77,13 +77,15 @@ type AgentRunRuntime struct {
 	EstimatedPromptTokens int
 	RequiresTools         bool
 	SessionLogDirOverride string
-	// HarnessOverride, ModelOverride, ProfileOverride, and PermissionsOverride let a caller
+	// HarnessOverride, ModelOverride, ModelRefOverride, ProfileOverride, and
+	// PermissionsOverride let a caller
 	// pin one of the durable knobs from rcfg for this single invocation
 	// without re-resolving the full ResolvedConfig. SD-024 step B22d-d:
 	// execute-bead pins permissions=unrestricted; the post-merge reviewer
 	// pins harness/model to the reviewer-tier selection.
 	HarnessOverride     string
 	ModelOverride       string
+	ModelRefOverride    string
 	ProfileOverride     string
 	PermissionsOverride string
 	Role                string
@@ -97,6 +99,10 @@ type AgentRunRuntime struct {
 	// for auxiliary classifier/reviewer-style calls that deliberately want the
 	// strongest viable route instead of the worker attempt's cost cap.
 	ClearMaxPower bool
+	// ClearProfile drops rcfg.Profile() for this single invocation. Auxiliary
+	// calls that pin ModelRefOverride should not inherit a profile constraint
+	// from the worker attempt.
+	ClearProfile bool
 }
 
 // Result holds the output of an agent invocation.

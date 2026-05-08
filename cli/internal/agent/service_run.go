@@ -178,8 +178,13 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		model = pt.Model
 	}
 
+	modelRef := runtime.ModelRefOverride
+	if modelRef == "" {
+		modelRef = rcfg.ModelRef()
+	}
+
 	profile := runtime.ProfileOverride
-	if profile == "" {
+	if profile == "" && !runtime.ClearProfile {
 		profile = rcfg.Profile()
 	}
 
@@ -208,7 +213,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		Profile:         profile,
 		Provider:        pt.Provider,
 		Harness:         harness,
-		ModelRef:        rcfg.ModelRef(),
+		ModelRef:        modelRef,
 		Reasoning:       agentlib.Reasoning(rcfg.Effort()),
 		Permissions:     permissions,
 		WorkDir:         wd,
