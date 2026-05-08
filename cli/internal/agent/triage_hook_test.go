@@ -167,6 +167,28 @@ func TestTriageHook_PromptIncludesOutcomeAndLogExcerpt(t *testing.T) {
 	assert.Contains(t, prompt, `"session_log_excerpt"`)
 }
 
+func TestPostAttemptTriageHook_ClearsProfileSoDefaultPowerBoundsDoNotApply(t *testing.T) {
+	root := newTriageHookTestRoot(t)
+	store, b := newTriageHookTestStore(t, root)
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Profile: "default"})
+	require.Equal(t, "default", rcfg.Profile())
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"classification":"transport","recommended_action":"release_claim_retry","rationale":"profile cleared","suggested_amendments":[],"suggested_followup_beads":[]}`,
+	}
+
+	got, err := NewPostAttemptTriageHook(root, store, rcfg, svc, nil, nil)(context.Background(), b.ID, ExecuteBeadReport{
+		BeadID:    b.ID,
+		Status:    ExecuteBeadStatusExecutionFailed,
+		Detail:    "dispatch failure",
+		BaseRev:   "abc",
+		ResultRev: "abc",
+	})
+
+	require.NoError(t, err)
+	assert.Equal(t, "transport", got.Classification)
+	assert.Empty(t, svc.lastReq.Profile)
+}
+
 func TestTriageHook_DecodeToleratesLegacyNoneArraySentinels(t *testing.T) {
 	got := decodeTriageResult(`{"classification":"transport","recommended_action":"release_claim_retry","rationale":"transient","suggested_amendments":"none","suggested_followup_beads":"none"}`)
 
