@@ -15,3 +15,7 @@ policy, route health, and model alias resolution. DDx execution config owns
 route. Explicit `--harness`, `--provider`, and `--model` values are
 operator-supplied passthrough controls only; they are not replacement routing
 policy and are not filled in from `agent.*` defaults.
+
+See ADR-024 for retry and review policy: DDx may change `MinPower`,
+`MaxPower`, and request facts, but Fizeau chooses the concrete route. DDx never
+normalizes, substitutes, widens, or fuzzy-matches explicit passthrough values.

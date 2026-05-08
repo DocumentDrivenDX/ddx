@@ -238,4 +238,5 @@ budget stop instead of disguising the stop as model failure.
 - `docs/helix/01-frame/features/FEAT-010-task-execution.md`
 - `docs/helix/01-frame/features/FEAT-014-token-awareness.md`
 - `docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md`
+- `docs/migrations/routing-config.md`
 - `docs/helix/02-design/technical-designs/TD-033-multi-turn-structured-evidence-assembly.md`
