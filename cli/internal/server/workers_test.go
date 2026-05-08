@@ -224,6 +224,20 @@ func waitForWorkerExit(t *testing.T, m *WorkerManager, id string, timeout time.D
 	return WorkerRecord{}
 }
 
+func installFastSuccessWorker(m *WorkerManager) {
+	m.BeadWorkerFactory = func(s agent.ExecuteBeadLoopStore) *agent.ExecuteBeadWorker {
+		return &agent.ExecuteBeadWorker{
+			Store: s,
+			Executor: agent.ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+				return agent.ExecuteBeadReport{
+					BeadID: beadID,
+					Status: agent.ExecuteBeadStatusSuccess,
+				}, nil
+			}),
+		}
+	}
+}
+
 // setupBeadStore creates a minimal .ddx/beads.jsonl in the test dir
 // so the worker can initialize the bead store without errors.
 func setupBeadStore(t *testing.T, root string) {
@@ -503,6 +517,7 @@ func TestProjectWorkerShowEndpoint(t *testing.T) {
 
 	// Start a worker so there is something to show
 	m := srv.workers
+	installFastSuccessWorker(m)
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
 	require.NoError(t, err)
 
@@ -536,6 +551,7 @@ func TestProjectWorkerProgressKeepaliveOnIdleWorker(t *testing.T) {
 
 	// Start and wait for a worker to finish so it's on disk but not active
 	m := srv.workers
+	installFastSuccessWorker(m)
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
 	require.NoError(t, err)
 	_ = waitForWorkerExit(t, m, record.ID, 10*time.Second)

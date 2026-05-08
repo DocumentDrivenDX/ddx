@@ -707,10 +707,15 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		OpaquePassthrough: spec.OpaquePassthrough,
 	})
 
-	var qualityRunner agent.AgentRunner
-	lintHook := agent.NewPreDispatchLintHook(projectRoot, store, rcfg, nil, qualityRunner)
-	intakeHook := agent.NewPreClaimIntakeHook(projectRoot, store, rcfg, nil, qualityRunner)
-	triageHook := agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
+	var lintHook func(ctx context.Context, beadID string) (agent.LintResult, error)
+	var intakeHook agent.PreClaimIntakeHook
+	var triageHook func(ctx context.Context, beadID string, report agent.ExecuteBeadReport) (agent.TriageResult, error)
+	if m.BeadWorkerFactory == nil {
+		var qualityRunner agent.AgentRunner
+		lintHook = agent.NewPreDispatchLintHook(projectRoot, store, rcfg, nil, qualityRunner)
+		intakeHook = agent.NewPreClaimIntakeHook(projectRoot, store, rcfg, nil, qualityRunner)
+		triageHook = agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
+	}
 
 	var worker *agent.ExecuteBeadWorker
 	var costCap *policyescalation.CostCapTracker
