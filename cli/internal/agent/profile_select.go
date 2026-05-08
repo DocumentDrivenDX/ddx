@@ -82,7 +82,7 @@ func profileSnapshotCacheKey(svc agentlib.FizeauService) string {
 		return "<nil>"
 	}
 	switch v.Kind() {
-	case reflect.Chan, reflect.Func, reflect.Map, reflect.Pointer, reflect.Slice, reflect.UnsafePointer:
+	case reflect.Chan, reflect.Func, reflect.Map, reflect.Ptr, reflect.Slice, reflect.UnsafePointer:
 		return fmt.Sprintf("%s:%x", v.Type(), v.Pointer())
 	default:
 		return fmt.Sprintf("%T:%v", svc, svc)
@@ -213,7 +213,11 @@ func selectProfileForDispatch(ctx context.Context, projectRoot string, svc agent
 	}
 	selectedSvc := svc
 	if selectedSvc == nil {
-		built, err := NewServiceFromWorkDir(projectRoot)
+		factory := serviceRunFactory
+		if factory == nil {
+			factory = NewServiceFromWorkDir
+		}
+		built, err := factory(projectRoot)
 		if err != nil {
 			return ""
 		}
