@@ -25,7 +25,8 @@ The five in-flight hygiene beads each introduce new state-machine vocabulary:
 - ddx-3c154349 — auto-triage of stuck beads (TriageContract)
 - ddx-aede917d — drain pause on quota exhaustion (QuotaPauseContract)
 - ddx-c6e3db02 — rate-limit retry behavior (RateLimitRetryContract)
-- ddx-da11a34a — store-lock contention handling (LockContentionContract)
+- ddx-da11a34a — main-git/tracker lock contention handling
+  (LockContentionContract)
 
 Without one TD that nails down the categories and the transition matrix,
 those five beads will each independently invent overlapping vocabulary.
@@ -476,8 +477,8 @@ standard mapping in section 5 applies. The worker briefly enters
 
 ### 8.5 LockContentionContract (ddx-da11a34a)
 
-Status transitions used: none. Lock contention is a store-access
-concern, not a bead-state concern.
+Status transitions used: none. Lock contention is a main-git/tracker
+coordination concern, not a bead-state concern.
 
 Labels: none.
 
@@ -494,6 +495,31 @@ exponential backoff up to a bounded budget. On budget exhaustion the
 calling outcome maps to `execution_failed` (section 5). The worker does
 not enter a dedicated worker-state for lock contention; it remains
 `draining` and treats the failure as ordinary.
+
+Filesystem-shape contract: the main-git/tracker lock path
+`.ddx/.git-tracker.lock` is a process-shared lock **directory**, not a
+regular lockfile. Lock acquisition MUST classify the existing path
+immediately after `mkdir` reports that it already exists and MUST NOT
+sleep/back off until the path is confirmed to be a real lock directory.
+
+- Missing after race: retry acquisition immediately.
+- Directory: apply the existing PID/`acquired_at` stale-lock policy. A
+  directory owned by a live process remains ordinary lock contention.
+- Stale regular file: if and only if `lstat` reports an exact regular
+  file and its mtime is older than the stale-lock threshold, remove it
+  with single-path removal and retry acquisition immediately.
+- Fresh regular file: fail fast with a malformed-lock diagnostic. Do not
+  wait for the lock-contention retry budget and do not report
+  `owner pid: unknown`.
+- Symlink, socket, device, or other special file: fail fast with a
+  malformed-lock diagnostic and do not remove it.
+
+Malformed lock paths are operator/remediation diagnostics, not lock
+contention. They do not emit `lock-contention`, do not introduce a new
+status or label, and do not change claim semantics. If a malformed path
+is surfaced through `ddx work` pre-claim guarding, the operator-facing
+message MUST name the malformed path and expected directory shape rather
+than repeatedly skipping every candidate behind a retry timeout.
 
 ## 9. Future-Change Process
 
