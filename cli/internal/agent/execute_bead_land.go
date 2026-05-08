@@ -412,6 +412,11 @@ func syncWorkTreeToHeadExcludingPaths(dir, fromRev string, skipPaths []string) e
 	// -f overwrites any stale content at these exact paths. Unrelated files
 	// are untouched because we pass the specific path list.
 	if len(indexFiles) > 0 {
+		for _, f := range indexFiles {
+			if err := os.MkdirAll(filepath.Dir(filepath.Join(dir, f)), 0o755); err != nil {
+				return fmt.Errorf("creating checkout parent for %s: %w", f, err)
+			}
+		}
 		args := []string{"checkout-index", "-f", "--"}
 		args = append(args, indexFiles...)
 		out2, err2 := internalgit.Command(context.Background(), dir, args...).CombinedOutput()
