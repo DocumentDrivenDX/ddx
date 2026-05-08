@@ -226,6 +226,11 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	cancelCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
+	// When Harness is set and Model is empty, fizeau routes within the harness's
+	// eligible models using Profile/MinPower as the routing constraint. This is the
+	// well-formed request shape for profile-driven dispatch without an explicit model.
+	// fizeau returns ErrHarnessModelIncompatible (typed, non-nil) on pre-dispatch
+	// errors and a failed final event for post-dispatch errors.
 	start := time.Now().UTC()
 	events, err := svc.Execute(cancelCtx, req)
 	if err != nil {
