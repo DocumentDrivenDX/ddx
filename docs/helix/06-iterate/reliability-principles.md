@@ -56,3 +56,13 @@ no-progress. If bytes, inodes, writability, or git worktree registration are
 unhealthy after one cleanup pass, the work loop stops visibly and claims no more
 beads. Continuing to scan the queue under ENOSPC expands the blast radius and
 violates P4.
+
+Concrete policy values — recognized DDx-owned scratch prefixes, minimum mtime
+age for metadata-less directories (6 hours), soft cleanup trigger (512 MiB free
+bytes / 8192 free inodes), and hard stop floor (64 MiB free bytes / 1024 free
+inodes) — are defined in FEAT-010 `### Execution Resource Cleanup` and mirrored
+in SD-025 `### Roots and ownership` and `### Resource preflight and loop-fatal
+handling`. Implementation beads must reference those sections rather than
+guessing at values. Test/e2e scratch roots under DDx prefixes (`ddx-test-`,
+`ddx-e2e-`) are explicitly in scope for cleanup; treating them as out of scope
+is a correctness bug under this principle.

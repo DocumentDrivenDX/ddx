@@ -222,11 +222,16 @@ During the legacy migration window, the manager handles both
 `.ddx/executions/<attempt-id>` and `.ddx/runs/<run-id>` evidence, but it treats
 complete evidence bundles as durable data rather than scratch.
 DDx-owned cleanup scope also includes DDx-created test and e2e scratch roots,
-generated test binaries, and run-state or liveness files. A path is eligible
-for deletion only when ownership metadata or a recognized DDx prefix is
-present, the configured minimum age or mtime threshold has passed, and no live
-PID/session liveness remains. The manager preserves published evidence and
-registered active worktrees.
+generated test binaries, and run-state or liveness files. Recognized DDx-owned
+scratch prefixes are: `ddx-exec-wt`, `ddx-claim-heartbeats`,
+`ddx-metric-keepalive`, `ddx-test-`, and `ddx-e2e-`. Any directory containing
+a `cleanup.json` metadata file with matching project ownership is DDx-owned
+regardless of its name. A path is eligible for deletion when: (a) it has
+`cleanup.json` metadata and the liveness is expired or the owning attempt is
+terminal; or (b) it matches a recognized DDx prefix without metadata, the
+directory mtime is at least **6 hours** old, and no live PID or active session
+is present. The manager preserves published evidence and registered active
+worktrees.
 
 ### Entry points
 
@@ -283,9 +288,11 @@ immediate cleanup pass and repeats the check. If the check still fails, the
 attempt returns `resource_exhausted` without claiming the bead.
 
 `ddx work` and server-managed workers perform the same cleanup pass before the
-first claim and before any later claim when temp free space falls below a soft
-high-water threshold. If the temp roots remain below the hard floor after that
-cleanup, the loop records host exhaustion and stops claiming new beads.
+first claim and before any later claim when any checked temp or evidence root
+falls below the soft cleanup trigger of **512 MiB free bytes** or **8192 free
+inodes**. If the temp roots remain below the hard stop floor of **64 MiB free
+bytes** and **1024 free inodes** after that cleanup, the loop records host
+exhaustion and stops claiming new beads.
 
 If resource exhaustion occurs after a claim or during worktree setup,
 `ddx try` records whatever partial evidence is available, removes any partial

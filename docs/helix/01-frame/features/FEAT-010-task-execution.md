@@ -623,10 +623,11 @@ immediate DDx-scoped cleanup pass, re-checks, and then either proceeds or
 returns `resource_exhausted` without claiming the bead.
 
 `ddx work` and server-managed workers use the same cleanup manager before the
-first claim and before later claims whenever temp free space drops below a soft
-high-water threshold. If cleanup does not restore the temp roots above the hard
-floor, the loop stops visibly with `resource_exhausted` and claims no more
-beads.
+first claim and before later claims whenever any checked temp or evidence root
+falls below the soft cleanup trigger of **512 MiB free bytes** or **8192 free
+inodes**. If cleanup does not restore all roots above the hard stop floor of
+**64 MiB free bytes** and **1024 free inodes**, the loop stops visibly with
+`resource_exhausted` and claims no more beads.
 
 After an attempt starts, Layer 2 removes the isolated worktree when the result
 has been merged, explicitly preserved, classified as no-changes/no-evidence, or
@@ -637,10 +638,21 @@ path or ref.
 
 DDx-owned cleanup scope includes execution worktrees, DDx-created test and e2e
 scratch roots, generated test binaries, and run-state or liveness files. The
-cleanup manager may delete only DDx-owned paths with ownership metadata or
-known DDx prefixes, minimum age/mtime satisfied, and no live PID/session
-liveness. It must preserve published evidence, registered active worktrees,
-and anything outside DDx-owned roots.
+cleanup manager may delete only DDx-owned paths. Recognized DDx-owned scratch
+prefixes are: `ddx-exec-wt`, `ddx-claim-heartbeats`, `ddx-metric-keepalive`,
+`ddx-test-`, and `ddx-e2e-`. Any temp directory that contains a `cleanup.json`
+metadata file with matching project ownership is also DDx-owned regardless of
+its name.
+
+Deletion is permitted only when all of the following hold:
+
+- **Metadata-backed paths**: the `cleanup.json` liveness record is expired or
+  the owning attempt has reached a terminal state.
+- **Metadata-less recognized-prefix paths**: the directory's mtime is at least
+  **6 hours** old and no live PID or active session is attached.
+
+The manager must preserve published evidence, registered active worktrees, and
+anything outside DDx-owned roots.
 
 Layer 3 owns loop cleanup. `ddx work` runs cleanup:
 
