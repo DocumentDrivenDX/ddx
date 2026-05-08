@@ -1,0 +1,53 @@
+{
+  "attempt_id": "20260508T050621-7fdebb5e",
+  "bead_id": "ddx-2599ce10",
+  "base_rev": "5903531ad3ba479fd5af8f7abbc25c10ad4d6bc3",
+  "created_at": "2026-05-08T05:06:27.331987396Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-2599ce10",
+    "title": "agent: split implementation, evidence, and landed revision fields",
+    "description": "PROBLEM\n`ExecuteBeadResult.ResultRev` is overloaded. Depending on where the caller observes it, the field can mean the worker implementation commit, a merge commit, or the trailing evidence commit. That makes candidate review, landing, replay, server state, and UI drill-down ambiguous.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead.go:26-37 defines `ExecuteBeadResult` with only `BaseRev` and `ResultRev`.\n- cli/internal/agent/execute_bead_land.go:1549-1584 mutates `res.ResultRev = land.NewTip`, replacing the original worker result revision with the target branch tip after fast-forward or merge.\n- cli/internal/agent/execute_bead_land.go:1614-1623 builds `LandRequest.ResultRev` from `res.ResultRev`, so callers must know whether the field still names the candidate commit or has already been rewritten.\n- cli/internal/server/workers.go:756-792 uses `ResultRev` both to decide whether to land and to report the final worker result.\n- cli/internal/server/workers.go:979-992 persists `WorkerExecutionResult.ResultRev` without distinguishing candidate, landed, or evidence revisions.\n- cli/internal/server/state_executions.go:23-75 and 175-182 expose only `result_rev` in execution manifests/results.\n\nPROPOSED FIX\n- Add explicit fields for the revision roles, for example `ImplementationRev` or `CandidateRev`, `LandedRev`, and `EvidenceRev`.\n- Define `ResultRev` as a backwards-compatible alias during migration only; document which field it mirrors and stop using it for new internal decisions.\n- LandRequest construction must use the implementation/candidate revision, never an evidence or already-landed revision.\n- ApplyLandResult must preserve the implementation/candidate revision and set landed/evidence fields separately.\n- Server worker reports, state persistence, execution manifests, and UI/query loaders must expose the revision triplet so operators can trace implementation, branch landing, and evidence publication independently.\n\nNON-SCOPE\n- Do not change merge strategy, candidate review policy, or the execute-bead evidence file format beyond additive fields.\n- Do not rewrite existing historical execution bundles.\n- Do not remove `result_rev` until a later compatibility cleanup.\n\nPARENT + DEPS\nParent: ddx-31e07fdc. Depends on ddx-7cb3153d so the new semantics line up with candidate refs instead of preserving the ambiguous raw worktree SHA model.",
+    "acceptance": "1. TestApplyLandResult_PreservesImplementationRevAndSetsLandedRev proves a successful land keeps the original implementation/candidate revision and records the target branch tip separately.\n2. TestBuildLandRequest_UsesImplementationRevNotEvidenceRev proves LandRequest.ResultRev is built from the candidate/implementation revision even after evidence or landed fields are populated.\n3. TestExecutionBundle_ExposesRevisionTriplet proves manifest/result loading exposes implementation/candidate, landed, and evidence revisions while preserving `result_rev` compatibility.\n4. TestWorkerReport_DistinguishesCandidateAndLandedRev proves server worker state and operator output no longer collapse candidate and landed revision into one field.\n5. TestNoChangesRevisionSemantics_PreservesBaseRev verifies no-change attempts do not fabricate landed/evidence revisions and keep base/candidate semantics clear.\n6. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/server/... -run \"TestApplyLandResult_PreservesImplementationRevAndSetsLandedRev|TestBuildLandRequest_UsesImplementationRevNotEvidenceRev|TestExecutionBundle_ExposesRevisionTriplet|TestWorkerReport_DistinguishesCandidateAndLandedRev|TestNoChangesRevisionSemantics_PreservesBaseRev\" -count=1 passes.\n7. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/server/... passes.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-31e07fdc",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:evidence",
+      "area:git",
+      "kind:refactor",
+      "reliability",
+      "adr:024",
+      "spec:FEAT-010",
+      "candidate-cycle"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-08T05:04:20Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2270209",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"All 8 rubric criteria met. Title is imperative, names subsystem and change. Description has all four required sections (PROBLEM, ROOT CAUSE WITH FILE:LINE, PROPOSED FIX, NON-SCOPE) plus explicit PARENT+DEPS. Root cause cites six specific file:line ranges across four files. AC items 1–5 each name a distinct TestXxx function; item 6 provides a filtered go test -run invocation; items 7–8 are the required full-suite and lefthook gate lines. Labels carry phase:2, two area: tags, kind:refactor, and two cross-ref tags (adr:024, spec:FEAT-010). Parent ddx-31e07fdc and dep ddx-7cb3153d are both explicit. A cold agent can identify files to edit (execute_bead.go:26-37, execute_bead_land.go:1549-1623, workers.go:756-992, state_executions.go:23-182), write the named tests, and run the gate commands without operator clarification.\",\"score\":8,\"suggested_fixes\":[],\"waivers_applied\":[]}",
+          "created_at": "2026-05-08T05:06:21.518674587Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=8"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-08T05:04:20.310627589Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260508T050621-7fdebb5e",
+    "prompt": ".ddx/executions/20260508T050621-7fdebb5e/prompt.md",
+    "manifest": ".ddx/executions/20260508T050621-7fdebb5e/manifest.json",
+    "result": ".ddx/executions/20260508T050621-7fdebb5e/result.json",
+    "checks": ".ddx/executions/20260508T050621-7fdebb5e/checks.json",
+    "usage": ".ddx/executions/20260508T050621-7fdebb5e/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-2599ce10-20260508T050621-7fdebb5e"
+  },
+  "prompt_sha": "89503a620e002411a82cd85f8914ba1a0a922cdb6cccd5ee940950940cd1c754"
+}
