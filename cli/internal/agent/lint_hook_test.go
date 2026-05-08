@@ -12,6 +12,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -271,4 +272,27 @@ func TestLintHook_EmptyOutputWithRunnerError_ReturnsDispatchFailure(t *testing.T
 	require.Error(t, err)
 	assert.ErrorIs(t, err, ErrLintHookDispatch)
 	assert.Contains(t, err.Error(), "argument list too long")
+}
+
+func TestPreDispatchLintHook_ClearsProfileSoDefaultPowerBoundsDoNotApply(t *testing.T) {
+	root := newLintHookTestRoot(t)
+	store, b := newLintHookTestStore(t, root)
+
+	svc := &passthroughTestService{
+		executeEvents: []agentlib.ServiceEvent{
+			{
+				Type: "final",
+				Data: []byte(`{"status":"success","final_text":"{\"score\":8,\"rationale\":\"clear-profile\",\"suggested_fixes\":[],\"waivers_applied\":[]}"}`),
+			},
+		},
+	}
+
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Profile: "default"})
+	require.Equal(t, "default", rcfg.Profile())
+
+	hook := NewPreDispatchLintHook(root, store, rcfg, svc, nil)
+	got, err := hook(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 8, got.Score)
+	assert.Empty(t, svc.lastReq.Profile, "ClearProfile must prevent the default profile from being forwarded to the service")
 }

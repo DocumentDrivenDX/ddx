@@ -115,6 +115,7 @@ func NewPostAttemptTriageHook(projectRoot string, store BeadReader, rcfg config.
 			Prompt:       prompt,
 			WorkDir:      projectRoot,
 			PromptSource: postAttemptTriagePromptSource,
+			ClearProfile: true,
 		})
 		if err != nil {
 			return TriageResult{}, fmt.Errorf("triage hook: dispatch: %w", err)
