@@ -1031,7 +1031,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	var evidenceCommittedInWt bool
 	defer func() {
 		// Runs BEFORE WorktreeRemove (registered later = first in LIFO order).
-		if !evidenceCommittedInWt {
+		if evidenceCommittedInWt {
+			publishEvidenceBundleToProjectRoot(projectRoot, wtPath, filepath.ToSlash(filepath.Join(evidenceDir, "embedded")))
+		} else {
 			publishEvidenceBundleToProjectRoot(projectRoot, wtPath, evidenceDir)
 		}
 	}()

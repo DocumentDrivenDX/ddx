@@ -10,15 +10,14 @@ import (
 // BuildLandingGateContext prepares the inputs the gate evaluator needs to
 // score a worker's result before LandBeadResult decides merge-vs-preserve:
 //
-//  1. Read the worker's manifest at projectRoot/<res.ManifestFile> and
-//     extract the governing-IDs list. When the manifest declares no governing
-//     IDs the function returns an empty wtPath/govern-IDs pair and a no-op
-//     cleanup — caller skips gate eval entirely.
-//  2. Otherwise pin res.ResultRev to refs/ddx/gate-pins/<beadID>/<attemptID>
+//  1. Pin res.ResultRev to refs/ddx/gate-pins/<beadID>/<attemptID>
 //     so the SHA stays alive while the ephemeral worktree exists.
-//  3. WorktreeAdd a temp worktree (under os.TempDir() with prefix
+//  2. WorktreeAdd a temp worktree (under os.TempDir() with prefix
 //     "ddx-gate-wt-") at the pinned ref so gate evaluators can read the
 //     result tree without disturbing the main worktree.
+//  3. Read the worker manifest from that result tree and extract governing IDs.
+//     When the manifest declares no governing IDs the temporary worktree is
+//     removed immediately and the caller skips gate evaluation.
 //
 // The returned cleanup closure removes the worktree and deletes the pin ref.
 // Callers MUST defer cleanup() before returning to avoid orphaned worktrees.
@@ -29,15 +28,6 @@ func BuildLandingGateContext(projectRoot string, res *ExecuteBeadResult, gitOps 
 	noop := func() {}
 
 	if res == nil || res.ManifestFile == "" {
-		return "", nil, noop, nil
-	}
-	manifestPath := filepath.Join(projectRoot, res.ManifestFile)
-	if _, statErr := os.Stat(manifestPath); statErr != nil {
-		// Soft-skip: missing manifest = no gate eval.
-		return "", nil, noop, nil
-	}
-	ids := ExtractGoverningIDsFromManifest(manifestPath)
-	if len(ids) == 0 {
 		return "", nil, noop, nil
 	}
 	if res.ResultRev == "" {
@@ -74,6 +64,17 @@ func BuildLandingGateContext(projectRoot string, res *ExecuteBeadResult, gitOps 
 		_ = gitOps.WorktreeRemove(projectRoot, wt)
 		_ = os.RemoveAll(wt) // belt-and-suspenders if WorktreeRemove failed
 		unpin()
+	}
+
+	manifestPath := filepath.Join(wt, filepath.FromSlash(res.ManifestFile))
+	if _, statErr := os.Stat(manifestPath); statErr != nil {
+		cleanup()
+		return "", nil, noop, nil
+	}
+	ids := ExtractGoverningIDsFromManifest(manifestPath)
+	if len(ids) == 0 {
+		cleanup()
+		return "", nil, noop, nil
 	}
 	return wt, ids, cleanup, nil
 }
