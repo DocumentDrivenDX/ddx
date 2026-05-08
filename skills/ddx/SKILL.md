@@ -8,8 +8,9 @@ description: Operates the DDx toolkit for document-driven development. Covers be
 DDx (Document-Driven Development eXperience) is a CLI platform for
 document-driven development. It ships a bead tracker (portable work
 items with acceptance criteria), a task-execution boundary (DDx
-orchestrates work while Fizeau routes providers/models, catalog lookups,
-and transcript rendering), a persona system (bindable AI
+orchestrates work while Fizeau owns provider/model routing, alias
+resolution, fuzzy matching of raw model strings, catalog lookups, and
+transcript/session rendering), a persona system (bindable AI
 personalities), a library registry (plugins with prompts, templates,
 personas), and git-aware synchronization. This skill makes any
 skills-compatible coding agent (Claude Code, OpenAI Codex, Gemini
