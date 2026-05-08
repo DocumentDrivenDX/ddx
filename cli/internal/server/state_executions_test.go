@@ -210,6 +210,130 @@ func TestExecutions_TerseManifestSchema(t *testing.T) {
 	}
 }
 
+// TestExecutionBundle_ExposesRevisionTriplet proves that loadExecutionBundle
+// surfaces implementation_rev, landed_rev, and evidence_rev from both manifest
+// and result JSON while preserving backwards-compat result_rev.
+func TestExecutionBundle_ExposesRevisionTriplet(t *testing.T) {
+	const (
+		implSHA     = "impl1111impl2222impl3333impl4444impl5555"
+		landedSHA   = "land1111land2222land3333land4444land5555"
+		evidenceSHA = "evid1111evid2222evid3333evid4444evid5555"
+		resultSHA   = landedSHA // result_rev mirrors landed_rev
+	)
+
+	root := t.TempDir()
+	bundleID := "20260508T010000-revtriplet"
+	bundleDir := filepath.Join(root, agent.ExecuteBeadArtifactDir, bundleID)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	manifest := map[string]any{
+		"attempt_id":         bundleID,
+		"bead_id":            "ddx-triplet",
+		"base_rev":           "base1111base2222",
+		"result_rev":         resultSHA,
+		"implementation_rev": implSHA,
+		"landed_rev":         landedSHA,
+		"evidence_rev":       evidenceSHA,
+		"created_at":         "2026-05-08T01:00:00Z",
+		"requested":          map[string]string{"harness": "claude"},
+	}
+	mb, _ := json.Marshal(manifest)
+	if err := os.WriteFile(filepath.Join(bundleDir, "manifest.json"), mb, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	result := map[string]any{
+		"bead_id":    "ddx-triplet",
+		"attempt_id": bundleID,
+		"outcome":    "merged",
+		"exit_code":  0,
+	}
+	rb, _ := json.Marshal(result)
+	if err := os.WriteFile(filepath.Join(bundleDir, "result.json"), rb, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newServerStateForTest(t, root)
+	all := s.GetExecutionsGraphQL("proj-test", ddxgraphql.ExecutionFilter{})
+	if len(all) != 1 {
+		t.Fatalf("expected 1 execution, got %d", len(all))
+	}
+	exec := all[0]
+
+	// result_rev backwards-compat field.
+	if exec.ResultRev == nil || *exec.ResultRev != resultSHA {
+		t.Errorf("ResultRev: want %q, got %v", resultSHA, exec.ResultRev)
+	}
+	// New explicit fields.
+	if exec.ImplementationRev == nil || *exec.ImplementationRev != implSHA {
+		t.Errorf("ImplementationRev: want %q, got %v", implSHA, exec.ImplementationRev)
+	}
+	if exec.LandedRev == nil || *exec.LandedRev != landedSHA {
+		t.Errorf("LandedRev: want %q, got %v", landedSHA, exec.LandedRev)
+	}
+	if exec.EvidenceRev == nil || *exec.EvidenceRev != evidenceSHA {
+		t.Errorf("EvidenceRev: want %q, got %v", evidenceSHA, exec.EvidenceRev)
+	}
+}
+
+// TestExecutionBundle_RevisionTriplet_ResultFallback confirms that when the
+// triplet fields are present in result.json (not manifest.json) they are still
+// surfaced — manifest takes priority when both are present.
+func TestExecutionBundle_RevisionTriplet_ResultFallback(t *testing.T) {
+	const (
+		implSHA   = "rimpl111rimpl222rimpl333rimpl444rimpl555"
+		landedSHA = "rland111rland222rland333rland444rland555"
+	)
+
+	root := t.TempDir()
+	bundleID := "20260508T020000-revfallback"
+	bundleDir := filepath.Join(root, agent.ExecuteBeadArtifactDir, bundleID)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Manifest has no rev triplet fields.
+	manifest := map[string]any{
+		"attempt_id": bundleID,
+		"bead_id":    "ddx-fallback",
+		"base_rev":   "base0000",
+		"result_rev": landedSHA,
+		"created_at": "2026-05-08T02:00:00Z",
+	}
+	mb, _ := json.Marshal(manifest)
+	if err := os.WriteFile(filepath.Join(bundleDir, "manifest.json"), mb, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// result.json carries the triplet.
+	result := map[string]any{
+		"bead_id":            "ddx-fallback",
+		"attempt_id":         bundleID,
+		"outcome":            "merged",
+		"exit_code":          0,
+		"implementation_rev": implSHA,
+		"landed_rev":         landedSHA,
+	}
+	rb, _ := json.Marshal(result)
+	if err := os.WriteFile(filepath.Join(bundleDir, "result.json"), rb, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	s := newServerStateForTest(t, root)
+	all := s.GetExecutionsGraphQL("proj-test", ddxgraphql.ExecutionFilter{})
+	if len(all) != 1 {
+		t.Fatalf("expected 1 execution, got %d", len(all))
+	}
+	exec := all[0]
+
+	if exec.ImplementationRev == nil || *exec.ImplementationRev != implSHA {
+		t.Errorf("ImplementationRev from result.json: want %q, got %v", implSHA, exec.ImplementationRev)
+	}
+	if exec.LandedRev == nil || *exec.LandedRev != landedSHA {
+		t.Errorf("LandedRev from result.json: want %q, got %v", landedSHA, exec.LandedRev)
+	}
+}
+
 // Perf-shaped sanity check: scanning 1k bundles should complete promptly so
 // the list-view p95 budget (200ms HTTP) is realistic on a dev laptop.
 func TestExecutions_ListPerf_1000(t *testing.T) {

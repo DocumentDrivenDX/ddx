@@ -246,7 +246,16 @@ type ExecuteBeadReport struct {
 	SessionID                   string        `json:"session_id,omitempty"`
 	BaseRev                     string        `json:"base_rev,omitempty"`
 	ResultRev                   string        `json:"result_rev,omitempty"`
-	PreserveRef                 string        `json:"preserve_ref,omitempty"`
+	// ImplementationRev is the worker's own commit SHA before landing.
+	// Mirrors ExecuteBeadResult.ImplementationRev; empty for no-changes attempts.
+	ImplementationRev string `json:"implementation_rev,omitempty"`
+	// LandedRev is the target branch tip after the coordinator landing.
+	// Distinct from ImplementationRev on the merge-commit path.
+	LandedRev string `json:"landed_rev,omitempty"`
+	// EvidenceRev is the trailing evidence commit SHA when distinct from
+	// ImplementationRev. Empty when not separately committed.
+	EvidenceRev string `json:"evidence_rev,omitempty"`
+	PreserveRef string `json:"preserve_ref,omitempty"`
 	// CandidateRef is the project-root git ref pinned before checks and review.
 	// Format: refs/ddx/iterations/<attempt-id>/<cycle-index>.
 	CandidateRef string `json:"candidate_ref,omitempty"`

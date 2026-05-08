@@ -21,17 +21,20 @@ import (
 // schema (harness, model, base_rev, result_rev, verdict, bead_id,
 // execution_dir).
 type executionBundleManifest struct {
-	AttemptID    string `json:"attempt_id,omitempty"`
-	WorkerID     string `json:"worker_id,omitempty"`
-	BeadID       string `json:"bead_id,omitempty"`
-	BaseRev      string `json:"base_rev,omitempty"`
-	ResultRev    string `json:"result_rev,omitempty"`
-	Verdict      string `json:"verdict,omitempty"`
-	Harness      string `json:"harness,omitempty"`
-	Model        string `json:"model,omitempty"`
-	ExecutionDir string `json:"execution_dir,omitempty"`
-	CreatedAt    string `json:"created_at,omitempty"`
-	Requested    struct {
+	AttemptID         string `json:"attempt_id,omitempty"`
+	WorkerID          string `json:"worker_id,omitempty"`
+	BeadID            string `json:"bead_id,omitempty"`
+	BaseRev           string `json:"base_rev,omitempty"`
+	ResultRev         string `json:"result_rev,omitempty"`
+	ImplementationRev string `json:"implementation_rev,omitempty"`
+	LandedRev         string `json:"landed_rev,omitempty"`
+	EvidenceRev       string `json:"evidence_rev,omitempty"`
+	Verdict           string `json:"verdict,omitempty"`
+	Harness           string `json:"harness,omitempty"`
+	Model             string `json:"model,omitempty"`
+	ExecutionDir      string `json:"execution_dir,omitempty"`
+	CreatedAt         string `json:"created_at,omitempty"`
+	Requested         struct {
 		Harness string `json:"harness,omitempty"`
 		Model   string `json:"model,omitempty"`
 	} `json:"requested,omitempty"`
@@ -69,6 +72,9 @@ type executionBundleResult struct {
 	ExitCode           int     `json:"exit_code"`
 	BaseRev            string  `json:"base_rev,omitempty"`
 	ResultRev          string  `json:"result_rev,omitempty"`
+	ImplementationRev  string  `json:"implementation_rev,omitempty"`
+	LandedRev          string  `json:"landed_rev,omitempty"`
+	EvidenceRev        string  `json:"evidence_rev,omitempty"`
 	StartedAt          string  `json:"started_at,omitempty"`
 	FinishedAt         string  `json:"finished_at,omitempty"`
 	AgentLogPath       string  `json:"agent_log_path,omitempty"`
@@ -179,6 +185,18 @@ func loadExecutionBundle(projectID, projectRoot, bundleDirAbs, bundleID string) 
 	resultRev := firstNonEmptyStr(manifest.ResultRev, result.ResultRev)
 	if resultRev != "" {
 		exec.ResultRev = &resultRev
+	}
+	implRev := firstNonEmptyStr(manifest.ImplementationRev, result.ImplementationRev)
+	if implRev != "" {
+		exec.ImplementationRev = &implRev
+	}
+	landedRev := firstNonEmptyStr(manifest.LandedRev, result.LandedRev)
+	if landedRev != "" {
+		exec.LandedRev = &landedRev
+	}
+	evidenceRev := firstNonEmptyStr(manifest.EvidenceRev, result.EvidenceRev)
+	if evidenceRev != "" {
+		exec.EvidenceRev = &evidenceRev
 	}
 
 	// Path pointers — prefer manifest.paths if populated, else default

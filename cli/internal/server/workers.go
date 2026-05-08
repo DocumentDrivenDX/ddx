@@ -157,19 +157,24 @@ type WorkerRecord struct {
 }
 
 type WorkerExecutionResult struct {
-	BeadID     string `json:"bead_id,omitempty"`
-	AttemptID  string `json:"attempt_id,omitempty"`
-	WorkerID   string `json:"worker_id,omitempty"`
-	Harness    string `json:"harness,omitempty"`
-	Tier       string `json:"tier,omitempty"`
-	Provider   string `json:"provider,omitempty"`
-	Model      string `json:"model,omitempty"`
-	Status     string `json:"status,omitempty"`
-	Detail     string `json:"detail,omitempty"`
-	SessionID  string `json:"session_id,omitempty"`
-	BaseRev    string `json:"base_rev,omitempty"`
-	ResultRev  string `json:"result_rev,omitempty"`
-	RetryAfter string `json:"retry_after,omitempty"`
+	BeadID    string `json:"bead_id,omitempty"`
+	AttemptID string `json:"attempt_id,omitempty"`
+	WorkerID  string `json:"worker_id,omitempty"`
+	Harness   string `json:"harness,omitempty"`
+	Tier      string `json:"tier,omitempty"`
+	Provider  string `json:"provider,omitempty"`
+	Model     string `json:"model,omitempty"`
+	Status    string `json:"status,omitempty"`
+	Detail    string `json:"detail,omitempty"`
+	SessionID string `json:"session_id,omitempty"`
+	BaseRev   string `json:"base_rev,omitempty"`
+	// ResultRev is the backwards-compat field. After a successful land it mirrors
+	// LandedRev. Prefer ImplementationRev and LandedRev for new consumers.
+	ResultRev         string `json:"result_rev,omitempty"`
+	ImplementationRev string `json:"implementation_rev,omitempty"`
+	LandedRev         string `json:"landed_rev,omitempty"`
+	EvidenceRev       string `json:"evidence_rev,omitempty"`
+	RetryAfter        string `json:"retry_after,omitempty"`
 }
 
 type workerHandle struct {
@@ -785,6 +790,9 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				SessionID:          res.SessionID,
 				BaseRev:            res.BaseRev,
 				ResultRev:          res.ResultRev,
+				ImplementationRev:  res.ImplementationRev,
+				LandedRev:          res.LandedRev,
+				EvidenceRev:        res.EvidenceRev,
 				PreserveRef:        res.PreserveRef,
 				NoChangesRationale: res.NoChangesRationale,
 				CostUSD:            res.CostUSD,
@@ -977,19 +985,22 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		if len(loopResult.Results) > 0 {
 			last := loopResult.Results[len(loopResult.Results)-1]
 			r := WorkerExecutionResult{
-				BeadID:     last.BeadID,
-				AttemptID:  last.AttemptID,
-				WorkerID:   last.WorkerID,
-				Harness:    last.Harness,
-				Tier:       last.Tier,
-				Provider:   last.Provider,
-				Model:      last.Model,
-				Status:     last.Status,
-				Detail:     last.Detail,
-				SessionID:  last.SessionID,
-				BaseRev:    last.BaseRev,
-				ResultRev:  last.ResultRev,
-				RetryAfter: last.RetryAfter,
+				BeadID:            last.BeadID,
+				AttemptID:         last.AttemptID,
+				WorkerID:          last.WorkerID,
+				Harness:           last.Harness,
+				Tier:              last.Tier,
+				Provider:          last.Provider,
+				Model:             last.Model,
+				Status:            last.Status,
+				Detail:            last.Detail,
+				SessionID:         last.SessionID,
+				BaseRev:           last.BaseRev,
+				ResultRev:         last.ResultRev,
+				ImplementationRev: last.ImplementationRev,
+				LandedRev:         last.LandedRev,
+				EvidenceRev:       last.EvidenceRev,
+				RetryAfter:        last.RetryAfter,
 			}
 			record.CurrentBead = last.BeadID
 			record.LastResult = &r
