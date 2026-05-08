@@ -1,0 +1,59 @@
+{
+  "attempt_id": "20260508T174626-1c56a59e",
+  "bead_id": "ddx-119ddb10",
+  "base_rev": "8cbc28c6e8d0dc837d41084d9418c1525416acb9",
+  "created_at": "2026-05-08T17:46:30.769317211Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-119ddb10",
+    "title": "skills: synchronize DDx skill references with Fizeau passthrough contract",
+    "description": "PROBLEM\nThe parent Fizeau-boundary bead includes DDx skill references, and those are duplicated across `.agents/skills/ddx`, `.claude/skills/ddx`, and `skills/ddx`. The main DDx skill already states that Fizeau owns routing, but the copies and reference files need one focused audit so agents do not learn stale DDx-side routing or compatibility-alias behavior from shipped skills.\n\nCURRENT STATE WITH FILE:LINE\n- .agents/skills/ddx/SKILL.md:8-16 describes DDx orchestration and Fizeau routing ownership.\n- .agents/skills/ddx/SKILL.md:46-61 defines `ddx run` and harness passthrough constraints.\n- .agents/skills/ddx/SKILL.md:138-140 says `--harness`, `--provider`, and `--model` are passthrough constraints only.\n- .agents/skills/ddx/reference/agents.md:3-46 is the dedicated routing guidance; `.claude/skills/ddx/reference/agents.md` and `skills/ddx/reference/agents.md` should match it semantically.\n\nPROPOSED FIX\n- Audit `.agents/skills/ddx`, `.claude/skills/ddx`, and `skills/ddx` for stale DDx-owned routing, model aliasing, fuzzy matching, quorum-in-core, or `ddx agent` compatibility-alias wording.\n- Keep legitimate examples of explicit passthrough such as `--model qwen3.6-27b`, but state that DDx passes the raw string unchanged and Fizeau owns interpretation.\n- Keep the skill copies in sync where the same reference files are intentionally duplicated.\n\nNON-SCOPE\n- Do not edit website generated command docs in this bead; sibling child covers website/docs copies.\n- Do not change production CLI behavior.\n- Do not edit unrelated non-DDx skills.\n\nPARENT + DEPS\nParent: ddx-424fdac4. No deps; this is one decomposition child of the broad Fizeau-boundary ratification bead.",
+    "acceptance": "1. `.agents/skills/ddx`, `.claude/skills/ddx`, and `skills/ddx` consistently state that DDx uses power bounds and raw passthrough constraints while Fizeau owns concrete routing, provider/model discovery, aliases, fuzzy matching, and transcript/session rendering.\n2. `rg -n \"compatibility alias|ddx agent run|ddx agent execute-loop|quorum|fuzzy match|model alias|route selection\" .agents/skills/ddx .claude/skills/ddx skills/ddx` returns only audited historical or explicit passthrough-context hits.\n3. `ddx skills check .agents/skills/ddx .claude/skills/ddx skills/ddx` passes.\n4. `make skill-schema` passes after any `SKILL.md` edit.\n5. `cd cli \u0026\u0026 go test ./cmd/... ./internal/skills/... -run \"TestDDxSkillCopiedTreesMatchSource|TestEmbeddedSkillsHaveValidMetadata|TestRepoSkillsHaveValidMetadata|TestSkillsCheck\" -count=1` passes.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-424fdac4",
+    "labels": [
+      "phase:2",
+      "area:skills",
+      "area:docs",
+      "area:fizeau",
+      "kind:docs",
+      "breaking",
+      "spec:FEAT-006"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-08T17:40:26Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "862751",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Title, description structure (PROBLEM/ROOT-CAUSE/FIX/NON-SCOPE), labels, parent+deps, and the test-name+lefthook AC tail all pass. Three issues prevent a confident autonomous dispatch:\\n\\n1. FIZEAU NOT DEFINED IN BEAD BODY (self-test failure, criterion 8): 'Fizeau', 'Fizeau passthrough contract', and 'Fizeau owns routing' are used throughout without ever being defined or pointing to a source file. A cold sub-agent receiving only this bead body cannot know what Fizeau is, where its contract spec lives, or what 'passthrough' means concretely. The parent bead id is noted but no inline excerpt is provided, violating P7.\\n\\n2. AC#3 REFERENCES UNVERIFIED COMMAND: `ddx skills check` does not appear in the CLI Command Overview in CLAUDE.md. If this command does not exist the acceptance criterion is unachievable and the agent will be stuck.\\n\\n3. AC#4 REFERENCES UNVERIFIED MAKEFILE TARGET: `make skill-schema` is not in the documented Makefile targets. Same risk as AC#3.\\n\\nMinor: the 'breaking' label is applied but the description never identifies what the breaking change is or who is affected.\\n\\nOverall: 6/8 — below the 7/8 autonomous-dispatch threshold.\",\"score\":6,\"suggested_fixes\":[\"Add 2-3 sentences to CURRENT STATE or PROPOSED FIX that define Fizeau (e.g., 'Fizeau is the routing layer defined in \\u003cpath/to/fizeau-spec.md\\u003e that owns provider/model selection; DDx's role is raw passthrough of flags unchanged'). Inline the one or two sentences from FEAT-006 that state the passthrough contract so an agent reading only this bead understands the constraint.\",\"Verify `ddx skills check` exists as a CLI command before dispatch. If it does not yet exist, replace AC#3 with a concrete inspection step such as a targeted `rg` query or a diff check. If it does exist, add the full command path (e.g., `ddx skills check --strict .agents/skills/ddx`) so the agent knows the exact invocation.\",\"Verify `make skill-schema` exists in the root or cli Makefile. If it does not, replace AC#4 with an equivalent verification step (e.g., `cd cli \\u0026\\u0026 go generate ./internal/skills/...` or the actual target name).\",\"Explain the 'breaking' label in the description — name what consumer-facing behavior or contract changes, or remove the label if it was applied in error.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-08T17:46:26.837218346Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=6"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-08T17:40:26.049550127Z",
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Consumer of the Fizeau Execution Contract"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260508T174626-1c56a59e",
+    "prompt": ".ddx/executions/20260508T174626-1c56a59e/prompt.md",
+    "manifest": ".ddx/executions/20260508T174626-1c56a59e/manifest.json",
+    "result": ".ddx/executions/20260508T174626-1c56a59e/result.json",
+    "checks": ".ddx/executions/20260508T174626-1c56a59e/checks.json",
+    "usage": ".ddx/executions/20260508T174626-1c56a59e/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-119ddb10-20260508T174626-1c56a59e"
+  },
+  "prompt_sha": "36bcba04eef3a416e24b676f948f8891bca86158d386d4085499b3df2f81c3ca"
+}

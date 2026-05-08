@@ -1,0 +1,49 @@
+{
+  "attempt_id": "20260508T183602-d870ca0d",
+  "bead_id": "ddx-1a9cc01f",
+  "base_rev": "fb150c9acf9ba9c2a0b066a506ff6dc06ab4767f",
+  "created_at": "2026-05-08T18:36:07.627665389Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1a9cc01f",
+    "title": "agent: introduce canonical ExecuteLoopSpec package",
+    "description": "PROBLEM\nExecute-loop execution fields are duplicated across cobra extraction, REST/GraphQL request structs, server ExecuteLoopWorkerSpec persistence, and runWorker consumption. Adding a worker mode or idle interval can silently drop it on one transport.\n\nROOT CAUSE\ncli/internal/server/workers.go:25-49 defines ExecuteLoopWorkerSpec as a server-local struct while cli/cmd/agent_cmd.go:1582-1605 extracts a wider flag set, cli/internal/server/server.go:2395-2409 has another request struct, and cli/internal/server/graphql_adapters.go:63-75 has a third. The type boundary is not shared, and the old polling field name conflicts with the desired public semantics.\n\nPROPOSED FIX\n- Add a small import-safe package under cli/internal/agent/executeloop/ that defines ExecuteLoopSpec with JSON tags and fields ProjectRoot, Harness, Model, Profile, Provider, ModelRef, Effort, LabelFilter, Mode, IdleInterval, NoReview, ReviewHarness, ReviewModel, OpaquePassthrough, MaxCostUSD, RequestTimeout, MinPower, MaxPower, FromRev, and SpecVersion.\n- Define Mode values for once, drain, and watch. CLI parsing may keep --once, but the persisted/API spec uses Mode rather than a boolean once field.\n- IdleInterval is the sleep duration used only when Mode=watch and the queue has no execution-ready work.\n- Do not add or preserve a PollInterval field, poll_interval JSON field, or public compatibility alias in the new spec.\n- Add DispatchOptions with only Local and JSON control-plane fields; do not persist it.\n- Add Duration JSON support that marshals as strings and unmarshals both strings and numeric nanoseconds.\n- Add ApplyDefaults and Validate methods, including SpecVersion support and a code comment documenting the single-version client/server forward-compat stance.\n- Do not wire cobra, REST, GraphQL, or runWorker callers in this bead; later children consume this package.\n\nNON-SCOPE\n- Do not change LabelFilter from string.\n- Do not change execute-loop validation policy beyond moving existing checks behind the spec lifecycle.\n- Do not modify server or cobra call sites except imports needed by tests.",
+    "acceptance": "1. cli/internal/agent/executeloop/ package exists with ExecuteLoopSpec struct (fields: ProjectRoot, Harness, Model, Profile, Provider, ModelRef, Effort, LabelFilter, Mode, IdleInterval, NoReview, ReviewHarness, ReviewModel, OpaquePassthrough, MaxCostUSD, RequestTimeout, MinPower, MaxPower, FromRev, SpecVersion) and JSON tags.\n2. ExecuteLoopSpec has no PollInterval field, no poll_interval JSON tag, and no compatibility field for the removed public flag.\n3. DispatchOptions struct exists with Local and JSON control-plane fields only (not persisted).\n4. Duration JSON support marshals as strings and unmarshals both strings and numeric nanoseconds.\n5. ApplyDefaults and Validate methods present; SpecVersion single-version forward-compat comment added.\n6. TestExecuteLoopSpec_RoundTrip_AllFields verifies JSON marshal/unmarshal round-trip preserves all fields.\n7. TestExecuteLoopSpec_ApplyDefaults verifies zero-value fields get correct defaults, including default Mode=drain and watch idle interval only when Mode=watch.\n8. No cobra, REST, GraphQL, or runWorker callers modified in this bead (wired by later children).\n9. cd cli \u0026\u0026 go test ./internal/agent/executeloop/... green.\n10. lefthook run pre-commit passes.",
+    "parent": "ddx-29058e2a",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:server",
+      "kind:refactor",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-08T18:32:45Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "862751",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Strong bead overall. Title is imperative with subsystem + change named. Description has PROBLEM, ROOT CAUSE with four concrete file:line references (workers.go:25-49, agent_cmd.go:1582-1605, server.go:2395-2409, graphql_adapters.go:63-75), a detailed PROPOSED FIX naming every field and method, and NON-SCOPE. AC is numbered, each criterion is verifiable, two named Test* functions are present (TestExecuteLoopSpec_RoundTrip_AllFields, TestExecuteLoopSpec_ApplyDefaults), and the final two lines are exactly the required `cd cli \\u0026\\u0026 go test ./\\u003cpath\\u003e/... green` and `lefthook run pre-commit passes` gate. Labels cover phase, area (dual), kind, and prevention. Parent is set. One gap: the bead body never declares 'no deps' or lists dependencies — the rubric requires an explicit statement either way, and a cold-reading agent cannot determine whether any blocking beads exist. Notes field references 'fresh-eyes cleanup' as prior-session context, but since this is informational rather than load-bearing for execution it does not fail the standalone criterion.\",\"score\":7,\"suggested_fixes\":[\"Add an explicit 'Dependencies: none' (or list actual dep IDs) to the description to satisfy the parent+deps rubric criterion.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-08T18:36:02.219098991Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=7"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-08T18:32:45.450820613Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260508T183602-d870ca0d",
+    "prompt": ".ddx/executions/20260508T183602-d870ca0d/prompt.md",
+    "manifest": ".ddx/executions/20260508T183602-d870ca0d/manifest.json",
+    "result": ".ddx/executions/20260508T183602-d870ca0d/result.json",
+    "checks": ".ddx/executions/20260508T183602-d870ca0d/checks.json",
+    "usage": ".ddx/executions/20260508T183602-d870ca0d/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-1a9cc01f-20260508T183602-d870ca0d"
+  },
+  "prompt_sha": "98dc11d0fd9771369f11ac6b15ef78217c0779114deb8dcb38c2669b7544ec97"
+}
