@@ -114,6 +114,62 @@ func TestCleanEnv_StripsLocalEnvVars(t *testing.T) {
 	}
 }
 
+// TestGitFixtureHelpersStripHookEnv proves that fixture git config writes
+// (user.email, user.name) land in the fixture repo even when GIT_DIR,
+// GIT_WORK_TREE, and GIT_INDEX_FILE are contaminated to point at an outer
+// repo — the scenario that caused core.bare=true and leaked fixture@ddx.test
+// into the primary checkout during the ddx-b8bbd0a6 incident.
+func TestGitFixtureHelpersStripHookEnv(t *testing.T) {
+	ctx := context.Background()
+
+	// outer repo: simulates the hook-context repo whose GIT_DIR is inherited.
+	outerDir := t.TempDir()
+	if out, err := exec.Command("git", "init", "-q", outerDir).CombinedOutput(); err != nil {
+		t.Fatalf("git init outer: %v\n%s", err, out)
+	}
+	outerGitDir := filepath.Join(outerDir, ".git")
+
+	// Contaminate the process env (t.Setenv restores after the test).
+	t.Setenv("GIT_DIR", outerGitDir)
+	t.Setenv("GIT_WORK_TREE", outerDir)
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(outerGitDir, "index"))
+
+	// fixture repo: should receive config writes, must not touch outer repo.
+	fixtureDir := t.TempDir()
+
+	// Use Command() — the wrapper that strips local env vars before spawning git.
+	if out, err := Command(ctx, fixtureDir, "init", "-q").CombinedOutput(); err != nil {
+		t.Fatalf("git init fixture: %v\n%s", err, out)
+	}
+	if out, err := Command(ctx, fixtureDir, "config", "user.email", "fixture@ddx.test").CombinedOutput(); err != nil {
+		t.Fatalf("git config email: %v\n%s", err, out)
+	}
+	if out, err := Command(ctx, fixtureDir, "config", "user.name", "DDx Fixture").CombinedOutput(); err != nil {
+		t.Fatalf("git config name: %v\n%s", err, out)
+	}
+
+	// Assert fixture received the writes.
+	emailOut, err := Command(ctx, fixtureDir, "config", "--get", "user.email").Output()
+	if err != nil {
+		t.Fatalf("read fixture user.email: %v", err)
+	}
+	if got := strings.TrimSpace(string(emailOut)); got != "fixture@ddx.test" {
+		t.Errorf("fixture user.email = %q, want fixture@ddx.test", got)
+	}
+
+	// Assert outer repo config is clean — no fixture identity leaked.
+	outerConfig, err := os.ReadFile(filepath.Join(outerGitDir, "config"))
+	if err != nil {
+		t.Fatalf("read outer .git/config: %v", err)
+	}
+	if strings.Contains(string(outerConfig), "fixture@ddx.test") {
+		t.Errorf("fixture email leaked into outer repo config:\n%s", outerConfig)
+	}
+	if strings.Contains(string(outerConfig), "DDx Fixture") {
+		t.Errorf("fixture name leaked into outer repo config:\n%s", outerConfig)
+	}
+}
+
 // TestLocalEnvVars_IncludesEssentials guards the hardcoded fallback set
 // against accidental edits.
 func TestLocalEnvVars_IncludesEssentials(t *testing.T) {

@@ -24,6 +24,9 @@ import (
 // Chat method), so a successful test proves cancellation reaches the
 // provider boundary.
 func TestWorkerManagerStopCancelsAgentExecution(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires execute-loop goroutine timing; too slow for -short")
+	}
 	root := t.TempDir()
 	setupBeadStoreWithReadyBead(t, root)
 

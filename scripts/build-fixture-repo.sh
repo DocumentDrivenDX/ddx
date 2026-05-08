@@ -68,6 +68,20 @@ create_project() {
   mkdir -p "$dir/.ddx"
   (
     cd "$dir"
+    # Scrub Git-local env vars so hook-context GIT_DIR / GIT_WORK_TREE /
+    # GIT_INDEX_FILE do not redirect git operations to the outer repo.
+    # This protects callers that invoke this script from inside a lefthook hook
+    # or other git hook context where these vars are set by git itself.
+    for _git_local_var in GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_COMMON_DIR \
+        GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_PREFIX \
+        GIT_SHALLOW_FILE GIT_NO_REPLACE_OBJECTS GIT_REPLACE_REF_BASE \
+        GIT_CONFIG GIT_CONFIG_GLOBAL GIT_CONFIG_SYSTEM GIT_CONFIG_PARAMETERS \
+        GIT_CONFIG_COUNT GIT_INDEX_VERSION GIT_LITERAL_PATHSPECS \
+        GIT_GLOB_PATHSPECS GIT_NOGLOB_PATHSPECS GIT_ICASE_PATHSPECS \
+        GIT_QUARANTINE_PATH GIT_INTERNAL_NEW_OBJECT_HOOK GIT_IMPLICIT_WORK_TREE; do
+      unset "$_git_local_var" 2>/dev/null || true
+    done
+    unset _git_local_var
     git init -q -b main
     git config user.email "fixture@ddx.test"
     git config user.name  "DDx Fixture"

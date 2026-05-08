@@ -96,6 +96,9 @@ func (f reviewerFn) ReviewBead(ctx context.Context, beadID, resultRev string, im
 //     the bead via CloseWithEvidence.
 //   - no review-manual-required event fires (threshold=5 ≥ attempts=5).
 func TestReviewRetryThresholdFromConfigServer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires execute-loop with review infrastructure; too slow for -short")
+	}
 	const (
 		failUntil = 4
 		threshold = 5
