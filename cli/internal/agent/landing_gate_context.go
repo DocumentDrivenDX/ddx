@@ -68,6 +68,9 @@ func BuildLandingGateContext(projectRoot string, res *ExecuteBeadResult, gitOps 
 
 	manifestPath := filepath.Join(wt, filepath.FromSlash(res.ManifestFile))
 	if _, statErr := os.Stat(manifestPath); statErr != nil {
+		manifestPath = filepath.Join(projectRoot, filepath.FromSlash(res.ManifestFile))
+	}
+	if _, statErr := os.Stat(manifestPath); statErr != nil {
 		cleanup()
 		return "", nil, noop, nil
 	}
