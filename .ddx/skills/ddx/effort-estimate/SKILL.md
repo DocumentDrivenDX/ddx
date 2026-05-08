@@ -46,7 +46,7 @@ Write the prompt to a file, e.g. `estimate-target.md`:
 
 ## Governing artifacts
 
-- FEAT-010: docs/helix/01-frame/features/FEAT-010-executions.md
+- FEAT-010: docs/helix/01-frame/features/FEAT-010-task-execution.md
 - (add others as relevant)
 
 ## Known constraints

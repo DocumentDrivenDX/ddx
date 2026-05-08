@@ -335,3 +335,79 @@ func mustResolveRef(t *testing.T, root, ref string) string {
 	require.NoError(t, err, "rev-parse %s", ref)
 	return strings.TrimSpace(string(out))
 }
+
+// TestWorkerReport_DistinguishesCandidateAndLandedRev proves that after
+// evaluateGatesAndSubmit lands a result, res.ImplementationRev holds the
+// worker's own commit and res.LandedRev holds the target branch tip, and
+// that a WorkerExecutionResult built from the resulting report exposes both
+// fields separately rather than collapsing them into one ResultRev field.
+func TestWorkerReport_DistinguishesCandidateAndLandedRev(t *testing.T) {
+	const beadID = "ddx-rev-triplet"
+	const attemptID = "20260508T000000-revtriplet"
+
+	root, initialTip := gateRepoFixture(t, "FEAT-TRIPLET", false, 0)
+	manifestRel := writeGateManifest(t, root, beadID, attemptID, nil)
+	resultRev := commitWorkerChange(t, root, "worker-triplet.txt", "worker triplet change\n")
+
+	res := &agent.ExecuteBeadResult{
+		BeadID:       beadID,
+		AttemptID:    attemptID,
+		BaseRev:      initialTip,
+		ResultRev:    resultRev,
+		ExitCode:     0,
+		Outcome:      agent.ExecuteBeadOutcomeTaskSucceeded,
+		ExecutionDir: filepath.Join(".ddx", "executions", attemptID),
+		ManifestFile: manifestRel,
+	}
+
+	m := NewWorkerManager(root)
+	t.Cleanup(func() { m.LandCoordinators.StopAll() })
+	rec := &recordingSubmitter{inner: m.LandCoordinators.Get(root)}
+
+	var logBuf bytes.Buffer
+	require.NoError(t, evaluateGatesAndSubmit(root, res, &agent.RealGitOps{}, rec, landSafetyConfig{}, &logBuf))
+
+	// After landing, ImplementationRev must preserve the original worker commit.
+	assert.Equal(t, resultRev, res.ImplementationRev,
+		"ImplementationRev must be the worker's own commit SHA")
+
+	// LandedRev must be the branch tip after the coordinator ran.
+	tipAfter := mustResolveRef(t, root, "refs/heads/main")
+	assert.Equal(t, tipAfter, res.LandedRev,
+		"LandedRev must equal the target branch tip after landing")
+
+	// ResultRev is the compat alias that mirrors LandedRev.
+	assert.Equal(t, res.LandedRev, res.ResultRev,
+		"ResultRev (compat alias) must equal LandedRev after landing")
+
+	// Simulate building the WorkerExecutionResult from the ExecuteBeadReport
+	// as singleTierAttempt does (mirrors workers.go:~787, ~979).
+	report := agent.ExecuteBeadReport{
+		BeadID:            res.BeadID,
+		AttemptID:         res.AttemptID,
+		BaseRev:           res.BaseRev,
+		ResultRev:         res.ResultRev,
+		ImplementationRev: res.ImplementationRev,
+		LandedRev:         res.LandedRev,
+		EvidenceRev:       res.EvidenceRev,
+		Status:            res.Status,
+	}
+	workerResult := WorkerExecutionResult{
+		BeadID:            report.BeadID,
+		AttemptID:         report.AttemptID,
+		BaseRev:           report.BaseRev,
+		ResultRev:         report.ResultRev,
+		ImplementationRev: report.ImplementationRev,
+		LandedRev:         report.LandedRev,
+		EvidenceRev:       report.EvidenceRev,
+		Status:            report.Status,
+	}
+
+	// Worker result must carry both fields and not collapse them.
+	assert.NotEmpty(t, workerResult.ImplementationRev, "WorkerExecutionResult.ImplementationRev must be set")
+	assert.NotEmpty(t, workerResult.LandedRev, "WorkerExecutionResult.LandedRev must be set")
+	assert.Equal(t, resultRev, workerResult.ImplementationRev,
+		"WorkerExecutionResult.ImplementationRev must be the original worker commit")
+	assert.Equal(t, tipAfter, workerResult.LandedRev,
+		"WorkerExecutionResult.LandedRev must be the post-land branch tip")
+}

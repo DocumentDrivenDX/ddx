@@ -229,8 +229,8 @@ func TestIntake_ErrorContinuesToClaimWithoutParkingCandidate(t *testing.T) {
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "intake errors must not block claim")
 	assert.Equal(t, 1, result.Attempts)
-	assert.Contains(t, log.String(), "pre-claim intake: starting "+candidate.ID)
-	assert.Contains(t, log.String(), "pre-claim intake warning: empty output (continuing with "+candidate.ID+")")
+	assert.Contains(t, log.String(), "readiness check: starting "+candidate.ID)
+	assert.Contains(t, log.String(), "readiness check unavailable: empty output (continuing with "+candidate.ID+")")
 	assert.NotContains(t, log.String(), "pre-claim intake: pre-claim intake:")
 
 	got, err := inner.Get(candidate.ID)
@@ -285,7 +285,7 @@ func TestIntake_LogsStartBeforeHookReturns(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("intake hook did not start")
 	}
-	assert.Contains(t, log.String(), "pre-claim intake: starting "+candidate.ID)
+	assert.Contains(t, log.String(), "readiness check: starting "+candidate.ID)
 	assert.Contains(t, eventSink.String(), "pre_claim_intake.start")
 
 	close(release)
@@ -552,4 +552,87 @@ func TestIntake_DescriptionPreservationFailureParksForHuman(t *testing.T) {
 	}
 	assert.True(t, foundBlocked, "description preservation failure must append intake.blocked event")
 	assert.Contains(t, logBuf.String(), "parking")
+}
+
+// TestReadinessHookEmptyOutput_DeduplicatesPrefix asserts that when the intake
+// hook returns an error already prefixed with "pre-claim intake:", the operator
+// log renders a single user-facing prefix and never contains the doubled form
+// "pre-claim intake: pre-claim intake:".
+func TestReadinessHookEmptyOutput_DeduplicatesPrefix(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-dedup",
+				ResultRev: "abc000",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	var log bytes.Buffer
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		Log:  &log,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			// Simulate the exact error format returned by intakeResultPayload.
+			return PreClaimIntakeResult{}, errors.New("pre-claim intake: empty output")
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	logOut := log.String()
+	assert.NotContains(t, logOut, "pre-claim intake: pre-claim intake:", "doubled prefix must not appear")
+	assert.Contains(t, logOut, "readiness check unavailable: empty output (continuing with "+candidate.ID+")")
+	// Execution must still proceed (fail-open semantics).
+	assert.Equal(t, 1, result.Successes)
+}
+
+// TestReadinessUnavailableOutputIsActionable asserts that a missing-harness
+// lint hook failure renders as an actionable readiness-check warning in the
+// operator log rather than exposing the raw "lint hook: missing-harness" error.
+func TestReadinessUnavailableOutputIsActionable(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-harness-warn",
+				ResultRev: "def000",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	var logBuf bytes.Buffer
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:    true,
+		Log:     &logBuf,
+		PreDispatchLintHook: func(ctx context.Context, beadID string) (LintResult, error) {
+			return LintResult{}, ErrLintHookMissingHarness
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	logOut := logBuf.String()
+	assert.NotContains(t, logOut, "lint hook: missing-harness", "raw lint hook error must not appear in operator log")
+	assert.NotContains(t, logOut, "pre-dispatch lint:", "pre-dispatch lint prefix must not appear in operator log")
+	assert.Contains(t, logOut, "readiness check unavailable: no harness configured; continuing with "+candidate.ID)
+	// Fail-open: execution must proceed.
+	assert.Equal(t, 1, result.Successes)
 }

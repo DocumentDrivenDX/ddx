@@ -785,11 +785,31 @@ func landEvidence(wd, targetBranch string, req LandRequest, gitOps LandingGitOps
 		return fmt.Errorf("commit evidence: %w", err)
 	}
 	if sha == "" {
-		return fmt.Errorf("commit evidence: no staged evidence files under %s", req.EvidenceDir)
+		// Evidence already committed in the working tree (worktree-origin path):
+		// the bundle was committed inside the attempt worktree as part of ResultRev
+		// so it is present at HEAD when the landing finalization worktree is checked
+		// out. No trailing commit needed; verify tracked files exist then accept.
+		if !evidenceDirHasTrackedFiles(wd, req.EvidenceDir) {
+			return fmt.Errorf("commit evidence: no staged evidence files under %s", req.EvidenceDir)
+		}
+		headSHA, headErr := gitOps.HeadRevAt(wd)
+		if headErr != nil {
+			return fmt.Errorf("evidence already committed, reading HEAD: %w", headErr)
+		}
+		result.EvidenceCommitSHA = headSHA
+		return nil
 	}
 	result.EvidenceCommitSHA = sha
 	result.NewTip = sha
 	return nil
+}
+
+// evidenceDirHasTrackedFiles reports whether any files under dirRel are tracked
+// in git at wd. Used by landEvidence to distinguish "nothing staged because
+// already committed" from "nothing staged because evidence is absent."
+func evidenceDirHasTrackedFiles(wd, dirRel string) bool {
+	out, err := internalgit.Command(context.Background(), wd, "ls-files", "--", filepath.FromSlash(dirRel)).Output()
+	return err == nil && len(strings.TrimSpace(string(out))) > 0
 }
 
 func landingFinalizationWorktree(projectRoot, wd, targetBranch string, gitOps LandingGitOps) (string, func(), error) {
@@ -1580,7 +1600,12 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 		// NewTip reflects the ref actually on the target branch (either
 		// ResultRev on the ff path or the merge commit SHA on the merge path).
 		if land.NewTip != "" {
-			res.ResultRev = land.NewTip
+			// Preserve the implementation rev before rewriting the compat alias.
+			if res.ImplementationRev == "" {
+				res.ImplementationRev = res.ResultRev
+			}
+			res.LandedRev = land.NewTip
+			res.ResultRev = land.NewTip // backwards-compat alias mirrors LandedRev
 		}
 	case "preserved":
 		res.Outcome = "preserved"
@@ -1612,10 +1637,18 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 // workdir — the worker's original worktree has already been cleaned up by the
 // time Land() runs.
 func BuildLandRequestFromResult(projectRoot string, res *ExecuteBeadResult) LandRequest {
+	// Use the pre-landing implementation revision. If ImplementationRev is set
+	// (i.e. the result was already landed once and ResultRev was rewritten to
+	// the branch tip), prefer it so the coordinator always sees the candidate
+	// commit rather than an already-landed or evidence rev.
+	candidateRev := res.ImplementationRev
+	if candidateRev == "" {
+		candidateRev = res.ResultRev
+	}
 	return LandRequest{
 		WorktreeDir:  projectRoot,
 		BaseRev:      res.BaseRev,
-		ResultRev:    res.ResultRev,
+		ResultRev:    candidateRev,
 		BeadID:       res.BeadID,
 		AttemptID:    res.AttemptID,
 		TargetBranch: "",

@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -245,7 +246,16 @@ type ExecuteBeadReport struct {
 	SessionID                   string        `json:"session_id,omitempty"`
 	BaseRev                     string        `json:"base_rev,omitempty"`
 	ResultRev                   string        `json:"result_rev,omitempty"`
-	PreserveRef                 string        `json:"preserve_ref,omitempty"`
+	// ImplementationRev is the worker's own commit SHA before landing.
+	// Mirrors ExecuteBeadResult.ImplementationRev; empty for no-changes attempts.
+	ImplementationRev string `json:"implementation_rev,omitempty"`
+	// LandedRev is the target branch tip after the coordinator landing.
+	// Distinct from ImplementationRev on the merge-commit path.
+	LandedRev string `json:"landed_rev,omitempty"`
+	// EvidenceRev is the trailing evidence commit SHA when distinct from
+	// ImplementationRev. Empty when not separately committed.
+	EvidenceRev string `json:"evidence_rev,omitempty"`
+	PreserveRef string `json:"preserve_ref,omitempty"`
 	// CandidateRef is the project-root git ref pinned before checks and review.
 	// Format: refs/ddx/iterations/<attempt-id>/<cycle-index>.
 	CandidateRef string `json:"candidate_ref,omitempty"`
@@ -734,7 +744,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		// re-appear in ReadyExecution until an operator reviews it.
 		if runtime.PreClaimIntakeHook != nil {
 			if runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake: starting %s\n", candidate.ID)
+				_, _ = fmt.Fprintf(runtime.Log, "readiness check: starting %s\n", candidate.ID)
 			}
 			emit("pre_claim_intake.start", map[string]any{
 				"bead_id": candidate.ID,
@@ -747,7 +757,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				Phase:     "pre_claim_intake",
 				Heartbeat: true,
 				TS:        now().UTC(),
-				Message:   "pre-claim intake",
+				Message:   "readiness check",
 			})
 			intakeResult, intakeErr := runtime.PreClaimIntakeHook(ctx, candidate.ID)
 			intakeOutcome := intakeResult.normalizedOutcome()
@@ -755,7 +765,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			case intakeErr != nil:
 				warning := trimDiagnosticPrefix(intakeErr.Error(), "pre-claim intake")
 				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake warning: %s (continuing with %s)\n", warning, candidate.ID)
+					_, _ = fmt.Fprintf(runtime.Log, "readiness check unavailable: %s (continuing with %s)\n", warning, candidate.ID)
 				}
 				emit("pre_claim_intake.warn", map[string]any{
 					"bead_id": candidate.ID,
@@ -768,7 +778,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				if err := applyPreClaimIntakeRewrite(w.Store, candidate.ID, assignee, intakeResult, now().UTC()); err != nil {
 					warning := trimDiagnosticPrefix(err.Error(), "pre-claim intake rewrite")
 					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake rewrite: %s (parking %s for human review)\n", warning, candidate.ID)
+						_, _ = fmt.Fprintf(runtime.Log, "bead readiness: rewrite error: %s (parking %s)\n", warning, candidate.ID)
 					}
 					emit("pre_claim_intake.blocked", map[string]any{
 						"bead_id": candidate.ID,
@@ -776,7 +786,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						"detail":  warning,
 					})
 					if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeAmbiguousNeedsHuman, warning, now().UTC()); berr != nil && runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake park error: %v\n", berr)
+						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
 					}
 					_ = w.Store.Unclaim(candidate.ID)
 					if runtime.Once {
@@ -788,10 +798,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			case intakeOutcome == PreClaimIntakeError:
 				warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
 				if warning == "" {
-					warning = "pre-claim intake returned intake_error"
+					warning = "readiness check returned intake_error"
 				}
 				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake warning: %s (continuing with %s)\n", warning, candidate.ID)
+					_, _ = fmt.Fprintf(runtime.Log, "readiness check unavailable: %s (continuing with %s)\n", warning, candidate.ID)
 				}
 				emit("pre_claim_intake.warn", map[string]any{
 					"bead_id": candidate.ID,
@@ -806,7 +816,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					warning = string(intakeOutcome)
 				}
 				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake: %s (releasing %s)\n", warning, candidate.ID)
+					_, _ = fmt.Fprintf(runtime.Log, "bead readiness blocked: %s (releasing %s)\n", warning, candidate.ID)
 				}
 				emit("pre_claim_intake.blocked", map[string]any{
 					"bead_id": candidate.ID,
@@ -814,7 +824,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					"detail":  warning,
 				})
 				if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, intakeOutcome, intakeResult.Detail, now().UTC()); berr != nil && runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake park error: %v\n", berr)
+					_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
 				}
 				_ = w.Store.Unclaim(candidate.ID)
 				if runtime.Once {
@@ -832,7 +842,12 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 			if lintErr != nil {
 				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "pre-dispatch lint: %v (continuing with %s)\n", lintErr, candidate.ID)
+					var lhe *LintHookError
+					if errors.As(lintErr, &lhe) && lhe.Kind == LintHookErrorKindMissingHarness {
+						_, _ = fmt.Fprintf(runtime.Log, "readiness check unavailable: no harness configured; continuing with %s\n", candidate.ID)
+					} else {
+						_, _ = fmt.Fprintf(runtime.Log, "readiness check unavailable: %v (continuing with %s)\n", lintErr, candidate.ID)
+					}
 				}
 				emit("pre_dispatch_lint.warn", map[string]any{
 					"bead_id": candidate.ID,
@@ -840,7 +855,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				})
 			} else if lintThreshold > 0 && lintResult.Score < lintThreshold {
 				blockMsg := fmt.Sprintf(
-					"pre-dispatch lint blocked dispatch for %s: score=%d below threshold=%d; see bead-lifecycle MODE: lint guidance in .agents/skills/ddx/bead-lifecycle/SKILL.md",
+					"bead-quality check blocked dispatch for %s: score=%d below threshold=%d; see bead-lifecycle MODE: lint guidance in .agents/skills/ddx/bead-lifecycle/SKILL.md",
 					candidate.ID, lintResult.Score, lintThreshold,
 				)
 				if runtime.Log != nil {

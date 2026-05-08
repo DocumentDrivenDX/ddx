@@ -1,0 +1,53 @@
+{
+  "attempt_id": "20260508T043844-9139bbb4",
+  "bead_id": "ddx-a7999f14",
+  "base_rev": "56d528de2a807f3dc7c3c4a6de61c2f75f15cc0b",
+  "created_at": "2026-05-08T04:38:49.121046208Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-a7999f14",
+    "title": "agent: create execute-bead evidence bundles inside attempt worktree",
+    "description": "PROBLEM\nexecute-bead evidence bundles are still created from the project-root checkout, so live workers leave untracked `.ddx/executions/\u003cattempt\u003e/` directories in the main worktree. This is the main-tree noise the coordinator should eliminate: the evidence bundle belongs to the attempt worktree and should land through the same candidate/merge path as the implementation evidence.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead.go:1517-1522 calls `createArtifactBundle(projectRoot, wtPath, attemptID)`, passing the main project root as the bundle root even though the attempt worktree path is available.\n- cli/internal/agent/execute_bead.go:1632-1648 builds `DirAbs` under `rootDir/.ddx/executions/\u003cattempt\u003e`, so the current call site writes into the main checkout.\n- cli/internal/agent/execute_bead_land.go:90-96 documents `LandRequest.EvidenceDir` as a project-root relative directory that Land later commits as a trailing evidence commit.\n- cli/internal/agent/execute_bead_land.go:815-856 has `copyEvidenceDirForLanding(projectRoot, landingWD, relPath)`, which copies evidence from the main project root into a landing worktree when they are different.\n- cli/internal/server/workers.go:767-770 calls `VerifyCleanWorktree(projectRoot, res.AttemptID)` as a safety net for leftover evidence, proving the server path still expects project-root evidence dirt.\n\nPROPOSED FIX\n- Create the per-attempt bundle under `wtPath/.ddx/executions/\u003cattempt\u003e` for normal execute-bead attempts.\n- Ensure prompt, manifest, result, usage, checks, and any review metadata are part of the worker/candidate evidence that the coordinator can inspect and commit.\n- Change landing to consume evidence from the candidate/landing worktree for normal attempts instead of copying from the main checkout.\n- Preserve evidence for no-land/no-change/no-evidence outcomes intentionally, but do it through a controlled publish/copy path that leaves the main worktree clean after the attempt finalizes.\n- Keep durable `.ddx/executions` evidence tracked when the attempt lands; eliminate untracked live-worker evidence noise in the main checkout.\n\nNON-SCOPE\n- Do not delete historical `.ddx/executions` records.\n- Do not change candidate review, repair, or routing policy.\n- Do not remove the existing evidence format during the `.ddx/runs` migration window.\n\nPARENT + DEPS\nParent: ddx-31e07fdc. Depends on ddx-7cb3153d because project-root candidate refs provide the durable reference point for worktree-owned evidence during review, repair, and recovery.",
+    "acceptance": "1. TestExecuteBeadArtifacts_BundleCreatedInAttemptWorktree proves `prepareArtifacts` creates `.ddx/executions/\u003cattempt\u003e` under the isolated attempt worktree, not under the main project root.\n2. TestExecuteBeadWork_MainTreeHasNoUntrackedExecutionEvidence runs a successful fake attempt and asserts `git status --short` in the main checkout has no untracked `.ddx/executions/\u003cattempt\u003e/` entry while the attempt is in normal finalization.\n3. TestLand_EvidenceCommitUsesWorktreeBundleWithoutProjectCopy proves Land commits the worktree-owned evidence bundle and does not need `copyEvidenceDirForLanding` from the project root on the normal path.\n4. TestExecuteBead_NoLandPreservesEvidenceWithoutMainNoise proves no-change/no-evidence/no-land outcomes preserve the bundle through an explicit publish path and leave the main worktree clean afterward.\n5. Existing evidence bundle readers still load prompt, manifest, result, usage, and checks for both historical project-root bundles and new worktree-origin bundles.\n6. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/server/... -run \"TestExecuteBeadArtifacts_BundleCreatedInAttemptWorktree|TestExecuteBeadWork_MainTreeHasNoUntrackedExecutionEvidence|TestLand_EvidenceCommitUsesWorktreeBundleWithoutProjectCopy|TestExecuteBead_NoLandPreservesEvidenceWithoutMainNoise\" -count=1 passes.\n7. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/server/... passes.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-31e07fdc",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:evidence",
+      "area:git",
+      "kind:bug",
+      "reliability",
+      "prevention",
+      "spec:FEAT-010",
+      "candidate-cycle"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-08T04:37:05Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2372250",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"All 8 rubric criteria satisfied. (1) Title is imperative ('create'), names subsystem ('agent') and the precise change ('execute-bead evidence bundles inside attempt worktree'). (2) Root cause cites five specific file:line ranges across three files with per-site explanation. (3) AC is fully numbered with 8 items; items 1–4 each name a distinct Test* function; item 6 embeds a -run filter with all four test names. (4) Wired-in assertion present in AC 6 via explicit -run filter. (5) Final gate lines present: AC 7 is 'cd cli \\u0026\\u0026 go test ./internal/agent/... ./internal/server/... passes', AC 8 is 'lefthook run pre-commit passes'. (6) Labels carry phase:2, three area: tags, kind:bug, plus reliability, prevention, and spec:FEAT-010 cross-refs. (7) Parent ddx-31e07fdc and dep ddx-7cb3153d are explicit with dependency rationale. (8) Description is fully self-contained — no /tmp paths, no chat-session references, dep relationship explained inline. Minor note: AC 5 ('Existing evidence bundle readers still load…') is behavioral but does not name a Test* function; it is covered by the broad go test run in AC 7 and does not warrant a deduction given the four named tests in items 1–4.\",\"score\":8,\"suggested_fixes\":[],\"waivers_applied\":[]}",
+          "created_at": "2026-05-08T04:38:44.275477454Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=8"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-08T04:37:05.324360972Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260508T043844-9139bbb4",
+    "prompt": ".ddx/executions/20260508T043844-9139bbb4/prompt.md",
+    "manifest": ".ddx/executions/20260508T043844-9139bbb4/manifest.json",
+    "result": ".ddx/executions/20260508T043844-9139bbb4/result.json",
+    "checks": ".ddx/executions/20260508T043844-9139bbb4/checks.json",
+    "usage": ".ddx/executions/20260508T043844-9139bbb4/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-a7999f14-20260508T043844-9139bbb4"
+  },
+  "prompt_sha": "7ff3aeb433bd4c81c34983d58780e35aff7c5af181189cc4fe79d4ba134a05de"
+}

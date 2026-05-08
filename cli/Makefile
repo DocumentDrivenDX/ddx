@@ -66,6 +66,9 @@ frontend-verify:
 # so //go:embed (which cannot traverse upward out of the package) picks it up.
 # Runs as a prereq of build/test/dev so contributors never see stale embedded
 # skills. rsync --delete keeps the destination in exact sync.
+# Also refreshes project-local copies (.agents, .claude, .ddx) when they
+# already exist, so interactive-behavior edits stay in sync across all five
+# shipped paths without a separate ddx init/update invocation.
 SKILLS_SRC := ../skills/ddx
 SKILLS_DST := internal/skills/ddx
 copy-skills:
@@ -73,6 +76,9 @@ copy-skills:
 		echo "error: $(SKILLS_SRC) not found (run from cli/)"; exit 1; \
 	fi
 	@rsync -a --delete $(SKILLS_SRC)/ $(SKILLS_DST)/
+	@if [ -d "../.agents/skills/ddx" ]; then rsync -a --delete $(SKILLS_SRC)/ ../.agents/skills/ddx/; fi
+	@if [ -d "../.claude/skills/ddx" ]; then rsync -a --delete $(SKILLS_SRC)/ ../.claude/skills/ddx/; fi
+	@if [ -d "../.ddx/skills/ddx" ]; then rsync -a --delete $(SKILLS_SRC)/ ../.ddx/skills/ddx/; fi
 
 # Build for current platform
 build: copy-skills frontend-build

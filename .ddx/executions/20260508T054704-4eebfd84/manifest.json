@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260508T054704-4eebfd84",
+  "bead_id": "ddx-c2a66f45-wt-6bee7238",
+  "base_rev": "a35848597f417a1f7973737a3f7ffcbd2b4ed430",
+  "created_at": "2026-05-08T05:47:09.658451959Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c2a66f45-wt-6bee7238",
+    "title": "ddx skill: add interactive-steward routing and fixtures",
+    "description": "PROBLEM\nThe specs define interactive-steward as the default queue-steward conversation workflow, but the shipped ddx skill still routes broad prompts directly to status/work/review/beads references, the existing status/work references still steer interactive users toward worker-ready work, and the route fixture/eval surface still only understands the legacy expected_reference/expected_cli shape. A green embedded-copy sync can also leave .agents, .claude, and .ddx project skill copies stale.\n\nROOT CAUSE\ndocs/helix/01-frame/features/FEAT-011-skills.md:136-179 requires reference/interactive.md, route precedence, phase output contracts, consent-gated adversarial review, negative fixtures, and a richer routing fixture schema consumed by the eval driver. docs/helix/01-frame/features/FEAT-011-skills.md:228-238 states that make copy-skills syncs only skills/ddx to cli/internal/skills/ddx and that project-local copies also need verification. skills/ddx/SKILL.md:102-109 routes queue/work/review prompts directly to existing references and has no interactive-steward first stop. skills/ddx/reference/status.md:18-23 maps \"What should I work on next?\" to ddx bead ready, which exposes worker-ready work rather than the human intervention/planning loop. scripts/eval-skill.sh:115-128 reads only expected_reference and expected_cli, so it cannot validate mode, mutation permissions, queue commands, or next action.\n\nPROPOSED FIX\nAdd the interactive-steward skill reference and deterministic route fixtures, and fold the older broad-prompt queue-steward reference cleanup into this bead. Update the source ddx skill frontmatter/router to send broad conversational DDx prompts to reference/interactive.md before delegating to status.md, review.md, beads.md, or work.md. Update status/work/review references so broad interactive prompts inspect focus/status and plan rather than manually implementing ready beads. Update routing.jsonl and scripts/eval-skill.sh so the richer fixture schema is validated and consumed. Sync and verify all shipped skill copies.\n\nIN-SCOPE FILES\n- skills/ddx/SKILL.md\n- skills/ddx/reference/interactive.md\n- skills/ddx/reference/status.md\n- skills/ddx/reference/work.md\n- skills/ddx/reference/review.md\n- skills/ddx/evals/routing.jsonl\n- scripts/eval-skill.sh\n- cli/cmd/skill_interactive_steward_test.go (create if absent; colocate with existing skill/routing tests if a better local test file exists)\n- cli/internal/skills/ddx/**, .agents/skills/ddx/**, .claude/skills/ddx/**, .ddx/skills/ddx/** as generated/copied skill outputs\n\nOUT-OF-SCOPE\n- Implementing ddx work focus.\n- Changing ddx work/try execution behavior.\n- Updating AGENTS.md generation; that is a separate child bead.\n- Editing tracker storage by hand.\n\nPARENT AND DEPS\nParent: ddx-09d7d787. Dependencies: ddx-377ebf92. Absorbs the implementation scope formerly tracked by ddx-847df529.",
+    "acceptance": "1. skills/ddx/reference/interactive.md exists and defines: Mode, Router precedence, Session brief, Phase outputs, Mutation policy, Fresh-eyes review, Queue orientation fallback, Spec alignment, and Breakdown.\n2. skills/ddx/SKILL.md frontmatter description includes trigger phrases \"review with fresh eyes\", \"fold in this guidance\", \"review again\", \"break this down into specs and beads\", \"make this testable\", and \"what's blocking the queue\".\n3. skills/ddx/SKILL.md router sends broad conversational DDx prompts to reference/interactive.md before delegating to status.md, review.md, beads.md, or work.md; explicit ddx work/try/execute-bead prompts still route to bead_execution/work.md.\n4. skills/ddx/reference/status.md, skills/ddx/reference/work.md, and skills/ddx/reference/review.md preserve their domain guidance but distinguish queue_steward, bead_execution, direct_user_implementation, and review so broad prompts such as \"what should I work on next\", \"what's blocking the queue\", and \"work the queue\" do not instruct manual ready-bead implementation.\n5. skills/ddx/evals/routing.jsonl includes rows for \"what should I work on next\", \"what's blocking the queue now\", \"review with fresh eyes\", \"fold in this guidance and review again\", \"break this down into specs and beads\", \"make this testable\", \"implement the top ready bead\", and \"ddx work --once\". Each row records phrase, mode, references, queue_commands, tracker_mutation_allowed, code_edits_allowed, and expected_next_action.\n6. scripts/eval-skill.sh validates and consumes the richer fixture schema fields (mode, references, queue_commands, tracker_mutation_allowed, code_edits_allowed, expected_next_action) and no longer relies only on expected_reference/expected_cli for interactive-steward routing validation.\n7. TestDDxInteractiveStewardRouteFixtures in cli/cmd/skill_interactive_steward_test.go validates the route fixture schema, the required phrases, the negative cases, the phase output contract names, and the expected queue/code/tracker permissions.\n8. TestDDxSkillCopiedTreesMatchSource in cli/cmd/skill_interactive_steward_test.go compares the touched ddx skill files across skills/ddx, cli/internal/skills/ddx, .agents/skills/ddx, .claude/skills/ddx, and .ddx/skills/ddx so stale project copies cannot pass.\n9. cd cli \u0026\u0026 make copy-skills passes and syncs the embedded cli/internal/skills/ddx copy; the implementation also refreshes .agents/skills/ddx, .claude/skills/ddx, and .ddx/skills/ddx via ddx init/update behavior or an explicit repo-local sync command documented in the change.\n10. make skill-schema passes after SKILL.md edits.\n11. ddx skills check skills/ddx .agents/skills/ddx .claude/skills/ddx cli/internal/skills/ddx .ddx/skills/ddx passes.\n12. cd cli \u0026\u0026 go test ./cmd/... -run \"TestDDxInteractiveStewardRouteFixtures|TestDDxSkillCopiedTreesMatchSource\" -count=1 passes.\n13. cd cli \u0026\u0026 go test ./cmd/... passes.\n14. lefthook run pre-commit passes.",
+    "parent": "ddx-09d7d787",
+    "labels": [
+      "phase:2",
+      "area:skills",
+      "area:agent",
+      "kind:feature",
+      "operator-ux",
+      "queue-steward",
+      "interactive-steward",
+      "spec:FEAT-011"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-08T05:45:22Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "2372250",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Strong bead overall: title is imperative and names subsystem+change; description carries explicit PROBLEM / ROOT CAUSE with file:line refs / PROPOSED FIX / OUT-OF-SCOPE; AC is numbered (14 items), names Test* functions (AC7, AC8, AC12), and closes with the required `go test ./cmd/...` gate (AC13) and `lefthook run pre-commit` gate (AC14); labels carry phase:2, area:*, kind:feature, and spec:FEAT-011 cross-ref; parent and deps are explicit; no /tmp or chat references; standalone. Three concerns prevent an 8: (1) AC9 uses 'or' ('via ddx init/update behavior or an explicit repo-local sync command documented in the change'), giving the agent two code paths with no tie-breaker — it may pick the wrong one or produce a half-implementation; (2) AC10 references `make skill-schema` which may not exist in cli/Makefile — if absent the AC silently fails rather than guiding the agent to create or substitute it; (3) AC11 invokes `ddx skills check` with five positional paths — this multi-path signature should be verified against the current CLI surface before dispatch, as an unrecognised flag or arity mismatch will block the gate without a clear fix path.\",\"score\":7,\"suggested_fixes\":[\"AC9: collapse the 'or' to a single deterministic sequence, e.g. 'run make copy-skills to sync cli/internal/skills/ddx, then run ddx update to refresh .agents/skills/ddx, .claude/skills/ddx, and .ddx/skills/ddx; document both steps in the PR description.'\",\"AC10: before dispatch, confirm that `make skill-schema` exists in cli/Makefile; if absent, inline the equivalent invocation (e.g. `cd cli \\u0026\\u0026 go run ./cmd/ddx skill schema skills/ddx/SKILL.md`) so the AC is self-contained and cannot silently pass.\",\"AC11: verify that `ddx skills check` accepts multiple positional path arguments in the current CLI; if not, document the correct per-path invocation or replace with a loop so the AC is runnable verbatim.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-08T05:47:04.073671055Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=7"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-08T05:45:22.929418188Z",
+      "spec-id": "FEAT-011"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-011",
+      "path": "docs/helix/01-frame/features/FEAT-011-skills.md",
+      "title": "Feature: DDx Agent Skills"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260508T054704-4eebfd84",
+    "prompt": ".ddx/executions/20260508T054704-4eebfd84/prompt.md",
+    "manifest": ".ddx/executions/20260508T054704-4eebfd84/manifest.json",
+    "result": ".ddx/executions/20260508T054704-4eebfd84/result.json",
+    "checks": ".ddx/executions/20260508T054704-4eebfd84/checks.json",
+    "usage": ".ddx/executions/20260508T054704-4eebfd84/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-c2a66f45-wt-6bee7238-20260508T054704-4eebfd84"
+  },
+  "prompt_sha": "1d0296bb6f96c7c31c249f6e0217c3a8ee0f06d3a15162e4c04e1c50715302b8"
+}

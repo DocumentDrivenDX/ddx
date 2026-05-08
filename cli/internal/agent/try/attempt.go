@@ -41,6 +41,9 @@ type Report struct {
 	SessionID                   string
 	BaseRev                     string
 	ResultRev                   string
+	ImplementationRev           string
+	LandedRev                   string
+	EvidenceRev                 string
 	PreserveRef                 string
 	RetryAfter                  string
 	NoChangesRationale          string
