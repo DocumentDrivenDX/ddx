@@ -376,9 +376,9 @@ func TestDDxWork_WiresPreClaimIntakeHook(t *testing.T) {
 	mu.Unlock()
 	require.GreaterOrEqual(t, len(got), 1, "work must invoke the intake hook")
 	assert.Equal(t, "intake", got[0], "plain ddx work must run pre-claim intake before claim")
-	assert.Equal(t, "smart", gotIntakeReq.Profile)
+	assert.Empty(t, gotIntakeReq.Profile)
 	assert.Zero(t, gotIntakeReq.MinPower)
-	assert.Zero(t, gotIntakeReq.MaxPower, "smart intake clears MaxPower so Fizeau can choose the strongest eligible model")
+	assert.Equal(t, 8, gotIntakeReq.MaxPower, "intake dispatch should use the same max_power path as implementation dispatch")
 	assert.GreaterOrEqual(t, len(got), 2, "work must continue past intake to later execution stages")
 }
 
