@@ -20,7 +20,7 @@ func TestRuntimelintCleanTree(t *testing.T) {
 		t.Fatalf("resolve module root: %v", err)
 	}
 
-	cmd := exec.Command("go", "run", "./tools/lint/runtimelint/cmd/runtimelint", "./...")
+	cmd := exec.Command("go", "run", "-buildvcs=false", "./tools/lint/runtimelint/cmd/runtimelint", "./...")
 	cmd.Dir = moduleRoot
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
