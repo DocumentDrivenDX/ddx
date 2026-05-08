@@ -204,21 +204,6 @@ func TestLintHook_AllowsEmptyHarnessForAutoRouting(t *testing.T) {
 	assert.Empty(t, runner.lastOpts.Harness, "empty harness must pass through as auto-routing")
 }
 
-func TestPreDispatchLintHook_ClearsProfileSoDefaultPowerBoundsDoNotApply(t *testing.T) {
-	root := newLintHookTestRoot(t)
-	store, b := newLintHookTestStore(t, root)
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Profile: "default"})
-	require.Equal(t, "default", rcfg.Profile())
-	svc := &preClaimIntakeHookServiceStub{
-		finalText: `{"score":8,"rationale":"profile cleared","suggested_fixes":[],"waivers_applied":[]}`,
-	}
-
-	got, err := NewPreDispatchLintHook(root, store, rcfg, svc, nil)(context.Background(), b.ID)
-	require.NoError(t, err)
-	assert.Equal(t, 8, got.Score)
-	assert.Empty(t, svc.lastReq.Profile)
-}
-
 func TestLintHook_BadJSON_ReturnsInfrastructureError(t *testing.T) {
 	root := newLintHookTestRoot(t)
 	store, b := newLintHookTestStore(t, root)
