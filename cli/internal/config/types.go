@@ -31,8 +31,8 @@ type NewConfig struct {
 	ReviewMaxRetries *int `yaml:"review_max_retries,omitempty" json:"review_max_retries,omitempty"`
 	// Triage configures the post-attempt triage decision module
 	// (cli/internal/triage). Optional; when unset the binary default policy
-	// is used. Distinct from agent.triage, which controls the pre-claim
-	// complexity gate.
+	// is used. Distinct from agent.triage, which controls the bead readiness
+	// decomposition gate.
 	Triage *TriagePolicyConfig `yaml:"triage,omitempty" json:"triage,omitempty"`
 }
 
@@ -305,7 +305,7 @@ type AgentConfig struct {
 	Triage          *TriageConfig       `yaml:"triage,omitempty" json:"triage,omitempty"`
 }
 
-// TriageConfig controls the pre-Claim complexity gate (ddx-5bf4ee7e).
+// TriageConfig controls the bead readiness decomposition gate.
 type TriageConfig struct {
 	// MaxDecompositionDepth caps recursive bead splitting. Children re-enter
 	// the gate; at cap the parent is blocked with label=needs-human-decomposition.
