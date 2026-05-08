@@ -23,8 +23,7 @@ condition, capture the new attempt as a peer record, render a diff.
   to see whether the task is tractable at all.
 - **Model upgrade A/B** — replay a representative bead under the
   newer model to see whether the diff materially improves before
-  rolling the model out as the default. Raw model strings such as
-  `qwen36` are forwarded unchanged by DDx; Fizeau owns matching.
+  rolling the model out as the default.
 - **Regression sanity check** — replay a previously-green bead under
   a candidate change (new prompt, new persona, new profile) to
   confirm nothing regressed on a known-good task.
@@ -55,10 +54,6 @@ BEAD=ddx-abc123
 BASELINE_ATTEMPT=20260420T101530-aaaaaaaa
 ddx tries show "$BASELINE_ATTEMPT" > replay/baseline.txt
 ```
-
-For example, `ddx try "$BEAD" --model qwen36 --no-merge` forwards the raw
-model string unchanged. Fizeau decides whether `qwen36` matches a catalog
-entry or returns a typed error.
 
 A replay without a pinned baseline is just a fresh `ddx try` — there
 is nothing to diff against.

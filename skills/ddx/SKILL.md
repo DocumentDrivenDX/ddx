@@ -1,6 +1,6 @@
 ---
 name: ddx
-description: Operates the DDx toolkit for document-driven development. Covers beads (work items), the queue, executions, agents, harnesses, personas, reviews, spec-id. Use when the user says "do work", "drain the queue", "run the next bead", "execute a bead", "review this", "check against spec", "what's on the queue", "what's ready", "create a bead", "file this as work", "run an agent", "dispatch", "use a persona", "how am I doing", "ddx doctor", or mentions any ddx CLI command.
+description: Operates the DDx toolkit for document-driven development. Covers beads (work items), the queue, executions, agents, harnesses, personas, reviews, spec-id. Use when the user says "do work", "drain the queue", "run the next bead", "execute a bead", "review this", "review with fresh eyes", "fold in this guidance", "review again", "break this down into specs and beads", "make this testable", "check against spec", "what's on the queue", "what's ready", "what's blocking the queue", "create a bead", "file this as work", "run an agent", "dispatch", "use a persona", "how am I doing", "ddx doctor", or mentions any ddx CLI command.
 ---
 
 # DDx
@@ -101,8 +101,9 @@ Before responding, read the matching file.
 
 | User says / asks about | Read this file |
 |---|---|
+| "what should I work on next", "what's blocking the queue", "review with fresh eyes", "fold in this guidance", "review again", "break this down into specs and beads", "make this testable", broad queue orientation or planning | `reference/interactive.md` |
 | write/plan work, "create a bead", "file this as work", bead metadata, acceptance criteria, dependencies | `reference/beads.md` |
-| "do work", "drain the queue", "run the next bead", "execute a bead", "run work", verify-and-close | `reference/work.md` |
+| `ddx work`, `ddx try <id>`, "execute bead `<id>`", "drain the queue", "run the next bead", "start the worker", verify-and-close | `reference/work.md` |
 | "review this", "check against spec", bead review, quorum review, code review, adversarial check | `reference/review.md` |
 | "assess bead readiness", "score a bead", "triage a failed attempt", "refine a bead", bead authoring lint | `bead-lifecycle/` |
 | "run an agent", "dispatch", harness/provider/model passthrough, power, effort, "use a persona", role bindings | `reference/agents.md` |
