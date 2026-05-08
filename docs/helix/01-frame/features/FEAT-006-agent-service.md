@@ -21,7 +21,7 @@ That contract is the entire execution boundary. DDx exposes the public
 `ddx run` / `ddx try` / `ddx work` layers and sends requests to Fizeau for the
 actual invocation. Upstream diagnostic/status commands may remain as
 Fizeau-owned observability, but the retired workflow namespace is
-not a public workflow surface and has no compatibility alias.
+not a public workflow surface and has no legacy alias.
 
 ## DDx-side responsibilities
 

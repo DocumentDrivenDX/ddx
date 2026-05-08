@@ -53,7 +53,8 @@ what an agent opened in a DDx project is permitted to do.
 ### Precedence
 
 `bead_execution` supersedes `queue_steward` when DDx invokes a worker
-explicitly (via `ddx work`, `ddx try <id>`, or `ddx agent execute-bead`).
+explicitly (via `ddx work`, `ddx try <id>`, or an internal execute-bead
+worker invocation).
 `direct_user_implementation` supersedes `queue_steward` when the user
 explicitly asks for code or doc edits unrelated to the queue. `review`
 supersedes `queue_steward` when the user explicitly requests a graded review
@@ -700,7 +701,7 @@ mode. The public flag is `--idle-interval <duration>` with a default of **30s**
 in watch mode. There is no idle interval concept in `once` or `drain` modes.
 
 **`--poll-interval` is removed from the public CLI and generated docs.** There is
-no compatibility alias. Operators previously relying on `--poll-interval 30s` to
+no legacy alias. Operators previously relying on `--poll-interval 30s` to
 stay alive should use `--watch`. Operators previously relying on
 `--poll-interval=0` to drain-and-exit should use bare `ddx work` (drain mode,
 the new default).
@@ -907,9 +908,9 @@ the command about to run:
 - legacy project-local skill symlinks from the pre-FEAT-015 install model.
 
 Passing preflight checks are silent. Failed checks are observable and
-actionable. `ddx work`, `ddx try`, and compatibility `ddx agent execute-loop`
-fail on missing required project/tracker state, but warn once per process and
-continue for optional lifecycle-hook degradation in WARN-ONLY mode. `ddx server`
+actionable. `ddx work` and `ddx try` fail on missing required project/tracker
+state, but warn once per process and continue for optional lifecycle-hook
+degradation in WARN-ONLY mode. `ddx server`
 fails on missing required server project state, but missing lifecycle skills or
 legacy skill layout are surfaced as degraded startup diagnostics and health
 metadata rather than blocking the HTTP server. When the lifecycle skill is

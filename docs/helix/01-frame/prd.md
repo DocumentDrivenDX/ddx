@@ -32,11 +32,9 @@ Concrete command, API, and storage contracts belong in the DDx feature
 specifications. The PRD stays at the user- and capability-level:
 
 - FEAT-001 defines the CLI surface and operator experience: top-level `run`,
-  `try`, and `work` commands; `ddx agent` as a structural mount of the
-  upstream agent Cobra root (no DDx-defined leaf subcommands beneath it);
-  hard-deprecation handlers for `ddx agent {run, execute-bead, execute-loop}`;
-  and `ddx runs`, `ddx tries`, `ddx work workers` namespaces for cross-layer
-  evidence introspection
+  `try`, and `work` commands, no retired agent workflow namespace or legacy
+  aliases, and `ddx runs`, `ddx tries`, `ddx work workers` namespaces for
+  cross-layer evidence introspection
 - FEAT-002 defines the server, HTTP, and MCP surfaces
 - FEAT-003 defines the promotional website and documentation
 - FEAT-004 defines shared work-item storage
@@ -44,11 +42,11 @@ specifications. The PRD stays at the user- and capability-level:
   broadens to non-markdown via sidecar `.ddx.yaml`; `media_type` and
   `generated_by` fields added; any file with a sidecar is a first-class
   artifact; authority rule: identity present → artifact
-- FEAT-006 defines the layer-1 agent-dispatch boundary: the `ddx run`
-  consumer-side wrapper that powers single agent invocation per CONTRACT-003;
-  `ddx agent` mounts the upstream agent Cobra root structurally; non-bead
-  profile and permissions selection; session-log envelope owned by DDx, inner
-  log shape by upstream
+- FEAT-006 defines the layer-1 Fizeau execution boundary: the `ddx run`
+  consumer-side wrapper that powers one invocation per CONTRACT-003; DDx sends
+  request facts and explicit operator passthrough constraints, while Fizeau
+  owns routing, provider/model discovery, concrete route selection, fuzzy model
+  matching, and the inner session-log shape
 - FEAT-007 defines the artifact graph and staleness model: sidecar-aware
   scanner; `media_type` field; `generated_by` edge with a separate provenance
   staleness rule (does not cascade like `depends_on`); 100% read endpoints for
