@@ -99,6 +99,11 @@ MCP (POST /mcp):
 			if federationAllowPlainHTTP && !hubMode {
 				return fmt.Errorf("--federation-allow-plain-http requires --hub-mode")
 			}
+			// Preflight: surface degraded startup diagnostics for missing lifecycle
+			// skills or legacy symlinks without blocking server startup.
+			preflightResult := checkProjectRuntimePreflight(f.WorkingDir)
+			emitServerPreflightDiagnostics(cmd.ErrOrStderr(), preflightResult)
+
 			listenAddr := fmt.Sprintf("%s:%d", addr, port)
 			fmt.Fprintf(cmd.OutOrStdout(), "DDx server listening on https://%s\n", listenAddr)
 			srv := server.New(listenAddr, f.WorkingDir)
@@ -143,6 +148,9 @@ MCP (POST /mcp):
 				fmt.Fprintf(cmd.OutOrStdout(), "DDx ts-net enabled (hostname: %s)\n", tc.Hostname)
 			}
 
+			if f.serverListenAndServeOverride != nil {
+				return f.serverListenAndServeOverride(tlsCert, tlsKey)
+			}
 			return srv.ListenAndServeTLS(tlsCert, tlsKey)
 		},
 	}
