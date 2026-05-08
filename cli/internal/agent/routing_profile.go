@@ -2,14 +2,9 @@ package agent
 
 import "strings"
 
-const DefaultRoutingProfile = "default"
-
-// NormalizeRoutingProfile returns "default" for empty/whitespace-only strings,
-// and the trimmed input otherwise.
+// NormalizeRoutingProfile trims operator input while preserving an empty value.
+// Empty means unconstrained: the agent service chooses without profile-derived
+// power bounds.
 func NormalizeRoutingProfile(profile string) string {
-	profile = strings.TrimSpace(profile)
-	if profile == "" {
-		return DefaultRoutingProfile
-	}
-	return profile
+	return strings.TrimSpace(profile)
 }
