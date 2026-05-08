@@ -17,6 +17,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	agentlib "github.com/DocumentDrivenDX/fizeau"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -273,6 +274,23 @@ func TestExecuteOnService_IgnoresToolCallTranscriptProjection(t *testing.T) {
 	if len(result.ToolCalls) != 0 {
 		t.Fatalf("expected no reconstructed tool transcript, got %+v", result.ToolCalls)
 	}
+}
+
+func TestExecuteOnService_FinalErrorWithZeroExitBecomesFailure(t *testing.T) {
+	svc := &passthroughTestService{
+		executeEvents: []agentlib.ServiceEvent{
+			{Type: "final", Data: []byte(`{"status":"error","exit_code":0,"error":"ResolveRoute: no viable routing candidate: 3 candidates rejected"}`)},
+		},
+	}
+	rcfg := resolvedWithPassthrough("", "", "", 0, 0)
+
+	result, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "hello",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 1, result.ExitCode)
+	assert.Contains(t, result.Error, "ResolveRoute: no viable routing candidate")
 }
 
 // TestServiceRun_ForwardsOpaqueFizeauEvents verifies that a future/unknown

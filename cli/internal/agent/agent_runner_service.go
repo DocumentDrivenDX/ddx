@@ -150,6 +150,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		}
 	}
 	result.Error = appendProviderTimeoutHint(result.Error, providerTimeout)
+	normalizeServiceFinalExitCode(result)
 
 	promptSource := opts.PromptSource
 	if promptSource == "" {

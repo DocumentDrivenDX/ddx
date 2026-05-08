@@ -310,6 +310,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		}
 	}
 	result.Error = appendProviderTimeoutHint(result.Error, providerTimeout)
+	normalizeServiceFinalExitCode(result)
 	entry := SessionIndexEntryFromResult(workDir, SessionIndexInputs{
 		Harness:     harness,
 		Model:       model,
@@ -319,6 +320,15 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	}, result, start, finishedAt)
 	_ = AppendSessionIndex(ResolveLogDir(workDir, ""), entry, finishedAt)
 	return result, nil
+}
+
+func normalizeServiceFinalExitCode(result *Result) {
+	if result == nil {
+		return
+	}
+	if result.ExitCode == 0 && strings.TrimSpace(result.Error) != "" {
+		result.ExitCode = 1
+	}
 }
 
 // CapabilitiesViaService returns HarnessCapabilities for the named harness by
