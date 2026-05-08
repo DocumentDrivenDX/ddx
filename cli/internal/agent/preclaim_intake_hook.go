@@ -88,46 +88,28 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: build prompt: %w", err)
 		}
 
-		strongMinPower := resolveStrongSplitterMinPower(ctx, projectRoot, svc)
-		if rcfg.MinPower() > strongMinPower {
-			strongMinPower = rcfg.MinPower()
-		}
-
+		profile, selectedSvc := selectProfileForAuxiliaryDispatch(ctx, projectRoot, svc, runner, SelectStrongestProfile)
 		runtime := AgentRunRuntime{
 			Prompt:          prompt,
 			WorkDir:         projectRoot,
 			PromptSource:    PreClaimIntakePromptSource,
-			ProfileOverride: "smart",
+			ProfileOverride: profile,
+			ClearProfile:    true,
 			ClearMaxPower:   true,
 		}
-		if strongMinPower > 0 {
-			runtime.MinPowerOverride = strongMinPower
-		}
-		payload, err := dispatchPreClaimIntakePayload(ctx, projectRoot, svc, runner, rcfg, runtime, strongMinPower)
+		payload, err := dispatchPreClaimIntakePayload(ctx, projectRoot, selectedSvc, runner, rcfg, runtime)
 		if err != nil {
-			if isStrongPowerUnsatisfiedError(err) {
-				return PreClaimIntakeResult{
-					Outcome: PreClaimIntakeError,
-					Detail:  preClaimIntakeRouteUnavailableDetail(err),
-				}, nil
-			}
-			return PreClaimIntakeResult{}, err
+			return PreClaimIntakeResult{
+				Outcome: PreClaimIntakeError,
+				Detail:  preClaimIntakeRouteUnavailableDetail(err),
+			}, nil
 		}
 
 		return decodePreClaimIntakePayloadResult(payload)
 	}
 }
 
-func dispatchPreClaimIntakePayload(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime, strongMinPower int) (string, error) {
-	payload, err := dispatchPreClaimIntakePayloadOnce(ctx, projectRoot, svc, runner, rcfg, runtime)
-	if err == nil {
-		return payload, nil
-	}
-	if runtime.ProfileOverride != "smart" || strongMinPower > 0 || !isSmartRouteUnavailableError(err) {
-		return "", err
-	}
-
-	runtime.ProfileOverride = ""
+func dispatchPreClaimIntakePayload(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (string, error) {
 	return dispatchPreClaimIntakePayloadOnce(ctx, projectRoot, svc, runner, rcfg, runtime)
 }
 
@@ -251,50 +233,6 @@ func normalizePreClaimIntakeRewriteFields(fields []string) []string {
 	return out
 }
 
-func resolveStrongSplitterMinPower(ctx context.Context, projectRoot string, svc agentlib.FizeauService) int {
-	if svc == nil {
-		return 0
-	}
-
-	models, err := svc.ListModels(ctx, agentlib.ModelFilter{})
-	if err != nil {
-		return 0
-	}
-	maxPower := 0
-	for _, m := range models {
-		if m.Power > maxPower {
-			maxPower = m.Power
-		}
-	}
-	return maxPower
-}
-
-func isStrongPowerUnsatisfiedError(err error) bool {
-	if err == nil {
-		return false
-	}
-	switch ClassifyFailureMode("task_failed", 1, err.Error()) {
-	case FailureModeAgentPowerUnsatisfied, FailureModeBlockedByPassthroughConstraint:
-		return true
-	default:
-		return false
-	}
-}
-
-func isSmartRouteUnavailableError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := strings.ToLower(err.Error())
-	return strings.Contains(msg, "tier ≥ smart") ||
-		strings.Contains(msg, "tier >= smart") ||
-		strings.Contains(msg, "profile=smart") ||
-		strings.Contains(msg, "profile smart") ||
-		strings.Contains(msg, "model_ref=smart") ||
-		strings.Contains(msg, "model-ref smart") ||
-		strings.Contains(msg, `model ref "smart"`)
-}
-
 // decodePreClaimIntakePayloadResult decodes a JSON payload into a PreClaimIntakeResult.
 // It accepts both the legacy intake schema (classification field) and the canonical
 // readiness schema (outcome field), converting both into the same decision model.
@@ -354,7 +292,7 @@ func decodeLegacyIntakePayload(payload string) (PreClaimIntakeResult, error) {
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode result: %w", err)
 	}
 	switch strings.ToLower(strings.TrimSpace(out.Classification)) {
-	case "atomic":
+	case "atomic", "ok", "ready", "actionable", "pass":
 		return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic, Detail: strings.TrimSpace(out.Reasoning)}, nil
 	case "rewritten":
 		return PreClaimIntakeResult{

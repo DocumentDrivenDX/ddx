@@ -507,6 +507,13 @@ func TestPostAttemptTriageHook_ClearsProfileSoDefaultPowerBoundsDoNotApply(t *te
 	store, b := newTriageHookTestStore(t, root)
 
 	svc := &passthroughTestService{
+		listProfiles: []agentlib.ProfileInfo{
+			{Name: "standard", MinPower: 7, MaxPower: 8},
+			{Name: "cheap", MinPower: 5, MaxPower: 5},
+		},
+		listModels: []agentlib.ModelInfo{
+			{ID: "cheap-model", Power: 5, Available: true, AutoRoutable: true},
+		},
 		executeEvents: []agentlib.ServiceEvent{
 			{
 				Type: "final",
@@ -528,5 +535,5 @@ func TestPostAttemptTriageHook_ClearsProfileSoDefaultPowerBoundsDoNotApply(t *te
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "transport", got.Classification)
-	assert.Empty(t, svc.lastReq.Profile, "ClearProfile must prevent the default profile from being forwarded to the service")
+	assert.Equal(t, "cheap", svc.lastReq.Profile, "triage dispatch should choose a cheap service profile instead of forwarding the default profile")
 }

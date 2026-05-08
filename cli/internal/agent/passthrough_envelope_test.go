@@ -26,6 +26,8 @@ type passthroughTestService struct {
 	executeCalled       bool
 	lastReq             agentlib.ServiceExecuteRequest
 	listHarnessesCalled bool
+	listModels          []agentlib.ModelInfo
+	listProfiles        []agentlib.ProfileInfo
 	executeEvents       []agentlib.ServiceEvent
 }
 
@@ -60,11 +62,11 @@ func (s *passthroughTestService) ListProviders(ctx context.Context) ([]agentlib.
 }
 
 func (s *passthroughTestService) ListModels(ctx context.Context, filter agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
-	return nil, nil
+	return append([]agentlib.ModelInfo(nil), s.listModels...), nil
 }
 
 func (s *passthroughTestService) ListProfiles(ctx context.Context) ([]agentlib.ProfileInfo, error) {
-	return nil, nil
+	return append([]agentlib.ProfileInfo(nil), s.listProfiles...), nil
 }
 
 func (s *passthroughTestService) ResolveProfile(ctx context.Context, name string) (*agentlib.ResolvedProfile, error) {

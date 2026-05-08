@@ -20,6 +20,7 @@ import (
 type preClaimIntakeHookServiceStub struct {
 	executeCalls int32
 	lastReq      agentlib.ServiceExecuteRequest
+	listProfiles []agentlib.ProfileInfo
 	listModels   []agentlib.ModelInfo
 	executeErr   error
 	executeFunc  func(agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
@@ -80,7 +81,7 @@ func (s *preClaimIntakeHookServiceStub) ProfileAliases(_ context.Context) (map[s
 }
 
 func (s *preClaimIntakeHookServiceStub) ListProfiles(_ context.Context) ([]agentlib.ProfileInfo, error) {
-	return nil, nil
+	return append([]agentlib.ProfileInfo(nil), s.listProfiles...), nil
 }
 
 func (s *preClaimIntakeHookServiceStub) RecordRouteAttempt(_ context.Context, _ agentlib.RouteAttempt) error {
@@ -144,9 +145,13 @@ func TestDecompositionHook_UsesStrongMinPower(t *testing.T) {
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
 	svc := &preClaimIntakeHookServiceStub{
+		listProfiles: []agentlib.ProfileInfo{
+			{Name: "cheap", MinPower: 5, MaxPower: 5},
+			{Name: "smart", MinPower: 9, MaxPower: 10},
+		},
 		listModels: []agentlib.ModelInfo{
-			{ID: "cheap", Power: 21},
-			{ID: "smart", Power: 94},
+			{ID: "cheap", Power: 5, Available: true, AutoRoutable: true},
+			{ID: "smart", Power: 9, Available: true, AutoRoutable: true},
 		},
 		finalText: `{"classification":"atomic","confidence":0.99,"reasoning":"single-slice"}`,
 	}
@@ -160,7 +165,7 @@ func TestDecompositionHook_UsesStrongMinPower(t *testing.T) {
 	assert.Equal(t, root, svc.lastReq.WorkDir)
 	assert.Empty(t, svc.lastReq.ModelRef)
 	assert.Equal(t, "smart", svc.lastReq.Profile)
-	assert.GreaterOrEqual(t, svc.lastReq.MinPower, 94)
+	assert.Zero(t, svc.lastReq.MinPower)
 }
 
 func TestDecompositionHook_CatalogUnavailableUsesSmartProfileWithoutMagicPower(t *testing.T) {
@@ -177,7 +182,7 @@ func TestDecompositionHook_CatalogUnavailableUsesSmartProfileWithoutMagicPower(t
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 	assert.Empty(t, svc.lastReq.ModelRef)
-	assert.Equal(t, "smart", svc.lastReq.Profile)
+	assert.Empty(t, svc.lastReq.Profile)
 	assert.Zero(t, svc.lastReq.MinPower)
 }
 
@@ -218,7 +223,7 @@ func TestDecompositionHook_SmartProfileUnavailableFallsBackToAutoRoute(t *testin
 	got, err := hook(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
-	assert.Equal(t, int32(2), atomic.LoadInt32(&svc.executeCalls))
+	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 	assert.Empty(t, svc.lastReq.ModelRef)
 	assert.Empty(t, svc.lastReq.Profile)
 	assert.Zero(t, svc.lastReq.MinPower)
@@ -229,8 +234,11 @@ func TestDecompositionHook_PreservesPassthroughConstraints(t *testing.T) {
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
 	svc := &preClaimIntakeHookServiceStub{
+		listProfiles: []agentlib.ProfileInfo{
+			{Name: "smart", MinPower: 9, MaxPower: 10},
+		},
 		listModels: []agentlib.ModelInfo{
-			{ID: "smart", Power: 96},
+			{ID: "smart", Power: 9, Available: true, AutoRoutable: true},
 		},
 		finalText: `{"classification":"atomic","confidence":0.95,"reasoning":"passthrough intact"}`,
 	}
@@ -251,7 +259,7 @@ func TestDecompositionHook_PreservesPassthroughConstraints(t *testing.T) {
 	assert.Equal(t, "claude-sonnet-4-6", svc.lastReq.Model)
 	assert.Empty(t, svc.lastReq.ModelRef)
 	assert.Equal(t, "smart", svc.lastReq.Profile)
-	assert.GreaterOrEqual(t, svc.lastReq.MinPower, 96)
+	assert.Zero(t, svc.lastReq.MinPower)
 }
 
 func TestDecompositionHook_StrongPowerUnsatisfiedReturnsIntakeError(t *testing.T) {
@@ -279,12 +287,16 @@ func TestDecompositionHook_ClearsMaxPowerForSmartIntake(t *testing.T) {
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
 	svc := &preClaimIntakeHookServiceStub{
+		listProfiles: []agentlib.ProfileInfo{
+			{Name: "smart", MinPower: 9, MaxPower: 10},
+		},
 		listModels: []agentlib.ModelInfo{
-			{ID: "smart", Power: 90},
+			{ID: "smart", Power: 9, Available: true, AutoRoutable: true},
 		},
 	}
 	svc.executeFunc = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
-		assert.Equal(t, 90, req.MinPower)
+		assert.Zero(t, req.MinPower)
+		assert.Equal(t, "smart", req.Profile)
 		assert.Zero(t, req.MaxPower, "pre-claim intake must not inherit worker max_power")
 		ch := make(chan agentlib.ServiceEvent, 1)
 		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"atomic\",\"confidence\":0.99,\"reasoning\":\"frontier-ready\"}"}`)}
@@ -353,6 +365,12 @@ func TestPreClaimReadiness_DecodesLegacyIntakeJSON(t *testing.T) {
 			payload:     `{"classification":"atomic","confidence":0.99,"reasoning":"single slice"}`,
 			wantOutcome: PreClaimIntakeActionableAtomic,
 			wantDetail:  "single slice",
+		},
+		{
+			name:        "ok",
+			payload:     `{"classification":"ok","confidence":0.99,"reasoning":"ready"}`,
+			wantOutcome: PreClaimIntakeActionableAtomic,
+			wantDetail:  "ready",
 		},
 		{
 			name:        "decomposable",
