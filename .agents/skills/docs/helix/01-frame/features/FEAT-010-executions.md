@@ -5,13 +5,6 @@ ddx:
     - helix.prd
     - FEAT-005
     - FEAT-006
-  review:
-    self_hash: 4e11ae252d4e0d80169f0a7d36a4904da6df15e56c2bd453bec7e83b21112fc2
-    deps:
-      FEAT-005: f0c76f41c15cb33aa357ebbb7eecac76e533f82a250fc5c037f8f09cf0338951
-      FEAT-006: f13f1e4abdd9623083aa2728767f243b394bbe670f70fdbc5b8bba7543712d67
-      helix.prd: e0c67dbc961e1ff48dbe6f025f293f7cff523bc141e74d8bf0dcd067835254a2
-    reviewed_at: "2026-05-05T15:03:29Z"
 ---
 # Feature: Executions (Definitions and Runs)
 

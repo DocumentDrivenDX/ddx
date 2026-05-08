@@ -1,0 +1,5 @@
+name: filesystem
+version: 1.0.0
+package: "@modelcontextprotocol/server-filesystem"
+description: MCP server for filesystem operations
+category: core

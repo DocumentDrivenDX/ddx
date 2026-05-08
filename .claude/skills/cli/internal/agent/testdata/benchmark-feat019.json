@@ -1,0 +1,40 @@
+{
+  "name": "FEAT-019 Agent Evaluation Benchmark",
+  "description": "Benchmark suite testing model capabilities across read-comprehension, analysis, and coding tasks against the FEAT-019 spec and codebase.",
+  "version": "1.0.0",
+  "arms": [
+    {"label": "agent-smart", "harness": "agent", "tier": "smart"},
+    {"label": "agent-fast",  "harness": "agent", "tier": "fast"},
+    {"label": "codex-smart", "harness": "codex", "tier": "smart"},
+    {"label": "codex-fast",  "harness": "codex", "tier": "fast"},
+    {"label": "claude-smart","harness": "claude", "tier": "smart"},
+    {"label": "claude-fast", "harness": "claude", "tier": "fast"}
+  ],
+  "prompts": [
+    {
+      "id": "read-comprehension",
+      "name": "Spec Read Comprehension",
+      "tags": ["read", "comprehension"],
+      "prompt": "Read docs/helix/01-frame/features/FEAT-019-agent-evaluation.md and answer:\n1. What are the three main functional requirement groups?\n2. What sandbox mechanism is used?\n3. What data does the agent harness provide that subprocess harnesses don't?\n4. Name two user stories.\nBe brief — one sentence per answer."
+    },
+    {
+      "id": "code-analysis",
+      "name": "Code Structure Analysis",
+      "tags": ["read", "analysis", "code"],
+      "prompt": "Read cli/internal/agent/compare.go and cli/internal/agent/grade.go. Answer:\n1. How does RunCompare handle parallel execution of arms?\n2. What happens if one arm fails — does the comparison abort?\n3. How does captureGitDiff handle untracked files?\n4. How does parseGrades handle non-JSON grader output?\nBe brief — one sentence per answer."
+    },
+    {
+      "id": "cross-reference",
+      "name": "Cross-Reference Spec vs Implementation",
+      "tags": ["analysis", "alignment"],
+      "prompt": "Read FEAT-019-agent-evaluation.md in docs/helix/01-frame/features/ and compare.go in cli/internal/agent/. Identify:\n1. Which FEAT-019 requirements are implemented in compare.go?\n2. Which requirements are NOT yet implemented?\n3. Are there any implementation details that diverge from the spec?\nBe specific — cite requirement numbers."
+    },
+    {
+      "id": "simple-coding",
+      "name": "Simple Code Generation",
+      "tags": ["coding", "generation"],
+      "prompt": "Write a Go function `FormatComparisonTable(record *ComparisonRecord) string` that formats a ComparisonRecord as an ASCII table with columns: Arm, Status, Tokens, Cost, Duration. Use the types defined in cli/internal/agent/types.go. Return only the function — no tests, no package declaration."
+    }
+  ],
+  "timeout": "5m"
+}

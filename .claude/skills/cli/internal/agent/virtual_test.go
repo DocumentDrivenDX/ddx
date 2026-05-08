@@ -1,0 +1,224 @@
+package agent
+
+import (
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestPromptHash(t *testing.T) {
+	h1 := PromptHash("hello world")
+	h2 := PromptHash("hello world")
+	h3 := PromptHash("different prompt")
+
+	assert.Equal(t, h1, h2, "same prompt should produce same hash")
+	assert.NotEqual(t, h1, h3, "different prompts should produce different hashes")
+	assert.Len(t, h1, 16, "hash should be 16 hex characters")
+}
+
+func TestRecordAndLookup(t *testing.T) {
+	dir := t.TempDir()
+
+	entry := &VirtualEntry{
+		Prompt:       "Create a hello world program",
+		Response:     "Here is a hello world program...",
+		Harness:      "claude",
+		Model:        "claude-sonnet-4-6",
+		DelayMS:      2000,
+		InputTokens:  100,
+		OutputTokens: 50,
+	}
+
+	err := RecordEntry(dir, entry)
+	require.NoError(t, err)
+
+	// Verify file was created with hash-based name.
+	hash := PromptHash("Create a hello world program")
+	path := filepath.Join(dir, hash+".json")
+	assert.FileExists(t, path)
+
+	// Lookup should find it.
+	found, err := LookupEntry(dir, "Create a hello world program")
+	require.NoError(t, err)
+	assert.Equal(t, "Here is a hello world program...", found.Response)
+	assert.Equal(t, "claude", found.Harness)
+	assert.Equal(t, 2000, found.DelayMS)
+	assert.Equal(t, 100, found.InputTokens)
+
+	// Lookup with different prompt should fail.
+	_, err = LookupEntry(dir, "different prompt")
+	assert.Error(t, err)
+}
+
+func TestNormalizePrompt(t *testing.T) {
+	patterns := []config.NormalizePattern{
+		{Pattern: `/tmp/[a-zA-Z0-9._]+`, Replace: "<TMPDIR>"},
+		{Pattern: `hx-[a-f0-9]{8}`, Replace: "<BEAD_ID>"},
+	}
+
+	t.Run("replaces temp paths", func(t *testing.T) {
+		input := "Work in /tmp/tmp.ABC123 on task"
+		got := NormalizePrompt(input, patterns)
+		assert.Equal(t, "Work in <TMPDIR> on task", got)
+	})
+
+	t.Run("replaces bead IDs", func(t *testing.T) {
+		input := "Build hx-038ea52b and hx-7103bc49"
+		got := NormalizePrompt(input, patterns)
+		assert.Equal(t, "Build <BEAD_ID> and <BEAD_ID>", got)
+	})
+
+	t.Run("no patterns returns unchanged", func(t *testing.T) {
+		input := "plain prompt"
+		got := NormalizePrompt(input, nil)
+		assert.Equal(t, "plain prompt", got)
+	})
+
+	t.Run("invalid regex skipped", func(t *testing.T) {
+		bad := []config.NormalizePattern{{Pattern: `[invalid`, Replace: "x"}}
+		input := "test"
+		got := NormalizePrompt(input, bad)
+		assert.Equal(t, "test", got)
+	})
+}
+
+func TestRecordAndLookupWithNormalization(t *testing.T) {
+	dir := t.TempDir()
+	patterns := []config.NormalizePattern{
+		{Pattern: `/tmp/[a-zA-Z0-9._]+`, Replace: "<TMPDIR>"},
+	}
+
+	entry := &VirtualEntry{
+		Prompt:   "Process /tmp/tmp.RUN1 files",
+		Response: "done",
+		Harness:  "claude",
+	}
+
+	err := RecordEntry(dir, entry, patterns...)
+	require.NoError(t, err)
+
+	// Lookup with a different temp path should match (same normalized hash).
+	found, err := LookupEntry(dir, "Process /tmp/tmp.RUN2 files", patterns...)
+	require.NoError(t, err)
+	assert.Equal(t, "done", found.Response)
+
+	// Lookup without normalization should NOT match.
+	_, err = LookupEntry(dir, "Process /tmp/tmp.RUN2 files")
+	assert.Error(t, err)
+}
+
+func TestLookupInline(t *testing.T) {
+	responses := []InlineResponse{
+		{PromptMatch: "implementation action", Response: "done", ExitCode: 0},
+		{PromptMatch: "/build.*test/", Response: "build output", ExitCode: 1},
+		{PromptMatch: "exact match", Response: "found it"},
+	}
+
+	t.Run("substring match", func(t *testing.T) {
+		ir, ok := LookupInline(responses, "run the implementation action now")
+		require.True(t, ok)
+		assert.Equal(t, "done", ir.Response)
+		assert.Equal(t, 0, ir.ExitCode)
+	})
+
+	t.Run("regex match", func(t *testing.T) {
+		ir, ok := LookupInline(responses, "build and test")
+		require.True(t, ok)
+		assert.Equal(t, "build output", ir.Response)
+		assert.Equal(t, 1, ir.ExitCode)
+	})
+
+	t.Run("no match", func(t *testing.T) {
+		_, ok := LookupInline(responses, "completely unrelated prompt")
+		assert.False(t, ok)
+	})
+
+	t.Run("first match wins", func(t *testing.T) {
+		ir, ok := LookupInline(responses, "implementation action exact match")
+		require.True(t, ok)
+		assert.Equal(t, "done", ir.Response) // first match
+	})
+}
+
+func TestRunVirtualWithInlineResponses(t *testing.T) {
+	dir := t.TempDir()
+	logDir := filepath.Join(dir, ".ddx", "agent-logs")
+	require.NoError(t, os.MkdirAll(logDir, 0755))
+
+	runner := NewRunner(Config{
+		Harness:       "virtual",
+		SessionLogDir: logDir,
+	})
+
+	// Set inline responses via env var.
+	t.Setenv("DDX_VIRTUAL_RESPONSES", `[
+		{"prompt_match": "hello", "response": "world", "exit_code": 0},
+		{"prompt_match": "fail", "response": "error occurred", "exit_code": 1}
+	]`)
+
+	t.Run("matching prompt returns response", func(t *testing.T) {
+		result, err := runVirtualFn(runner, RunOptions{
+			Harness: "virtual",
+			Prompt:  "say hello please",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "world", result.Output)
+		assert.Equal(t, 0, result.ExitCode)
+	})
+
+	t.Run("failure simulation", func(t *testing.T) {
+		result, err := runVirtualFn(runner, RunOptions{
+			Harness: "virtual",
+			Prompt:  "this should fail",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "error occurred", result.Output)
+		assert.Equal(t, 1, result.ExitCode)
+	})
+}
+
+func TestRunVirtual(t *testing.T) {
+	dir := t.TempDir()
+	dictDir := filepath.Join(dir, ".ddx", "agent-dictionary")
+
+	// Record a response.
+	entry := &VirtualEntry{
+		Prompt:       "test prompt",
+		Response:     "test response output",
+		Harness:      "claude",
+		DelayMS:      0, // no delay for tests
+		InputTokens:  50,
+		OutputTokens: 25,
+	}
+	require.NoError(t, RecordEntry(dictDir, entry))
+
+	// Create runner with virtual harness.
+	logDir := filepath.Join(dir, ".ddx", "agent-logs")
+	require.NoError(t, os.MkdirAll(logDir, 0755))
+
+	runner := NewRunner(Config{
+		Harness:       "virtual",
+		SessionLogDir: logDir,
+	})
+
+	// Override dictionary lookup path by ensuring VirtualDictionaryDir is checked.
+	// For the test, we need the runner to find our dict dir.
+	origWd, _ := os.Getwd()
+	require.NoError(t, os.Chdir(dir))
+	defer func() { _ = os.Chdir(origWd) }()
+
+	result, err := runVirtualFn(runner, RunOptions{
+		Harness: "virtual",
+		Prompt:  "test prompt",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "test response output", result.Output)
+	assert.Equal(t, 0, result.ExitCode)
+	assert.Equal(t, 50, result.InputTokens)
+	assert.Equal(t, 25, result.OutputTokens)
+	assert.Equal(t, "virtual", result.Harness)
+}

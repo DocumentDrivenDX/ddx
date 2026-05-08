@@ -1,0 +1,100 @@
+version: "2"
+run:
+  tests: true
+linters:
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+  disable:
+    - unused  # Many WIP functions, will clean up later
+  settings:
+    errcheck:
+      check-blank: false  # Allow _ = assignment for intentional ignores
+      exclude-functions:
+        # Output functions where errors are typically ignored
+        - 'fmt.Fprintf'
+        - 'fmt.Fprintln'
+        - 'fmt.Fprint'
+        # Defer cleanup operations
+        - '(*os.File).Close'
+        # Cobra/pflag flag parsing (panics on error)
+        - '(*github.com/spf13/pflag.FlagSet).GetBool'
+        - '(*github.com/spf13/pflag.FlagSet).GetString'
+        - '(*github.com/spf13/pflag.FlagSet).GetStringSlice'
+        # Completion generation (best effort)
+        - '(*github.com/spf13/cobra.Command).GenBashCompletion'
+        - '(*github.com/spf13/cobra.Command).GenZshCompletion'
+        - '(*github.com/spf13/cobra.Command).GenFishCompletion'
+        - '(*github.com/spf13/cobra.Command).GenPowerShellCompletionWithDesc'
+        # Color output (best effort)
+        - '(*github.com/fatih/color.Color).Println'
+        - '(*github.com/fatih/color.Color).Fprintf'
+        - '(*github.com/fatih/color.Color).Fprintln'
+        - '(*github.com/fatih/color.Color).Printf'
+        # Cobra help output (best effort)
+        - '(*github.com/spf13/cobra.Command).Help'
+        # Test cleanup (intentional)
+        - 'os.Remove'
+        - 'os.Chmod'
+        - 'os.Unsetenv'
+        - 'os.Setenv'
+        - 'os.Chdir'
+        # Cleanup operations (best effort)
+        - 'os.RemoveAll'
+        - '(*net/http.Response).Body.Close'
+        - '(*archive/zip.ReadCloser).Close'
+        - '(*compress/gzip.Reader).Close'
+        - '(*io.ReadCloser).Close'
+        # Filesystem operations (rarely fail)
+        - 'os.UserHomeDir'
+        - 'filepath.Rel'
+        - 'filepath.Walk'
+        # Pattern matching
+        - 'regexp.MatchString'
+        # Buffer operations
+        - '(*bufio.Writer).Flush'
+        # Flag parsing
+        - '(*github.com/spf13/pflag.FlagSet).GetInt'
+        # Cache operations (best effort)
+        - '*.Save'
+        - '*.Load'
+    staticcheck:
+      checks:
+        - all
+        - '-ST1000'  # Package comment not required
+        - '-ST1021'  # Comment formatting is nice to have
+        - '-ST1005'  # Error string formatting is style
+        - '-SA9003'  # Empty branch can be intentional (defensive code)
+        - '-SA4009'  # Overwritten args can be refactored later
+        - '-QF1004'  # ReplaceAll suggestion
+        - '-QF1012'  # Fprintf suggestion
+        - '-S1040'  # Type assertion suggestion
+        - '-S1011'  # Loop simplification suggestion
+        - '-QF1003'  # Tagged switch suggestion
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+    rules:
+      # Exclude errcheck for test files (intentional test setup/cleanup)
+      - linters:
+          - errcheck
+        path: _test\.go
+      # Exclude ineffassign for test files
+      - linters:
+          - ineffassign
+        path: _test\.go
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

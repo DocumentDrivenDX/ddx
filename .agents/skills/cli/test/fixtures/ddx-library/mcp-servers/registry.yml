@@ -1,0 +1,11 @@
+version: 1.0.0
+updated: 2025-01-15T00:00:00Z
+servers:
+  - name: filesystem
+    file: servers/filesystem.yml
+    category: core
+    description: Access local files
+  - name: github
+    file: servers/github.yml
+    category: development
+    description: Access GitHub repositories

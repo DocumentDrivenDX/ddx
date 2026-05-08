@@ -1,0 +1,4 @@
+# ./cmd
+main module (github.com/easel/ddx) does not contain package github.com/easel/ddx/cmd
+FAIL	./cmd [setup failed]
+FAIL

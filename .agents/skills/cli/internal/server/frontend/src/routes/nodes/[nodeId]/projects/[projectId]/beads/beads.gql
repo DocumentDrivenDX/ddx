@@ -1,0 +1,18 @@
+query BeadsByProject($projectID: String!, $first: Int, $after: String) {
+	beadsByProject(projectID: $projectID, first: $first, after: $after) {
+		edges {
+			node {
+				id
+				title
+				status
+				priority
+			}
+			cursor
+		}
+		pageInfo {
+			hasNextPage
+			endCursor
+		}
+		totalCount
+	}
+}

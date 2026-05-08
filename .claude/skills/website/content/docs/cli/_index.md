@@ -1,119 +1,95 @@
 ---
 title: CLI Reference
 weight: 3
-# hand-curated; do not auto-regenerate
-# This page mirrors the CLI Command Overview in CLAUDE.md. The auto-generated
-# per-command pages live under /docs/cli/commands/ and are regenerated from the
-# Cobra command tree — this index is maintained by hand and must not be
-# overwritten by that regeneration process.
 ---
 
-<!-- hand-curated; do not auto-regenerate -->
+For the full auto-generated reference — one page per command with all flags and
+subcommands — see the [Command Reference](/docs/cli/commands/).
 
-This is a curated, noun-verb tour of the `ddx` CLI. For the full
-auto-generated reference — one page per command with every flag and
-subcommand — see the [Complete command reference](/docs/cli/commands/).
+## Quick Reference
 
-## Core
-
-Lifecycle and health of a DDx-enabled project.
+### Setup
 
 ```bash
-ddx init              # Initialize DDx in a project
-ddx doctor            # Check installation health and diagnose issues
-ddx upgrade           # Upgrade DDx binary to latest release version
-ddx update            # Update toolkit resources from master repository
-ddx contribute        # Share improvements back to community
-ddx status            # Show version and sync status
+ddx init              # Initialize DDx in your project
+ddx install helix     # Install a workflow plugin
+ddx doctor            # Check installation health
+ddx upgrade           # Upgrade DDx binary
 ```
 
-## Bead Tracker
+### Beads (Work Tracker)
 
-Beads are work items with dependencies, claims, and status. The tracker is
-the substrate workflow tools (like HELIX) drive execution against.
+The bead tracker is the core of DDx. Beads are work items with dependencies,
+claims, and status. Workflow tools like HELIX use beads to drive execution.
 
 ```bash
-# CRUD
 ddx bead create "Title" --type task
-ddx bead show <id>
-ddx bead update <id> --claim
-ddx bead close <id>
-
-# Query and filter
 ddx bead list
+ddx bead show <id>
 ddx bead ready              # unblocked beads
 ddx bead blocked            # beads waiting on deps
-ddx bead status
-
-# Dependency DAG
+ddx bead update <id> --claim
+ddx bead close <id>
 ddx bead dep add <id> <dep>
-ddx bead dep remove <id> <dep>
 ddx bead dep tree <id>
-
-# JSONL interchange with bd / br
-ddx bead import <file>
-ddx bead export
 ```
 
-## Queue Work
+### Execution Engine
 
-Primary execution surface for draining the bead queue end-to-end.
+Define reusable execution definitions and run them with recorded evidence.
 
 ```bash
-ddx work                    # drain the bead execution queue
-ddx try <id>                # attempt one bead in an isolated worktree
-ddx run --prompt <file>     # invoke the agent once
+ddx exec define <name> --artifact <id> --command "go test ./..."
+ddx exec run <id>
+ddx exec list
+ddx exec history --artifact <id>
+ddx exec result <run-id>
+ddx exec log <run-id>
 ```
 
-## Agent Diagnostics
-
-Inspect harness health, session logs, routing, and provider availability.
-The `ddx agent` namespace is a diagnostics surface; use `ddx run`, `ddx try`,
-and `ddx work` for execution.
+### Agent Dispatch
 
 ```bash
-ddx agent list              # available harnesses
-ddx agent doctor            # harness health check
-ddx agent log               # session history
-ddx agent capabilities      # model and reasoning-level capabilities
-ddx agent providers         # configured providers with live status
+ddx agent run --harness claude --prompt file.md
+ddx agent run --quorum majority --harnesses codex,claude --text "Review this"
+ddx agent list
+ddx agent usage
+ddx agent capabilities claude
 ```
 
-## Resource Commands
-
-Browse and apply the document-library resources DDx ships and syncs.
+### Package Registry
 
 ```bash
-ddx prompts list
-ddx prompts show <name>
-
-ddx templates list
-ddx templates apply <name>
-
-ddx persona list
-ddx persona show <name>
-ddx persona bind <role> <persona>
-
-ddx mcp list
-ddx mcp install <name>
+ddx search <query>
+ddx install <name>
+ddx installed
+ddx uninstall <name>
 ```
 
-## Embedded Utilities
-
-Utilities that ship inside the `ddx` binary so projects don't need extra
-tooling on PATH.
+### Documents
 
 ```bash
-ddx jq <filter> [file...]   # embedded jq processor (via gojq)
+ddx doc history <id>
+ddx doc changed --since HEAD~5
+ddx checkpoint <name>
+ddx list
 ```
 
-## Global Flags
+### Configuration
+
+```yaml
+# .ddx/config.yaml
+agent:
+  harness: claude
+  permissions: safe         # safe | supervised | unrestricted
+git:
+  auto_commit: never        # always | prompt | never
+```
+
+### Global Flags
 
 | Flag | Description |
 |------|------------|
 | `-v` | Verbose output |
 | `--config` | Config file path |
 | `--help` | Show help |
-
-For every command, subcommand, and flag, see the
-[Complete command reference](/docs/cli/commands/).

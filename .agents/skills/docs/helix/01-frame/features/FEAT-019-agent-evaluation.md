@@ -7,15 +7,6 @@ ddx:
     - FEAT-006
     - FEAT-012
     - FEAT-014
-  review:
-    self_hash: 759bc56c7861a6ece601bc816c7728cd556385a1db93d495d0ecfe12d99065fc
-    deps:
-      FEAT-004: c22477641ea9d36c86b5132565da9b74f67759febfd0d856cbf10f0ecda60ccb
-      FEAT-006: f13f1e4abdd9623083aa2728767f243b394bbe670f70fdbc5b8bba7543712d67
-      FEAT-012: ed84dc5da4811a03067da2eed91c69331d24bd96196c4f9d5cede1fbbd4cb4e4
-      FEAT-014: fce79206a02c26dcc097618073f82a4e73d749c2775201a4bc9cc0e616dc142f
-      helix.prd: e0c67dbc961e1ff48dbe6f025f293f7cff523bc141e74d8bf0dcd067835254a2
-    reviewed_at: "2026-05-05T15:03:29Z"
 ---
 # Feature: DDx Agent Evaluation and Prompt Comparison
 

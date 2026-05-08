@@ -1,0 +1,10 @@
+subscription WorkerProgress($workerID: ID!) {
+	workerProgress(workerID: $workerID) {
+		eventID
+		workerID
+		phase
+		timestamp
+		logLine
+		beadID
+	}
+}

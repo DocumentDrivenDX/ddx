@@ -1,0 +1,6 @@
+query NodeInfo {
+	nodeInfo {
+		id
+		name
+	}
+}

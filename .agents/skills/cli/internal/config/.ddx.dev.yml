@@ -1,0 +1,7 @@
+repository:
+  branch: "develop"
+includes:
+  - "env1"
+variables:
+  log_level: "debug"
+  env_only: "env_value"

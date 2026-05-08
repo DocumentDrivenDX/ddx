@@ -45,7 +45,7 @@ More information:
 
 ### SEE ALSO
 
-* [ddx agent](/docs/cli/commands/ddx_agent/)	 - Agent diagnostics and legacy command namespace
+* [ddx agent](/docs/cli/commands/ddx_agent/)	 - Invoke AI agents with harness dispatch, quorum, and session logging
 * [ddx bead](/docs/cli/commands/ddx_bead/)	 - Manage beads (portable work items)
 * [ddx checkpoint](/docs/cli/commands/ddx_checkpoint/)	 - Create, list, or restore named git checkpoints
 * [ddx completion](/docs/cli/commands/ddx_completion/)	 - Generate completion script
