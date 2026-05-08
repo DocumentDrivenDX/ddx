@@ -104,6 +104,45 @@ fi
 command -v ddx >/dev/null 2>&1 || fail "ddx binary not on PATH; routing eval needs it"
 command -v jq >/dev/null 2>&1 || fail "jq required for reading routing.jsonl"
 
+# --- Fixture schema validation ---
+
+info "==> Validating routing fixture schema ($EVAL_FILE)"
+
+schema_fail=0
+row_count=0
+while IFS= read -r line; do
+  [[ -z "$line" ]] && continue
+  row_count=$((row_count + 1))
+  for field in phrase mode references queue_commands tracker_mutation_allowed code_edits_allowed expected_next_action; do
+    if ! echo "$line" | jq -e "has(\"$field\")" >/dev/null 2>&1; then
+      echo "  SCHEMA FAIL row $row_count: missing field '$field'" >&2
+      schema_fail=1
+    fi
+  done
+  # references and queue_commands must be arrays
+  for arr_field in references queue_commands; do
+    arr_type="$(echo "$line" | jq -r ".${arr_field} | type" 2>/dev/null)"
+    if [[ "$arr_type" != "array" ]]; then
+      echo "  SCHEMA FAIL row $row_count: '$arr_field' must be an array (got $arr_type)" >&2
+      schema_fail=1
+    fi
+  done
+  # tracker_mutation_allowed and code_edits_allowed must be booleans
+  for bool_field in tracker_mutation_allowed code_edits_allowed; do
+    bool_type="$(echo "$line" | jq -r ".${bool_field} | type" 2>/dev/null)"
+    if [[ "$bool_type" != "boolean" ]]; then
+      echo "  SCHEMA FAIL row $row_count: '$bool_field' must be a boolean (got $bool_type)" >&2
+      schema_fail=1
+    fi
+  done
+done < "$EVAL_FILE"
+
+[[ "$schema_fail" -eq 0 ]] || fail "routing.jsonl schema validation failed"
+[[ "$row_count" -ge 15 ]] || fail "routing.jsonl must have at least 15 rows (got $row_count)"
+info "✓ Fixture schema valid ($row_count rows)"
+
+# --- Harness routing eval ---
+
 info "==> Running routing evals against harnesses: $HARNESSES"
 
 fail_count=0
@@ -113,8 +152,8 @@ IFS=',' read -ra harness_list <<< "$HARNESSES"
 while IFS= read -r line; do
   [[ -z "$line" ]] && continue
   phrase="$(echo "$line" | jq -r '.phrase')"
-  expected_ref="$(echo "$line" | jq -r '.expected_reference')"
-  expected_cli="$(echo "$line" | jq -r '.expected_cli')"
+  mode="$(echo "$line" | jq -r '.mode')"
+  expected_next_action="$(echo "$line" | jq -r '.expected_next_action')"
 
   for h in "${harness_list[@]}"; do
     # Skip harnesses that aren't available (avoid spurious failures in CI)
@@ -124,12 +163,37 @@ while IFS= read -r line; do
     fi
 
     response="$(ddx agent run --harness "$h" --text "$phrase" 2>&1 || true)"
-    if echo "$response" | grep -qF "$expected_ref" \
-      || echo "$response" | grep -qF "$expected_cli"; then
+
+    # Check if response mentions any reference file from the fixture
+    matched=0
+    while IFS= read -r ref; do
+      [[ -z "$ref" ]] && continue
+      if echo "$response" | grep -qF "$ref"; then
+        matched=1
+        break
+      fi
+    done < <(echo "$line" | jq -r '.references[]' 2>/dev/null)
+
+    # If no ref matched, check queue_commands
+    if [[ "$matched" -eq 0 ]]; then
+      while IFS= read -r cmd; do
+        [[ -z "$cmd" ]] && continue
+        if echo "$response" | grep -qF "$cmd"; then
+          matched=1
+          break
+        fi
+      done < <(echo "$line" | jq -r '.queue_commands[]' 2>/dev/null)
+    fi
+
+    if [[ "$matched" -eq 1 ]]; then
       pass_count=$((pass_count+1))
     else
       fail_count=$((fail_count+1))
-      echo "  ✗ [$h] '$phrase' — expected hint of '$expected_ref' or '$expected_cli'" >&2
+      refs_str="$(echo "$line" | jq -r '[.references[]] | join(", ")' 2>/dev/null)"
+      cmds_str="$(echo "$line" | jq -r '[.queue_commands[]] | join(", ")' 2>/dev/null)"
+      echo "  ✗ [$h] '$phrase' (mode=$mode, next=$expected_next_action)" >&2
+      echo "      expected ref in: ${refs_str:-none}" >&2
+      echo "      expected cmd in: ${cmds_str:-none}" >&2
     fi
   done
 done < "$EVAL_FILE"

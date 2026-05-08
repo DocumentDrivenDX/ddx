@@ -1,5 +1,20 @@
 # Review — Bead Review and Quorum Review
 
+## Mode note
+
+This reference covers **explicit `review` mode**: requests that name review as
+the primary action — "review this", "check against spec", `ddx bead review <id>`.
+
+If the user said "review with fresh eyes", "fold in this guidance and review
+again", or any broad orientation phrase, they are in **`interactive-steward`**
+mode — see `reference/interactive.md` for the fresh-eyes review and fold-guidance
+phases. Multi-harness adversarial review is consent-gated in steward mode.
+
+Review mode is **read-only** by default. Code edits only happen if the user
+explicitly requests fixes after seeing the findings.
+
+---
+
 DDx has two distinct review concepts. They are **not interchangeable**.
 
 | Concept | Command | What it does |

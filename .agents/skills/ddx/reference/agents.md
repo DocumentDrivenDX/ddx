@@ -40,13 +40,12 @@ constraints:
 ddx run --min-power 10 --model qwen3.6-27b --prompt task.md
 ```
 
-DDx sends these values to Fizeau unchanged. DDx does not validate them, score
-them, use them for queue policy, rewrite them on retry, or use them as a
-fallback mechanism. For example, `ddx run --model qwen36 --prompt task.md`
-passes the raw model string `qwen36` through unchanged. If the values conflict
-with requested power bounds or availability, Fizeau owns the typed error or
-actual route. DDx stops on hard-pin exhaustion; it does not remove pins, widen
-pins, call `ResolveRoute`, or retry in a loop.
+DDx sends these values to Fizeau unchanged. DDx does not validate them,
+score them, use them for queue policy, rewrite them on retry, or use them as a
+fallback mechanism. If the values conflict with requested power bounds or
+availability, Fizeau owns the typed error or actual route. DDx stops on
+hard-pin exhaustion; it does not remove pins, widen pins, call `ResolveRoute`,
+or retry in a loop.
 
 ## Execution layering
 
@@ -141,8 +140,7 @@ See the personas README for the authoring quality bar.
 
 - **Stacking power bounds and `--model` / `--harness` casually**. Normal DDx
   work should request `MinPower`. Use passthrough pins only for explicit
-  operator constraints; DDx must not interpret them. Raw strings such as
-  `qwen36` are forwarded unchanged and matched in Fizeau.
+  operator constraints; DDx must not interpret them.
 - **Hardcoding a harness name in a workflow**. Workflow should
   dispatch by power or role binding; letting each project route through its
   agent configuration is the point of DDx's agent boundary.

@@ -1,5 +1,18 @@
 # Work — Drain the Queue, Execute, Verify, Close
 
+## Mode note
+
+This reference covers **`bead_execution` mode**: explicit worker commands such as
+`ddx work`, `ddx try <id>`, "execute bead `<id>`", or "start the worker".
+
+If the user said "what should I work on next?", "what's blocking the queue?", or
+"work the queue" without an explicit bead ID or `ddx work` command, they are in
+**`interactive-steward`** mode — see `reference/interactive.md`. The steward
+plans; the worker executes. Do not instruct manual ready-bead implementation in
+response to broad orientation prompts.
+
+---
+
 "Doing work" in DDx means draining the ready queue: pick the top ready bead,
 run one or more `ddx try` attempts, verify the result, and close the bead on
 success or leave it available for a future eligible retry.
