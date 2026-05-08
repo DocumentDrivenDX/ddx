@@ -119,10 +119,11 @@ documents. Better documents produce better code, every time.
   in the repository.
 - **Bead tracker** — work items with a dependency DAG, ready/blocked queues,
   and JSONL interchange. Beads are the unit of work agents execute.
-- **Agent service** — unified harness dispatch (Claude, Codex, Gemini, local
-  models) with quorum review, session logging, and a single prompt envelope.
-- **Execute-loop** — drain the bead queue with isolated worktrees, automatic
-  review, and recovery. Cheap models do, strong models review.
+- **Agent service** — harness dispatch via `ddx run` (Claude, Codex, Gemini,
+  local models) with session logging and a single prompt envelope. Comparison
+  and adversarial review compose `ddx run` at the skill layer.
+- **Queue drain** — `ddx work` drains the bead queue with isolated worktrees,
+  automatic review, and recovery. `ddx try` handles one bead attempt.
 - **Project-local install** — `ddx init` and `ddx install <plugin>` only touch
   `<projectRoot>`. The only global artifact is `ddx-server`.
 - **Single `ddx` skill** — one consolidated skill, not a fleet. One surface

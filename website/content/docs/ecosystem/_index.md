@@ -88,7 +88,7 @@ model. Beads, documents, and skills are consumed by agents you bring.
 
 | Agent class | Examples | How DDx talks to it |
 |-------------|----------|--------------------|
-| Hosted frontier | Claude (Anthropic), GPT (OpenAI), Gemini (Google) | Provider SDKs via `ddx agent run` |
+| Hosted frontier | Claude (Anthropic), GPT (OpenAI), Gemini (Google) | Provider SDKs via `ddx run` |
 | Coding harnesses | Claude Code, Codex, Cursor agents | Harness adapters configured per project |
 | Local / self-hosted | Ollama, llama.cpp, vLLM-served models | OpenAI-compatible endpoints |
 | MCP clients | Any MCP-aware host | `ddx-server` exposes documents and beads |
