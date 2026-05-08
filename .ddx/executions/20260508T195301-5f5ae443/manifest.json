@@ -1,0 +1,51 @@
+{
+  "attempt_id": "20260508T195301-5f5ae443",
+  "bead_id": "ddx-ea91688b",
+  "base_rev": "ede01178ab2f1a645ff9f8a15b4e43dab8939bfa",
+  "created_at": "2026-05-08T19:53:04.764532789Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ea91688b",
+    "title": "agent: stop synthesizing default routing profile from empty input",
+    "description": "PROBLEM\nDDx synthesizes a `default` routing profile for any operator who does not pass `--profile`, then sends `Profile=\"default\"` to fizeau. Fizeau's `default` profile (`fizeau/internal/modelcatalog/catalog/models.yaml:438-443`) hard-pins `min_power: 7, max_power: 8`. For operators whose model catalog has no power-7-or-8 entries — e.g., local providers (power 5–6) plus frontier cloud (power 9) — `routePowerPolicyForRequest` overlays those bounds and the routing engine rejects every candidate as `below_min_power` or `above_max_power`. Result: zero-config `ddx work` claims a bead, dispatches with empty intent, fizeau returns \"no viable routing candidate,\" and the agent exits in \u003c1s with `no_evidence_produced`. Power was meant to be a hint, not a gate; synthesizing a constraint the operator never asked for inverts that policy. Repro: in this repo with no flags, `ddx work --once` triggers the dispatch-failure on hooks today and would trigger it on the implementation dispatch too if explicit `--harness/--model` flags weren't bypassing the bound via fizeau's exact-pin escape (`routePowerBoundsForRequest`).\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/routing_profile.go:9-15` returns the constant `\"default\"` whenever the operator-supplied profile is empty.\n- `cli/cmd/work.go:70` registers the `--profile` flag with default value `agent.DefaultRoutingProfile`, so cobra fills in `\"default\"` even when the operator omits the flag.\n- `cli/cmd/try.go:86` does the same for `ddx try`.\n- `cli/cmd/run.go:137`, `cli/cmd/agent_cmd.go:298`, `cli/cmd/agent_cmd.go:1613`, `cli/cmd/try.go:215`, and `cli/internal/server/workers.go:{303,409,705}` all call `NormalizeRoutingProfile`, inheriting the synthesis.\n- Downstream fizeau gating: `routePowerPolicyForRequest` (`fizeau/service_routing.go:1117-1141`) returns zero bounds only when `req.Profile == \"\"`; any non-empty profile string causes a catalog lookup that overlays its `min_power`/`max_power` onto the request.\n\nPROPOSED FIX\n- Change `NormalizeRoutingProfile` to return the trimmed input as-is; an empty operator value stays empty. Keep the function (callers want trim+normalize), drop the synthesis branch.\n- Remove the `DefaultRoutingProfile = \"default\"` constant, or repurpose it strictly for the help-text label rather than a runtime default. Update `cli/cmd/work.go:70` and `cli/cmd/try.go:86` so the cobra flag's default is `\"\"` and the help string reads \"Routing profile: cheap, fast, smart (empty = unconstrained, let the agent service choose)\".\n- Audit every caller of `NormalizeRoutingProfile` to confirm they tolerate `\"\"` (today they all forward the value into `CLIOverrides.Profile` or a workers spec — empty is already valid downstream).\n- After this change, zero-config `ddx work` sends `Profile=\"\"` → fizeau applies no profile-derived power bound → routing picks any available model regardless of power tier, honoring the \"power is a hint\" policy.\n- The pre-dispatch lint and post-attempt triage hooks (`lint_hook.go`, `triage_hook.go`) still need `ClearProfile: true` so they ignore an explicitly operator-set `--profile fast`/`--profile standard` (those profiles also pin power 7-8); that defensive change is tracked in ddx-c54b817c and remains correct.\n\nNON-SCOPE\n- Do not change fizeau's `default` profile or its power-gating semantics; making power bounds advisory rather than hard is a fizeau-side change and out of scope here.\n- Do not change `--min-power`/`--max-power` flag handling. When the operator explicitly asks for a power bound, honor it; this bead only stops DDx from inventing one.\n- Do not remove `cheap`/`fast`/`smart`/`standard` profile values — they remain available as explicit operator opt-ins.\n- Do not modify ddx-c54b817c's hook-level fix; it is independently defensive against operator-set profiles.\n\nPARENT + DEPS\nNo parent. No deps. ddx-c54b817c is sibling/defensive; both can land in either order.",
+    "acceptance": "1. `cli/internal/agent/routing_profile.go` `NormalizeRoutingProfile(\"\")` returns `\"\"` (not `\"default\"`), and `NormalizeRoutingProfile(\"  \")` also returns `\"\"`.\n2. `cli/cmd/work.go` and `cli/cmd/try.go` register the `--profile` cobra flag with default value `\"\"` and help text that documents the empty default as \"unconstrained\".\n3. New test `TestNormalizeRoutingProfile_EmptyStaysEmpty` in `cli/internal/agent/routing_profile_test.go` asserts `NormalizeRoutingProfile(\"\")` and `NormalizeRoutingProfile(\"  \")` both return `\"\"`, and that non-empty inputs are trimmed but otherwise preserved.\n4. New test `TestZeroConfigWork_DispatchesWithEmptyProfile` in `cli/cmd/agent_run_passthrough_test.go` (or a sibling) drives `ddx work` with no `--profile`, no `--harness`, no `--model`, no `--min-power`, no `--max-power`, captures the dispatched `ServiceExecuteRequest` via the existing `executeCapturingStub`, and asserts `req.Profile == \"\"` and `req.MinPower == 0` and `req.MaxPower == 0`.\n5. New test `TestZeroConfigTry_DispatchesWithEmptyProfile` mirrors AC 4 for `ddx try`.\n6. Existing tests that asserted `profile == \"default\"` (search `cli/` for `\"default\"` in profile contexts) are updated to assert `\"\"` for the no-flag case while still asserting `\"default\"` only when the operator explicitly passes `--profile default`.\n7. `cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... -run \"TestNormalizeRoutingProfile|TestZeroConfigWork|TestZeroConfigTry|TestRunCommand|TestRunPassthrough|TestWorkPassthrough|TestTryPassthrough|TestProfile\" -count=1` passes.\n8. `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... ./internal/server/...` green.\n9. `lefthook run pre-commit` passes.",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:routing",
+      "area:cli",
+      "kind:bug",
+      "reliability",
+      "operator-ux",
+      "spec:FEAT-010"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-08T19:52:21Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1636313",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: canceled: context canceled\"}",
+          "created_at": "2026-05-08T19:53:01.662610661Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-08T19:52:21.292504514Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260508T195301-5f5ae443",
+    "prompt": ".ddx/executions/20260508T195301-5f5ae443/prompt.md",
+    "manifest": ".ddx/executions/20260508T195301-5f5ae443/manifest.json",
+    "result": ".ddx/executions/20260508T195301-5f5ae443/result.json",
+    "checks": ".ddx/executions/20260508T195301-5f5ae443/checks.json",
+    "usage": ".ddx/executions/20260508T195301-5f5ae443/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-ea91688b-20260508T195301-5f5ae443"
+  },
+  "prompt_sha": "0e6bbce403a1bfff98704ef277da33cd720989dfd76afda7e5ae6c860937fe9e"
+}
