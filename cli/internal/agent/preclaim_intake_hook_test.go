@@ -158,12 +158,12 @@ func TestDecompositionHook_UsesStrongMinPower(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 	assert.Contains(t, svc.lastReq.Prompt, "MODE: intake")
 	assert.Equal(t, root, svc.lastReq.WorkDir)
-	assert.Equal(t, "smart", svc.lastReq.ModelRef)
-	assert.Empty(t, svc.lastReq.Profile)
+	assert.Empty(t, svc.lastReq.ModelRef)
+	assert.Equal(t, "smart", svc.lastReq.Profile)
 	assert.GreaterOrEqual(t, svc.lastReq.MinPower, 94)
 }
 
-func TestDecompositionHook_CatalogUnavailableUsesSmartModelRefWithoutMagicPower(t *testing.T) {
+func TestDecompositionHook_CatalogUnavailableUsesSmartProfileWithoutMagicPower(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
@@ -176,8 +176,8 @@ func TestDecompositionHook_CatalogUnavailableUsesSmartModelRefWithoutMagicPower(
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
-	assert.Equal(t, "smart", svc.lastReq.ModelRef)
-	assert.Empty(t, svc.lastReq.Profile)
+	assert.Empty(t, svc.lastReq.ModelRef)
+	assert.Equal(t, "smart", svc.lastReq.Profile)
 	assert.Zero(t, svc.lastReq.MinPower)
 }
 
@@ -196,15 +196,15 @@ func TestDecompositionHook_AcceptsStringConfidence(t *testing.T) {
 	assert.Equal(t, "ready despite string confidence", got.Detail)
 }
 
-func TestDecompositionHook_SmartModelRefUnavailableFallsBackToAutoRoute(t *testing.T) {
+func TestDecompositionHook_SmartProfileUnavailableFallsBackToAutoRoute(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
 	svc := &preClaimIntakeHookServiceStub{}
 	svc.executeFunc = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 		ch := make(chan agentlib.ServiceEvent, 1)
-		if req.ModelRef == "smart" {
-			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":1,"error":"ResolveRoute: no live provider supports model_ref=smart"}`)}
+		if req.Profile == "smart" {
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":1,"error":"ResolveRoute: no live provider supports profile=smart"}`)}
 			close(ch)
 			return ch, nil
 		}
@@ -249,8 +249,8 @@ func TestDecompositionHook_PreservesPassthroughConstraints(t *testing.T) {
 	assert.Equal(t, "claude", svc.lastReq.Harness)
 	assert.Equal(t, "anthropic", svc.lastReq.Provider)
 	assert.Equal(t, "claude-sonnet-4-6", svc.lastReq.Model)
-	assert.Equal(t, "smart", svc.lastReq.ModelRef)
-	assert.Empty(t, svc.lastReq.Profile)
+	assert.Empty(t, svc.lastReq.ModelRef)
+	assert.Equal(t, "smart", svc.lastReq.Profile)
 	assert.GreaterOrEqual(t, svc.lastReq.MinPower, 96)
 }
 

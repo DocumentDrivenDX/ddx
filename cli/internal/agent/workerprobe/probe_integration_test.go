@@ -40,7 +40,7 @@ func TestWorker_RealAttemptEvents_FlowToServer(t *testing.T) {
 	// the fixture, avoiding two builds.
 	binDir := t.TempDir()
 	binPath := filepath.Join(binDir, "ddx")
-	build := exec.Command("go", "build", "-o", binPath, ".")
+	build := exec.Command("go", "build", "-buildvcs=false", "-o", binPath, ".")
 	build.Dir = repoCLIDir(t)
 	if out, err := build.CombinedOutput(); err != nil {
 		t.Fatalf("go build ddx: %v\n%s", err, out)

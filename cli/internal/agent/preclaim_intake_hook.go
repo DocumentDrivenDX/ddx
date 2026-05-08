@@ -94,12 +94,11 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 		}
 
 		runtime := AgentRunRuntime{
-			Prompt:           prompt,
-			WorkDir:          projectRoot,
-			PromptSource:     PreClaimIntakePromptSource,
-			ModelRefOverride: "smart",
-			ClearProfile:     true,
-			ClearMaxPower:    true,
+			Prompt:          prompt,
+			WorkDir:         projectRoot,
+			PromptSource:    PreClaimIntakePromptSource,
+			ProfileOverride: "smart",
+			ClearMaxPower:   true,
 		}
 		if strongMinPower > 0 {
 			runtime.MinPowerOverride = strongMinPower
@@ -124,11 +123,11 @@ func dispatchPreClaimIntakePayload(ctx context.Context, projectRoot string, svc 
 	if err == nil {
 		return payload, nil
 	}
-	if runtime.ModelRefOverride != "smart" || strongMinPower > 0 || !isSmartRouteUnavailableError(err) {
+	if runtime.ProfileOverride != "smart" || strongMinPower > 0 || !isSmartRouteUnavailableError(err) {
 		return "", err
 	}
 
-	runtime.ModelRefOverride = ""
+	runtime.ProfileOverride = ""
 	return dispatchPreClaimIntakePayloadOnce(ctx, projectRoot, svc, runner, rcfg, runtime)
 }
 
