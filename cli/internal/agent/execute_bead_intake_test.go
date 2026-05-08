@@ -428,6 +428,128 @@ func TestIntake_UnsafeRewriteBlocksForHuman(t *testing.T) {
 
 	got, err := inner.Get(candidate.ID)
 	require.NoError(t, err)
-	assert.NotContains(t, got.Description, "invented product semantics")
+	assert.Equal(t, bead.StatusOpen, got.Status, "rejected rewrite must leave bead open")
+	assert.NotContains(t, got.Description, "invented product semantics", "original description must be preserved")
 	assert.Equal(t, "1. preserve the original intent\n2. name the verification command", got.Acceptance)
+	assert.Contains(t, got.Labels, bead.LabelNeedsHuman, "rejected rewrite must add needs_human label")
+
+	events, err := inner.Events(candidate.ID)
+	require.NoError(t, err)
+	var foundIntakeBlocked bool
+	for _, ev := range events {
+		if ev.Kind != "intake.blocked" {
+			continue
+		}
+		foundIntakeBlocked = true
+		var body map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+		assert.Equal(t, "ambiguous_needs_human", body["intake_outcome"])
+	}
+	assert.True(t, foundIntakeBlocked, "rejected rewrite must append intake.blocked event to bead")
+}
+
+func TestIntake_UnsafeRewriteRemovedFromReadyExecution(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+		b.Description = "PROBLEM\noriginal description\n\nROOT CAUSE\nsome cause\n"
+		b.Acceptance = "1. verify something\n2. run tests"
+	}))
+
+	store := &claimCountingStore{Store: inner}
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatal("executor must not run for unsafe rewrites")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome: PreClaimIntakeActionableButRewritten,
+				Detail:  "rewrote description without preserving original",
+				Rewrite: PreClaimIntakeRewrite{
+					Description:   "PROBLEM\ncompletely different description\n",
+					Acceptance:    "1. verify something\n2. run tests",
+					ChangedFields: []string{"description"},
+				},
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+
+	ready, err := inner.ReadyExecution()
+	require.NoError(t, err)
+	for _, b := range ready {
+		if b.ID == candidate.ID {
+			t.Fatalf("parked bead %s must not appear in ReadyExecution after unsafe rewrite rejection", candidate.ID)
+		}
+	}
+}
+
+func TestIntake_DescriptionPreservationFailureParksForHuman(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+		b.Description = "PROBLEM\noriginal problem text\n\nROOT CAUSE\nexact root cause\n"
+		b.Acceptance = "1. check the output\n2. run lefthook"
+	}))
+
+	store := &claimCountingStore{Store: inner}
+	var logBuf bytes.Buffer
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatal("executor must not run for description preservation failures")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		Log:  &logBuf,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome: PreClaimIntakeActionableButRewritten,
+				Detail:  "description must preserve original text",
+				Rewrite: PreClaimIntakeRewrite{
+					Description:   "PROBLEM\ncompletely different text that drops original\n",
+					Acceptance:    "1. check the output\n2. run lefthook",
+					ChangedFields: []string{"description"},
+				},
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 0, result.Attempts)
+
+	got, err := inner.Get(candidate.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status, "bead must remain open after description preservation failure")
+	assert.Contains(t, got.Labels, bead.LabelNeedsHuman, "description preservation failure must add needs_human label")
+	assert.Contains(t, got.Description, "original problem text", "original description must not be overwritten")
+
+	events, err := inner.Events(candidate.ID)
+	require.NoError(t, err)
+	var foundBlocked bool
+	for _, ev := range events {
+		if ev.Kind != "intake.blocked" {
+			continue
+		}
+		foundBlocked = true
+		var body map[string]any
+		require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+		assert.Equal(t, "ambiguous_needs_human", body["intake_outcome"])
+		assert.Contains(t, fmt.Sprintf("%v", body["detail"]), "description must preserve original text")
+	}
+	assert.True(t, foundBlocked, "description preservation failure must append intake.blocked event")
+	assert.Contains(t, logBuf.String(), "parking")
 }

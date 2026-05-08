@@ -768,13 +768,16 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				if err := applyPreClaimIntakeRewrite(w.Store, candidate.ID, assignee, intakeResult, now().UTC()); err != nil {
 					warning := trimDiagnosticPrefix(err.Error(), "pre-claim intake rewrite")
 					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake rewrite: %s (releasing %s)\n", warning, candidate.ID)
+						_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake rewrite: %s (parking %s for human review)\n", warning, candidate.ID)
 					}
 					emit("pre_claim_intake.blocked", map[string]any{
 						"bead_id": candidate.ID,
 						"outcome": string(PreClaimIntakeAmbiguousNeedsHuman),
 						"detail":  warning,
 					})
+					if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeAmbiguousNeedsHuman, warning, now().UTC()); berr != nil && runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "pre-claim intake park error: %v\n", berr)
+					}
 					_ = w.Store.Unclaim(candidate.ID)
 					if runtime.Once {
 						applyStop(work.StopInput{Once: true})
