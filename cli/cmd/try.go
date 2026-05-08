@@ -83,7 +83,7 @@ Exit codes:
 	cmd.Flags().String("from", "", "Base git revision to start from (default: HEAD)")
 	cmd.Flags().String("harness", "", "Agent harness constraint (passthrough; ddx try does not validate)")
 	cmd.Flags().String("model", "", "Model constraint (passthrough; ddx try does not validate)")
-	cmd.Flags().String("profile", agent.DefaultRoutingProfile, "Routing profile: default, cheap, fast, or smart")
+	cmd.Flags().String("profile", "", "Routing profile: default, cheap, fast, or smart (empty = unconstrained; let the agent service choose)")
 	cmd.Flags().String("provider", "", "Provider constraint (passthrough; ddx try does not validate)")
 	cmd.Flags().String("model-ref", "", "Model catalog reference (e.g. code-medium); resolved via the model catalog")
 	cmd.Flags().String("effort", "", "Effort level")
@@ -235,17 +235,12 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				}
 			}
 
-			attemptProfile := profile
-			if autoInferTier && inferredTier != "" {
-				attemptProfile = escalation.TierToProfile(inferredTier)
-			}
-
 			loopOverrides := config.CLIOverrides{
 				Harness:           harness,
 				Model:             model,
 				Provider:          provider,
 				ModelRef:          modelRef,
-				Profile:           attemptProfile,
+				Profile:           profile,
 				Effort:            effort,
 				MinPower:          minPower,
 				MaxPower:          maxPower,

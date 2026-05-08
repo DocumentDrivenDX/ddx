@@ -30,6 +30,8 @@ type executeCapturingStub struct {
 	mu            sync.Mutex
 	executeCalled bool
 	lastReq       agentlib.ServiceExecuteRequest
+	executionReq  agentlib.ServiceExecuteRequest
+	executionSeen bool
 	executeFn     func(agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
 }
 
@@ -37,6 +39,10 @@ func (s *executeCapturingStub) Execute(_ context.Context, req agentlib.ServiceEx
 	s.mu.Lock()
 	s.executeCalled = true
 	s.lastReq = req
+	if req.Role == "implementer" {
+		s.executionReq = req
+		s.executionSeen = true
+	}
 	s.mu.Unlock()
 	if s.executeFn != nil {
 		return s.executeFn(req)
@@ -258,6 +264,48 @@ func TestWorkPassesEmptyHarnessToService(t *testing.T) {
 	}
 	assert.Empty(t, lastReq.Harness,
 		"ddx work with no --harness must send empty Harness to service for engine auto-selection")
+}
+
+func TestZeroConfigWork_DispatchesWithEmptyProfile(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	stub := installExecuteCapturingStub(t)
+
+	dir := setupWorkIntakeFixture(t)
+	root := NewCommandFactory(dir).NewRootCommand()
+	_, _ = executeCommand(root, "work", "--once", "--no-review", "--no-review-i-know-what-im-doing")
+
+	stub.mu.Lock()
+	executionSeen := stub.executionSeen
+	executionReq := stub.executionReq
+	stub.mu.Unlock()
+
+	require.True(t, executionSeen, "ddx work must reach the implementation dispatch")
+	assert.Empty(t, executionReq.Profile)
+	assert.Zero(t, executionReq.MinPower)
+	assert.Zero(t, executionReq.MaxPower)
+}
+
+func TestZeroConfigTry_DispatchesWithEmptyProfile(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	stub := installExecuteCapturingStub(t)
+
+	dir := setupWorkIntakeFixture(t)
+	factory := NewCommandFactory(dir)
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
+	root := factory.NewRootCommand()
+	_, _ = executeCommand(root, "try", "ddx-intake-test", "--no-review", "--no-review-i-know-what-im-doing")
+
+	stub.mu.Lock()
+	executionSeen := stub.executionSeen
+	executionReq := stub.executionReq
+	stub.mu.Unlock()
+
+	require.True(t, executionSeen, "ddx try must reach the implementation dispatch")
+	assert.Empty(t, executionReq.Profile)
+	assert.Zero(t, executionReq.MinPower)
+	assert.Zero(t, executionReq.MaxPower)
 }
 
 func TestDDxWork_WiresPreClaimIntakeHook(t *testing.T) {
