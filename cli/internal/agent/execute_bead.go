@@ -595,6 +595,28 @@ func synthesizeCommitExcludePathspecs(dir string) []string {
 			pathspec:    ":(exclude).ddx/executions/*/no_changes_rationale.txt",
 			ignoreProbe: ".ddx/executions/.ddx-check-ignore/no_changes_rationale.txt",
 		},
+		// Exclude DDx-managed evidence bundle files written to the attempt
+		// worktree by execute_bead.go itself. These are committed separately by
+		// commitEvidenceBundleInWorktree and must not appear in the agent's code
+		// commit (which SynthesizeCommit creates). Prior to this worktree-evidence
+		// design, these files lived in projectRoot and were invisible to
+		// SynthesizeCommit (which runs in wtPath).
+		{
+			pathspec:    ":(exclude).ddx/executions/*/prompt.md",
+			ignoreProbe: ".ddx/executions/.ddx-check-ignore/prompt.md",
+		},
+		{
+			pathspec:    ":(exclude).ddx/executions/*/manifest.json",
+			ignoreProbe: ".ddx/executions/.ddx-check-ignore/manifest.json",
+		},
+		{
+			pathspec:    ":(exclude).ddx/executions/*/result.json",
+			ignoreProbe: ".ddx/executions/.ddx-check-ignore/result.json",
+		},
+		{
+			pathspec:    ":(exclude).ddx/executions/*/usage.json",
+			ignoreProbe: ".ddx/executions/.ddx-check-ignore/usage.json",
+		},
 		{
 			pathspec:    ":(exclude).claude/skills",
 			ignoreProbe: ".claude/skills",
@@ -990,6 +1012,19 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		_ = gitOps.WorktreeRemove(projectRoot, wtPath)
 	}()
 
+	// evidenceCommittedInWt is true when the evidence bundle was successfully
+	// committed inside the attempt worktree (normal success path). The deferred
+	// publish below is a no-op in that case; for all other paths it copies the
+	// bundle from wtPath to projectRoot so VerifyCleanWorktree can commit it.
+	evidenceDir := filepath.ToSlash(filepath.Join(ExecuteBeadArtifactDir, attemptID))
+	var evidenceCommittedInWt bool
+	defer func() {
+		// Runs BEFORE WorktreeRemove (registered later = first in LIFO order).
+		if !evidenceCommittedInWt {
+			publishEvidenceBundleToProjectRoot(projectRoot, wtPath, evidenceDir)
+		}
+	}()
+
 	// Publish the live run-state so operators and HELIX can observe what is
 	// executing without polling the bead tracker (CONTRACT-001 §5). The file
 	// is removed on completion; a crashed worker leaves a stale file that
@@ -1024,12 +1059,15 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			Error:     err.Error(),
 			Outcome:   ExecuteBeadOutcomeTaskFailed,
 		}
-		if abInfo, _ := os.Stat(filepath.Join(projectRoot, ExecuteBeadArtifactDir, attemptID)); abInfo != nil && abInfo.IsDir() {
+		// Bundle lives in the attempt worktree after the fix; check there.
+		wtBundleDir := filepath.Join(wtPath, ExecuteBeadArtifactDir, attemptID)
+		if abInfo, _ := os.Stat(wtBundleDir); abInfo != nil && abInfo.IsDir() {
 			res.ExecutionDir = filepath.Join(ExecuteBeadArtifactDir, attemptID)
 		}
 		res.FailureMode = ClassifyFailureMode(res.Outcome, res.ExitCode, res.Error)
 		populateWorkerStatus(res)
-		_ = writeArtifactJSON(filepath.Join(projectRoot, ExecuteBeadArtifactDir, attemptID, "result.json"), res)
+		_ = writeArtifactJSON(filepath.Join(wtBundleDir, "result.json"), res)
+		// The deferred publish will copy from wtPath to projectRoot before cleanup.
 		return res, fmt.Errorf("execute-bead context load: %w", err)
 	}
 
@@ -1185,7 +1223,24 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			res.AttemptDiagnostics = buildAttemptDiagnostic(projectRoot, wtPath, beadID, attemptID, headRevErr, gitOps)
 		}
 		populateWorkerStatus(res)
+		// Check if wtPath is gone BEFORE writeArtifactJSON — that call uses
+		// os.MkdirAll internally and would recreate the directory, making a
+		// subsequent os.Stat check fail to detect the vanished worktree.
+		_, wtStatErr := os.Stat(wtPath)
 		_ = writeArtifactJSON(artifacts.ResultAbs, res)
+		// Fallback: when the worktree was gone before the write above, write
+		// evidence directly to projectRoot so the diagnostic files are recoverable.
+		if os.IsNotExist(wtStatErr) {
+			recoveryDir := filepath.Join(projectRoot, artifacts.DirRel)
+			_ = os.MkdirAll(recoveryDir, 0o755)
+			_ = writeArtifactJSON(filepath.Join(recoveryDir, "result.json"), res)
+			// Stubs for prompt.md and manifest.json that were lost with the worktree.
+			_ = os.WriteFile(filepath.Join(recoveryDir, "prompt.md"),
+				[]byte("# Evidence Recovery\nWorktree was lost before prompt could be preserved.\n"), 0o644)
+			_ = writeArtifactJSON(filepath.Join(recoveryDir, "manifest.json"), map[string]string{
+				"attempt_id": attemptID, "bead_id": beadID, "status": "worktree_lost",
+			})
+		}
 		return res, fmt.Errorf("failed to read worktree HEAD: %w", revErr)
 	}
 
@@ -1385,6 +1440,17 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	populateWorkerStatus(res)
 	if err := writeArtifactJSON(artifacts.ResultAbs, res); err != nil {
 		return nil, fmt.Errorf("writing execute-bead result artifact: %w", err)
+	}
+
+	// For the normal success path, commit the evidence bundle in the attempt
+	// worktree so Land() can find it in the landing finalization worktree
+	// without copying from the project root (AC: no live-worker noise in main).
+	if resultRev != baseRev && exitCode == 0 {
+		if newRev := commitEvidenceBundleInWorktree(wtPath, artifacts.DirRel, attemptID); newRev != "" {
+			resultRev = newRev
+			res.ResultRev = newRev
+			evidenceCommittedInWt = true
+		}
 	}
 
 	// Optional out-of-band mirror of the bundle. Wired here so the whole
@@ -1631,7 +1697,7 @@ func ResolveGoverningRefs(root string, b *bead.Bead) []executeBeadGoverningRef {
 
 func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifacts, error) {
 	dirRel := filepath.ToSlash(filepath.Join(ExecuteBeadArtifactDir, attemptID))
-	dirAbs := filepath.Join(rootDir, ExecuteBeadArtifactDir, attemptID)
+	dirAbs := filepath.Join(wtPath, ExecuteBeadArtifactDir, attemptID)
 	if err := os.MkdirAll(dirAbs, 0o755); err != nil {
 		return nil, fmt.Errorf("creating execute-bead artifact bundle: %w", err)
 	}
@@ -2064,6 +2130,74 @@ func VerifyCleanWorktree(projectRoot, attemptID string) error {
 		return fmt.Errorf("committing leftover evidence: %s: %w", strings.TrimSpace(string(commitOut)), commitErr)
 	}
 	return nil
+}
+
+// commitEvidenceBundleInWorktree stages the evidence directory in the attempt
+// worktree and commits it so Land() can find the bundle inside the landing
+// finalization worktree without copying from the project root. Returns the new
+// HEAD SHA on success, or "" if staging finds nothing to commit (e.g. because
+// the worktree is not a real git repo in tests or staging fails).
+func commitEvidenceBundleInWorktree(wtPath, dirRel, attemptID string) string {
+	if dirRel == "" {
+		return ""
+	}
+	dirArg := filepath.FromSlash(dirRel)
+	addArgs := append([]string{"add", "--", dirArg}, EvidenceLandExcludePathspecs()...)
+	if _, err := internalgit.Command(context.Background(), wtPath, addArgs...).CombinedOutput(); err != nil {
+		return ""
+	}
+	diffOut, _ := internalgit.Command(context.Background(), wtPath, "diff", "--cached", "--name-only", "--", dirArg).Output()
+	if len(strings.TrimSpace(string(diffOut))) == 0 {
+		return ""
+	}
+	msg := fmt.Sprintf("chore: add execution evidence [%s]", shortAttempt(attemptID))
+	if _, err := internalgit.Command(context.Background(), wtPath,
+		"-c", "user.name=ddx-land-coordinator",
+		"-c", "user.email=coordinator@ddx.local",
+		"commit", "--no-verify", "-m", msg,
+	).CombinedOutput(); err != nil {
+		return ""
+	}
+	headOut, headErr := internalgit.Command(context.Background(), wtPath, "rev-parse", "HEAD").Output()
+	if headErr != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(headOut))
+}
+
+// publishEvidenceBundleToProjectRoot copies the evidence bundle from the
+// isolated attempt worktree to the project root. Used by non-landing paths
+// (no-changes, task-failed, operator-cancel) so that VerifyCleanWorktree can
+// commit the bundle. A no-op when the source does not exist or when wtPath and
+// projectRoot resolve to the same path.
+func publishEvidenceBundleToProjectRoot(projectRoot, wtPath, dirRel string) {
+	if dirRel == "" || sameFilesystemPath(projectRoot, wtPath) {
+		return
+	}
+	src := filepath.Join(wtPath, filepath.FromSlash(dirRel))
+	dst := filepath.Join(projectRoot, filepath.FromSlash(dirRel))
+	info, err := os.Stat(src)
+	if err != nil || !info.IsDir() {
+		return
+	}
+	_ = filepath.WalkDir(src, func(path string, d os.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		rel, relErr := filepath.Rel(src, path)
+		if relErr != nil {
+			return relErr
+		}
+		target := filepath.Join(dst, rel)
+		if d.IsDir() {
+			return os.MkdirAll(target, 0o755)
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return readErr
+		}
+		return os.WriteFile(target, data, 0o644)
+	})
 }
 
 func excludeCleanupMetadataFromWorktreeGit(wtPath string) error {
