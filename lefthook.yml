@@ -47,7 +47,7 @@ pre-commit:
 
     git-config-health:
       run: "sh scripts/git-config-health.sh"
-      fail_text: "Local Git config is invalid. Unset core.worktree/core.hooksPath and rerun lefthook install --reset-hooks-path."
+      fail_text: "Local Git config is invalid. Repair core.bare/core.worktree/core.hooksPath and fixture identity before committing."
 
     beads-tracker-health:
       run: "sh scripts/beads-tracker-health.sh"
@@ -501,6 +501,12 @@ pre-push:
   parallel: false
 
   commands:
+    git-config-health:
+      name: "Git config health"
+      run: "sh scripts/git-config-health.sh"
+      fail_text: "Local Git config is invalid. Repair core.bare/core.worktree/core.hooksPath and fixture identity before pushing."
+      tags: [policy]
+
     # AGENTS.md §Merge Policy: branches carrying execute-bead / [ddx-*]
     # commits must preserve SHA history. closing_commit_sha pointers in
     # .ddx/beads.jsonl index those exact commits; squash/rebase/amend that
@@ -548,6 +554,13 @@ pre-push:
       name: "Full test suite"
       root: "cli/"
       run: |
+        # Git hooks export local repository variables such as GIT_DIR. The
+        # test suite creates nested fixture repositories, so scrub those vars
+        # before tests spawn git.
+        for var in $(git rev-parse --local-env-vars); do
+          unset "$var"
+        done
+
         # Race detector requires cgo. Explicit CGO_ENABLED=1 overrides any
         # inherited CGO_ENABLED=0 in the shell environment.
         export CGO_ENABLED=1

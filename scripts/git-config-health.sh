@@ -11,9 +11,23 @@ if [ ! -f "$config_file" ]; then
 	exit 0
 fi
 
+bare_val=$(git config --file "$config_file" --get core.bare || true)
 worktree_val=$(git config --file "$config_file" --get core.worktree || true)
 hooks_path_val=$(git config --file "$config_file" --get core.hooksPath || true)
+user_name_val=$(git config --file "$config_file" --get user.name || true)
+user_email_val=$(git config --file "$config_file" --get user.email || true)
 failed=0
+
+case "$bare_val" in
+	true | TRUE | True | 1 | yes | on)
+		{
+			echo "Invalid local git config: core.bare=$bare_val"
+			echo "This checkout has a working tree and must not be marked bare."
+			echo "Run: git config --unset core.bare"
+		} >&2
+		failed=1
+		;;
+esac
 
 if [ -n "$worktree_val" ]; then
 	case "$worktree_val" in
@@ -74,6 +88,17 @@ if [ -n "$hooks_path_val" ]; then
 			failed=1
 			;;
 	esac
+fi
+
+if [ "$user_name_val" = "DDx Fixture" ] || [ "$user_email_val" = "fixture@ddx.test" ]; then
+	{
+		echo "Invalid local git config: fixture identity leaked into primary checkout."
+		echo "user.name=${user_name_val:-<unset>}"
+		echo "user.email=${user_email_val:-<unset>}"
+		echo "Run: git config --unset user.name"
+		echo "Run: git config --unset user.email"
+	} >&2
+	failed=1
 fi
 
 if [ "$failed" -ne 0 ]; then
