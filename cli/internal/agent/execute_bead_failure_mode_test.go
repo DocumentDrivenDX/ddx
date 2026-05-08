@@ -72,6 +72,8 @@ func TestFailureModeClassifyWorker(t *testing.T) {
 			"something exploded", FailureModeUnknown},
 		{"no_error_text_non_zero", ExecuteBeadOutcomeTaskFailed, 137, "",
 			FailureModeUnknown},
+		{"resolveroute_zero_exit_error", ExecuteBeadOutcomeTaskFailed, 0,
+			"ResolveRoute: no viable routing candidate: 3 candidates rejected", FailureModeNoViableProvider},
 
 		// Ordering: timeout wins over test/build keywords when both appear.
 		{"timeout_beats_test_failure", ExecuteBeadOutcomeTaskFailed, 1,

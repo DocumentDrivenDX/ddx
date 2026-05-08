@@ -58,9 +58,11 @@ type preClaimReadinessPromptResult struct {
 // using the repository's triage prompt and returns one of the typed intake
 // outcomes so the loop can decide whether to claim or skip the candidate.
 //
-// The hook preserves operator-supplied passthrough constraints. Route/power
-// failures are infrastructure failures, not bead-readiness decisions, so they
-// return intake_error and let the loop use its fail-open readiness path.
+// The hook uses the normal service execution path but clears hidden
+// profile/power bounds so auxiliary readiness calls do not create DDx-side
+// routing pins. Route failures are infrastructure failures, not bead-readiness
+// decisions, so they return intake_error and let the loop use its fail-open
+// readiness path.
 func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner) func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 	return func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 		if ctx != nil {
@@ -89,9 +91,12 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 		}
 
 		runtime := AgentRunRuntime{
-			Prompt:       prompt,
-			WorkDir:      projectRoot,
-			PromptSource: PreClaimIntakePromptSource,
+			Prompt:        prompt,
+			WorkDir:       projectRoot,
+			PromptSource:  PreClaimIntakePromptSource,
+			ClearProfile:  true,
+			ClearMinPower: true,
+			ClearMaxPower: true,
 		}
 		payload, err := dispatchPreClaimIntakePayload(ctx, projectRoot, svc, runner, rcfg, runtime)
 		if err != nil {

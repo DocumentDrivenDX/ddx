@@ -108,6 +108,10 @@ func ClassifyFailureMode(outcome string, exitCode int, errMsg string) string {
 		"no viable harness",
 		"no harness configured",
 		"failed to initialize routing service",
+		"resolveroute:",
+		"no viable routing candidate",
+		"no live provider supports",
+		"no candidate satisfying local endpoint",
 		"no viable provider"):
 		return FailureModeNoViableProvider
 	case containsAny(lower,
@@ -167,6 +171,9 @@ func ClassifyFailureMode(outcome string, exitCode int, errMsg string) string {
 		"assertion failed",
 		"test failure"):
 		return FailureModeTestFailure
+	}
+	if outcome == ExecuteBeadOutcomeTaskFailed && errMsg != "" {
+		return FailureModeUnknown
 	}
 	if exitCode != 0 {
 		return FailureModeUnknown

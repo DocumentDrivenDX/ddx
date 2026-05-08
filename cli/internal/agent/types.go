@@ -95,6 +95,10 @@ type AgentRunRuntime struct {
 	// implementer's actual selected power, biasing routing toward a stronger
 	// reviewer model (R4 pairing: reviewer >= impl + 1 power).
 	MinPowerOverride int
+	// ClearMinPower drops rcfg.MinPower() for this single invocation. Auxiliary
+	// lifecycle classifier calls should not inherit implementation power bounds;
+	// Fizeau owns routing for those hidden dispatches.
+	ClearMinPower bool
 	// ClearMaxPower drops rcfg.MaxPower() for this single invocation. This is
 	// for auxiliary classifier/reviewer-style calls that deliberately want the
 	// strongest viable route instead of the worker attempt's cost cap.

@@ -502,7 +502,7 @@ func TestTriageHook_HookError_DoesNotCreateDefaultCooldown(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestPostAttemptTriageHook_UsesImplementationRoutingProfile(t *testing.T) {
+func TestPostAttemptTriageHook_ClearsImplementationRoutingPins(t *testing.T) {
 	root := newTriageHookTestRoot(t)
 	store, b := newTriageHookTestStore(t, root)
 
@@ -535,5 +535,7 @@ func TestPostAttemptTriageHook_UsesImplementationRoutingProfile(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "transport", got.Classification)
-	assert.Equal(t, "default", svc.lastReq.Profile, "triage dispatch should use the same resolved profile as implementation dispatch")
+	assert.Empty(t, svc.lastReq.Profile, "triage dispatch must not inherit implementation profile pins")
+	assert.Zero(t, svc.lastReq.MinPower, "triage dispatch must not inherit implementation min_power pins")
+	assert.Zero(t, svc.lastReq.MaxPower, "triage dispatch must not inherit implementation max_power pins")
 }

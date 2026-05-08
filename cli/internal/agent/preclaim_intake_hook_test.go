@@ -166,6 +166,7 @@ func TestDecompositionHook_UsesImplementationRoutingPath(t *testing.T) {
 	assert.Empty(t, svc.lastReq.ModelRef)
 	assert.Empty(t, svc.lastReq.Profile)
 	assert.Zero(t, svc.lastReq.MinPower)
+	assert.Zero(t, svc.lastReq.MaxPower)
 }
 
 func TestDecompositionHook_CatalogUnavailableUsesSmartProfileWithoutMagicPower(t *testing.T) {
@@ -184,6 +185,7 @@ func TestDecompositionHook_CatalogUnavailableUsesSmartProfileWithoutMagicPower(t
 	assert.Empty(t, svc.lastReq.ModelRef)
 	assert.Empty(t, svc.lastReq.Profile)
 	assert.Zero(t, svc.lastReq.MinPower)
+	assert.Zero(t, svc.lastReq.MaxPower)
 }
 
 func TestDecompositionHook_AcceptsStringConfidence(t *testing.T) {
@@ -227,6 +229,7 @@ func TestDecompositionHook_SmartProfileUnavailableFallsBackToAutoRoute(t *testin
 	assert.Empty(t, svc.lastReq.ModelRef)
 	assert.Empty(t, svc.lastReq.Profile)
 	assert.Zero(t, svc.lastReq.MinPower)
+	assert.Zero(t, svc.lastReq.MaxPower)
 }
 
 func TestDecompositionHook_PreservesPassthroughConstraints(t *testing.T) {
@@ -282,7 +285,7 @@ func TestDecompositionHook_StrongPowerUnsatisfiedReturnsIntakeError(t *testing.T
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 }
 
-func TestDecompositionHook_InheritsImplementationPowerBounds(t *testing.T) {
+func TestDecompositionHook_ClearsImplementationPowerBounds(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
@@ -297,7 +300,7 @@ func TestDecompositionHook_InheritsImplementationPowerBounds(t *testing.T) {
 	svc.executeFunc = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 		assert.Zero(t, req.MinPower)
 		assert.Empty(t, req.Profile)
-		assert.Equal(t, 8, req.MaxPower, "pre-claim intake should use the same max_power path as implementation dispatch")
+		assert.Zero(t, req.MaxPower, "pre-claim intake must not inherit implementation max_power pins")
 		ch := make(chan agentlib.ServiceEvent, 1)
 		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"atomic\",\"confidence\":0.99,\"reasoning\":\"frontier-ready\"}"}`)}
 		close(ch)
@@ -318,12 +321,18 @@ func TestDecompositionHook_InheritsImplementationPowerBounds(t *testing.T) {
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls), "pre-claim intake must still dispatch when the worker has a low max_power")
 }
 
-func TestDecompositionHook_RoutePinsUnsatisfiedAfterClearingMaxReturnsIntakeError(t *testing.T) {
+func TestDecompositionHook_RoutingFailureReturnsIntakeErrorWithoutDDxPins(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
 	svc := &preClaimIntakeHookServiceStub{
-		executeErr: fmt.Errorf("runner error: ResolveRoute: no viable routing candidate for pins min_power=7 max_power=8: 3 candidates rejected"),
+		executeErr: fmt.Errorf("runner error: ResolveRoute: no viable routing candidate: 3 candidates rejected"),
+	}
+	svc.executeFunc = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		assert.Empty(t, req.Profile)
+		assert.Zero(t, req.MinPower)
+		assert.Zero(t, req.MaxPower)
+		return nil, svc.executeErr
 	}
 	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
 		Model: "claude-sonnet-4-6",
@@ -338,7 +347,8 @@ func TestDecompositionHook_RoutePinsUnsatisfiedAfterClearingMaxReturnsIntakeErro
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeError, got.Outcome)
 	assert.Contains(t, got.Detail, "readiness route unavailable")
-	assert.Contains(t, got.Detail, "min_power=7 max_power=8")
+	assert.NotContains(t, got.Detail, "min_power=7")
+	assert.NotContains(t, got.Detail, "max_power=8")
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
 }
 

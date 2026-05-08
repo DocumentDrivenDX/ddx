@@ -179,7 +179,8 @@ func LandBeadResult(projectRoot string, res *ExecuteBeadResult, gitOps Orchestra
 	// Agent failed with no commits: report as error (not no-changes).
 	// Prefer res.Reason (e.g. HeadRev failure set by worker) over res.Error
 	// (agent error) so the primary context failure is surfaced as the reason.
-	if res.ExitCode != 0 && res.ResultRev == res.BaseRev {
+	agentFailed := res.ExitCode != 0 || res.Outcome == ExecuteBeadOutcomeTaskFailed
+	if agentFailed && res.ResultRev == res.BaseRev {
 		landing.Outcome = "error"
 		switch {
 		case res.Reason != "":
@@ -215,7 +216,7 @@ func LandBeadResult(projectRoot string, res *ExecuteBeadResult, gitOps Orchestra
 	}
 
 	// Agent failed but produced commits: preserve without attempting merge.
-	if res.ExitCode != 0 {
+	if agentFailed {
 		ref := PreserveRef(res.BeadID, res.BaseRev)
 		if err := gitOps.UpdateRef(projectRoot, ref, res.ResultRev); err != nil {
 			return nil, fmt.Errorf("preserving result ref: %w", err)

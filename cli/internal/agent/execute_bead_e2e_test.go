@@ -93,6 +93,15 @@ func (r *gateTestAgentRunner) Run(opts RunArgs) (*Result, error) {
 	return &Result{ExitCode: r.exitCode}, nil
 }
 
+type gateTestResultRunner struct {
+	result *Result
+	err    error
+}
+
+func (r *gateTestResultRunner) Run(opts RunArgs) (*Result, error) {
+	return r.result, r.err
+}
+
 // setupGateTestProjectRoot creates projectRoot with the minimal .ddx/ structure
 // needed for the lock and artifact bundle creation.
 func setupGateTestProjectRoot(t *testing.T) string {
@@ -415,5 +424,52 @@ func TestExecuteBead_NoEvidenceProducedWhenRationaleAbsent(t *testing.T) {
 	}
 	if res.NoChangesRationale != "" {
 		t.Errorf("expected empty NoChangesRationale when file absent, got %q", res.NoChangesRationale)
+	}
+}
+
+func TestExecuteBead_ServiceErrorWithZeroExitIsExecutionFailed(t *testing.T) {
+	const beadID = "ddx-service-error-01"
+
+	projectRoot := setupGateTestProjectRoot(t)
+
+	const fixedRev = "eeeeeeeeffffffff"
+	gitOps := &gateTestGitOps{
+		projectRoot: projectRoot,
+		baseRev:     fixedRev,
+		resultRev:   fixedRev,
+		wtSetupFn: func(wtPath string) {
+			ddxDir := filepath.Join(wtPath, ".ddx")
+			if err := os.MkdirAll(ddxDir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			store := bead.NewStore(ddxDir)
+			if err := store.Init(); err != nil {
+				t.Fatal(err)
+			}
+			b := &bead.Bead{ID: beadID, Title: "Service error bead"}
+			if err := store.Create(b); err != nil {
+				t.Fatal(err)
+			}
+		},
+	}
+
+	runner := &gateTestResultRunner{result: &Result{
+		ExitCode: 0,
+		Error:    "ResolveRoute: no viable routing candidate: 3 candidates rejected",
+	}}
+
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{}).Resolve(config.CLIOverrides{})
+	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{AgentRunner: runner}, gitOps)
+	if err != nil {
+		t.Fatalf("ExecuteBead returned error: %v", err)
+	}
+	if res.Outcome != ExecuteBeadOutcomeTaskFailed {
+		t.Errorf("expected outcome=%s, got %q", ExecuteBeadOutcomeTaskFailed, res.Outcome)
+	}
+	if res.Status != ExecuteBeadStatusExecutionFailed {
+		t.Errorf("expected status=%s, got %q", ExecuteBeadStatusExecutionFailed, res.Status)
+	}
+	if res.FailureMode != FailureModeNoViableProvider {
+		t.Errorf("expected failure_mode=%s, got %q", FailureModeNoViableProvider, res.FailureMode)
 	}
 }

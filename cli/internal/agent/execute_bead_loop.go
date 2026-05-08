@@ -1008,6 +1008,73 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 			return result, nil
 		}
+		if isRoutingInfrastructureReport(report) {
+			result.Attempts++
+			report.OutcomeReason = FailureModeNoViableProvider
+			report.Disrupted = true
+			report.DisruptionReason = "routing"
+			if err := w.Store.Unclaim(candidate.ID); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("Unclaim", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return result, ctx.Err()
+				}
+				return result, err
+			}
+			emitDisruptionDetected(emit, w.Store, candidate.ID,
+				report.DisruptionReason, report.Detail, report.Harness, report.Model, assignee, now().UTC())
+			appendExecutionRoutingIntentEvidence(w.Store, candidate, report, now().UTC())
+			result.Results = append(result.Results, report)
+			result.Failures++
+			result.LastFailureStatus = report.Status
+			if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("AppendEvent", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return result, ctx.Err()
+				}
+				return result, err
+			}
+			finalAttemptID := report.AttemptID
+			if finalAttemptID == "" {
+				finalAttemptID = provAttemptID
+			}
+			phaseSeq++
+			emitProgress(runtime.ProgressCh, ProgressEvent{
+				EventID:   "evt-" + randomProgressID(),
+				AttemptID: finalAttemptID,
+				WorkerID:  runtime.WorkerID,
+				ProjectID: runtime.ProjectRoot,
+				BeadID:    candidate.ID,
+				Harness:   harness,
+				Model:     model,
+				Profile:   profile,
+				Phase:     "failed",
+				PhaseSeq:  phaseSeq,
+				Heartbeat: false,
+				TS:        now().UTC(),
+				ElapsedMS: now().Sub(runStart).Milliseconds(),
+				Message:   report.Detail,
+			})
+			emit("bead.result", map[string]any{
+				"bead_id":              candidate.ID,
+				"status":               report.Status,
+				"detail":               report.Detail,
+				"session_id":           report.SessionID,
+				"result_rev":           report.ResultRev,
+				"base_rev":             report.BaseRev,
+				"preserve_ref":         report.PreserveRef,
+				"no_changes_rationale": report.NoChangesRationale,
+				"duration_ms":          now().Sub(runStart).Milliseconds(),
+			})
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
+			}
+			exitReason = "routing_unavailable"
+			return result, nil
+		}
 		// ddx-5b3e57f4: distinguish worker-disrupted from model-gave-up.
 		// A failed attempt where the loop ctx was cancelled, or the executor
 		// surfaced a transport-class error, is not evidence the model could
@@ -2080,6 +2147,26 @@ func isNoViableProviderReport(report ExecuteBeadReport) bool {
 		report.Stderr,
 	}, "\n"))
 	return ClassifyFailureMode(report.Status, 0, combined) == FailureModeNoViableProvider
+}
+
+func isRoutingInfrastructureReport(report ExecuteBeadReport) bool {
+	if report.Status != ExecuteBeadStatusExecutionFailed {
+		return false
+	}
+	combined := strings.TrimSpace(strings.Join([]string{
+		report.Detail,
+		report.Error,
+		report.Stderr,
+	}, "\n"))
+	if combined == "" {
+		return false
+	}
+	lower := strings.ToLower(combined)
+	return containsAny(lower,
+		"resolveroute:",
+		"no viable routing candidate",
+		"no live provider supports",
+		"no candidate satisfying local endpoint")
 }
 
 // classifyDisruption examines the loop ctx and the executor's error to decide

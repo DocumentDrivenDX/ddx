@@ -199,6 +199,9 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	if runtime.MinPowerOverride > 0 {
 		minPower = runtime.MinPowerOverride
 	}
+	if runtime.ClearMinPower {
+		minPower = 0
+	}
 	maxPower := rcfg.MaxPower()
 	if runtime.ClearMaxPower {
 		maxPower = 0

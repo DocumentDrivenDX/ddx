@@ -274,7 +274,7 @@ func TestLintHook_EmptyOutputWithRunnerError_ReturnsDispatchFailure(t *testing.T
 	assert.Contains(t, err.Error(), "argument list too long")
 }
 
-func TestPreDispatchLintHook_UsesImplementationRoutingProfile(t *testing.T) {
+func TestPreDispatchLintHook_ClearsImplementationRoutingPins(t *testing.T) {
 	root := newLintHookTestRoot(t)
 	store, b := newLintHookTestStore(t, root)
 
@@ -301,5 +301,7 @@ func TestPreDispatchLintHook_UsesImplementationRoutingProfile(t *testing.T) {
 	got, err := hook(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, 8, got.Score)
-	assert.Equal(t, "default", svc.lastReq.Profile, "lint dispatch should use the same resolved profile as implementation dispatch")
+	assert.Empty(t, svc.lastReq.Profile, "lint dispatch must not inherit implementation profile pins")
+	assert.Zero(t, svc.lastReq.MinPower, "lint dispatch must not inherit implementation min_power pins")
+	assert.Zero(t, svc.lastReq.MaxPower, "lint dispatch must not inherit implementation max_power pins")
 }

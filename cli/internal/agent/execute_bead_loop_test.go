@@ -727,6 +727,49 @@ func TestExecuteBeadWorker_NoViableProviderUsesRetryableTransportPolicy(t *testi
 	assert.Equal(t, now.Add(ProviderUnavailableCooldown).Format(time.RFC3339), got.Extra["execute-loop-retry-after"])
 }
 
+func TestExecuteBeadWorker_RoutingFailureStopsLoopWithoutCoolingBead(t *testing.T) {
+	store, first, second := newExecuteLoopTestStore(t)
+	var calls int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&calls, 1)
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusExecutionFailed,
+				Detail:    "ResolveRoute: no viable routing candidate: 3 candidates rejected",
+				BaseRev:   "aaaa1111",
+				ResultRev: "aaaa1111",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		PollInterval: 0,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Equal(t, int32(1), atomic.LoadInt32(&calls), "routing failure must stop before claiming the next bead")
+	require.Len(t, result.Results, 1)
+	assert.Equal(t, FailureModeNoViableProvider, result.Results[0].OutcomeReason)
+	assert.True(t, result.Results[0].Disrupted)
+	assert.Equal(t, "routing", result.Results[0].DisruptionReason)
+
+	gotFirst, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, gotFirst.Status)
+	assert.Empty(t, gotFirst.Owner)
+	require.NotNil(t, gotFirst.Extra)
+	assert.NotContains(t, gotFirst.Extra, "execute-loop-retry-after")
+
+	gotSecond, err := store.Get(second.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
+	assert.Empty(t, gotSecond.Owner)
+}
+
 func TestExecuteBeadWorkerNoReadyWork(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())

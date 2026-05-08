@@ -1378,8 +1378,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// no_changes signal when the agent also wrote the explicit rationale file.
 	// The parent orchestrator (LandBeadResult + ApplyLandingToResult) will
 	// overwrite Outcome and Status with the landing decision before output.
+	agentReportedError := strings.TrimSpace(agentErrMsg) != ""
 	switch {
-	case exitCode != 0:
+	case exitCode != 0 || agentReportedError:
 		res.Outcome = ExecuteBeadOutcomeTaskFailed
 	case resultRev == baseRev:
 		res.Outcome = ExecuteBeadOutcomeTaskNoChanges
