@@ -595,6 +595,28 @@ func synthesizeCommitExcludePathspecs(dir string) []string {
 			pathspec:    ":(exclude).ddx/executions/*/no_changes_rationale.txt",
 			ignoreProbe: ".ddx/executions/.ddx-check-ignore/no_changes_rationale.txt",
 		},
+		// Exclude DDx-managed evidence bundle files written to the attempt
+		// worktree by execute_bead.go itself. These are committed separately by
+		// commitEvidenceBundleInWorktree and must not appear in the agent's code
+		// commit (which SynthesizeCommit creates). Prior to this worktree-evidence
+		// design, these files lived in projectRoot and were invisible to
+		// SynthesizeCommit (which runs in wtPath).
+		{
+			pathspec:    ":(exclude).ddx/executions/*/prompt.md",
+			ignoreProbe: ".ddx/executions/.ddx-check-ignore/prompt.md",
+		},
+		{
+			pathspec:    ":(exclude).ddx/executions/*/manifest.json",
+			ignoreProbe: ".ddx/executions/.ddx-check-ignore/manifest.json",
+		},
+		{
+			pathspec:    ":(exclude).ddx/executions/*/result.json",
+			ignoreProbe: ".ddx/executions/.ddx-check-ignore/result.json",
+		},
+		{
+			pathspec:    ":(exclude).ddx/executions/*/usage.json",
+			ignoreProbe: ".ddx/executions/.ddx-check-ignore/usage.json",
+		},
 		{
 			pathspec:    ":(exclude).claude/skills",
 			ignoreProbe: ".claude/skills",
@@ -1201,7 +1223,24 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 			res.AttemptDiagnostics = buildAttemptDiagnostic(projectRoot, wtPath, beadID, attemptID, headRevErr, gitOps)
 		}
 		populateWorkerStatus(res)
+		// Check if wtPath is gone BEFORE writeArtifactJSON — that call uses
+		// os.MkdirAll internally and would recreate the directory, making a
+		// subsequent os.Stat check fail to detect the vanished worktree.
+		_, wtStatErr := os.Stat(wtPath)
 		_ = writeArtifactJSON(artifacts.ResultAbs, res)
+		// Fallback: when the worktree was gone before the write above, write
+		// evidence directly to projectRoot so the diagnostic files are recoverable.
+		if os.IsNotExist(wtStatErr) {
+			recoveryDir := filepath.Join(projectRoot, artifacts.DirRel)
+			_ = os.MkdirAll(recoveryDir, 0o755)
+			_ = writeArtifactJSON(filepath.Join(recoveryDir, "result.json"), res)
+			// Stubs for prompt.md and manifest.json that were lost with the worktree.
+			_ = os.WriteFile(filepath.Join(recoveryDir, "prompt.md"),
+				[]byte("# Evidence Recovery\nWorktree was lost before prompt could be preserved.\n"), 0o644)
+			_ = writeArtifactJSON(filepath.Join(recoveryDir, "manifest.json"), map[string]string{
+				"attempt_id": attemptID, "bead_id": beadID, "status": "worktree_lost",
+			})
+		}
 		return res, fmt.Errorf("failed to read worktree HEAD: %w", revErr)
 	}
 
