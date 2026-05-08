@@ -33,6 +33,8 @@ type executeCapturingStub struct {
 	executionReq  agentlib.ServiceExecuteRequest
 	executionSeen bool
 	executeFn     func(agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
+	listModels    []agentlib.ModelInfo
+	listProfiles  []agentlib.ProfileInfo
 }
 
 func (s *executeCapturingStub) Execute(_ context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
@@ -69,10 +71,10 @@ func (s *executeCapturingStub) ListProviders(_ context.Context) ([]agentlib.Prov
 	return nil, nil
 }
 func (s *executeCapturingStub) ListModels(_ context.Context, _ agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
-	return nil, nil
+	return append([]agentlib.ModelInfo(nil), s.listModels...), nil
 }
 func (s *executeCapturingStub) ListProfiles(_ context.Context) ([]agentlib.ProfileInfo, error) {
-	return nil, nil
+	return append([]agentlib.ProfileInfo(nil), s.listProfiles...), nil
 }
 func (s *executeCapturingStub) ResolveProfile(_ context.Context, _ string) (*agentlib.ResolvedProfile, error) {
 	return nil, nil
@@ -315,6 +317,14 @@ func TestDDxWork_WiresPreClaimIntakeHook(t *testing.T) {
 	modes := make([]string, 0, 4)
 	var intakeReq agentlib.ServiceExecuteRequest
 	stub := installExecuteCapturingStub(t)
+	stub.listProfiles = []agentlib.ProfileInfo{
+		{Name: "cheap", MinPower: 5, MaxPower: 5},
+		{Name: "smart", MinPower: 9, MaxPower: 10},
+	}
+	stub.listModels = []agentlib.ModelInfo{
+		{ID: "cheap-model", Power: 5, Available: true, AutoRoutable: true},
+		{ID: "smart-model", Power: 9, Available: true, AutoRoutable: true},
+	}
 	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 		mode := "execute"
 		switch {

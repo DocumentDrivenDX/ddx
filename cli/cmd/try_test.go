@@ -220,6 +220,7 @@ func TestTry_HappyPath_ClaimsAndExecutes(t *testing.T) {
 	})
 
 	factory := NewCommandFactory(env.Dir)
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
 	factory.tryExecutorOverride = stubExecutor
 	root := factory.NewRootCommand()
 
