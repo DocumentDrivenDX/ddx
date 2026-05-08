@@ -140,13 +140,15 @@ providers, models, or harnesses; if an operator supplied those values, DDx
 passes them through as opaque constraints to the agent runtime.
 
 Decomposition is a high-judgment routing decision. The splitter must run through
-the normal `ddx work` path with a strong `MinPower` floor, defaulting to the
-smart/top-power tier floor when the project has no explicit splitter override.
-DDx still does not pick a concrete model: it only raises the power floor and
-lets the agent route within any operator-supplied passthrough constraints. If no
-available route satisfies that strong floor, the bead is blocked with
-`agent_power_unsatisfied`; DDx must not silently fall back to weak
-decomposition.
+the normal `ddx work` path with Fizeau's `smart` model-ref and a strong
+`MinPower` floor, defaulting to the smart/top-power tier floor when the project
+has no explicit splitter override. DDx still does not pick a concrete model: it
+only requests the abstract smart ref, raises the power floor, and lets the agent
+route within any operator-supplied passthrough constraints. If no available
+route satisfies that strong floor, DDx records readiness as unavailable
+(`readiness_error` / `intake_error`) instead of marking the bead as ambiguous or
+`needs_human`. DDx must not silently fall back to weak decomposition; the worker
+continues, skips, or stops according to the configured readiness-failure mode.
 
 ## Disabling the gate
 

@@ -165,13 +165,15 @@ skill under the `ddx` skill tree and records readiness evidence in the
 layer-3 run record.
 
 `ddx work` wires this hook by default in both CLI and server-managed worker
-paths. Decomposition decisions run with a strong `MinPower` floor, defaulting to
-the smart/top-power tier floor when no project-specific splitter override is
-configured. DDx does not choose the concrete model; it passes the raised power
-floor to Fizeau and preserves any operator-supplied harness/provider/model
-passthrough constraints. If those constraints cannot satisfy the strong floor,
-DDx records `agent_power_unsatisfied` and blocks instead of running weak
-decomposition.
+paths. Decomposition decisions request Fizeau's `smart` model-ref and run with a
+strong `MinPower` floor, defaulting to the smart/top-power tier floor when no
+project-specific splitter override is configured. DDx does not choose the
+concrete model; it passes the raised power floor to Fizeau and preserves any
+operator-supplied harness/provider/model passthrough constraints. If those
+constraints cannot satisfy the strong floor, DDx records readiness as
+unavailable (`readiness_error` / `intake_error`) instead of treating the bead as
+ambiguous or in need of human review; the worker then continues through the
+normal implementation route with the same operator passthrough constraints.
 
 The readiness assessment result is one of:
 
@@ -190,10 +192,10 @@ The readiness assessment result is one of:
 - `ambiguous_needs_human` — the bead/spec is unclear, contradictory,
   unverifiable, or missing acceptance criteria that DDx cannot safely invent.
   DDx blocks or marks the bead `needs_human` and does not claim it.
-- `readiness_error` — readiness infrastructure failed. In migration/WARN mode
-  this fails open with evidence; in reliable factory/BLOCK mode it may skip the
-  candidate for the current pass but must not park it behind a cooldown unless a
-  retryable time-based class is recorded.
+- `readiness_error` / `intake_error` — readiness infrastructure failed. In
+  migration/WARN mode this fails open with evidence; in reliable factory/BLOCK
+  mode it may skip the candidate for the current pass but must not park it
+  behind a cooldown unless a retryable time-based class is recorded.
 
 Safe rewrites are validated against durable context, not against a vague
 "same spirit" comparison to the prior bead text. The prior bead can itself be
