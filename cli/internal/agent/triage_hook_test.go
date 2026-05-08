@@ -15,6 +15,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -521,4 +522,33 @@ func TestTriageHook_HookError_DoesNotCreateDefaultCooldown(t *testing.T) {
 	require.NotNil(t, got.Extra)
 	_, ok := got.Extra["execute-loop-retry-after"]
 	assert.False(t, ok)
+}
+
+func TestPostAttemptTriageHook_ClearsProfileSoDefaultPowerBoundsDoNotApply(t *testing.T) {
+	root := newTriageHookTestRoot(t)
+	store, b := newTriageHookTestStore(t, root)
+
+	svc := &passthroughTestService{
+		executeEvents: []agentlib.ServiceEvent{
+			{
+				Type: "final",
+				Data: []byte(`{"status":"success","final_text":"{\"classification\":\"transport\",\"recommended_action\":\"release_claim_retry\",\"rationale\":\"transient\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}"}`),
+			},
+		},
+	}
+
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{Profile: "default"})
+	require.Equal(t, "default", rcfg.Profile())
+
+	hook := NewPostAttemptTriageHook(root, store, rcfg, svc, nil, nil)
+	got, err := hook(context.Background(), b.ID, ExecuteBeadReport{
+		BeadID:    b.ID,
+		Status:    ExecuteBeadStatusNoChanges,
+		Detail:    "nothing changed",
+		BaseRev:   "abc123",
+		ResultRev: "abc123",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "transport", got.Classification)
+	assert.Empty(t, svc.lastReq.Profile, "ClearProfile must prevent the default profile from being forwarded to the service")
 }
