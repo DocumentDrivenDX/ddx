@@ -338,6 +338,116 @@ func TestIntakeResultPayload_EmptyOutputPreservesRunnerError(t *testing.T) {
 	assert.NotContains(t, err.Error(), "empty output")
 }
 
+func TestPreClaimReadiness_DecodesLegacyIntakeJSON(t *testing.T) {
+	tests := []struct {
+		name       string
+		payload    string
+		wantOutcome PreClaimIntakeOutcome
+		wantDetail  string
+	}{
+		{
+			name:        "atomic",
+			payload:     `{"classification":"atomic","confidence":0.99,"reasoning":"single slice"}`,
+			wantOutcome: PreClaimIntakeActionableAtomic,
+			wantDetail:  "single slice",
+		},
+		{
+			name:        "decomposable",
+			payload:     `{"classification":"decomposable","reasoning":"too broad"}`,
+			wantOutcome: PreClaimIntakeTooLargeDecomposed,
+			wantDetail:  "too broad",
+		},
+		{
+			name:        "ambiguous",
+			payload:     `{"classification":"ambiguous","reasoning":"unclear scope"}`,
+			wantOutcome: PreClaimIntakeAmbiguousNeedsHuman,
+			wantDetail:  "unclear scope",
+		},
+		{
+			name:        "rewritten",
+			payload:     `{"classification":"rewritten","reasoning":"safe fix","rewrite":{"changed_fields":["acceptance"],"acceptance":"1. TestFoo\n2. cd cli && go test ./..."}}`,
+			wantOutcome: PreClaimIntakeActionableButRewritten,
+			wantDetail:  "safe fix",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := decodePreClaimIntakePayloadResult(tt.payload)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantOutcome, got.Outcome)
+			assert.Equal(t, tt.wantDetail, got.Detail)
+		})
+	}
+}
+
+func TestPreClaimReadiness_DecodesCanonicalReadinessJSON(t *testing.T) {
+	tests := []struct {
+		name        string
+		payload     string
+		wantOutcome PreClaimIntakeOutcome
+		wantDetail  string
+	}{
+		{
+			name:        "actionable_atomic",
+			payload:     `{"outcome":"actionable_atomic","reason":"single slice"}`,
+			wantOutcome: PreClaimIntakeActionableAtomic,
+			wantDetail:  "single slice",
+		},
+		{
+			name:        "too_large_decomposed",
+			payload:     `{"outcome":"too_large_decomposed","reason":"too broad"}`,
+			wantOutcome: PreClaimIntakeTooLargeDecomposed,
+			wantDetail:  "too broad",
+		},
+		{
+			name:        "ambiguous_needs_human",
+			payload:     `{"outcome":"ambiguous_needs_human","reason":"unclear scope"}`,
+			wantOutcome: PreClaimIntakeAmbiguousNeedsHuman,
+			wantDetail:  "unclear scope",
+		},
+		{
+			name:        "readiness_error_fails_open",
+			payload:     `{"outcome":"readiness_error","reason":"skill missing"}`,
+			wantOutcome: PreClaimIntakeError,
+			wantDetail:  "skill missing",
+		},
+		{
+			name:        "system_unready_fails_open",
+			payload:     `{"outcome":"system_unready","reason":"infra failure"}`,
+			wantOutcome: PreClaimIntakeError,
+			wantDetail:  "infra failure",
+		},
+		{
+			name:        "actionable_but_rewritten",
+			payload:     `{"outcome":"actionable_but_rewritten","reason":"needs clarification","rewrite":{"changed_fields":["acceptance"],"description":"","acceptance":"1. TestFoo\n2. cd cli && go test ./..."}}`,
+			wantOutcome: PreClaimIntakeActionableButRewritten,
+			wantDetail:  "needs clarification",
+		},
+		{
+			name:        "detail_field_fallback",
+			payload:     `{"outcome":"actionable_atomic","detail":"via detail field"}`,
+			wantOutcome: PreClaimIntakeActionableAtomic,
+			wantDetail:  "via detail field",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := decodePreClaimIntakePayloadResult(tt.payload)
+			require.NoError(t, err)
+			assert.Equal(t, tt.wantOutcome, got.Outcome)
+			assert.Equal(t, tt.wantDetail, got.Detail)
+		})
+	}
+}
+
+func TestPreClaimReadiness_UnknownReasonActionableError(t *testing.T) {
+	_, err := decodePreClaimIntakePayloadResult(`{"outcome":"not_a_real_outcome","reason":"some reason"}`)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "not_a_real_outcome")
+	assert.Contains(t, err.Error(), "actionable_atomic")
+	assert.Contains(t, err.Error(), "system_unready")
+}
+
 func TestDecompositionHook_ActionableButRewrittenParsesRewrite(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)

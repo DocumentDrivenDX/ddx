@@ -105,6 +105,30 @@ func TestPreClaimOriginAheadFastForward(t *testing.T) {
 	assert.Equal(t, newSHA, localAfter, "local branch should be fast-forwarded")
 }
 
+func TestPreClaimOriginAheadStagedChangesBlockFastForward(t *testing.T) {
+	workDir, originDir, initialSHA := setupBareOrigin(t)
+
+	secondDir := t.TempDir()
+	runGitInteg(t, secondDir, "clone", originDir, ".")
+	runGitInteg(t, secondDir, "config", "user.email", "test@ddx.test")
+	runGitInteg(t, secondDir, "config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(secondDir, "extra.txt"), []byte("new\n"), 0o644))
+	runGitInteg(t, secondDir, "add", "extra.txt")
+	runGitInteg(t, secondDir, "commit", "-m", "feat: extra commit")
+	runGitInteg(t, secondDir, "push", "origin", "main")
+
+	require.NoError(t, os.WriteFile(filepath.Join(workDir, "operator.txt"), []byte("operator\n"), 0o644))
+	runGitInteg(t, workDir, "add", "operator.txt")
+
+	ops := RealLandingGitOps{}
+	res, err := ops.FetchOriginAncestryCheck(workDir, "main")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "staged changes")
+	assert.Empty(t, res.Action)
+	assert.Equal(t, initialSHA, runGitInteg(t, workDir, "rev-parse", "refs/heads/main"))
+	assert.Equal(t, "operator.txt", runGitInteg(t, workDir, "diff", "--cached", "--name-only"))
+}
+
 // TestPreClaimLocalAheadNoOp verifies that when local is ahead of origin the
 // result is Action=="local-ahead" and no modifications are made.
 func TestPreClaimLocalAheadNoOp(t *testing.T) {

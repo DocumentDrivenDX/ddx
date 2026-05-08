@@ -85,16 +85,15 @@ var trackerLockStaleAge = 10 * time.Minute
 // Tests may swap this out via the exported helpers below.
 var trackerLockPolicy = DefaultLockRetryPolicy()
 
-// trackerLockPath returns the tracker-commit lock directory for the given
-// project root. The lock guards git index operations on the primary .git
-// (staging and committing .ddx/beads.jsonl) so that multiple concurrent
-// workers (e.g. several `ddx work` processes) do not race on
-// .git/index.lock.
+// trackerLockPath returns the main-git lock directory for the given project
+// root. The historical name remains because tests and older comments refer to
+// the tracker lock, but the lock now protects all primary-checkout git writes:
+// tracker commits, pre-dispatch checkpoint/ref updates, and landing.
 func trackerLockPath(projectRoot string) string {
 	return filepath.Join(projectRoot, ".ddx", ".git-tracker.lock")
 }
 
-// withTrackerLock acquires the process-shared tracker-commit lock for the
+// withMainGitLock acquires the process-shared main-git lock for the
 // given project root, runs fn, and releases the lock. The lock is a
 // directory created via os.Mkdir (atomic across processes on POSIX and
 // Windows) following the same pattern as cli/internal/bead/lock.go.
@@ -103,8 +102,18 @@ func trackerLockPath(projectRoot string) string {
 // bounded budget. Per TD-031 §8.5 the contention itself does not change
 // bead status; on budget exhaustion the caller surfaces an ordinary
 // execution_failed and triage decides next steps.
-func withTrackerLock(projectRoot string, fn func() error) error {
+func withMainGitLock(projectRoot string, fn func() error) error {
+	if projectRoot == "" {
+		return fn()
+	}
 	return withTrackerLockPolicy(projectRoot, trackerLockPolicy, fn)
+}
+
+// withTrackerLock is retained for existing tracker/pre-dispatch call sites. It
+// uses the same process-shared lock as landing so separate ddx work processes
+// cannot interleave commits, ref updates, and checkout sync in the main tree.
+func withTrackerLock(projectRoot string, fn func() error) error {
+	return withMainGitLock(projectRoot, fn)
 }
 
 // withTrackerLockPolicy is the policy-parameterised form of

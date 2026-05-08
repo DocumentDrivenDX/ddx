@@ -344,6 +344,14 @@ const (
 	// budget; the bead is parked with a needs_human label until an operator
 	// intervenes.
 	ExecuteBeadStatusReviewTerminalBlock = "review_terminal_block"
+
+	// ExecuteBeadStatusReviewFixableGap is set when a BLOCK review verdict is
+	// classified as a fixable gap — the issues are addressable by a repair
+	// attempt at higher MinPower with the reviewer's rationale as context.
+	// Exactly one repair cycle is scheduled per result_rev; a second
+	// review_fixable_gap on the same result_rev falls through to the regular
+	// BLOCK triage path instead.
+	ExecuteBeadStatusReviewFixableGap = "review_fixable_gap"
 )
 
 // ClassifyExecuteBeadStatus maps a landing outcome to the supervisor-visible
