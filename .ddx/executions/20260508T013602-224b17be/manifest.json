@@ -1,0 +1,61 @@
+{
+  "attempt_id": "20260508T013602-224b17be",
+  "bead_id": "ddx-d5ae126c",
+  "base_rev": "11fc69fb810799fd90d34768b623c83c2843df9a",
+  "created_at": "2026-05-08T01:36:10.22759279Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d5ae126c",
+    "title": "agent: park rejected safe-rewrite attempts",
+    "description": "\u003ccontext-digest\u003e\n\u003cprinciples\u003eExecutable specifications · Audit trail required · Context is king · Work is a DAG · Drift is debt\u003c/principles\u003e\n\u003cconcerns\u003ego-std | security-owasp | testing\u003c/concerns\u003e\n\u003cpractices\u003eGo changes live under cli/ · use focused unit tests with real store/in-memory stubs · run targeted go test plus lefthook · preserve tracker mutations through ddx bead commands\u003c/practices\u003e\n\u003cgoverning\u003eFEAT-010 and TD-031 require rejected readiness rewrites to park with needs_human instead of returning to the execution-ready lane. Rejected rewrite evidence must explain why preservation could not be proven.\u003c/governing\u003e\n\u003c/context-digest\u003e\n\nPROBLEM\nWhen readiness returns actionable_but_rewritten but the rewrite validator rejects the proposed mutation, ddx work logs a blocked outcome and unclaims the bead without parking it. In continuous mode, the same bead can be selected again immediately, producing a loop.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead_loop.go:767-783 handles `PreClaimIntakeActionableButRewritten` validation errors by emitting `pre_claim_intake.blocked`, calling `Unclaim`, and continuing. It does not call `parkBeadPostIntakeRejection`.\n- cli/internal/agent/execute_bead_loop.go:798-821 correctly parks other terminal non-actionable intake outcomes with `needs_human`; the unsafe rewrite rejection branch diverged from that policy.\n- cli/internal/agent/execute_bead_intake_test.go:383-433 verifies unsafe rewrites do not execute, but does not assert `needs_human`, `intake.blocked` bead evidence, or removal from `ReadyExecution`.\n- cli/internal/bead/store.go:1508-1511 already excludes `needs_human` beads from `ReadyExecution`, so parking is sufficient to stop the loop.\n\nPROPOSED FIX\n- In the unsafe rewrite rejection branch, call `parkBeadPostIntakeRejection` with outcome `ambiguous_needs_human` and the validator detail before unclaiming.\n- Change operator wording from `releasing` to `parking for human review` or equivalent.\n- Preserve the validator failure detail in the event stream and bead evidence.\n- Strengthen tests so rejected rewrites are proven to be open/unclaimed, labeled `needs_human`, recorded with `intake.blocked`, and absent from `ReadyExecution`.\n\nNON-SCOPE\n- Do not implement the validated replacement rewrite policy; that is ddx-a41e6fbb.\n- Do not change readiness routing or model selection.\n- Do not change generic ambiguous_needs_human parking semantics outside this branch.\n\nPARENT + DEPS\nParent: ddx-5cd555c0. Depends on ddx-5cd555c0 so the spec-evolution bead lands first.",
+    "acceptance": "1. TestIntake_UnsafeRewriteBlocksForHuman asserts rejected actionable_but_rewritten leaves the bead open/unclaimed, preserves original description/acceptance, adds needs_human, and appends an intake.blocked event with intake_outcome=ambiguous_needs_human.\n2. TestIntake_UnsafeRewriteRemovedFromReadyExecution asserts Store.ReadyExecution no longer returns the bead after the rejection.\n3. TestIntake_DescriptionPreservationFailureParksForHuman covers the observed `description must preserve original text` failure detail or the replacement-validator equivalent after ddx-a41e6fbb lands.\n4. Operator log for this branch says parking/needs-human rather than releasing.\n5. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... -run \"TestIntake_.*UnsafeRewrite|TestIntake_DescriptionPreservationFailure|TestReadyExecution.*NeedsHuman\" -count=1 passes.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-5cd555c0",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:bead",
+      "kind:bug",
+      "reliability",
+      "bead-quality",
+      "spec:FEAT-010",
+      "spec:ADR-023",
+      "from:ddx-5cd555c0"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-08T01:34:33Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1033746",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"All 8 rubric criteria met: title is imperative and names subsystem plus change; description contains PROBLEM, ROOT CAUSE with three explicit file:line anchors, PROPOSED FIX, and NON-SCOPE; AC is numbered with three named Test* functions and a go test -run regex; final two AC lines are the cd cli \\u0026\\u0026 go test gate and lefthook run pre-commit; labels carry spec:FEAT-010 and spec:ADR-023 cross-refs plus from: back-ref; parent and deps are explicit with rationale; description is standalone with no /tmp or chat references.\",\"score\":8,\"suggested_fixes\":[\"AC #3 contains a conditional clause ('or the replacement-validator equivalent after ddx-a41e6fbb lands') that introduces an undeclared soft dependency. Either make the current failure detail unconditional and drop the conditional arm, or add ddx-a41e6fbb to the deps list with a note that it is non-blocking.\",\"Title says 'safe-rewrite' but the description consistently uses 'unsafe rewrite' and 'unsafe rewrite rejection'. Aligning the title to 'park rejected unsafe-rewrite attempts' removes a parsing ambiguity for a cold reader.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-08T01:36:02.896912215Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=8"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-08T01:34:33.648412325Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260508T013602-224b17be",
+    "prompt": ".ddx/executions/20260508T013602-224b17be/prompt.md",
+    "manifest": ".ddx/executions/20260508T013602-224b17be/manifest.json",
+    "result": ".ddx/executions/20260508T013602-224b17be/result.json",
+    "checks": ".ddx/executions/20260508T013602-224b17be/checks.json",
+    "usage": ".ddx/executions/20260508T013602-224b17be/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-d5ae126c-20260508T013602-224b17be"
+  },
+  "prompt_sha": "fe1a8e67b7aa40dd5746533991177e8651b605ba20fa6105cdae92748a14ee34"
+}
