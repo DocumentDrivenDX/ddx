@@ -182,8 +182,10 @@ func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bea
 	var sb strings.Builder
 	sb.WriteString("MODE: intake\n")
 	sb.WriteString("You are evaluating whether this bead is atomic, decomposable, ambiguous, or safely refinable before claim.\n")
-	sb.WriteString("Use rewritten only when you can preserve the bead's intent and return safe description/acceptance updates without inventing behavior, choosing product semantics, widening scope, or dropping acceptance criteria.\n")
-	sb.WriteString("If the bead cannot be safely refined, classify it as ambiguous.\n")
+	sb.WriteString("Use rewritten to improve prompt fitness: compress stale, duplicated, or noisy description prose, or expand a vague bead with durable context grounded in the repository or governing artifacts.\n")
+	sb.WriteString("Validated replacement is preferred over append-only amendment when it makes the bead a better implementation prompt.\n")
+	sb.WriteString("Preservation rules: non-scope items, governing artifact references (FEAT-NNN, ADR-NNN), named test functions (TestFoo), file:line evidence, and dependency IDs (ddx-XXXXXXXX) must all appear in the replacement description.\n")
+	sb.WriteString("When preservation cannot be proven from durable anchors, or when rewriting would require inventing acceptance criteria, changing scope, or choosing between conflicting requirements, classify as ambiguous_needs_human.\n")
 	sb.WriteString("Return exactly one JSON object matching the intake schema with classification, confidence, reasoning, and optional rewrite fields.\n")
 	sb.WriteString("When classification is rewritten, include rewrite.changed_fields, rewrite.description, and rewrite.acceptance.\n")
 	sb.WriteString("Do not include prose or markdown.\n\n")

@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 	"time"
 
@@ -19,10 +20,124 @@ type preClaimIntakeRewriteSnapshot struct {
 }
 
 type preClaimIntakeRewriteEventBody struct {
-	Rationale     string                        `json:"rationale,omitempty"`
-	ChangedFields []string                      `json:"changed_fields,omitempty"`
-	Before        preClaimIntakeRewriteSnapshot `json:"before"`
-	After         preClaimIntakeRewriteSnapshot `json:"after"`
+	Rationale            string                        `json:"rationale,omitempty"`
+	ChangedFields        []string                      `json:"changed_fields,omitempty"`
+	Before               preClaimIntakeRewriteSnapshot `json:"before"`
+	After                preClaimIntakeRewriteSnapshot `json:"after"`
+	PreservationEvidence []string                      `json:"preservation_evidence,omitempty"`
+}
+
+// Patterns for extracting explicit commitments from bead descriptions.
+// A commitment is a durable anchor that must survive a replacement rewrite.
+var (
+	reGoverningRef = regexp.MustCompile(`\b[A-Z]{2,6}-\d{3,}\b`)
+	reNamedTest    = regexp.MustCompile(`\bTest[A-Z]\w+\b`)
+	reFileLine     = regexp.MustCompile(`\b[\w/.-]+\.go:\d+\b`)
+	reDepID        = regexp.MustCompile(`\bddx-[0-9a-f]{8}\b`)
+)
+
+var descriptionSectionHeaders = []string{
+	"PROBLEM", "ROOT CAUSE", "PROPOSED FIX", "NON-SCOPE", "NON SCOPE",
+	"CONTEXT", "PARENT", "DEPS", "DEPENDENCIES", "BACKGROUND",
+}
+
+func isDescriptionSectionHeader(line string) bool {
+	upper := strings.ToUpper(strings.TrimRight(normalizeWhitespace(line), ":"))
+	for _, h := range descriptionSectionHeaders {
+		if upper == h {
+			return true
+		}
+	}
+	return false
+}
+
+// extractNonScopeBullets returns normalized bullet text from the NON-SCOPE
+// section of a bead description.
+func extractNonScopeBullets(desc string) []string {
+	lines := strings.Split(desc, "\n")
+	var inNonScope bool
+	var result []string
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		upper := strings.ToUpper(strings.TrimRight(normalizeWhitespace(trimmed), ":"))
+		if upper == "NON-SCOPE" || upper == "NON SCOPE" {
+			inNonScope = true
+			continue
+		}
+		if inNonScope {
+			if trimmed == "" {
+				continue
+			}
+			if isDescriptionSectionHeader(trimmed) {
+				inNonScope = false
+				continue
+			}
+			bullet := strings.TrimLeft(trimmed, "-•*+# ")
+			bullet = normalizeWhitespace(bullet)
+			if bullet != "" {
+				result = append(result, bullet)
+			}
+		}
+	}
+	return result
+}
+
+// extractDescriptionCommitments returns durable anchor strings that must be
+// preserved across a description replacement rewrite:
+//   - Governing artifact references (FEAT-010, ADR-023, etc.)
+//   - Named test functions (TestFoo)
+//   - File:line references (pkg/file.go:42)
+//   - Dependency IDs (ddx-XXXXXXXX)
+//   - NON-SCOPE section bullet points (prefixed with "non_scope:")
+func extractDescriptionCommitments(desc string) []string {
+	seen := make(map[string]struct{})
+	var result []string
+	add := func(s string) {
+		if _, ok := seen[s]; !ok {
+			seen[s] = struct{}{}
+			result = append(result, s)
+		}
+	}
+	for _, m := range reGoverningRef.FindAllString(desc, -1) {
+		add(m)
+	}
+	for _, m := range reNamedTest.FindAllString(desc, -1) {
+		add(m)
+	}
+	for _, m := range reFileLine.FindAllString(desc, -1) {
+		add(m)
+	}
+	for _, m := range reDepID.FindAllString(desc, -1) {
+		add(m)
+	}
+	for _, bullet := range extractNonScopeBullets(desc) {
+		add("non_scope:" + bullet)
+	}
+	return result
+}
+
+// validateDescriptionReplacement checks that all explicit commitments in the
+// old description are preserved in the new description. It returns the list of
+// preservation evidence entries recorded. An error is returned if any
+// commitment is missing from the replacement.
+func validateDescriptionReplacement(oldDesc, newDesc string) ([]string, error) {
+	commitments := extractDescriptionCommitments(oldDesc)
+	normNew := normalizeWhitespace(newDesc)
+	var evidence []string
+	for _, c := range commitments {
+		if strings.HasPrefix(c, "non_scope:") {
+			checkIn := strings.TrimPrefix(c, "non_scope:")
+			if !strings.Contains(normNew, checkIn) {
+				return nil, fmt.Errorf("pre-claim intake rewrite: description drops commitment %q", c)
+			}
+		} else {
+			if !strings.Contains(newDesc, c) {
+				return nil, fmt.Errorf("pre-claim intake rewrite: description drops commitment %q", c)
+			}
+		}
+		evidence = append(evidence, c)
+	}
+	return evidence, nil
 }
 
 func applyPreClaimIntakeRewrite(store ExecuteBeadLoopStore, beadID, actor string, intake PreClaimIntakeResult, createdAt time.Time) error {
@@ -41,7 +156,7 @@ func applyPreClaimIntakeRewrite(store ExecuteBeadLoopStore, beadID, actor string
 		return fmt.Errorf("pre-claim intake rewrite: load bead %s: %w", beadID, err)
 	}
 
-	rewrite, before, after, err := validateAndApplyPreClaimIntakeRewrite(original, intake.Rewrite)
+	rewrite, before, after, preservation, err := validateAndApplyPreClaimIntakeRewrite(original, intake.Rewrite)
 	if err != nil {
 		return err
 	}
@@ -58,10 +173,11 @@ func applyPreClaimIntakeRewrite(store ExecuteBeadLoopStore, beadID, actor string
 	}
 
 	body, err := json.Marshal(preClaimIntakeRewriteEventBody{
-		Rationale:     strings.TrimSpace(intake.Detail),
-		ChangedFields: rewrite.ChangedFields,
-		Before:        before,
-		After:         after,
+		Rationale:            strings.TrimSpace(intake.Detail),
+		ChangedFields:        rewrite.ChangedFields,
+		Before:               before,
+		After:                after,
+		PreservationEvidence: preservation,
 	})
 	if err != nil {
 		return fmt.Errorf("pre-claim intake rewrite: encode event: %w", err)
@@ -81,9 +197,13 @@ func applyPreClaimIntakeRewrite(store ExecuteBeadLoopStore, beadID, actor string
 	})
 }
 
-func validateAndApplyPreClaimIntakeRewrite(original *bead.Bead, rewrite PreClaimIntakeRewrite) (PreClaimIntakeRewrite, preClaimIntakeRewriteSnapshot, preClaimIntakeRewriteSnapshot, error) {
+func validateAndApplyPreClaimIntakeRewrite(original *bead.Bead, rewrite PreClaimIntakeRewrite) (PreClaimIntakeRewrite, preClaimIntakeRewriteSnapshot, preClaimIntakeRewriteSnapshot, []string, error) {
+	errOut := func(msg string, args ...any) (PreClaimIntakeRewrite, preClaimIntakeRewriteSnapshot, preClaimIntakeRewriteSnapshot, []string, error) {
+		return PreClaimIntakeRewrite{}, preClaimIntakeRewriteSnapshot{}, preClaimIntakeRewriteSnapshot{}, nil, fmt.Errorf(msg, args...)
+	}
+
 	if original == nil {
-		return PreClaimIntakeRewrite{}, preClaimIntakeRewriteSnapshot{}, preClaimIntakeRewriteSnapshot{}, fmt.Errorf("pre-claim intake rewrite: bead required")
+		return errOut("pre-claim intake rewrite: bead required")
 	}
 
 	normalized := PreClaimIntakeRewrite{
@@ -92,7 +212,7 @@ func validateAndApplyPreClaimIntakeRewrite(original *bead.Bead, rewrite PreClaim
 		ChangedFields: normalizePreClaimIntakeRewriteFields(rewrite.ChangedFields),
 	}
 	if len(normalized.ChangedFields) == 0 {
-		return PreClaimIntakeRewrite{}, preClaimIntakeRewriteSnapshot{}, preClaimIntakeRewriteSnapshot{}, fmt.Errorf("pre-claim intake rewrite: missing changed_fields")
+		return errOut("pre-claim intake rewrite: missing changed_fields")
 	}
 
 	allowed := map[string]struct{}{
@@ -101,42 +221,43 @@ func validateAndApplyPreClaimIntakeRewrite(original *bead.Bead, rewrite PreClaim
 	}
 	for _, field := range normalized.ChangedFields {
 		if _, ok := allowed[field]; !ok {
-			return PreClaimIntakeRewrite{}, preClaimIntakeRewriteSnapshot{}, preClaimIntakeRewriteSnapshot{}, fmt.Errorf("pre-claim intake rewrite: unsafe field %q", field)
+			return errOut("pre-claim intake rewrite: unsafe field %q", field)
 		}
 	}
 
 	before := snapshotPreClaimIntakeRewrite(original.Description, original.Acceptance)
 
+	var preservation []string
 	oldDescription := strings.TrimSpace(original.Description)
 	if hasString(normalized.ChangedFields, "description") {
 		if normalized.Description == "" {
-			return PreClaimIntakeRewrite{}, preClaimIntakeRewriteSnapshot{}, preClaimIntakeRewriteSnapshot{}, fmt.Errorf("pre-claim intake rewrite: description rewrite missing")
+			return errOut("pre-claim intake rewrite: description rewrite missing")
 		}
 		if strings.EqualFold(strings.TrimSpace(normalized.Description), oldDescription) {
-			return PreClaimIntakeRewrite{}, preClaimIntakeRewriteSnapshot{}, preClaimIntakeRewriteSnapshot{}, fmt.Errorf("pre-claim intake rewrite: description unchanged")
+			return errOut("pre-claim intake rewrite: description unchanged")
 		}
-		if oldDescription != "" {
-			if !strings.Contains(normalizeWhitespace(normalized.Description), normalizeWhitespace(oldDescription)) {
-				return PreClaimIntakeRewrite{}, preClaimIntakeRewriteSnapshot{}, preClaimIntakeRewriteSnapshot{}, fmt.Errorf("pre-claim intake rewrite: description must preserve original text")
-			}
+		ev, err := validateDescriptionReplacement(oldDescription, normalized.Description)
+		if err != nil {
+			return PreClaimIntakeRewrite{}, preClaimIntakeRewriteSnapshot{}, preClaimIntakeRewriteSnapshot{}, nil, err
 		}
+		preservation = ev
 	} else if normalized.Description != "" {
-		return PreClaimIntakeRewrite{}, preClaimIntakeRewriteSnapshot{}, preClaimIntakeRewriteSnapshot{}, fmt.Errorf("pre-claim intake rewrite: description supplied without changed_fields")
+		return errOut("pre-claim intake rewrite: description supplied without changed_fields")
 	}
 
 	oldAcceptance := strings.TrimSpace(original.Acceptance)
 	if hasString(normalized.ChangedFields, "acceptance") {
 		if normalized.Acceptance == "" {
-			return PreClaimIntakeRewrite{}, preClaimIntakeRewriteSnapshot{}, preClaimIntakeRewriteSnapshot{}, fmt.Errorf("pre-claim intake rewrite: acceptance rewrite missing")
+			return errOut("pre-claim intake rewrite: acceptance rewrite missing")
 		}
 		if strings.EqualFold(strings.TrimSpace(normalized.Acceptance), oldAcceptance) {
-			return PreClaimIntakeRewrite{}, preClaimIntakeRewriteSnapshot{}, preClaimIntakeRewriteSnapshot{}, fmt.Errorf("pre-claim intake rewrite: acceptance unchanged")
+			return errOut("pre-claim intake rewrite: acceptance unchanged")
 		}
 		if !acceptancePreservesCriteria(oldAcceptance, normalized.Acceptance) {
-			return PreClaimIntakeRewrite{}, preClaimIntakeRewriteSnapshot{}, preClaimIntakeRewriteSnapshot{}, fmt.Errorf("pre-claim intake rewrite: acceptance criteria dropped or altered")
+			return errOut("pre-claim intake rewrite: acceptance criteria dropped or altered")
 		}
 	} else if normalized.Acceptance != "" {
-		return PreClaimIntakeRewrite{}, preClaimIntakeRewriteSnapshot{}, preClaimIntakeRewriteSnapshot{}, fmt.Errorf("pre-claim intake rewrite: acceptance supplied without changed_fields")
+		return errOut("pre-claim intake rewrite: acceptance supplied without changed_fields")
 	}
 
 	afterDescription := oldDescription
@@ -148,7 +269,7 @@ func validateAndApplyPreClaimIntakeRewrite(original *bead.Bead, rewrite PreClaim
 		afterAcceptance = normalized.Acceptance
 	}
 	after := snapshotPreClaimIntakeRewrite(afterDescription, afterAcceptance)
-	return normalized, before, after, nil
+	return normalized, before, after, preservation, nil
 }
 
 func snapshotPreClaimIntakeRewrite(description, acceptance string) preClaimIntakeRewriteSnapshot {

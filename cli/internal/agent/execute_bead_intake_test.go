@@ -451,7 +451,7 @@ func TestIntake_UnsafeRewriteBlocksForHuman(t *testing.T) {
 func TestIntake_UnsafeRewriteRemovedFromReadyExecution(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
-		b.Description = "PROBLEM\noriginal description\n\nROOT CAUSE\nsome cause\n"
+		b.Description = "PROBLEM\noriginal description\n\nROOT CAUSE\nsome cause\n\nNON-SCOPE\nDo not change the API contract\n"
 		b.Acceptance = "1. verify something\n2. run tests"
 	}))
 
@@ -495,7 +495,7 @@ func TestIntake_UnsafeRewriteRemovedFromReadyExecution(t *testing.T) {
 func TestIntake_DescriptionPreservationFailureParksForHuman(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
-		b.Description = "PROBLEM\noriginal problem text\n\nROOT CAUSE\nexact root cause\n"
+		b.Description = "PROBLEM\noriginal problem text\n\nROOT CAUSE\ncli/internal/agent/preclaim.go:42\n\nNON-SCOPE\nDo not touch acceptance criteria\n"
 		b.Acceptance = "1. check the output\n2. run lefthook"
 	}))
 
@@ -548,7 +548,7 @@ func TestIntake_DescriptionPreservationFailureParksForHuman(t *testing.T) {
 		var body map[string]any
 		require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
 		assert.Equal(t, "ambiguous_needs_human", body["intake_outcome"])
-		assert.Contains(t, fmt.Sprintf("%v", body["detail"]), "description must preserve original text")
+		assert.Contains(t, fmt.Sprintf("%v", body["detail"]), "drops commitment")
 	}
 	assert.True(t, foundBlocked, "description preservation failure must append intake.blocked event")
 	assert.Contains(t, logBuf.String(), "parking")
