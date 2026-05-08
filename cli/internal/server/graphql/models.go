@@ -1015,7 +1015,16 @@ type Execution struct {
 	// Git revision the attempt started from.
 	BaseRev *string `json:"baseRev,omitempty"`
 	// Git revision the attempt produced (commit SHA when one was made).
+	// Backwards-compat alias; after a successful land this mirrors LandedRev.
 	ResultRev *string `json:"resultRev,omitempty"`
+	// ImplementationRev is the worker's own commit SHA before landing.
+	// Distinct from LandedRev on the merge-commit path.
+	ImplementationRev *string `json:"implementationRev,omitempty"`
+	// LandedRev is the target branch tip after the coordinator landing.
+	LandedRev *string `json:"landedRev,omitempty"`
+	// EvidenceRev is the trailing evidence commit SHA when distinct from
+	// ImplementationRev. Empty when not separately committed.
+	EvidenceRev *string `json:"evidenceRev,omitempty"`
 	// Bundle directory (relative to project root).
 	BundlePath string `json:"bundlePath"`
 	// Path to the prompt file in the bundle.
