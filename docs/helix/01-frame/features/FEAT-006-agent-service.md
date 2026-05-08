@@ -242,6 +242,30 @@ artifact and only uses typed agent response fields plus DDx-owned attempt
 evidence as policy inputs. DDx copies or links the artifact as evidence; it
 does not present the inner session log as a DDx-rendered view.
 
+## Human Stdout Projection Boundary
+
+Fizeau **typed service events** remain **opaque** to DDx — DDx must not parse,
+rehydrate, or semantically interpret the inner event schema or payload. This
+opacity applies to `ServiceEvent` fields, structured transcript events, session
+events, tool-call details, model-routing metadata, and any event payload that
+Fizeau owns.
+
+DDx **may** project summary information derived from envelope-level Fizeau
+response fields (such as actual model, actual power, route label, and tool call
+index from `ExecuteResponse`) into **phase-labeled human stdout** without
+mutating the event schema. For example, DDx may emit a one-line progress note
+such as:
+
+```
+[impl] running: codex / claude-sonnet (power 8) — tool calls: 14
+```
+
+DDx must not emit Fizeau inner event details (provider-internal routing
+decisions, model fallback chains, raw transcript tokens, or session-log content)
+as human stdout. Phase labels (`[impl]`, `[review]`, `[triage]`) are
+DDx-owned display context; they are not Fizeau event fields and must not be
+confused with changes to the Fizeau event schema.
+
 ## Layer Ownership Migration Table
 
 FEAT-006 is deliberately narrow after the three-layer refactor. It describes

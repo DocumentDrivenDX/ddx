@@ -684,38 +684,170 @@ Cleanup reporting includes scratch roots removed, bytes and inodes reclaimed,
 preserved paths, and blocked warnings so operators can see why cleanup stopped
 short.
 
-### Long-running default (`--poll-interval`)
+### `ddx work` Run Modes
 
-Per ddx-dc157075, the default `--poll-interval` for `ddx work` is **30s**.
-With a positive poll interval the
-worker stays alive across empty polls (`drained` becomes a transient
-"running (idle)" substate, not a terminal exit). The loop exits only on
-the conditions enumerated above plus `signal`, fatal config errors, or
-the explicit operator opt-outs:
+`ddx work` supports three named run modes that govern when the worker exits.
+These are the public operator semantics; there are no other mode names.
 
-- `--once` — process at most one ready bead, then exit.
-- `--poll-interval=0` — legacy "drain-and-exit" semantics: when the
-  queue empties, return immediately without polling.
+| Mode | CLI flag | Semantics |
+|---|---|---|
+| `once` | `--once` | Process at most one execution-ready bead, then exit immediately. |
+| `drain` | (default, no flag) | Process all currently execution-ready beads until a terminal stop condition fires, then exit. The worker does not sleep or wait for new work to arrive. |
+| `watch` | `--watch` | Process ready work, then remain idle and rescan for newly arriving execution-ready work at each idle interval, until `signal`, fatal config error, budget/resource stop, or operator stop fires. |
 
-Server-managed workers spawned via `POST /api/workers/execute-loop`
-inherit the same 30s default when the request omits `poll_interval`. The
-worker record exposes a `substate` field set to `"idle"` while the loop
-is sleeping between empty polls; it is cleared as soon as a candidate is
-picked. Terminal worker states (`exited`, `failed`, `stopped`, `reaped`)
+**Idle interval** is the sleep duration between empty-queue scans while in `watch`
+mode. The public flag is `--idle-interval <duration>` with a default of **30s**
+in watch mode. There is no idle interval concept in `once` or `drain` modes.
+
+**`--poll-interval` is removed from the public CLI and generated docs.** There is
+no compatibility alias. Operators previously relying on `--poll-interval 30s` to
+stay alive should use `--watch`. Operators previously relying on
+`--poll-interval=0` to drain-and-exit should use bare `ddx work` (drain mode,
+the new default).
+
+#### Direct CLI defaults
+
+Bare `ddx work` with no mode flag uses **drain** mode: the worker processes all
+currently execution-ready beads and exits when a stop condition fires. Operators
+who want long-running watch behavior must pass `--watch`.
+
+#### Server-managed worker defaults
+
+Server-managed workers spawned via `POST /api/workers/execute-loop` default to
+**watch** mode with a **30s idle interval** when the request omits `mode` and
+`idle_interval`. The request vocabulary uses `mode` + `idle_interval` fields:
+
+```json
+{
+  "mode": "once" | "drain" | "watch",
+  "idle_interval": "<duration-string>"
+}
+```
+
+`poll_interval` is not accepted as a server/API input. Workers previously
+launched with `poll_interval` must migrate to `mode` + `idle_interval`.
+
+The worker record exposes a `substate` field set to `"idle"` while the loop is
+sleeping between empty scans in watch mode; it is cleared as soon as a candidate
+is picked. Terminal worker states (`exited`, `failed`, `stopped`, `reaped`)
 always clear `substate`.
 
-The structured `loop.end` event carries an `exit_reason` field
-(`once_complete`, `explicit_poll_zero`, `sigint`, `sigterm`,
-`fatal_config`, `resource_exhausted`; `providers_exhausted` is reserved for the
-quota-pause work in ddx-aede917d).
+The structured `loop.end` event carries an `exit_reason` field (`once_complete`,
+`drain_complete`, `sigint`, `sigterm`, `fatal_config`, `resource_exhausted`;
+`providers_exhausted` is reserved for the quota-pause work in ddx-aede917d).
 
 Power escalation is evaluated between attempts as part of retry policy. A
 higher-power retry raises `MinPower` and resets neither the evidence history nor
 the no-progress counter; it is recorded as the next `ddx try` with its own
 requested bounds and actual power metadata.
 
-The evaluation log is persisted on the layer-3 record so a human or
-tool can audit which condition fired and on which iteration.
+The evaluation log is persisted on the layer-3 record so a human or tool can
+audit which condition fired and on which iteration.
+
+### `ddx work` Stdout Contract
+
+This section defines the human-facing stdout produced by `ddx work`. Every item
+here is a stable operator-visible surface; the structured event log (JSONL) is a
+separate machine-readable channel.
+
+#### Terminal summary
+
+When `ddx work` exits for any reason, it prints a terminal summary block. The
+summary states:
+
+- **Attempts:** total bead attempts made in this drain.
+- **Closed:** count of beads closed during this drain.
+- **Changed / already-satisfied:** breakdown of closed beads into those that
+  produced a commit (`changed`) and those closed as already-satisfied with no
+  commit (`already-satisfied`).
+- **Failures:** count of attempts that ended in a non-success terminal outcome.
+- **Stop reason:** the named stop condition that fired (`drained`, `blocked`,
+  `deferred`, `no_progress`, `signal`, or `resource_exhausted`).
+- **Remaining queue state:** a summary of open beads broken into buckets (see
+  below).
+
+Example terminal summary:
+
+```
+ddx work — drain complete
+  attempts:          7
+  closed:            5  (changed: 4, already-satisfied: 1)
+  failures:          2
+  stop reason:       drained
+
+remaining queue:
+  execution-ready:   0
+  blocked:           3
+  needs-human:       1
+  cooldown/deferred: 1
+  not-eligible:      0
+  superseded:        0
+  epic/closure:      0
+```
+
+#### Remaining queue-state buckets
+
+The remaining queue-state summary distinguishes the following buckets where DDx
+can compute them:
+
+| Bucket | Definition |
+|---|---|
+| `execution-ready` | Beads whose dependencies are satisfied and that have no outstanding block |
+| `blocked` | Beads with unsatisfied dependencies or explicit block flags |
+| `needs-human` | Beads parked for operator attention (`needs_human` status) |
+| `cooldown/deferred` | Beads on retry-after cooldown or explicitly deferred |
+| `not-eligible` | Beads in a non-runnable state (closed, cancelled, superseded-pending-removal) |
+| `superseded` | Beads explicitly superseded by later work |
+| `epic/closure-candidate` | Parent/epic beads that may be closable when all children complete |
+
+#### Human-review dependency pressure
+
+When open beads are transitively blocked behind `needs_human` or
+needs-investigation blockers, the terminal summary and each watch-mode idle poll
+include a dependency-pressure section. The wording is:
+
+```
+30 beads blocked behind 3 needs-human blockers:
+  ddx-a1b2c3d4 "resolve auth ambiguity" (12 downstream)
+  ddx-e5f6a7b8 "clarify rate-limit spec" (11 downstream)
+  ddx-c9d0e1f2 "investigate flaky test" (7 downstream)
+```
+
+**Total blocked count** is the number of unique open downstream beads that are
+transitively blocked behind one or more `needs_human` or needs-investigation
+blockers — the deduplicated union across all such blockers. **Per-blocker
+downstream count** is the count of unique open beads that are transitively
+blocked through that specific blocker. Per-blocker counts may sum higher than
+the total when a bead is blocked behind multiple human-review blockers.
+
+#### Watch mode idle stdout
+
+While in watch mode with an empty queue, every idle poll prints a compact
+queue-state line:
+
+```
+idle: no execution-ready beads; sleeping 30s [execution-ready: 0, blocked: 3, needs-human: 1]
+```
+
+The idle line always includes: the literal `idle:` label, a reason phrase, the
+sleep duration, and a compact inline queue-state summary with at minimum the
+`execution-ready`, `blocked`, and `needs-human` counts.
+
+The full blocker list (blocker IDs, titles, and per-blocker downstream counts)
+may be suppressed on repeated idle polls when the queue state is unchanged from
+the prior poll. The counts and sleep duration remain visible on every poll.
+
+#### Next-ready-bead transition stdout
+
+When watch mode wakes up from an idle sleep and claims new work, stdout separates
+the new bead from the prior idle block with a transition line printed before the
+bead execution block starts:
+
+```
+taking next ready bead from queue: ddx-a1b2c3d4 — "implement login rate limiting"
+```
+
+The format is `taking next ready bead from queue: <id> — <title>`.
 
 ## Quality Hooks
 
