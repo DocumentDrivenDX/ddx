@@ -1451,3 +1451,159 @@ func TestLandConflictAutoRecover_NonExistentPreserveRef_ReturnsError(t *testing.
 // Deterministic test clock helper — avoids unused time import when no test
 // overrides NowFunc.
 var _ = time.Now
+
+// ---------------------------------------------------------------------------
+// Revision-triplet tests (ddx-2599ce10)
+// ---------------------------------------------------------------------------
+
+// TestApplyLandResult_PreservesImplementationRevAndSetsLandedRev verifies that
+// a successful land preserves the worker's own commit as ImplementationRev and
+// records the target branch tip as LandedRev, without losing the original rev.
+func TestApplyLandResult_PreservesImplementationRevAndSetsLandedRev(t *testing.T) {
+	const workerSHA = "aaaa1111bbbb2222cccc3333dddd4444eeee5555"
+	const branchTip = "ffff6666aaaa7777bbbb8888cccc9999dddd0000"
+
+	res := &ExecuteBeadResult{
+		BeadID:    "ddx-test",
+		BaseRev:   "0000000000000000000000000000000000000000",
+		ResultRev: workerSHA,
+	}
+	land := &LandResult{
+		Status:  "landed",
+		NewTip:  branchTip,
+		Merged:  false,
+	}
+
+	ApplyLandResultToExecuteBeadResult(res, land)
+
+	if res.ImplementationRev != workerSHA {
+		t.Errorf("ImplementationRev: want %q, got %q", workerSHA, res.ImplementationRev)
+	}
+	if res.LandedRev != branchTip {
+		t.Errorf("LandedRev: want %q, got %q", branchTip, res.LandedRev)
+	}
+	// ResultRev is the backwards-compat alias that mirrors LandedRev.
+	if res.ResultRev != branchTip {
+		t.Errorf("ResultRev (compat): want %q, got %q", branchTip, res.ResultRev)
+	}
+	// Outcome must be "merged".
+	if res.Outcome != "merged" {
+		t.Errorf("Outcome: want %q, got %q", "merged", res.Outcome)
+	}
+}
+
+// TestApplyLandResult_PreservesImplementationRevAndSetsLandedRev_MergeCommit
+// confirms that a merge-commit landing also preserves ImplementationRev.
+func TestApplyLandResult_PreservesImplementationRevAndSetsLandedRev_MergeCommit(t *testing.T) {
+	const workerSHA = "1111aaaa2222bbbb3333cccc4444dddd5555eeee"
+	const mergeCommit = "9999ffff8888eeee7777dddd6666cccc5555bbbb"
+
+	res := &ExecuteBeadResult{
+		BeadID:    "ddx-test",
+		BaseRev:   "0000000000000000000000000000000000000000",
+		ResultRev: workerSHA,
+	}
+	land := &LandResult{
+		Status: "landed",
+		NewTip: mergeCommit,
+		Merged: true,
+	}
+
+	ApplyLandResultToExecuteBeadResult(res, land)
+
+	if res.ImplementationRev != workerSHA {
+		t.Errorf("ImplementationRev: want %q, got %q (merge-commit path)", workerSHA, res.ImplementationRev)
+	}
+	if res.LandedRev != mergeCommit {
+		t.Errorf("LandedRev: want %q, got %q (merge-commit path)", mergeCommit, res.LandedRev)
+	}
+}
+
+// TestBuildLandRequest_UsesImplementationRevNotEvidenceRev proves that
+// BuildLandRequestFromResult uses the pre-landing implementation revision even
+// when EvidenceRev and LandedRev are also set (e.g. after a first land
+// already rewrote ResultRev to the branch tip).
+func TestBuildLandRequest_UsesImplementationRevNotEvidenceRev(t *testing.T) {
+	const implSHA = "impl1111impl2222impl3333impl4444impl5555"
+	const landedSHA = "land1111land2222land3333land4444land5555"
+	const evidenceSHA = "evid1111evid2222evid3333evid4444evid5555"
+
+	res := &ExecuteBeadResult{
+		BeadID:            "ddx-test",
+		AttemptID:         "20260101T000000-deadbeef",
+		BaseRev:           "base1111base2222base3333base4444base5555",
+		ResultRev:         landedSHA,   // already rewritten to branch tip
+		ImplementationRev: implSHA,     // original worker commit
+		LandedRev:         landedSHA,
+		EvidenceRev:       evidenceSHA,
+		ExecutionDir:      ".ddx/executions/20260101T000000-deadbeef",
+	}
+
+	req := BuildLandRequestFromResult("/some/project/root", res)
+
+	if req.ResultRev != implSHA {
+		t.Errorf("LandRequest.ResultRev: want implementation rev %q, got %q", implSHA, req.ResultRev)
+	}
+	// Sanity: base rev is passed through unchanged.
+	if req.BaseRev != res.BaseRev {
+		t.Errorf("LandRequest.BaseRev: want %q, got %q", res.BaseRev, req.BaseRev)
+	}
+}
+
+// TestBuildLandRequest_FallsBackToResultRevWhenImplementationRevEmpty confirms
+// the backwards-compat path: when ImplementationRev is not yet set (pre-landing
+// state) BuildLandRequestFromResult uses ResultRev.
+func TestBuildLandRequest_FallsBackToResultRevWhenImplementationRevEmpty(t *testing.T) {
+	const workerSHA = "work1111work2222work3333work4444work5555"
+
+	res := &ExecuteBeadResult{
+		BeadID:            "ddx-test",
+		BaseRev:           "base1111",
+		ResultRev:         workerSHA,
+		ImplementationRev: "", // not yet set
+	}
+
+	req := BuildLandRequestFromResult("/project", res)
+
+	if req.ResultRev != workerSHA {
+		t.Errorf("LandRequest.ResultRev: want ResultRev fallback %q, got %q", workerSHA, req.ResultRev)
+	}
+}
+
+// TestNoChangesRevisionSemantics_PreservesBaseRev verifies that a no-changes
+// landing outcome does not fabricate ImplementationRev, LandedRev, or
+// EvidenceRev, and leaves ResultRev and BaseRev intact.
+func TestNoChangesRevisionSemantics_PreservesBaseRev(t *testing.T) {
+	const baseSHA = "base1111base2222base3333base4444base5555"
+
+	res := &ExecuteBeadResult{
+		BeadID:    "ddx-test",
+		BaseRev:   baseSHA,
+		ResultRev: baseSHA, // worker produced no commit
+	}
+	land := &LandResult{
+		Status: "no-changes",
+		Reason: "worker reported no changes",
+	}
+
+	ApplyLandResultToExecuteBeadResult(res, land)
+
+	if res.ImplementationRev != "" {
+		t.Errorf("ImplementationRev: want empty for no-changes, got %q", res.ImplementationRev)
+	}
+	if res.LandedRev != "" {
+		t.Errorf("LandedRev: want empty for no-changes, got %q", res.LandedRev)
+	}
+	if res.EvidenceRev != "" {
+		t.Errorf("EvidenceRev: want empty for no-changes, got %q", res.EvidenceRev)
+	}
+	if res.ResultRev != baseSHA {
+		t.Errorf("ResultRev: want base SHA %q unchanged, got %q", baseSHA, res.ResultRev)
+	}
+	if res.BaseRev != baseSHA {
+		t.Errorf("BaseRev: want %q unchanged, got %q", baseSHA, res.BaseRev)
+	}
+	if res.Outcome != "no-changes" {
+		t.Errorf("Outcome: want %q, got %q", "no-changes", res.Outcome)
+	}
+}

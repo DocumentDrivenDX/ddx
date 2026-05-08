@@ -35,6 +35,17 @@ type ExecuteBeadResult struct {
 	WorkerID  string `json:"worker_id,omitempty"`
 	BaseRev   string `json:"base_rev"`
 	ResultRev string `json:"result_rev,omitempty"`
+	// ImplementationRev is the worker's own commit SHA — the candidate revision
+	// produced by the agent before landing. Set from ResultRev by
+	// ApplyLandResultToExecuteBeadResult before ResultRev is rewritten to the
+	// branch tip. Never overwritten after first assignment.
+	ImplementationRev string `json:"implementation_rev,omitempty"`
+	// LandedRev is the target branch tip after the coordinator fast-forwards or
+	// merges the implementation commit. Populated by ApplyLandResultToExecuteBeadResult.
+	LandedRev string `json:"landed_rev,omitempty"`
+	// EvidenceRev is the SHA of the trailing evidence commit when it differs from
+	// ImplementationRev. Populated by the evidence committer; empty otherwise.
+	EvidenceRev string `json:"evidence_rev,omitempty"`
 
 	// Outcome and Status are initially set by the worker to task-level values
 	// (task_succeeded / task_failed / task_no_changes), then overwritten by

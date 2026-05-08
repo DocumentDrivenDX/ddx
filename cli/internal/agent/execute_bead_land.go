@@ -1580,7 +1580,12 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 		// NewTip reflects the ref actually on the target branch (either
 		// ResultRev on the ff path or the merge commit SHA on the merge path).
 		if land.NewTip != "" {
-			res.ResultRev = land.NewTip
+			// Preserve the implementation rev before rewriting the compat alias.
+			if res.ImplementationRev == "" {
+				res.ImplementationRev = res.ResultRev
+			}
+			res.LandedRev = land.NewTip
+			res.ResultRev = land.NewTip // backwards-compat alias mirrors LandedRev
 		}
 	case "preserved":
 		res.Outcome = "preserved"
@@ -1612,10 +1617,18 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 // workdir — the worker's original worktree has already been cleaned up by the
 // time Land() runs.
 func BuildLandRequestFromResult(projectRoot string, res *ExecuteBeadResult) LandRequest {
+	// Use the pre-landing implementation revision. If ImplementationRev is set
+	// (i.e. the result was already landed once and ResultRev was rewritten to
+	// the branch tip), prefer it so the coordinator always sees the candidate
+	// commit rather than an already-landed or evidence rev.
+	candidateRev := res.ImplementationRev
+	if candidateRev == "" {
+		candidateRev = res.ResultRev
+	}
 	return LandRequest{
 		WorktreeDir:  projectRoot,
 		BaseRev:      res.BaseRev,
-		ResultRev:    res.ResultRev,
+		ResultRev:    candidateRev,
 		BeadID:       res.BeadID,
 		AttemptID:    res.AttemptID,
 		TargetBranch: "",
