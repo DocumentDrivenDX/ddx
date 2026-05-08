@@ -1969,6 +1969,9 @@ func buildCLIPreClaimHook(projectRoot string, gitOps agent.LandingGitOps) func(c
 		}
 		res, err := gitOps.FetchOriginAncestryCheck(projectRoot, branch)
 		if err != nil {
+			if !strings.Contains(err.Error(), "git fetch origin") {
+				return err
+			}
 			return nil // fetch failure is non-fatal
 		}
 		if res.Action == "diverged" {

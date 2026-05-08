@@ -1,0 +1,68 @@
+{
+  "attempt_id": "20260507T233944-084dbb37",
+  "bead_id": "ddx-7cb3153d",
+  "base_rev": "d8a01b088cf84c10d7208784482874b0c73cd385",
+  "created_at": "2026-05-07T23:39:48.197672544Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7cb3153d",
+    "title": "agent: create project-root candidate refs with retention policy",
+    "description": "PROBLEM\nCandidate commits created in a temp worktree must be resolvable from the project repository before checks, review, repair, landing, or crash recovery can rely on them. Today the worker returns a raw result_rev from the temp worktree, but no dedicated project-root candidate ref lifecycle exists for the FEAT-010 candidate-cycle pipeline.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/agent/execute_bead.go:32-103 defines ExecuteBeadResult with base_rev/result_rev/preserve_ref fields but no candidate_ref or cycle_index metadata.\n- cli/internal/agent/execute_bead_loop.go:397-410 in FEAT-010's sequence says candidate refs must be pinned before candidate checks and read-only review, but the loop currently goes from implementation result toward checks/review/land without a project-root candidate ref record.\n- cli/internal/agent/execute_bead_land.go:696-708 creates land-time preserve refs under refs/ddx/iterations/\u003cbead-id\u003e/\u003cattempt-id\u003e-\u003cshort-tip\u003e, but that only covers failed/deferred landing; it is not the per-cycle candidate ref required before checks/review.\n- docs/helix/01-frame/features/FEAT-010-task-execution.md:333-365 defines each cycle as recording cycle_index, attempt_id, base_rev, result_rev, and a candidate ref under refs/ddx/iterations/\u003cattempt-id\u003e/\u003ccycle-index\u003e.\n\nPROPOSED FIX\n- Add CandidateRefStore or equivalent agent package helper that pins each close-eligible candidate commit in the project repo under refs/ddx/iterations/\u003cattempt-id\u003e/\u003ccycle-index\u003e before candidate checks and read-only review run.\n- Use cycle_index starting at 0 for the first implementation cycle in an attempt and increment for each append-only repair cycle.\n- Record candidate_ref and cycle_index alongside existing attempt metadata. The concrete storage target is ExecuteBeadResult/result.json (add JSON fields) plus the append-only bead event emitted for the candidate-cycle step; include base_rev and result_rev so the cycle can be reconstructed after worktree cleanup.\n- Retention policy: landed temporary candidate refs may be deleted only after result.json and the bead event/landed evidence containing candidate_ref, base_rev, result_rev, attempt_id, and cycle_index are durable in the project branch. Preserved/manual/parked/conflicted candidates retain the candidate ref for operator inspection and recovery.\n- Ensure git -C \u003cprojectRoot\u003e rev-parse \u003ccandidate_ref\u003e resolves even after the temp worktree is removed.\n\nNON-SCOPE\n- Do not move review or repair into the worktree yet.\n- Do not implement stale ref pruning beyond the retention behavior above.\n- Do not rename existing land-time preserve refs in execute_bead_land.go except where tests need to distinguish preserve_ref from candidate_ref.\n\nPARENT + DEPS\nParent: ddx-31e07fdc. Depends on ddx-49d8d6cb for coordinator interfaces.",
+    "acceptance": "1. CandidateRefStore or equivalent pins candidate commits under refs/ddx/iterations/\u003cattempt-id\u003e/\u003ccycle-index\u003e before candidate checks and read-only review run.\n2. TestCandidateRefStore_ProjectRootReachable verifies git -C \u003cprojectRoot\u003e rev-parse \u003ccandidate_ref\u003e succeeds for a candidate produced in a temp worktree, including after that temp worktree is removed.\n3. TestCandidateRefStore_MetadataRecorded verifies result.json / ExecuteBeadResult includes candidate_ref and cycle_index plus existing base_rev, result_rev, and attempt_id for the cycle.\n4. TestCandidateRefStore_EventRecorded verifies the bead event emitted for the candidate-cycle step includes candidate_ref, cycle_index, base_rev, result_rev, and attempt_id.\n5. TestCandidateRefStore_RetentionPolicy verifies approved-landed temporary refs are cleaned only after candidate metadata is durable, while preserved/manual/parked/conflicted candidates retain refs.\n6. cd cli \u0026\u0026 go test ./internal/agent/... -run \"TestCandidateRefStore\" green.\n7. cd cli \u0026\u0026 go test ./internal/agent/... ./cmd/... green.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-31e07fdc",
+    "labels": [
+      "phase:2",
+      "area:agent",
+      "area:git",
+      "kind:feature",
+      "reliability",
+      "adr:024",
+      "spec:FEAT-010",
+      "candidate-cycle"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-07T23:38:28Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "4097607",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"Three gaps prevent standalone execution without consulting FEAT-010. (1) Ref namespace is undefined: description uses refs/ddx/candidates/\\u003cbead-id\\u003e/\\u003ccycle-or-attempt\\u003e while AC item 1 uses \\u003ccycle\\u003e, and the 'or the exact namespace defined by the spec bead' hedge defers the authoritative form to FEAT-010 — choosing one over the other is a product-semantic decision that cannot be made safely here. (2) 'attempt bundle/run record' is undefined: no file path, struct name, or schema is given for where base_rev/candidate_rev/candidate_ref/cycle_index are persisted; an agent executing this bead cannot pick a concrete storage location without either inventing one or reading FEAT-010. (3) Retention policy is deferred to spec without inlining the required behavior: AC item 4 says 'artifact metadata is durable' without defining what durable means operationally (which file, which field, what write barrier). All three require FEAT-010 content to be inlined into the description before a sub-agent can execute, and doing so would require reading that spec — which is outside the scope of a safe rewrite.\",\"intake_outcome\":\"ambiguous_needs_human\"}",
+          "created_at": "2026-05-07T15:58:18.387683227Z",
+          "kind": "intake.blocked",
+          "source": "ddx agent execute-loop",
+          "summary": "ambiguous_needs_human"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"All 8 rubric criteria satisfied. Title is imperative and names both subsystem (agent) and change. Description supplies PROBLEM, ROOT CAUSE WITH FILE:LINE (three concrete locations with line ranges), PROPOSED FIX, and NON-SCOPE. AC is numbered, each item is verifiable, four named Test* functions are present (TestCandidateRefStore_ProjectRootReachable, _MetadataRecorded, _EventRecorded, _RetentionPolicy), and the final two items are the broad `go test` green gate and `lefthook run pre-commit passes`. Labels carry phase:2, area:agent, area:git, kind:feature, adr:024, and spec:FEAT-010. Parent and dep are both explicit with dep context provided. No /tmp paths or chat references appear. A competent agent given only the bead body can identify which file to create, which structs to extend (ExecuteBeadResult, result.json), which ref namespace to write (refs/ddx/iterations/\\u003cattempt-id\\u003e/\\u003ccycle-index\\u003e), and which tests to run.\",\"score\":8,\"suggested_fixes\":[],\"waivers_applied\":[]}",
+          "created_at": "2026-05-07T23:39:44.060675378Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=8"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-07T23:38:28.871705376Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260507T233944-084dbb37",
+    "prompt": ".ddx/executions/20260507T233944-084dbb37/prompt.md",
+    "manifest": ".ddx/executions/20260507T233944-084dbb37/manifest.json",
+    "result": ".ddx/executions/20260507T233944-084dbb37/result.json",
+    "checks": ".ddx/executions/20260507T233944-084dbb37/checks.json",
+    "usage": ".ddx/executions/20260507T233944-084dbb37/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-7cb3153d-20260507T233944-084dbb37"
+  },
+  "prompt_sha": "6c31add957e7cd77bad35762241723eda6b1d28d31d1736ae886eceea0542a09"
+}

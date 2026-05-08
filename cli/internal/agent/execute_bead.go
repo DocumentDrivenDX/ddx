@@ -45,8 +45,13 @@ type ExecuteBeadResult struct {
 	Detail  string `json:"detail,omitempty"`
 
 	// Landing fields — populated by ApplyLandingToResult, not by ExecuteBead.
-	Reason              string            `json:"reason,omitempty"`
-	PreserveRef         string            `json:"preserve_ref,omitempty"`
+	Reason      string `json:"reason,omitempty"`
+	PreserveRef string `json:"preserve_ref,omitempty"`
+	// CandidateRef is the project-root git ref pinned before checks and review.
+	// Format: refs/ddx/iterations/<attempt-id>/<cycle-index>.
+	CandidateRef string `json:"candidate_ref,omitempty"`
+	// CycleIndex is the zero-based repair-cycle index for this candidate.
+	CycleIndex          int               `json:"cycle_index,omitempty"`
 	GateResults         []GateCheckResult `json:"gate_results,omitempty"`
 	RequiredExecSummary string            `json:"required_exec_summary,omitempty"`
 	ChecksFile          string            `json:"checks_file,omitempty"`
@@ -1487,7 +1492,7 @@ func commitTrackerLocked(projectRoot string) error {
 	if cached, err := internalgit.Command(context.Background(), projectRoot, "diff", "--cached", "--", ".ddx/beads.jsonl").Output(); err == nil && strings.TrimSpace(string(cached)) == "" {
 		return nil
 	}
-	commitOut, err = internalgit.Command(context.Background(), projectRoot, "commit", "--no-verify", "-m", msg).CombinedOutput()
+	commitOut, err = internalgit.Command(context.Background(), projectRoot, "commit", "--no-verify", "--only", "-m", msg, "--", ".ddx/beads.jsonl").CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("committing tracker: %s: %w", strings.TrimSpace(string(commitOut)), err)
 	}
