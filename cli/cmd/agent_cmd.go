@@ -1867,16 +1867,12 @@ func writeExecuteLoopResult(w io.Writer, projectRoot string, result *agent.Execu
 
 	if result.NoReadyWork && result.Attempts == 0 {
 		writeNoReadyWorkSummary(w, projectRoot, result.NoReadyWorkDetail)
+		writeQueueSnapshotTerminalSummary(w, result.QueueSnapshot)
 		return nil
 	}
 
 	fmt.Fprintf(w, "\nproject: %s\n", projectRoot)
-	fmt.Fprintf(w, "completed: %d  |  successes: %d  |  failures: %d\n", result.Attempts, result.Successes, result.Failures)
-	for _, attempt := range result.Results {
-		if route := formatAttemptRouteEconomics(attempt); route != "" {
-			fmt.Fprintf(w, "route: %s\n", route)
-		}
-	}
+	writeWorkTerminalSummary(w, result)
 	if result.Failures > 0 {
 		fmt.Fprintf(w, "\nfailed:\n")
 		for _, attempt := range result.Results {
@@ -1892,8 +1888,92 @@ func writeExecuteLoopResult(w io.Writer, projectRoot string, result *agent.Execu
 	if result.NoReadyWork {
 		fmt.Fprintln(w)
 		writeNoReadyWorkSummary(w, "", result.NoReadyWorkDetail)
+		writeQueueSnapshotTerminalSummary(w, result.QueueSnapshot)
 	}
 	return nil
+}
+
+func writeWorkTerminalSummary(w io.Writer, result *agent.ExecuteBeadLoopResult) {
+	closed, changed, alreadySatisfied := countWorkTerminalOutcomes(result)
+	fmt.Fprintf(w, "worker exited: %s\n", workExitSummary(result))
+	fmt.Fprintf(w, "attempts: %d  |  closed: %d  |  changed: %d  |  already-satisfied: %d  |  failures: %d\n",
+		result.Attempts, closed, changed, alreadySatisfied, result.Failures)
+}
+
+func countWorkTerminalOutcomes(result *agent.ExecuteBeadLoopResult) (closed, changed, alreadySatisfied int) {
+	for _, attempt := range result.Results {
+		switch attempt.Status {
+		case agent.ExecuteBeadStatusSuccess:
+			closed++
+			changed++
+		case agent.ExecuteBeadStatusAlreadySatisfied:
+			closed++
+			alreadySatisfied++
+		}
+	}
+	if closed == 0 && result.Successes > 0 {
+		closed = result.Successes
+	}
+	return closed, changed, alreadySatisfied
+}
+
+func workExitSummary(result *agent.ExecuteBeadLoopResult) string {
+	switch result.ExitReason {
+	case "drained":
+		return "drained current execution-ready queue"
+	case "once_complete":
+		return "once complete"
+	case "budget":
+		return "budget reached"
+	case "no_progress":
+		return "no-progress policy stopped work"
+	case "blocked":
+		return "blocked waiting for external action"
+	case "sigint", "sigterm", "context_cancelled":
+		return "stopped by signal"
+	case "fatal_config":
+		return "fatal configuration error"
+	case "preflight_failed":
+		return "preflight failed"
+	case "resource_exhausted":
+		return "resource exhausted"
+	case "routing_unavailable":
+		return "routing unavailable"
+	}
+	if result.StopCondition != "" {
+		return strings.ToLower(strings.ReplaceAll(result.StopCondition, "_", " "))
+	}
+	return "completed"
+}
+
+func writeQueueSnapshotTerminalSummary(w io.Writer, snapshot *agent.QueueSnapshot) {
+	if snapshot == nil {
+		return
+	}
+	retry := ""
+	if snapshot.NextRetryAfter != "" {
+		retry = " next-retry=" + snapshot.NextRetryAfter
+	}
+	fmt.Fprintf(w, "remaining queue: execution-ready=%d blocked=%d operator-attention=%d needs-human/investigation=%d cooldown/deferred=%d%s execution-ineligible=%d superseded=%d epics=%d epic-closure-candidates=%d\n",
+		snapshot.ExecutionReadyCount,
+		snapshot.BlockedCount,
+		snapshot.ProposedOperatorAttentionCount,
+		snapshot.HumanReviewBlockerCount,
+		snapshot.RetryCooldownCount,
+		retry,
+		snapshot.ExecutionIneligibleCount,
+		snapshot.SupersededCount,
+		snapshot.SkippedEpicsCount,
+		snapshot.EpicClosureCandidatesCount,
+	)
+	if snapshot.HumanReviewBlockedTotal <= 0 || snapshot.HumanReviewBlockerCount <= 0 {
+		return
+	}
+	fmt.Fprintf(w, "%d beads blocked behind %d needs-human blockers:\n",
+		snapshot.HumanReviewBlockedTotal, snapshot.HumanReviewBlockerCount)
+	for i, blocker := range snapshot.HumanReviewBlockers {
+		fmt.Fprintf(w, "  %d. %s %s (%d downstream)\n", i+1, blocker.ID, blocker.Title, blocker.DownstreamBlockedCount)
+	}
 }
 
 func writeNoReadyWorkSummary(w io.Writer, projectRoot string, d agent.NoReadyWorkBreakdown) {

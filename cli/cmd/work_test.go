@@ -305,7 +305,7 @@ func TestWorkHelpDocumentsWatchMode(t *testing.T) {
 	assert.NotContains(t, out, "--poll-interval")
 }
 
-func TestWorkDefaultOutput_PrintsSelectedRouteEconomics(t *testing.T) {
+func TestWorkDefaultOutput_DoesNotPrintBareRouteSummaryAfterScopedRoutes(t *testing.T) {
 	var out bytes.Buffer
 	err := writeExecuteLoopResult(&out, "/tmp/project", &agent.ExecuteBeadLoopResult{
 		Attempts:  1,
@@ -325,8 +325,70 @@ func TestWorkDefaultOutput_PrintsSelectedRouteEconomics(t *testing.T) {
 	require.NoError(t, err)
 
 	got := out.String()
-	expected := "route: harness=agent provider=openai model=gpt-5.2 power=82 speed=35.5 tok/s cost=$0.012345/1k tok source=catalog"
-	assert.Contains(t, got, expected)
+	assert.NotContains(t, got, "\nroute:")
+	assert.NotContains(t, got, "route: harness=agent")
+	assert.Contains(t, got, "attempts: 1")
+}
+
+func TestWorkDefaultOutput_PrintsCompactTerminalSummary(t *testing.T) {
+	var out bytes.Buffer
+	err := writeExecuteLoopResult(&out, "/tmp/project", &agent.ExecuteBeadLoopResult{
+		Attempts:      2,
+		Successes:     2,
+		Failures:      0,
+		StopCondition: "Drained",
+		ExitReason:    "drained",
+		Results: []agent.ExecuteBeadReport{
+			{BeadID: "ddx-changed", Status: agent.ExecuteBeadStatusSuccess},
+			{BeadID: "ddx-satisfied", Status: agent.ExecuteBeadStatusAlreadySatisfied},
+		},
+	}, false)
+	require.NoError(t, err)
+
+	got := out.String()
+	assert.Contains(t, got, "worker exited: drained current execution-ready queue")
+	assert.Contains(t, got, "attempts: 2  |  closed: 2  |  changed: 1  |  already-satisfied: 1  |  failures: 0")
+	assert.NotContains(t, got, "completed:")
+}
+
+func TestWorkDefaultOutput_PrintsQueueStateAndHumanBlockers(t *testing.T) {
+	var out bytes.Buffer
+	err := writeExecuteLoopResult(&out, "/tmp/project", &agent.ExecuteBeadLoopResult{
+		Attempts:    1,
+		Successes:   1,
+		NoReadyWork: true,
+		ExitReason:  "drained",
+		Results: []agent.ExecuteBeadReport{{
+			BeadID: "ddx-done",
+			Status: agent.ExecuteBeadStatusSuccess,
+		}},
+		QueueSnapshot: &agent.QueueSnapshot{
+			ExecutionReadyCount:            0,
+			BlockedCount:                   30,
+			ProposedOperatorAttentionCount: 3,
+			HumanReviewBlockerCount:        3,
+			HumanReviewBlockedTotal:        30,
+			RetryCooldownCount:             2,
+			NextRetryAfter:                 "2026-05-09T12:00:00Z",
+			ExecutionIneligibleCount:       1,
+			SupersededCount:                1,
+			SkippedEpicsCount:              1,
+			EpicClosureCandidatesCount:     1,
+			HumanReviewBlockers: []agent.HumanReviewBlockerSnapshot{
+				{ID: "ddx-human-1", Title: "Needs human 1", DownstreamBlockedCount: 10},
+				{ID: "ddx-human-2", Title: "Needs human 2", DownstreamBlockedCount: 10},
+				{ID: "ddx-human-3", Title: "Needs human 3", DownstreamBlockedCount: 10},
+			},
+		},
+	}, false)
+	require.NoError(t, err)
+
+	got := out.String()
+	assert.Contains(t, got, "remaining queue: execution-ready=0 blocked=30 operator-attention=3 needs-human/investigation=3 cooldown/deferred=2 next-retry=2026-05-09T12:00:00Z execution-ineligible=1 superseded=1 epics=1 epic-closure-candidates=1")
+	assert.Contains(t, got, "30 beads blocked behind 3 needs-human blockers:")
+	assert.Contains(t, got, "1. ddx-human-1 Needs human 1 (10 downstream)")
+	assert.Contains(t, got, "2. ddx-human-2 Needs human 2 (10 downstream)")
+	assert.Contains(t, got, "3. ddx-human-3 Needs human 3 (10 downstream)")
 }
 
 func TestWorkStopSummary_ProposedVsDependencyWaiting(t *testing.T) {
@@ -377,7 +439,7 @@ func TestWorkStopSummary_CompletedThenDrainedIncludesNoReadyDetail(t *testing.T)
 	require.NoError(t, err)
 
 	got := out.String()
-	assert.Contains(t, got, "completed: 1  |  successes: 1  |  failures: 0")
+	assert.Contains(t, got, "attempts: 1  |  closed: 1  |  changed: 1  |  already-satisfied: 0  |  failures: 0")
 	assert.Contains(t, got, "No execution-ready beads.")
 	assert.Contains(t, got, "operator attention: 1 proposed bead(s) stop autonomous work")
 	assert.Contains(t, got, "waiting on dependencies: 1 open bead(s): ddx-waiting")
