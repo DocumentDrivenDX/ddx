@@ -1760,13 +1760,7 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 		if entry.Decision.Bucket != LifecycleBucketReady {
 			continue
 		}
-		if executionOnly {
-			ready = append(ready, entry.Bead)
-			continue
-		}
-		if entry.Status == StatusOpen {
-			ready = append(ready, entry.Bead)
-		}
+		ready = append(ready, entry.Bead)
 	}
 
 	sortBeadsForQueue(ready)

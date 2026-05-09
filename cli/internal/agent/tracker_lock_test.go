@@ -447,3 +447,61 @@ func TestTrackerCommit_RetryBackoffPolicy(t *testing.T) {
 		}
 	})
 }
+
+// TestTrackerLock_RecordsRetryCount asserts that TrackerLockMetricsSink
+// captures a non-zero retry count under simulated lock contention.
+func TestTrackerLock_RecordsRetryCount(t *testing.T) {
+	root := initTrackerRepo(t)
+
+	var mu sync.Mutex
+	var captured []TrackerLockSample
+	prev := TrackerLockMetricsSink
+	TrackerLockMetricsSink = func(s TrackerLockSample) {
+		mu.Lock()
+		captured = append(captured, s)
+		mu.Unlock()
+	}
+	defer func() { TrackerLockMetricsSink = prev }()
+
+	// Pre-acquire the lock with the current PID so breakStaleTrackerLock
+	// cannot reclaim it.
+	lockDir := trackerLockPath(root)
+	require.NoError(t, os.MkdirAll(lockDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(lockDir, "pid"),
+		[]byte(fmt.Sprintf("%d", os.Getpid())), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(lockDir, "acquired_at"),
+		[]byte(time.Now().UTC().Format(time.RFC3339)), 0o644))
+
+	// Release the lock after 30ms to allow at least a few retry iterations.
+	go func() {
+		time.Sleep(30 * time.Millisecond)
+		_ = os.RemoveAll(lockDir)
+	}()
+
+	policy := LockRetryPolicy{
+		InitialBackoff: 5 * time.Millisecond,
+		MaxBackoff:     10 * time.Millisecond,
+		Multiplier:     2.0,
+		MaxRetries:     200,
+		MaxElapsed:     5 * time.Second,
+	}
+	err := withTrackerLockPolicy(root, policy, func() error { return nil })
+	require.NoError(t, err)
+
+	mu.Lock()
+	got := append([]TrackerLockSample(nil), captured...)
+	mu.Unlock()
+
+	if len(got) == 0 {
+		t.Fatal("TrackerLockMetricsSink was not called")
+	}
+	if got[0].Retries == 0 {
+		t.Fatalf("expected Retries > 0 for contended lock, got %d", got[0].Retries)
+	}
+	if got[0].Wait < 5*time.Millisecond {
+		t.Fatalf("expected Wait >= 5ms, got %v", got[0].Wait)
+	}
+	if got[0].LockDir != lockDir {
+		t.Fatalf("LockDir = %q, want %q", got[0].LockDir, lockDir)
+	}
+}
