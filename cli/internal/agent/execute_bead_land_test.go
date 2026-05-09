@@ -1448,6 +1448,132 @@ func TestLandConflictAutoRecover_NonExistentPreserveRef_ReturnsError(t *testing.
 	}
 }
 
+// TestLand_MergeRequired_IndexCleanAfterMerge is a regression test for
+// ddx-7e659c95. After a successful merge landing (the target branch advanced
+// since the worker started), the main worktree's git INDEX must be clean —
+// i.e. `git diff --cached --name-only` must return nothing for files the
+// bead changed. Before the fix, UpdateRefTo advanced the main branch ref
+// without updating the index, leaving staged reverts of the bead's changes.
+// When the operator subsequently ran `git commit` (intending only
+// beads.jsonl), those phantom staged entries were swept in, undoing the
+// bead's work.
+//
+// The test exercises the index-lock contention scenario: a goroutine holds
+// `.git/index.lock` for 2 s while Land() runs. Before the fix,
+// SyncWorkTreeToHead silently discarded the lock-contention error and
+// returned, leaving the index dirty. After the fix, SyncWorkTreeToHead
+// retries until the lock is released and the index is clean.
+func TestLand_MergeRequired_IndexCleanAfterMerge(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	// Pre-seed a tracked file in the initial commit so the worker has
+	// something to modify (regression requires a modification, not just a
+	// new file, so that UpdateRefTo dirtying the index is observable).
+	r.writeFile("tracked.txt", "original content\n")
+	r.runGit("add", "-A")
+	r.runGit("commit", "-m", "test: seed tracked file")
+	r.baseSHA = r.resolveRef("refs/heads/main")
+
+	// Worker modifies tracked.txt (branching off baseSHA).
+	workerSHA := r.commitOn(r.baseSHA, "tracked.txt", "bead changes\n", "feat: bead updates tracked")
+
+	// Meanwhile, a sibling lands a commit on main (different file, no conflict).
+	siblingSHA := r.commitOn(r.baseSHA, "sibling.txt", "sibling content\n", "feat: sibling")
+	r.runGit("update-ref", "refs/heads/main", siblingSHA)
+	r.syncWorkTreeFrom(r.baseSHA)
+
+	// Create an evidence dir so the full merge+evidence path is exercised.
+	// (Evidence triggers landingFinalizationWorktree and landEvidence, which
+	// is the code path that existed when ddx-7e659c95 was filed.)
+	attemptID := "20260508T000000-7e659c95"
+	evidenceDir := filepath.Join(".ddx", "executions", attemptID)
+	fullEvidenceDir := filepath.Join(r.dir, evidenceDir)
+	if err := os.MkdirAll(fullEvidenceDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fullEvidenceDir, "manifest.json"),
+		[]byte(`{"attempt_id":"`+attemptID+`"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Simulate operator index-lock contention: hold .git/index.lock so that
+	// the first git read-tree HEAD call inside SyncWorkTreeToHead fails with
+	// "Unable to create index.lock: File exists". Before the fix,
+	// SyncWorkTreeToHead returned silently on this error and the index stayed
+	// dirty. After the fix it retries until the lock clears.
+	//
+	// Timing: Land() takes ~800ms. The syncWorkTreeToHeadGuarded call happens
+	// near the end (after merge + evidence worktree ops). Hold the lock for
+	// 2s so it is still present when git read-tree HEAD is attempted; the
+	// goroutine releases it so that the retry eventually succeeds.
+	indexLockPath := filepath.Join(r.dir, ".git", "index.lock")
+	lockFile, err := os.OpenFile(indexLockPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatalf("could not pre-create index.lock for contention test: %v", err)
+	}
+	_ = lockFile.Close()
+	go func() {
+		// Hold the lock for 2 s then release it so SyncWorkTreeToHead can retry.
+		time.Sleep(2 * time.Second)
+		_ = os.Remove(indexLockPath)
+	}()
+
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      r.baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-7e659c95",
+		AttemptID:    attemptID,
+		TargetBranch: "main",
+		EvidenceDir:  filepath.ToSlash(evidenceDir),
+	}
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.Status != "landed" {
+		t.Fatalf("expected status=landed, got %q (reason=%q)", land.Status, land.Reason)
+	}
+	if !land.Merged {
+		t.Fatalf("expected Merged=true on merge path")
+	}
+
+	// AC2: after Land() returns, the main worktree index must be clean.
+	// Specifically, `git diff --cached --name-only` must be empty: no
+	// staged changes (including no phantom revert of tracked.txt).
+	cached := r.runGit("diff", "--cached", "--name-only")
+	if strings.TrimSpace(cached) != "" {
+		t.Errorf("ddx-7e659c95 regression: main worktree index is dirty after merge landing.\n"+
+			"Staged changes:\n%s\n"+
+			"These phantom staged entries cause subsequent operator commits to "+
+			"undo the bead's work.", cached)
+	}
+
+	// AC1: no pre-merge revert for tracked.txt in git status.
+	statusOut := r.runGit("status", "--porcelain", "tracked.txt")
+	if strings.TrimSpace(statusOut) != "" {
+		t.Errorf("ddx-7e659c95 regression: tracked.txt has unexpected status after merge landing: %q", statusOut)
+	}
+
+	// Sanity: main tip must equal the evidence commit (or the merge commit if
+	// no evidence was committed, but evidence is set here).
+	if land.NewTip == "" {
+		t.Fatalf("NewTip must not be empty after successful land")
+	}
+	if got := r.resolveRef("refs/heads/main"); got != land.NewTip {
+		t.Errorf("main tip = %s, want land.NewTip %s", got, land.NewTip)
+	}
+
+	// Sanity: tracked.txt on disk must reflect the bead's change.
+	content, readErr := os.ReadFile(filepath.Join(r.dir, "tracked.txt"))
+	if readErr != nil {
+		t.Errorf("tracked.txt not present in working tree after merge landing: %v", readErr)
+	} else if string(content) != "bead changes\n" {
+		t.Errorf("tracked.txt content = %q after merge landing, want bead changes", string(content))
+	}
+}
+
 // Deterministic test clock helper — avoids unused time import when no test
 // overrides NowFunc.
 var _ = time.Now

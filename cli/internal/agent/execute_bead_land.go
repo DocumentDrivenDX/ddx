@@ -385,11 +385,58 @@ func (RealLandingGitOps) SyncWorkTreeToHead(dir, fromRev string) error {
 	return syncWorkTreeToHeadExcludingPaths(dir, fromRev, nil)
 }
 
+// readTreeHeadWithRetry runs `git read-tree HEAD` in dir, retrying with
+// exponential backoff when the git index lock is held by a concurrent process.
+//
+// Background (ddx-7e659c95): git read-tree needs to acquire .git/index.lock.
+// When an operator git command (git status, git commit, etc.) holds the lock
+// concurrently, git exits 128 with "Unable to create index.lock: File exists".
+// Without retry the main worktree index stays dirty after a merge landing,
+// causing a subsequent `git commit beads.jsonl` to sweep in phantom reverts of
+// the bead's changes.
+//
+// The retry budget (30 s, 100 ms → 1 s backoff) matches the
+// DefaultLockRetryPolicy used by withTrackerLock so contention handling is
+// consistent across all ddx git-index operations.
+func readTreeHeadWithRetry(dir string) ([]byte, error) {
+	const (
+		initialBackoff = 100 * time.Millisecond
+		maxBackoff     = 1 * time.Second
+		maxElapsed     = 30 * time.Second
+	)
+	start := time.Now()
+	backoff := initialBackoff
+	for {
+		out, err := internalgit.Command(context.Background(), dir, "read-tree", "HEAD").CombinedOutput()
+		if err == nil {
+			return out, nil
+		}
+		// Only retry on index lock contention; all other errors are fatal.
+		if !strings.Contains(string(out), "index.lock") {
+			return out, err
+		}
+		if time.Since(start) >= maxElapsed {
+			return out, err
+		}
+		time.Sleep(backoff)
+		backoff *= 2
+		if backoff > maxBackoff {
+			backoff = maxBackoff
+		}
+	}
+}
+
 func syncWorkTreeToHeadExcludingPaths(dir, fromRev string, skipPaths []string) error {
 	// Step 1: sync the index to HEAD. This is required before checkout-index
 	// below will do anything useful, and also keeps subsequent CommitTracker
 	// calls from building stale trees.
-	out, err := internalgit.Command(context.Background(), dir, "read-tree", "HEAD").CombinedOutput()
+	//
+	// ddx-7e659c95: git read-tree requires .git/index.lock. If an operator
+	// git command (git status, git commit, etc.) holds the lock concurrently,
+	// git read-tree exits 128 with "Unable to create index.lock: File exists".
+	// Retry with exponential backoff for up to 30 s so transient operator
+	// contention does not leave the main worktree index dirty.
+	out, err := readTreeHeadWithRetry(dir)
 	if err != nil {
 		return fmt.Errorf("git read-tree HEAD: %s: %w", strings.TrimSpace(string(out)), err)
 	}
