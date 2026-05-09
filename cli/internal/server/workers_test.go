@@ -1252,6 +1252,20 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 	assert.Equal(t, executeloop.SpecCurrentVersion, persisted.SpecVersion)
 }
 
+func TestRESTWorkerStart_RejectsPollIntervalAlias(t *testing.T) {
+	projectRoot := setupTestDir(t)
+	srv := New(":0", projectRoot)
+
+	req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/execute-loop", strings.NewReader(`{"poll_interval":"30s"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code, "body: %s", w.Body.String())
+	assert.Contains(t, w.Body.String(), "poll_interval is not supported")
+}
+
 func TestRESTWorkerStart_UnknownSpecVersion(t *testing.T) {
 	xdgDir := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", xdgDir)

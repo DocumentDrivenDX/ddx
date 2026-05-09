@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -84,8 +85,8 @@ func TestExecuteBeadWorkerResourceExhaustedStopsLoop(t *testing.T) {
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Log:          &logBuf,
-		Once:         false,
-		PollInterval: 10 * time.Millisecond,
+		Mode:         executeloop.ModeWatch,
+		IdleInterval: 10 * time.Millisecond,
 		ProjectRoot:  t.TempDir(),
 		SessionID:    "sess-resource-loop",
 		WorkerID:     "worker-resource",

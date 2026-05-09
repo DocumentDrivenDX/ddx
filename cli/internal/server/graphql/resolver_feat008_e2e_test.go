@@ -179,6 +179,10 @@ review_max_retries: 5
 	assert.Equal(t, "smart", got.args["profile"],
 		"with no agent.profile configured and no input override, the "+
 			"resolver's legacy fallback of \"smart\" must continue to apply")
+	assert.Equal(t, "watch", got.args["mode"],
+		"GraphQL startWorker defaults server-managed workers to watch mode")
+	assert.Equal(t, "30s", got.args["idle_interval"],
+		"GraphQL startWorker defaults watch workers to a 30s idle interval")
 
 	// Half 2: drive ExecuteBeadWorker.RunWithConfig with the same
 	// ResolvedConfig production would produce. This mirrors what

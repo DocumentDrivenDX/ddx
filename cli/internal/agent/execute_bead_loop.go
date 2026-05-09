@@ -12,6 +12,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	agenttry "github.com/DocumentDrivenDX/ddx/internal/agent/try"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/work"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -56,7 +57,12 @@ type ExecuteBeadLoopRuntime struct {
 	// BudgetStop, when non-nil, is checked before selecting the next bead. It
 	// lets CLI/server callers surface already-tripped budget state as a typed
 	// work-layer StopCondition before any new bead is claimed.
-	BudgetStop   func() (ExecuteBeadReport, bool)
+	BudgetStop func() (ExecuteBeadReport, bool)
+	// Mode and IdleInterval are the runtime loop intent. Once and
+	// PollInterval remain for older tests/callers but production entry points
+	// should set Mode and IdleInterval directly.
+	Mode         executeloop.Mode
+	IdleInterval time.Duration
 	Once         bool
 	PollInterval time.Duration
 	NoReview     bool
@@ -71,11 +77,30 @@ type ExecuteBeadLoopRuntime struct {
 	TargetBeadID string
 	// WakeCh, when non-nil, signals the idle-poll sleep to return immediately
 	// so the loop re-scans the queue. Used by the operator-prompt approve /
-	// auto-approve mutations (Story 15) to avoid a poll-interval-sized delay
+	// auto-approve mutations (Story 15) to avoid an idle-interval-sized delay
 	// before a freshly-approved bead is claimed. Implementations must send
 	// non-blocking (server-side helpers do); the loop only waits for a
 	// receive on WakeCh during the idle sleep, never elsewhere.
 	WakeCh <-chan struct{}
+}
+
+func (r ExecuteBeadLoopRuntime) loopIntent() (executeloop.Mode, time.Duration) {
+	mode := r.Mode
+	if mode == "" {
+		if r.Once {
+			mode = executeloop.ModeOnce
+		} else {
+			mode = executeloop.ModeDrain
+		}
+	}
+	idleInterval := r.IdleInterval
+	if idleInterval == 0 && mode == executeloop.ModeWatch {
+		idleInterval = r.PollInterval
+	}
+	if idleInterval == 0 && mode == executeloop.ModeWatch {
+		idleInterval = 30 * time.Second
+	}
+	return mode, idleInterval
 }
 
 // DefaultReviewMaxRetries is the number of reviewer attempts allowed per
@@ -509,6 +534,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	harness := rcfg.Harness()
 	model := rcfg.Model()
 	profile := rcfg.Profile()
+	loopMode, idleInterval := runtime.loopIntent()
 
 	result := &ExecuteBeadLoopResult{}
 	resultsResetIdx := 0
@@ -526,7 +552,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		"model":        model,
 		"session_id":   runtime.SessionID,
 		"assignee":     assignee,
-		"once":         runtime.Once,
+		"mode":         string(loopMode),
+		"once":         loopMode == executeloop.ModeOnce,
 	})
 	cleanupLog := runtime.CleanupLog
 	if cleanupLog == nil {
@@ -681,20 +708,20 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 			}
 			if applyStop(work.StopInput{
-				NoReadyWork:  true,
-				Once:         runtime.Once,
-				PollInterval: runtime.PollInterval,
+				NoReadyWork: true,
+				Once:        loopMode == executeloop.ModeOnce,
+				Mode:        loopMode,
 			}) {
 				return result, nil
 			}
-			// Long-running drain (poll-interval > 0): an empty queue is idle,
-			// not terminal. --once and explicit poll-zero exits are classified
-			// above through work.StopCondition. Emit a transient "no_ready_work"
+			// Watch mode treats an empty queue as idle, not terminal. --once
+			// and drain exits are classified above through work.StopCondition.
+			// Emit a transient "no_ready_work"
 			// event so server-managed workers can surface this as an idle substate
 			// (ddx-dc157075 AC #5) instead of treating it as terminal.
 			emit("loop.idle", map[string]any{
 				"reason":        "no_ready_work",
-				"poll_interval": runtime.PollInterval.String(),
+				"idle_interval": idleInterval.String(),
 			})
 			// Surface the idle substate via the progress channel so server-side
 			// drainProgress can flip WorkerRecord.Substate to "idle" without
@@ -710,7 +737,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				Message:   "no_ready_work",
 			})
 			resultsResetIdx = len(result.Results)
-			if err := sleepOrWake(ctx, runtime.PollInterval, runtime.WakeCh); err != nil {
+			if err := sleepOrWake(ctx, idleInterval, runtime.WakeCh); err != nil {
 				if exitReason == "" {
 					applyStop(work.StopInput{ContextErr: err})
 				}
@@ -801,7 +828,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					Status: ExecuteBeadStatusSuccess,
 					Detail: "dangling-success recovery: bead closed idempotently (result_rev already merged)",
 				})
-				if applyStop(work.StopInput{Once: runtime.Once}) {
+				if applyStop(work.StopInput{Once: loopMode == executeloop.ModeOnce}) {
 					return result, nil
 				}
 				continue
@@ -863,7 +890,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
 					}
 					_ = w.Store.Unclaim(candidate.ID)
-					if runtime.Once {
+					if loopMode == executeloop.ModeOnce {
 						applyStop(work.StopInput{Once: true})
 						return result, nil
 					}
@@ -911,7 +938,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
 				}
 				_ = w.Store.Unclaim(candidate.ID)
-				if runtime.Once {
+				if loopMode == executeloop.ModeOnce {
 					applyStop(work.StopInput{Once: true})
 					return result, nil
 				}
@@ -961,7 +988,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					"waivers_applied":  lintResult.WaiversApplied,
 				})
 				_ = w.Store.Unclaim(candidate.ID)
-				if runtime.Once {
+				if loopMode == executeloop.ModeOnce {
 					applyStop(work.StopInput{Once: true})
 					return result, nil
 				}
@@ -1551,7 +1578,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
 		}
 
-		if runtime.Once {
+		if loopMode == executeloop.ModeOnce {
 			applyStop(work.StopInput{Once: true})
 			return result, nil
 		}

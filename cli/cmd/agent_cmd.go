@@ -1401,7 +1401,8 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	modelRef, _ := cmd.Flags().GetString("model-ref")
 	effort, _ := cmd.Flags().GetString("effort")
 	once, _ := cmd.Flags().GetBool("once")
-	pollInterval, _ := cmd.Flags().GetDuration("poll-interval")
+	watch, _ := cmd.Flags().GetBool("watch")
+	rawIdleInterval, _ := cmd.Flags().GetDuration("idle-interval")
 	asJSON, _ := cmd.Flags().GetBool("json")
 	dispatchJSON := ""
 	if asJSON {
@@ -1421,14 +1422,20 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	if noReview && !noReviewAck {
 		return executeloop.ExecuteLoopSpec{}, executeloop.DispatchOptions{}, fmt.Errorf("--no-review requires --no-review-i-know-what-im-doing (break-glass acknowledgement)")
 	}
+	if once && watch {
+		return executeloop.ExecuteLoopSpec{}, executeloop.DispatchOptions{}, fmt.Errorf("--once and --watch are mutually exclusive")
+	}
+	if !watch && cmd.Flags().Changed("idle-interval") {
+		return executeloop.ExecuteLoopSpec{}, executeloop.DispatchOptions{}, fmt.Errorf("--idle-interval only applies in watch mode; pass --watch")
+	}
 
 	mode := executeloop.ModeDrain
 	var idleInterval executeloop.Duration
 	if once {
 		mode = executeloop.ModeOnce
-	} else if pollInterval > 0 {
+	} else if watch {
 		mode = executeloop.ModeWatch
-		idleInterval = executeloop.Duration{Duration: pollInterval}
+		idleInterval = executeloop.Duration{Duration: rawIdleInterval}
 	}
 
 	spec := executeloop.ExecuteLoopSpec{
@@ -1779,14 +1786,9 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		progressLog = io.Discard
 		cleanupLog = io.Discard
 	}
-	once := spec.Mode == executeloop.ModeOnce
-	pollInterval := time.Duration(0)
-	if spec.Mode == executeloop.ModeWatch {
-		pollInterval = spec.IdleInterval.Duration
-	}
 	result, err := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
-		Once:                  once,
-		PollInterval:          pollInterval,
+		Mode:                  spec.Mode,
+		IdleInterval:          spec.IdleInterval.Duration,
 		Log:                   progressLog,
 		CleanupLog:            cleanupLog,
 		EventSink:             loopSink,

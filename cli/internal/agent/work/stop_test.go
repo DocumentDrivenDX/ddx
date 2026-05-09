@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
-	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 )
 
 func TestStopCondition_ClassifiesDrainExitReasons(t *testing.T) {
@@ -33,15 +34,15 @@ func TestStopCondition_ClassifiesDrainExitReasons(t *testing.T) {
 		wantReason string
 	}{
 		{
-			name:       "drained explicit poll zero",
-			input:      StopInput{NoReadyWork: true, PollInterval: 0},
+			name:       "drained",
+			input:      StopInput{NoReadyWork: true, Mode: executeloop.ModeDrain},
 			wantOK:     true,
 			wantCond:   StopConditionDrained,
-			wantReason: "explicit_poll_zero",
+			wantReason: "drained",
 		},
 		{
 			name:       "once",
-			input:      StopInput{Once: true, PollInterval: 30 * time.Second},
+			input:      StopInput{Once: true, Mode: executeloop.ModeWatch},
 			wantOK:     true,
 			wantCond:   StopConditionOnce,
 			wantReason: "once_complete",
@@ -90,7 +91,7 @@ func TestStopCondition_ClassifiesDrainExitReasons(t *testing.T) {
 		},
 		{
 			name:   "idle is nonterminal",
-			input:  StopInput{NoReadyWork: true, PollInterval: time.Second},
+			input:  StopInput{NoReadyWork: true, Mode: executeloop.ModeWatch},
 			wantOK: false,
 		},
 	}

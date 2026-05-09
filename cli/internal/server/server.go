@@ -12,6 +12,7 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	"io"
 	"io/fs"
 	"math/big"
 	"net"
@@ -2378,8 +2379,20 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
 		return
 	}
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+		return
+	}
+	if err := rejectLegacyExecuteLoopWorkerArgs(body); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error":        err.Error(),
+			"capabilities": executeLoopSpecCapabilities(),
+		})
+		return
+	}
 	var spec executeloop.ExecuteLoopSpec
-	if err := json.NewDecoder(r.Body).Decode(&spec); err != nil {
+	if err := json.Unmarshal(body, &spec); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}

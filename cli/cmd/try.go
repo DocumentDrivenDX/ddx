@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -339,7 +340,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	lintHook := agent.NewPreDispatchLintHook(projectRoot, store, rcfg, nil, qualityRunner)
 	triageHook := agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
 	result, runErr := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
-		Once:                  true,
+		Mode:                  executeloop.ModeOnce,
 		Log:                   cmd.OutOrStdout(),
 		EventSink:             loopSink,
 		WorkerID:              resolveClaimAssignee(),

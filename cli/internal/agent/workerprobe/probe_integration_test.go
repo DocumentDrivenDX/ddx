@@ -78,7 +78,7 @@ func TestWorker_RealAttemptEvents_FlowToServer(t *testing.T) {
 	// irrelevant to this test, which asserts only that events flowed through the
 	// probe.
 	cmd := exec.Command(bin, "work", "--once", "--no-review", "--no-review-i-know-what-im-doing",
-		"--harness", "noop", "--poll-interval", "0", "--project", proj)
+		"--harness", "noop", "--project", proj)
 	cmd.Env = append(os.Environ(),
 		"XDG_DATA_HOME="+xdg,
 		"HOME="+t.TempDir(),

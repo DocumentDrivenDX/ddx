@@ -2263,6 +2263,10 @@ type StartWorkerInput struct {
 	Effort *string `json:"effort,omitempty"`
 	// Optional label filter for ready beads
 	LabelFilter *string `json:"labelFilter,omitempty"`
+	// Worker mode: once, drain, or watch. Defaults to watch.
+	Mode *string `json:"mode,omitempty"`
+	// Sleep duration between empty-queue scans in watch mode (for example "30s").
+	IdleInterval *string `json:"idleInterval,omitempty"`
 }
 
 // Subscription is the root entry point for all real-time events

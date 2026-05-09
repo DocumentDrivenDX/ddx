@@ -50,7 +50,8 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 	setFlag("provider", "anthropic")
 	setFlag("model-ref", "code-medium")
 	setFlag("effort", "high")
-	setFlag("poll-interval", "45s")
+	setFlag("watch", "true")
+	setFlag("idle-interval", "45s")
 	setFlag("json", "true")
 	setFlag("local", "true")
 	setFlag("no-review", "true")
@@ -145,13 +146,37 @@ func TestParseExecuteLoopFlags_OnceFlag(t *testing.T) {
 	workCmd, _, err := root.Find([]string{"work"})
 	require.NoError(t, err)
 	require.NoError(t, workCmd.Flags().Set("once", "true"))
-	require.NoError(t, workCmd.Flags().Set("poll-interval", "45s"))
 
 	spec, _, err := parseExecuteLoopSpec(workCmd, true)
 	require.NoError(t, err)
 
 	assert.Equal(t, executeloop.ModeOnce, spec.Mode)
 	assert.Zero(t, spec.IdleInterval.Duration)
+}
+
+func TestParseExecuteLoopFlags_OnceAndWatchAreMutuallyExclusive(t *testing.T) {
+	dir := t.TempDir()
+	root := NewCommandFactory(dir).NewRootCommand()
+	workCmd, _, err := root.Find([]string{"work"})
+	require.NoError(t, err)
+	require.NoError(t, workCmd.Flags().Set("once", "true"))
+	require.NoError(t, workCmd.Flags().Set("watch", "true"))
+
+	_, _, err = parseExecuteLoopSpec(workCmd, true)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--once and --watch are mutually exclusive")
+}
+
+func TestParseExecuteLoopFlags_IdleIntervalRequiresWatch(t *testing.T) {
+	dir := t.TempDir()
+	root := NewCommandFactory(dir).NewRootCommand()
+	workCmd, _, err := root.Find([]string{"work"})
+	require.NoError(t, err)
+	require.NoError(t, workCmd.Flags().Set("idle-interval", "15s"))
+
+	_, _, err = parseExecuteLoopSpec(workCmd, true)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "--idle-interval only applies in watch mode")
 }
 
 // TestAgentExecuteLoopCommandRemoved verifies that the old nested command name
@@ -213,7 +238,7 @@ func TestWorkPassthroughNotValidated(t *testing.T) {
 		"ddx work with no ready beads must report no_ready_work=true")
 }
 
-func TestWorkDefaultPollIntervalExitsOnEmptyQueue(t *testing.T) {
+func TestWorkDefaultDrainModeExitsOnEmptyQueue(t *testing.T) {
 	env := NewTestEnvironment(t)
 	root := NewCommandFactory(env.Dir).NewRootCommand()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -236,16 +261,48 @@ func TestWorkDefaultPollIntervalExitsOnEmptyQueue(t *testing.T) {
 	assert.Equal(t, 0, res.Attempts)
 }
 
-func TestWorkLongRunningPollIntervalRemainsOptIn(t *testing.T) {
+func TestWorkWatchModeFlagsArePresent(t *testing.T) {
 	dir := t.TempDir()
 	root := NewCommandFactory(dir).NewRootCommand()
 
 	workCmd, _, err := root.Find([]string{"work"})
 	require.NoError(t, err, "ddx work must exist")
-	flag := workCmd.Flags().Lookup("poll-interval")
-	require.NotNil(t, flag)
-	assert.Equal(t, "0s", flag.DefValue)
-	assert.Contains(t, flag.Usage, "Set 30s to keep the worker alive")
+	watch := workCmd.Flags().Lookup("watch")
+	require.NotNil(t, watch)
+	assert.Contains(t, watch.Usage, "Keep watching")
+	idle := workCmd.Flags().Lookup("idle-interval")
+	require.NotNil(t, idle)
+	assert.Equal(t, "30s", idle.DefValue)
+	assert.Contains(t, idle.Usage, "watch mode")
+}
+
+func TestWorkPollIntervalRemoved(t *testing.T) {
+	dir := t.TempDir()
+	root := NewCommandFactory(dir).NewRootCommand()
+
+	workCmd, _, err := root.Find([]string{"work"})
+	require.NoError(t, err, "ddx work must exist")
+	assert.Nil(t, workCmd.Flags().Lookup("poll-interval"))
+
+	_, err = executeCommand(root, "work", "--poll-interval=30s")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown flag: --poll-interval")
+}
+
+func TestWorkHelpDocumentsWatchMode(t *testing.T) {
+	dir := t.TempDir()
+	root := NewCommandFactory(dir).NewRootCommand()
+
+	out, err := executeCommand(root, "work", "--help")
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "ddx work")
+	assert.Contains(t, out, "ddx work --once")
+	assert.Contains(t, out, "ddx work --watch")
+	assert.Contains(t, out, "ddx work --watch --idle-interval 15s")
+	assert.Contains(t, out, "--watch")
+	assert.Contains(t, out, "--idle-interval")
+	assert.NotContains(t, out, "--poll-interval")
 }
 
 func TestWorkDefaultOutput_PrintsSelectedRouteEconomics(t *testing.T) {

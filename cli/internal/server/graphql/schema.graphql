@@ -1926,6 +1926,10 @@ input StartWorkerInput {
   effort: String
   """Optional label filter for ready beads"""
   labelFilter: String
+  """Worker mode: once, drain, or watch. Defaults to watch."""
+  mode: String
+  """Sleep duration between empty-queue scans in watch mode (for example "30s")."""
+  idleInterval: String
 }
 
 """PluginDispatchResult describes the worker started by a plugin action."""

@@ -64,8 +64,11 @@ ddx work
 # Process at most one ready bead and stop
 ddx work --once
 
-# Run as a long-lived worker
-ddx work --poll-interval 30s
+# Watch for newly-ready work after the current queue drains
+ddx work --watch
+
+# Watch with a shorter idle scan interval
+ddx work --watch --idle-interval 15s
 
 # Debug a specific bead
 ddx try <bead-id>

@@ -6,14 +6,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestLoop_StaysAliveWithEmptyQueue covers ddx-dc157075 AC #2: with
-// poll-interval > 0, the loop must NOT exit when nextCandidate returns no
+// TestLoop_StaysAliveWithEmptyQueue covers watch mode: the loop must
+// NOT exit when nextCandidate returns no
 // eligible bead. It must reset the per-Run attempted/hookFailed maps and
 // sleep, then poll again. Cancelling the context is the only way out.
 func TestLoop_StaysAliveWithEmptyQueue(t *testing.T) {
@@ -44,7 +45,8 @@ func TestLoop_StaysAliveWithEmptyQueue(t *testing.T) {
 
 	start := time.Now()
 	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
-		PollInterval: pollInterval,
+		Mode:         executeloop.ModeWatch,
+		IdleInterval: pollInterval,
 	})
 	elapsed := time.Since(start)
 
@@ -83,7 +85,7 @@ func TestDrain_RoutingPreflightRunsOnce(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		PollInterval: 0,
+		Mode: executeloop.ModeDrain,
 		RoutePreflight: func(ctx context.Context, harness, model string) error {
 			atomic.AddInt32(&preflightCalls, 1)
 			return nil
@@ -131,11 +133,10 @@ func TestLoop_OnceFlagStillExits(t *testing.T) {
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
-	// Even with poll-interval > 0 (the new long-running default), --once must
-	// still cause the loop to exit after one bead.
+	// Even in watch-capable runtimes, once mode must still cause the loop to
+	// exit after one bead.
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once:         true,
-		PollInterval: 30 * time.Second,
+		Mode: executeloop.ModeOnce,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
@@ -145,10 +146,9 @@ func TestLoop_OnceFlagStillExits(t *testing.T) {
 	assert.Equal(t, 1, result.Successes)
 }
 
-// TestLoop_ExplicitPollZeroExits covers ddx-dc157075 back-compat: an explicit
-// --poll-interval=0 (legacy "drain-and-exit" semantics) must still exit when
-// the queue is empty, even though the new default is 30s.
-func TestLoop_ExplicitPollZeroExits(t *testing.T) {
+// TestLoop_ExplicitDrainExits covers drain-and-exit semantics: an empty queue
+// is terminal unless watch mode is selected.
+func TestLoop_ExplicitDrainExits(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
@@ -163,18 +163,18 @@ func TestLoop_ExplicitPollZeroExits(t *testing.T) {
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
-	// PollInterval=0 explicitly: exit when queue is empty rather than poll.
-	// A bounded-time context guards against a regression that would hang.
+	// Drain mode exits when the queue is empty rather than idling. A
+	// bounded-time context guards against a regression that would hang.
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	start := time.Now()
 	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
-		PollInterval: 0,
+		Mode: executeloop.ModeDrain,
 	})
 	elapsed := time.Since(start)
 
-	require.NoError(t, err, "explicit poll-interval=0 must return cleanly without timing out")
+	require.NoError(t, err, "drain mode must return cleanly without timing out")
 	require.NotNil(t, result)
 	assert.True(t, elapsed < time.Second,
 		"explicit poll=0 must exit promptly when queue is empty; took %s", elapsed)

@@ -45,10 +45,11 @@ DDx owns:
 - **Bead-driven invocation.** `ddx try`, `ddx work`, and the server's
   queue-drain worker translate bead state into `ExecuteRequest` values and
   surface results back into the bead tracker. The queue-drain worker
-  defaults to a long-running 30s `--poll-interval` (ddx-dc157075):
-  workers stay alive across empty polls and surface "no ready work" as a
-  transient `idle` substate. Operators opt out with `--once` (one-shot)
-  or `--poll-interval=0` (legacy drain-and-exit).
+  uses explicit `once`, `drain`, and `watch` modes: direct CLI `ddx work`
+  drains and exits by default, while server-managed workers default to
+  `watch` with a 30s `idle_interval`. Watch workers stay alive across
+  empty polls and surface "no ready work" as a transient `idle` substate.
+  Operators choose one-shot CLI work with `--once`.
 - **Bead-attempt orchestration.** Worktree creation, base-revision pinning,
   result landing (merge / preserve / no-changes), gate evaluation, evidence
   bundle capture. The agent provides the LLM execution; DDx provides the

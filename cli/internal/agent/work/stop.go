@@ -2,7 +2,8 @@ package work
 
 import (
 	"context"
-	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 )
 
 // StopCondition is the typed work-drain terminal decision vocabulary. Keep
@@ -20,13 +21,13 @@ const (
 
 // StopInput describes one possible terminal drain decision point.
 type StopInput struct {
-	ContextErr   error
-	NoReadyWork  bool
-	Once         bool
-	PollInterval time.Duration
-	Budget       bool
-	NoProgress   bool
-	Blocked      bool
+	ContextErr  error
+	NoReadyWork bool
+	Once        bool
+	Mode        executeloop.Mode
+	Budget      bool
+	NoProgress  bool
+	Blocked     bool
 }
 
 // StopDecision is the classified terminal decision plus the legacy-compatible
@@ -53,8 +54,8 @@ func ClassifyStop(in StopInput) (StopDecision, bool) {
 		return StopDecision{Condition: StopConditionBlocked, ExitReason: "blocked"}, true
 	case in.Once:
 		return StopDecision{Condition: StopConditionOnce, ExitReason: "once_complete"}, true
-	case in.NoReadyWork && in.PollInterval <= 0:
-		return StopDecision{Condition: StopConditionDrained, ExitReason: "explicit_poll_zero"}, true
+	case in.NoReadyWork && in.Mode != executeloop.ModeWatch:
+		return StopDecision{Condition: StopConditionDrained, ExitReason: "drained"}, true
 	default:
 		return StopDecision{}, false
 	}

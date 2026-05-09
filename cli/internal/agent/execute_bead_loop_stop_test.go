@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
@@ -17,7 +18,7 @@ import (
 )
 
 func TestExecuteBeadWorkerStopConditionWiredIntoRun(t *testing.T) {
-	t.Run("drained explicit poll zero", func(t *testing.T) {
+	t.Run("drained", func(t *testing.T) {
 		store := bead.NewStore(t.TempDir())
 		require.NoError(t, store.Init())
 
@@ -29,12 +30,12 @@ func TestExecuteBeadWorkerStopConditionWiredIntoRun(t *testing.T) {
 			}),
 		}
 		result, exitReason, err := runStopConditionCase(t, worker, context.Background(), ExecuteBeadLoopRuntime{
-			PollInterval: 0,
+			Mode: executeloop.ModeDrain,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.True(t, result.NoReadyWork)
-		assert.Equal(t, "explicit_poll_zero", exitReason)
+		assert.Equal(t, "drained", exitReason)
 	})
 
 	t.Run("once complete", func(t *testing.T) {
@@ -51,8 +52,7 @@ func TestExecuteBeadWorkerStopConditionWiredIntoRun(t *testing.T) {
 			}),
 		}
 		result, exitReason, err := runStopConditionCase(t, worker, context.Background(), ExecuteBeadLoopRuntime{
-			Once:         true,
-			PollInterval: 30 * time.Second,
+			Mode: executeloop.ModeOnce,
 		})
 		require.NoError(t, err)
 		require.NotNil(t, result)
@@ -74,7 +74,7 @@ func TestExecuteBeadWorkerStopConditionWiredIntoRun(t *testing.T) {
 			}),
 		}
 		result, exitReason, err := runStopConditionCase(t, worker, ctx, ExecuteBeadLoopRuntime{
-			PollInterval: 30 * time.Second,
+			Mode: executeloop.ModeWatch,
 		})
 		require.ErrorIs(t, err, context.Canceled)
 		require.NotNil(t, result)
@@ -148,7 +148,7 @@ func TestStopCondition_BudgetAfterImplementerCostStopsBeforeNextClaim(t *testing
 				Detail: detail,
 			}, true
 		},
-		PollInterval: 0,
+		Mode: executeloop.ModeDrain,
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)

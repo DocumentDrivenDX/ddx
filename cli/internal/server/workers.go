@@ -953,8 +953,8 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	landingOps := agent.RealLandingGitOps{}
 
 	loopResult, err := worker.Run(ctx, rcfg, agent.ExecuteBeadLoopRuntime{
-		Once:                  executeLoopOnce(spec),
-		PollInterval:          executeLoopPollInterval(spec),
+		Mode:                  spec.Mode,
+		IdleInterval:          executeLoopPollInterval(spec),
 		Log:                   log,
 		CleanupLog:            log,
 		EventSink:             eventSink,

@@ -44041,7 +44041,7 @@ func (ec *executionContext) unmarshalInputStartWorkerInput(ctx context.Context, 
 		asMap[k] = v
 	}
 
-	fieldsInOrder := [...]string{"projectId", "harness", "profile", "effort", "labelFilter"}
+	fieldsInOrder := [...]string{"projectId", "harness", "profile", "effort", "labelFilter", "mode", "idleInterval"}
 	for _, k := range fieldsInOrder {
 		v, ok := asMap[k]
 		if !ok {
@@ -44083,6 +44083,20 @@ func (ec *executionContext) unmarshalInputStartWorkerInput(ctx context.Context, 
 				return it, err
 			}
 			it.LabelFilter = data
+		case "mode":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("mode"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.Mode = data
+		case "idleInterval":
+			ctx := graphql.WithPathContext(ctx, graphql.NewPathWithField("idleInterval"))
+			data, err := ec.unmarshalOString2ᚖstring(ctx, v)
+			if err != nil {
+				return it, err
+			}
+			it.IdleInterval = data
 		}
 	}
 	return it, nil

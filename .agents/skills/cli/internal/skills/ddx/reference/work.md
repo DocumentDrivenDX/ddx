@@ -32,8 +32,8 @@ lookups, and transcript/session rendering.
 Flags worth knowing:
 
 - `--once` — pick one bead and stop (don't loop).
-- `--poll-interval <dur>` — continuous worker mode; wait between
-  iterations.
+- `--watch` — keep running after the current ready queue drains; wait for newly-ready beads.
+- `--idle-interval <dur>` — sleep duration between empty-queue scans in watch mode (default 30s).
 - `--min-power <n>` / `--max-power <n>` — requested agent power bounds.
 - `--top-power` — choose a `MinPower` threshold from the service's reported
   power bands.
@@ -146,7 +146,8 @@ that exercise the new code:
 ```bash
 ddx work                                    # default queue drain
 ddx work --once                             # one bead, then stop
-ddx work --poll-interval 30s                # continuous worker
+ddx work --watch                            # continuous worker
+ddx work --watch --idle-interval 15s        # shorter idle scan interval
 ddx work --min-power 10                     # request stronger attempts
 ddx work --harness claude                   # passthrough constraint
 ddx work --model-ref qwen/qwen3.6-27b        # passthrough constraint

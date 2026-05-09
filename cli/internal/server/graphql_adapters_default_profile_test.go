@@ -15,8 +15,9 @@ import (
 
 // TestWorkerDispatchAdapterEmptyArgsDefaultsProfile pins ddx-755f5881 AC #1:
 // workerDispatchAdapter.DispatchWorker with an empty rawArgs and no
-// workers.default_spec must produce a spec with Profile: "default" and no
-// other knobs set. This is the contract that eliminates the historical
+// workers.default_spec must produce a spec with Profile: "default", watch mode,
+// and the default idle interval, with no route pins set. This is the contract
+// that eliminates the historical
 // 19-burn drain-queue failure mode where an empty input fanned out into
 // per-tier ladder iteration with no upstream synthesis target.
 func TestWorkerDispatchAdapterEmptyArgsDefaultsProfile(t *testing.T) {
@@ -78,6 +79,12 @@ func TestWorkerDispatchAdapterEmptyArgsDefaultsProfile(t *testing.T) {
 	if spec.Effort != "" {
 		t.Errorf("Effort must be empty on default path, got %q", spec.Effort)
 	}
+	if spec.Mode != executeloop.ModeWatch {
+		t.Errorf("Mode: want watch, got %q", spec.Mode)
+	}
+	if spec.IdleInterval.Duration != 30*time.Second {
+		t.Errorf("IdleInterval: want 30s, got %v", spec.IdleInterval.Duration)
+	}
 	if spec.LabelFilter != "" {
 		t.Errorf("LabelFilter must be empty on default path, got %q", spec.LabelFilter)
 	}
@@ -91,8 +98,8 @@ func TestWorkerDispatchAdapterEmptyArgsDefaultsProfile(t *testing.T) {
 
 // TestWorkerDispatchAdapterHistoricalDrainConfigNoSynthesis pins ddx-755f5881
 // AC #4: on the default dispatch path (no rawArgs, no workers.default_spec),
-// the dispatched spec is just {Profile: "default"} — model and harness are
-// empty so no synthesis fan-out occurs.
+// the dispatched spec has only default profile/watch/idle runtime intent —
+// model and harness are empty so no synthesis fan-out occurs.
 func TestWorkerDispatchAdapterHistoricalDrainConfigNoSynthesis(t *testing.T) {
 	root := t.TempDir()
 	setupBeadStore(t, root)
@@ -143,6 +150,12 @@ library:
 	}
 	if spec.Harness != "" {
 		t.Errorf("Harness must be empty on default path, got %q", spec.Harness)
+	}
+	if spec.Mode != executeloop.ModeWatch {
+		t.Errorf("Mode: want watch, got %q", spec.Mode)
+	}
+	if spec.IdleInterval.Duration != 30*time.Second {
+		t.Errorf("IdleInterval: want 30s, got %v", spec.IdleInterval.Duration)
 	}
 }
 

@@ -119,6 +119,16 @@ func (r *mutationResolver) StartWorker(ctx context.Context, input StartWorkerInp
 	if input.LabelFilter != nil && strings.TrimSpace(*input.LabelFilter) != "" {
 		args["label_filter"] = strings.TrimSpace(*input.LabelFilter)
 	}
+	mode := "watch"
+	if input.Mode != nil && strings.TrimSpace(*input.Mode) != "" {
+		mode = strings.TrimSpace(*input.Mode)
+	}
+	args["mode"] = mode
+	if input.IdleInterval != nil && strings.TrimSpace(*input.IdleInterval) != "" {
+		args["idle_interval"] = strings.TrimSpace(*input.IdleInterval)
+	} else if mode == "watch" {
+		args["idle_interval"] = "30s"
+	}
 	raw, err := json.Marshal(args)
 	if err != nil {
 		return nil, err

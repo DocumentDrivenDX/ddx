@@ -126,7 +126,7 @@ library:
 	factory.AgentRunnerOverride = &panicAgentRunner{t: t}
 
 	root := factory.NewRootCommand()
-	outStr, err := executeCommand(root, "work", "--poll-interval=0", "--project", projectRoot)
+	outStr, err := executeCommand(root, "work", "--project", projectRoot)
 	require.NoError(t, err)
 	require.Contains(t, outStr, agent.ResourceExhaustedStopMessage)
 	require.Equal(t, int32(2), atomic.LoadInt32(&checker.calls))
@@ -200,7 +200,6 @@ library:
 	outStr, err := executeCommand(
 		factory.NewRootCommand(),
 		"work",
-		"--poll-interval=0",
 		"--project", projectRoot,
 		"--no-review",
 		"--no-review-i-know-what-im-doing",

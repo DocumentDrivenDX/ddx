@@ -1,6 +1,8 @@
 package cmd
 
 import (
+	"time"
+
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/spf13/cobra"
@@ -20,8 +22,8 @@ queue drain: it iterates ddx try (layer 2) across ready beads until a stop
 condition is met and owns retry-power policy between attempts.
 
 ddx work treats --harness, --provider, and --model as opaque passthrough
-constraints forwarded to the agent unchanged. DDx does not validate these
-values or branch on them; the agent owns routing within the requested power
+constraints forwarded to Fizeau unchanged. DDx does not validate these values
+or branch on them; Fizeau owns routing within the requested power
 bounds.
 
 Review is on by default. --no-review is a break-glass override and
@@ -46,8 +48,11 @@ work runs inline in the current process; per ADR-022 there is no separate
   # Pick one ready bead, execute it, and stop
   ddx work --once
 
-  # Run continuously as a bounded queue worker
-  ddx work --poll-interval 30s
+  # Watch for newly-ready work after the current queue drains
+  ddx work --watch
+
+  # Watch with a shorter idle scan interval
+  ddx work --watch --idle-interval 15s
 
   # Forward harness/model as passthrough constraints (ddx does not validate these)
   ddx work --once --harness agent --model minimax/minimax-m2.7
@@ -72,7 +77,8 @@ work runs inline in the current process; per ADR-022 there is no separate
 	cmd.Flags().String("model-ref", "", "Model reference passthrough (e.g. code-medium); resolved by Fizeau")
 	cmd.Flags().String("effort", "", "Effort level")
 	cmd.Flags().Bool("once", false, "Process at most one ready bead")
-	cmd.Flags().Duration("poll-interval", 0, "Poll interval for continuous scanning; zero drains current ready work and exits. Set 30s to keep the worker alive across empty polls.")
+	cmd.Flags().Bool("watch", false, "Keep watching for newly-ready beads after the current queue drains")
+	cmd.Flags().Duration("idle-interval", 30*time.Second, "Sleep duration between empty-queue scans in watch mode")
 	cmd.Flags().Bool("json", false, "Output loop result as JSON")
 	cmd.Flags().Bool("local", false, "Deprecated: no-op; ddx work always runs inline (ADR-022)")
 	_ = cmd.Flags().MarkDeprecated("local", "ddx work always runs inline; the flag is a no-op (ADR-022)")
