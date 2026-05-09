@@ -141,50 +141,6 @@ that exercise the new code:
   guards against this via claim semantics, but don't try to defeat
   it — each claim represents an in-flight attempt.
 
-## Dangling-success recovery (ddx-2b2d114e)
-
-A **dangling success** occurs when:
-1. An agent produced commits and they were merged into the target branch, AND
-2. The process crashed or the store write failed between `Land()` returning and
-   `CloseWithEvidence()` running.
-
-Result: the bead stays `in_progress` even though the work is done.
-
-### Automatic recovery
-
-The execute loop detects this automatically on the next attempt. When a stale
-`in_progress` bead is reclaimed and its most recent `result.json` shows
-`outcome=task_succeeded` with a `result_rev` already merged into HEAD, the loop
-closes the bead idempotently without re-executing. No operator action needed.
-
-### Manual detection
-
-To detect dangling-success beads (e.g. in a CI audit or post-incident review):
-
-```bash
-ddx bead doctor --dangling
-ddx bead doctor --dangling --json   # machine-readable
-```
-
-Two sub-cases are reported:
-
-| `reachable` | Meaning | Recovery |
-|---|---|---|
-| `true` | Merge succeeded, close didn't run | `ddx bead close <id>` |
-| `false` | The merge itself was never applied (dangling commit) | Inspect `result_rev`, re-run `ddx try <id>` or `git cherry-pick <result_rev>` |
-
-### Why it happens
-
-The success→merge→close pipeline is not atomic. A crash window exists between
-`Land()` advancing the git ref and `Store.CloseWithEvidence()` writing the
-bead status. Under normal conditions (healthy process, no OOM) this window
-is microseconds wide. Under memory pressure, SIGKILL, or network partition
-during a distributed coordinator the bead can be stranded.
-
-The automatic recovery on re-claim ensures correctness without operator action.
-`ddx bead doctor --dangling` surfaces the cases where automatic recovery hasn't
-run yet (e.g., the queue is empty or the bead has no stale lease yet).
-
 ## CLI reference
 
 ```bash
@@ -199,9 +155,6 @@ ddx work --profile default                  # passthrough constraint
 ddx try <id>                                # one bead attempt
 ddx try <id> --from <rev>                   # override base commit
 ddx try <id> --no-merge                     # preserve iteration
-
-ddx bead doctor --dangling                  # detect dangling-success beads
-ddx bead doctor --dangling --json           # machine-readable output
 ```
 
 Full flag list: `ddx work --help`, `ddx try --help`, `ddx run --help`.
