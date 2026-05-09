@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
@@ -18,6 +19,8 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
 	"github.com/spf13/cobra"
 )
+
+const supportedValeVersion = "vale version 3.13.0"
 
 // DiagnosticIssue represents a detected problem and its remediation
 type DiagnosticIssue struct {
@@ -108,6 +111,28 @@ func (f *CommandFactory) runDoctor(cmd *cobra.Command, args []string) error {
 		issues = append(issues, *legacyCatalog)
 	} else {
 		fmt.Println("✅ No legacy DDx-side model catalog file")
+	}
+
+	// Check 3c: Pinned Vale prose checker.
+	fmt.Print("✓ Checking Prose Checker... ")
+	proseCheck := checkProseChecker()
+	if proseCheck.Issue == nil {
+		fmt.Println("✅ Vale prose checker")
+	} else {
+		fmt.Println("⚠️  Vale prose checker unavailable or unsupported")
+		fmt.Printf("   ⚠️  %s\n", proseCheck.Issue.Description)
+		for _, r := range proseCheck.Issue.Remediation {
+			fmt.Printf("   💡 %s\n", r)
+		}
+		issues = append(issues, *proseCheck.Issue)
+	}
+	if verbose {
+		if proseCheck.Path != "" {
+			fmt.Printf("   vale path: %s\n", proseCheck.Path)
+		}
+		if proseCheck.Version != "" {
+			fmt.Printf("   vale version: %s\n", proseCheck.Version)
+		}
 	}
 
 	// Check 4: Git Installation
@@ -464,6 +489,70 @@ func checkLegacyModelCatalogFile() *DiagnosticIssue {
 		},
 		SystemInfo: map[string]string{
 			"path": path,
+		},
+	}
+}
+
+type proseCheckerStatus struct {
+	Path    string
+	Version string
+	Issue   *DiagnosticIssue
+}
+
+func checkProseChecker() proseCheckerStatus {
+	path, err := exec.LookPath("vale")
+	if err != nil {
+		return proseCheckerStatus{
+			Issue: proseCheckerIssue("Vale prose checker is not installed or is not on PATH"),
+		}
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	output, err := exec.CommandContext(ctx, path, "--version").CombinedOutput()
+	version := strings.TrimSpace(string(output))
+	if err != nil {
+		desc := fmt.Sprintf("Vale prose checker did not report a supported version; expected %q", supportedValeVersion)
+		if version != "" {
+			desc += fmt.Sprintf("; got %q", version)
+		}
+		desc += fmt.Sprintf("; error: %v", err)
+		return proseCheckerStatus{
+			Path:    path,
+			Version: version,
+			Issue:   proseCheckerIssue(desc),
+		}
+	}
+	if version != supportedValeVersion {
+		if version == "" {
+			version = "<empty>"
+		}
+		return proseCheckerStatus{
+			Path:    path,
+			Version: version,
+			Issue: proseCheckerIssue(
+				fmt.Sprintf("Unsupported Vale prose checker version %q; expected %q", version, supportedValeVersion),
+			),
+		}
+	}
+
+	return proseCheckerStatus{
+		Path:    path,
+		Version: version,
+	}
+}
+
+func proseCheckerIssue(description string) *DiagnosticIssue {
+	return &DiagnosticIssue{
+		Type:        "prose_checker",
+		Description: description,
+		Remediation: []string{
+			"Install Vale 3.13.0 from https://github.com/errata-ai/vale/releases/tag/v3.13.0",
+			"Ensure the pinned vale binary is available on PATH",
+		},
+		SystemInfo: map[string]string{
+			"expected_version": supportedValeVersion,
 		},
 	}
 }

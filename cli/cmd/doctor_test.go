@@ -8,6 +8,123 @@ import (
 	"testing"
 )
 
+func TestDoctorProseChecker_MissingVale(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+
+	status := checkProseChecker()
+
+	if status.Issue == nil {
+		t.Fatal("expected missing vale to produce a prose checker issue")
+	}
+	if status.Issue.Type != "prose_checker" {
+		t.Fatalf("issue.Type = %q, want prose_checker", status.Issue.Type)
+	}
+	if !strings.Contains(status.Issue.Description, "not installed") {
+		t.Fatalf("expected missing vale diagnostic, got %q", status.Issue.Description)
+	}
+
+	output, err := runDoctorForProseCheckerTest(t, "")
+	if err != nil {
+		t.Fatalf("doctor must remain non-fatal for missing Vale; got %v", err)
+	}
+	if !strings.Contains(output, "Vale prose checker is not installed or is not on PATH") {
+		t.Fatalf("expected missing Vale output, got:\n%s", output)
+	}
+}
+
+func TestDoctorProseChecker_WrongValeVersion(t *testing.T) {
+	valePath := writeFakeVale(t, "vale version 3.12.0")
+	t.Setenv("PATH", filepath.Dir(valePath))
+
+	status := checkProseChecker()
+
+	if status.Issue == nil {
+		t.Fatal("expected wrong vale version to produce a prose checker issue")
+	}
+	if status.Path != valePath {
+		t.Fatalf("status.Path = %q, want %q", status.Path, valePath)
+	}
+	if status.Version != "vale version 3.12.0" {
+		t.Fatalf("status.Version = %q, want vale version 3.12.0", status.Version)
+	}
+	if !strings.Contains(status.Issue.Description, "Unsupported Vale prose checker version") {
+		t.Fatalf("expected unsupported version diagnostic, got %q", status.Issue.Description)
+	}
+
+	output, err := runDoctorForProseCheckerTest(t, "vale version 3.12.0")
+	if err != nil {
+		t.Fatalf("doctor must remain non-fatal for unsupported Vale; got %v", err)
+	}
+	if !strings.Contains(output, `expected "vale version 3.13.0"`) {
+		t.Fatalf("expected pinned Vale version output, got:\n%s", output)
+	}
+}
+
+func TestDoctorProseChecker_SupportedValeVersion(t *testing.T) {
+	valePath := writeFakeVale(t, supportedValeVersion)
+	t.Setenv("PATH", filepath.Dir(valePath))
+
+	status := checkProseChecker()
+
+	if status.Issue != nil {
+		t.Fatalf("expected supported vale version to pass, got issue: %+v", status.Issue)
+	}
+	if status.Path != valePath {
+		t.Fatalf("status.Path = %q, want %q", status.Path, valePath)
+	}
+	if status.Version != supportedValeVersion {
+		t.Fatalf("status.Version = %q, want %q", status.Version, supportedValeVersion)
+	}
+}
+
+func TestDoctorProseChecker_VerboseShowsPathAndVersion(t *testing.T) {
+	valePath := writeFakeVale(t, supportedValeVersion)
+	t.Setenv("PATH", filepath.Dir(valePath))
+	t.Setenv("HOME", t.TempDir())
+
+	factory := NewCommandFactory(t.TempDir())
+	output, err := executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor", "--verbose")
+	if err != nil {
+		t.Fatalf("doctor --verbose returned error: %v\noutput:\n%s", err, output)
+	}
+	if !strings.Contains(output, "vale path: "+valePath) {
+		t.Fatalf("expected verbose output to include Vale path %q, got:\n%s", valePath, output)
+	}
+	if !strings.Contains(output, "vale version: "+supportedValeVersion) {
+		t.Fatalf("expected verbose output to include Vale version, got:\n%s", output)
+	}
+}
+
+func writeFakeVale(t *testing.T, version string) string {
+	t.Helper()
+
+	binDir := t.TempDir()
+	valePath := filepath.Join(binDir, "vale")
+	script := "#!/bin/sh\nprintf '%s\\n' '" + version + "'\n"
+	if err := os.WriteFile(valePath, []byte(script), 0o755); err != nil {
+		t.Fatalf("write fake vale: %v", err)
+	}
+	return valePath
+}
+
+func runDoctorForProseCheckerTest(t *testing.T, valeVersion string) (string, error) {
+	t.Helper()
+
+	binDir := t.TempDir()
+	if valeVersion != "" {
+		valePath := filepath.Join(binDir, "vale")
+		script := "#!/bin/sh\nprintf '%s\\n' '" + valeVersion + "'\n"
+		if err := os.WriteFile(valePath, []byte(script), 0o755); err != nil {
+			t.Fatalf("write fake vale: %v", err)
+		}
+	}
+	t.Setenv("PATH", binDir)
+	t.Setenv("HOME", t.TempDir())
+
+	factory := NewCommandFactory(t.TempDir())
+	return executeWithStdoutCapture(t, factory.NewRootCommand(), "doctor")
+}
+
 // TestDoctor_FlagsLegacySymlinks verifies that ddx doctor exits non-zero and
 // writes the expected diagnostic strings to stderr when project-local skill
 // directories contain symlinks (pre-FEAT-015 install remnants).
