@@ -1722,6 +1722,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		WorkerID:              resolveClaimAssignee(),
 		ProjectRoot:           projectRoot,
 		CleanupRunner:         agent.NewExecutionCleanupManager(projectRoot, &agent.RealGitOps{}),
+		ResourceChecker:       resourceChecker,
 		SessionID:             loopSessionID,
 		PreClaimHook:          buildCLIPreClaimHook(projectRoot, cliLandingOps),
 		PreClaimIntakeHook:    intakeHook,

@@ -340,6 +340,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		EventSink:             loopSink,
 		WorkerID:              resolveClaimAssignee(),
 		ProjectRoot:           projectRoot,
+		ResourceChecker:       resourceChecker,
 		SessionID:             loopSessionID,
 		PreClaimHook:          buildCLIPreClaimHook(projectRoot, cliLandingOps),
 		PreDispatchLintHook:   lintHook,
