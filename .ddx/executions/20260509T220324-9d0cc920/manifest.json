@@ -1,0 +1,67 @@
+{
+  "attempt_id": "20260509T220324-9d0cc920",
+  "bead_id": "ddx-94a368b6",
+  "base_rev": "529153308dc01dfc42023ba65eddcc5eed8f595e",
+  "created_at": "2026-05-09T22:03:31.697527148Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-94a368b6",
+    "title": "bead/conformance: add transition-matrix coverage to backend_conformance_test",
+    "description": "PROBLEM\n  cli/internal/bead/backend_conformance_test.go is the single shared test\n  suite that must pass against both the JSONL backend (backend_jsonl.go) and\n  the Axon backend (axon_backend.go). It covers create, update, claim, deps,\n  events, and close - but it does NOT exercise the TD-031 §3 transition\n  matrix. Two backends could silently diverge on transition side effects\n  (external_blocker_reason persistence on Blocked, claim-Extra cleanup on\n  Reopen, label management) without the conformance suite catching it.\n\nROOT CAUSE\n  - cli/internal/bead/backend_conformance_test.go:53-166 enumerates test\n    cases for the existing surface but skips status-transition flows.\n  - cli/internal/bead/lifecycle.go:244-256 declares the legal transition\n    matrix; cli/internal/bead/lifecycle_conformance_test.go covers the\n    transition validator in isolation but does not run it through both\n    backends end-to-end.\n  - axon_backend.go and backend_jsonl.go each implement their own metadata\n    side effects; drift is undetected.\n\nPROPOSED FIX\n  - Extend cli/internal/bead/backend_conformance_test.go with a new test\n    block TransitionMatrix that, for each backend instance under test:\n      a. Walks every legal transition from lifecycle.go:244-256:\n         proposed -\u003e {open, cancelled}\n         open -\u003e {in_progress, blocked, proposed, cancelled}\n         in_progress -\u003e {open, closed, blocked, proposed}\n         blocked -\u003e {open, proposed, cancelled}\n         closed -\u003e open (with ManualReopen)\n      b. For each transition, asserts:\n         - The persisted Status field changed.\n         - Required Extra side effects landed (external_blocker_reason on\n           Blocked, claim-Extra cleared on Reopen, etc.).\n         - Forbidden transitions return the expected validation error from\n           ValidateLifecycleTransition.\n  - Use existing test helpers in backend_conformance_test.go (the\n    parameterized factory pattern); do not introduce a new harness.\n  - Run the suite against both JSONL and Axon backends via the existing\n    parameterization at backend_conformance_test.go top.\n\nNON-SCOPE\n  - Changing the transition matrix or validator.\n  - Adding new transitions.\n  - Refactoring the conformance suite structure beyond appending the new\n    test block.\n  - Drift in event vocabulary (TD-031 §4); covered by separate event tests.\n\nINTERSECTIONS\n  - ddx-ca1c66ee (epic parent).\n  - No deps on B1/B2/B3; can run in parallel.",
+    "acceptance": "1. cli/internal/bead/backend_conformance_test.go contains a new test (e.g. TestBackendConformance_TransitionMatrix) that walks every legal transition declared in lifecycle.go:244-256 and asserts both Status persistence and required Extra side effects against both backends.\n2. The new test asserts forbidden transitions (closed -\u003e *, cancelled -\u003e *, in_progress -\u003e cancelled) return the expected ValidateLifecycleTransition error against both backends.\n3. The new test passes against both the JSONL backend and the Axon backend via the existing conformance parameterization.\n4. cd cli \u0026\u0026 go test ./internal/bead/... -run TestBackendConformance green.\n5. cd cli \u0026\u0026 go test ./internal/bead/... ./internal/agent/... ./cmd/... green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-ca1c66ee",
+    "labels": [
+      "phase:6",
+      "area:bead",
+      "area:lifecycle",
+      "kind:test",
+      "spec:TD-031"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-09T22:02:20Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-09T19:15:34.359474691Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-09T22:03:24.759937257Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-09T22:02:20.505977859Z",
+      "spec-id": "TD-031"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-031",
+      "path": "docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md",
+      "title": "Technical Design: Bead State Machine and Naming-Role Decisions"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260509T220324-9d0cc920",
+    "prompt": ".ddx/executions/20260509T220324-9d0cc920/prompt.md",
+    "manifest": ".ddx/executions/20260509T220324-9d0cc920/manifest.json",
+    "result": ".ddx/executions/20260509T220324-9d0cc920/result.json",
+    "checks": ".ddx/executions/20260509T220324-9d0cc920/checks.json",
+    "usage": ".ddx/executions/20260509T220324-9d0cc920/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-94a368b6-20260509T220324-9d0cc920"
+  },
+  "prompt_sha": "c8cb53d6b34b87f6eae664d566e4f4d1cd0f1ad39f9ab132f6d2e315d395e5a2"
+}

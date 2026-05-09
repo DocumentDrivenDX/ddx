@@ -5,6 +5,9 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
+  schedule:
+    - cron: '0 4 * * 1'  # Weekly on Monday at 04:00 UTC
+  workflow_dispatch:
 
 # Minimal permissions by default
 permissions:
@@ -255,3 +258,57 @@ jobs:
     - name: Run frontend Playwright E2E tests
       working-directory: cli/internal/server/frontend
       run: bun run test:e2e
+
+  # Test timing — runs the full suite with -json output and uploads durable timing artifacts.
+  # Non-gating: timing data is captured regardless of ci job outcome.
+  test-timing:
+    name: Test Timing
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+
+    - name: Run tests with JSON output
+      run: go test -json -race -cover ./... 2>&1 | tee ../test-output.json || true
+
+    - name: Generate timing summary
+      if: always()
+      run: go run ./tools/test-timing < ../test-output.json > ../test-timing-summary.md
+
+    - name: Upload test timing artifacts
+      if: always()
+      uses: actions/upload-artifact@v4
+      with:
+        name: test-timing-${{ github.run_id }}
+        path: |
+          test-output.json
+          test-timing-summary.md
+        retention-days: 30
+
+  # Perf tests — non-gating; run weekly on schedule or on manual dispatch only
+  perf:
+    name: Perf Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+
+    - name: Run perf tests
+      run: make test-perf
