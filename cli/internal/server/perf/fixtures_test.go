@@ -1,3 +1,5 @@
+//go:build perf
+
 // Package perf provides a reusable GraphQL performance harness for the DDx
 // server. It seeds realistic on-disk fixtures (projects × beads, docgraph,
 // agent sessions) using the real storage primitives, then drives each GraphQL
