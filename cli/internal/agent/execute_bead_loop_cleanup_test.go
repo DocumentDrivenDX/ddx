@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"io"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"sync"
@@ -348,6 +349,96 @@ func TestWorkCleanup_UsesProjectLock(t *testing.T) {
 	require.NoError(t, firstResult.err)
 	assert.False(t, firstResult.skipped)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&runner.calls))
+}
+
+func TestBackgroundCleanupEndToEnd_UsesLockAndJitter(t *testing.T) {
+	projectRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
+
+	delay := jitteredCleanupDelay(10*time.Minute, rand.New(rand.NewSource(1)))
+	assert.GreaterOrEqual(t, delay, 8*time.Minute)
+	assert.LessOrEqual(t, delay, 12*time.Minute)
+
+	runner := &blockingCleanupRunner{
+		started: make(chan struct{}),
+		release: make(chan struct{}),
+	}
+	runnerSummary := ExecutionCleanupSummary{
+		ProjectRoot:          projectRoot,
+		TempRoot:             filepath.Join(projectRoot, ".ddx", "tmp"),
+		RemovedRunStateFiles: 1,
+		BytesReclaimed:       1,
+		InodesReclaimed:      1,
+	}
+	originalCleanup := runner.Cleanup
+	wrappedRunner := cleanupRunnerFunc(func(ctx context.Context) (ExecutionCleanupSummary, error) {
+		_, err := originalCleanup(ctx)
+		return runnerSummary, err
+	})
+
+	type cleanupEvent struct {
+		typ    string
+		reason string
+	}
+	var (
+		eventsMu sync.Mutex
+		events   []cleanupEvent
+	)
+	emit := func(typ string, data map[string]any) {
+		reason, _ := data["reason"].(string)
+		eventsMu.Lock()
+		events = append(events, cleanupEvent{typ: typ, reason: reason})
+		eventsMu.Unlock()
+	}
+	eventCount := func(typ string) int {
+		eventsMu.Lock()
+		defer eventsMu.Unlock()
+		count := 0
+		for _, ev := range events {
+			if ev.typ == typ {
+				count++
+			}
+		}
+		return count
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tickA := make(chan time.Time, 4)
+	tickB := make(chan time.Time, 4)
+	stopA := startExecutionCleanupWorker(ctx, projectRoot, wrappedRunner, time.Hour, tickA, io.Discard, emit)
+	stopB := startExecutionCleanupWorker(ctx, projectRoot, wrappedRunner, time.Hour, tickB, io.Discard, emit)
+
+	tickA <- time.Unix(100, 0)
+	select {
+	case <-runner.started:
+	case <-time.After(2 * time.Second):
+		t.Fatal("first cleanup pass did not start")
+	}
+	assert.Equal(t, int32(1), atomic.LoadInt32(&runner.calls))
+	assert.Equal(t, int32(1), atomic.LoadInt32(&runner.active))
+
+	tickB <- time.Unix(101, 0)
+	require.Eventually(t, func() bool {
+		return eventCount("cleanup.skipped") >= 1
+	}, 2*time.Second, 10*time.Millisecond)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&runner.calls), "second worker must skip while project cleanup lock is held")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&runner.maxActive), "cleanup passes must not overlap")
+
+	close(runner.release)
+	require.Eventually(t, func() bool {
+		return eventCount("cleanup.pass") >= 1
+	}, 2*time.Second, 10*time.Millisecond)
+	assert.Equal(t, int32(0), atomic.LoadInt32(&runner.active))
+
+	tickA <- time.Unix(102, 0)
+	require.Eventually(t, func() bool {
+		return atomic.LoadInt32(&runner.calls) >= 2 && eventCount("cleanup.pass") >= 2
+	}, 2*time.Second, 10*time.Millisecond)
+
+	cancel()
+	stopA()
+	stopB()
 }
 
 func TestWorkCleanup_ShutdownPassRunsOnSignal(t *testing.T) {
