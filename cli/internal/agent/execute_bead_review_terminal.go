@@ -81,6 +81,8 @@ func applyReviewOperatorRequiredParking(store ExecuteBeadLoopStore, beadID, acto
 		Actor:            actor,
 		Source:           "ddx agent execute-loop",
 	}, func(b *bead.Bead) error {
+		// Migration-only cleanup: defensive removal for legacy rows that escaped
+		// the lifecycle migration or arrived via external import.
 		b.Labels = removeBeadLabels(b.Labels, TriageNeedsHumanLabel, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
 		clearReviewTriageClaimMetadata(b)
 		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{

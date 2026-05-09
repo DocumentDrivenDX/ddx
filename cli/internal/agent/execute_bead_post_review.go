@@ -575,6 +575,8 @@ func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now tim
 				b.Extra = make(map[string]any)
 			}
 			delete(b.Extra, TriageTierHintKey)
+			// Migration-only cleanup: defensive removal for legacy rows that escaped
+			// the lifecycle migration or arrived via external import.
 			b.Labels = removeBeadLabels(b.Labels, TriageNeedsHumanLabel, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
 			clearReviewTriageClaimMetadata(b)
 			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{

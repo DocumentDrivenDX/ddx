@@ -171,6 +171,8 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 			Actor:            in.Assignee,
 			Source:           "ddx agent try",
 		}, func(b *bead.Bead) error {
+			// Migration-only cleanup: defensive removal for legacy rows that escaped
+			// the lifecycle migration or arrived via external import.
 			b.Labels = removeConflictRecoveryLabels(b.Labels, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
 			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
 				Reason:          reason,

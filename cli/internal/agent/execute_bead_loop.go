@@ -2412,6 +2412,8 @@ func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, beadID, actor strin
 		Source:           "ddx agent execute-loop",
 	}, func(b *bead.Bead) error {
 		ensureBeadExtra(b)
+		// Migration-only cleanup: defensive removal for legacy rows that escaped
+		// the lifecycle migration or arrived via external import.
 		b.Labels = removeBeadLabels(b.Labels, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
 		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
 			Reason:          reason,
@@ -2548,6 +2550,8 @@ func ensureBeadExtra(b *bead.Bead) {
 }
 
 func clearNoChangesLifecycleLabels(b *bead.Bead) {
+	// Migration-only cleanup: LabelNeedsInvestigation removal is defensive for
+	// legacy rows that escaped the lifecycle migration or arrived via external import.
 	b.Labels = removeBeadLabels(b.Labels,
 		bead.LabelNoChangesUnverified,
 		bead.LabelNoChangesUnjustified,
