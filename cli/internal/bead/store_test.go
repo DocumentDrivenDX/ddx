@@ -707,6 +707,42 @@ func TestHeartbeatReclaimStaleInProgressBead(t *testing.T) {
 	assert.Equal(t, orig.ID, ready[0].ID)
 }
 
+func TestReady_StaleClaimedInProgressIsReady(t *testing.T) {
+	withHeartbeat(t, 10*time.Millisecond, 50*time.Millisecond)
+
+	s := newTestStore(t)
+	b := &Bead{ID: "ddx-stale-ready", Title: "Stale in_progress bead"}
+	require.NoError(t, s.Create(b))
+
+	// Claim it so status transitions to in_progress.
+	require.NoError(t, s.Claim(b.ID, "worker-a"))
+
+	// Forge a stale liveness lease so the claim is no longer fresh.
+	stale := time.Now().UTC().Add(-1 * time.Hour)
+	staleRec := claimLivenessRecord{
+		BeadID:    b.ID,
+		UpdatedAt: stale,
+		PID:       os.Getpid(),
+	}
+	data, err := json.Marshal(staleRec)
+	require.NoError(t, err)
+	require.NoError(t, writeAtomicClaimFile(claimLivenessPath(s.Dir, b.ID), append(data, '\n')))
+	require.NoError(t, s.Update(b.ID, func(bd *Bead) {
+		if bd.Extra == nil {
+			bd.Extra = map[string]any{}
+		}
+		staleStr := stale.Format(time.RFC3339)
+		bd.Extra["execute-loop-heartbeat-at"] = staleStr
+		bd.Extra["claimed-at"] = staleStr
+	}))
+
+	// Operator-facing Ready() must surface the stale-claimed in_progress bead.
+	ready, err := s.Ready()
+	require.NoError(t, err)
+	require.Len(t, ready, 1)
+	assert.Equal(t, b.ID, ready[0].ID)
+}
+
 func TestHeartbeatKeepsActiveClaimAlive(t *testing.T) {
 	withHeartbeat(t, 5*time.Millisecond, 50*time.Millisecond)
 
@@ -936,4 +972,64 @@ func TestAtomicRename_OriginalPreservedOnError(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, string(beforeData), string(afterData),
 		"original beads.jsonl must be unchanged after failed atomic write")
+}
+
+func TestParkToProposed_TransitionAndMetadata(t *testing.T) {
+	t.Run("open bead transitions to proposed", func(t *testing.T) {
+		s := newTestStore(t)
+		b := &Bead{Title: "park open"}
+		require.NoError(t, s.Create(b))
+
+		require.NoError(t, s.ParkToProposed(b.ID, ParkConflictRecovery, nil))
+
+		got, err := s.Get(b.ID)
+		require.NoError(t, err)
+		assert.Equal(t, StatusProposed, got.Status)
+	})
+
+	t.Run("in_progress bead transitions to proposed", func(t *testing.T) {
+		s := newTestStore(t)
+		b := &Bead{Title: "park in_progress"}
+		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Claim(b.ID, "test-agent"))
+
+		require.NoError(t, s.ParkToProposed(b.ID, ParkReviewTerminal, nil))
+
+		got, err := s.Get(b.ID)
+		require.NoError(t, err)
+		assert.Equal(t, StatusProposed, got.Status)
+	})
+
+	t.Run("mutate callback runs after transition", func(t *testing.T) {
+		s := newTestStore(t)
+		b := &Bead{Title: "park mutate order"}
+		require.NoError(t, s.Create(b))
+
+		var statusDuringMutate string
+		require.NoError(t, s.ParkToProposed(b.ID, ParkIntakeRejection, func(b *Bead) {
+			statusDuringMutate = b.Status
+		}))
+		assert.Equal(t, StatusProposed, statusDuringMutate, "mutate must run after transition")
+	})
+
+	t.Run("reason and source match ParkReason mapping", func(t *testing.T) {
+		expected := map[ParkReason]parkReasonMeta{
+			ParkIntakeRejection:           {Reason: "pre-claim intake blocked execution", Source: "ddx agent execute-loop"},
+			ParkNoChangesOperatorRequired: {Reason: "operator decision required before another automated attempt", Source: "ddx agent execute-loop"},
+			ParkPostReviewMalfunction:     {Reason: "review BLOCK triage reached operator-required rung", Source: "ddx agent execute-loop"},
+			ParkReviewTerminal:            {Reason: "terminal review block requires operator decision", Source: "ddx agent execute-loop"},
+			ParkConflictRecovery:          {Reason: "land conflict requires operator judgment", Source: "ddx agent execute-loop"},
+		}
+		assert.Equal(t, expected, parkReasonMetaMap)
+	})
+
+	t.Run("terminal bead is rejected", func(t *testing.T) {
+		s := newTestStore(t)
+		b := &Bead{Title: "park terminal"}
+		require.NoError(t, s.Create(b))
+		require.NoError(t, s.SetLifecycleStatus(b.ID, StatusClosed, LifecycleTransitionOptions{ManualClose: true}))
+
+		err := s.ParkToProposed(b.ID, ParkConflictRecovery, nil)
+		assert.Error(t, err, "parking a closed bead must be rejected")
+	})
 }

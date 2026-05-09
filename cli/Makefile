@@ -17,7 +17,7 @@ PLATFORMS = \
 	linux/arm64 \
 	windows/amd64
 
-.PHONY: all build clean test lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build frontend-rebuild frontend-verify copy-skills eval-skill bench-graphql
+.PHONY: all build clean test test-perf lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build frontend-rebuild frontend-verify copy-skills eval-skill bench-graphql
 
 # Default target
 all: clean deps test build
@@ -123,8 +123,13 @@ bench-graphql:
 	@mkdir -p $(BENCH_REPORT_DIR)
 	DDX_BENCH_REPORT_DIR=$(BENCH_REPORT_DIR) \
 	DDX_BENCH_REPORT_DATE=$(BENCH_REPORT_DATE) \
-	go test ./internal/server/perf/ -run TestGraphQLPerfMatrix_Baseline -v -timeout 5m
+	go test -tags=perf ./internal/server/perf/ -run TestGraphQLPerfMatrix_Baseline -v -timeout 5m
 	@echo "Baseline report written to $(BENCH_REPORT_DIR)/$(BENCH_REPORT_DATE)-baseline.md"
+
+# Run perf tests (excluded from default `make test`; use this target or CI perf job)
+test-perf:
+	@echo "Running perf tests (excluded from default test run)..."
+	go test -tags=perf ./internal/server/perf/... -v -timeout 5m
 
 # Validate the shared bead record schema
 bead-schema:
