@@ -707,6 +707,42 @@ func TestHeartbeatReclaimStaleInProgressBead(t *testing.T) {
 	assert.Equal(t, orig.ID, ready[0].ID)
 }
 
+func TestReady_StaleClaimedInProgressIsReady(t *testing.T) {
+	withHeartbeat(t, 10*time.Millisecond, 50*time.Millisecond)
+
+	s := newTestStore(t)
+	b := &Bead{ID: "ddx-stale-ready", Title: "Stale in_progress bead"}
+	require.NoError(t, s.Create(b))
+
+	// Claim it so status transitions to in_progress.
+	require.NoError(t, s.Claim(b.ID, "worker-a"))
+
+	// Forge a stale liveness lease so the claim is no longer fresh.
+	stale := time.Now().UTC().Add(-1 * time.Hour)
+	staleRec := claimLivenessRecord{
+		BeadID:    b.ID,
+		UpdatedAt: stale,
+		PID:       os.Getpid(),
+	}
+	data, err := json.Marshal(staleRec)
+	require.NoError(t, err)
+	require.NoError(t, writeAtomicClaimFile(claimLivenessPath(s.Dir, b.ID), append(data, '\n')))
+	require.NoError(t, s.Update(b.ID, func(bd *Bead) {
+		if bd.Extra == nil {
+			bd.Extra = map[string]any{}
+		}
+		staleStr := stale.Format(time.RFC3339)
+		bd.Extra["execute-loop-heartbeat-at"] = staleStr
+		bd.Extra["claimed-at"] = staleStr
+	}))
+
+	// Operator-facing Ready() must surface the stale-claimed in_progress bead.
+	ready, err := s.Ready()
+	require.NoError(t, err)
+	require.Len(t, ready, 1)
+	assert.Equal(t, b.ID, ready[0].ID)
+}
+
 func TestHeartbeatKeepsActiveClaimAlive(t *testing.T) {
 	withHeartbeat(t, 5*time.Millisecond, 50*time.Millisecond)
 

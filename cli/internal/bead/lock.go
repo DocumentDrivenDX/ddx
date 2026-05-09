@@ -13,17 +13,35 @@ import (
 // and can be forcibly broken. Default: 2 hours.
 var StaleLockAge = 2 * time.Hour
 
+// LockSample carries timing metrics for one Store.WithLock acquire/release cycle.
+type LockSample struct {
+	LockDir string
+	Wait    time.Duration // time from WithLock entry to lock acquisition
+	Hold    time.Duration // time the callback held the lock
+}
+
+// LockMetricsSink is called after each successful Store.WithLock acquire+release
+// cycle. The zero value (nil) is a no-op. Tests may swap this to capture metrics.
+var LockMetricsSink func(LockSample)
+
 // WithLock acquires the file lock, runs fn, then releases the lock.
 // For external backends, locking is delegated to the backend tool.
 func (s *Store) WithLock(fn func() error) error {
 	if s.backend != nil {
 		return s.backend.WithLock(fn)
 	}
+	waitStart := time.Now()
 	if err := s.acquireLock(); err != nil {
 		return err
 	}
+	waitDur := time.Since(waitStart)
+	holdStart := time.Now()
 	defer s.releaseLock()
-	return fn()
+	fnErr := fn()
+	if sink := LockMetricsSink; sink != nil {
+		sink(LockSample{LockDir: s.LockDir, Wait: waitDur, Hold: time.Since(holdStart)})
+	}
+	return fnErr
 }
 
 func (s *Store) acquireLock() error {
