@@ -70,6 +70,7 @@ func runGitIntegOutput(dir string, args ...string) (string, error) {
 func newScriptHarnessRepo(t *testing.T, beadCount int) (string, string) {
 	t.Helper()
 
+	setExecutionWorktreeRootForTest(t)
 	root := t.TempDir()
 
 	runGitInteg(t, root, "init", "-b", "main")
@@ -106,6 +107,14 @@ func newScriptHarnessRepo(t *testing.T, beadCount int) (string, string) {
 	runGitInteg(t, root, "commit", "-m", "chore: seed beads")
 
 	return root, initialSHA
+}
+
+func setExecutionWorktreeRootForTest(t *testing.T) string {
+	t.Helper()
+	root := filepath.Join(t.TempDir(), ExecuteBeadTmpSubdir)
+	require.NoError(t, os.MkdirAll(root, 0o755))
+	t.Setenv(config.ExecutionWorktreeRootEnv, root)
+	return root
 }
 
 // ---------------------------------------------------------------------------

@@ -77,6 +77,7 @@ func (removeAttemptWorktreeRunner) Run(opts RunArgs) (*Result, error) {
 
 func runWorktreeLostExecuteBead(t *testing.T) (*ExecuteBeadResult, string, error) {
 	t.Helper()
+	setExecutionWorktreeRootForTest(t)
 	projectRoot := setupArtifactTestProjectRoot(t)
 	gitOps := &worktreeLostGitOps{
 		projectRoot: projectRoot,
