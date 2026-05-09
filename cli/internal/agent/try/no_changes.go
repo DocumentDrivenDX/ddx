@@ -46,6 +46,11 @@ type ParsedNoChangesRationale struct {
 	Reason              string
 	SuggestedAction     string
 	RejectionReason     string
+	// OrchestratorAction, when set to "decompose", signals that the implementation
+	// attempt hit its depth cap and the queue-level orchestrator should split the
+	// bead. The orchestrator checks the queue-level max_decomposition_depth before
+	// acting; implementation-attempt depth caps are not forwarded here.
+	OrchestratorAction string
 }
 
 func ParseNoChangesRationale(text string) ParsedNoChangesRationale {
@@ -75,6 +80,9 @@ func ParseNoChangesRationale(text string) ParsedNoChangesRationale {
 			inReason = true
 		case strings.HasPrefix(lower, "suggested_action:"):
 			p.SuggestedAction = strings.TrimSpace(line[len("suggested_action:"):])
+			inReason = false
+		case strings.HasPrefix(lower, "orchestrator_action:"):
+			p.OrchestratorAction = strings.TrimSpace(strings.ToLower(line[len("orchestrator_action:"):]))
 			inReason = false
 		default:
 			if inReason && line != "" {

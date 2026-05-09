@@ -1805,7 +1805,7 @@ The bead is too big when any of these holds:
 - Description names multiple feature-sized sub-pieces.
 - More than ~500 lines across more than ~5 files in unrelated packages.
 - If the bead description exceeds 8000 bytes, treat Step 0 as a split-first pass and favor child-bead scoping before implementation.
-- Auto-decomposition is capped at depth 2: root beads may split once, decomposed children may split once more, and third-level splits must be rejected with an explanation.
+- Auto-decomposition inside this worktree is capped at depth 2: root beads may split once, decomposed children may split once more, and third-level splits must be rejected with an explanation. This cap applies only to the implementation attempt — the queue-level orchestrator (agent.triage.max_decomposition_depth, default 3) may still split the parent bead on its next dispatch cycle.
 
 If too big, decompose — do not attempt the work:
 
@@ -1828,7 +1828,9 @@ const instrNoChangesContract = `
 - ` + "`status: proposed`" + ` + ` + "`reason: <operator needed>`" + ` — operator lane.
 - ` + "`status: blocked`" + ` + ` + "`reason: <external blocker>`" + ` — blocked lane.
 
-No pseudo-statuses. Bare rationales and ` + "`status: needs_investigation`" + ` reject.`
+No pseudo-statuses. Bare rationales and ` + "`status: needs_investigation`" + ` reject.
+
+To request orchestrator-level decomposition (e.g. because this worktree's depth cap prevents splitting), add ` + "`orchestrator_action: decompose`" + ` alongside ` + "`status: open`" + `. The orchestrator will invoke the queue-level splitter on its next dispatch cycle if the queue-level depth cap allows it.`
 
 // instrInvestigationReports is the shared report-output rule.
 const instrInvestigationReports = `

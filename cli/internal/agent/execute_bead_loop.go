@@ -43,6 +43,12 @@ type ExecuteBeadLoopRuntime struct {
 	PreClaimIntakeHook    PreClaimIntakeHook
 	PreDispatchLintHook   func(ctx context.Context, beadID string) (LintResult, error)
 	PostAttemptTriageHook func(ctx context.Context, beadID string, report ExecuteBeadReport) (TriageResult, error)
+	// PostAttemptDecompositionHook is called when a no_changes attempt signals
+	// orchestrator_action: decompose in its rationale, indicating the bead is too
+	// large for implementation-level splitting. The hook should run the same
+	// orchestrator splitter used by the intake gate and return child specs and an
+	// AC map. A nil return or error falls back to operator-required parking.
+	PostAttemptDecompositionHook func(ctx context.Context, beadID string) (*PreClaimDecomposition, error)
 	// ReviewCostCap, when non-nil, accumulates reviewer cost on the same
 	// loop budget tracker used by the implementer attempts.
 	ReviewCostCap *escalation.CostCapTracker
@@ -201,6 +207,82 @@ func SubmitWithPreMergeChecks(
 	}
 	land, sErr := submit(BuildLandRequestFromResult(projectRoot, res))
 	return land, outcome, sErr
+}
+
+// handlePostAttemptDecomposition runs the orchestrator-level splitter when a
+// no_changes attempt signals orchestrator_action: decompose. It checks the
+// queue-level max_decomposition_depth (not the implementation prompt cap),
+// validates the AC map for completeness, and either creates children+deps or
+// parks the parent for operator review if the split is lossy or depth-capped.
+// The bead must already be unclaimed before this is called.
+func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, candidate *bead.Bead, runtime ExecuteBeadLoopRuntime, assignee string, rcfg config.ResolvedConfig, at time.Time) {
+	emit := func(kind string, body map[string]any) {
+		if runtime.EventSink == nil {
+			return
+		}
+		data, _ := json.Marshal(map[string]any{"event": kind, "payload": body})
+		_, _ = fmt.Fprintf(runtime.EventSink, "%s\n", data)
+	}
+	parkOperator := func(reason string) {
+		if runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition blocked: %s (%s)\n", reason, candidate.ID)
+		}
+		emit("post_attempt_decomposition.blocked", map[string]any{
+			"bead_id": candidate.ID,
+			"reason":  reason,
+		})
+		if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeOperatorRequired, reason, at); berr != nil && runtime.Log != nil {
+			_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition park error: %v\n", berr)
+		}
+	}
+
+	// Queue-level depth check: orchestrator uses its own cap, not the
+	// implementation prompt's hardcoded depth-2 cap.
+	maxDepth := rcfg.MaxDecompositionDepth()
+	if maxDepth > 0 && storeBeadDepth(w.Store, candidate) >= maxDepth {
+		overflowBody, _ := json.Marshal(map[string]any{
+			"depth": storeBeadDepth(w.Store, candidate),
+			"max":   maxDepth,
+		})
+		_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+			Kind:      "triage-overflow",
+			Summary:   "depth cap exceeded during post-attempt decomposition",
+			Body:      string(overflowBody),
+			Actor:     assignee,
+			Source:    "ddx agent execute-loop",
+			CreatedAt: at,
+		})
+		parkOperator("queue-level depth cap exceeded; operator must split")
+		return
+	}
+
+	decomp, err := runtime.PostAttemptDecompositionHook(ctx, candidate.ID)
+	if err != nil {
+		parkOperator(fmt.Sprintf("decomposition hook error: %s", err.Error()))
+		return
+	}
+	if decomp == nil {
+		parkOperator("decomposition hook returned no split")
+		return
+	}
+	lossyOrEmpty := isDecompositionLossy(decomp.ACMap) || (len(decomp.ACMap) == 0 && strings.TrimSpace(candidate.Acceptance) != "")
+	if lossyOrEmpty {
+		parkOperator("decomposition AC map is incomplete; operator must produce a lossless split")
+		return
+	}
+
+	childIDs, decompErr := applyPreClaimDecomposition(w.Store, candidate, decomp, assignee, at)
+	if decompErr != nil {
+		parkOperator(fmt.Sprintf("decomposition apply error: %s", decompErr.Error()))
+		return
+	}
+	if runtime.Log != nil {
+		_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition: bead %s split into %s\n", candidate.ID, strings.Join(childIDs, ", "))
+	}
+	emit("post_attempt_decomposition.applied", map[string]any{
+		"bead_id":   candidate.ID,
+		"child_ids": childIDs,
+	})
 }
 
 // runPostAttemptTriage invokes the optional post-attempt triage hook after
@@ -362,6 +444,7 @@ func (f ExecuteBeadExecutorFunc) Execute(ctx context.Context, beadID string) (Ex
 type ExecuteBeadLoopStore interface {
 	ReadyExecution() ([]bead.Bead, error)
 	Get(id string) (*bead.Bead, error)
+	Create(b *bead.Bead) error
 	Claim(id, assignee string) error
 	Unclaim(id string) error
 	TouchClaimHeartbeat(id string) error
@@ -886,6 +969,38 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 		}
 
+		// Queue-level decomposition depth cap: when the bead has already been split
+		// to the configured limit, block it for operator review without invoking
+		// the classifier or splitter (docs/triage/decomposition.md §Recursion depth cap).
+		if runtime.PreClaimIntakeHook != nil && rcfg.MaxDecompositionDepth() > 0 {
+			maxDepth := rcfg.MaxDecompositionDepth()
+			depth := storeBeadDepth(w.Store, &candidate)
+			if depth >= maxDepth {
+				body, _ := json.Marshal(map[string]any{"depth": depth, "max": maxDepth})
+				_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+					Kind:      "triage-overflow",
+					Summary:   "depth cap exceeded",
+					Body:      string(body),
+					Actor:     assignee,
+					Source:    "ddx agent execute-loop",
+					CreatedAt: now().UTC(),
+				})
+				if lerr := addBeadLabel(w.Store, candidate.ID, "needs-human-decomposition"); lerr != nil && runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "triage-overflow label error: %v\n", lerr)
+				}
+				overflowDetail := fmt.Sprintf("bead depth %d reached max_decomposition_depth %d; operator must split", depth, maxDepth)
+				if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeOperatorRequired, overflowDetail, now().UTC()); berr != nil && runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+				}
+				_ = w.Store.Unclaim(candidate.ID)
+				if loopMode == executeloop.ModeOnce {
+					applyStop(work.StopInput{Once: true})
+					return result, nil
+				}
+				continue
+			}
+		}
+
 		// Pre-dispatch intake runs after claiming so that only the owning worker
 		// performs model-backed readiness evaluation. Concurrent workers that lose
 		// the claim race skip intake entirely (picker.claim_race above). Terminal
@@ -990,6 +1105,72 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					"system_reason": systemReason,
 					"detail":        warning,
 				})
+			case intakeOutcome == PreClaimIntakeTooLargeDecomposed && intakeResult.Decomposition != nil:
+				// too_large_decomposed with concrete child specs: validate the AC map,
+				// check the queue-level depth cap, then create children and wire deps.
+				decomp := intakeResult.Decomposition
+				lossyOrEmpty := isDecompositionLossy(decomp.ACMap) || (len(decomp.ACMap) == 0 && strings.TrimSpace(candidate.Acceptance) != "")
+				depthAtCap := storeBeadDepth(w.Store, &candidate) >= rcfg.MaxDecompositionDepth()
+				if lossyOrEmpty || depthAtCap {
+					// Cannot produce a lossless split: block for operator.
+					blockedDetail := "decomposition AC map is incomplete or depth cap reached; operator review required"
+					if depthAtCap {
+						blockedDetail = "depth cap reached during decomposition; operator must split"
+					}
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "bead decomposition blocked: %s (releasing %s)\n", blockedDetail, candidate.ID)
+					}
+					emit("pre_claim_intake.blocked", map[string]any{
+						"bead_id": candidate.ID,
+						"outcome": string(PreClaimIntakeOperatorRequired),
+						"reason":  blockedDetail,
+						"detail":  blockedDetail,
+					})
+					if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeOperatorRequired, blockedDetail, now().UTC()); berr != nil && runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+					}
+					_ = w.Store.Unclaim(candidate.ID)
+					if loopMode == executeloop.ModeOnce {
+						applyStop(work.StopInput{Once: true})
+						return result, nil
+					}
+					continue
+				}
+				childIDs, decompErr := applyPreClaimDecomposition(w.Store, &candidate, decomp, assignee, now().UTC())
+				if decompErr != nil {
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "bead decomposition error: %v (releasing %s)\n", decompErr, candidate.ID)
+					}
+					emit("pre_claim_intake.blocked", map[string]any{
+						"bead_id": candidate.ID,
+						"outcome": string(PreClaimIntakeOperatorRequired),
+						"detail":  decompErr.Error(),
+					})
+					if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeOperatorRequired, decompErr.Error(), now().UTC()); berr != nil && runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+					}
+					_ = w.Store.Unclaim(candidate.ID)
+					if loopMode == executeloop.ModeOnce {
+						applyStop(work.StopInput{Once: true})
+						return result, nil
+					}
+					continue
+				}
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "bead decomposed into %s (releasing %s)\n", strings.Join(childIDs, ", "), candidate.ID)
+				}
+				emit("pre_claim_intake.decomposed", map[string]any{
+					"bead_id":   candidate.ID,
+					"child_ids": childIDs,
+				})
+				// Parent stays open (not proposed) — it is now dependency-blocked on
+				// children and will re-enter the queue only after they close.
+				_ = w.Store.Unclaim(candidate.ID)
+				if loopMode == executeloop.ModeOnce {
+					applyStop(work.StopInput{Once: true})
+					return result, nil
+				}
+				continue
 			default:
 				// Terminal non-actionable outcome: move to status=proposed so
 				// ReadyExecution filters this bead until an operator reviews it.
@@ -1415,6 +1596,22 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				continue
 			}
+
+			// Post-attempt orchestrator decomposition: when the implementation
+			// attempt signals orchestrator_action: decompose (because it hit the
+			// implementation depth cap or the bead is too large for the worktree),
+			// invoke the queue-level splitter. The orchestrator checks the
+			// queue-level max_decomposition_depth, not the implementation cap.
+			if report.NoChangesRationale != "" && runtime.PostAttemptDecompositionHook != nil {
+				parsed := agenttry.ParseNoChangesRationale(report.NoChangesRationale)
+				if parsed.OrchestratorAction == "decompose" {
+					w.handlePostAttemptDecomposition(ctx, &candidate, runtime, assignee, rcfg, now().UTC())
+					result.Failures++
+					result.LastFailureStatus = report.Status
+					continue
+				}
+			}
+
 			if noChanges.EventKind != "" {
 				_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
 					Kind:      noChanges.EventKind,
@@ -2395,6 +2592,78 @@ func classifyLoopReportFailure(report *ExecuteBeadReport) {
 		report.Disrupted = true
 		report.DisruptionReason = FailureModeLockContention
 	}
+}
+
+// storeBeadDepth walks the parent chain of b using the loop's store and returns
+// the number of ancestor levels (0 = root, 1 = child, 2 = grandchild, …).
+func storeBeadDepth(store ExecuteBeadLoopStore, b *bead.Bead) int {
+	if b == nil {
+		return 0
+	}
+	depth := 0
+	seen := map[string]struct{}{}
+	current := b
+	for {
+		parentID := strings.TrimSpace(current.Parent)
+		if parentID == "" {
+			break
+		}
+		if _, ok := seen[parentID]; ok {
+			break
+		}
+		seen[parentID] = struct{}{}
+		parent, err := store.Get(parentID)
+		if err != nil || parent == nil {
+			break
+		}
+		depth++
+		current = parent
+	}
+	return depth
+}
+
+// applyPreClaimDecomposition creates child beads, wires parent→child dependency
+// edges, and appends a triage-decomposed event to the parent. It returns the
+// IDs of the created children so the caller can log or record them.
+func applyPreClaimDecomposition(store ExecuteBeadLoopStore, parent *bead.Bead, decomp *PreClaimDecomposition, actor string, at time.Time) ([]string, error) {
+	childIDs := make([]string, 0, len(decomp.Children))
+	for _, child := range decomp.Children {
+		nb := &bead.Bead{
+			Title:       child.Title,
+			Description: child.Description,
+			Acceptance:  child.Acceptance,
+			Labels:      append([]string(nil), child.Labels...),
+			Parent:      parent.ID,
+		}
+		if err := store.Create(nb); err != nil {
+			return childIDs, fmt.Errorf("decompose: create child %q: %w", child.Title, err)
+		}
+		childIDs = append(childIDs, nb.ID)
+	}
+
+	// Wire parent → children dependency edges so the parent is blocked until
+	// all children close.
+	if err := store.Update(parent.ID, func(b *bead.Bead) {
+		for _, childID := range childIDs {
+			b.AddDep(childID, "depends_on")
+		}
+	}); err != nil {
+		return childIDs, fmt.Errorf("decompose: wire deps on parent %s: %w", parent.ID, err)
+	}
+
+	body, _ := json.Marshal(map[string]any{
+		"child_ids": childIDs,
+		"rationale": decomp.Rationale,
+		"ac_map":    decomp.ACMap,
+	})
+	return childIDs, store.AppendEvent(parent.ID, bead.BeadEvent{
+		Kind:      "triage-decomposed",
+		Summary:   fmt.Sprintf("decomposed into %s", strings.Join(childIDs, ", ")),
+		Body:      string(body),
+		Actor:     actor,
+		Source:    "ddx agent execute-loop",
+		CreatedAt: at,
+	})
 }
 
 // parkBeadPostIntakeRejection moves the bead to proposed and appends an
