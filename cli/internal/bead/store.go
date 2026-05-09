@@ -468,6 +468,8 @@ func (s *Store) Create(b *Bead) error {
 		b.IssueType = DefaultType
 	}
 	if b.Status == "" {
+		// Creation is not a transition; the only status write that does not go
+		// through transitionLifecycleInPlace (TD-031 §3 transition matrix).
 		b.Status = DefaultStatus
 	}
 	b.CreatedAt = now
@@ -1242,6 +1244,8 @@ func (s *Store) closeWithEvidence(id string, sessionID string, commitSHA string)
 		if commitSHA != "" {
 			b.Extra["closing_commit_sha"] = commitSHA
 		}
+		// ClosureGate guards the evidence-close path only; reconcile-close skips
+		// it by design (TD-031 §5).
 		if err := ClosureGate(b); err != nil {
 			// Surface via bead notes so a later operator audit can see why the
 			// close was refused; a single error path would be dropped by the
