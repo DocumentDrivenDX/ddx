@@ -1698,10 +1698,7 @@ func (s *Server) handleUpdateBead(w http.ResponseWriter, r *http.Request) {
 	}
 
 	store := s.beadStoreForRequest(r)
-	err := store.Update(id, func(b *bead.Bead) {
-		if req.Status != nil {
-			b.Status = *req.Status
-		}
+	mutate := func(b *bead.Bead) error {
 		if req.Labels != nil {
 			b.Labels = req.Labels
 		}
@@ -1717,7 +1714,19 @@ func (s *Server) handleUpdateBead(w http.ResponseWriter, r *http.Request) {
 		if req.Notes != nil {
 			b.Notes = *req.Notes
 		}
-	})
+		return nil
+	}
+	var err error
+	if req.Status != nil {
+		err = store.UpdateWithLifecycleStatus(id, *req.Status, bead.LifecycleTransitionOptions{
+			Reason: "REST bead update",
+			Source: "rest:beadUpdate",
+		}, mutate)
+	} else {
+		err = store.Update(id, func(b *bead.Bead) {
+			_ = mutate(b)
+		})
+	}
 	if err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
@@ -1793,16 +1802,11 @@ func (s *Server) handleReopenBead(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewDecoder(r.Body).Decode(&req)
 
 	store := s.beadStoreForRequest(r)
-	err := store.Update(id, func(b *bead.Bead) {
-		b.Status = bead.StatusOpen
-		b.Owner = ""
-		if req.Reason != "" && b.Notes != "" {
-			b.Notes = b.Notes + "\n\nReopened: " + req.Reason
-		} else if req.Reason != "" {
-			b.Notes = "Reopened: " + req.Reason
-		}
-	})
-	if err != nil {
+	appendNotes := ""
+	if req.Reason != "" {
+		appendNotes = "Reopened: " + req.Reason
+	}
+	if err := store.Reopen(id, req.Reason, appendNotes); err != nil {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": err.Error()})
 		return
 	}
@@ -4392,10 +4396,7 @@ func (s *Server) mcpBeadUpdate(workingDir, id, status, labelsStr, description, a
 		}
 	}
 	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
-	err := store.Update(id, func(b *bead.Bead) {
-		if status != "" {
-			b.Status = status
-		}
+	mutate := func(b *bead.Bead) error {
 		if labelsStr != "" {
 			b.Labels = strings.Split(labelsStr, ",")
 		}
@@ -4405,7 +4406,19 @@ func (s *Server) mcpBeadUpdate(workingDir, id, status, labelsStr, description, a
 		if acceptance != "" {
 			b.Acceptance = acceptance
 		}
-	})
+		return nil
+	}
+	var err error
+	if status != "" {
+		err = store.UpdateWithLifecycleStatus(id, status, bead.LifecycleTransitionOptions{
+			Reason: "MCP bead update",
+			Source: "mcp:ddx_bead_update",
+		}, mutate)
+	} else {
+		err = store.Update(id, func(b *bead.Bead) {
+			_ = mutate(b)
+		})
+	}
 	if err != nil {
 		return mcpToolResult{
 			Content: []mcpContent{mcpText(err.Error())},

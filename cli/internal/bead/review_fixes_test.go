@@ -21,7 +21,7 @@ func TestUpdateRejectsInvalidStatus(t *testing.T) {
 		b.Status = "garbage"
 	})
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid status")
+	assert.Contains(t, err.Error(), "requires Store.TransitionLifecycle")
 }
 
 func TestUpdateRejectsEmptyTitle(t *testing.T) {
@@ -55,9 +55,9 @@ func TestUpdateValidMutationSucceeds(t *testing.T) {
 
 	err := s.Update(b.ID, func(b *Bead) {
 		b.Title = "Updated"
-		b.Status = StatusInProgress
 	})
 	assert.NoError(t, err)
+	require.NoError(t, s.SetLifecycleStatus(b.ID, StatusInProgress, LifecycleTransitionOptions{}))
 
 	got, _ := s.Get(b.ID)
 	assert.Equal(t, "Updated", got.Title)

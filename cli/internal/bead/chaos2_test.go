@@ -177,7 +177,7 @@ func TestChaos_ConcurrentCreateCloseEvidence(t *testing.T) {
 								Summary: fmt.Sprintf("wave%d-g%d-i%d", wave, g, i),
 							})
 						case 3: // reopen
-							_ = s.Update(id, func(b *Bead) { b.Status = StatusOpen })
+							_ = setLifecycleStatusForTest(t, s, id, StatusOpen)
 						}
 					}
 				}()
@@ -623,7 +623,7 @@ func TestChaos_StatusCountsAfterChaos(t *testing.T) {
 				case 2:
 					_ = s.Unclaim(id)
 				case 3:
-					_ = s.Update(id, func(b *Bead) { b.Status = StatusOpen })
+					_ = setLifecycleStatusForTest(t, s, id, StatusOpen)
 				}
 			}
 		}()

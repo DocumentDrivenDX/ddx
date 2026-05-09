@@ -127,12 +127,9 @@ func (r *mutationResolver) BeadUpdate(ctx context.Context, id string, input Bead
 	}
 
 	store := r.beadStore(ctx)
-	err := store.Update(id, func(b *bead.Bead) {
+	mutate := func(b *bead.Bead) error {
 		if input.Title != nil {
 			b.Title = *input.Title
-		}
-		if input.Status != nil {
-			b.Status = *input.Status
 		}
 		if input.Priority != nil {
 			b.Priority = *input.Priority
@@ -155,7 +152,19 @@ func (r *mutationResolver) BeadUpdate(ctx context.Context, id string, input Bead
 		if input.Notes != nil {
 			b.Notes = *input.Notes
 		}
-	})
+		return nil
+	}
+	var err error
+	if input.Status != nil {
+		err = store.UpdateWithLifecycleStatus(id, *input.Status, bead.LifecycleTransitionOptions{
+			Reason: "graphql bead update",
+			Source: "graphql:beadUpdate",
+		}, mutate)
+	} else {
+		err = store.Update(id, func(b *bead.Bead) {
+			_ = mutate(b)
+		})
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -210,11 +219,7 @@ func (r *mutationResolver) BeadReopen(ctx context.Context, id string) (*Bead, er
 	}
 
 	store := r.beadStore(ctx)
-	err := store.Update(id, func(b *bead.Bead) {
-		b.Status = bead.StatusOpen
-		b.Owner = ""
-	})
-	if err != nil {
+	if err := store.Reopen(id, "graphql bead reopen", ""); err != nil {
 		return nil, err
 	}
 

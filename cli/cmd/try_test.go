@@ -134,10 +134,7 @@ func TestTry_BeadClosed(t *testing.T) {
 		Title:  "A closed bead",
 		Status: bead.StatusOpen,
 	}))
-	// Set status directly via Update — the admin escape hatch that bypasses ClosureGate.
-	require.NoError(t, store.Update("closed-bead-001", func(b *bead.Bead) {
-		b.Status = bead.StatusClosed
-	}))
+	require.NoError(t, store.SetLifecycleStatus("closed-bead-001", bead.StatusClosed, bead.LifecycleTransitionOptions{ManualClose: true}))
 
 	root := NewCommandFactory(env.Dir).NewRootCommand()
 	out, err := executeCommand(root, "try", "closed-bead-001")
@@ -156,10 +153,7 @@ func TestTry_BeadCancelledNotClaimable(t *testing.T) {
 		Title:  "A cancelled bead",
 		Status: bead.StatusOpen,
 	}))
-	// Transition to cancelled via Update (direct status override for test).
-	require.NoError(t, store.Update("cancelled-bead-001", func(b *bead.Bead) {
-		b.Status = bead.StatusCancelled
-	}))
+	require.NoError(t, store.SetLifecycleStatus("cancelled-bead-001", bead.StatusCancelled, bead.LifecycleTransitionOptions{}))
 
 	root := NewCommandFactory(env.Dir).NewRootCommand()
 	out, err := executeCommand(root, "try", "cancelled-bead-001")

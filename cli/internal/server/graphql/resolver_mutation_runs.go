@@ -72,10 +72,7 @@ func (r *mutationResolver) RunRequeue(ctx context.Context, input RunRequeueInput
 		// the requeue against the run's current originating bead.
 	}
 
-	if err := store.Update(originatingBeadID, func(b *bead.Bead) {
-		b.Status = bead.StatusOpen
-		b.Owner = ""
-	}); err != nil {
+	if err := store.Reopen(originatingBeadID, "run requeued", ""); err != nil {
 		return nil, fmt.Errorf("runRequeue: reopen bead %s: %w", originatingBeadID, err)
 	}
 

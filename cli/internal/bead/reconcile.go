@@ -223,7 +223,7 @@ func planLifecycleReconcile(b Bead, events []BeadEvent, childCount int, now time
 }
 
 func (s *Store) applyReconcilePlan(p ReconcilePlan) error {
-	err := s.Update(p.BeadID, func(b *Bead) {
+	mutate := func(b *Bead) error {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
@@ -240,9 +240,6 @@ func (s *Store) applyReconcilePlan(p ReconcilePlan) error {
 			addLabel(b, label)
 		}
 		addLabel(b, LabelReconciledNoChangesState)
-		if p.CloseSatisfied {
-			b.Status = StatusClosed
-		}
 		appendInlineEvent(b, BeadEvent{
 			Kind:      "lifecycle_reconciled",
 			Summary:   p.Reason,
@@ -250,7 +247,21 @@ func (s *Store) applyReconcilePlan(p ReconcilePlan) error {
 			Source:    "ddx bead reconcile",
 			CreatedAt: time.Now().UTC(),
 		})
-	})
+		return nil
+	}
+	var err error
+	if p.CloseSatisfied {
+		err = s.UpdateWithLifecycleStatus(p.BeadID, StatusClosed, LifecycleTransitionOptions{
+			ManualClose: true,
+			Reason:      p.Reason,
+			Actor:       "ddx",
+			Source:      "ddx bead reconcile",
+		}, mutate)
+	} else {
+		err = s.Update(p.BeadID, func(b *Bead) {
+			_ = mutate(b)
+		})
+	}
 	if err != nil {
 		return err
 	}

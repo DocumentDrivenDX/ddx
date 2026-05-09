@@ -532,8 +532,16 @@ func (s *Store) Get(id string) (*Bead, error) {
 	return nil, fmt.Errorf("bead: not found: %s", id)
 }
 
-// Update modifies a bead by ID. The mutate function receives a pointer to modify.
+// Update modifies a bead by ID. The mutate function receives a pointer to
+// modify, but persisted lifecycle status changes must use TransitionLifecycle.
 func (s *Store) Update(id string, mutate func(*Bead)) error {
+	return s.updateBead(id, false, func(b *Bead) error {
+		mutate(b)
+		return nil
+	})
+}
+
+func (s *Store) updateBead(id string, allowStatusChange bool, mutate func(*Bead) error) error {
 	return s.WithLock(func() error {
 		beads, _, err := s.readAllLatestRaw()
 		if err != nil {
@@ -542,7 +550,15 @@ func (s *Store) Update(id string, mutate func(*Bead)) error {
 		found := false
 		for i := range beads {
 			if beads[i].ID == id {
-				mutate(&beads[i])
+				beforeStatus := beads[i].Status
+				if mutate != nil {
+					if err := mutate(&beads[i]); err != nil {
+						return err
+					}
+				}
+				if !allowStatusChange && beads[i].Status != beforeStatus {
+					return fmt.Errorf("bead: lifecycle status change %s -> %s requires Store.TransitionLifecycle", beforeStatus, beads[i].Status)
+				}
 				beads[i].UpdatedAt = time.Now().UTC()
 				// Core validation after mutation
 				if err := s.validateBead(&beads[i]); err != nil {
@@ -561,6 +577,68 @@ func (s *Store) Update(id string, mutate func(*Bead)) error {
 		}
 		return s.WriteAll(beads)
 	})
+}
+
+// TransitionLifecycle validates and persists one bead lifecycle status
+// transition. Callers may provide a mutator for metadata that must land
+// atomically with the status write.
+func (s *Store) TransitionLifecycle(id string, status string, opts LifecycleTransitionOptions, mutate func(*Bead) error) error {
+	return s.updateBead(id, true, func(b *Bead) error {
+		if err := transitionLifecycleInPlace(b, status, opts); err != nil {
+			return err
+		}
+		if mutate != nil {
+			return mutate(b)
+		}
+		return nil
+	})
+}
+
+// SetLifecycleStatus validates and persists a lifecycle status transition.
+func (s *Store) SetLifecycleStatus(id string, status string, opts LifecycleTransitionOptions) error {
+	return s.TransitionLifecycle(id, status, opts, nil)
+}
+
+// UpdateWithLifecycleStatus atomically applies non-status field mutations and
+// a validated lifecycle status transition.
+func (s *Store) UpdateWithLifecycleStatus(id string, status string, opts LifecycleTransitionOptions, mutate func(*Bead) error) error {
+	return s.updateBead(id, true, func(b *Bead) error {
+		beforeStatus := b.Status
+		if mutate != nil {
+			if err := mutate(b); err != nil {
+				return err
+			}
+		}
+		if b.Status != beforeStatus {
+			return fmt.Errorf("bead: UpdateWithLifecycleStatus mutator changed lifecycle status directly")
+		}
+		return transitionLifecycleInPlace(b, status, opts)
+	})
+}
+
+func transitionLifecycleInPlace(b *Bead, status string, opts LifecycleTransitionOptions) error {
+	from := b.Status
+	if err := ValidateLifecycleTransition(from, status, opts); err != nil {
+		return fmt.Errorf("bead: lifecycle transition %s -> %s rejected: %w", from, status, err)
+	}
+	b.Status = status
+	applyLifecycleTransitionMetadata(b, status, opts)
+	return nil
+}
+
+const ExtraLifecycleExternalBlockerReason = "lifecycle-external-blocker-reason"
+
+func applyLifecycleTransitionMetadata(b *Bead, status string, opts LifecycleTransitionOptions) {
+	if b.Extra == nil {
+		b.Extra = make(map[string]any)
+	}
+	if status == StatusBlocked {
+		if reason := strings.TrimSpace(opts.ExternalBlockerReason); reason != "" {
+			b.Extra[ExtraLifecycleExternalBlockerReason] = reason
+		}
+	} else {
+		delete(b.Extra, ExtraLifecycleExternalBlockerReason)
+	}
 }
 
 // HeartbeatInterval is how often a claim owner should refresh the external
@@ -623,11 +701,14 @@ func (s *Store) ClaimWithOptions(id, assignee, session, worktree string) error {
 				}
 				return fmt.Errorf("bead: refusing to claim %s — previous attempt landed locally but push failed; clear execute-loop-last-status to retry", id)
 			}
-			if beads[i].Extra == nil {
-				beads[i].Extra = make(map[string]any)
+			if err := transitionLifecycleInPlace(&beads[i], StatusInProgress, LifecycleTransitionOptions{
+				Reason: "claim",
+				Actor:  assignee,
+				Source: "Store.ClaimWithOptions",
+			}); err != nil {
+				return err
 			}
 			now := time.Now().UTC()
-			beads[i].Status = StatusInProgress
 			beads[i].Owner = assignee
 			beads[i].UpdatedAt = now
 			beads[i].Extra["claimed-at"] = now.Format(time.RFC3339)
@@ -730,9 +811,14 @@ func heartbeatIsStale(extra map[string]any) bool {
 // Unclaim clears claim metadata. Only reverts status to open if the bead
 // is currently in_progress — a closed bead stays closed.
 func (s *Store) Unclaim(id string) error {
-	if err := s.Update(id, func(b *Bead) {
+	if err := s.updateBead(id, true, func(b *Bead) error {
 		if b.Status == StatusInProgress {
-			b.Status = StatusOpen
+			if err := transitionLifecycleInPlace(b, StatusOpen, LifecycleTransitionOptions{
+				Reason: "unclaim",
+				Source: "Store.Unclaim",
+			}); err != nil {
+				return err
+			}
 		}
 		b.Owner = ""
 		if b.Extra != nil {
@@ -743,6 +829,7 @@ func (s *Store) Unclaim(id string) error {
 			delete(b.Extra, "claimed-worktree")
 			delete(b.Extra, "execute-loop-heartbeat-at")
 		}
+		return nil
 	}); err != nil {
 		return err
 	}
@@ -1022,8 +1109,10 @@ func beadEventFromMap(m map[string]any) BeadEvent {
 // attachment under .ddx/attachments/<id>/events.jsonl so the active row stays
 // small (per ADR-004's attachment model and TD-027 §c).
 func (s *Store) Close(id string) error {
-	if err := s.Update(id, func(b *Bead) {
-		b.Status = StatusClosed
+	if err := s.SetLifecycleStatus(id, StatusClosed, LifecycleTransitionOptions{
+		ManualClose: true,
+		Reason:      "manual close",
+		Source:      "Store.Close",
 	}); err != nil {
 		return err
 	}
@@ -1143,7 +1232,7 @@ func (s *Store) CloseWithEvidence(id string, sessionID string, commitSHA string)
 }
 
 func (s *Store) closeWithEvidence(id string, sessionID string, commitSHA string) error {
-	return s.Update(id, func(b *Bead) {
+	return s.updateBead(id, true, func(b *Bead) error {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
@@ -1158,9 +1247,13 @@ func (s *Store) closeWithEvidence(id string, sessionID string, commitSHA string)
 			// close was refused; a single error path would be dropped by the
 			// Update callback signature (no error return).
 			appendClosureRejectNote(b, err)
-			return
+			return nil
 		}
-		b.Status = StatusClosed
+		return transitionLifecycleInPlace(b, StatusClosed, LifecycleTransitionOptions{
+			ManualClose: true,
+			Reason:      "close with evidence",
+			Source:      "Store.CloseWithEvidence",
+		})
 	})
 }
 
@@ -1205,7 +1298,11 @@ func (s *Store) Reopen(id string, reason string, appendNotes string) error {
 				continue
 			}
 			b := &beads[i]
-			b.Status = StatusOpen
+			if err := transitionLifecycleInPlace(b, StatusOpen, LifecycleTransitionOptions{
+				ManualReopen: true,
+			}); err != nil {
+				return err
+			}
 			b.Owner = ""
 			b.UpdatedAt = now
 			if b.Extra == nil {

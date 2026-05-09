@@ -29,6 +29,8 @@ func TestLifecycleTransitionMatrix(t *testing.T) {
 		{name: "blocked unblocked", from: StatusBlocked, to: StatusOpen, want: true},
 		{name: "blocked operator required", from: StatusBlocked, to: StatusProposed, opts: LifecycleTransitionOptions{OperatorRequired: true}, want: true},
 		{name: "blocked cancelled", from: StatusBlocked, to: StatusCancelled, want: true},
+		{name: "manual close from open", from: StatusOpen, to: StatusClosed, opts: LifecycleTransitionOptions{ManualClose: true}, want: true},
+		{name: "manual reopen from closed", from: StatusClosed, to: StatusOpen, opts: LifecycleTransitionOptions{ManualReopen: true}, want: true},
 		{name: "open cannot close directly", from: StatusOpen, to: StatusClosed, want: false},
 		{name: "closed terminal", from: StatusClosed, to: StatusOpen, want: false},
 		{name: "cancelled terminal", from: StatusCancelled, to: StatusOpen, want: false},

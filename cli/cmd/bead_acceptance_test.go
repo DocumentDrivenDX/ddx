@@ -77,6 +77,30 @@ func TestBeadCommandsCRUDLifecycle(t *testing.T) {
 	assert.Equal(t, float64(0), status["open"])
 }
 
+func TestBeadUpdateStatusUsesLifecycleTransition(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	rootCmd := factory.NewRootCommand()
+
+	createOut, err := executeCommand(rootCmd, "bead", "create", "Transition target", "--type", "task")
+	require.NoError(t, err)
+	id := strings.TrimSpace(createOut)
+
+	_, err = executeCommand(rootCmd, "bead", "update", id, "--status", "blocked")
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "transition_requires_external_blocker")
+
+	_, err = executeCommand(rootCmd, "bead", "update", id, "--status", "in_progress", "--assignee", "me")
+	require.NoError(t, err)
+
+	showOut, err := executeCommand(rootCmd, "bead", "show", id, "--json")
+	require.NoError(t, err)
+	var got map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &got))
+	assert.Equal(t, "in_progress", got["status"])
+	assert.Equal(t, "me", got["owner"])
+}
+
 func TestBeadCommandsClaimUsesExplicitAssignee(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)

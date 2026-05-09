@@ -520,12 +520,13 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 				}
 			}
 
-			if err := s.Update(args[0], func(b *bead.Bead) {
+			statusValue, _ := cmd.Flags().GetString("status")
+			statusChanged := cmd.Flags().Changed("status")
+			statusOpts := beadTransitionOptionsFromSetFlags(statusValue, setFlags, "ddx bead update")
+
+			applyUpdateFields := func(b *bead.Bead) error {
 				if v, _ := cmd.Flags().GetString("title"); cmd.Flags().Changed("title") {
 					b.Title = v
-				}
-				if v, _ := cmd.Flags().GetString("status"); cmd.Flags().Changed("status") {
-					b.Status = v
 				}
 				if v, _ := cmd.Flags().GetInt("priority"); cmd.Flags().Changed("priority") {
 					b.Priority = v
@@ -593,7 +594,18 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 						}
 					}
 				}
-			}); err != nil {
+				return nil
+			}
+
+			var err error
+			if statusChanged {
+				err = s.UpdateWithLifecycleStatus(args[0], statusValue, statusOpts, applyUpdateFields)
+			} else {
+				err = s.Update(args[0], func(b *bead.Bead) {
+					_ = applyUpdateFields(b)
+				})
+			}
+			if err != nil {
 				return err
 			}
 			if _, err := f.beadAutoCommit("update " + args[0]); err != nil {
@@ -604,7 +616,7 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 	}
 
 	cmd.Flags().String("title", "", "New title")
-	cmd.Flags().String("status", "", "New status (open, in_progress, closed)")
+	cmd.Flags().String("status", "", "New lifecycle status (validated transition)")
 	cmd.Flags().Int("priority", 0, "New priority")
 	cmd.Flags().String("labels", "", "New labels (comma-separated)")
 	cmd.Flags().String("acceptance", "", "New acceptance criteria")
@@ -636,6 +648,23 @@ func isProtectedBeadExtraKey(key string) bool {
 	default:
 		return false
 	}
+}
+
+func beadTransitionOptionsFromSetFlags(status string, setFlags []string, source string) bead.LifecycleTransitionOptions {
+	opts := bead.LifecycleTransitionOptions{
+		Reason: "set lifecycle status",
+		Source: source,
+	}
+	if status == bead.StatusBlocked {
+		for _, kv := range setFlags {
+			k, v, ok := strings.Cut(kv, "=")
+			if ok && k == bead.ExtraLifecycleExternalBlockerReason {
+				opts.ExternalBlockerReason = v
+				break
+			}
+		}
+	}
+	return opts
 }
 
 func (f *CommandFactory) newBeadEvidenceCommand() *cobra.Command {
@@ -1049,10 +1078,14 @@ func (f *CommandFactory) resolveNeedsHumanBead(id, action, note string, children
 	s := f.beadStore()
 	switch action {
 	case "retry":
-		if err := s.Update(id, func(b *bead.Bead) {
-			b.Status = bead.StatusOpen
+		if err := s.UpdateWithLifecycleStatus(id, bead.StatusOpen, bead.LifecycleTransitionOptions{
+			Reason: "human resolve retry",
+			Actor:  resolveClaimAssignee(),
+			Source: "ddx bead human resolve",
+		}, func(b *bead.Bead) error {
 			removeBeadLabel(b, bead.LabelNeedsHuman)
 			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
+			return nil
 		}); err != nil {
 			return err
 		}
@@ -1072,10 +1105,14 @@ func (f *CommandFactory) resolveNeedsHumanBead(id, action, note string, children
 				return err
 			}
 		}
-		if err := s.Update(id, func(b *bead.Bead) {
-			b.Status = bead.StatusOpen
+		if err := s.UpdateWithLifecycleStatus(id, bead.StatusOpen, bead.LifecycleTransitionOptions{
+			Reason: "human resolve split",
+			Actor:  resolveClaimAssignee(),
+			Source: "ddx bead human resolve",
+		}, func(b *bead.Bead) error {
 			removeBeadLabel(b, bead.LabelNeedsHuman)
 			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
+			return nil
 		}); err != nil {
 			return err
 		}

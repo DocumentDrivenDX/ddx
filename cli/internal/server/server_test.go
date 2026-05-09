@@ -2994,6 +2994,32 @@ func TestUpdateBead(t *testing.T) {
 	}
 }
 
+func TestRESTBeadUpdateStatusUsesLifecycleTransition(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"status":"in_progress"}`
+	req := httptest.NewRequest("PUT", "/api/beads/bx-001", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+	var updated struct {
+		ID     string `json:"id"`
+		Status string `json:"status"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &updated); err != nil {
+		t.Fatal(err)
+	}
+	if updated.Status != bead.StatusInProgress {
+		t.Errorf("expected status=%q, got %q", bead.StatusInProgress, updated.Status)
+	}
+}
+
 func TestUpdateBeadNotFound(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
@@ -3409,6 +3435,41 @@ func TestMCPWriteToolsTrustedAllowed(t *testing.T) {
 				t.Errorf("expected trusted %s to not be forbidden, got %q", tc.name, text)
 			}
 		})
+	}
+}
+
+func TestMCPBeadUpdateStatusUsesLifecycleTransition(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	body := `{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"ddx_bead_update","arguments":{"id":"bx-001","status":"in_progress"}}}`
+	req := httptest.NewRequest("POST", "/mcp", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 JSON-RPC response, got %d", w.Code)
+	}
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result, ok := resp.Result.(map[string]any)
+	if !ok {
+		t.Fatal("expected result map")
+	}
+	content, _ := result["content"].([]any)
+	if len(content) == 0 {
+		t.Fatal("expected content in response")
+	}
+	text, _ := content[0].(map[string]any)["text"].(string)
+	if strings.Contains(text, "requires Store.TransitionLifecycle") {
+		t.Fatalf("MCP update used direct status mutation: %s", text)
+	}
+	if !strings.Contains(text, `"status":"in_progress"`) {
+		t.Fatalf("expected updated bead status in response, got %s", text)
 	}
 }
 

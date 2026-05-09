@@ -29,9 +29,13 @@ func seedClosedBead(t *testing.T, store *bead.Store, title string) string {
 	if err := store.Create(b); err != nil {
 		t.Fatalf("create bead: %v", err)
 	}
-	if err := store.Update(b.ID, func(x *bead.Bead) {
-		x.Status = bead.StatusClosed
+	if err := store.UpdateWithLifecycleStatus(b.ID, bead.StatusClosed, bead.LifecycleTransitionOptions{
+		ManualClose: true,
+		Reason:      "test close",
+		Source:      "test",
+	}, func(x *bead.Bead) error {
 		x.Owner = "agent-prior"
+		return nil
 	}); err != nil {
 		t.Fatalf("close bead: %v", err)
 	}
@@ -131,8 +135,10 @@ func TestRunRequeue_DuplicateKeyReturnsExisting(t *testing.T) {
 
 	// Close the bead again to prove the second call does NOT re-reopen it
 	// (no second enqueue) — duplicate key must collapse.
-	if err := store.Update(beadID, func(b *bead.Bead) {
-		b.Status = bead.StatusClosed
+	if err := store.SetLifecycleStatus(beadID, bead.StatusClosed, bead.LifecycleTransitionOptions{
+		ManualClose: true,
+		Reason:      "test re-close",
+		Source:      "test",
 	}); err != nil {
 		t.Fatalf("re-close: %v", err)
 	}

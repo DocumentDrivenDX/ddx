@@ -10,6 +10,11 @@ import (
 type LifecycleTransitionOptions struct {
 	OperatorRequired      bool
 	ExternalBlockerReason string
+	ManualClose           bool
+	ManualReopen          bool
+	Reason                string
+	Actor                 string
+	Source                string
 }
 
 // LifecycleDependencyState is the small dependency shape the pure lifecycle
@@ -97,6 +102,15 @@ func ValidateLifecycleTransition(from, to string, opts LifecycleTransitionOption
 		return err
 	}
 	if from == to {
+		return nil
+	}
+	if to == StatusClosed && opts.ManualClose {
+		switch from {
+		case StatusOpen, StatusInProgress, StatusBlocked, StatusProposed:
+			return nil
+		}
+	}
+	if from == StatusClosed && to == StatusOpen && opts.ManualReopen {
 		return nil
 	}
 	if from == StatusClosed || from == StatusCancelled {

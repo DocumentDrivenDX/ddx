@@ -106,7 +106,7 @@ func TestProperty_OneRowPerID(t *testing.T) {
 	for round := 0; round < 50; round++ {
 		id := ids[rng.Intn(len(ids))]
 		next := statuses[rng.Intn(len(statuses))]
-		_ = s.Update(id, func(b *Bead) { b.Status = next })
+		_ = s.SetLifecycleStatus(id, next, lifecycleTransitionOptionsForTests(next))
 	}
 
 	// Invariant: ReadAll returns exactly one row per ID.
@@ -199,9 +199,9 @@ func TestProperty_ClaimStateMachine(t *testing.T) {
 		case 2: // Close: always succeeds (idempotent if already closed).
 			assert.NoError(t, s.Close(id), "step %d: Close must never error", step)
 
-		case 3: // Reopen via Update: always succeeds.
-			assert.NoError(t, s.Update(id, func(b *Bead) { b.Status = StatusOpen }),
-				"step %d: reopen via Update must never error", step)
+		case 3: // Reopen through the lifecycle API: always succeeds for this state set.
+			assert.NoError(t, s.Reopen(id, "", ""),
+				"step %d: reopen must never error", step)
 		}
 
 		// After every operation the bead must have a valid status.
@@ -558,7 +558,7 @@ func TestProperty_RandomizedOpStream(t *testing.T) {
 			ops = append(ops,
 				op{name: "update-status", fn: func() {
 					next := validStatuses[rng.Intn(len(validStatuses))]
-					_ = s.Update(id, func(b *Bead) { b.Status = next })
+					_ = s.SetLifecycleStatus(id, next, lifecycleTransitionOptionsForTests(next))
 				}},
 				op{name: "claim", fn: func() { _ = s.Claim(id, "agent") }},
 				op{name: "unclaim", fn: func() { _ = s.Unclaim(id) }},

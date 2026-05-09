@@ -216,9 +216,8 @@ func (s *axonSmokeServer) handleQuery(t *testing.T, w http.ResponseWriter, r *ht
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		if err := s.store.Update(id, func(b *bead.Bead) {
+		mutate := func(b *bead.Bead) error {
 			b.Title = input.Title
-			b.Status = input.Status
 			b.Priority = input.Priority
 			b.IssueType = input.IssueType
 			b.Owner = input.Owner
@@ -229,7 +228,9 @@ func (s *axonSmokeServer) handleQuery(t *testing.T, w http.ResponseWriter, r *ht
 			b.Notes = input.Notes
 			b.Dependencies = dependencyInputsToLocal(input.Dependencies)
 			b.Extra = cloneStringAnyMap(input.Extra)
-		}); err != nil {
+			return nil
+		}
+		if err := s.store.UpdateWithLifecycleStatus(id, input.Status, bead.LifecycleTransitionOptions{}, mutate); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}

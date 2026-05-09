@@ -140,9 +140,7 @@ func TestChaos_AtomicStatusTransitions(t *testing.T) {
 					// Ignore errors: contention may cause transient failures that are
 					// acceptable (e.g. attempting to set a status that is already set).
 					// The critical invariant is no corruption.
-					_ = s.Update(id, func(bead *Bead) {
-						bead.Status = next
-					})
+					_ = setLifecycleStatusForTest(t, s, id, next)
 				}
 			}()
 		}
@@ -182,9 +180,7 @@ func TestChaos_ConcurrentCloseAndAppend(t *testing.T) {
 
 		for round := 0; round < rounds; round++ {
 			// Re-open the bead so we can close it again
-			require.NoError(t, s.Update(closeID, func(b *Bead) {
-				b.Status = StatusOpen
-			}))
+			require.NoError(t, setLifecycleStatusForTest(t, s, closeID, StatusOpen))
 
 			newTitle := fmt.Sprintf("new-bead-round-%d", round)
 			var newID string
@@ -243,9 +239,7 @@ func TestChaos_ConcurrentCloseNotLost(t *testing.T) {
 
 		for round := 0; round < rounds; round++ {
 			// Reset to open
-			require.NoError(t, s.Update(closeID, func(b *Bead) {
-				b.Status = StatusOpen
-			}))
+			require.NoError(t, setLifecycleStatusForTest(t, s, closeID, StatusOpen))
 
 			// Run close and create concurrently, then wait for both
 			var wg sync.WaitGroup

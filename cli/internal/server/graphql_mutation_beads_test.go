@@ -180,6 +180,36 @@ func TestGraphQLBeadUpdate(t *testing.T) {
 	}
 }
 
+func TestGraphQLBeadUpdateStatusUsesLifecycleTransition(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "gql-mut-test-node")
+
+	workDir := setupTestDir(t)
+	srv := New(":0", workDir)
+
+	mutation := `mutation {
+		beadUpdate(id: "bx-001", input: { status: "in_progress" }) {
+			id
+			status
+		}
+	}`
+
+	resp := gqlMutation(t, srv, mutation)
+	var data struct {
+		BeadUpdate struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		} `json:"beadUpdate"`
+	}
+	if err := json.Unmarshal(resp["data"], &data); err != nil {
+		t.Fatalf("parse data: %v", err)
+	}
+	if data.BeadUpdate.Status != "in_progress" {
+		t.Fatalf("expected status=in_progress, got %q", data.BeadUpdate.Status)
+	}
+}
+
 // TC-GQL-MUT-003: beadClaim sets bead to in_progress with the given assignee.
 func TestGraphQLBeadClaim(t *testing.T) {
 	xdgDir := t.TempDir()

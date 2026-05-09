@@ -760,8 +760,7 @@ func TestIntegration_Mutation_BeadReopen(t *testing.T) {
 	if err := store.Create(b); err != nil {
 		t.Fatalf("create bead: %v", err)
 	}
-	// Close the bead directly via the store.
-	if err := store.Update(b.ID, func(x *bead.Bead) { x.Status = bead.StatusClosed }); err != nil {
+	if err := store.SetLifecycleStatus(b.ID, bead.StatusClosed, bead.LifecycleTransitionOptions{ManualClose: true}); err != nil {
 		t.Fatalf("close bead: %v", err)
 	}
 

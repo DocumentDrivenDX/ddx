@@ -351,10 +351,10 @@ func TestUpdate(t *testing.T) {
 	b := &Bead{Title: "Original"}
 	require.NoError(t, s.Create(b))
 
-	err := s.Update(b.ID, func(b *Bead) {
+	err := s.UpdateWithLifecycleStatus(b.ID, StatusInProgress, LifecycleTransitionOptions{}, func(b *Bead) error {
 		b.Title = "Updated"
-		b.Status = StatusInProgress
 		b.Owner = "me"
+		return nil
 	})
 	require.NoError(t, err)
 

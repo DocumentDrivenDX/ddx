@@ -360,8 +360,11 @@ func (r *mutationResolver) OperatorPromptSubmit(ctx context.Context, input Opera
 	autoApproved := false
 	if input.AutoApprove != nil && *input.AutoApprove {
 		if r.canAutoApprove(identity) {
-			if err := store.Update(b.ID, func(updated *bead.Bead) {
-				updated.Status = bead.StatusOpen
+			if err := store.SetLifecycleStatus(b.ID, bead.StatusOpen, bead.LifecycleTransitionOptions{
+				OperatorRequired: true,
+				Reason:           "operator prompt auto-approved on submit",
+				Actor:            identity.actor,
+				Source:           "graphql:operatorPromptSubmit",
 			}); err != nil {
 				return nil, fmt.Errorf("operator-prompts: auto-approve update: %w", err)
 			}
@@ -416,8 +419,11 @@ func (r *mutationResolver) OperatorPromptApprove(ctx context.Context, id string)
 	if existing.Status != bead.StatusProposed {
 		return nil, fmt.Errorf("operator-prompts: bead %s is not in proposed status (got %q); cannot approve", id, existing.Status)
 	}
-	if err := store.Update(id, func(b *bead.Bead) {
-		b.Status = bead.StatusOpen
+	if err := store.SetLifecycleStatus(id, bead.StatusOpen, bead.LifecycleTransitionOptions{
+		OperatorRequired: true,
+		Reason:           "operator prompt approved",
+		Actor:            ident.actor,
+		Source:           "graphql:operatorPromptApprove",
 	}); err != nil {
 		return nil, err
 	}
@@ -475,8 +481,10 @@ func (r *mutationResolver) OperatorPromptCancel(ctx context.Context, id string) 
 	if existing.Status != bead.StatusProposed {
 		return nil, fmt.Errorf("operator-prompts: bead %s is not in proposed status (got %q); cannot cancel", id, existing.Status)
 	}
-	if err := store.Update(id, func(b *bead.Bead) {
-		b.Status = bead.StatusCancelled
+	if err := store.SetLifecycleStatus(id, bead.StatusCancelled, bead.LifecycleTransitionOptions{
+		Reason: "operator prompt cancelled",
+		Actor:  ident.actor,
+		Source: "graphql:operatorPromptCancel",
 	}); err != nil {
 		return nil, err
 	}
