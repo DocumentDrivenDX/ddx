@@ -165,7 +165,7 @@ func TestServerWorker_WiresPreClaimIntakeHook(t *testing.T) {
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
 		ProjectRoot: root,
 		Harness:     "claude",
-		Once:        true,
+		Mode:        "once",
 		NoReview:    true,
 	})
 	require.NoError(t, err)

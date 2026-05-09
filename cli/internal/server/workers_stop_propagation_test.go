@@ -56,7 +56,8 @@ func TestWorkerManagerStopCancelsAgentExecution(t *testing.T) {
 	}
 
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
-		PollInterval: 30 * time.Second,
+		Mode:         "watch",
+		IdleInterval: executeLoopIdleInterval(30 * time.Second),
 	})
 	require.NoError(t, err)
 

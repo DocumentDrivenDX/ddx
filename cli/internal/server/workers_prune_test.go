@@ -165,7 +165,8 @@ func TestWorkerManagerPruneSkipsLiveWorkers(t *testing.T) {
 	defer m.StopWatchdog()
 
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
-		PollInterval: 30 * time.Second,
+		Mode:         "watch",
+		IdleInterval: executeLoopIdleInterval(30 * time.Second),
 	})
 	require.NoError(t, err)
 	defer func() { _ = m.Stop(record.ID) }()

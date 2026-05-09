@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/stretchr/testify/assert"
@@ -32,7 +33,7 @@ func TestWorkerManagerStartAndShow(t *testing.T) {
 		Harness:  "fiz",
 		Model:    "qwen/qwen3.6",
 		Provider: "openrouter",
-		Once:     true,
+		Mode:     "once",
 	})
 	require.NoError(t, err)
 	require.NotEmpty(t, record.ID)
@@ -142,7 +143,7 @@ func TestWorkerManagerList(t *testing.T) {
 
 	m := NewWorkerManager(root)
 
-	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: "once"})
 	require.NoError(t, err)
 
 	_ = waitForWorkerExit(t, m, record.ID, 10*time.Second)
@@ -160,7 +161,8 @@ func TestWorkerManagerStop(t *testing.T) {
 	m := NewWorkerManager(root)
 	// Use a long poll interval so the worker stays running
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
-		PollInterval: 30 * time.Second,
+		Mode:         "watch",
+		IdleInterval: executeLoopIdleInterval(30 * time.Second),
 	})
 	require.NoError(t, err)
 
@@ -176,7 +178,7 @@ func TestWorkerManagerLogs(t *testing.T) {
 
 	m := NewWorkerManager(root)
 
-	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: "once"})
 	require.NoError(t, err)
 
 	_ = waitForWorkerExit(t, m, record.ID, 10*time.Second)
@@ -196,7 +198,7 @@ func TestWorkerManagerWritesStatusToDisk(t *testing.T) {
 
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
 		Harness: "fiz",
-		Once:    true,
+		Mode:    "once",
 	})
 	require.NoError(t, err)
 
@@ -207,6 +209,68 @@ func TestWorkerManagerWritesStatusToDisk(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join(dir, "status.json"))
 	require.NoError(t, err)
 	assert.Contains(t, string(data), record.ID)
+}
+
+func TestWorkers_UnifiedSpec_PersistsToSpecJson(t *testing.T) {
+	root := t.TempDir()
+	setupBeadStore(t, root)
+
+	m := NewWorkerManager(root)
+
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		Harness:           "fiz",
+		Model:             "qwen/qwen3.6",
+		Provider:          "openrouter",
+		ModelRef:          "openrouter/qwen/qwen3.6",
+		Profile:           "default",
+		Effort:            "high",
+		LabelFilter:       "phase:reliability",
+		Mode:              executeloop.ModeWatch,
+		IdleInterval:      executeloop.Duration{Duration: 45 * time.Second},
+		NoReview:          true,
+		ReviewHarness:     "review-harness",
+		ReviewModel:       "review-model",
+		OpaquePassthrough: true,
+		MaxCostUSD:        1.25,
+		RequestTimeout:    executeloop.Duration{Duration: 2 * time.Minute},
+		MinPower:          7,
+		MaxPower:          8,
+		FromRev:           "HEAD~1",
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		_ = m.Stop(record.ID)
+		_ = waitForWorkerExit(t, m, record.ID, 5*time.Second)
+	})
+
+	specPath := filepath.Join(root, record.SpecPath)
+	data, err := os.ReadFile(specPath)
+	require.NoError(t, err)
+	assert.NotContains(t, string(data), `"once"`)
+	assert.NotContains(t, string(data), `"poll_interval"`)
+
+	var persisted ExecuteLoopWorkerSpec
+	require.NoError(t, json.Unmarshal(data, &persisted))
+	assert.Equal(t, root, persisted.ProjectRoot)
+	assert.Equal(t, "fiz", persisted.Harness)
+	assert.Equal(t, "qwen/qwen3.6", persisted.Model)
+	assert.Equal(t, "openrouter", persisted.Provider)
+	assert.Equal(t, "openrouter/qwen/qwen3.6", persisted.ModelRef)
+	assert.Equal(t, "default", persisted.Profile)
+	assert.Equal(t, "high", persisted.Effort)
+	assert.Equal(t, "phase:reliability", persisted.LabelFilter)
+	assert.Equal(t, executeloop.ModeWatch, persisted.Mode)
+	assert.Equal(t, 45*time.Second, persisted.IdleInterval.Duration)
+	assert.True(t, persisted.NoReview)
+	assert.Equal(t, "review-harness", persisted.ReviewHarness)
+	assert.Equal(t, "review-model", persisted.ReviewModel)
+	assert.True(t, persisted.OpaquePassthrough)
+	assert.Equal(t, 1.25, persisted.MaxCostUSD)
+	assert.Equal(t, 2*time.Minute, persisted.RequestTimeout.Duration)
+	assert.Equal(t, 7, persisted.MinPower)
+	assert.Equal(t, 8, persisted.MaxPower)
+	assert.Equal(t, "HEAD~1", persisted.FromRev)
+	assert.Equal(t, executeloop.SpecCurrentVersion, persisted.SpecVersion)
 }
 
 func waitForWorkerExit(t *testing.T, m *WorkerManager, id string, timeout time.Duration) WorkerRecord {
@@ -256,7 +320,8 @@ func TestWorkerManagerCancelledContext(t *testing.T) {
 	m := NewWorkerManager(root)
 
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
-		PollInterval: 30 * time.Second, // long poll to keep it alive
+		Mode:         "watch",
+		IdleInterval: executeLoopIdleInterval(30 * time.Second), // long poll to keep it alive
 	})
 	require.NoError(t, err)
 
@@ -518,7 +583,7 @@ func TestProjectWorkerShowEndpoint(t *testing.T) {
 	// Start a worker so there is something to show
 	m := srv.workers
 	installFastSuccessWorker(m)
-	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: "once"})
 	require.NoError(t, err)
 
 	_ = waitForWorkerExit(t, m, record.ID, 10*time.Second)
@@ -552,7 +617,7 @@ func TestProjectWorkerProgressKeepaliveOnIdleWorker(t *testing.T) {
 	// Start and wait for a worker to finish so it's on disk but not active
 	m := srv.workers
 	installFastSuccessWorker(m)
-	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: "once"})
 	require.NoError(t, err)
 	_ = waitForWorkerExit(t, m, record.ID, 10*time.Second)
 
@@ -652,7 +717,7 @@ func TestWorkerScopeToProject(t *testing.T) {
 
 	mA := NewWorkerManager(rootA)
 
-	record, err := mA.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
+	record, err := mA.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: "once"})
 	require.NoError(t, err)
 
 	_ = waitForWorkerExit(t, mA, record.ID, 10*time.Second)
@@ -865,7 +930,7 @@ func TestWorkerLandsCommitViaCoordinator(t *testing.T) {
 		}
 	}
 
-	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: "once"})
 	require.NoError(t, err)
 
 	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
@@ -979,7 +1044,7 @@ func TestWorkerLandsEvidenceViaCoordinator(t *testing.T) {
 		}
 	}
 
-	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: "once"})
 	require.NoError(t, err)
 
 	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
@@ -1020,7 +1085,7 @@ func TestStartExecuteLoopProjectRootOverride(t *testing.T) {
 	// Submit a worker targeting project B.
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
 		ProjectRoot: projectB,
-		Once:        true,
+		Mode:        "once",
 	})
 	require.NoError(t, err)
 	// The returned record must reflect the target project, not project A.
@@ -1112,8 +1177,8 @@ func TestConcurrentWorkersFromDifferentProjects(t *testing.T) {
 	mB := NewWorkerManager(rootB)
 
 	// Start one worker per project concurrently.
-	recA, errA := mA.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
-	recB, errB := mB.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
+	recA, errA := mA.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: "once"})
+	recB, errB := mB.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: "once"})
 	require.NoError(t, errA)
 	require.NoError(t, errB)
 

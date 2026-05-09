@@ -37,7 +37,27 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
-	os.Exit(m.Run())
+	cleanupTemp := isolateServerTestTempRoot()
+	code := m.Run()
+	cleanupTemp()
+	os.Exit(code)
+}
+
+func isolateServerTestTempRoot() func() {
+	tempRoot, err := os.MkdirTemp("", "ddx-server-tests-*")
+	if err != nil {
+		return func() {}
+	}
+	oldTmp, hadTmp := os.LookupEnv("TMPDIR")
+	_ = os.Setenv("TMPDIR", tempRoot)
+	return func() {
+		if hadTmp {
+			_ = os.Setenv("TMPDIR", oldTmp)
+		} else {
+			_ = os.Unsetenv("TMPDIR")
+		}
+		_ = os.RemoveAll(tempRoot)
+	}
 }
 
 // setupTestDir creates a temp directory with a library and bead store.

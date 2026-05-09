@@ -103,6 +103,39 @@ func TestWorkerExecutorCostCap_StopsAfterCap(t *testing.T) {
 	}
 }
 
+func TestWorkers_ServerSpawnedWorker_HonorsMaxCostUSD(t *testing.T) {
+	const configuredCap = 0.42
+	maxCostUSD := executeLoopMaxCostUSD(ExecuteLoopWorkerSpec{MaxCostUSD: configuredCap})
+	if maxCostUSD != configuredCap {
+		t.Fatalf("executeLoopMaxCostUSD = %.2f, want %.2f", maxCostUSD, configuredCap)
+	}
+	if got := executeLoopMaxCostUSD(ExecuteLoopWorkerSpec{}); got != escalation.DefaultMaxCostUSD {
+		t.Fatalf("default executeLoopMaxCostUSD = %.2f, want %.2f", got, escalation.DefaultMaxCostUSD)
+	}
+
+	tracker := escalation.NewCostCapTracker(maxCostUSD, func(string) bool { return true })
+	fake := &fakeServerAttempt{
+		reports: []agent.ExecuteBeadReport{
+			{BeadID: "ddx-cost-cap", Harness: "openrouter", Status: agent.ExecuteBeadStatusSuccess, CostUSD: 0.43},
+		},
+	}
+	exec := wrapServerExecutor(tracker, fake.next)
+
+	report, err := exec(context.Background(), "ddx-cost-cap")
+	if err != nil {
+		t.Fatalf("exec returned error: %v", err)
+	}
+	if report.Status != agent.ExecuteBeadStatusExecutionFailed {
+		t.Fatalf("status = %s, want %s", report.Status, agent.ExecuteBeadStatusExecutionFailed)
+	}
+	if !strings.Contains(report.Detail, "$0.43 billed >= $0.42 cap") {
+		t.Fatalf("detail = %q, want configured cap in message", report.Detail)
+	}
+	if got := fake.calls.Load(); got != 1 {
+		t.Fatalf("inner attempt calls = %d, want 1", got)
+	}
+}
+
 // TestWorkerExecutorCostCap_SubscriptionDoesNotCount asserts that
 // subscription/local-provider costs do not contribute to the cap, even
 // at huge reported CostUSD values.

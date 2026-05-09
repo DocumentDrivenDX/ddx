@@ -27,7 +27,8 @@ func TestWorkerManagerStopSetsStoppedState(t *testing.T) {
 	defer m.StopWatchdog()
 	// Keep the worker alive long enough to observe the stop path.
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
-		PollInterval: 30 * time.Second,
+		Mode:         "watch",
+		IdleInterval: executeLoopIdleInterval(30 * time.Second),
 	})
 	require.NoError(t, err)
 
@@ -54,7 +55,8 @@ func TestWorkerManagerStopIsIdempotent(t *testing.T) {
 	m := NewWorkerManager(root)
 	defer m.StopWatchdog()
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
-		PollInterval: 30 * time.Second,
+		Mode:         "watch",
+		IdleInterval: executeLoopIdleInterval(30 * time.Second),
 	})
 	require.NoError(t, err)
 
@@ -238,7 +240,8 @@ func TestRunWorkerPreservesStoppedState(t *testing.T) {
 	defer m.StopWatchdog()
 	// Keep the worker alive so we can stop it while it is still polling.
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
-		PollInterval: 30 * time.Second,
+		Mode:         "watch",
+		IdleInterval: executeLoopIdleInterval(30 * time.Second),
 	})
 	require.NoError(t, err)
 

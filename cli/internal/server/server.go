@@ -2432,6 +2432,7 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		}
 		pollInterval = d
 	}
+	mode, idleInterval := executeLoopModeFromLegacy(req.Once, pollInterval)
 	record, err := s.workers.StartExecuteLoop(ExecuteLoopWorkerSpec{
 		ProjectRoot:   projectRoot,
 		Harness:       req.Harness,
@@ -2441,8 +2442,8 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		ModelRef:      req.ModelRef,
 		Effort:        req.Effort,
 		LabelFilter:   req.LabelFilter,
-		Once:          req.Once,
-		PollInterval:  pollInterval,
+		Mode:          mode,
+		IdleInterval:  idleInterval,
 		NoReview:      req.NoReview,
 		ReviewHarness: req.ReviewHarness,
 		ReviewModel:   req.ReviewModel,

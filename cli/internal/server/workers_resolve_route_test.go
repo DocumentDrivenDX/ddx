@@ -174,7 +174,7 @@ func TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel(t *testin
 	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
 		Harness: "fiz",
 		Model:   "gpt-5.4-mini",
-		Once:    true,
+		Mode:    "once",
 	})
 	require.NoError(t, err)
 

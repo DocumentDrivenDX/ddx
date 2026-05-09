@@ -41,7 +41,27 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
-	os.Exit(m.Run())
+	cleanupTemp := isolateGraphQLTestTempRoot()
+	code := m.Run()
+	cleanupTemp()
+	os.Exit(code)
+}
+
+func isolateGraphQLTestTempRoot() func() {
+	tempRoot, err := os.MkdirTemp("", "ddx-server-graphql-tests-*")
+	if err != nil {
+		return func() {}
+	}
+	oldTmp, hadTmp := os.LookupEnv("TMPDIR")
+	_ = os.Setenv("TMPDIR", tempRoot)
+	return func() {
+		if hadTmp {
+			_ = os.Setenv("TMPDIR", oldTmp)
+		} else {
+			_ = os.Unsetenv("TMPDIR")
+		}
+		_ = os.RemoveAll(tempRoot)
+	}
 }
 
 // ─────────────────────────── shared setup ───────────────────────────────────

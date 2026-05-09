@@ -246,7 +246,7 @@ func TestWatchdogStartedOnFirstWorkerLaunch(t *testing.T) {
 	m.WatchdogCheckInterval = 1 * time.Hour
 	defer m.StopWatchdog()
 
-	rec, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Once: true})
+	rec, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{Mode: "once"})
 	require.NoError(t, err)
 	_ = waitForWorkerExit(t, m, rec.ID, 10*time.Second)
 

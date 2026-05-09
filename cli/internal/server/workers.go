@@ -18,37 +18,14 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	tierescalation "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
 	agentlib "github.com/DocumentDrivenDX/fizeau"
 )
 
-type ExecuteLoopWorkerSpec struct {
-	// ProjectRoot overrides the manager's default project root for this worker.
-	// When set, the worker scans and executes beads from this project instead of
-	// the server's primary working directory. Must be an absolute path to a
-	// directory containing a .ddx/ folder. Validated by the server before the
-	// worker starts.
-	ProjectRoot  string        `json:"project_root,omitempty"`
-	Harness      string        `json:"harness,omitempty"`
-	Model        string        `json:"model,omitempty"`
-	Profile      string        `json:"profile,omitempty"`
-	Provider     string        `json:"provider,omitempty"`
-	ModelRef     string        `json:"model_ref,omitempty"`
-	Effort       string        `json:"effort,omitempty"`
-	LabelFilter  string        `json:"label_filter,omitempty"`
-	Once         bool          `json:"once,omitempty"`
-	PollInterval time.Duration `json:"poll_interval,omitempty"`
-	// Review options — controls the post-merge review agent.
-	NoReview      bool   `json:"no_review,omitempty"`
-	ReviewHarness string `json:"review_harness,omitempty"`
-	ReviewModel   string `json:"review_model,omitempty"`
-	// OpaquePassthrough, when true, skips DDx-side route validation and config
-	// harness/model injection. Routing belongs to the agent service (CONTRACT-003
-	// / FEAT-010 / ddx-c4231775). Set by ddx work; not set by ddx agent execute-loop.
-	OpaquePassthrough bool `json:"opaque_passthrough,omitempty"`
-}
+type ExecuteLoopWorkerSpec = executeloop.ExecuteLoopSpec
 
 type PluginActionWorkerSpec struct {
 	ProjectRoot string `json:"project_root,omitempty"`
@@ -311,6 +288,38 @@ func lifecycleStartDetail(spec ExecuteLoopWorkerSpec) string {
 	return strings.Join(parts, " ")
 }
 
+func executeLoopOnce(spec ExecuteLoopWorkerSpec) bool {
+	return spec.Mode == executeloop.ModeOnce
+}
+
+func executeLoopPollInterval(spec ExecuteLoopWorkerSpec) time.Duration {
+	if spec.Mode != executeloop.ModeWatch {
+		return 0
+	}
+	return spec.IdleInterval.Duration
+}
+
+func executeLoopIdleInterval(duration time.Duration) executeloop.Duration {
+	return executeloop.Duration{Duration: duration}
+}
+
+func executeLoopModeFromLegacy(once bool, pollInterval time.Duration) (executeloop.Mode, executeloop.Duration) {
+	if once {
+		return executeloop.ModeOnce, executeloop.Duration{}
+	}
+	if pollInterval > 0 {
+		return executeloop.ModeWatch, executeLoopIdleInterval(pollInterval)
+	}
+	return executeloop.ModeDrain, executeloop.Duration{}
+}
+
+func executeLoopMaxCostUSD(spec ExecuteLoopWorkerSpec) float64 {
+	if spec.MaxCostUSD == 0 {
+		return policyescalation.DefaultMaxCostUSD
+	}
+	return spec.MaxCostUSD
+}
+
 // applyServerWatchdogConfig reads .ddx/config.yaml at projectRoot and applies
 // any server.watchdog_deadline / server.stall_deadline overrides. Invalid or
 // missing values are silently ignored — defaults are filled in by the
@@ -356,6 +365,11 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	effectiveRoot := spec.ProjectRoot
 	if effectiveRoot == "" {
 		effectiveRoot = m.projectRoot
+	}
+	spec.ProjectRoot = effectiveRoot
+	spec.ApplyDefaults()
+	if err := spec.Validate(); err != nil {
+		return WorkerRecord{}, err
 	}
 
 	// Pre-flight: validate harness availability and model compatibility
@@ -408,8 +422,8 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 		Model:        spec.Model,
 		Profile:      agent.NormalizeRoutingProfile(spec.Profile),
 		Effort:       spec.Effort,
-		Once:         spec.Once,
-		PollInterval: spec.PollInterval.String(),
+		Once:         executeLoopOnce(spec),
+		PollInterval: executeLoopPollInterval(spec).String(),
 		StdoutPath:   relToProject(m.projectRoot, logPath),
 		SpecPath:     relToProject(m.projectRoot, filepath.Join(dir, "spec.json")),
 		StartedAt:    time.Now().UTC(),
@@ -696,7 +710,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		defer eventSink.Close() //nolint:errcheck
 	}
 	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
-	rcfg, _ := config.LoadAndResolve(projectRoot, config.CLIOverrides{
+	overrides := config.CLIOverrides{
 		Assignee:          "ddx",
 		Harness:           spec.Harness,
 		Model:             spec.Model,
@@ -704,8 +718,15 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		ModelRef:          spec.ModelRef,
 		Profile:           agent.NormalizeRoutingProfile(spec.Profile),
 		Effort:            spec.Effort,
+		MinPower:          spec.MinPower,
+		MaxPower:          spec.MaxPower,
 		OpaquePassthrough: spec.OpaquePassthrough,
-	})
+	}
+	requestTimeout := spec.RequestTimeout.Duration
+	if requestTimeout > 0 {
+		overrides.ProviderRequestTimeout = &requestTimeout
+	}
+	rcfg, _ := config.LoadAndResolve(projectRoot, overrides)
 
 	var lintHook func(ctx context.Context, beadID string) (agent.LintResult, error)
 	var intakeHook agent.PreClaimIntakeHook
@@ -741,7 +762,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			if resolvedProvider != "" {
 				attemptProvider = resolvedProvider
 			}
-			attemptRcfg, _ := config.LoadAndResolve(projectRoot, config.CLIOverrides{
+			loopOverrides := config.CLIOverrides{
 				Harness:           resolvedHarness,
 				Model:             resolvedModel,
 				Provider:          attemptProvider,
@@ -749,10 +770,16 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				Profile:           rcfg.Profile(),
 				Effort:            spec.Effort,
 				MinPower:          requestedMinPower,
+				MaxPower:          spec.MaxPower,
 				OpaquePassthrough: spec.OpaquePassthrough,
-			})
+			}
+			if requestTimeout > 0 {
+				loopOverrides.ProviderRequestTimeout = &requestTimeout
+			}
+			attemptRcfg, _ := config.LoadAndResolve(projectRoot, loopOverrides)
 			beadStore := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
 			res, err := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, agent.ExecuteBeadRuntime{
+				FromRev:    spec.FromRev,
 				BeadEvents: beadStore,
 				BeadCancel: beadStore,
 			}, gitOps)
@@ -807,8 +834,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 
 		// Cost-cap state for this worker run. Subscription / local providers do
 		// not contribute (see escalation.CountsTowardCostCap).
-		// TODO(ddx-785d02f7): expose maxCostUSD as a worker spec field
-		// once the spec config knob lands.
+		maxCostUSD := executeLoopMaxCostUSD(spec)
 		var ladderOnce sync.Once
 		var ladder *tierescalation.Ladder
 		loadLadder := func() *tierescalation.Ladder {
@@ -828,7 +854,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			})
 			return ladder
 		}
-		costCap = policyescalation.NewCostCapTracker(policyescalation.DefaultMaxCostUSD, func(harnessName string) bool {
+		costCap = policyescalation.NewCostCapTracker(maxCostUSD, func(harnessName string) bool {
 			svc, svcErr := agent.NewServiceFromWorkDir(projectRoot)
 			if svcErr != nil {
 				return true
@@ -854,7 +880,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			spent := costCap.Spent()
 			return agent.ExecuteBeadReport{
 				Status: agent.ExecuteBeadStatusExecutionFailed,
-				Detail: fmt.Sprintf("cost cap reached: $%.2f billed >= $%.2f cap; raise the cap or set 0 to disable. Subscription and local providers do not count.", spent, policyescalation.DefaultMaxCostUSD),
+				Detail: fmt.Sprintf("cost cap reached: $%.2f billed >= $%.2f cap; raise the cap or set 0 to disable. Subscription and local providers do not count.", spent, maxCostUSD),
 			}, true
 		}
 		attemptWithCostCap := func(ctx context.Context, beadID string, requestedMinPower int) (agent.ExecuteBeadReport, error) {
@@ -924,8 +950,8 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 	landingOps := agent.RealLandingGitOps{}
 
 	loopResult, err := worker.Run(ctx, rcfg, agent.ExecuteBeadLoopRuntime{
-		Once:                  spec.Once,
-		PollInterval:          spec.PollInterval,
+		Once:                  executeLoopOnce(spec),
+		PollInterval:          executeLoopPollInterval(spec),
 		Log:                   log,
 		CleanupLog:            log,
 		EventSink:             eventSink,

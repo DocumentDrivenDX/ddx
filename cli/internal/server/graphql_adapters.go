@@ -121,6 +121,7 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 		pollInterval = d
 	}
 
+	mode, idleInterval := executeLoopModeFromLegacy(req.Once, pollInterval)
 	record, err := a.manager.StartExecuteLoop(ExecuteLoopWorkerSpec{
 		ProjectRoot:   projectRoot,
 		Harness:       req.Harness,
@@ -130,8 +131,8 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 		ModelRef:      req.ModelRef,
 		Effort:        req.Effort,
 		LabelFilter:   req.LabelFilter,
-		Once:          req.Once,
-		PollInterval:  pollInterval,
+		Mode:          mode,
+		IdleInterval:  idleInterval,
 		NoReview:      req.NoReview,
 		ReviewHarness: req.ReviewHarness,
 		ReviewModel:   req.ReviewModel,

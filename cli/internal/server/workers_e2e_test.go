@@ -151,7 +151,7 @@ review_max_retries: 5
 	for i := 0; i < totalIterations; i++ {
 		rec, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
 			ProjectRoot: projectRoot,
-			Once:        true,
+			Mode:        "once",
 		})
 		require.NoErrorf(t, err, "iteration %d: StartExecuteLoop", i+1)
 		_ = waitForWorkerExit(t, m, rec.ID, 10*time.Second)
