@@ -141,7 +141,7 @@ restarts, in-flight worker subprocesses lose their connection to the
 orchestrator. Today there are two execution paths that diverge in lifecycle,
 configuration plumbing, and observability:
 
-- **`--local` path.** `ddx work` (a.k.a. `ddx agent execute-loop`) runs an
+- **`--local` path.** `ddx work` runs an
   in-process drain loop that talks to the bead store directly
   (`cli/internal/agent/execute_bead_loop.go`).
 - **Server-spawned path.** The server forks a worker process, hand-marshals
@@ -548,7 +548,7 @@ claims.
 - Integration tests asserting specific `.ddx/workers/` on-disk format
   may need adjustment if rev 4 changes that layout. Currently rev 4 does
   NOT modify `.ddx/workers/` shape; workers continue to write spec.json
-  + status.json there for `ddx agent doctor` consumption.
+  + status.json there for worker diagnostics consumption.
 - New tests for the two endpoints: `TestWorkerRegister_HappyPath`,
   `TestWorkerRegister_ServerDown_WorkerProceeds`,
   `TestWorkerEvent_Mirrored_BestEffort`,
@@ -612,7 +612,7 @@ UI/doctor/FEAT-006/server-spawn-migration/backfill scope.
 
 5. **server: derived-view GraphQL + UI workers panel** — schema fields: `workers { id, project, harness, state, last_event_at, mirror_failures_count, had_dropped_backfill, current_bead, current_attempt }`; UI surfaces freshness indicators + duplicate-worker display + the "trusted-peer reported, not authoritative" labeling. Existing workers panel migrated. ~400 LOC frontend + ~100 LOC backend.
 
-6. **`ddx agent doctor` migration** — read worker state from server's runtime registry when available; fall back to `.ddx/workers/` on-disk files when no server. The on-disk format stays as the fallback-source-of-truth for one alpha release lag, then deprecated. ~150 LOC.
+6. **worker diagnostics migration** — read worker state from server's runtime registry when available; fall back to `.ddx/workers/` on-disk files when no server. The on-disk format stays as the fallback-source-of-truth for one alpha release lag, then deprecated. ~150 LOC.
 
 7. **server-spawn path migration** — `cli/internal/server/workers.go` and `handleStartExecuteLoopWorker` switch from hand-marshalled spec to `exec ddx work` with env-vars. The legacy spec serialization deletes when this lands. ~200 LOC + test updates.
 

@@ -25,7 +25,7 @@ HELIX plugin steps.
 **Given** DDx is initialized in a fresh project
 **When** `ddx install helix` runs
 **Then** exit code 0, `ddx installed` shows helix, skills exist at
-`~/.agents/skills/helix-*/SKILL.md`
+`.agents/skills/helix-*/SKILL.md` (project-local; FEAT-015: home paths retired)
 
 ### TC-021: Offline init creates working structure
 **Given** a fresh git repo with no network access to ddx-library
@@ -39,9 +39,9 @@ HELIX plugin steps.
 **Then** `ddx bead ready` shows the epic (dep satisfied),
 `ddx bead dep tree` shows the closed task
 
-### TC-023: Agent usage reports sessions
+### TC-023: Run metrics report sessions
 **Given** `.ddx/agent-logs/sessions.jsonl` has fixture entries
-**When** `ddx agent usage --format json` runs
+**When** run/process metrics are queried as JSON
 **Then** output contains correct per-harness aggregation
 
 ### TC-024: Doc history resolves artifacts
@@ -57,7 +57,7 @@ with agent credentials.
 
 ### TC-030: Frame a project with HELIX
 **Given** DDx initialized, HELIX installed, claude harness available
-**When** `ddx agent run --harness claude --prompt <frame-prompt>` runs
+**When** `ddx run --harness claude --prompt <frame-prompt>` runs
 **Then** agent creates spec documents in `docs/`, beads exist for
 design/implementation work
 
@@ -72,7 +72,7 @@ Keep it minimal — this is a demo.
 
 ### TC-031: Build the project with HELIX
 **Given** TC-030 complete (specs and beads exist)
-**When** `ddx agent run --harness claude --prompt <build-prompt>` runs
+**When** `ddx run --harness claude --prompt <build-prompt>` runs
 **Then** agent implements the task tracker, tests pass, beads are closed
 
 **Build prompt:**
@@ -83,7 +83,7 @@ per the specs. Write tests first (TDD). Close each bead when done.
 
 ### TC-032: Evolve the project
 **Given** TC-031 complete (working task tracker)
-**When** `ddx agent run --harness claude --prompt <evolve-prompt>` runs
+**When** `ddx run --harness claude --prompt <evolve-prompt>` runs
 **Then** agent updates specs, creates new beads, implements the feature
 
 **Evolve prompt:**
@@ -101,7 +101,7 @@ build the feature.
 ```bash
 ddx bead list          # shows mix of open/closed beads
 ddx bead ready         # may be empty (all done) or show follow-up work
-ddx agent usage        # shows token consumption from the session
+ddx metrics cost       # shows token/cost consumption from run evidence
 ddx doc history <prd>  # shows commits from framing and evolution
 ddx doc changed --since HEAD~20  # shows all artifacts touched
 ```
@@ -117,11 +117,11 @@ ddx install helix
 ddx doctor
 
 # Phase 2: Frame (~60s, requires agent)
-ddx agent run --harness claude --effort high \
+ddx run --harness claude --effort high \
   --prompt "$(cat scripts/demos/prompts/frame-tracker.md)"
 
 # Phase 3: Build (~120s, requires agent)
-ddx agent run --harness claude --effort high \
+ddx run --harness claude --effort high \
   --prompt "$(cat scripts/demos/prompts/build-tracker.md)"
 
 # Phase 4: Verify
@@ -129,12 +129,12 @@ ddx bead list
 ddx bead status
 
 # Phase 5: Evolve (~90s, requires agent)
-ddx agent run --harness claude --effort high \
+ddx run --harness claude --effort high \
   --prompt "$(cat scripts/demos/prompts/evolve-priorities.md)"
 
 # Phase 6: Inspect
 ddx bead list
-ddx agent usage --since today
+ddx metrics cost --since today
 ddx doc changed --since HEAD~20
 ```
 

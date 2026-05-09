@@ -10,18 +10,20 @@ ddx:
 # Feature: DDx Agent Skills
 
 **ID:** FEAT-011
-**Status:** Revising (consolidation in progress; see Phase 1 epic in beads)
+**Status:** Implemented (root `ddx` skill with nested workflow skills present in `skills/`, `cli/internal/skills/`, `.agents/skills/`, `.claude/skills/`, and `.ddx/skills/`; site copy pending)
 **Priority:** P1
 **Owner:** DDx Team
 
 ## Overview
 
-DDx ships a single agent-facing skill (`ddx`) that makes any
-skills-compatible coding agent "ddx-aware" after `ddx init`. The skill
-is written to the [agentskills.io](https://agentskills.io) open
-standard so it works identically in Claude Code, OpenAI Codex, Gemini
-CLI, Cursor, OpenCode, and any other harness that implements the
-standard.
+DDx ships a single root agent-facing skill (`ddx`) that makes any
+skills-compatible coding agent "ddx-aware" after `ddx init`. Under that root,
+DDx may ship nested workflow skills such as `bead-breakdown/`, `replay-bead/`,
+`compare-prompts/`, and the bead-lifecycle quality skill governed by ADR-023.
+The root skill and nested skills are written to the
+[agentskills.io](https://agentskills.io) open standard so they work identically
+in Claude Code, OpenAI Codex, Gemini CLI, Cursor, OpenCode, and any other
+harness that implements the standard.
 
 When the user says "do work", "review this", "what's on the queue",
 "create a bead", or any DDx concept, the harness discovers the `ddx`
@@ -32,7 +34,7 @@ domain guidance.
 ## Problem Statement
 
 Prior iterations of FEAT-011 shipped ~7 sibling skills
-(`ddx-bead`, `ddx-agent`, `ddx-run`, `ddx-review`, `ddx-status`,
+(`ddx-bead`, `ddx-run`, `ddx-review`, `ddx-status`,
 `ddx-install`, `ddx-doctor`). Real-world usage exposed problems:
 
 - **Intent ambiguity.** Users say "do work", not "/ddx-run". A flat
@@ -60,7 +62,7 @@ The consolidated design fixes each of these.
 
 ## Architecture
 
-### Single skill, progressive disclosure
+### Root skill plus nested workflow skills
 
 ```
 skills/ddx/
@@ -70,9 +72,15 @@ skills/ddx/
 │   ├── work.md             # draining the queue, execute-bead, verify + close
 │   ├── review.md           # bead-review (AC grade) + quorum code review
 │   ├── agents.md           # harness/profile dispatch, personas
+│   ├── interactive.md      # default queue-steward conversation workflow
 │   └── status.md           # queue state, doctor, health checks
-└── evals/
-    └── routing.jsonl       # ~15 phrase→expected-routing fixtures
+├── evals/
+│   └── routing.jsonl       # phrase→mode/reference/action fixtures
+├── bead-breakdown/
+│   └── SKILL.md            # workflow skill composition over ddx bead create
+├── replay-bead/
+│   └── SKILL.md            # workflow skill composition over ddx run / try
+└── ...
 ```
 
 At harness startup, only the skill's `name` + `description` metadata
@@ -83,6 +91,18 @@ intent router matches a phrase, the harness reads the matching
 Codex and other agentskills.io implementations progressively disclose
 skill content.
 
+Nested workflow skills are independent skills stored below the root `ddx/`
+directory so DDx can package them with the core domain vocabulary without
+returning to the stale flat sibling model (`ddx-bead`, `ddx-run`,
+`ddx-review`, etc.). They describe reusable workflows over DDx primitives:
+break down an epic into beads, replay a bead under altered conditions, compare
+prompt variants, estimate effort, run adversarial review, and perform
+bead readiness assessment, lint/rubric scoring, and post-attempt triage. The
+bead-lifecycle skill owns bead readiness assessment, the rubric pass inside
+readiness, post-attempt triage, and refine guidance. They do not
+introduce new DDx run kinds; FEAT-010's three-layer architecture remains the
+execution substrate.
+
 ### Portability contract
 
 Frontmatter is the portable-safe minimum — `name` + `description` only.
@@ -90,7 +110,7 @@ Frontmatter is the portable-safe minimum — `name` + `description` only.
 ```yaml
 ---
 name: ddx
-description: Operates the DDx toolkit for document-driven development. Covers beads (work items), the queue, executions, agents, harnesses, personas, reviews, spec-id. Use when the user says "do work", "drain the queue", "run the next bead", "execute a bead", "review this", "check against spec", "what's on the queue", "what's ready", "create a bead", "file this as work", "run an agent", "dispatch", "use a persona", "how am I doing", "ddx doctor", or mentions any ddx CLI command.
+description: Operates the DDx toolkit for document-driven development. Covers beads (work items), the queue, executions, agents, harnesses, personas, reviews, spec-id. Use when the user says "do work", "drain the queue", "run the next bead", "execute a bead", "review this", "review with fresh eyes", "fold in this guidance", "review again", "break this down into specs and beads", "make this testable", "check against spec", "what's on the queue", "what's ready", "what's blocking the queue", "create a bead", "file this as work", "run an agent", "dispatch", "use a persona", "how am I doing", "ddx doctor", or mentions any ddx CLI command.
 ---
 ```
 
@@ -113,29 +133,116 @@ Claude does not reliably auto-chase reference links; the router in
 > be grounded in the reference file's guidance, not this overview
 > alone."
 
-### Subagents: ship none
+### Interactive-steward routing
 
-Subagent orchestration is harness-specific (Claude Code has
-`.claude/agents/` + `context: fork`; Codex has its own subagent
-surface; others differ). The `ddx` skill describes *actions*
-("run `ddx agent run --quorum=<policy>`") and lets each harness
-decide how to run them. Quorum review is a CLI invocation, not a
-skill-frontmatter directive.
+`reference/interactive.md` is the first stop for broad conversational DDx
+prompts that combine queue orientation, planning, review, guidance folding,
+spec alignment, and bead breakdown. It delegates to `status.md`, `review.md`,
+`beads.md`, and `work.md` instead of duplicating their domain guidance.
+
+Router precedence is load-bearing:
+
+1. Explicit worker commands such as `ddx work`, `ddx try <id>`, "execute bead
+   `<id>`", or "start the worker" route to `bead_execution` and `work.md`.
+2. Broad prompts such as "what's blocking the queue", "review with fresh
+   eyes", "fold in this guidance", "review again", "make this testable", and
+   "break this down into specs and beads" route to `interactive-steward` and
+   `interactive.md`.
+3. Explicit code/doc edit requests such as "fix this bug" or "update this
+   file" route to `direct_user_implementation`.
+4. Explicit review-only requests route to `review` and remain read-only unless
+   the user asks for fixes.
+
+`interactive.md` defines phase output contracts:
+
+- `orient` returns `QueueFacts`. It probes `ddx work focus --help`; if the
+  command is unavailable, it falls back to `ddx bead status`, `ddx bead blocked`,
+  `ddx bead ready`, and targeted `ddx bead show`. If `ddx work focus` exists
+  but fails, the steward reports that failure.
+- `plan` returns `SessionBrief`.
+- `fresh-eyes review` returns `Findings` and `Verdict`. Multi-harness
+  adversarial review is consent-gated unless explicitly requested.
+- `fold guidance` returns `Accepted`, `Rejected`, `Unresolved`, and a revised
+  plan.
+- `align specs` returns `SpecDeltas`.
+- `breakdown` returns filed bead IDs, parent/dependency edges, named tests, and
+  verification commands.
+
+The route fixtures under `skills/ddx/evals/routing.jsonl` assert a stable row
+schema: `phrase`, `mode`, `references`, `queue_commands`,
+`tracker_mutation_allowed`, `code_edits_allowed`, and
+`expected_next_action`. The evaluation driver consumes those fields directly;
+it must not keep validating only the legacy `expected_reference` /
+`expected_cli` pair after the richer schema lands. Negative fixtures are
+required: "what should I work on next" routes to `interactive-steward` with no
+code edits, whereas "implement the top ready bead" is direct implementation only
+because the implementation verb is explicit.
+
+### Nested workflow skills
+
+Subagent orchestration remains harness-specific (Claude Code has
+`.claude/agents/` + `context: fork`; Codex has its own subagent surface;
+others differ). DDx does not ship harness-specific subagent definitions.
+
+DDx does ship nested workflow skills under the root skill tree when a
+workflow has enough procedure to deserve its own reusable instructions. Current
+examples include `bead-breakdown/`, `replay-bead/`, `compare-prompts/`,
+`benchmark-suite/`, `effort-estimate/`, and `adversarial-review/`. ADR-023
+(`../../02-design/adr/ADR-023-bead-lifecycle-quality-policy.md`) adds the same
+model for bead-lifecycle quality: bead readiness assessment is the canonical
+pre-claim decision, lint/rubric scoring is the rubric pass inside readiness,
+and post-attempt triage is the after-evidence classification. Those steps
+invoke a nested workflow skill while keeping routing through the root `ddx`
+skill.
+
+Nested workflow skills are compositions over FEAT-010's three layers. They may
+tell the harness to run `ddx run`, `ddx try`, or `ddx work`, but they do not
+create a fourth run layer, bespoke storage shape, or harness-specific
+frontmatter contract.
+
+The bead-lifecycle skill owns bead readiness assessment, lint/rubric scoring,
+post-attempt triage, and refine guidance for this policy surface. Those
+responsibilities are separate from the legacy `MODE: intake` compatibility
+wording, which remains only as an implementation detail for older hooks.
 
 ### Installation
 
+> See FEAT-015 (2026-04-29 amendment) for the authoritative install
+> model: project-local copy semantics, zero symlinks created by
+> `ddx install`, and the no-`~` manifest invariant.
+
 - `ddx init` copies `skills/ddx/` into `.claude/skills/ddx/`,
   `.agents/skills/ddx/`, and `.ddx/skills/ddx/` as real files
-  (symlinks break after `git clone` on a fresh machine).
+  (symlinks break after `git clone` on a fresh machine, and DDx no
+  longer creates symlinks during install — see FEAT-015).
+- DDx maintains five shipped copies of the root skill tree:
+  `skills/ddx/` as source, `cli/internal/skills/ddx/` for `go:embed`,
+  `.agents/skills/ddx/` for Codex and agentskills-compatible harnesses,
+  `.claude/skills/ddx/` for Claude Code, and `.ddx/skills/ddx/` as the
+  project-local DDx-managed copy.
 - On init and on `ddx update`, stale ddx-prefixed skill directories
   from prior DDx versions are removed:
-  `ddx-bead`, `ddx-run`, `ddx-agent`, `ddx-review`, `ddx-status`,
+  `ddx-bead`, `ddx-run`, `ddx-review`, `ddx-status`,
   `ddx-doctor`, `ddx-install`, `ddx-release`. Third-party skills are
   untouched.
 - Skills embed into the binary via `//go:embed all:ddx` against a
   copy under `cli/internal/skills/ddx/`. Because `go:embed` cannot
   traverse upward, a `make copy-skills` target rsyncs
   `skills/ddx/` → `cli/internal/skills/ddx/` before every build.
+  That target covers only the embedded copy.
+- Source skill edits that affect shipped interactive behavior must also refresh
+  the project-local copies under `.agents/skills/ddx/`, `.claude/skills/ddx/`,
+  and `.ddx/skills/ddx/` through `ddx init` / `ddx update` behavior or an
+  explicit repo-local sync command. Tests must compare touched files across all
+  five shipped paths so a green `make copy-skills` cannot mask stale project
+  copies.
+- The five shipped `ddx` skill paths are:
+  `skills/ddx/` (source), `cli/internal/skills/ddx/` (embedded copy),
+  `.agents/skills/ddx/` (Codex/agentskills project copy),
+  `.claude/skills/ddx/` (Claude Code project copy), and
+  `.ddx/skills/ddx/` (DDx-managed project copy). Nested workflow skills
+  live under each copied tree so lifecycle hooks and human-invoked skills
+  see the same instructions.
 
 ### AGENTS.md: merge, not clobber
 
@@ -146,6 +253,10 @@ may have added content. `ddx init` uses marker-delimited injection:
 <!-- DDX-AGENTS:START -->
 This project uses DDx. Use the `ddx` skill for beads, work, review,
 agents, and status.
+
+(default interactive sessions use interactive-steward / `queue_steward`; explicit
+`ddx work` and `ddx try` prompts use bead_execution only for executing bead AC;
+tracker, merge, commit, safety, and verification policy still apply)
 
 (tracker/merge policy follows)
 <!-- DDX-AGENTS:END -->
@@ -160,33 +271,50 @@ command phrasing). Re-running `ddx init` updates the block in place.
 Anthropic's skill-authoring guidance treats evaluations as
 load-bearing, not optional. The repo ships:
 
-- `skills/ddx/evals/routing.jsonl` — ~15 rows, each a user phrase +
-  expected reference file + expected CLI invocation, covering every
-  intent-router entry and edge phrasings.
-- `scripts/eval-skill.sh` — driver that runs each row against
-  `--harness claude` and `--harness codex` and verifies routing.
-  `--validate` mode does agentskills.io spec conformance.
+- `skills/ddx/evals/routing.jsonl` — at least 15 rows, each a user phrase plus
+  mode, references, queue commands, mutation permissions, and expected next
+  action, covering every intent-router entry and edge phrasing.
+- `scripts/eval-skill.sh` — driver that validates the fixture schema, runs each
+  row against `--harness claude` and `--harness codex`, and verifies the richer
+  routing contract. `--validate` mode does agentskills.io spec conformance.
 - `make eval-skill` in CI on PRs that touch `skills/ddx/`.
 
 ## Requirements
 
 ### Functional
 
-1. DDx ships exactly one skill (`ddx`) in `skills/ddx/`; no sibling
-   `ddx-*` skill directories.
+1. DDx ships exactly one root skill tree (`ddx`) in `skills/ddx/`; no sibling
+   `ddx-*` skill directories. Workflow-specific DDx skills live as nested
+   subdirectories under the root tree.
 2. `SKILL.md` frontmatter contains only `name` and `description`.
 3. `SKILL.md` body is under 500 lines and includes an explicit
    intent-router directive.
-4. `reference/*.md` files are linked one level deep from `SKILL.md`.
+4. `reference/*.md` files are linked one level deep from the root `SKILL.md`;
+   nested workflow skills carry their own `SKILL.md` and optional local
+   `reference/`, `scripts/`, or `evals/` as needed.
 5. `ddx init` copies the skill, removes stale `ddx-*` dirs, and
    merges the AGENTS.md block without clobbering user content.
 6. `ddx update` refreshes `.claude/skills/ddx/` and removes stale
    dirs.
 7. `skills/ddx/evals/routing.jsonl` contains at least 15 rows, each
-   passing against `claude` and `codex` harnesses via
-   `make eval-skill`.
+   passing the richer route schema and then passing against `claude` and
+   `codex` harnesses via `make eval-skill`.
 8. `SKILL.md` passes `scripts/eval-skill.sh --validate` (agentskills.io
    spec conformance).
+9. `reference/interactive.md` is present in every shipped skill copy and defines
+   the interactive-steward loop, phase output contracts, mutation policy,
+   consent-gated adversarial review, and `ddx work focus` fallback behavior.
+10. Generated AGENTS guidance uses the same precedence as the skill: broad
+    interactive prompts route to `interactive-steward`, explicit worker prompts
+    route to `bead_execution`, and `DDX_MODE=bead_execution` never overrides
+    tracker, merge, safety, commit, or verification policy.
+11. `scripts/eval-skill.sh` consumes the interactive routing fields
+    (`mode`, `references`, `queue_commands`, `tracker_mutation_allowed`,
+    `code_edits_allowed`, `expected_next_action`) instead of relying only on
+    the legacy `expected_reference` / `expected_cli` fields.
+12. Tests or validation commands prove touched files match across
+    `skills/ddx/`, `cli/internal/skills/ddx/`, `.agents/skills/ddx/`,
+    `.claude/skills/ddx/`, and `.ddx/skills/ddx/`.
 
 ### Non-Functional
 
@@ -212,6 +340,29 @@ skills-compatible harness
   and `--harness codex`.
 - Each intent-router entry in `SKILL.md` has at least one matching
   row in `routing.jsonl`.
+- Each row includes `mode`, `references`, `queue_commands`,
+  `tracker_mutation_allowed`, `code_edits_allowed`, and
+  `expected_next_action`, and the eval driver validates those fields.
+- Route fixtures cover "review with fresh eyes", "fold in this guidance",
+  "review again", "break this down into specs and beads", "make this testable",
+  "what should I work on next", "implement the top ready bead", and
+  `ddx work --once`.
+
+### US-110a: Interactive steward supports multi-turn planning
+**As a** user steering a DDx project interactively
+**I want** broad planning/review/breakdown phrases to follow a standard steward
+loop
+**So that** I do not have to retype "fresh-eyes review", "fold guidance",
+"align specs", and "make testable beads" instructions every turn
+
+**Acceptance Criteria:**
+- `reference/interactive.md` documents the session brief fields and phase output
+  contracts for orient, plan, fresh-eyes review, fold guidance, align specs, and
+  breakdown.
+- "Fresh eyes" defaults to local structured review; adversarial multi-harness
+  review is suggested and consent-gated unless explicitly requested.
+- Durable bead/spec outputs inline the accepted session brief and never rely on
+  chat history or `/tmp` files.
 
 ### US-111: Skill stays under the token budget
 **As a** harness loading the `ddx` skill
@@ -227,7 +378,7 @@ token budget and doesn't compete with conversation context
 **As a** user upgrading from an older DDx version with
 `.claude/skills/ddx-run/` and similar dirs already present
 **I want** `ddx init` to remove the old dirs and install only the
-new single-skill layout
+  new root-skill layout
 **So that** the harness doesn't see stale, conflicting skills
 
 **Acceptance Criteria:**
@@ -266,6 +417,7 @@ improvements
 - FEAT-001 (CLI commands the skill wraps)
 - FEAT-006 (agent service — harnesses, profiles, personas)
 - FEAT-009 (registry for package-install guidance inside `reference/agents.md`)
+- ADR-023 (bead-lifecycle quality policy using nested workflow skills)
 - agentskills.io open standard
 
 ## Out of Scope
@@ -278,8 +430,8 @@ improvements
 
 ## Implementation Notes
 
-The migration from the 7-sibling-skills layout to the single `ddx`
-skill is sequenced into phases; see the Phase 1 / Phase 2 / Phase 3
+The migration from the 7-sibling-skills layout to the root `ddx`
+skill tree is sequenced into phases; see the Phase 1 / Phase 2 / Phase 3
 epic beads for the work breakdown. Phase 1 is the critical path
 (ship the new surface + eval suite + init/update changes); Phase 2
 is cleanup of old references; Phase 3 is the persona roster trim

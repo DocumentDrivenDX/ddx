@@ -72,7 +72,7 @@ exact definitions.
   `.ddx/config.yaml` under `persona_bindings`.
 - **Power bounds** — `MinPower` and optional `MaxPower` integers passed to the
   upstream execution service. DDx may raise `MinPower` on eligible retries;
-  Fizeau owns the concrete harness/provider/model routing.
+  Fizeau owns concrete route selection within those bounds.
 - **Plugin** — a self-contained extension installed to
   `.ddx/plugins/<name>/`. The default `ddx` plugin (personas,
   prompts, patterns, templates) is auto-installed by `ddx init`.

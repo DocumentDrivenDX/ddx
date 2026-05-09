@@ -347,7 +347,7 @@ failure, or escalate a provider bug
   summary classifies the outcome as `review-error: provider_empty`
 - Given a reviewer produces text that lacks a verdict line, then the
   event summary classifies the outcome as `review-error: unparseable`
-- Given `ddx agent metrics review-outcomes` is queried, then results
+- Given review-outcome metrics are queried, then results
   include counts per error class and prompt-size quantiles
 
 ### US-222: Reviewer failure has a bounded retry ceiling
@@ -460,10 +460,10 @@ execute-loop review path
   reciprocate the field-definition reference.
 - **FEAT-005** (Artifacts) — the execute-bead attempt bundle structure
   that FEAT-022 §15 extends with an evidence-assembly block.
-- **FEAT-006** (Agent Service) — review, grading, execute-bead, and
-  session capture are owned here. FEAT-022 adds requirements on how
-  the evidence these paths carry is assembled without re-owning the
-  paths themselves.
+- **FEAT-006** (Fizeau Execution Boundary) — review, grading, `ddx try`, and
+  session capture pass through the execution boundary. FEAT-022 adds
+  requirements on how the evidence these paths carry is assembled without
+  re-owning the paths themselves.
 - **TD-033** (Multi-Turn Structured Evidence Assembly) — documents the
   caller-facing assembly envelope and the no-tool reviewer-mode
   convention used by FEAT-006 and FEAT-008.

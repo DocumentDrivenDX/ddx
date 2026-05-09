@@ -37,8 +37,8 @@ constraints.
 
 DDx power escalation is a DDx retry-policy decision expressed only by changing
 the next request's `MinPower` and carrying the same request facts forward.
-DDx does not choose, substitute, downgrade, or fallback concrete harnesses,
-providers, or models. Fizeau chooses the concrete route.
+DDx only changes `MinPower` and carries request facts forward; Fizeau chooses
+the concrete route.
 
 ### Primary Attempt Escalation
 
@@ -75,8 +75,8 @@ the same values unchanged. If those constraints make a later power request
 unsatisfiable, DDx records a typed terminal classification such as
 `blocked_by_passthrough_constraint` or `agent_power_unsatisfied` and reports
 operator action required. DDx must not remove pins, widen pins, substitute a
-fallback route, call `ResolveRoute` to work around the conflict, or loop over
-concrete route names.
+fallback route, call any route-selection helper to work around the conflict, or
+loop over concrete route names.
 
 ### Infrastructure And Rate-Limit Fallback
 

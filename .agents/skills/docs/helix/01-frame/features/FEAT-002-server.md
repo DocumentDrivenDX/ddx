@@ -7,7 +7,6 @@ ddx:
     - FEAT-010
     - FEAT-007
     - FEAT-012
-    - FEAT-020
 ---
 # Feature: DDx Server
 
@@ -20,8 +19,8 @@ ddx:
 
 `ddx-server` is a lightweight Go web server that exposes DDx platform services
 over HTTP and MCP endpoints. It serves documents, beads, execution definitions
-and run history, the document dependency graph, DDx agent invocation activity
-plus embedded-agent telemetry references, and (via FEAT-008) an embedded web
+and run history, the document dependency graph, DDx execution activity plus
+embedded Fizeau telemetry references, and (via FEAT-008) an embedded web
 UI — all from a single binary.
 
 `ddx-server` runs as a per-user host daemon: one server process per machine,
@@ -32,7 +31,14 @@ at `~/.local/share/ddx/server-state.json` (`$XDG_DATA_HOME/ddx/server-state.json
 when set), and the last-known server URL is written to
 `~/.local/share/ddx/server.addr` (see FEAT-020). The server binds multiple
 project roots concurrently; each request is resolved against one explicit
-project context before adapters run.
+project context before adapters run. DDx manages worker/bead lifecycle
+progress and worker records only. Fizeau owns agent transcript/session
+payloads and transcript/session presentation for agent events that may travel
+through agent-session records. DDx treats forwarded Fizeau agent events as
+opaque attachments, never interprets their semantics, and never promotes them
+into worker state. Those payloads stay distinct from worker lifecycle state;
+the server surfaces them only as opaque Fizeau payloads alongside DDx
+progress views.
 
 ## Architecture
 
@@ -57,7 +63,7 @@ before dispatching to feature-specific adapters.
 - the server holds one project registry per host+user, persisted at
   `~/.local/share/ddx/server-state.json` as specified in FEAT-020
 - projects enter the registry by auto-registration from CLI commands
-  (`ddx bead`, `ddx agent`, `ddx doc`) running in any project directory on
+  (`ddx bead`, `ddx run`, `ddx try`, `ddx work`, `ddx doc`) running in any project directory on
   the machine, and by the server registering its own startup working directory
 - optional seed entries may be provided via `server.projects` in config so a
   fresh install can boot with a known project list before any CLI commands run
@@ -84,16 +90,21 @@ Legacy unscoped `/api/...` and `/mcp/...` forms remain only as compatibility ali
 
 ### Worker Boundaries
 
-`ddx-server` hosts an in-process `WorkerManager` that supervises
-execute-loop workers as goroutines. Each execute-loop worker runs a
-`ddx agent execute-loop` against exactly one registered project context; it
-never crosses project boundaries. Worker lifecycle (start, live logs, stop,
-record on disk) is owned by the server, so the host+user daemon is the single
-point of coordination for all long-running agent activity on the machine. The
-supervisor exposes worker state through the same project-scoped API surface
-used for beads and executions, and worker records persist under the project's
-own `.ddx/workers/` directory so preservation and cleanup stay scoped per
-project.
+`ddx-server` hosts an in-process `WorkerManager` that supervises `ddx work`
+workers as goroutines. Each worker drains exactly one registered project
+context; it never crosses project boundaries. Worker lifecycle state
+(start, live progress, stop, record on disk) is DDx-owned and distinct from
+any agent transcript data or forwarded Fizeau events. Fizeau owns
+transcript/progress/session rendering for its agent events; DDx only surfaces
+its own worker state and any opaque forwarded Fizeau payloads alongside it.
+DDx does not parse transcript semantics to derive worker state or turn
+Fizeau session logs into worker progress output.
+The host+user daemon is the single
+point of coordination for all long-running DDx worker activity on the
+machine. The supervisor exposes worker state through the same project-scoped
+API surface used for beads and executions, and worker records persist under
+the project's own `.ddx/workers/` directory so preservation and cleanup stay
+scoped per project.
 
 When multiple machines each run `ddx-server` against the same project, each
 machine runs its own land coordinator against its local clone. The shared git
@@ -104,11 +115,12 @@ divergence, and recovery contract are specified in SD-020.
 
 ### Replay-Backed Execution Evidence
 
-Execute-bead attempts store their normalized prompt, manifest, transcript, and
-runtime metrics under `.ddx/executions/<attempt-id>/` inside the project that
-owns the bead (see FEAT-006). These bundles are the replay-backed source of
-truth that server endpoints and dashboards read to reconstruct attempt history;
-the server does not own a separate transcript store.
+Execute-bead attempts store their normalized prompt, manifest, runtime
+metrics, and any copied or linked Fizeau transcript artifacts under
+`.ddx/executions/<attempt-id>/` inside the project that owns the bead (see
+FEAT-006). These bundles are the replay-backed source of truth that server
+endpoints and dashboards read to reconstruct attempt history; the server does
+not own a separate transcript store.
 
 ## Requirements
 
@@ -146,8 +158,13 @@ resolve exactly one project context.
 
 **Agent Activity (FEAT-006)**
 19. `GET /api/projects/:project/agent/sessions` — list recent DDx agent invocations
-20. `GET /api/projects/:project/agent/sessions/:id` — invocation detail, including native
-    session/trace references and any DDx-owned transcript data
+20. `GET /api/projects/:project/agent/sessions/:id` — invocation detail,
+    including native session/trace references and any forwarded Fizeau
+    event/transcript envelope data; those payloads are opaque to DDx, owned by
+    Fizeau, and are distinct from worker lifecycle events. DDx stores them as
+    attachments, keeps the inner Fizeau transcript or session-log content
+    opaque, and does not treat them as worker lifecycle state. The payload is
+    evidence, not worker progress.
 21. MCP tool: `ddx_agent_sessions` (project selector required unless singleton compatibility mode applies)
 
 **Worker Progress (FEAT-006 embedded-agent progress contract)**
@@ -156,6 +173,15 @@ Worker state is read from the WorkerManager's in-memory registry plus the
 per-project `.ddx/workers/` directory. The WorkerManager is the single
 authoritative source for live phase state; the on-disk records are the
 authoritative source for historical phase summaries.
+
+Worker lifecycle events are DDx-owned. Forwarded Fizeau agent events are
+opaque payloads attached to agent-session records, not worker lifecycle state,
+and the server surfaces them without interpreting transcript semantics or
+turning them into worker progress. Fizeau owns transcript rendering and
+session-log presentation; DDx only relays opaque payloads alongside its own
+worker records. DDx never converts those forwarded events into worker state,
+never renders Fizeau inner session logs in worker views, and never treats the
+events as worker progress.
 
 22. `GET /api/projects/:project/workers` — list active and recently completed
     workers for a project; each entry includes worker identity, current status
@@ -219,11 +245,19 @@ shape for the in-flight attempt, enabling a single read model across CLI and UI)
 
 `recent_phases` retains only phase-transition events (not heartbeats) and is
 capped at the last 20 entries. This is the shared read model for both the CLI
-`ddx agent log --worker` command and the UI status dashboard worker cards.
+and the UI status dashboard worker cards; any Fizeau diagnostics surface may
+link or copy the same underlying evidence, but DDx keeps the inner Fizeau
+session logs opaque there and does not render or parse them inside DDx worker
+views.
 
 **Provider Availability and Utilization (FEAT-014)**
 
-The provider dashboard endpoints expose the same normalized routing signal model that `ddx agent run` uses for harness selection. They are read-only; all signal data is derived from provider-native sources and DDx-observed metrics, never fabricated. Unknown values are surfaced as `unknown`, not omitted.
+The provider dashboard endpoints expose the upstream agent's normalized
+status/debug signal model. They are read-only; all signal data is derived from
+provider-native sources, agent-reported catalog/status data, and DDx-observed
+metrics, never fabricated. Unknown values are surfaced as `unknown`, not
+omitted. These endpoints do not participate in `ddx run` / `ddx try` /
+`ddx work` routing decisions.
 
 26. `GET /api/providers` — list all configured harnesses with current routing availability, auth/health state, quota/headroom, and signal freshness; not scoped to a project (provider config is host+user global, shared across projects). Response is an array of provider summary objects.
 27. `GET /api/providers/:harness` — detail for one harness: full routing signal snapshot, per-model quota/headroom when available, historical usage summary (last 7d / 30d), recent latency/success rates, burn estimate, and freshness timestamps with source attribution.
@@ -312,7 +346,7 @@ Field semantics:
 
 MCP tools: `ddx_provider_list`, `ddx_provider_show` — host+user global; not project-scoped (provider config is per host+user, not per project).
 
-**Executions (FEAT-010)**
+**Task Execution (FEAT-010)**
 22. `GET /api/projects/:project/exec/definitions` — list execution definitions with optional artifact filter
 23. `GET /api/projects/:project/exec/definitions/:id` — show one execution definition
 24. `GET /api/projects/:project/exec/runs` — list execution runs with optional artifact/definition/status filters
@@ -365,10 +399,10 @@ MCP tools: `ddx_provider_list`, `ddx_provider_show` — host+user global; not pr
 ## Dependencies
 
 - FEAT-004 (Beads) — bead endpoints read from bead store
-- FEAT-010 (Executions) — execution endpoints read definitions and immutable run history
+- FEAT-010 (Task Execution) — execution endpoints read definitions and immutable run history
 - FEAT-007 (Doc Graph) — graph/stale endpoints use doc graph engine
-- FEAT-006 (Agent Service) — agent activity endpoints read DDx invocation
-  metadata and embedded telemetry references; execute-bead attempt artifacts
+- FEAT-006 (Fizeau Execution Boundary) — task execution activity endpoints read
+  DDx invocation metadata and opaque Fizeau telemetry references; `ddx try` artifacts
   live in each project's `.ddx/executions/<attempt-id>/` bundle
 - FEAT-008 (Web UI) — embedded SPA served at `/`; provider dashboard view consumes `/api/providers`
 - FEAT-014 (Agent Usage Awareness and Routing Signals) — provider availability

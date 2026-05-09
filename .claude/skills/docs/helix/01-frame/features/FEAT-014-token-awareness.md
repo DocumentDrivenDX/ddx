@@ -5,7 +5,6 @@ ddx:
     - helix.prd
     - FEAT-006
     - FEAT-002
-    - FEAT-008
 ---
 # Feature: Agent Usage Awareness and Routing Signals
 
@@ -16,10 +15,16 @@ ddx:
 
 ## Overview
 
-DDx's agent wrapper should understand provider-native usage and routing signals
-across harnesses so that every `ddx agent run` can make an informed decision
-about which harness to use based on request fit, availability, cost,
-performance, and current quota/headroom when known.
+DDx should understand provider-native usage and agent-reported status signals
+well enough to attribute cost, show availability, and preserve audit evidence
+without taking ownership of model/provider routing. `ddx run`, `ddx try`,
+`ddx work`, and `ddx artifact regenerate` consume token budgets via this same
+FEAT-014 normalized signal model.
+`generate-artifact` runs therefore draw from the same FEAT-014 token budget
+accounting as agent work runs, with cost attribution recorded through the run
+evidence model rather than a separate artifact-only ledger.
+See [[MET-001]] for the canonical `source: exec` MET artifact that anchors
+runtime-metric reporting.
 
 ## Problem Statement
 
@@ -35,20 +40,22 @@ performance, and current quota/headroom when known.
 - Claude exposes historical usage via `~/.claude/stats-cache.json`, but the
   best current-quota source is still unresolved. DDx should exhaust stable
   non-PTY options before accepting PTY automation.
-- The embedded `ddx-agent` runtime is gaining its own session logging and OTEL
+- The embedded Fizeau runtime is gaining its own session logging and OTEL
   telemetry. DDx should consume that telemetry minimally rather than re-owning
   the runtime's logs.
-- DDx does not yet have a normalized routing-signal model that combines
+- DDx does not yet have a normalized status/cost signal model that combines
   capability, availability, quota/headroom, cost, and DDx-observed performance
-  into one preflight harness decision.
+  for operator visibility and retry evidence.
 
-**Desired outcome:** Every `ddx agent run` evaluates candidate harnesses using
-normalized routing signals:
-- request fit (profile/model/effort/permissions)
+**Desired outcome:** Every `ddx run` / `ddx try` / `ddx work` records normalized
+agent status and cost signals without selecting a concrete route:
+- request facts (MinPower/MaxPower, passthrough constraints, effort/permissions)
 - provider availability and authentication
 - current quota/headroom where known
 - cost estimate or cost class
 - DDx-observed performance and reliability
+- role/correlation facts for review invocations, including whether review
+  pairing degraded relative to the implementer
 
 External harnesses preserve native persistence. DDx owns only the minimal
 activity and performance metadata needed for routing and provenance.
@@ -71,7 +78,7 @@ activity and performance metadata needed for routing and provenance.
 | Codex native session JSONL / local state | Yes, when persistence is enabled and `token_count.rate_limits` is present | Yes, recent usage totals from session JSONL and local state | Near-real-time once Codex writes the session log; stale if the file is missing or unreadable | Machine-local, authenticated Codex session/account state | Yes, preferred live source for Codex routing when readable | Treat missing persistence or unreadable logs as `unknown`; do not rely on inline PTY scraping in the routing path |
 | Claude `~/.claude/stats-cache.json` | No stable non-PTY source confirmed yet; surface as `unknown` | Yes, account-wide daily activity, daily tokens by model, cumulative model usage, session counts, and hour-of-day distribution | Cached and delayed; freshness depends on the last stats-cache write | Machine-local cache with account-wide historical usage | Yes for historical usage, no for current quota | Use this source for history and load balancing only; current quota remains `unknown` until a stable live source is confirmed |
 | Claude runtime / statusline / SDK / hook artifacts | None confirmed | None confirmed | N/A unless a trustworthy source is discovered | N/A until validated | No, not yet | Investigate these before any PTY fallback; if live probing becomes necessary, feed an async snapshot cache rather than routing-time terminal scraping |
-| embedded `ddx-agent` telemetry | Not a provider quota source | Yes, DDx-owned invocation activity, runtime metrics, and session references | Per invocation or per write | Local workspace / install / session | Yes for DDx-observed performance and provenance; no for provider quota routing | Consume references and derived metrics only; do not duplicate provider transcript storage or provider quota state |
+| embedded Fizeau telemetry | Not a provider quota source | Yes, DDx-owned invocation activity, runtime metrics, and session references | Per invocation or per write | Local workspace / install / session | Yes for DDx-observed performance and provenance; no for provider quota routing | Consume references and derived metrics only; do not duplicate provider transcript storage or provider quota state |
 
 Interpretation:
 
@@ -104,7 +111,7 @@ Interpretation:
 3. opencode harness: `run --format json`, JSON envelope parsing
 4. `input_tokens`, `output_tokens`, `cost_usd` fields on DDx invocation
    activity rows
-5. `ddx agent usage` command with harness/time-window/machine-readable output
+5. Fizeau usage diagnostics with harness/time-window/machine-readable output
 6. gemini harness: investigate `--output-format=json` output when auth is
    available; implement token extraction if format is known
 
@@ -123,8 +130,8 @@ Interpretation:
     fallback of last resort, not the MVP path, and must feed an asynchronous
     snapshot/sampling path rather than synchronous routing-time scraping.
 11. **Signal freshness/cache policy** — cache provider-native signal reads with
-    explicit freshness semantics so `ddx agent run` can distinguish fresh from
-    stale state.
+    explicit freshness semantics so status/debug surfaces can distinguish fresh
+    from stale state.
 
 **Normalized routing signals**
 12. **Routing signal model** — DDx normalizes every candidate's:
@@ -141,6 +148,12 @@ Interpretation:
     Outcome samples may record recent success/failure, latency, and last
     observed token/cost values when available; DDx does not store provider
     transcripts or native session bodies as routing inputs.
+13a. **Review cost and pairing signals** — default adversarial pre-close review
+    invocations record the same normalized cost fields as primary attempts plus
+    compact role/correlation metadata (`role=reviewer`, reviewed `result_rev`,
+    `review_group_id`, reviewer slot, and implementer/reviewer route facts when
+    known). A `review-pairing-degraded` event is a routing-quality signal for
+    operators and metrics; it is not a route-selection input owned by DDx.
 14. **Snapshot history for live quota sources** — when DDx depends on an
     actively probed quota source, it checkpoints time-stamped quota snapshots
     asynchronously and relates them to native usage accumulation to build a
@@ -152,20 +165,20 @@ Interpretation:
 16. **Routing integration** — harness selection uses the normalized signal
     model together with requested profile, model, effort, permission mode, and
     explicit harness override semantics.
-17. **Operator visibility** — `ddx agent doctor --routing` and `ddx agent
-    usage` consume the normalized signal model and report source freshness.
+17. **Operator visibility** — Fizeau routing diagnostics and usage views
+    consume the normalized signal model and report source freshness.
 
 **Budgeting and throttling**
 18. **Deferred scope** — budget passthrough, automatic throttling, and pacing
     policy remain follow-on work after the signal-source spikes establish the
     right acquisition model.
 
-**Always-on execute-bead runtime metrics**
-19. `ddx agent execute-bead` must capture built-in runtime metrics for every
-    iteration, independent of any graph-authored execution documents. These are
-    DDx runtime facts, not substitutes for project-authored metric docs. The
-    fields below are persisted into the project's
-    `.ddx/executions/<attempt-id>/` attempt bundle (FEAT-006) so the host+user
+**Always-on bead-attempt runtime metrics**
+19. `ddx try` must capture built-in runtime metrics for every attempt,
+    independent of any graph-authored execution documents. These are DDx runtime
+    facts, not substitutes for project-authored metric docs. The fields below
+    are persisted into the project's `.ddx/runs/<run-id>/` run substrate
+    (FEAT-010) so the host+user
     `ddx-server` and its dashboards can replay runtime metrics from the same
     replay-backed artifacts that back execution history — DDx does not keep a
     separate runtime-metrics store. When execute-bead runs inside the server's
@@ -309,20 +322,20 @@ Sorting is supported on: `harness` (alpha), `status`, `auth_state`,
 
 ```bash
 # Routing state with freshness and quota/headroom where known
-ddx agent doctor --routing
+Fizeau routing diagnostics
 
 # Usage summary derived from provider-native sources + DDx-owned metrics
-ddx agent usage
+Fizeau usage diagnostics
 
 # Filter to one harness
-ddx agent usage --harness claude
+Fizeau usage diagnostics --harness claude
 
 # Specific time window
-ddx agent usage --since 7d
-ddx agent usage --since 2026-04-01
+Fizeau usage diagnostics --since 7d
+Fizeau usage diagnostics --since 2026-04-01
 
 # Machine-readable
-ddx agent usage --format json
+Fizeau usage diagnostics --format json
 ```
 
 ## User Stories
@@ -333,11 +346,11 @@ ddx agent usage --format json
 **So that** I can understand what DDx is routing on
 
 **Acceptance Criteria:**
-- Given I run `ddx agent usage`, then I see per-harness usage/cost where
+- Given I run Fizeau usage diagnostics, then I see per-harness usage/cost where
   available, plus DDx-observed runtime metrics
-- Given I run `ddx agent usage --since today`, then only today's windows are
+- Given I run Fizeau usage diagnostics --since today, then only today's windows are
   counted
-- Given I run `ddx agent usage --format json`, then output is valid JSON
+- Given I run Fizeau usage diagnostics --format json, then output is valid JSON
 
 ### US-141: DDx Routes Using Current Availability Signals
 **As** the DDx agent router
@@ -358,12 +371,12 @@ performance signals
 
 ### US-142: Developer Sees Signal Freshness in Doctor Output
 **As a** developer debugging harness selection
-**I want** `ddx agent doctor --routing` to show where each signal came from and
+**I want** Fizeau routing diagnostics to show where each signal came from and
 how fresh it is
 **So that** I can trust or question DDx's decision with evidence
 
 **Acceptance Criteria:**
-- Given I run `ddx agent doctor --routing`, then each harness reports current
+- Given I run Fizeau routing diagnostics, then each harness reports current
   availability state, quota/headroom state, and last-checked freshness
 - Given a signal came from a provider-native source, then doctor output
   identifies that source
@@ -407,12 +420,12 @@ how fresh it is
 
 ### US-145: Execute-bead Runtime Metrics Are Captured Automatically
 **As** a developer reviewing bead execution history
-**I want** runtime metrics recorded for every execute-bead iteration without
+**I want** runtime metrics recorded for every bead-attempt iteration without
 manual instrumentation
 **So that** iterations are comparable and cost is always visible
 
 **Acceptance Criteria:**
-- Given `ddx agent execute-bead` runs with a harness that exposes token and cost
+- Given `ddx try` runs with an agent response that exposes token and cost
   data, when the iteration completes, then the run record contains `harness`,
   `model`, `session_id`, `elapsed_ms`, `input_tokens`, `output_tokens`,
   `total_tokens`, and `cost_usd`
@@ -422,21 +435,23 @@ manual instrumentation
 
 ## Dependencies
 
-- FEAT-006 (Agent Service) — harness registry, invocation activity capture
+- FEAT-006 (Fizeau Execution Boundary) — execution route facts and invocation activity capture
 - FEAT-002 (DDx Server) — `/api/providers` and `/api/providers/:harness`
   expose FEAT-014's routing signal model to UI and MCP consumers
 - FEAT-008 (Web UI) — the provider dashboard view is the browser surface for
   FEAT-014's read model; FEAT-014 governs field semantics, unknown-state
   rules, and tooltip registry for that view
+- [[MET-001]] (ddx test wall time) — canonical `source: exec` MET artifact for
+  projected runtime metrics and evidence formatting
 - provider-native local stores such as `~/.codex/` and `~/.claude/`
-- embedded `ddx-agent` runtime telemetry and session references
+- embedded Fizeau runtime telemetry and session references
 
 ## Implementation Strategy
 
 ### Phase 1 — Signal-source spikes
 - Inventory provider-native signal sources and freshness semantics
 - Define the minimal routing metrics schema and retention rules
-  (now part of ddx-agent's internal routing per CONTRACT-003-ddx-agent-service)
+  (now part of Fizeau's internal routing per CONTRACT-003-fizeau-service)
 - Resolve whether Claude has a stable non-PTY current-quota source
 
 ### Phase 2 — Preserve native persistence and add adapters
@@ -463,4 +478,7 @@ manual instrumentation
 - Gemini token capture (blocked on auth investigation)
 - Cross-machine usage aggregation (see FEAT-013)
 - Immediate budget enforcement and adaptive throttling policy
+- Queue-drain budget stop policy and reviewer-cost cap handling, which are
+  owned by FEAT-010 and ADR-024. FEAT-014 supplies the normalized cost and
+  cost-class signals they consume.
 - Prompt design and task strategy beyond harness selection

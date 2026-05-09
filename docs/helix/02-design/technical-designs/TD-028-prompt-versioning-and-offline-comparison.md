@@ -12,7 +12,7 @@ ddx:
 
 Design only. **Implementation is deferred.** This TD captures the
 measurement roadmap that grew out of Story 12 (optimize the static
-prompts that drive `ddx agent execute-bead`). Story 12 lands the
+prompts that drive `ddx try`). Story 12 lands the
 mechanical pieces — guardrail dedup (B1/B2) and `prompt_sha` on the
 attempt manifest (B3). Everything below — the human-readable
 `prompt_version` field, the `DDX_PROMPT_VARIANT` environment selector
@@ -129,8 +129,8 @@ Constraints:
   end-user surface, and avoids inventing a new config schema for
   something we expect to retire after each round of tuning.
 
-Why an env var and not a CLI flag: `ddx agent execute-bead` is
-invoked by the loop (`agent execute-loop` / `ddx work`), and the
+Why an env var and not a CLI flag: `ddx try` is
+invoked by the loop (`ddx work`), and the
 loop does not currently thread per-call CLI flags into the
 prompt-render path. An env var is the cheapest way to attach a
 variant selection to a whole drain run without rewriting the

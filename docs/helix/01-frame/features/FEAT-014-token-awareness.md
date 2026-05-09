@@ -435,7 +435,7 @@ manual instrumentation
 
 ## Dependencies
 
-- FEAT-006 (Agent Service) — harness registry, invocation activity capture
+- FEAT-006 (Fizeau Execution Boundary) — execution route facts and invocation activity capture
 - FEAT-002 (DDx Server) — `/api/providers` and `/api/providers/:harness`
   expose FEAT-014's routing signal model to UI and MCP consumers
 - FEAT-008 (Web UI) — the provider dashboard view is the browser surface for

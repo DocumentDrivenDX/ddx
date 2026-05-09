@@ -30,8 +30,8 @@ substrate; layer metadata distinguishes records.
 
 Implementation code for this boundary should follow the task-execution
 vocabulary (`taskexec` for core layer logic, `fizeauadapter` for the service
-bridge) rather than the legacy `internal/agent` package name. Those package
-names should make the DDx-owned workflow boundary explicit.
+bridge). Treat `internal/agent` as legacy naming only; new DDx-owned execution
+work should make the workflow boundary explicit.
 
 `ddx artifact regenerate <id>` is sugar over layer 1 (or layer 2 when the
 generator edits the repo) with `produces_artifact: <id>` metadata. It is
@@ -332,8 +332,8 @@ harness/provider/model passthrough values to make escalation work. If the
 combination is invalid or constraining, the agent owns that typed error or
 actual route. DDx stops with `blocked_by_passthrough_constraint` or
 `agent_power_unsatisfied`, records the evidence, and reports operator action
-required; it does not remove pins, widen pins, call `ResolveRoute`, or retry in a
-loop.
+required; it does not remove pins, widen pins, call any route-selection helper,
+or retry in a loop.
 
 ### Retry eligibility
 
@@ -1276,7 +1276,7 @@ spinning, or interrupted
 - Given retry escalation would exceed the power available under hard
   passthrough pins, then DDx stops with `blocked_by_passthrough_constraint` or
   `agent_power_unsatisfied`, records the Fizeau-supplied evidence, and does not
-  mutate the pins or call `ResolveRoute`.
+  mutate the pins or call any route-selection helper.
 
 ### US-094: Cross-Layer Run History
 

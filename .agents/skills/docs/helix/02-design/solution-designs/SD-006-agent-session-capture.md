@@ -68,8 +68,8 @@ DDx stores the data but does not interpret workflow-specific keys.
 
 ## Inspection UX
 
-- `ddx agent log` lists sessions in reverse chronological order.
-- `ddx agent log <session-id>` renders the full stored prompt and response.
+- `ddx runs list` lists execution sessions in reverse chronological order.
+- `ddx runs log <run-id>` renders the stored prompt, response, and attachments.
 - The server's agent-session endpoints mirror the same data shape.
 
 ## Compatibility

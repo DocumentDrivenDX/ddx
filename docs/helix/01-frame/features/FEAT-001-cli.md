@@ -52,7 +52,7 @@ The `ddx` CLI is a single Go binary providing all DDx platform services locally:
 19. Backend abstraction (jsonl/bd/br)
 
 **Task Execution (top-level — FEAT-006/FEAT-010)**
-20. `ddx run --min-power <n> [--max-power <n>] --prompt <file>` — layer-1: invoke an AI agent with requested abstract power bounds; Fizeau owns model/provider routing
+20. `ddx run --min-power <n> [--max-power <n>] --prompt <file>` — layer-1: invoke an AI agent with requested abstract power bounds; Fizeau owns concrete route selection within those bounds
 20b. `ddx run --top-power --prompt <file>` — request a `MinPower` threshold derived from Fizeau's available model/power catalog
 20c. `ddx run --effort <level>` — pass non-routing reasoning/effort intent to Fizeau
 20c-1. `ddx run --harness <name> --provider <name> --model <name>` — optional passthrough constraints sent unchanged to Fizeau; DDx does not validate, resolve, fallback, branch on, or widen them

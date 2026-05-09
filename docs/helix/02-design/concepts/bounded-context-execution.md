@@ -161,7 +161,7 @@ unit fresh.
 - [FEAT-010 — Task Execution](../../01-frame/features/FEAT-010-task-execution.md)
   — the on-disk and CLI shape of `ddx run` / `ddx try` / `ddx work` that
   implements bounded context execution.
-- [`ddx agent execute-loop` command reference](../../../../website/content/docs/cli/commands/ddx_agent_execute-loop.md)
-  — the queue-drain surface (aliased as `ddx work`) that runs this loop.
+- [`ddx work` command reference](../../../../website/content/docs/cli/commands/ddx_work.md)
+  — the queue-drain surface that runs this loop.
 - [Website concept page: Bounded Context Execution](../../../../website/content/docs/concepts/bounded-context-execution.md)
   — the public-facing explainer of the same concept.

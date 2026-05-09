@@ -13,13 +13,14 @@ ddx:
     cwd: cli
     timeout_ms: 300000
 ---
-# Exec: Go Test (internal/agent)
+# Exec: Go Test (task execution)
 
-Runs the Go unit tests for `cli/internal/agent/...`, which is the package that
-hosts the execute-bead, execute-loop, and gate evaluation logic governed by
-FEAT-006 (Agent Service). Any execute-bead attempt targeting a bead whose
-`spec-id` includes `FEAT-006` must pass this test suite before the result is
-allowed to land on the default branch.
+Runs the Go unit tests for DDx task execution orchestration, which currently
+lives under the legacy task-execution package while the package rename is
+pending. The suite hosts `ddx try`, `ddx work`, and gate evaluation logic
+governed by FEAT-006 and FEAT-010. Any attempt targeting a bead whose `spec-id`
+includes FEAT-006 must pass this test suite before the result is allowed to land
+on the default branch.
 
 ## Why this is deterministic
 

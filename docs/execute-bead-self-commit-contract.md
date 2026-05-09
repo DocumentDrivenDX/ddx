@@ -1,8 +1,7 @@
 # Execute-Bead Self-Commit Contract
 
-`ddx try` / legacy `ddx agent execute-bead` runs an agent inside an isolated
-worktree. The agent must produce exactly one of two durable signals before it
-exits:
+`ddx try` runs an agent inside an isolated worktree. The agent must produce
+exactly one of two durable signals before it exits:
 
 - a git commit containing the completed implementation and tests
 - `.ddx/executions/<attempt-id>/no_changes_rationale.txt`

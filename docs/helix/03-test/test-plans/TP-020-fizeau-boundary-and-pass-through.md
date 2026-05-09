@@ -5,7 +5,7 @@ ddx:
     - FEAT-001
     - FEAT-006
 ---
-# Test Plan: DDx Boundary Over Fizeau Routing
+# Test Plan: DDx Pass-Through Boundary For Fizeau Routing
 
 > **Supersedes the old DDx-side routing planner plan.** DDx no longer owns
 > model normalization, fuzzy matching, candidate ranking, or route selection.
@@ -15,9 +15,9 @@ ddx:
 
 ## Scope
 
-Validate that DDx forwards operator-supplied routing constraints unchanged and
-does not perform any DDx-side model matching, catalog ranking, or route
-selection.
+Validate that DDx forwards operator-supplied routing constraints unchanged.
+DDx never normalizes model strings, fuzzy-matches model/provider names, ranks
+catalog candidates, or selects routes locally.
 
 ## Test Cases
 
@@ -62,4 +62,3 @@ selection.
 - DDx test coverage proves no local normalization, fuzzy matching, or route
   selection occurs in `run`, `try`, or `work`.
 - Fizeau routing behavior is covered in Fizeau-owned tests, not in DDx.
-

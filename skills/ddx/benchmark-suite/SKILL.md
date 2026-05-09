@@ -7,8 +7,8 @@ description: Run a repeatable prompt or task benchmark across a matrix of agent 
 
 A workflow skill for running the same benchmark suite across a matrix of
 agent conditions and aggregating the results. This is a skill-level workflow:
-DDx owns suite orchestration and evidence capture; the upstream agent owns
-provider/model routing.
+DDx owns suite orchestration and evidence capture; Fizeau owns concrete route
+selection and provider/model discovery.
 
 Use this when one prompt comparison is too narrow and you need repeated cases:
 prompt-regression sets, model/power evaluation, harness passthrough smoke
@@ -168,5 +168,5 @@ answer the question, say that and list the missing evidence.
 - Do not compare arms that changed both prompt and power unless the suite is
   explicitly a full-matrix experiment.
 - Do not interpret harness/provider/model as DDx routing decisions. They are
-  passthrough constraints to the upstream agent.
+  passthrough constraints to Fizeau.
 - Do not merge failed or missing arms into averages. Report them separately.

@@ -44,8 +44,8 @@ Out of scope:
 
 - The CONTRACT-003 boundary with `~/Projects/agent`. Investigation
   confirmed the agent module does not import `ddx/internal/config`
-  and ddx pre-resolves at `cli/internal/agent/agent_runner_service.go:104`
-  and `cli/internal/agent/serviceconfig.go:80`. No agent-repo changes
+  and DDx previously pre-resolved route inputs in legacy task-execution glue.
+  No agent-repo changes
   are required and no contract document needs revision. Agent
   v0.9.9 (ADR-005 smart routing) further simplifies the boundary by removing
   the pre-resolved route request field — `ResolveRoute` is now informational
@@ -54,7 +54,7 @@ Out of scope:
   `RequiresTools` (new per-invocation hints) on `ServiceExecuteRequest`;
   routing decisions are owned upstream.
 - Routing-layer cleanup driven by agent v0.9.9 (rendering composed inventory in
-  `ddx agent route-status`, retiring model override config, dropping the
+  Fizeau diagnostics, retiring model override config, dropping the
   "No model routes configured" fatal error path).
   Tracked separately as a small follow-up batch on top of FEAT-006;
   does not block this refactor and is not delivered by it.
@@ -293,7 +293,7 @@ not consumed) into the resolved-config path.
 **Stage 4 — Lint enforcement and test debt cleanup.**
 Adds a structural lint analyzer (`runtimelint`) using a closed-list
 of forbidden field names scoped to `*Runtime` structs in
-`cli/internal/agent/`. Reuses the analyzer pattern from FEAT-022
+the legacy task-execution package. Reuses the analyzer pattern from FEAT-022
 Stage A2 so the new rule plugs into the same Lefthook + CI hooks.
 Resolves the four disabled config tests per evidence-driven
 decisions specified in TD-024 §Disabled Test Resolution: two are
@@ -355,7 +355,7 @@ Changes that are *enabled* by the refactor but not part of it:
 
 ## References
 
-- FEAT-006 — Agent Service (CONTRACT-003 boundary; this SD confirms
+- FEAT-006 — Fizeau Execution Boundary (CONTRACT-003 boundary; this SD confirms
   the boundary stays clean).
 - FEAT-022 — Prompt Evidence Assembly. This SD's Stage 1 unblocks
   FEAT-022 Stage G.

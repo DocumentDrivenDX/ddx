@@ -39,9 +39,9 @@ HELIX plugin steps.
 **Then** `ddx bead ready` shows the epic (dep satisfied),
 `ddx bead dep tree` shows the closed task
 
-### TC-023: Agent usage reports sessions
+### TC-023: Run metrics report sessions
 **Given** `.ddx/agent-logs/sessions.jsonl` has fixture entries
-**When** `ddx agent usage --format json` runs
+**When** run/process metrics are queried as JSON
 **Then** output contains correct per-harness aggregation
 
 ### TC-024: Doc history resolves artifacts
@@ -101,7 +101,7 @@ build the feature.
 ```bash
 ddx bead list          # shows mix of open/closed beads
 ddx bead ready         # may be empty (all done) or show follow-up work
-ddx agent usage        # shows token consumption from the session
+ddx metrics cost       # shows token/cost consumption from run evidence
 ddx doc history <prd>  # shows commits from framing and evolution
 ddx doc changed --since HEAD~20  # shows all artifacts touched
 ```
@@ -134,7 +134,7 @@ ddx run --harness claude --effort high \
 
 # Phase 6: Inspect
 ddx bead list
-ddx agent usage --since today
+ddx metrics cost --since today
 ddx doc changed --since HEAD~20
 ```
 

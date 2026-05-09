@@ -28,8 +28,12 @@ directly.
 
 ## Skill Format
 
+> **FEAT-015 amendment:** Skill directories are project-local under
+> `<projectRoot>/.agents/skills/`. Home-directory skill paths are retired.
+> The layout below uses the current project-local model.
+
 ```
-~/.agents/skills/ddx/
+.agents/skills/ddx/   # project-local (FEAT-015)
 ├── SKILL.md
 ├── evals/
 │   └── routing.jsonl
@@ -72,8 +76,8 @@ reference file before responding to a DDx-related request.
 Reference files cover:
 
 - `reference/beads.md` — bead CRUD, dependencies, claims, evidence
-- `reference/agents.md` — harness dispatch, profiles, `ddx agent run`,
-  execute-bead / execute-loop (alias `ddx work`)
+- `reference/agents.md` — power-bound dispatch, passthrough constraints,
+  `ddx run`, `ddx try`, and `ddx work`
 - `reference/executions.md` — execution definitions and immutable run
   history (`ddx metric` / `ddx exec`)
 - `reference/personas.md` — persona listing, show, binding
@@ -97,10 +101,8 @@ symlinked to global) so project worktrees can evolve independently.
 
 ### Global Install (`ddx install --global`)
 
-Planned surface (FEAT-015 AC-002): extract the embedded skill to
-`~/.ddx/skills/ddx/` and create relative symlinks from
-`~/.agents/skills/ddx` and `~/.claude/skills/ddx` into that copy.
-Implementation tracked by `ddx-6f32aa4c`.
+> **Retired (FEAT-015):** `ddx install --global` has been removed. Skills are
+> installed project-locally via `ddx init`. No home-directory writes occur.
 
 ### Plugin-Declared Skills (`ddx install <plugin>`)
 

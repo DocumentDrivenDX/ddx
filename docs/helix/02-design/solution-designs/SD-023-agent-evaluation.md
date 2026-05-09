@@ -23,9 +23,9 @@ surface. The layer answers three operator questions:
 - What would another harness or model have done for a preserved bead attempt?
 
 This design defines the architecture for comparison isolation, grading,
-benchmark aggregation, and replay. It does not replace `ddx agent
-execute-bead`; it evaluates preserved executions and comparison runs produced
-by existing agent primitives.
+benchmark aggregation, and replay. It does not replace `ddx try`; it evaluates
+preserved executions and comparison runs produced by existing task-execution
+primitives.
 
 ## Scope
 
@@ -51,17 +51,16 @@ The design uses several FEAT-019-adjacent primitives:
 
 - `compare-prompts`: immediate comparison dispatch. It runs N arms against the
   same prompt and emits a `ComparisonRecord`.
-- `ddx agent benchmark`: suite runner. It expands suite arms/prompts into
+- `benchmark-suite`: suite runner. It expands suite arms/prompts into
   repeated comparison dispatches and aggregates statistics.
 - comparison skill consensus mode: consensus gate. It reuses multi-arm dispatch
   ideas but returns pass/fail consensus, not graded comparison evidence.
-- `ddx agent replay`: bead replay entry point. This design tightens its
+- `replay-bead`: bead replay entry point. This design tightens its
   evidence lookup and diff-comparison contract.
-- `ddx agent grade`: target CLI for rubric grades on a persisted comparison.
-  The grading library path already defines the record and parser shape.
-- `ddx agent compare`: target inspection surface for persisted comparison
-  records. Until persistence lands, `run --compare` is the executable
-  comparison surface.
+- grading workflows over `ddx run`: rubric grades on a persisted comparison.
+  The grading library path defines the record and parser shape.
+- `ddx runs list/show`: inspection surface for persisted comparison records
+  once they are stored in the FEAT-010 run substrate.
 
 The design keeps these surfaces separate because they answer different
 questions. `quorum` answers "did enough agents agree or pass?" Comparison and
@@ -274,9 +273,9 @@ depending on the current file path.
 
 Persistence is required for:
 
-- `ddx agent compare --list`
-- `ddx agent compare --show <id>`
-- `ddx agent grade --comparison <id>`
+- `ddx runs list` inspection of comparison records
+- `ddx runs show <id>` inspection of one comparison record
+- grading workflows that append results to a comparison record
 - benchmark output history
 - CI gates that consume prior comparison IDs
 
@@ -355,7 +354,7 @@ the fact; it reports the grader's structured decision.
 
 ## Benchmark Architecture
 
-`ddx agent benchmark` is a batch wrapper around comparison dispatch.
+`benchmark-suite` is a batch wrapper around comparison dispatch.
 
 Suite input:
 
@@ -488,19 +487,19 @@ compare-prompts \
   --arm agent:gpt-5.4:agent-smart \
   --arm claude:opus:claude-smart \
   --prompt task.md
-ddx agent compare --list
-ddx agent compare --show cmp-abc123 --format json
+ddx runs list --type comparison
+ddx runs show cmp-abc123 --format json
 ```
 
-`run --compare` creates records. `compare --list` and `compare --show` inspect
-persisted records. A future `compare --from-executions` may assemble records
-from preserved execute-bead attempts without rerunning agents.
+`compare-prompts` creates records. `ddx runs list` and `ddx runs show` inspect
+persisted records. A future comparison workflow may assemble records from
+preserved `ddx try` attempts without rerunning agents.
 
 ### Grade
 
 ```bash
-ddx agent grade --comparison cmp-abc123
-ddx agent grade --comparison cmp-abc123 --grader claude --rubric rubrics/code.md
+compare-prompts --grade cmp-abc123
+compare-prompts --grade cmp-abc123 --min-power 10 --rubric rubrics/code.md
 ```
 
 The grade command mutates only the comparison record's grading events.
@@ -508,7 +507,7 @@ The grade command mutates only the comparison record's grading events.
 ### Benchmark
 
 ```bash
-ddx agent benchmark --suite benchmarks/implementation.json --output results.json
+benchmark-suite --suite benchmarks/implementation.json --output results.json
 ```
 
 Benchmark output includes full comparison records, not only summary rows.
@@ -526,8 +525,8 @@ comparison plus grade and then apply its own policy.
 ### Replay
 
 ```bash
-ddx agent replay ddx-52d42ccb --model gpt-5.4 --harness agent
-ddx agent replay ddx-52d42ccb --model gpt-5.4 --harness agent --at-head
+replay-bead ddx-52d42ccb --model gpt-5.4
+replay-bead ddx-52d42ccb --model gpt-5.4 --at-head
 ```
 
 Replay emits JSON with source evidence flags so CI and reviewers can
@@ -598,8 +597,8 @@ The concrete validation matrix is TP-019. The design requires coverage for:
 
 ## Implementation Order
 
-1. Stabilize `ComparisonRecord` persistence and `ddx agent compare --list/show`.
-2. Ensure `run --compare` records `base_rev`, prompt source, and arm labels.
+1. Stabilize `ComparisonRecord` persistence and `ddx runs list/show`.
+2. Ensure `compare-prompts` records `base_rev`, prompt source, and arm labels.
 3. Complete grading CLI and append-only grade events.
 4. Update benchmark to persist or emit full comparison records with suite
    provenance.

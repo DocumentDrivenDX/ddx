@@ -67,7 +67,7 @@ reopen the bead and escalate to a stronger model, with the review
 findings threaded into the retry prompt as a `<review-findings>`
 section — directly mirroring the Self-Refine critique-and-revise loop
 but with the critic's output preserved as durable input to the next
-attempt. The multi-model `--quorum` and codex-plus-opus plan-review
+attempt. Multi-model comparison review and codex-plus-opus plan-review
 discipline are the same pattern with independent critics. The
 acceptance criteria are the anchor MAST identifies as load-bearing —
 without them, the loop has nothing to inspect.

@@ -5,10 +5,15 @@
 > routing-contract guidance. The current boundary is the top-level
 > `ddx run` / `ddx try` / `ddx work` stack: DDx owns bead orchestration,
 > success classification, evidence, and retry escalation; Fizeau owns
-> concrete model/provider routing, provider/model discovery, transcript
+> concrete route selection, provider/model discovery, transcript
 > rendering, and operator/debug status surfaces behind `Execute`.
 > Pre-resolved route injection and DDx-side route decisions described below are
 > obsolete.
+>
+> Search hits in this file for legacy agent naming, legacy package paths, route
+> decision helpers, and old workflow examples are audited historical references
+> only. They document the superseded migration design and must not be used as
+> active DDx implementation guidance.
 
 ## Problem
 

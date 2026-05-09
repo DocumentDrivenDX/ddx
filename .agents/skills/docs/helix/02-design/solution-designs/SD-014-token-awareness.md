@@ -6,13 +6,13 @@ ddx:
     - FEAT-006
     - ADR-001
 ---
-# Solution Design: Agent Token Awareness
+# Solution Design: Task Execution Token Awareness
 
 ## Overview
 
 Fix token/cost capture from codex and claude harnesses by switching to
-structured JSON output, extend the session log schema, and add a `ddx agent
-usage` aggregation command.
+structured JSON output, extend the execution evidence schema, and add
+aggregation under the run/process metrics surfaces.
 
 ## Changes by Component
 
@@ -67,11 +67,11 @@ type SessionEntry struct {
 `Tokens` continues to be `input + output` for backward compat. New fields
 are `omitempty` so old logs without them parse cleanly.
 
-### 4. Usage Command (`cmd/agent_cmd.go`)
+### 4. Usage Aggregation
 
-New subcommand `ddx agent usage` that:
-1. Reads `.ddx/agent-logs/sessions.jsonl` line by line
-2. Filters by `--since` and `--harness`
+The read model should:
+1. Read FEAT-010 run records and legacy session rows during migration
+2. Filter by `--since` and `--harness` / route facts
 3. Aggregates: sum input/output tokens, sum cost, count sessions, avg duration
 4. Renders as table (default), JSON, or CSV
 
@@ -103,4 +103,4 @@ See TP-014 for detailed test cases. Key verification:
 1. Unit tests for `ExtractUsage()` with fixture JSON from each harness
 2. Unit test for session log backward compatibility (old format → new struct)
 3. Unit test for usage aggregation (filter, sum, render)
-4. Integration: `ddx agent usage` against a fixture sessions.jsonl
+4. Integration: run/process metrics against fixture execution evidence

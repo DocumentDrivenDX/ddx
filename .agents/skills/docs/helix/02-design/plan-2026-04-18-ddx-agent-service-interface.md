@@ -1,5 +1,20 @@
 # Plan: `agentlib.Service` interface — narrow public surface
 
+> **Historical / superseded.** Retained as a design record for the
+> 2026-04-18 service-boundary investigation. Do not use this file as current
+> routing-contract guidance. The current boundary is the top-level
+> `ddx run` / `ddx try` / `ddx work` stack: DDx owns bead orchestration,
+> success classification, evidence, and retry escalation; Fizeau owns
+> concrete route selection, provider/model discovery, transcript
+> rendering, and operator/debug status surfaces behind `Execute`.
+> Pre-resolved route injection and DDx-side route decisions described below are
+> obsolete.
+>
+> Search hits in this file for legacy agent naming, legacy package paths, route
+> decision helpers, and old workflow examples are audited historical references
+> only. They document the superseded migration design and must not be used as
+> active DDx implementation guidance.
+
 ## Problem
 
 DDx imports **150+ symbols across 11 packages** of `github.com/DocumentDrivenDX/agent`:
@@ -18,7 +33,8 @@ DDx imports **150+ symbols across 11 packages** of `github.com/DocumentDrivenDX/
 | `modelcatalog` | 3 | catalog lookup |
 | `provider/anthropic` | 2 | provider construction |
 
-DDx has reimplemented the agent loop using ddx-agent as a parts catalog. Concrete consequences:
+DDx has reimplemented the task-execution loop using the upstream service as a
+parts catalog. Concrete consequences:
 
 - `cli/internal/agent/agent_runner.go:148` — DDx constructs the compactor with hardcoded 131K, ignoring the model's actual 256K context (bragi qwen3.6-35b-a3b case).
 - DDx orchestrates prompt construction, tool registration, session logging, compaction, observability — every concern the agent should own.
@@ -26,7 +42,8 @@ DDx has reimplemented the agent loop using ddx-agent as a parts catalog. Concret
 
 ## Proposal
 
-Expose **one** interface from ddx-agent. All other types are either inputs/outputs of its methods or move internal.
+Expose **one** interface from Fizeau. All other types are either inputs/outputs
+of its methods or move internal.
 
 ```go
 package agentlib
@@ -161,7 +178,11 @@ func New(opts Options) (DdxAgent, error)
 
 Six methods. `Execute` is the primary verb (mirrors the harness invocation); the other five are the "extras" only ddx-agent has — model catalog, discovery, route inspection.
 
-DDx's `agentHarness` implementation of the `Harness` interface delegates `Run` → `Service.ExecuteStream`. DDx commands that need the extras (`ddx agent route-status`, `ddx agent providers`, `ddx agent models`, `ddx agent check`) call the corresponding `Service` method directly — they don't go through the harness abstraction since they're not invocations.
+DDx's `taskexec` implementation of the `Harness` interface delegates `Run` →
+`Service.ExecuteStream`. DDx commands that need the extras (`ddx fizeau
+route-status`, `ddx fizeau providers`, `ddx fizeau models`, `ddx fizeau
+check`) call the corresponding `Service` method directly — they don't go
+through the harness abstraction since they're not invocations.
 
 ## Internal-package enforcement
 
@@ -247,7 +268,7 @@ Only **10 non-test files** import `github.com/DocumentDrivenDX/agent`. The 113 s
 1. **Where do the stall + compaction-stuck circuit breakers live?** Today `agent_runner.go:200-318` inspects private JSON fields on compaction-end events to enforce DDx-defined limits (no read-only-tool-only iterations, no consecutive no-op compactions). Two options:
    - **Move enforcement upstream.** `ExecuteRequest.StallPolicy{ReadOnlyTools int, NoopCompactions int}` and the agent enforces, ending execution with `Status: stalled`. DDx no longer needs the event-inspection code.
    - **Keep enforcement in DDx.** Then `Event` payloads must carry the structured `compaction-end{success bool, no_compaction bool}` shape, which slightly leaks compaction internals.
-   - Recommendation: **upstream**. Stall is an execution concern, not a DDx concern; HELIX/Dun would want the same limits.
+   - Recommendation: **upstream**. Stall is an execution concern, not a DDx concern; HELIX and other consumers would want the same limits.
 
 2. **`findTool` rename:** rename upstream `glob` → `find`. Same handler. No back-compat alias (pre-release). DDx-side `findTool` wrapper deletes.
 
@@ -261,7 +282,8 @@ Only **10 non-test files** import `github.com/DocumentDrivenDX/agent`. The 113 s
 
 ### Specs that encode the current boundary
 - **PLAN-2026-04-08-AGENT-ROUTING-AND-CATALOG-RESOLUTION** [superseded] — original two-layer design.
-- **FEAT-006 — Agent Service** — DDx owns harness orchestration + cross-harness routing; embedded agent owns provider/backend selection.
+- **FEAT-006 — Fizeau consumer contract** — DDx owns harness orchestration +
+  cross-harness pass-through; embedded Fizeau owns provider/backend selection.
 - **SD-015 — Resolution path** — 5-mode precedence (harness override → explicit model → profile → default → provider targeting), candidate-ranking rules, and fuzzy match with shortest-suffix tiebreak.
 - **SD-023 — Routing visibility** — explicit DDx/agent boundary; DDx accesses agent state via Go package APIs, not shellout. Eight visibility beads block on this boundary.
 - **agent-side: plan-2026-04-10-model-first-routing.md, SD-005 (provider config), SD-002 (standalone CLI)** — model-first routing, ModelRouteCandidateConfig, RoutingConfig (weight tuning), CandidateScorer interface for DDx quota overlay.
@@ -318,7 +340,7 @@ The existing spec landscape **biases toward Option B** (finish the existing two-
 
 ## Decision: Option C — consolidate harnesses down into ddx-agent
 
-### What ddx-agent becomes
+### What Fizeau becomes
 
 Two roles, one module:
 
@@ -326,13 +348,21 @@ Two roles, one module:
 
 2. **A wrapper around other agents.** Subprocess harness layer for claude, codex, opencode, pi, gemini — used when their interactive features, vendor billing, or specific capabilities matter, OR when comparison/fallback routing wants them in the candidate pool.
 
-**The product:** ddx-agent is the one stop shop for optimally routed one-shot noninteractive agentic prompts. DDx is one consumer (the bead-driven workflow); HELIX, Dun, and standalone CLI users are others.
+**The product:** Fizeau is the one stop shop for optimally routed one-shot
+noninteractive prompts. DDx is one consumer (the bead-driven workflow); HELIX
+and standalone CLI users are others.
 
 ### Why C is right (overriding the existing spec landscape)
 
 1. **Testability of the service boundary.** Under C, every harness — native and subprocess — is reachable through the same `DdxAgent` Service interface, with the same input/output contract. The boundary is **one surface to test**. Under B, the boundary is N+1 surfaces (one Service interface plus N harness binaries DDx invokes directly), and parity testing requires bridging two modules. The "comparison suite" argument from earlier rounds was a weaker version of this point — testability is the actual reason.
 
-2. **Two-role coherence.** ddx-agent's value prop ("optimally routed one-shot noninteractive prompts") only makes sense if it owns the routing **across** harnesses, not just within in-process providers. A consumer that wants "give me the best harness/provider/model for this prompt under cost constraint X" needs one entrypoint that knows about all options. Under B, that consumer has to glue DDx's harness routing to ddx-agent's provider routing themselves.
+2. **Two-role coherence.** Fizeau's value prop ("optimally routed one-shot
+   noninteractive prompts") only makes sense if it owns the routing **across**
+   harnesses, not just within in-process providers. A consumer that wants
+   "give me the best harness/provider/model for this prompt under cost
+   constraint X" needs one entrypoint that knows about all options. Under B,
+   that consumer has to glue DDx's harness routing to Fizeau's provider
+   routing themselves.
 
 3. **The six "badly implemented" smells are structural duplication.** Codex's review (round 3) was right that under B you can patch each side. But "patch each side" is exactly how the duplication arose — and exactly what produced the smells. C eliminates the possibility of recurrence by deleting one of the two homes.
 
@@ -355,7 +385,7 @@ The cross-repo entanglement is the failure mode. **Do not supersede. Do not depr
 
 #### Files to GUT on the DDx side
 
-- `docs/helix/01-frame/features/FEAT-006-agent-service.md` — rewrite to one page: "DDx invokes LLMs via the ddx-agent contract. DDx-side responsibilities: bead-driven invocation, execute-bead orchestration, evidence/session capture. End." No harness, routing, or provider language survives.
+- `docs/helix/01-frame/features/FEAT-006-agent-service.md` — rewrite to one page: "DDx invokes LLMs via the ddx-agent contract. DDx-side responsibilities: bead-driven invocation, execute-bead orchestration, evidence/session capture. End." DDx may keep copied/linkable evidence-envelope references and forward Fizeau transcript `ServiceEvent`s as opaque evidence, but it is only a pass-through/marshalling consumer for those events. Fizeau owns transcript, session-log, and progress rendering plus transcript semantics. DDx only preserves the opaque envelope and attachments; it does not rehydrate, parse, render, or semantically interpret inner Fizeau transcript or session-log content, and it does not render inner session logs in DDx worker views.
 
 #### Files to TRIM on the agent side (drop boundary claims; describe internals in agent's own language)
 
@@ -383,7 +413,7 @@ After deletes/trims, grep both repos for references to the deleted IDs and fix o
 grep -rn "SD-015\|SD-023\|CONTRACT-002\|plan-2026-04-08-agent-routing" --include="*.md" --include="*.go"
 ```
 
-Any remaining reference is a re-entanglement risk. Remove with prejudice. Code-side imports of `cli/internal/agent` types from outside DDx (if any — see HELIX/Dun audit below) get the same treatment.
+Any remaining reference is a re-entanglement risk. Remove with prejudice. Code-side imports of `cli/internal/agent` types from outside DDx (if any — see HELIX and other consumers audit below) get the same treatment.
 
 #### How DDx asks for changes
 
@@ -413,7 +443,7 @@ When DDx needs new contract behavior, it files an issue/bead against ddx-agent r
 | `cli/internal/agent/compare.go`, `benchmark.go`, `quorum.go`, `condense.go` | **Move to ddx-agent** — these ARE the comparison suite the user wants in one module |
 | `cli/internal/agent/providerstatus/probe.go` | **Moves to ddx-agent** |
 | `cli/internal/agent/claude_stream.go`, `claude_quota_cache.go` | **Move to ddx-agent** as part of the claude harness implementation |
-| `cli/internal/agent/jsonl.go`, `format.go`, `session_log_format.go`, `session_log_tailer.go` | **Mostly move** to ddx-agent (event/format primitives); DDx keeps any UI rendering |
+| `cli/internal/agent/jsonl.go`, `format.go`, `session_log_format.go`, `session_log_tailer.go` | **Mostly move** to ddx-agent (event/format primitives); DDx keeps only copied/linkable evidence-envelope metadata and attachment pointers, and it keeps the inner Fizeau transcript or session-log content opaque. Fizeau owns the session-log and progress rendering surfaces plus transcript semantics; DDx is only an opaque forwarder for those artifacts, not a renderer or parser of inner session logs |
 | `cli/internal/agent/state.go`, `executions_mirror.go`, `executor.go`, `script.go` | **Stay** in DDx — these are execute-bead orchestration (DDx-specific concern) |
 | `cli/internal/agent/grade.go`, `pricing.go`, `models.go`, `catalog.go`, `model_catalog_yaml.go`, `agent_catalog_shared.go`, `worktree_skills.go` | Mixed — likely most move; some DDx-specific glue stays |
 | `cli/cmd/agent_*.go` | **Stay** in DDx as commands, but become thin Service.* callers |
@@ -501,7 +531,7 @@ Three architectural options on the table:
 - **Event schema.** `ExecuteStream` event types form a closed union: `text_delta`, `tool_call`, `tool_result`, `compaction`, `routing_decision`, `final`. Each has a documented JSON shape that both subprocess and in-process backends emit identically. Defined in CONTRACT-001.
 - **OS-level cancellation.** `Service` guarantees that `ctx.Done()` triggers cleanup of any subprocess (PTY teardown, orphan reap). Tests prove it.
 - **Stall enforcement.** `ExecuteRequest.StallPolicy{ReadOnlyTools int, NoopCompactions int}` — the agent enforces, ends execution with `Status: stalled`. DDx's circuit-breaker code at `agent_runner.go:200-318` deletes.
-- **HELIX/Dun audit.** Before lock-in, grep both repos for `cli/internal/agent` imports. Any non-DDx consumer is added as a named migration target with their own bead.
+- **HELIX and other consumers audit.** Before lock-in, grep both repos for `cli/internal/agent` imports. Any non-DDx consumer is added as a named migration target with their own bead.
 
 ## Concrete contract draft (CONTRACT-001-ddx-agent-service.md)
 
@@ -1068,7 +1098,7 @@ Concrete deliverable: ddx-agent ships an integration suite that, given credentia
 |---|---|
 | Mid-migration production fix needed | Adapter layer (`legacy/`) lets old code paths keep working until each is migrated. Hot-fix on legacy is allowed during migration. |
 | Test suite churn | Four test seams (FakeProvider, PromptAssertionHook, CompactionAssertionHook, ToolWiringHook) spec'd before migration starts. Any test that can't migrate cleanly is a gap in the seam — fix the seam, don't add a workaround. |
-| HELIX/Dun consumer break | Phase 0.1 audit (Go imports + doc references) catches them; named migration beads filed before Phase 5. |
+| HELIX and other consumers consumer break | Phase 0.1 audit (Go imports + doc references) catches them; named migration beads filed before Phase 5. |
 | Subprocess harness PTY/orphan cleanup regressions | Contract names this guarantee; Phase 2.7 + Phase 3.13 mandate explicit cancellation tests. Don't skip. |
 | Spec drift recurrence | Reference-cleanup grep in Phase 1 + Phase 7 catches it. CI lint can be added later (post-epic). |
 | Routing behavior change goes unnoticed | Existing test suites + integration suite A/B run before/after migration; any divergence on identical inputs is a bug. |
@@ -1114,7 +1144,7 @@ The breakdown below is informed by Phases 0-7 above. **Not yet filed** — revie
 **Sub-beads (ordered):**
 
 1. **Spec cleanup** — DELETE `SD-015-agent-routing-and-catalog-resolution.md`, `SD-015-resolution-path-trace.md`, `SD-023-agent-routing-visibility.md`, `plan-2026-04-08-agent-routing-and-catalog-resolution.md`. GUT `FEAT-006-agent-service.md` to a one-page reference. Reference-cleanup grep + remove. Blocks: nothing (can run in parallel with code work).
-2. **HELIX/Dun import audit** — grep both projects for `cli/internal/agent` imports. File a migration bead per consumer. Blocks: 16.
+2. **HELIX and other consumers import audit** — grep both projects for `cli/internal/agent` imports. File a migration bead per consumer. Blocks: 16.
 3. **Bump go.mod to `agent v0.4.0-pre`** — new contract available; legacy still compiles. Blocks: 4-12.
 4. **Add `cli/internal/agent/legacy/` adapter layer** — wraps the new Service to expose the old call shapes during migration. Lets cmd/ files migrate one at a time without a flag day. Deletes in step 14.
 5. **Migrate `cmd/agent_check.go`** → `service.HealthCheck` + `service.ListProviders`.
@@ -1160,7 +1190,7 @@ Epic on DDx tracker: **migrate to ddx-agent Service interface**
 - ddx-5: sessions/observations/compaction migration (supersedes ddx-76df1a46)
 - ddx-6: virtual-provider test paths migration
 - ddx-7: bump to v0.5.0; verify import-list shrunk; cleanup
-- ddx-8: HELIX/Dun consumer docs (optional — only if those projects are ready)
+- ddx-8: HELIX and other consumers consumer docs (optional — only if those projects are ready)
 
 Subprocess CLI (`ddx-agent` binary as a polyglot front door) is **deferred** — easy to add later as a `cliService` implementation of the same interface if/when a non-Go consumer needs it.
 

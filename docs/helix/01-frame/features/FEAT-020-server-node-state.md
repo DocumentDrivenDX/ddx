@@ -122,8 +122,9 @@ Two paths register projects with the server:
 
 **1. Server startup:** registers the project at its own working directory.
 
-**2. CLI commands:** `ddx agent`, `ddx bead`, and `ddx doc` subcommand groups
-call `serverreg.TryRegisterAsync(workingDir)` in their `PersistentPreRunE`.
+**2. CLI commands:** `ddx run`, `ddx try`, `ddx work`, `ddx bead`, and `ddx doc`
+subcommand groups call `serverreg.TryRegisterAsync(workingDir)` in their
+`PersistentPreRunE`.
 This fires a background goroutine that:
 - reads the server URL from `DDX_SERVER_URL` env, then `~/.local/share/ddx/server.addr`, then defaults to `https://localhost:7743`
 - POSTs `{"path": "<project path>"}` to `POST /api/projects/register`
@@ -226,7 +227,7 @@ contract (mode `0700`, files mode `0600`) extends to that file unchanged.
    registry (updating `last_seen` if already present), and persists state.
 6. `GET /api/node` returns the node's name, ID, started_at, and last_seen.
 7. `GET /api/projects` returns the full project registry as a JSON array.
-8. `ddx bead`, `ddx agent`, and `ddx doc` commands call
+8. `ddx run`, `ddx try`, `ddx work`, `ddx bead`, and `ddx doc` commands call
    `serverreg.TryRegisterAsync` before their subcommands execute.
 9. Client registration is fire-and-forget: no CLI command blocks on or fails
    due to server unavailability.

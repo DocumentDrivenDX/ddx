@@ -34,7 +34,7 @@ multi-machine use because PIDs collide across hosts and `assignee` is advisory.
 **Changes to the claim record:**
 
 - Add `claimed-machine` (hostname or `$DDX_MACHINE_ID` env override)
-- Add `claimed-session` (agent session ID if invoked from `ddx agent run`,
+- Add `claimed-session` (agent session ID if invoked from `ddx run`,
   empty otherwise)
 - Add `claimed-worktree` (worktree branch name when `--worktree` is set)
 
@@ -85,8 +85,8 @@ state via existing list/show endpoints in the near term.
 
 ## Worktree-Aware Dispatch
 
-`ddx agent run` today accepts `--workdir` to set the working directory of the
-agent invocation.
+`ddx run` accepts non-routing workdir intent to set the working directory of
+the agent invocation.
 
 **New flag:** `--worktree <name>`
 
@@ -106,13 +106,13 @@ git-tracked files. The coordination pattern for multi-machine work:
 
 1. Coordinator creates a worktree branch and pushes it to the remote.
 2. Worker (another machine or account) fetches the branch and runs
-   `ddx agent run --worktree <branch>`.
+   `ddx run --workdir .worktrees/<branch>`.
 3. Worker pushes results (code, updated beads, agent session logs) to the branch.
 4. Coordinator fetches, reviews, and merges.
 
 **What DDx provides in this flow:**
 - `ddx bead claim` records which branch/machine holds the work
-- `ddx agent run --worktree` creates the isolation boundary
+- `ddx run --workdir` executes inside the isolation boundary
 - Bead JSONL and session collections are file-backed and merge-friendly
   (append-only JSONL rows are non-conflicting if agents write to separate
   collections or the merge strategy takes both sides)

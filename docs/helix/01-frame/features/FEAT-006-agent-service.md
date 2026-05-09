@@ -18,10 +18,11 @@ DDx invokes LLMs through the upstream Fizeau execution contract,
 (`docs/helix/02-design/contracts/CONTRACT-003-fizeau-service.md`).
 
 That contract is the entire execution boundary. DDx exposes the public
-`ddx run` / `ddx try` / `ddx work` layers and sends requests to Fizeau for the
-actual invocation. Upstream diagnostic/status commands may remain as
-Fizeau-owned observability, but the retired workflow namespace is
-not a public workflow surface and has no legacy alias.
+`ddx run` / `ddx try` / `ddx work` layers, forwards raw passthrough constraints
+unchanged, and sends requests to Fizeau for the actual invocation. Upstream
+diagnostic/status commands may remain as Fizeau-owned observability, but the
+retired workflow namespace is not a public workflow surface and has no legacy
+alias.
 
 ## DDx-side responsibilities
 
@@ -149,7 +150,8 @@ envelope described below.
 
 `--harness`, `--provider`, and `--model` are permitted on `ddx run`, `ddx try`,
 and `ddx work` only as passthrough fields. DDx carries them in one narrow
-request envelope and sends them to Fizeau unchanged.
+request envelope and sends them to Fizeau unchanged. Fizeau interprets those
+raw strings.
 
 For example:
 
@@ -164,16 +166,16 @@ DDx passes the raw string unchanged.
 These fields must not leak into DDx routing policy:
 
 - no DDx-side validation against harness/provider/model catalogs
-- no preflight `ResolveRoute`
+- no preflight route-selection helper
 - no provider/model fallback or substitution
 - no retry-policy branches that inspect the string values
 - no config-driven default harness/provider/model selection
 - no worker columns or queue selection logic that treat these as DDx concepts
 
 If an operator supplies passthrough constraints and DDx later retries with a
-higher `MinPower`, DDx keeps the passthrough values unchanged. The agent
-decides whether the power bounds and passthrough constraints are compatible and
-reports the actual model/power or a typed error. DDx records the requested
+higher `MinPower`, DDx keeps the passthrough values unchanged. Fizeau decides
+whether the power bounds and passthrough constraints are compatible and reports
+the actual model/power or a typed error. DDx records the requested
 passthrough values for audit, but it does not use them to select a route.
 
 When hard passthrough pins make the requested power bounds unsatisfiable, DDx
@@ -181,8 +183,8 @@ must stop with a typed terminal classification such as
 `blocked_by_passthrough_constraint` or `agent_power_unsatisfied`. DDx records
 the requested `MinPower`/`MaxPower`, passthrough envelope, and Fizeau-supplied
 evidence, then reports operator action required. DDx must not remove pins,
-choose alternatives, call `ResolveRoute` to work around the conflict, or loop on
-higher `MinPower` values.
+choose alternatives, call any route-selection helper to work around the
+conflict, or loop on higher `MinPower` values.
 
 The only DDx code allowed to touch raw passthrough fields is the CLI parser, the
 single passthrough/intent value, Execute request construction, execution-record
@@ -190,10 +192,10 @@ persistence, and human-facing evidence rendering. Retry, queue selection, work
 scheduling, catalog threshold helpers, and config defaulting must carry the
 opaque value without reading `Harness`, `Provider`, or `Model`.
 
-`ResolveRoute` is not part of normal execution. It is allowed only for
+Route-resolution diagnostics are not part of normal execution. Fizeau may expose
 operator-facing status/debug surfaces such as route-status and provider
-diagnostics. A `RouteDecision` returned by `ResolveRoute` must never be
-re-injected into `Execute`.
+diagnostics, but DDx must never feed a diagnostic route decision back into
+`Execute`.
 
 `agent.routing.profile_ladders`, `agent.routing.model_overrides`,
 `agent.routing.profile_priority`, and the `cheap`/`standard`/`smart` profile
@@ -213,7 +215,7 @@ return or mutate concrete harness/provider/model pins for execution.
 ADR-024 is the governing policy for power escalation and review routing. FEAT-006
 owns only the request envelope: requested `MinPower` / `MaxPower`, opaque
 passthrough constraints, role/correlation metadata, and actual route facts
-returned by the agent. FEAT-010 owns whether a retry or review retry is
+returned by Fizeau. FEAT-010 owns whether a retry or review retry is
 scheduled. FEAT-014 owns normalized usage and cost signals.
 
 DDx may compute the next `MinPower` floor from catalog power numbers, but it
@@ -221,7 +223,7 @@ must not translate that floor into a concrete model/provider or mutate
 operator-supplied passthrough values. Review pairing uses the same boundary:
 DDx can request stronger review and record `review-pairing-degraded` when the
 actual reviewer route converges with the implementer, but concrete reviewer
-selection remains inside the agent service.
+selection remains inside Fizeau.
 
 ## Session Log Envelope Boundary
 

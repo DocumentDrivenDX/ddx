@@ -36,9 +36,9 @@ The name follows the `bd` (Dolt-backed) and `br` (SQLite-backed) convention: sho
 1. **Bead CRUD** (`ddx bead create/show/update/close`) — create, read, update, and close work items
 2. **Listing and filtering** (`ddx bead list`) — filter by status, label, or custom predicates
 3. **Dependency DAG** (`ddx bead dep add/remove/tree`) — declare ordering constraints between beads
-4. **Ready queue** (`ddx bead ready`) — list open beads with all dependencies satisfied
-5. **Blocked query** (`ddx bead blocked`) — list open beads with unsatisfied dependencies
-6. **Status summary** (`ddx bead status`) — counts of open, closed, blocked, ready beads
+4. **Ready queue** (`ddx bead ready`) — list `status=open` beads with all dependencies satisfied and no execution-suppressing metadata
+5. **Dependency-waiting query** (`ddx bead blocked`) — list `status=open` beads with unsatisfied dependencies; this is derived waiting, not `status=blocked`
+6. **Status summary** (`ddx bead status`) — counts persisted-status values and derived buckets such as ready and dependency-waiting
 7. **Import** (`ddx bead import`) — ingest beads from `bd`, `br`, or raw JSONL files
 8. **Export** (`ddx bead export`) — write beads as JSONL for interchange with other tools
 9. **Initialization** (`ddx bead init`) — create storage file and directory
@@ -46,6 +46,7 @@ The name follows the `bd` (Dolt-backed) and `br` (SQLite-backed) convention: sho
 11. **Claim ownership** (`ddx bead update <id> --claim [--assignee A]`) — claim a bead with explicit assignee control and stable claim metadata
 12. **Execution evidence** (`ddx bead evidence add/list`) — append-only history for close summaries, agent outputs, and experiment outcomes
 13. **Unknown field preservation** — round-trip fields DDx doesn't know about (enables workflow-specific extensions)
+14. **In-priority queue ordering override** (`ddx bead queue ...`) — let operators move a bead within its existing priority bucket without changing priority or extending the core bead schema
 
 ### Non-Functional
 
@@ -62,7 +63,7 @@ The name follows the `bd` (Dolt-backed) and `br` (SQLite-backed) convention: sho
 | id | string | auto-generated | `bx-` + 8 hex chars | Prefix configurable |
 | title | string | yes | — | Non-empty |
 | type | string | no | `task` | Free-form (task, epic, bug, chore, etc.) |
-| status | string | no | `open` | Enum: open, in_progress, closed |
+| status | string | no | `open` | Enum: open, in_progress, closed, blocked, proposed, cancelled (bd/br canonical set; see TD-031 §2) |
 | priority | int | no | 2 | Range 0-4 (0 = highest) |
 | labels | []string | no | [] | Free-form, no enforcement |
 | parent | string | no | "" | ID of parent bead |
@@ -74,7 +75,49 @@ The name follows the `bd` (Dolt-backed) and `br` (SQLite-backed) convention: sho
 | created | datetime | auto | — | ISO-8601 UTC |
 | updated | datetime | auto | — | ISO-8601 UTC |
 
-Unknown fields in imported or existing beads are preserved on read/write. This allows HELIX to store `spec-id`, `execution-eligible`, `claimed-at`, `claimed-pid`, `superseded-by`, and `replaces` without DDx needing to understand them.
+Unknown fields in imported or existing beads are preserved on read/write. This allows HELIX to store `spec-id`, `execution-eligible`, `claimed-at`, `claimed-pid`, `superseded-by`, `replaces`, and DDx-specific queue metadata such as `queue-rank` without extending the core bd/br-compatible schema table.
+
+Operator-attention work uses `status=proposed` when a bead needs a human
+decision before autonomous execution. Legacy/backcompat `needs_human` labels
+and legacy/backcompat `needs-human-*` preserved `Extra` fields may be read
+during migration, but they are metadata only; they do not define a queue lane or
+suppress routing after the status-owned lifecycle contract in TD-031 is applied.
+
+TD-031 defines how lifecycle actions use the existing carriers: persisted
+bd/br statuses, labels, dependency edges, append-only events, and preserved
+`Extra` fields. FEAT-004 does not introduce additional status vocabulary for
+no_changes, cooldown, superseded, or execution-readiness cases.
+
+### Lifecycle Migration Gate
+
+The status-owned lifecycle migration is one-way. Legacy/backcompat
+`needs_human`, `triage:needs-investigation`, and pseudo-status lifecycle names
+are input to `ddx bead migrate --lifecycle`; normal runtime does not preserve
+them as compatibility queue lanes.
+
+Before queue commands derive readiness or mutate beads, DDx performs the TD-031
+lifecycle startup preflight. If the active store still contains unmigrated
+legacy lifecycle labels or pseudo-statuses, `ddx bead ready`, `ddx bead
+blocked`, `ddx bead status`, `ddx work`, and worker/API queue-readiness surfaces
+must refuse normal operation. The permitted bead commands during this state are
+the migration path and diagnostics:
+
+```bash
+ddx bead migrate --lifecycle --dry-run
+ddx bead migrate --lifecycle --apply
+```
+
+The refusal output must include counts by legacy label/pseudo-status, a sample
+of affected bead IDs, and the exact migration command to run. Because beads are
+git-tracked, recovery from an incorrect one-way migration is git rollback of
+the tracker commit rather than maintaining dual lifecycle semantics.
+
+Bead readiness assessment uses those existing metadata carriers. Lint/rubric
+scoring happens inside readiness, and post-attempt triage happens after
+execution. None of them add dedicated readiness fields or new schema fields;
+readiness is derived from the bead record's existing title, description,
+acceptance, labels, parent, dependencies, claim metadata, and preserved
+extras.
 
 ### Queue Semantics For Epics
 
@@ -83,9 +126,9 @@ queue-drain contract as ordinary executable task/bug/chore beads.
 
 - A normal execution-ready queue is **single-ticket-first**. Ready non-epic
   beads are ordered ahead of ready epic beads at the same priority.
-- Open epics are not launched by the ordinary `ddx agent execute-loop`
-  single-ticket worker by default. They are consumed by an epic-scoped worker
-  mode that owns an epic branch and worktree.
+- Open epics are not launched by the ordinary `ddx work` single-ticket worker
+  by default. They are consumed by an epic-scoped worker mode that owns an epic
+  branch and worktree.
 - Child beads of an epic remain individually executable units and may be
   closed one-by-one as they land on the epic branch.
 - Epic queue entries remain visible in the tracker and UI, but their
@@ -94,6 +137,42 @@ queue-drain contract as ordinary executable task/bug/chore beads.
 
 This split preserves the simple `W2 = bead(W1)` contract for ordinary beads
 while allowing a separate sequential execution mode for epic branches.
+
+### Queue Ordering Overrides
+
+The canonical ready-queue order is:
+
+1. `priority` ascending (`0` first, `4` last)
+2. explicit `queue-rank` ascending, with missing `queue-rank` sorted after
+   explicit ranks inside the same priority bucket
+3. `created_at` ascending
+4. `id` ascending
+
+`queue-rank` is preserved extension metadata stored in the bead's unknown-field
+map, not a core bead schema field. It is an operator override for ordering
+within one priority bucket only. A ranked `P1` bead never sorts ahead of an
+unranked `P0` bead, and a ranked bead that is blocked, on retry cooldown,
+superseded, `execution-eligible=false`, or epic-only/container work remains
+excluded from `ddx work`'s execution-ready picker.
+
+The CLI exposes queue movement as a first-class surface rather than requiring
+operators to manage raw metadata:
+
+- `ddx bead queue top <id>` assigns a rank that places the bead first among
+  ready beads with the same priority.
+- `ddx bead queue move <id> --before <other-id>` places the bead before another
+  bead in the same priority bucket.
+- `ddx bead queue move <id> --after <other-id>` places the bead after another
+  bead in the same priority bucket.
+- `ddx bead queue clear <id>` removes the explicit rank and restores the
+  default tie-break ordering for that bead.
+
+`queue move --before/--after` fails when the two beads have different
+priorities. Operators that want to change urgency must use `ddx bead update
+<id> --priority N` explicitly. Queue-rank values are canonicalized as integers;
+read paths may accept numeric strings for compatibility, but writes persist a
+number. Rank calculation should use sparse integer values and renormalize only
+the affected priority bucket when no midpoint exists.
 
 ## Storage
 
@@ -158,6 +237,63 @@ This matches how bd derives its prefix, ensuring beads created by DDx and bd in 
 
 **Workflow validation hooks:** An executable at `.ddx/hooks/validate-bead-create` (and `validate-bead-update`) receives the bead JSON on stdin. Exit codes: 0 = ok, 1 = hard error (stderr = message, creation blocked), 2 = warning (stderr = message, creation proceeds).
 
+### Bead Readiness And Authoring Quality
+
+ADR-023 adds lifecycle-quality hooks on top of the existing validation-hook
+surface. The canonical product concept is bead readiness assessment: the
+pre-claim decision about whether a bead is tractable and actionable. The same
+policy surface also includes lint/rubric scoring inside readiness, which
+measures prompt quality, and post-attempt triage, which classifies evidence
+after execution. The older "pre-claim intake" wording survives only as legacy
+compatibility language, not normative terminology. Base validation still
+protects the reusable bead schema; authoring quality checks protect the
+"bead as prompt" contract needed by `ddx try`, `ddx work`, and autonomous
+sub-agent execution. Readiness uses the existing bead metadata carriers and
+does not add schema fields.
+
+The lint rubric is the 8-criterion template in
+`docs/helix/06-iterate/bead-authoring-template.md`:
+
+- title is scoped and imperative
+- description contains problem, root cause with file:line, proposed fix, and
+  non-scope
+- acceptance criteria are numbered, verifiable, and name concrete tests or
+  observable artifacts when tests apply
+- new code paths include wired-in assertions
+- acceptance criteria name the applicable `go test` command and
+  `lefthook run pre-commit`
+- labels include phase, area, kind, and cross-references
+- parent and dependencies are explicit
+- the bead body is sufficient for a competent sub-agent to execute without
+  asking for operator context
+
+Bead readiness assessment, lint/rubric scoring, and post-attempt triage all
+invoke the nested bead-lifecycle skill under the `ddx` skill tree. DDx owns
+passing bead JSON, mode, waiver labels, and evidence paths into the hook; the
+skill owns producing human-readable criterion findings. Hook output is
+ephemeral execution evidence, not durable bead schema. For `ddx try` and
+`ddx work`, the readiness and lint reports are stored under the attempt
+evidence directory alongside the prompt, result, checks, and triage records.
+`beads.jsonl` is not extended with lint-score fields.
+
+Waiver storage uses existing labels. The durable form is
+`lint-waiver:<criterion>`, such as `lint-waiver:c` for the concrete-test-name
+criterion. Built-in rubric skips come from the authoring template: doc-only
+beads may skip test-name and wired-in criteria, epic beads may satisfy those
+criteria through children, and deletion/rename beads may skip wired-in checks
+when behavior preservation is asserted.
+
+Manual override is explicit and audited. When an operator dispatches with
+`--force --reason <text>`, DDx appends an evidence event recording the actor,
+reason, mode, waived criteria, and lint summary. The override does not mutate
+the bead schema and does not suppress future lint runs.
+
+WARN-ONLY is the default mode: lint findings are reported but create/update and
+dispatch proceed. BLOCK mode is opt-in and may block dispatch only after valid
+lint output, rubric skips, and label waivers have been applied. Hook
+infrastructure failures follow ADR-023's fail-open rule and are reported as
+warnings, not schema validation failures.
+
 ## CLI Surface
 
 ```
@@ -165,6 +301,9 @@ ddx bead init
 ddx bead create "Title" [--type T] [--priority N] [--labels L,L] [--acceptance A] [--parent ID] [--description D]
 ddx bead show <id> [--json]
 ddx bead update <id> [--title T] [--status S] [--priority N] [--labels L,L] [--acceptance A] [--assignee A] [--claim]
+ddx bead queue top <id>
+ddx bead queue move <id> [--before OTHER | --after OTHER]
+ddx bead queue clear <id>
 ddx bead evidence add <id> [--kind K] [--body B] [--summary S] [--source SRC] [--actor A]
 ddx bead evidence list <id> [--json]
 ddx bead close <id>
@@ -230,6 +369,18 @@ ddx bead export [--stdout] [file]
 **Acceptance Criteria:**
 - Given ddx-server is running with beads, when an agent calls `ddx_bead_ready`, then it receives ready beads as structured JSON
 - Given an agent calls `ddx_show_bead` with an ID, then it receives the full bead including all fields (known and unknown)
+
+### US-023a: Operator Reorders Work Within Priority
+**As an** operator managing the ready queue
+**I want** to move a bead ahead of other beads with the same priority
+**So that** I can express immediate sequence without changing urgency or rewriting the core bead schema
+
+**Acceptance Criteria:**
+- Given two ready `P0` beads exist, when I run `ddx bead queue top <later-id>`, then `ddx bead ready --execution` lists `<later-id>` before the other `P0` bead
+- Given a `P1` bead has `queue-rank=0` and a `P0` bead has no `queue-rank`, when I run `ddx bead ready --execution`, then the `P0` bead remains before the `P1` bead
+- Given two beads with different priorities, when I run `ddx bead queue move <id> --before <other-id>`, then DDx returns an error explaining that queue moves are limited to one priority bucket
+- Given a ranked bead is blocked, superseded, on retry cooldown, `execution-eligible=false`, or an epic-only/container bead, then `ddx bead ready --execution` still excludes it
+- Given a ranked bead exists, when I run `ddx bead queue clear <id>`, then DDx removes `queue-rank` and the bead returns to the default priority/created/id ordering
 
 ### US-024: Operator Recovers From Partial JSONL Corruption
 **As a** repo operator

@@ -9,16 +9,18 @@ ddx:
 # Feature: DDx Server Web UI
 
 **ID:** FEAT-008
-**Status:** Complete
+**Status:** In Progress
 **Priority:** P1
 **Owner:** DDx Team
 
 ## Overview
 
-The DDx server (`ddx-server`) serves a web UI for browsing documents, beads,
-the document dependency graph, and DDx agent invocation activity. The UI is a
-SvelteKit application built with Svelte 5, embedded into the Go binary via `embed.FS`,
-and served alongside the MCP and HTTP API endpoints from a single process.
+The DDx server (`ddx-server`) serves a web UI for browsing artifacts, beads,
+the artifact dependency graph, and DDx run activity. Artifacts include markdown
+documents plus sidecar-identified media such as diagrams, wireframes, images,
+and PDFs. The UI is a SvelteKit application built with Svelte 5, embedded into
+the Go binary via `embed.FS`, and served alongside the MCP and HTTP API
+endpoints from a single process.
 
 `ddx-server` runs as a per-user host daemon (one instance per machine, see
 FEAT-002 and FEAT-020), so the same UI enumerates every project that the
@@ -32,15 +34,17 @@ Every page lists its required query or subscription by name for traceability.
 
 ## Problem Statement
 
-**Current situation:** DDx documents, beads, and the doc graph are only accessible via CLI commands or MCP tool calls. There's no visual way to browse the document library, see the dependency graph, check bead status, or review agent activity and execution evidence.
+**Current situation:** DDx artifacts, beads, and the artifact graph are only accessible via CLI commands or MCP tool calls. There's no visual way to browse the artifact library, see the dependency graph, check bead status, regenerate generated artifacts, or review layer-aware run evidence.
 
 **Pain points:**
 - CLI output for `ddx doc graph` is text-only — dependency graphs need visual rendering
 - Bead status and dependency trees are hard to grok in terminal output
-- DDx agent activity has no browsable interface
-- New team members can't quickly understand what documents exist or how they relate
+- DDx run activity has no browsable interface that preserves the `work` -> `try` -> `run` layers
+- Non-markdown artifacts have no type-aware browser preview, even when the graph knows their identity
+- Generated artifacts have no UI affordance for checking provenance or requesting regeneration
+- New team members can't quickly understand what artifacts exist or how they relate
 
-**Desired outcome:** A web dashboard served from the same `ddx-server` binary that already handles MCP and HTTP API. Developers open a browser, see their document library, dependency graph, bead board, and agent activity — all from one URL.
+**Desired outcome:** A web dashboard served from the same `ddx-server` binary that already handles MCP and HTTP API. Developers open a browser, see their artifact library, dependency graph, bead board, generated-artifact provenance, and DDx run activity — all from one URL.
 
 ## Architecture
 
@@ -66,6 +70,58 @@ redirects to `/nodes/:nodeId` using the ID returned by `GET /api/node`
 exposes a project picker populated from `GET /api/projects`; selecting a
 project swaps the `:projectId` segment in place. All GraphQL queries issued by the
 UI are bound to the selected project context.
+
+### Project Navigation Tabs
+
+Each `/nodes/:nodeId/projects/:projectId/...` page exposes the following
+project-scoped tabs in the global navigation, in this order:
+
+| Tab | Route segment | Purpose |
+|---|---|---|
+| Overview | (none) | Project home, recent activity, operator-prompt input (ADR-021) |
+| Beads | `beads` | Bead list / kanban / ready / detail (US-082*) |
+| Artifacts | `artifacts` | Artifact browser (US-080, US-081b, US-083) |
+| Graph | `graph` | Document dependency graph (US-081, US-081c) |
+| Runs | `runs` | Layer-aware run history with `work` / `try` / `run` chips, row expansion into the shared `work` / `try` / `run` run-detail tab strip, and re-queue (US-086b, US-086c) |
+| Workers | `workers` | Live + recent worker processes for this project (US-085b, US-086, US-086a) |
+| Personas | `personas` | Persona browser + role bindings (US-097) |
+| Plugins | `plugins` | Plugin registry + install/uninstall (US-098) |
+| Commits | `commits` | Project git commit log (US-093, FEAT-021) |
+| Efficacy | `efficacy` | Model efficacy + comparisons (US-096) |
+
+**Sessions and Executions are retired as top-level activity tabs**
+(Story 8). The unified Runs tab carries the shared layer-aware tab
+structure and inline row expansion that surface what those tabs used to
+show. The shared detail tabs are:
+
+- `work` rows: `overview`
+- `try` rows: `overview`, `prompt`, `response`, `tools`, `evidence`
+- `run` rows: `overview`, `prompt`, `response`, `session`, `tools`, `evidence`
+
+- `layer=run` rows expand to AgentSession transcript / billing / cached
+  tokens / stderr (the old Sessions detail).
+- `layer=try` rows expand to the `.ddx/executions/<attempt-id>/` bundle
+  metadata, check results, and verdict (the old Executions detail).
+- `layer=work` rows expand to queue inputs and child run links.
+
+**URL deprecation policy.** During the deprecation window, the legacy
+URLs respond with **302 redirects (NOT 301)** to the matching filtered
+Runs URL with all query params preserved, plus a `Sunset` response
+header that names the cutoff date for the redirects:
+
+| Legacy URL | Redirect target |
+|---|---|
+| `/sessions` | `/runs?layer=run` |
+| `/sessions#<id>` | `/runs?layer=run&session=<id>` |
+| `/executions[?bead=&verdict=&harness=&q=&after=]` | `/runs?layer=try` with the original query string preserved verbatim |
+| `/executions/[id]` | `/runs/[runId]?bundle=true` |
+
+302 (not 301) is intentional: bookmarks and external link aggregators
+should not cache the redirect permanently while we still own the legacy
+routes. The redirect response carries `Sunset: <RFC 9745 date>` and the
+project nav drops the Sessions/Executions entries once the redirects and
+the internal-link sweep land (`shellRoutes.ts`, `BeadDetail.svelte`,
+commits page, agent page, Workers detail).
 
 ### Build Pipeline
 
@@ -101,15 +157,33 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 
 ### Functional
 
-1. **Artifact browser, viewer, and editor**
-   - List documents by category (prompts, personas, patterns, templates, ADRs, SDs)
-   - Full-text search across document content and frontmatter
-   - View document content rendered as markdown with syntax highlighting
-   - Show `ddx:` frontmatter metadata (id, dependencies, staleness status)
+1. **Artifact browser, viewer, editor, and regeneration**
+   - List artifacts by category (prompts, personas, patterns, templates, ADRs,
+     SDs, diagrams, wireframes, generated images, PDFs)
+   - Full-text search across textual artifact content, sidecar metadata, and
+     markdown frontmatter
+   - View markdown artifacts rendered as markdown with syntax highlighting
+   - Render artifacts by `media_type`:
+     - `text/markdown`: markdown renderer with syntax-highlighted code blocks
+     - `image/svg+xml` with Mermaid provenance: sanitized inline SVG preview
+     - `application/vnd.excalidraw+json`: Excalidraw read-only embed
+     - `image/*`: inline image preview with metadata fallback
+     - `application/pdf`: embedded PDF preview with open-file fallback
+     - unknown or binary media: metadata panel plus open/download affordance
+   - Show `ddx:` frontmatter or sidecar `.ddx.yaml` metadata (id,
+     `media_type`, dependencies, `generated_by`, and staleness status)
    - Clickable dependency links — navigate upstream/downstream docs inline
    - **Editor**: in-browser markdown editing with save-to-disk (calls API to write file)
    - Sidebar showing document dependency tree for current doc
    - Staleness indicator per document (fresh/stale/missing-deps)
+   - Generated-artifact provenance indicator: show producing run id, prompt or
+     generator summary, and source-hash status when `generated_by` is present
+   - Generated-artifact staleness is artifact-local: a `generated_by.source_hash`
+     mismatch marks only the generated artifact stale and does not cascade like
+     `depends_on`
+   - Regenerate action for generated artifacts calls the `artifactRegenerate`
+     mutation, returns the new run id, and links directly to the produced run
+     detail and updated artifact
 
 2. **Document dependency graph**
    - Interactive visual graph (D3/Cytoscape) showing all document relationships
@@ -128,11 +202,11 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
    **Master-detail list view:**
    - Searchable list: full-text across title, description, acceptance, labels
    - Sortable columns: ID, title, status, priority, labels, owner, updated_at
-   - Filterable by status, priority, label, owner
+   - Filterable by status, priority, label, owner, and a `Needs review` lane
    - Click a bead to open detail panel (split pane or slide-over)
    - Detail shows: all fields, dependency tree, execution beads, agent sessions
    - Graph traversal: click a dependency → navigate to that bead's detail
-   - Drill-down into execution runs linked to the bead (shows pass/fail,
+   - Drill-down into run records linked to the bead (shows layer, pass/fail,
      logs, duration)
 
    **Kanban board view:**
@@ -163,13 +237,15 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
      to the document viewer with that artifact's content)
    - Parent bead link navigates to the parent's detail
    - Dependency links navigate to each dep's detail
-   - Execution runs link to the execution detail view (logs, results)
+   - Run records link to the layer-aware run detail view (logs, results)
    - Agent session links navigate to the agent log viewer for that session
 
    *Review and re-evaluation:*
    - "Review" action: side-by-side view of the bead's acceptance criteria
      vs the latest execution results and implementation diff. The user or
-     agent evaluates whether the work actually meets the spec.
+     agent evaluates whether the work actually meets the spec. This dispatches
+     the TD-033 structured evidence envelope in no-tool reviewer mode so the
+     reviewer reasons only over the assembled evidence.
    - "Re-review" action on closed beads: re-evaluates against current
      artifact state — did the governing spec change since the bead was
      closed? If so, flag as potentially stale.
@@ -178,8 +254,11 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 
    *Status and lifecycle:*
    - Re-open a closed bead (status → open) with a reason field
-   - Re-run: dispatch `ddx exec run` or `ddx agent run` against the bead's
-     linked execution definition (calls server API which delegates to CLI)
+   - Re-run bead work: dispatch `ddx try <bead>` through the server worker API,
+     then open the resulting `try` record under the layer-aware run history
+   - Run linked checks: when the bead references an execution definition,
+     dispatch that definition as project checks and show the resulting record
+     separately from bead re-run history
    - Claim / unclaim for agent coordination
    - Inline status transitions (open → in_progress → closed)
 
@@ -199,7 +278,62 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
    - Token usage summary (provider-native or DDx-observed, depending on source)
    - Auto-refresh on configurable interval (or subscription in v2)
 
-5. **Status dashboard**
+5. **Layer-aware run history and detail**
+   - List DDx run records from the unified substrate with explicit layer chips:
+     `work`, `try`, and `run`
+   - Filter by layer, status, harness, provider, model, bead id, artifact id,
+     and time range without introducing a run-type catalog beyond the three
+     layers
+   - Free-text search across bead id, bead title, and output excerpt; multi-
+     column sort on Started / Duration / Cost. Search/sort/filter primitives
+     are the shared Story 6 chip + sort-header + search-input components
+     (PRIMITIVE reuse — Runs has its own page model for live updates,
+     parent/child hierarchy, layer expansion, and re-queue affordances).
+     Story 7's virtualization wrapper is reused with a Runs-specific live
+     adapter when row counts exceed 1k.
+   - Inline row expansion is **layer-aware** and opens the shared tabbed
+     run-detail surface (replaces the retired Sessions and Executions
+     top-level activity tabs and uses the shared `work` / `try` / `run`
+     tab strip):
+     - `layer=work` row expands to queue inputs, selected beads, stop
+       condition, retry/defer decisions, and child try-attempt links in
+       chronological order. The detail panel exposes the `overview` tab only.
+     - `layer=try` row expands to bead id, base/result revisions, isolated
+       worktree path, merge/preserve outcome, checks, verdict, and child
+       layer-1 run links — sourced losslessly from the
+       `.ddx/executions/<attempt-id>/` bundle attached to the layer-2 record.
+       The detail panel exposes `overview`, `prompt`, `response`, `tools`,
+       and `evidence`.
+     - `layer=run` row expands to prompt/config summary, power bounds,
+       selected harness/provider/model, token + cached-token + cost +
+       duration signals, output, stderr, and evidence links — sourced
+       losslessly from the joined `AgentSession` row (FEAT-010 §"Layer-to-
+       substrate mapping for the Runs UI"). The detail panel exposes
+       `overview`, `prompt`, `response`, `session`, `tools`, and `evidence`.
+   - Drill-down links preserve hierarchy in both directions:
+     `work` -> `try` -> `run`, with breadcrumbs back to parent records
+   - Artifact-producing runs show `produces_artifact`; artifact pages link back
+     to the producing run and expose regeneration history
+   - **Re-queue affordances** (Story 8):
+     - `layer=try` rows show a `Re-queue` button when the originating bead is
+       open AND no try is currently active for that bead. The button opens a
+       confirmation dialog prefilled with the original config; the client
+       generates the `idempotencyKey` and sends it with the
+       `runRequeue` mutation (FEAT-010).
+     - `layer=run` rows show `Re-queue` only when prompt / harness / model are
+       replayable; re-queueing a successful run requires double-confirmation.
+     - `layer=work` rows show **`Start worker from this drain`** (different
+       label from "Re-queue"; same dispatch path) prefilled with the
+       original queue inputs, stop condition, selected beads, and harness /
+       profile from the original work run.
+     - Re-queue against a closed bead is disabled and surfaces a
+       "Reopen bead first" link.
+     - Every successful re-queue emits a `run_requeue` audit event on the
+       originating bead (schema: FEAT-010 §"Re-queue audit event schema").
+   - Layer-aware run views consume read-only GraphQL/HTTP state except for the
+     narrow `artifactRegenerate` and `runRequeue` mutations.
+
+6. **Status dashboard**
    - Summary cards: document count by type, bead counts by status, stale document count, recent agent activity
    - Quick links to ready beads, stale documents, recent agent activity
    - Project health indicators (library populated, config valid, beads active)
@@ -229,7 +363,7 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
      each progress event without re-fetching the full worker record. When the terminal
      phase event arrives, the stream closes and the card switches to a static completed state.
 
-6. **Epic execution view**
+7. **Epic execution view**
    - Lists open epics separately from single-ticket ready work
    - Shows epic branch name, epic worktree path, active child bead, and merge
      gate status
@@ -237,7 +371,7 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
    - Allows the user to inspect the final epic merge candidate and merge-gate
      results before the merge commit is created
 
-7. **Provider / Harness Dashboard**
+8. **Provider / Harness Dashboard**
 
    A dedicated page — separate from the status dashboard, agent log monitor,
    and worker progress view — that gives operators a clear picture of
@@ -291,10 +425,50 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
      response verbatim — useful for bug reports and operator audits
    - Time-window selector (7d / 30d / custom) scopes the historical usage table
 
-8. **Persona viewer**
+9. **Persona viewer**
    - Browse personas with descriptions and tags
    - See which roles each persona is bound to in project config
    - View full persona content rendered as markdown
+
+### Performance Contract: Artifact Listing
+
+The artifact listing view carries a provisional performance contract for design
+work. These budgets shape the current implementation, but the gating numbers
+stay provisional until the B7-C1 baseline measurement is recorded and published
+in the perf docs. Treat the values below as design-time budgets, not final
+thresholds.
+
+| Budget | Provisional contract | Revisit when |
+|---|---|---|
+| Initial load | First usable content within 2s on the reference fixture | Baseline measurement lands with different gating numbers |
+| Search/filter latency | Interactions settle within 200ms once the current list data is already loaded | Search becomes data-loading bound instead of DOM-bound |
+| Steady-state DOM rows | Default list view stays flat and non-virtualized at up to 500 visible artifact rows | The default state needs 500-1000 visible rows, more than 1000 visible rows, or sticky group headers |
+
+- Revisit the contract before shipping if the artifact listing design adds any
+  of the following:
+  - infinite scroll
+  - auto-prefetch
+  - 500-1000 visible DOM rows in the default list state
+  - more than 1000 visible DOM rows in the default list state
+  - sticky group headers
+- The default list view assumes a flat, non-virtualized DOM. If the design
+  changes that assumption, update this section and the TP-002 measurement
+  methodology together.
+- Story 5 is page-local unless we explicitly add server-side `groupBy`: the
+  browser groups only the loaded artifact edges. Story 5 owners should treat
+  any requirement for cross-page or corpus-wide grouping accuracy as the
+  trigger to move `groupBy` into the GraphQL resolver and make it server-side.
+- Story 6 search/filter stays server-side: any query that changes result
+  membership (`q`, `mediaType`, `staleness`, `phase`, `prefix`, `sort`) must
+  continue to round-trip through the resolver so pagination and bookmarks stay
+  correct. Story 6 owners should treat server-side filtering as mandatory, not
+  optional, for any corpus-wide search or filter UI.
+- Add server-side `groupBy` when group headers must reflect the full corpus,
+  grouping needs to stay correct across page boundaries, or the page-local
+  grouping pass can no longer represent the loaded set faithfully.
+- Add virtualization when the visible artifact list needs more than the flat
+  500-row DOM budget, or when scroll cost is dominated by DOM rendering rather
+  than data loading.
 
 ### Non-Functional
 
@@ -311,19 +485,63 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 **So that** I can quickly understand what documents exist and how they're organized
 
 **Acceptance Criteria:**
-- Given ddx-server is running, when I open `http://localhost:PORT`, then I see a dashboard with document counts by category
+- Given ddx-server is running, when I open `http://localhost:PORT`, then I am redirected to `/nodes/:nodeId` and see a dashboard with document/artifact counts by category
 - Given I click on "Personas", then I see a list of all persona documents with names and descriptions
 - Given I click on a persona, then I see its full content rendered as markdown
+- Given I press the browser Back button, then I return to the Personas list with my scroll position preserved
 
-### US-081: Developer Views Dependency Graph
+**E2E Test:** `artifacts.spec.ts` — full workflow: land on dashboard → navigate to personas → open persona → verify rendered content → navigate back
+
+### US-081: Developer Views and Navigates Dependency Graph
 **As a** developer checking document health
-**I want** to see a visual graph of document dependencies
-**So that** I can identify which documents are stale and what depends on what
+**I want** to see a visual graph of document dependencies I can interact with
+**So that** I can identify stale documents, understand relationships, and navigate directly to any doc from the graph
 
 **Acceptance Criteria:**
-- Given documents have `ddx:` frontmatter with dependencies, when I open the graph view, then I see nodes and edges representing the dependency relationships
-- Given some documents are stale, then stale nodes are visually highlighted (red/orange)
-- Given I click a node, then I navigate to that document's detail view
+- Given I open the graph view, then I see nodes and edges representing dependency relationships; the graph renders with correct dimensions on first paint (no collapsed/zero-size SVG)
+- Given documents are stale, then stale nodes are colored amber; documents with missing dependencies are colored red; fresh documents are green
+- Given I click a node, then I navigate to that document's artifact detail view without a full page reload
+- Given I press Back after clicking a node, then I return to the graph with the same zoom level and pan position restored
+- Given I pan or zoom the graph, then the viewport state persists across the Back/Forward navigation cycle
+- Given I apply a staleness filter chip (fresh / stale / missing), then only matching nodes and their connecting edges remain visible
+- Given I apply a type filter chip, then only nodes of that media type remain visible
+- Given I am on the graph page, then a `View documents` link is visible that navigates to the artifact browser filtered to markdown
+- Given I am on an artifact detail page, then a `View in Graph` link navigates to the graph with that node highlighted
+- Given the graph is rendered in either light or dark theme, then every document graph edge stroke and arrowhead maintains WCAG AA non-text contrast (>=3:1 against the canvas background) in both themes
+
+**E2E Test:** `graph.spec.ts` — full workflow: open graph → verify non-zero render → pan and zoom → click stale node → verify amber color → click node → verify artifact detail → Back → verify same viewport → apply staleness filter → verify node count changes → follow `View documents` link
+
+### US-081b: Developer Views and Regenerates Multi-Media Artifacts
+**As a** developer working with generated project artifacts
+**I want** the artifact browser to list all artifacts by type and render each
+  one by media type, exposing regeneration when provenance exists
+**So that** diagrams, images, PDFs, and markdown docs are all inspectable and
+  refreshable without leaving the UI
+
+**Acceptance Criteria:**
+- Given I navigate to `/nodes/:nodeId/projects/:projectId/artifacts`, then I see
+  a list of all project artifacts with category filter chips and a search bar
+- Given I filter by category (e.g. "images"), then only artifacts of that
+  media type are shown and the URL updates to reflect the filter
+- Given an artifact has `media_type: text/markdown`, when I open it, then I see
+  rendered markdown with syntax-highlighted code blocks
+- Given an artifact has Mermaid-generated SVG metadata, Excalidraw JSON,
+  `image/*`, or `application/pdf`, when I open it, then the viewer renders the
+  corresponding preview and still exposes the raw sidecar metadata
+- Given an artifact's media type is unknown or binary-only, then the viewer
+  shows an explicit metadata-only fallback with an open/download affordance
+- Given an artifact has `generated_by`, then I see the producing run id,
+  generator/prompt summary, source-hash status, and a `Regenerate` action
+- Given I click `Regenerate`, then the UI calls `artifactRegenerate`, shows the
+  returned run id, and provides a link to both the layer-aware run detail and
+  the updated artifact — I can follow either link without losing my place
+- Given `generated_by.source_hash` no longer matches, then only the generated
+  artifact is marked stale; downstream `depends_on` staleness does not cascade
+  from provenance alone
+- Given I navigate to `/documents`, then I am redirected to `/artifacts` with a
+  `mediaType=text/markdown` filter pre-applied
+
+**E2E Test:** `artifacts.spec.ts` — full workflow: open artifacts list → filter by category → open artifact → verify media renderer → open provenance panel → click Regenerate → verify run link → follow link to run detail → navigate back to artifact → navigate back to list
 
 ### US-082: Developer Monitors Bead Status on Kanban Board
 **As a** developer tracking work items
@@ -333,11 +551,16 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 **Acceptance Criteria:**
 - Given beads exist, when I open the board view, then I see columns for
   open, in_progress, and closed with cards sorted by priority
-- Given beads have dependencies, then blocking/blocked relationships are
-  visually indicated (dimmed cards, connector lines, or grouping)
+- Given beads have dependencies, then dependency relationships are visually
+  indicated (dimmed cards, connector lines, or grouping)
 - Given I drag a card to a new column, then the bead status updates via API
+  and the card visually moves without a page reload
 - Given I click a card, then a detail panel opens showing description,
   acceptance criteria, execution runs, and the dependency graph
+- Given I close the detail panel, then I return to the board with my scroll
+  position and filter state intact
+
+**E2E Test:** `beads.spec.ts` — full workflow: open beads board → verify columns and priority sort → drag card to new column → verify status updated → open detail panel → verify all fields → close panel → verify board state preserved
 
 ### US-082b: Developer Searches and Traverses Beads
 **As a** developer investigating a work item
@@ -348,9 +571,13 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 - Given I type in the search bar, then results filter instantly (client-side,
   no server round-trip) across title, description, acceptance, and labels
 - Given I'm viewing a bead's detail, when I click a dependency link, then I
-  navigate to that bead's detail
+  navigate to that bead's detail without a full page reload
 - Given a bead has linked execution runs, then I see their pass/fail status,
   duration, and can expand to see logs
+- Given I navigate via a dependency link, then the browser Back button returns
+  me to the originating bead's detail
+
+**E2E Test:** `beads.spec.ts` — full workflow: type search term → verify instant filter → open bead detail → click dependency link → verify navigation → expand run log → press Back → verify return to originating bead
 
 ### US-082c: Developer Views Bead Execution Evidence
 **As a** developer evaluating whether a bead is truly done
@@ -364,6 +591,10 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 - Given I click a run, then I see structured results and raw log output
 - Given a bead has linked agent activity, then I see runtime summaries and any
   available native session references
+- Given I expand a run and then click back, then the bead detail is still
+  open showing the same run list
+
+**E2E Test:** `beads.spec.ts` — full workflow: open bead with runs → verify run list fields → click run → verify structured results and logs → press Back → verify bead detail still showing run list
 
 ### US-082d: Supervisor Reviews Bead Against Governing Artifact
 **As a** supervisor evaluating completed work
@@ -379,21 +610,32 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
   drift warning badge is shown
 - Given I determine the work is insufficient, when I click "Re-open" and
   provide a reason, then the bead status returns to open with the reason
-  recorded
+  recorded and the bead appears in the open column immediately
+- Given I re-open a bead, then the reason is visible in the bead's history
 
-### US-082e: Supervisor Re-runs Execution from Bead Detail
+**E2E Test:** `beads.spec.ts` — full workflow: open closed bead → click Review → verify AC and results side-by-side → verify drift badge when spec changed → click Re-open with reason → verify bead is open with reason recorded → verify bead appears in open column
+
+### US-082e: Supervisor Re-runs Bead Work from Bead Detail
 **As a** supervisor who wants fresh evidence
-**I want** to re-run an execution or agent invocation directly from the bead
-  detail
+**I want** to re-run bead work directly from the bead detail
 **So that** I can verify the implementation still works after spec changes
 
 **Acceptance Criteria:**
-- Given a bead has a linked execution definition, when I click "Re-run", then
-  the execution is dispatched via the server API
-- Given the run completes, then the result appears in the bead's execution
-  list and the UI refreshes
+- Given I click "Re-run bead", then the UI dispatches `ddx try <bead>` through
+  the server worker API; it does not dispatch `ddx run` directly for bead work
+- Given the re-run is dispatched, then a new worker card appears in the Workers
+  view and a pending try record appears in the bead's run list within 1s
+- Given the try completes, then the result appears in the bead's run list with
+  layer `try`, its child layer-1 `run` records, and the UI refreshes without a
+  manual reload
+- Given a bead has a linked execution definition and I click "Run linked
+  checks", then that definition is dispatched as project checks and displayed
+  separately from bead re-run history
 - Given I want to run an agent review, when I click "Agent review", then
-  an agent session is dispatched with the bead's context as the prompt
+  an agent session is dispatched in no-tool reviewer mode with the bead's
+  context assembled per FEAT-022 / TD-033
+
+**E2E Test:** `beads.spec.ts` — full workflow: open bead detail → click Re-run → verify worker appears in Workers view → verify pending try record in run list → wait for completion → verify try + child run records appear → click try record → verify layer-aware detail
 
 ### US-082f: Developer Navigates from Bead to Related Artifacts
 **As a** developer exploring a work item
@@ -408,6 +650,23 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
   to the parent bead's detail
 - Given a bead has execution runs, when I click a run, then I navigate to
   the execution detail view with logs and structured results
+- Given I followed any of these links, then the browser Back button returns
+  me to the originating bead's detail at the same scroll position
+
+**E2E Test:** `beads.spec.ts` — full workflow: open bead with spec-id and parent → click spec link → verify document viewer → press Back → click parent link → verify parent detail → press Back → click run → verify run detail → press Back → verify return to bead detail
+
+### US-082h: Operator Resolves Beads in the Needs Review Lane
+**As an** operator triaging ambiguous work
+**I want** to filter beads that need human review and resolve them from bead detail
+**So that** I can route work to retry, split, obsolete, or defer without losing context
+
+**Acceptance Criteria:**
+- Given a bead is `status=proposed`, when I choose the `Needs review` filter, then the Beads list shows only beads awaiting operator decision and excludes ordinary open beads
+- Given I open a proposed bead, then the detail panel shows a dedicated review-resolution panel with the human-review metadata: reason, since, source, suggested action, and summary
+- Given I choose retry, split, obsolete, or defer, then I must enter notes and the decision is recorded in the bead history
+- Given I resolve the bead, then it leaves the `Needs review` filter and the operator decision is visible in the bead history
+
+**E2E Test:** `beads.spec.ts` — full workflow: open bead list → apply Needs review filter → verify proposed-only results → open proposed bead → verify review-resolution panel fields → choose a resolution with notes → verify history entry and status update
 
 ### US-083: Developer Edits Document in Browser
 **As a** developer fixing a stale document
@@ -418,6 +677,9 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 - Given I'm viewing a document, when I click "Edit", then I see a markdown editor with the current content
 - Given I make changes and click "Save", then the file is written to disk via the API
 - Given the save succeeds, then the rendered view updates and staleness is rechecked
+- Given I navigate away without saving, then the UI warns me about unsaved changes
+
+**E2E Test:** `artifacts.spec.ts` — full workflow: open markdown artifact → click Edit → modify content → click Save → verify rendered view updated → verify staleness rechecked → open artifact again in editor → navigate away → verify unsaved-changes warning
 
 ### US-084: Developer Searches Across All Documents
 **As a** developer looking for how something is documented
@@ -428,6 +690,9 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 - Given I type in the search bar, then results appear from all document types
 - Given results are shown, then I see matching snippets with the search term highlighted
 - Given I click a result, then I navigate to that document's detail view
+- Given I press Back, then I return to the search results with my query intact
+
+**E2E Test:** `artifacts.spec.ts` — full workflow: type search term → verify results with highlighted snippets → click result → verify document detail → press Back → verify search results still showing same query
 
 ### US-085: Developer Creates and Manages Beads in the UI
 **As a** developer triaging work
@@ -436,9 +701,12 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 
 **Acceptance Criteria:**
 - Given I click "New Bead", then I see a form with title, type, priority, labels, description, acceptance
-- Given I submit the form, then a bead is created via the API and appears in the list
+- Given I submit the form, then a bead is created via the API and appears in the list immediately without a page reload
 - Given I click a bead's status, then I can transition it (open → in_progress → closed)
+- Given I transition a bead's status, then the change is reflected in the list and board views without a reload
 - Given I'm viewing a bead, then I can add/remove dependencies by selecting other beads
+
+**E2E Test:** `beads.spec.ts` — full workflow: click New Bead → fill form → submit → verify bead appears in list → click status → transition to in_progress → verify list updated → open bead → add dependency → verify dependency link visible
 
 ### US-085b: Operator Tracks Live Worker Progress from Status Dashboard
 **As an** operator supervising a running execute-loop
@@ -461,6 +729,8 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 - Given I expand a worker card for a completed attempt, then I see a link to
   the execution evidence bundle for that attempt
 
+**E2E Test:** `workers.spec.ts` — full workflow: open workers view with a running worker → verify phase badge and elapsed time → observe badge transition via subscription → expand card → verify phases timeline → wait for terminal phase → verify card stops updating → follow evidence link
+
 ### US-087: Operator Inspects Provider Availability and Routing Signals
 **As an** operator about to queue a batch of agent work
 **I want** to see configured providers with their availability, auth state,
@@ -476,6 +746,10 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
   signal snapshot with source attribution and freshness timestamp
 - Given I click the harness link in the agent log monitor for an invocation,
   then I navigate to that harness's detail in the Provider Dashboard
+- Given I navigate back from the provider detail, then I return to the provider
+  list with the same sort and filter state
+
+**E2E Test:** `providers.spec.ts` — full workflow (using fixture scenarios): open provider list → verify availability/auth/quota badges per fixture scenario → click row → verify detail panel → hover unknown badge → verify tooltip text → click harness link from agent log → verify navigation to provider detail → navigate back
 
 ### US-088: Operator Reviews Provider Utilization and Burn Rate
 **As an** operator tracking subscription usage
@@ -495,6 +769,8 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 - Given I want to share a provider's signal state with a colleague, then I can
   use "Copy JSON" to get the raw API response for the selected harness
 
+**E2E Test:** `providers.spec.ts` — full workflow (using fixture scenarios): open provider detail → verify 7d/30d usage tables → verify `—` for missing values → verify burn estimate row → click Copy JSON → verify clipboard contents match API response → change time window → verify table updates
+
 ### US-088b: Operator Distinguishes Source Types in Provider Detail
 **As an** operator debugging a routing decision
 **I want** to know whether each signal field came from the provider directly,
@@ -511,6 +787,8 @@ During development, SvelteKit's dev server proxies `/graphql` to the running Go 
 - Given I hover a `?` or "unknown" badge, then a tooltip explains why the
   value is unavailable (e.g., "no stable non-PTY quota source confirmed")
 
+**E2E Test:** `providers.spec.ts` — full workflow (using fixture scenarios 2 and 5): open provider detail → find provider-reported field → verify badge label → find DDx-estimated field → verify badge → hover `?` badge → verify tooltip text matches expected explanation
+
 ### US-086: Developer Monitors Agent Activity in Real Time
 **As a** developer running agents against my project
 **I want** to see agent invocations as they happen with routing metadata and
@@ -526,6 +804,114 @@ provider logs
 - Given I filter by harness, then only invocations for that harness are shown
 - Given I look at the summary, then I see total tokens consumed by harness and
   by day where a signal source exists
+- Given I click the harness name in an invocation row, then I navigate to that
+  harness's detail in the Provider Dashboard
+
+**E2E Test:** `workers.spec.ts` — full workflow: open agent log view → verify invocations sorted by time → click invocation → verify metadata and session references → apply harness filter → verify filtered list → click harness name → verify navigation to Provider Dashboard
+
+### US-086b: Operator Drills Through Work, Try, and Run Evidence
+**As an** operator auditing queue-drain behavior
+**I want** run history to preserve the `work` -> `try` -> `run` hierarchy
+**So that** I can distinguish queue orchestration, bead attempts, and single
+  agent invocations without flattening them into one ambiguous list
+
+**Acceptance Criteria:**
+- Given I navigate to `/nodes/:nodeId/projects/:projectId/runs`, then I see
+  run records for the project with a layer badge on each (`work`, `try`, or `run`)
+- Given I filter by layer `work`, then only work records are shown and the URL
+  reflects the filter
+- Given I click a `work` record, then I navigate to its detail showing queue
+  inputs, selected beads, stop condition, child try attempts in order, and
+  the `overview` tab
+- Given I click a child `try` record, then I navigate to its detail showing
+  bead id, base/result revisions, worktree path, merge or preserve outcome,
+  checks, child layer-1 run records, and the `overview` / `prompt` /
+  `response` / `tools` / `evidence` tabs
+- Given I click a layer-1 `run` record, then I navigate to its detail showing
+  prompt/config summary, power bounds, selected harness/provider/model,
+  duration, token and cost signals, output, evidence links, and the
+  `overview` / `prompt` / `response` / `session` / `tools` / `evidence`
+  tabs
+- Given I open the Evidence tab on a `try` or `run` detail, then whitelisted
+  bundle files render inline and each file exposes a Download link to
+  `/api/runs/:id/bundle?path=...`
+- Given I open a canonical project-scoped run detail, then DDx records a
+  `run_detail_view` audit event on the originating bead when the run is
+  visible through project membership; the event body captures the run id,
+  layer, and project id
+- Given I am on any run detail, then breadcrumb navigation is visible and
+  pressing Back takes me to the parent record without a full page reload
+- Given a run produced an artifact, then the run detail links to that artifact;
+  navigating to the artifact shows a "Produced by run" link back to this run
+- Given I filter the run history, then available layer filters are exactly
+  `work`, `try`, and `run`; no other run type labels appear
+
+**E2E Test:** `runs.spec.ts` and `runs-evidence.spec.ts` — full workflow: navigate to project runs → filter by layer `work` → click work record → verify fields and child tries → click try → verify fields and child runs → click layer-1 run → verify all fields → follow evidence link → press Back through breadcrumbs to run list → verify filter state restored; open Evidence tab → verify inline view and Download link
+
+### US-086c: Operator Re-queues a Run from the Runs Tab
+**As an** operator who wants fresh evidence on an existing bead or to
+  restart a queue drain
+**I want** to re-queue a `try` or `run` row, and to start a new worker
+  from a `work` row, directly from the Runs tab
+**So that** I do not have to leave the UI to dispatch follow-up work
+
+**Acceptance Criteria:**
+- Given I am on a `layer=try` row whose originating bead is open and has
+  no active try, then a `Re-queue` button is visible. Clicking it opens a
+  confirmation dialog prefilled with the original `(bead, harness, model)`
+  config; the client generates an `idempotencyKey` and submits it with the
+  `runRequeue` mutation (FEAT-010); on success the originating bead is
+  reopened and a `run_requeue` audit event appears on the bead
+- Given I am on a `layer=run` row with replayable `(prompt, harness,
+  model)`, then `Re-queue` is visible. If the run terminated with
+  success, the dialog requires explicit double-confirmation
+- Given I am on a `layer=work` row, then a **`Start worker from this
+  drain`** action is visible (instead of `Re-queue`). Confirming it
+  dispatches a new worker prefilled with the original queue inputs, stop
+  condition, selected beads, and harness/profile
+- Given the originating bead is closed, then the `Re-queue` button is
+  disabled and a "Reopen bead first" link is shown in its place
+- Given a duplicate submission (double-click race or accidental retry)
+  arrives with the same `idempotencyKey`, then the second response
+  carries `deduplicated=true`, the bead is reopened only once, and only
+  one `run_requeue` audit event is appended
+
+**E2E Test:** `runs.spec.ts` — full workflow: open Runs tab → click try-row Re-queue → verify confirmation dialog with prefilled config → confirm → verify originating bead reopens and audit event appears → re-click Re-queue (race) → verify single audit event and `deduplicated=true` response → switch to closed-bead row → verify Re-queue disabled with "Reopen bead first" link → switch to layer=work row → verify `Start worker from this drain` action prefills queue inputs → confirm → verify new worker appears in Workers tab
+
+### US-081c: Developer Repairs Graph Integrity Issues from the UI
+**As a** developer maintaining a healthy document graph
+**I want** to repair known integrity issues (missing dependencies, duplicate IDs)
+  directly from the graph view
+**So that** I don't have to hand-edit YAML files to clear issues the UI already
+  understands
+
+**Acceptance Criteria:**
+- Given IntegrityPanel shows issues, when I expand an issue, then I see the
+  proposed change (diff-style: which file, which key, old value → new value)
+  alongside the existing "Copy" affordances
+- Given an issue is auto-repairable (missing dep removal, duplicate ID rename
+  for an unambiguous choice), then a `Apply fix` button is visible for that
+  issue; non-repairable issues (parse errors, cycles, ambiguous duplicates,
+  missing required roots with no content) show a `Cannot auto-repair` label
+  with a tooltip explaining why
+- Given I click `Apply fix`, then the server validates: path is within the
+  project, the issue still matches the current file hash, and the structured
+  YAML/frontmatter edit is safe to apply; on success, the file is written and
+  the graph reloads showing the resolved or changed state
+- Given validation fails (stale issue, dirty/unwritable file, invalid YAML,
+  path traversal, generated-file guard), then an inline error banner names the
+  exact failure and the file is not modified
+- Given the fix resolves the issue, then the issue disappears from
+  IntegrityPanel without a manual reload; if the fix creates a new secondary
+  issue, the new issue appears immediately in the panel
+- Given I repair duplicate IDs and the chosen file has downstream dependents,
+  then the panel warns "N files reference this ID — they will be updated" before
+  I confirm (cascade-aware, not just single-file)
+- Given concurrent repairs are in-flight, then the second apply request returns
+  a 409 Conflict; the UI surfaces "Another repair is in progress — try again"
+  without a broken state
+
+**E2E Test:** `graph.spec.ts` — full workflow: open graph → expand auto-repairable issue → verify diff preview → click Apply fix → verify file written + issue removed + graph reloads → expand non-repairable issue → verify Cannot auto-repair label + tooltip → introduce stale-issue scenario → click Apply fix → verify error banner + file unchanged
 
 ### US-081a: Developer Follows Intra-Repo Markdown Links
 **As a** developer reading one doc and referenced by another
@@ -547,6 +933,8 @@ provider logs
   NOT navigate away from the UI
 - Given a link points to an anchor on the same doc (`#section-id`), when I
   click it, then the page scrolls to that anchor without changing the route
+
+**E2E Test:** `artifacts.spec.ts` — full workflow: open doc with intra-repo link → click relative link → verify same-tab navigation → press Back → verify scroll position → click external link → verify new tab → click anchor link → verify scroll to anchor
 
 ### US-082g: Developer Sorts and Filters the Beads List
 **As a** developer triaging the backlog
@@ -573,6 +961,8 @@ provider logs
 - Given I reload a URL with filter + sort params, then the same view is
   restored without interaction
 
+**E2E Test:** `beads.spec.ts` — full workflow: open list → click sort header → verify sort → click status filter → verify URL and filtered results → add second filter → verify AND composition → type in search → verify narrowed results → click label chip → verify filter added → remove chip → verify full list → copy URL with filters → reload → verify same view
+
 ### US-083a: Developer Toggles WYSIWYG vs Plain-Markdown Editor
 **As a** developer editing a doc in the browser
 **I want** to choose between a rich preview-while-editing view and a
@@ -595,6 +985,8 @@ provider logs
   `documentWrite` with the raw markdown; the render view refreshes; the
   doc's "Updated" timestamp advances
 
+**E2E Test:** `artifacts.spec.ts` — full workflow: open markdown artifact in editor (WYSIWYG) → make edit → toggle to Plain → verify raw markdown with frontmatter and edits preserved → edit frontmatter in Plain → toggle back to WYSIWYG → verify renders correctly → save → verify render updated and timestamp advanced
+
 ### US-085c: Developer Deletes (Soft-Closes) a Bead from the UI
 **As a** developer cleaning up mis-filed beads
 **I want** to delete a bead from the UI
@@ -616,6 +1008,8 @@ provider logs
   the confirmation modal surfaces the child count and requires
   additional `--cascade` checkbox opt-in; canceled by default
 
+**E2E Test:** `beads.spec.ts` — full workflow: open bead detail → click Delete → verify modal shows ID and title → cancel → verify bead unchanged and focus returned → click Delete again → type bead ID → confirm → verify bead status closed → verify redirect to beads list → verify bead not in open list
+
 ### US-086a: Developer Sees Streaming Agent Response Text
 **As a** developer watching an agent work on a bead
 **I want** to see the agent's response content stream in as it's produced
@@ -635,6 +1029,8 @@ provider logs
 - Given the subscription disconnects mid-stream, then a banner shows
   "Reconnecting…" and the panel auto-resumes on reconnect without losing
   the text received so far
+
+**E2E Test:** `workers.spec.ts` — full workflow: open running worker detail → verify live response panel updates → verify tool call card rendered → wait for terminal phase → verify panel frozen with timestamp → verify evidence bundle link → simulate disconnect → verify reconnecting banner → verify text preserved after reconnect
 
 ### US-095: Operator Initiates Work from the UI
 **As an** operator managing a project without context-switching to a
@@ -662,6 +1058,8 @@ provider logs
   no spec tree, no check suite), then the action is disabled with a
   tooltip explaining the prerequisite
 
+**E2E Test:** `actions.spec.ts` — full workflow: open project view → verify Actions panel → click Drain queue → verify confirmation dialog with bead count → confirm → verify worker appears in Workers list within 1s → verify button becomes worker link → click disabled action → verify tooltip explains prerequisite
+
 ### US-096: Operator Views Model Efficacy and Runs Comparisons
 **As an** operator pursuing the cost-tiered throughput-per-dollar goal
 **I want** to see per-model completion rates, cost, and latency, and run
@@ -678,7 +1076,7 @@ provider logs
 - Given I filter by tier / label / spec-id, then the table refilters
   live; URL encodes the filter for bookmarking
 - Given I click `Compare`, then a dialog lets me pick N `(model, prompt)`
-  pairs; on submit, DDx dispatches `ddx agent compare` and the resulting
+  pairs; on submit, DDx dispatches the `compare-prompts` workflow and the resulting
   `ComparisonRecord` appears under `Comparisons` with per-arm outputs,
   diffs, and (if configured) grader scores
 - Given a model's completion rate crosses the configured adaptive-min-tier
@@ -687,6 +1085,8 @@ provider logs
 - Given I click a row, then a detail panel shows the last 10 attempts
   with per-attempt outcome, evidence links, and links to the execution
   bundles; click-through to the bead that originated each attempt
+
+**E2E Test:** `actions.spec.ts` — full workflow: open Efficacy view → verify model table with all columns → apply label filter → verify URL encodes filter → hover warning badge → verify tooltip → click row → verify detail panel with attempts → click bead link → verify navigation to bead detail → press Back → verify detail panel still open
 
 ### US-097: Developer Browses and Binds Personas
 **As a** developer configuring a project for consistent agent behavior
@@ -708,6 +1108,10 @@ provider logs
 - Given a role is already bound in the selected project, then the form
   warns "This will replace the existing binding: `X`" and requires
   confirmation before overwriting
+- Given I complete a binding, then the persona detail shows the new
+  binding immediately without a page reload
+
+**E2E Test:** `personas.spec.ts` — full workflow: open Personas page → verify cards with name/tags/description → click persona → verify markdown render and current bindings → click Bind to role → fill form → submit → verify binding appears on persona detail → bind same role again → verify warning and confirmation required
 
 ### US-098: Operator Browses and Installs Plugins
 **As an** operator setting up DDx for a new project
@@ -724,11 +1128,15 @@ provider logs
   modal shows the install scope (global vs project) and required disk
   space; on confirm, the UI triggers `ddx install <name>` server-side
   and streams install progress via a worker-backed dispatch
+- Given installation completes, then the plugin card updates to
+  "installed" status without a page reload
 - Given a plugin is installed, then I can view its manifest
   (package.yaml), its skills, its prompts, and its templates from the
   same card; an `Uninstall` action with confirmation is present
 - Given a plugin has an available update, then the card shows both
   current and target versions and an `Update` action
+
+**E2E Test:** `plugins.spec.ts` — full workflow: open Plugins page → verify registry listing with status badges → click available plugin → click Install → verify modal with scope and disk space → confirm → observe install progress → verify status updated to installed → view manifest/skills/prompts → click Uninstall → confirm → verify removed
 
 ### US-099: Developer Uses a Keyboard Command Palette
 **As a** developer who lives on the keyboard
@@ -751,6 +1159,8 @@ provider logs
 - Given I'm on a deep URL and open the palette, then navigation results
   preserve the current project/node context (relative paths, not
   absolute)
+
+**E2E Test:** `command-palette.spec.ts` — full workflow: press Cmd+K → verify palette opens with focus → type document title → verify result appears → press Enter → verify navigation and palette closed → reopen → press Escape → verify palette closed → navigate to bead detail → press Cmd+K → verify bead-specific actions at top of list → trigger Claim action → verify bead claimed
 
 ## Provider Dashboard: Playwright Fixture Scenarios
 
@@ -905,13 +1315,18 @@ ddx/
                 │   │   │               ├── +page.svelte # project dashboard
                 │   │   │               ├── beads/
                 │   │   │               │   └── +page.svelte      # beads list (query: beads)
+                │   │   │               ├── artifacts/
+                │   │   │               │   └── +page.svelte      # artifacts list/viewer (query: artifacts)
                 │   │   │               ├── documents/
-                │   │   │               │   └── +page.svelte      # documents list (query: documents)
+                │   │   │               │   └── +page.svelte      # legacy markdown document route
+                │   │   │               ├── runs/
+                │   │   │               │   └── +page.svelte      # layer-aware run history (query: runs)
                 │   │   │               └── graph/
                 │   │   │                   └── +page.svelte      # dependency graph (query: docGraph)
                 │   │   └── graphql/
                 │   │       ├── beads.gql
-                │   │       ├── documents.gql
+                │   │       ├── artifacts.gql
+                │   │       ├── runs.gql
                 │   │       └── workers.gql
                 │   └── components/
                 └── build/         # SvelteKit output (embedded into Go)
@@ -922,11 +1337,20 @@ ddx/
 - FEAT-002 (DDx server HTTP/MCP API) — the web UI consumes GraphQL at `/graphql`;
   REST endpoints stay frozen for CLI/MCP compatibility
 - FEAT-004 (Beads) — for bead board; queries `beads` and mutations `beadCreate`, `beadUpdate`, `beadClaim`
-- FEAT-007 (Doc graph) — for dependency graph visualization; queries `docGraph`
+- FEAT-005 (Artifacts) — for artifact identity, sidecar metadata,
+  `media_type`, and `generated_by`
+- FEAT-007 (Doc graph) — for dependency graph visualization; queries
+  `docGraph` with artifact nodes and provenance edges
 - FEAT-006 (Agent service) — for agent activity and invocation detail
+- FEAT-010 (Task Execution) — for unified `work` / `try` / `run` records and the
+  narrow `artifactRegenerate` write surface
 - FEAT-014 (Agent Usage Awareness and Routing Signals) — governs the routing
   signal model consumed by the provider dashboard
 - FEAT-021 (Dashboard UI) — defines URL scheme and navigation patterns
+- ADR-021 (Operator-Prompt Beads as the Web Write Path) — trust contract,
+  audit-as-bead, multi-node delegation, prompt-injection threat model, and
+  allowed-mutation scope for the Story 15 operator-prompt input on the
+  project home page
 - SvelteKit, Svelte 5, Bun, graphql-request, graphql-ws, bits-ui, lucide-svelte, Tailwind
 - Playwright for testing (no MSW)
 - Go embed.FS, Chi or net/http, gqlgen
@@ -943,18 +1367,26 @@ ddx/
 ### Unit Tests
 
 - Component tests for beads list, filter chips, detail panel
-- Page-level tests for documents viewer, graph page, worker detail
+- Page-level tests for artifact viewer, graph page, worker detail, run detail
 - Store tests for node context, project selection, dark mode
 
 ### E2E Tests (Playwright)
 
-All tests run against the built SvelteKit app served by `ddx-server`.
+All tests run against the built SvelteKit app served by `ddx-server`. Each
+spec file covers the complete end-to-end workflow for its user stories —
+every test exercises the full flow from entry point through actions to
+outcome, including navigation back.
 
-- **navigation.spec.ts** — `/` redirect to `/nodes/:nodeId`, project picker
-- **beads.spec.ts** — list, filter, search, detail, claim/unclaim, mutations
-- **documents.spec.ts** — list, markdown render, edit-in-place, search
-- **graph.spec.ts** — graph visualization, drag/zoom, tooltip interaction
-- **workers.spec.ts** — worker list, live log via subscription, phase tracking
-- **providers.spec.ts** — provider dashboard, filter, detail panel, copy JSON
-
-Each test maps to a specific user story and acceptance criteria.
+| E2E Spec | User Stories | Workflow Covered |
+|---|---|---|
+| `navigation.spec.ts` | US-094 (via FEAT-021) | Root redirect, project picker, node identity in nav bar |
+| `artifacts.spec.ts` | US-080, US-081b, US-083, US-083a, US-084, US-081a | Browse library → open artifact → render by media type → edit + save → search → follow intra-repo links |
+| `graph.spec.ts` | US-081, US-081c | Open graph → pan/zoom → identify stale nodes → click node → navigate back; graph cross-link from artifact detail; integrity issue expand → apply fix → verify graph reload; non-repairable issue tooltip; stale-issue error |
+| `beads.spec.ts` | US-082, US-082b, US-082c, US-082d, US-082e, US-082f, US-082g, US-082h, US-085, US-085b, US-085c | Board view, search/filter, execution evidence, review vs spec, re-run, navigate to artifacts, sort/filter with URL state, needs review lane resolution, create/manage, worker progress, delete |
+| `workers.spec.ts` | US-085b, US-086, US-086a | Worker list, live phase updates via subscription, streaming response text with tool calls |
+| `runs.spec.ts` | US-086b, US-086c | Navigate to runs → filter by layer → drill work→try→run → verify fields at each level → breadcrumb back to list; re-queue try/run/work flows incl. idempotency dedupe and closed-bead block |
+| `providers.spec.ts` | US-087, US-088, US-088b | Provider list with fixture scenarios → detail panel → unknown semantics → Copy JSON → harness cross-link |
+| `actions.spec.ts` | US-095, US-096 | Initiate work from UI → dispatch worker → efficacy table → model comparison |
+| `personas.spec.ts` | US-097 | Browse personas → view detail → bind to role → handle conflict |
+| `plugins.spec.ts` | US-098 | Browse registry → install → observe progress → view manifest → uninstall |
+| `command-palette.spec.ts` | US-099 | Open palette → search → navigate → context-aware bead actions |

@@ -401,8 +401,8 @@ MCP tools: `ddx_provider_list`, `ddx_provider_show` — host+user global; not pr
 - FEAT-004 (Beads) — bead endpoints read from bead store
 - FEAT-010 (Task Execution) — execution endpoints read definitions and immutable run history
 - FEAT-007 (Doc Graph) — graph/stale endpoints use doc graph engine
-- FEAT-006 (Agent Service) — agent activity endpoints read DDx invocation
-  metadata and embedded telemetry references; execute-bead attempt artifacts
+- FEAT-006 (Fizeau Execution Boundary) — task execution activity endpoints read
+  DDx invocation metadata and opaque Fizeau telemetry references; `ddx try` artifacts
   live in each project's `.ddx/executions/<attempt-id>/` bundle
 - FEAT-008 (Web UI) — embedded SPA served at `/`; provider dashboard view consumes `/api/providers`
 - FEAT-014 (Agent Usage Awareness and Routing Signals) — provider availability

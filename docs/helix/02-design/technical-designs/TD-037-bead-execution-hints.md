@@ -26,8 +26,8 @@ does not let beads choose providers, harnesses, or concrete models.
 
 - Beads preserve unknown custom fields in `Extra`, but `ddx try` does not read
   arbitrary routing custom fields.
-- `ddx try` accepts CLI routing flags such as `--profile`, `--min-power`,
-  `--max-power`, `--harness`, `--provider`, `--model`, and `--model-ref`.
+- `ddx try` accepts CLI execution constraints: abstract power bounds plus raw
+  passthrough strings for profile, harness, provider, model, and model-ref.
 - When no routing flags are supplied and no project routing config exists,
   `ddx try` calls `escalation.InferTier(bead)`.
 - `InferTier` treats labels `tier:smart`, `tier:standard`, and `tier:cheap` as

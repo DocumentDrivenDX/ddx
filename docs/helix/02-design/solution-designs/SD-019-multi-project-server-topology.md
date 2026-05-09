@@ -73,8 +73,9 @@ Three paths contribute entries:
 
 1. **Server startup** registers the project at the server's own working
    directory.
-2. **CLI auto-registration** — `ddx agent`, `ddx bead`, and `ddx doc`
-   subcommand groups fire a fire-and-forget `POST /api/projects/register` in
+2. **CLI auto-registration** — `ddx run`, `ddx try`, `ddx work`, `ddx bead`,
+   and `ddx doc` subcommand groups fire a fire-and-forget
+   `POST /api/projects/register` in
    `PersistentPreRunE` so any project the user touches on the machine shows
    up in the host+user registry without manual configuration (FEAT-020).
 3. **Optional config seed** — a `server.projects` block in config may list

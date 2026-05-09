@@ -49,14 +49,14 @@ named provider profile — is locking in tomorrow's drift.
 
 ## DDx Implication
 
-DDx treats the agent service as a routing layer, not a model wrapper.
-`ddx agent run --harness=<name>` selects a harness by capability, not by
-hardwired model; harnesses can themselves cascade or quorum across
-models. The execute-loop runs cheap models first and escalates failed
-beads to stronger models on retry — directly mirroring FrugalGPT's
-cascade and the user's standing "cost-tiered work" goal. Endpoint-based
-discovery (vs. named provider profiles) is the implementation of REF-029's
-live-discovery requirement: the catalog is a runtime query, not a
-checked-in constant. The cost record kept in `.ddx/executions/` closes
+DDx treats Fizeau as the routing layer, not as a model wrapper. `ddx run`
+requests task facts and abstract power bounds while Fizeau selects a concrete
+route by current capability, not by hardwired model. `ddx work` starts with the
+lowest viable requested power and raises `MinPower` on eligible retries —
+directly mirroring FrugalGPT's cascade and the user's standing "cost-tiered
+work" goal. Endpoint-based discovery (vs. named provider profiles) is the
+implementation of REF-029's live-discovery requirement: the catalog is a
+runtime query, not a checked-in constant. The cost record kept in
+`.ddx/executions/` closes
 the loop by letting routing decisions be evaluated empirically rather
 than asserted.

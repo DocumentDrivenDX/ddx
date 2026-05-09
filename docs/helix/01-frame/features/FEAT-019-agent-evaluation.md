@@ -91,9 +91,9 @@ Workflow shapes live in the skills library:
 - `replay-bead` — re-run with altered conditions + baseline diff
 - `benchmark-suite` — compare across prompt matrix
 
-DDx owns grading invocation (`ddx agent grade`) and the evaluation UX.
-Workflow plugins own the policies: when to experiment, which variables to
-sweep, quality gates using grading results, automatic model selection, and
+DDx owns evaluation record storage, grading evidence, and the evaluation UX.
+Workflow plugins own invocation policies: when to experiment, which variables to
+sweep, quality gates using grading results, power-selection heuristics, and
 exploration loops.
 
 ## Problem Statement
@@ -101,13 +101,14 @@ exploration loops.
 **Current situation:**
 - `ddx run` can dispatch one agent invocation and capture output/tokens/cost.
 - Comparison skills can run multiple arms and check consensus (pass/fail).
-- DDx Agent gives DDx full control of the agent loop with tool call logging.
+- Fizeau gives DDx one execution boundary with route facts, tool-call logging,
+  and session evidence.
 - Beads define work. Commits capture verified results. But there is no
   structured way to compare harness outputs for the same prompt, replay a
   bead with a different model, or grade the quality of results.
 
 **Pain points:**
-- When evaluating whether a local model (via DDx Agent) can replace a cloud
+- When evaluating whether a local Fizeau route can replace a cloud
   model for a task class, there's no structured way to compare.
 - Side-effecting agent runs (file writes, shell commands) can't be safely
   compared without isolation — running two agents in the same worktree
@@ -154,7 +155,7 @@ The canonical architecture is
 
 **Grading rubric storage and display**
 7. Grading rubrics are stored as named artifacts in the DDx artifact store.
-   `ddx agent grade --rubric <file>` loads a rubric by path; named rubrics
+   A grading workflow can load a rubric by path; named rubrics
    can be stored and referenced by name.
 8. The web UI provides a rubric browser: list, view, and edit stored rubrics.
 9. Grading results (score, max_score, pass, rationale per arm) are stored in
@@ -163,12 +164,11 @@ The canonical architecture is
     the storage, retrieval, and display mechanism.
 
 **Grading invocation and display**
-11. `ddx agent grade --comparison <id>` sends a comparison record to a
-    grading harness and records the evaluation. This is the DDx-owned
-    grading invocation surface; dispatch mechanics reuse FEAT-006 harness
-    registry.
-12. `ddx agent grade --comparison <id> --grader claude` specifies which
-    harness performs the grading (default: highest-preference available).
+11. A grading workflow sends a comparison record through `ddx run` and records
+    the evaluation. DDx owns the resulting evidence schema and display surface;
+    Fizeau owns the concrete reviewer route.
+12. The workflow can request reviewer strength with `MinPower`; passthrough
+    constraints remain raw Fizeau constraints when an operator supplies them.
 13. The grading prompt is a standardized template that presents:
     - The original task prompt
     - Each arm's text output
@@ -255,22 +255,19 @@ surfaces what skills produce.
 
 ## CLI Interface
 
-> **Workflow dispatch shapes** (`compare`, `replay`, `benchmark`) are skills
-> in the skills library. FEAT-019 owns the grading invocation surface and the
-> record query/display surface.
+> **Workflow dispatch shapes** (`compare`, `replay`, `benchmark`, grading) are
+> skills in the skills library. FEAT-019 owns evaluation records and the record
+> query/display surface.
 
 ```bash
-# Grade a comparison using claude as grader
-ddx agent grade --comparison cmp-abc123 --grader claude
+# Grade a comparison using a reviewer route
+compare-prompts --grade cmp-abc123 --min-power 10
 
 # Grade with custom rubric
-ddx agent grade --comparison cmp-abc123 --rubric rubrics/code-quality.md
+compare-prompts --grade cmp-abc123 --rubric rubrics/code-quality.md
 
-# List recent comparisons
-ddx agent compare --list
-
-# Show comparison detail
-ddx agent compare --show cmp-abc123 --format json
+# List recent comparisons through the evaluation UI/API
+# Show comparison detail through the shared run-detail surface
 
 # Workflow dispatch shapes are skills — not DDx CLI core:
 # compare-prompts skill:  N-arm dispatch + aggregation
@@ -282,9 +279,9 @@ ddx agent compare --show cmp-abc123 --format json
 
 ```yaml
 # .ddx/config.yaml
-agent:
+evaluation:
   compare:
-    default_grader: claude         # harness to use for grading
+    default_grader_min_power: 10   # requested reviewer strength for grading
 ```
 
 ## User Stories
@@ -308,8 +305,8 @@ agent:
 **So that** I get a structured quality score without manual review
 
 **Acceptance Criteria:**
-- Given a completed comparison, when I run `ddx agent grade --comparison <id>`,
-  then a grading harness evaluates each arm
+- Given a completed comparison, when a grading workflow evaluates `<id>`,
+  then a reviewer route evaluates each arm
 - Given the grading completes, then each arm has a score, pass/fail, and
   rationale in the comparison record
 - Given I specify `--rubric custom.md`, then the custom rubric replaces
@@ -389,7 +386,8 @@ agent:
 
 - FEAT-010 (Task Execution) — run substrate; comparison/replay/benchmark records
   are stored here; FEAT-019 is a child of FEAT-010
-- FEAT-006 (Agent Service) — harness registry, session logging, grading dispatch
+- FEAT-006 (Fizeau Execution Boundary) — execution request envelope, route facts,
+  session evidence, and grading workflow dispatch through `ddx run`
 - FEAT-008 (Web UI) — UI rendering surfaces for comparison/replay/benchmark views
 - FEAT-014 (Token Awareness) — token/cost tracking per arm (displayed in comparison views)
 - FEAT-012 (Git Awareness) — git diff rendering in comparison views

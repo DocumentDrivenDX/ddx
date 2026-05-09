@@ -1,6 +1,6 @@
 ---
 ddx:
-  id: AR-2026-04-04
+  id: architecture
   depends_on:
     - helix.prd
     - FEAT-001
@@ -118,22 +118,20 @@ The engine supports:
 - tracker health summaries and status transitions
 - persistence compatible with existing CLI workflows and server read APIs
 
-### 3) Agent engine (`internal/agent`)
+### 3) Task execution engine (`taskexec` / legacy `internal/agent`)
 
-Agent execution remains CLI-owned:
-- agent command constructs a runner config from CLI args, environment, and `.ddx/config.yaml`
-- routing is intent-first for normal use: profile/model/effort selectors resolve
-  to a candidate harness plan before invocation
-- DDx consumes the shared `ddx-agent` model catalog for aliases, profiles,
-  canonical targets, and deprecation metadata across harness surfaces
-- DDx owns cross-harness candidate planning, ranking, and rejection
-  decisions; the embedded `ddx-agent` runtime owns provider/backend selection
-  after DDx chooses the embedded harness
-- capability introspection and doctor surfaces expose routing-relevant harness
-  capability and state, not only static model defaults
-- session evidence is written through a dedicated bead-backed
-  `agent-sessions` collection with separate prompt/response/log attachments,
-  and is surfaced read-only by server
+Task execution remains CLI-owned at the orchestration layer:
+- `ddx run`, `ddx try`, and `ddx work` construct execution requests from CLI
+  args, bead metadata, environment, and `.ddx/config.yaml`
+- DDx forwards explicit harness/provider/model passthrough values unchanged and
+  sends abstract `MinPower` / `MaxPower` bounds to Fizeau
+- Fizeau owns concrete route selection, provider/model discovery, alias
+  matching, fallback, and route errors
+- capability, provider, and catalog status surfaces expose Fizeau-owned
+  diagnostics without feeding diagnostic route decisions back into execution
+- execution evidence is written through dedicated run/attempt bundles with
+  prompt, response, transcript, and log attachments, and is surfaced read-only by
+  server
 
 ### 4) Execution engine (`internal/exec`)
 

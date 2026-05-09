@@ -75,9 +75,9 @@ metadata
 estimated subscription burn inputs without storing provider transcripts as a
 required input
 
-### TC-011: Routing doctor reports quota tri-state and freshness
+### TC-011: Fizeau diagnostics report quota tri-state and freshness
 **Given** normalized routing signals for codex and claude
-**When** `ddx agent doctor --routing` is run
+**When** the Fizeau diagnostic surface is queried
 **Then** each harness reports quota/headroom as `ok`, `blocked`, or `unknown`
 plus source freshness
 
@@ -90,7 +90,7 @@ waiting on inline terminal automation
 
 ### TC-012: Usage command consumes normalized signals
 **Given** provider-native adapters and DDx routing metrics both provide data
-**When** `ddx agent usage --format json` is run
+**When** run/process metrics are queried as JSON
 **Then** the output is derived from those normalized signals rather than only a
 DDx-owned duplicate session ledger
 
@@ -99,17 +99,16 @@ DDx-owned duplicate session ledger
 **When** cost is estimated
 **Then** DDx returns the expected estimated cost
 
-### TC-014: Execute-bead runtime metrics remain captured automatically
-**Given** `ddx agent execute-bead` completes with a harness exposing token data
+### TC-014: Bead-attempt runtime metrics remain captured automatically
+**Given** `ddx try` completes with an agent response exposing token data
 **When** the run record is inspected
 **Then** built-in runtime metrics are present independent of provider-native
 transcript ownership
 
 ## Implementation
 
-Tests in `cli/internal/agent/*_test.go` and relevant `cli/cmd/*_test.go`
-packages covering extraction, adapters, routing-state reporting, and command
-integration.
+Tests in task-execution and relevant `cli/cmd/*_test.go` packages cover
+extraction, adapters, routing-state reporting, and command integration.
 
 ## Pass Criteria
 

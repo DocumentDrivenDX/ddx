@@ -13,10 +13,9 @@ work drains the execution-ready bead queue. It is the FEAT-010 layer-3
 queue drain: it iterates ddx try (layer 2) across ready beads until a stop
 condition is met and owns retry-power policy between attempts.
 
-Unlike "ddx agent execute-loop", ddx work treats --harness, --provider, and
---model as opaque passthrough constraints forwarded to the agent unchanged.
-DDx does not validate these values or branch on them; the agent owns routing
-within the requested power bounds.
+ddx work treats --harness, --provider, and --model as opaque passthrough
+constraints forwarded to Fizeau unchanged. DDx does not validate these values
+or branch on them; Fizeau owns routing within the requested power bounds.
 
 Stop conditions (evaluated between attempts):
   drained     — no ready beads remain
@@ -69,7 +68,7 @@ ddx work [flags]
       --no-review                  Skip post-merge review
       --once                       Process at most one ready bead
       --poll-interval duration     Poll interval for continuous scanning; zero drains current ready work and exits (legacy opt-out). Default 30s keeps the worker alive across empty polls. (default 30s)
-      --profile string             Routing profile: default, cheap, fast, or smart (default "default")
+      --profile string             Fizeau profile constraint (passthrough; ddx work does not validate)
       --project string             Target project root path or name (default: CWD git root). Env: DDX_PROJECT_ROOT
       --provider string            Provider constraint (passthrough; ddx work does not validate)
       --request-timeout duration   Per-request provider wall-clock timeout; overrides project config and model-class defaults

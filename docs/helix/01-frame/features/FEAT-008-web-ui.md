@@ -1076,7 +1076,7 @@ provider logs
 - Given I filter by tier / label / spec-id, then the table refilters
   live; URL encodes the filter for bookmarking
 - Given I click `Compare`, then a dialog lets me pick N `(model, prompt)`
-  pairs; on submit, DDx dispatches `ddx agent compare` and the resulting
+  pairs; on submit, DDx dispatches the `compare-prompts` workflow and the resulting
   `ComparisonRecord` appears under `Comparisons` with per-arm outputs,
   diffs, and (if configured) grader scores
 - Given a model's completion rate crosses the configured adaptive-min-tier
