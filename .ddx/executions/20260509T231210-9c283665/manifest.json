@@ -1,0 +1,99 @@
+{
+  "attempt_id": "20260509T231210-9c283665",
+  "bead_id": "ddx-46f94cee",
+  "base_rev": "882f68b4dd2e4076826d544d0da3327912aea53a",
+  "created_at": "2026-05-09T23:12:20.29777915Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-46f94cee",
+    "title": "bead/store: consolidate claim-Extra key list shared by Reopen and Unclaim",
+    "description": "PROBLEM\n  Reopen and Unclaim each maintain their own inlined list of claim-related\n  Extra keys to clear. When a new claim metadata key is added (recently:\n  claimed-worktree), it must be added in both places or stale metadata\n  leaks into reopened/unclaimed beads. A consolidated key list would make\n  the cleanup atomic and audit-friendly.\n\nROOT CAUSE\n  - cli/internal/bead/store.go:823-831 Unclaim deletes claimed-at,\n    claimed-pid, claimed-machine, claimed-session, claimed-worktree,\n    plus assignee, plus other inline keys.\n  - cli/internal/bead/store.go:1306-1317 Reopen deletes the same set plus\n    execute-loop-heartbeat-at and walks an additional inline-event cleanup\n    block at lines 1329-1334.\n  - cli/internal/bead/reconcile.go:9-26 already declares some Extra-key\n    constants (ExtraExecutionEligible, ExtraExecutionReason, etc.) but\n    not the claim metadata set.\n\nPROPOSED FIX\n  - Add a single canonical declaration of claim-metadata Extra keys in\n    cli/internal/bead/lifecycle.go (alongside the lifecycle constants) or\n    cli/internal/bead/types.go (alongside CanonicalStatuses):\n        var ClaimMetadataExtraKeys = []string{\n            \"claimed-at\",\n            \"claimed-pid\",\n            \"claimed-machine\",\n            \"claimed-session\",\n            \"claimed-worktree\",\n        }\n    plus separate constants for ClaimAssigneeExtraKey (\"assignee\") and\n    ClaimHeartbeatExtraKey (\"execute-loop-heartbeat-at\") if they need\n    distinct cleanup rules.\n  - Refactor Unclaim (store.go:823-831) to iterate ClaimMetadataExtraKeys\n    instead of inlining delete calls. Preserve the order of operations:\n    clear assignee, clear claim metadata, then clear heartbeat.\n  - Refactor Reopen (store.go:1306-1317) similarly, plus preserve the\n    inline-event cleanup at 1329-1334 unchanged (different concern).\n  - Add a unit test TestClaimMetadataKeys_SharedByReopenAndUnclaim in\n    cli/internal/bead/store_test.go that:\n      a. Claims a bead, populates every key in ClaimMetadataExtraKeys plus\n         assignee and execute-loop-heartbeat-at.\n      b. Calls Unclaim; asserts every key in ClaimMetadataExtraKeys is\n         absent from b.Extra.\n      c. Re-claims, then calls Reopen; asserts the same.\n      d. Adds a deliberately new key to b.Extra not in\n         ClaimMetadataExtraKeys (e.g. \"claim-test-extra\"); asserts it\n         survives both Unclaim and Reopen (proving the cleanup is bounded\n         by the canonical list).\n\nNON-SCOPE\n  - Changing the actual fields the system writes during claim acquisition.\n  - Renaming or moving the Extra keys; their string values are unchanged.\n  - Touching the inline-event cleanup at store.go:1329-1334 (separate\n    concern: events, not claim metadata).\n  - Migrating existing beads with stale metadata; that is a separate\n    reconcile path.\n\nINTERSECTIONS\n  - ddx-ca1c66ee (epic parent).\n  - No deps on B1/B2/B3/B4/B5; can run in parallel.",
+    "acceptance": "1. ClaimMetadataExtraKeys (or equivalent canonical list) is declared in cli/internal/bead/lifecycle.go or cli/internal/bead/types.go with at minimum the keys claimed-at, claimed-pid, claimed-machine, claimed-session, claimed-worktree.\n2. cli/internal/bead/store.go Unclaim (around line 823-831) iterates the canonical list instead of inlining individual delete calls per key.\n3. cli/internal/bead/store.go Reopen (around line 1306-1317) iterates the canonical list instead of inlining individual delete calls per key.\n4. TestClaimMetadataKeys_SharedByReopenAndUnclaim in cli/internal/bead/store_test.go asserts the four properties in PROPOSED FIX (Unclaim clears all listed keys, Reopen clears all listed keys, an unrelated Extra key survives, the canonical list is the bound).\n5. cd cli \u0026\u0026 go test ./internal/bead/... ./internal/agent/... ./cmd/... green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-ca1c66ee",
+    "labels": [
+      "phase:6",
+      "area:bead",
+      "area:lifecycle",
+      "kind:refactor",
+      "spec:TD-031"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-09T23:11:03Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3533406",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-09T23:02:06.902114068Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[],\"requested_harness\":\"claude\",\"requested_model\":\"claude-sonnet-4-6\"}",
+          "created_at": "2026-05-09T23:08:46.029420365Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260509T230207-8ebcc046\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":26,\"output_tokens\":11473,\"total_tokens\":11499,\"cost_usd\":0.674624,\"duration_ms\":389018,\"exit_code\":0}",
+          "created_at": "2026-05-09T23:08:46.098078646Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=11499 cost_usd=0.6746 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-46f94cee\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-09T23:09:48.17622616Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "tracker lock timeout (max elapsed, owner pid: 3533406)\noutcome_reason=timeout",
+          "created_at": "2026-05-09T23:10:22.444890262Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-09T23:12:10.039497596Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-09T23:11:03.586508597Z",
+      "spec-id": "TD-031"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-031",
+      "path": "docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md",
+      "title": "Technical Design: Bead State Machine and Naming-Role Decisions"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260509T231210-9c283665",
+    "prompt": ".ddx/executions/20260509T231210-9c283665/prompt.md",
+    "manifest": ".ddx/executions/20260509T231210-9c283665/manifest.json",
+    "result": ".ddx/executions/20260509T231210-9c283665/result.json",
+    "checks": ".ddx/executions/20260509T231210-9c283665/checks.json",
+    "usage": ".ddx/executions/20260509T231210-9c283665/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-46f94cee-20260509T231210-9c283665"
+  },
+  "prompt_sha": "bfe6c7ec0e2813af8b74565057267cda2c3834f1b122395f438cee083737883c"
+}

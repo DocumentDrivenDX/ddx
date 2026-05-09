@@ -1,0 +1,99 @@
+{
+  "attempt_id": "20260509T224106-5a54888f",
+  "bead_id": "ddx-c113a116",
+  "base_rev": "2fd0beed9caf1317259e921a8fcf0424ed68bd51",
+  "created_at": "2026-05-09T22:41:16.932772469Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c113a116",
+    "title": "bead/store: unify Ready definition - drop redundant Status==Open filter",
+    "description": "PROBLEM\n  Two places answer \"is this bead ready?\" and they disagree. The lifecycle\n  module (lifecycle.go) classifies a bead's queue bucket from facts; the\n  store.go Ready() helper then re-filters by raw status, producing a different\n  answer than the lifecycle classifier when an in_progress bead has a stale\n  claim.\n\nROOT CAUSE\n  - cli/internal/bead/lifecycle.go:155-208 EvaluateLifecycleQueue routes\n    StatusInProgress at line 190-194 through evaluateOpenLifecycleQueue when\n    !ClaimFresh, which can produce LifecycleBucketReady at line 232.\n  - cli/internal/bead/store.go:1754-1766 readyFiltered then iterates the\n    classifier output and applies a second filter at line 1763:\n        if entry.Status == StatusOpen { ready = append(...) }\n    This filter is gated by !executionOnly, so external readers\n    (ddx bead ready non-executionOnly path) see a different result than\n    queue-execution callers (executionOnly path).\n  - Net effect: a stale-claimed in_progress bead with deps satisfied is\n    \"ready\" per EvaluateLifecycleQueue, \"not ready\" per store.Ready() in\n    operator-facing mode, and \"ready\" per store.Ready() in execution mode.\n    Three answers; one question.\n\nPROPOSED FIX\n  - Decide the canonical answer: per TD-031 §6, claim metadata is not status,\n    and a stale-claimed in_progress bead is recoverable through the heartbeat\n    TTL mechanism. The lifecycle module's classifier already encodes this.\n    Therefore the second filter at store.go:1763 is redundant and incorrect.\n  - Edit cli/internal/bead/store.go:1754-1766: remove the\n    \"if entry.Status == StatusOpen\" branch; both executionOnly and\n    operator-facing paths consume LifecycleBucketReady directly.\n  - Add regression test TestReady_StaleClaimedInProgressIsReady in\n    cli/internal/bead/store_test.go (or extend an existing nearby test) that:\n      a. Creates a bead, claims it (open -\u003e in_progress).\n      b. Manually expires the heartbeat (set claimed-at + heartbeat TTL).\n      c. Asserts Ready() returns the bead in operator-facing mode (not just\n         the executionOnly path).\n  - Verify no other call sites of readyFiltered or Ready depend on the\n    removed filter; grep for s.Ready, store.Ready, .Ready( across cli/.\n\nNON-SCOPE\n  - Changing EvaluateLifecycleQueue or the lifecycle bucket enumeration.\n  - Adding new claim-recovery semantics.\n  - Migrating callers between executionOnly and non-executionOnly paths.\n\nINTERSECTIONS\n  - ddx-ca1c66ee (epic parent).\n  - No deps on B1/B2; can run in parallel with the TD-031 amendment.",
+    "acceptance": "1. cli/internal/bead/store.go readyFiltered no longer applies a Status==StatusOpen filter; both executionOnly and operator-facing paths return entries whose Decision.Bucket==LifecycleBucketReady.\n2. TestReady_StaleClaimedInProgressIsReady in cli/internal/bead/store_test.go asserts a stale-claimed in_progress bead with satisfied deps appears in Ready() output.\n3. No other test in cli/internal/bead/... regresses (existing Ready/Blocked/queue tests stay green).\n4. cd cli \u0026\u0026 go test ./internal/bead/... ./internal/agent/... ./cmd/... green.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-ca1c66ee",
+    "labels": [
+      "phase:6",
+      "area:bead",
+      "area:lifecycle",
+      "kind:fix",
+      "spec:TD-031"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-09T22:40:01Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-09T16:13:44.48845771Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[],\"requested_harness\":\"claude\",\"requested_model\":\"claude-sonnet-4-6\"}",
+          "created_at": "2026-05-09T19:13:54.248782786Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260509T161344-5a35f540\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":33,\"output_tokens\":8472,\"total_tokens\":8505,\"cost_usd\":0.7156327499999999,\"duration_ms\":10802053,\"exit_code\":-1}",
+          "created_at": "2026-05-09T19:13:54.318986462Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=8505 cost_usd=0.7156 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260509T161344-5a35f540\",\"bead_id\":\"ddx-c113a116\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-09T19:13:54.736673298Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard model=sonnet harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "context deadline exceeded\nresult_rev=ef3630c5e3fa6a02edfcb5d80b096e228bff1e13\nbase_rev=7b7de75ff9731842a563c1cfe583b92309d65366\noutcome_reason=timeout",
+          "created_at": "2026-05-09T19:14:28.999138031Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-09T22:41:06.023249425Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-09T22:40:01.807036919Z",
+      "spec-id": "TD-031"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-031",
+      "path": "docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md",
+      "title": "Technical Design: Bead State Machine and Naming-Role Decisions"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260509T224106-5a54888f",
+    "prompt": ".ddx/executions/20260509T224106-5a54888f/prompt.md",
+    "manifest": ".ddx/executions/20260509T224106-5a54888f/manifest.json",
+    "result": ".ddx/executions/20260509T224106-5a54888f/result.json",
+    "checks": ".ddx/executions/20260509T224106-5a54888f/checks.json",
+    "usage": ".ddx/executions/20260509T224106-5a54888f/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-c113a116-20260509T224106-5a54888f"
+  },
+  "prompt_sha": "80f73fd39d0bbbb325f17af1a04e80e1aa2ef8c8a707acaf9685395018fc1a6a"
+}

@@ -1,0 +1,50 @@
+package bead
+
+import "fmt"
+
+// ParkReason identifies the canonical reason for transitioning a bead to
+// proposed status for operator attention. Each constant maps to a fixed
+// (Reason, Source) pair used by ParkToProposed.
+type ParkReason string
+
+const (
+	ParkIntakeRejection           ParkReason = "intake_rejection"
+	ParkNoChangesOperatorRequired ParkReason = "no_changes_operator_required"
+	ParkPostReviewMalfunction     ParkReason = "post_review_malfunction"
+	ParkReviewTerminal            ParkReason = "review_terminal"
+	ParkConflictRecovery          ParkReason = "conflict_recovery"
+)
+
+type parkReasonMeta struct {
+	Reason string
+	Source string
+}
+
+var parkReasonMetaMap = map[ParkReason]parkReasonMeta{
+	ParkIntakeRejection:           {Reason: "pre-claim intake blocked execution", Source: "ddx agent execute-loop"},
+	ParkNoChangesOperatorRequired: {Reason: "operator decision required before another automated attempt", Source: "ddx agent execute-loop"},
+	ParkPostReviewMalfunction:     {Reason: "review BLOCK triage reached operator-required rung", Source: "ddx agent execute-loop"},
+	ParkReviewTerminal:            {Reason: "terminal review block requires operator decision", Source: "ddx agent execute-loop"},
+	ParkConflictRecovery:          {Reason: "land conflict requires operator judgment", Source: "ddx agent execute-loop"},
+}
+
+// ParkToProposed transitions the bead to proposed status for operator
+// attention. It enforces OperatorRequired=true and the canonical Reason and
+// Source from the ParkReason mapping. The mutate callback runs after the
+// status transition; pass nil if no additional metadata is needed.
+func (s *Store) ParkToProposed(id string, reason ParkReason, mutate func(*Bead)) error {
+	meta, ok := parkReasonMetaMap[reason]
+	if !ok {
+		return fmt.Errorf("bead: unknown ParkReason %q", reason)
+	}
+	return s.TransitionLifecycle(id, StatusProposed, LifecycleTransitionOptions{
+		OperatorRequired: true,
+		Reason:           meta.Reason,
+		Source:           meta.Source,
+	}, func(b *Bead) error {
+		if mutate != nil {
+			mutate(b)
+		}
+		return nil
+	})
+}

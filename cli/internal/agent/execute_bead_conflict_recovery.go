@@ -45,6 +45,7 @@ type ConflictRecoveryStore interface {
 	Unclaim(beadID string) error
 	SetExecutionCooldown(beadID string, until time.Time, status, detail string) error
 	UpdateWithLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions, mutate func(*bead.Bead) error) error
+	ParkToProposed(id string, reason bead.ParkReason, mutate func(*bead.Bead)) error
 }
 
 // ConflictRecoveryInput bundles the data RunConflictRecovery needs from its
@@ -225,26 +226,19 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 			out.Report = report
 			return out
 		}
-		reason := "land conflict requires operator judgment"
-		if err := in.Store.UpdateWithLifecycleStatus(in.Bead.ID, bead.StatusProposed, bead.LifecycleTransitionOptions{
-			OperatorRequired: true,
-			Reason:           reason,
-			Actor:            in.Assignee,
-			Source:           "ddx agent execute-loop",
-		}, func(b *bead.Bead) error {
+		if err := in.Store.ParkToProposed(in.Bead.ID, bead.ParkConflictRecovery, func(b *bead.Bead) {
 			// Migration-only cleanup: defensive removal for legacy rows that escaped
 			// the lifecycle migration or arrived via external import.
 			b.Labels = removeBeadLabels(b.Labels, TriageNeedsHumanLabel, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
 			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
-				Reason:          reason,
+				Reason:          "land conflict requires operator judgment",
 				Since:           now().UTC().Format(time.RFC3339),
 				Source:          "ddx agent execute-loop",
 				SuggestedAction: "resolve the preserved land conflict manually or split the bead",
 				Summary:         "land conflict requires operator decision",
 			})
-			return nil
 		}); err != nil {
-			out.StoreErrOp = "UpdateWithLifecycleStatus"
+			out.StoreErrOp = "ParkToProposed"
 			out.StoreErr = err
 			out.Report = report
 			return out

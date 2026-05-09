@@ -824,12 +824,10 @@ func (s *Store) Unclaim(id string) error {
 		}
 		b.Owner = ""
 		if b.Extra != nil {
-			delete(b.Extra, "claimed-at")
-			delete(b.Extra, "claimed-pid")
-			delete(b.Extra, "claimed-machine")
-			delete(b.Extra, "claimed-session")
-			delete(b.Extra, "claimed-worktree")
-			delete(b.Extra, "execute-loop-heartbeat-at")
+			for _, k := range ClaimMetadataExtraKeys {
+				delete(b.Extra, k)
+			}
+			delete(b.Extra, ClaimHeartbeatExtraKey)
 		}
 		return nil
 	}); err != nil {
@@ -1313,12 +1311,10 @@ func (s *Store) Reopen(id string, reason string, appendNotes string) error {
 				b.Extra = make(map[string]any)
 			}
 			// Clear claim fields
-			delete(b.Extra, "claimed-at")
-			delete(b.Extra, "claimed-pid")
-			delete(b.Extra, "claimed-machine")
-			delete(b.Extra, "claimed-session")
-			delete(b.Extra, "claimed-worktree")
-			delete(b.Extra, "execute-loop-heartbeat-at")
+			for _, k := range ClaimMetadataExtraKeys {
+				delete(b.Extra, k)
+			}
+			delete(b.Extra, ClaimHeartbeatExtraKey)
 			// Append notes
 			if appendNotes != "" {
 				if b.Notes != "" {
@@ -1760,13 +1756,7 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 		if entry.Decision.Bucket != LifecycleBucketReady {
 			continue
 		}
-		if executionOnly {
-			ready = append(ready, entry.Bead)
-			continue
-		}
-		if entry.Status == StatusOpen {
-			ready = append(ready, entry.Bead)
-		}
+		ready = append(ready, entry.Bead)
 	}
 
 	sortBeadsForQueue(ready)

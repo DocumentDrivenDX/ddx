@@ -1,0 +1,3 @@
+// Package perf contains GraphQL performance tests gated behind the //go:build
+// perf build tag. Run with: go test -tags=perf ./internal/server/perf/...
+package perf
