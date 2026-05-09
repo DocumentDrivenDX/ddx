@@ -57,11 +57,12 @@ type CandidateCheckRunner interface {
 // CandidateReviewResult carries a reviewer verdict for a committed candidate.
 type CandidateReviewResult struct {
 	// Verdict is one of "APPROVE", "REQUEST_CHANGES", or "BLOCK".
-	Verdict        string
-	Rationale      string
-	PerAC          []ReviewAC
-	Findings       []Finding
-	Classification string
+	Verdict              string
+	Rationale            string
+	PerAC                []ReviewAC
+	Findings             []Finding
+	VerificationCommands []string
+	Classification       string
 }
 
 // CandidateReviewer runs a read-only review pass against a committed candidate
@@ -72,10 +73,10 @@ type CandidateReviewer interface {
 }
 
 // RepairPass attempts to repair a candidate in the still-live worktree based on
-// review findings, returning an updated CandidateResult. Reserved for future
-// repair-loop implementation (non-scope for FEAT-010 initial pass).
+// the repair prompt, returning an updated CandidateResult with an append-only
+// repair commit.
 type RepairPass interface {
-	Repair(ctx context.Context, candidate CandidateResult, findings string) (CandidateResult, error)
+	Repair(ctx context.Context, candidate CandidateResult, prompt string) (CandidateResult, error)
 }
 
 // CandidateLander lands an approved candidate to the main branch.
@@ -122,6 +123,7 @@ type CandidateCycleEventBody struct {
 
 const candidateChecksFailedEventKind = "candidate-checks-failed"
 const candidateReviewClassifiedEventKind = "candidate-review-classified"
+const repairCycleStartedEventKind = "repair-cycle-started"
 
 // CandidateChecksFailedEventBody is the structured payload of a
 // candidate-checks-failed bead event.
@@ -146,6 +148,16 @@ type CandidateReviewClassifiedEventBody struct {
 	Verdict        string `json:"verdict,omitempty"`
 	Classification string `json:"classification,omitempty"`
 	Reason         string `json:"reason,omitempty"`
+}
+
+// RepairCycleStartedEventBody is the structured payload of a
+// repair-cycle-started bead event.
+type RepairCycleStartedEventBody struct {
+	AttemptID          string `json:"attempt_id,omitempty"`
+	BaseRev            string `json:"base_rev,omitempty"`
+	FailedCandidateRev string `json:"failed_candidate_rev,omitempty"`
+	RepairCycleIndex   int    `json:"repair_cycle_index"`
+	Classification     string `json:"classification,omitempty"`
 }
 
 // ShouldRetainCandidateRef returns true when the attempt outcome requires
@@ -183,6 +195,9 @@ type AttemptCycleCoordinator struct {
 	RefStore    CandidateRefStore // nil → no ref pinning
 	ProjectRoot string            // required when RefStore non-nil
 	BeadEvents  BeadEventAppender // nil → no candidate-cycle event emission
+	// RepairMaxCycles caps append-only repair attempts after review_fixable_gap.
+	// Values <=0 default to one repair cycle.
+	RepairMaxCycles int
 }
 
 // Run executes one attempt cycle: implementation → checks → land. Non-success
@@ -205,57 +220,38 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 		return AttemptCycleResult{Report: candidate.Report}, nil
 	}
 
-	// Pin candidate ref in project root before checks and read-only review so
-	// the commit remains accessible even after the temp worktree is removed.
-	if c.RefStore != nil && c.ProjectRoot != "" {
-		ref, pinErr := c.RefStore.PinCandidateRef(
-			c.ProjectRoot,
-			candidate.Report.AttemptID,
-			candidate.CycleIndex,
-			candidate.Report.ResultRev,
-		)
-		if pinErr == nil {
-			candidate.Report.CandidateRef = ref
-			candidate.Report.CycleIndex = candidate.CycleIndex
-			if c.BeadEvents != nil {
-				body, _ := json.Marshal(CandidateCycleEventBody{
-					CandidateRef: ref,
-					CycleIndex:   candidate.CycleIndex,
-					AttemptID:    candidate.Report.AttemptID,
-					BaseRev:      candidate.Report.BaseRev,
-					ResultRev:    candidate.Report.ResultRev,
-				})
-				_ = c.BeadEvents.AppendEvent(beadID, bead.BeadEvent{
-					Kind: "candidate_cycle_pinned",
-					Body: string(body),
-				})
-			}
-		}
-	}
+	repairCycles := 0
+	var pinnedRefs []string
+	for {
+		c.pinCandidateRef(beadID, &candidate)
+		pinnedRefs = appendUniqueString(pinnedRefs, candidate.Report.CandidateRef)
 
-	if c.Checks != nil {
-		checksResult, checksErr := c.Checks.RunChecks(ctx, c.ProjectRoot, candidate)
-		if checksErr != nil {
-			checksResult.Detail = checksErr.Error()
-		}
-		if checksErr != nil || !checksResult.Passed {
-			report := candidate.Report
+		if c.Checks != nil {
+			checksResult, checksErr := c.Checks.RunChecks(ctx, c.ProjectRoot, candidate)
 			if checksErr != nil {
-				report.Status = ExecuteBeadStatusExecutionFailed
-			} else {
-				report.Status = ExecuteBeadStatusPostRunCheckFailed
+				checksResult.Detail = checksErr.Error()
 			}
-			report.OutcomeReason = candidateChecksFailedEventKind
-			report.Detail = candidateChecksFailedDetail(checksResult.Detail)
-			if checksErr != nil && report.Error == "" {
-				report.Error = checksErr.Error()
+			if checksErr != nil || !checksResult.Passed {
+				report := candidate.Report
+				if checksErr != nil {
+					report.Status = ExecuteBeadStatusExecutionFailed
+				} else {
+					report.Status = ExecuteBeadStatusPostRunCheckFailed
+				}
+				report.OutcomeReason = candidateChecksFailedEventKind
+				report.Detail = candidateChecksFailedDetail(checksResult.Detail)
+				if checksErr != nil && report.Error == "" {
+					report.Error = checksErr.Error()
+				}
+				c.appendCandidateChecksFailedEvent(beadID, report, checksResult)
+				return AttemptCycleResult{Report: report}, nil
 			}
-			c.appendCandidateChecksFailedEvent(beadID, report, checksResult)
-			return AttemptCycleResult{Report: report}, nil
 		}
-	}
 
-	if c.Reviewer != nil {
+		if c.Reviewer == nil {
+			break
+		}
+
 		reviewResult, reviewErr := c.Reviewer.Review(ctx, c.ProjectRoot, candidate)
 		if reviewErr != nil {
 			report := candidate.Report
@@ -266,33 +262,54 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 			c.appendCandidateReviewClassifiedEvent(beadID, report, reviewResult, ReviewFindingClassMalfunction, reviewErr.Error())
 			return AttemptCycleResult{Report: report}, nil
 		}
+
 		verdict := Verdict(strings.TrimSpace(reviewResult.Verdict))
 		switch verdict {
 		case VerdictApprove:
 			candidate.Report.ReviewVerdict = string(VerdictApprove)
 			candidate.Report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
-		case VerdictRequestChanges:
+			break
+		case VerdictRequestChanges, VerdictBlock:
 			classification := c.classifyCandidateReview(reviewResult)
 			report := candidate.Report
-			report.Status = ExecuteBeadStatusReviewRequestChanges
-			report.Detail = "pre-land review: REQUEST_CHANGES"
-			report.ReviewVerdict = string(VerdictRequestChanges)
+			report.ReviewVerdict = string(verdict)
 			report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
-			c.appendCandidateReviewClassifiedEvent(beadID, report, reviewResult, classification.Class, classification.Reason)
-			return AttemptCycleResult{Report: report}, nil
-		case VerdictBlock:
-			classification := c.classifyCandidateReview(reviewResult)
-			report := candidate.Report
-			report.Status = ExecuteBeadStatusReviewBlock
-			report.Detail = "pre-land review: BLOCK"
-			report.ReviewVerdict = string(VerdictBlock)
-			report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
+			if verdict == VerdictRequestChanges {
+				report.Status = ExecuteBeadStatusReviewRequestChanges
+				report.Detail = "pre-land review: REQUEST_CHANGES"
+			} else {
+				report.Status = ExecuteBeadStatusReviewBlock
+				report.Detail = "pre-land review: BLOCK"
+			}
 			if classification.Class == ReviewFindingClassMalfunction {
 				report.Status = ExecuteBeadStatusReviewMalfunction
 				report.Detail = "pre-land review: " + ReviewFindingClassMalfunction
 			}
 			c.appendCandidateReviewClassifiedEvent(beadID, report, reviewResult, classification.Class, classification.Reason)
-			return AttemptCycleResult{Report: report}, nil
+			if !classification.AutomatedRepairEligible || c.Repair == nil {
+				return AttemptCycleResult{Report: report}, nil
+			}
+			if repairCycles >= c.maxRepairCycles() {
+				report.Status = ExecuteBeadStatusRepairCycleExhausted
+				report.OutcomeReason = ExecuteBeadStatusRepairCycleExhausted
+				report.Detail = "pre-land repair: " + ExecuteBeadStatusRepairCycleExhausted
+				return AttemptCycleResult{Report: report}, nil
+			}
+			prompt := BuildRepairPrompt(repairPromptInput(beadID, candidate, reviewResult, repairCycles+1))
+			c.appendRepairCycleStartedEvent(beadID, candidate, repairCycles+1, classification.Class)
+			repaired, repairErr := c.Repair.Repair(ctx, candidate, prompt)
+			if repairErr != nil {
+				report.Status = ExecuteBeadStatusExecutionFailed
+				report.Detail = "pre-land repair: " + repairErr.Error()
+				report.Error = repairErr.Error()
+				return AttemptCycleResult{Report: report}, nil
+			}
+			repairCycles++
+			candidate = normalizeRepairedCandidate(candidate, repaired)
+			if candidate.Report.Status != ExecuteBeadStatusSuccess {
+				return AttemptCycleResult{Report: candidate.Report}, nil
+			}
+			continue
 		default:
 			report := candidate.Report
 			report.Status = ExecuteBeadStatusReviewMalfunction
@@ -302,6 +319,7 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 			c.appendCandidateReviewClassifiedEvent(beadID, report, reviewResult, ReviewFindingClassMalfunction, "malformed review verdict")
 			return AttemptCycleResult{Report: report}, nil
 		}
+		break
 	}
 
 	landed, err := c.Lander.Land(ctx, candidate)
@@ -323,7 +341,9 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 	// operators can inspect the candidate commit after the worktree is removed.
 	if c.RefStore != nil && c.ProjectRoot != "" && landed.CandidateRef != "" {
 		if !ShouldRetainCandidateRef(landed.Status) {
-			_ = c.RefStore.UnpinCandidateRef(c.ProjectRoot, landed.CandidateRef)
+			for _, ref := range pinnedRefs {
+				_ = c.RefStore.UnpinCandidateRef(c.ProjectRoot, ref)
+			}
 		}
 	}
 
@@ -336,6 +356,53 @@ func candidateChecksFailedDetail(detail string) string {
 		return candidateChecksFailedEventKind
 	}
 	return candidateChecksFailedEventKind + ": " + detail
+}
+
+func appendUniqueString(items []string, item string) []string {
+	item = strings.TrimSpace(item)
+	if item == "" {
+		return items
+	}
+	for _, existing := range items {
+		if existing == item {
+			return items
+		}
+	}
+	return append(items, item)
+}
+
+func (c *AttemptCycleCoordinator) pinCandidateRef(beadID string, candidate *CandidateResult) {
+	if candidate == nil || c.RefStore == nil || c.ProjectRoot == "" {
+		return
+	}
+	if candidate.Report.CandidateRef != "" {
+		return
+	}
+	ref, pinErr := c.RefStore.PinCandidateRef(
+		c.ProjectRoot,
+		candidate.Report.AttemptID,
+		candidate.CycleIndex,
+		candidate.Report.ResultRev,
+	)
+	if pinErr != nil {
+		return
+	}
+	candidate.Report.CandidateRef = ref
+	candidate.Report.CycleIndex = candidate.CycleIndex
+	if c.BeadEvents == nil {
+		return
+	}
+	body, _ := json.Marshal(CandidateCycleEventBody{
+		CandidateRef: ref,
+		CycleIndex:   candidate.CycleIndex,
+		AttemptID:    candidate.Report.AttemptID,
+		BaseRev:      candidate.Report.BaseRev,
+		ResultRev:    candidate.Report.ResultRev,
+	})
+	_ = c.BeadEvents.AppendEvent(beadID, bead.BeadEvent{
+		Kind: "candidate_cycle_pinned",
+		Body: string(body),
+	})
 }
 
 func (c *AttemptCycleCoordinator) appendCandidateChecksFailedEvent(beadID string, report ExecuteBeadReport, checksResult CandidateCheckResult) {
@@ -358,6 +425,13 @@ func (c *AttemptCycleCoordinator) appendCandidateChecksFailedEvent(beadID string
 	})
 }
 
+func (c *AttemptCycleCoordinator) maxRepairCycles() int {
+	if c.RepairMaxCycles <= 0 {
+		return 1
+	}
+	return c.RepairMaxCycles
+}
+
 func (c *AttemptCycleCoordinator) classifyCandidateReview(review CandidateReviewResult) ReviewFindingClassification {
 	if review.Classification != "" {
 		return reviewClassification(review.Classification, nil, "", review.Classification == ReviewFindingClassFixableGap)
@@ -368,6 +442,47 @@ func (c *AttemptCycleCoordinator) classifyCandidateReview(review CandidateReview
 		PerAC:     append([]ReviewAC(nil), review.PerAC...),
 		Findings:  append([]Finding(nil), review.Findings...),
 	})
+}
+
+func repairPromptInput(beadID string, candidate CandidateResult, review CandidateReviewResult, repairCycleIndex int) RepairPromptInput {
+	return RepairPromptInput{
+		BeadID:               beadID,
+		BaseRev:              candidate.Report.BaseRev,
+		FailedCandidateRev:   candidate.Report.ResultRev,
+		CycleIndex:           repairCycleIndex,
+		ReviewRationale:      strings.TrimSpace(review.Rationale),
+		PerAC:                append([]ReviewAC(nil), review.PerAC...),
+		Findings:             append([]Finding(nil), review.Findings...),
+		VerificationCommands: append([]string(nil), review.VerificationCommands...),
+	}
+}
+
+func normalizeRepairedCandidate(previous, repaired CandidateResult) CandidateResult {
+	if repaired.WorktreePath == "" {
+		repaired.WorktreePath = previous.WorktreePath
+	}
+	if repaired.CycleIndex <= previous.CycleIndex {
+		repaired.CycleIndex = previous.CycleIndex + 1
+	}
+	if repaired.Report.BeadID == "" {
+		repaired.Report.BeadID = previous.Report.BeadID
+	}
+	if repaired.Report.AttemptID == "" {
+		repaired.Report.AttemptID = previous.Report.AttemptID
+	}
+	if repaired.Report.BaseRev == "" {
+		repaired.Report.BaseRev = previous.Report.BaseRev
+	}
+	if repaired.Report.Status == "" {
+		repaired.Report.Status = ExecuteBeadStatusSuccess
+	}
+	if repaired.Report.CycleIndex == 0 && repaired.CycleIndex != 0 {
+		repaired.Report.CycleIndex = repaired.CycleIndex
+	}
+	repaired.Report.CandidateRef = ""
+	repaired.Report.ReviewVerdict = ""
+	repaired.Report.ReviewRationale = ""
+	return repaired
 }
 
 func (c *AttemptCycleCoordinator) appendCandidateReviewClassifiedEvent(beadID string, report ExecuteBeadReport, review CandidateReviewResult, class, reason string) {
@@ -387,6 +502,24 @@ func (c *AttemptCycleCoordinator) appendCandidateReviewClassifiedEvent(beadID st
 	_ = c.BeadEvents.AppendEvent(beadID, bead.BeadEvent{
 		Kind:    candidateReviewClassifiedEventKind,
 		Summary: strings.TrimSpace(class),
+		Body:    string(body),
+	})
+}
+
+func (c *AttemptCycleCoordinator) appendRepairCycleStartedEvent(beadID string, candidate CandidateResult, repairCycleIndex int, class string) {
+	if c.BeadEvents == nil {
+		return
+	}
+	body, _ := json.Marshal(RepairCycleStartedEventBody{
+		AttemptID:          candidate.Report.AttemptID,
+		BaseRev:            candidate.Report.BaseRev,
+		FailedCandidateRev: candidate.Report.ResultRev,
+		RepairCycleIndex:   repairCycleIndex,
+		Classification:     class,
+	})
+	_ = c.BeadEvents.AppendEvent(beadID, bead.BeadEvent{
+		Kind:    repairCycleStartedEventKind,
+		Summary: class,
 		Body:    string(body),
 	})
 }

@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,6 +39,12 @@ type candidateReviewerFunc func(ctx context.Context, projectRoot string, candida
 
 func (f candidateReviewerFunc) Review(ctx context.Context, projectRoot string, candidate CandidateResult) (CandidateReviewResult, error) {
 	return f(ctx, projectRoot, candidate)
+}
+
+type repairPassFunc func(ctx context.Context, candidate CandidateResult, prompt string) (CandidateResult, error)
+
+func (f repairPassFunc) Repair(ctx context.Context, candidate CandidateResult, prompt string) (CandidateResult, error) {
+	return f(ctx, candidate, prompt)
 }
 
 type inMemoryCandidateRefStore struct {
@@ -496,7 +506,240 @@ func TestReviewClassification_CandidateCycleEventIncludesCandidateRev(t *testing
 	assert.Equal(t, ReviewTerminalClassUnsafeOrOutScope, body.Classification)
 }
 
+func TestRepairCycle_RequestChangesAppendsRepairCommit(t *testing.T) {
+	var repairCalled bool
+	var landed CandidateResult
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return repairCycleCandidate(beadID, "attempt-repair-001", "base-rev", "candidate-rev", 0), nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateReviewResult, error) {
+			if candidate.Report.ResultRev == "repair-rev" {
+				return CandidateReviewResult{Verdict: "APPROVE", Rationale: "repair complete"}, nil
+			}
+			return repairCycleFixableReview(), nil
+		}),
+		Repair: repairPassFunc(func(_ context.Context, candidate CandidateResult, prompt string) (CandidateResult, error) {
+			repairCalled = true
+			assert.Equal(t, "/attempt/worktree", candidate.WorktreePath)
+			assert.Contains(t, prompt, "failed_candidate_rev: candidate-rev")
+			return repairCycleCandidate(candidate.Report.BeadID, candidate.Report.AttemptID, candidate.Report.BaseRev, "repair-rev", 1), nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			landed = candidate
+			return candidate.Report, nil
+		}),
+		RefStore:    &inMemoryCandidateRefStore{},
+		ProjectRoot: "/project",
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-repair-bead")
+	require.NoError(t, err)
+	assert.True(t, repairCalled)
+	assert.True(t, result.Landed)
+	assert.Equal(t, "repair-rev", landed.Report.ResultRev)
+	assert.Equal(t, 1, landed.CycleIndex)
+	assert.Equal(t, "APPROVE", landed.Report.ReviewVerdict)
+}
+
+func TestRepairCycle_PromptIncludesReviewFindings(t *testing.T) {
+	prompt := BuildRepairPrompt(RepairPromptInput{
+		BeadID:             "ddx-repair-bead",
+		BaseRev:            "base-rev",
+		FailedCandidateRev: "failed-rev",
+		CycleIndex:         1,
+		ReviewRationale:    "AC#2 test missing",
+		PerAC: []ReviewAC{
+			{Number: 2, Item: "Add regression test", Grade: "REQUEST_CHANGES", Evidence: "no TestRepairCycle coverage"},
+		},
+		Findings: []Finding{
+			{Severity: "warn", Summary: "missing repair regression", Location: "cli/internal/agent/candidate_cycle_test.go:1"},
+		},
+		VerificationCommands: []string{"cd cli && go test ./internal/agent/... -run TestRepairCycle"},
+	})
+
+	for _, want := range []string{
+		"base_rev: base-rev",
+		"failed_candidate_rev: failed-rev",
+		"AC#2 test missing",
+		"REQUEST_CHANGES",
+		"missing repair regression",
+		"cd cli && go test ./internal/agent/... -run TestRepairCycle",
+		"Make exactly one append-only repair commit",
+		"Do not reset, amend, squash, rebase",
+	} {
+		assert.Contains(t, prompt, want)
+	}
+}
+
+func TestRepairCycle_NoHistoryRewrite(t *testing.T) {
+	projectRoot, baseRev := initTestGitRepo(t)
+	implRev := commitTestFile(t, projectRoot, "impl.txt", "impl\n", "implementation commit")
+	var repairRev string
+
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:    beadID,
+					AttemptID: "attempt-repair-history",
+					Status:    ExecuteBeadStatusSuccess,
+					BaseRev:   baseRev,
+					ResultRev: implRev,
+				},
+				WorktreePath: projectRoot,
+			}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateReviewResult, error) {
+			if candidate.Report.ResultRev == repairRev && repairRev != "" {
+				return CandidateReviewResult{Verdict: "APPROVE", Rationale: "history ok"}, nil
+			}
+			return repairCycleFixableReview(), nil
+		}),
+		Repair: repairPassFunc(func(_ context.Context, candidate CandidateResult, _ string) (CandidateResult, error) {
+			repairRev = commitTestFile(t, projectRoot, "repair.txt", "repair\n", "repair commit")
+			repaired := candidate
+			repaired.Report.ResultRev = repairRev
+			repaired.CycleIndex = 1
+			return repaired, nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			return candidate.Report, nil
+		}),
+		RefStore:    &GitCandidateRefStore{},
+		ProjectRoot: projectRoot,
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-repair-bead")
+	require.NoError(t, err)
+	assert.True(t, result.Landed)
+	assert.NotEmpty(t, repairRev)
+
+	logOut, err := exec.Command("git", "-C", projectRoot, "log", "--format=%s", baseRev+".."+repairRev).Output()
+	require.NoError(t, err)
+	lines := strings.Split(strings.TrimSpace(string(logOut)), "\n")
+	assert.Equal(t, []string{"repair commit", "implementation commit"}, lines)
+}
+
+func TestRepairCycle_RerunsChecksAndReview(t *testing.T) {
+	var checked []string
+	var reviewed []string
+	refStore := &inMemoryCandidateRefStore{}
+	events := &inMemoryEventAppender{}
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return repairCycleCandidate(beadID, "attempt-repair-rerun", "base-rev", "candidate-rev", 0), nil
+		}),
+		Checks: candidateCheckRunnerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateCheckResult, error) {
+			checked = append(checked, candidate.Report.ResultRev)
+			return CandidateCheckResult{Passed: true}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateReviewResult, error) {
+			reviewed = append(reviewed, candidate.Report.ResultRev)
+			if candidate.Report.ResultRev == "repair-rev" {
+				return CandidateReviewResult{Verdict: "APPROVE", Rationale: "repair complete"}, nil
+			}
+			return repairCycleFixableReview(), nil
+		}),
+		Repair: repairPassFunc(func(_ context.Context, candidate CandidateResult, _ string) (CandidateResult, error) {
+			return repairCycleCandidate(candidate.Report.BeadID, candidate.Report.AttemptID, candidate.Report.BaseRev, "repair-rev", 1), nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			return candidate.Report, nil
+		}),
+		RefStore:    refStore,
+		ProjectRoot: "/project",
+		BeadEvents:  events,
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-repair-bead")
+	require.NoError(t, err)
+	assert.True(t, result.Landed)
+	assert.Equal(t, []string{"candidate-rev", "repair-rev"}, checked)
+	assert.Equal(t, []string{"candidate-rev", "repair-rev"}, reviewed)
+	assert.Equal(t, []string{"refs/ddx/iterations/attempt-repair-rerun/0", "refs/ddx/iterations/attempt-repair-rerun/1"}, refStore.pinned)
+	assert.Equal(t, refStore.pinned, refStore.unpinned)
+
+	foundRepairStart := false
+	for _, event := range events.events {
+		if event.Kind == repairCycleStartedEventKind {
+			foundRepairStart = true
+		}
+	}
+	assert.True(t, foundRepairStart, "repair cycle start event must be recorded")
+}
+
+func TestRepairCycle_MaxCyclesExhaustedPreservesCandidate(t *testing.T) {
+	refStore := &inMemoryCandidateRefStore{}
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return repairCycleCandidate(beadID, "attempt-repair-max", "base-rev", "candidate-rev", 0), nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, _ CandidateResult) (CandidateReviewResult, error) {
+			return repairCycleFixableReview(), nil
+		}),
+		Repair: repairPassFunc(func(_ context.Context, candidate CandidateResult, _ string) (CandidateResult, error) {
+			return repairCycleCandidate(candidate.Report.BeadID, candidate.Report.AttemptID, candidate.Report.BaseRev, "repair-rev", 1), nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			t.Fatalf("lander must not run after repair budget exhaustion: %+v", candidate)
+			return candidate.Report, nil
+		}),
+		RefStore:        refStore,
+		ProjectRoot:     "/project",
+		RepairMaxCycles: 1,
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-repair-bead")
+	require.NoError(t, err)
+	assert.False(t, result.Landed)
+	assert.Equal(t, ExecuteBeadStatusRepairCycleExhausted, result.Report.Status)
+	assert.Equal(t, "repair-rev", result.Report.ResultRev)
+	assert.Equal(t, []string{"refs/ddx/iterations/attempt-repair-max/0", "refs/ddx/iterations/attempt-repair-max/1"}, refStore.pinned)
+	assert.Empty(t, refStore.unpinned, "exhausted repair candidates must retain refs")
+}
+
 type beadEventWithBody struct {
 	kind string
 	body string
+}
+
+func repairCycleCandidate(beadID, attemptID, baseRev, resultRev string, cycleIndex int) CandidateResult {
+	return CandidateResult{
+		Report: ExecuteBeadReport{
+			BeadID:    beadID,
+			AttemptID: attemptID,
+			Status:    ExecuteBeadStatusSuccess,
+			BaseRev:   baseRev,
+			ResultRev: resultRev,
+		},
+		WorktreePath: "/attempt/worktree",
+		CycleIndex:   cycleIndex,
+	}
+}
+
+func repairCycleFixableReview() CandidateReviewResult {
+	return CandidateReviewResult{
+		Verdict:   "REQUEST_CHANGES",
+		Rationale: "missing regression test",
+		PerAC: []ReviewAC{
+			{Number: 1, Item: "Add regression", Grade: "REQUEST_CHANGES", Evidence: "TestRepairCycle missing"},
+		},
+		Findings: []Finding{
+			{Severity: "warn", Summary: "missing regression test", Location: "cli/internal/agent/candidate_cycle_test.go:1"},
+		},
+		VerificationCommands: []string{"cd cli && go test ./internal/agent/... -run TestRepairCycle"},
+	}
+}
+
+func commitTestFile(t *testing.T, repo, name, content, msg string) string {
+	t.Helper()
+	require.NoError(t, os.WriteFile(filepath.Join(repo, name), []byte(content), 0o644))
+	out, err := exec.Command("git", "-C", repo, "add", name).CombinedOutput()
+	require.NoError(t, err, "git add: %s", out)
+	out, err = exec.Command("git", "-C", repo, "commit", "-m", msg).CombinedOutput()
+	require.NoError(t, err, "git commit: %s", out)
+	raw, err := exec.Command("git", "-C", repo, "rev-parse", "HEAD").Output()
+	require.NoError(t, err)
+	return strings.TrimSpace(string(raw))
 }

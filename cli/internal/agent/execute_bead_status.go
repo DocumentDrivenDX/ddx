@@ -359,6 +359,12 @@ const (
 	// review_fixable_gap on the same result_rev falls through to the regular
 	// BLOCK triage path instead.
 	ExecuteBeadStatusReviewFixableGap = "review_fixable_gap"
+
+	// ExecuteBeadStatusRepairCycleExhausted is set when the candidate-cycle
+	// repair loop reaches its per-attempt repair_max_cycles limit before a
+	// reviewer approves the candidate. The latest candidate ref is retained for
+	// operator inspection.
+	ExecuteBeadStatusRepairCycleExhausted = "repair-cycle-exhausted"
 )
 
 // ClassifyExecuteBeadStatus maps a landing outcome to the supervisor-visible
