@@ -303,21 +303,23 @@ func executeLoopIdleInterval(duration time.Duration) executeloop.Duration {
 	return executeloop.Duration{Duration: duration}
 }
 
-func executeLoopModeFromLegacy(once bool, pollInterval time.Duration) (executeloop.Mode, executeloop.Duration) {
-	if once {
-		return executeloop.ModeOnce, executeloop.Duration{}
-	}
-	if pollInterval > 0 {
-		return executeloop.ModeWatch, executeLoopIdleInterval(pollInterval)
-	}
-	return executeloop.ModeDrain, executeloop.Duration{}
-}
-
 func executeLoopMaxCostUSD(spec ExecuteLoopWorkerSpec) float64 {
 	if spec.MaxCostUSD == 0 {
 		return policyescalation.DefaultMaxCostUSD
 	}
 	return spec.MaxCostUSD
+}
+
+func prepareExecuteLoopWorkerSpec(projectRoot string, spec executeloop.ExecuteLoopSpec, defaultMode executeloop.Mode) (ExecuteLoopWorkerSpec, error) {
+	spec.ProjectRoot = projectRoot
+	if spec.Mode == "" && defaultMode != "" {
+		spec.Mode = defaultMode
+	}
+	spec.ApplyDefaults()
+	if err := spec.Validate(); err != nil {
+		return ExecuteLoopWorkerSpec{}, err
+	}
+	return ExecuteLoopWorkerSpec(spec), nil
 }
 
 // applyServerWatchdogConfig reads .ddx/config.yaml at projectRoot and applies

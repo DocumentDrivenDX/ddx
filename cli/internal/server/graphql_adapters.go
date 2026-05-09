@@ -4,8 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	ddxexec "github.com/DocumentDrivenDX/ddx/internal/exec"
 	ddxgraphql "github.com/DocumentDrivenDX/ddx/internal/server/graphql"
@@ -60,22 +60,12 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 		return nil, fmt.Errorf("unsupported worker kind %q", kind)
 	}
 
-	var req struct {
-		Harness       string `json:"harness"`
-		Model         string `json:"model"`
-		Profile       string `json:"profile"`
-		Provider      string `json:"provider"`
-		ModelRef      string `json:"model_ref"`
-		Effort        string `json:"effort"`
-		LabelFilter   string `json:"label_filter"`
-		Once          bool   `json:"once"`
-		PollInterval  string `json:"poll_interval"`
-		NoReview      bool   `json:"no_review"`
-		ReviewHarness string `json:"review_harness"`
-		ReviewModel   string `json:"review_model"`
-	}
+	var spec executeloop.ExecuteLoopSpec
 	if rawArgs != nil && *rawArgs != "" {
-		if err := json.Unmarshal([]byte(*rawArgs), &req); err != nil {
+		if err := rejectLegacyExecuteLoopWorkerArgs([]byte(*rawArgs)); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(*rawArgs), &spec); err != nil {
 			return nil, fmt.Errorf("invalid worker args JSON: %w", err)
 		}
 	}
@@ -84,12 +74,12 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 	// (ddx-b6cf025c). The max_count cap counts currently-running drain workers
 	// for this project so the "+ Add worker" button can refuse cleanly.
 	if wc := loadWorkersConfig(projectRoot); wc != nil {
-		if spec := wc.DefaultSpec; spec != nil {
-			if req.Profile == "" {
-				req.Profile = spec.Profile
+		if defaultSpec := wc.DefaultSpec; defaultSpec != nil {
+			if spec.Profile == "" {
+				spec.Profile = defaultSpec.Profile
 			}
-			if req.Effort == "" {
-				req.Effort = spec.Effort
+			if spec.Effort == "" {
+				spec.Effort = defaultSpec.Effort
 			}
 		}
 		if wc.MaxCount != nil && *wc.MaxCount >= 0 {
@@ -105,38 +95,15 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 	// Profile: "default" and nothing else. This eliminates the historical
 	// 19-burn drain-queue failure mode where an empty spec fanned out into
 	// per-tier ladder iteration with no upstream synthesis target.
-	if req.Profile == "" {
-		req.Profile = "default"
+	if spec.Profile == "" {
+		spec.Profile = "default"
 	}
 
-	// Default poll-interval = 30s for server-managed workers (ddx-dc157075).
-	// Operators wanting drain-and-exit semantics must pass --once or an
-	// explicit poll_interval=0 in the dispatch payload.
-	pollInterval := 30 * time.Second
-	if req.PollInterval != "" {
-		d, err := time.ParseDuration(req.PollInterval)
-		if err != nil {
-			return nil, fmt.Errorf("invalid poll_interval: %w", err)
-		}
-		pollInterval = d
+	workerSpec, err := prepareExecuteLoopWorkerSpec(projectRoot, spec, executeloop.ModeWatch)
+	if err != nil {
+		return nil, err
 	}
-
-	mode, idleInterval := executeLoopModeFromLegacy(req.Once, pollInterval)
-	record, err := a.manager.StartExecuteLoop(ExecuteLoopWorkerSpec{
-		ProjectRoot:   projectRoot,
-		Harness:       req.Harness,
-		Model:         req.Model,
-		Profile:       req.Profile,
-		Provider:      req.Provider,
-		ModelRef:      req.ModelRef,
-		Effort:        req.Effort,
-		LabelFilter:   req.LabelFilter,
-		Mode:          mode,
-		IdleInterval:  idleInterval,
-		NoReview:      req.NoReview,
-		ReviewHarness: req.ReviewHarness,
-		ReviewModel:   req.ReviewModel,
-	})
+	record, err := a.manager.StartExecuteLoop(workerSpec)
 	if err != nil {
 		return nil, err
 	}
@@ -145,6 +112,20 @@ func (a *workerDispatchAdapter) DispatchWorker(ctx context.Context, kind string,
 		State: record.State,
 		Kind:  record.Kind,
 	}, nil
+}
+
+func rejectLegacyExecuteLoopWorkerArgs(raw []byte) error {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &fields); err != nil {
+		return fmt.Errorf("invalid worker args JSON: %w", err)
+	}
+	if _, ok := fields["poll_interval"]; ok {
+		return fmt.Errorf("poll_interval is not supported for execute-loop worker dispatch; use mode=\"watch\" and idle_interval")
+	}
+	if _, ok := fields["once"]; ok {
+		return fmt.Errorf("once is not supported for execute-loop worker dispatch; use mode=\"once\"")
+	}
+	return nil
 }
 
 // loadWorkersConfig reads .ddx/config.yaml at projectRoot and returns the

@@ -2406,12 +2406,11 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		}
 		projectRoot = resolved
 	}
-	spec.ProjectRoot = projectRoot
-	if spec.Mode == "" {
-		spec.Mode = executeloop.ModeWatch
+	if projectRoot == "" {
+		projectRoot = s.workers.projectRoot
 	}
-	spec.ApplyDefaults()
-	if err := spec.Validate(); err != nil {
+	workerSpec, err := prepareExecuteLoopWorkerSpec(projectRoot, spec, executeloop.ModeWatch)
+	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{
 			"error":        err.Error(),
 			"capabilities": executeLoopSpecCapabilities(),
@@ -2419,7 +2418,7 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	record, err := s.workers.StartExecuteLoop(ExecuteLoopWorkerSpec(spec))
+	record, err := s.workers.StartExecuteLoop(workerSpec)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
