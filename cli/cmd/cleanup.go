@@ -15,11 +15,16 @@ type cleanupCommandReport struct {
 	ScannedTempDirs             int                                 `json:"scanned_temp_dirs"`
 	ScannedEvidenceDirs         int                                 `json:"scanned_evidence_dirs"`
 	CompleteEvidenceDirs        int                                 `json:"complete_evidence_dirs"`
+	ScannedScratchDirs          int                                 `json:"scanned_scratch_dirs"`
 	RemovedUnregisteredTempDirs int64                               `json:"removed_unregistered_temp_dirs"`
 	RemovedRegisteredWorktrees  int64                               `json:"removed_registered_worktrees"`
 	RemovedRunStateFiles        int64                               `json:"removed_run_state_files"`
+	RemovedScratchDirs          int64                               `json:"removed_scratch_dirs"`
+	PreservedActiveScratchDirs  int64                               `json:"preserved_active_scratch_dirs"`
 	BytesReclaimed              int64                               `json:"bytes_reclaimed"`
 	InodesReclaimed             int64                               `json:"inodes_reclaimed"`
+	ScratchBytesReclaimed       int64                               `json:"scratch_bytes_reclaimed"`
+	ScratchInodesReclaimed      int64                               `json:"scratch_inodes_reclaimed"`
 	Warnings                    []agent.ExecutionCleanupWarning     `json:"warnings"`
 	BlockedErrors               []agent.ExecutionCleanupIssue       `json:"blocked_errors"`
 	Observations                []agent.ExecutionCleanupObservation `json:"observations"`
@@ -76,11 +81,16 @@ func (f *CommandFactory) runCleanup(cmd *cobra.Command, args []string) error {
 		ScannedTempDirs:             summary.ScannedTempDirs,
 		ScannedEvidenceDirs:         summary.ScannedEvidenceDirs,
 		CompleteEvidenceDirs:        summary.CompleteEvidenceDirs,
+		ScannedScratchDirs:          summary.ScannedScratchDirs,
 		RemovedUnregisteredTempDirs: summary.RemovedUnregisteredTempDirs,
 		RemovedRegisteredWorktrees:  summary.RemovedRegisteredWorktrees,
 		RemovedRunStateFiles:        summary.RemovedRunStateFiles,
+		RemovedScratchDirs:          summary.RemovedScratchDirs,
+		PreservedActiveScratchDirs:  summary.PreservedActiveScratchDirs,
 		BytesReclaimed:              summary.BytesReclaimed,
 		InodesReclaimed:             summary.InodesReclaimed,
+		ScratchBytesReclaimed:       summary.ScratchBytesReclaimed,
+		ScratchInodesReclaimed:      summary.ScratchInodesReclaimed,
 		Warnings:                    append([]agent.ExecutionCleanupWarning(nil), summary.Warnings...),
 		Observations:                append([]agent.ExecutionCleanupObservation(nil), summary.Observations...),
 	}
@@ -110,14 +120,23 @@ func (f *CommandFactory) runCleanup(cmd *cobra.Command, args []string) error {
 	if report.DryRun {
 		verb = "would remove"
 	}
-	fmt.Fprintf(out, "cleanup: %s %d stale temp dir(s), %d registered worktree(s), %d run-state file(s)\n",
+	fmt.Fprintf(out, "cleanup: %s %d stale temp dir(s), %d registered worktree(s), %d run-state file(s), %d scratch dir(s)\n",
 		verb,
 		report.RemovedUnregisteredTempDirs,
 		report.RemovedRegisteredWorktrees,
 		report.RemovedRunStateFiles,
+		report.RemovedScratchDirs,
 	)
 	if report.BytesReclaimed > 0 || report.InodesReclaimed > 0 {
 		fmt.Fprintf(out, "cleanup: %s %d byte(s), %d inode(s)\n", verb, report.BytesReclaimed, report.InodesReclaimed)
+	}
+	if report.ScratchBytesReclaimed > 0 || report.ScratchInodesReclaimed > 0 || report.PreservedActiveScratchDirs > 0 {
+		fmt.Fprintf(out, "cleanup: scratch scope %s %d byte(s), %d inode(s); preserved %d active scratch dir(s)\n",
+			verb,
+			report.ScratchBytesReclaimed,
+			report.ScratchInodesReclaimed,
+			report.PreservedActiveScratchDirs,
+		)
 	}
 	if report.CompleteEvidenceDirs > 0 {
 		fmt.Fprintf(out, "cleanup: preserved %d complete evidence bundle(s)\n", report.CompleteEvidenceDirs)

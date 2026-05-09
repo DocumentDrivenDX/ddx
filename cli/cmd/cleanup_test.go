@@ -19,11 +19,16 @@ type cleanupCommandJSON struct {
 	ScannedTempDirs             int              `json:"scanned_temp_dirs"`
 	ScannedEvidenceDirs         int              `json:"scanned_evidence_dirs"`
 	CompleteEvidenceDirs        int              `json:"complete_evidence_dirs"`
+	ScannedScratchDirs          int              `json:"scanned_scratch_dirs"`
 	RemovedUnregisteredTempDirs int64            `json:"removed_unregistered_temp_dirs"`
 	RemovedRegisteredWorktrees  int64            `json:"removed_registered_worktrees"`
 	RemovedRunStateFiles        int64            `json:"removed_run_state_files"`
+	RemovedScratchDirs          int64            `json:"removed_scratch_dirs"`
+	PreservedActiveScratchDirs  int64            `json:"preserved_active_scratch_dirs"`
 	BytesReclaimed              int64            `json:"bytes_reclaimed"`
 	InodesReclaimed             int64            `json:"inodes_reclaimed"`
+	ScratchBytesReclaimed       int64            `json:"scratch_bytes_reclaimed"`
+	ScratchInodesReclaimed      int64            `json:"scratch_inodes_reclaimed"`
 	Warnings                    []map[string]any `json:"warnings"`
 	BlockedErrors               []map[string]any `json:"blocked_errors"`
 	Observations                []map[string]any `json:"observations"`
@@ -156,4 +161,32 @@ func TestCleanupCommand_DoesNotRemovePreservedEvidence(t *testing.T) {
 	assert.FileExists(t, filepath.Join(evidenceDir, "manifest.json"))
 	assert.FileExists(t, filepath.Join(evidenceDir, "result.json"))
 	assert.FileExists(t, filepath.Join(runsDir, "record.json"))
+}
+
+func TestCleanupCommand_ReportsScratchReclamation(t *testing.T) {
+	projectRoot, tempRoot := setupCleanupCommandProject(t)
+	scratchPath, err := os.MkdirTemp(filepath.Dir(tempRoot), "ddx-test-cleanup-scratch-")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(scratchPath) })
+	require.NoError(t, os.WriteFile(filepath.Join(scratchPath, "payload.txt"), []byte("stale scratch\n"), 0o644))
+	staleTime := time.Now().Add(-48 * time.Hour)
+	require.NoError(t, os.Chtimes(scratchPath, staleTime, staleTime))
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	textOut, err := executeCommand(root, "cleanup")
+	require.NoError(t, err)
+	assert.Contains(t, textOut, "scratch dir(s)")
+	assert.Contains(t, textOut, "scratch scope would remove")
+	assert.DirExists(t, scratchPath)
+
+	root = NewCommandFactory(projectRoot).NewRootCommand()
+	jsonOut, err := executeCommand(root, "cleanup", "--json")
+	require.NoError(t, err)
+
+	var report cleanupCommandJSON
+	require.NoError(t, json.Unmarshal([]byte(jsonOut), &report))
+	assert.True(t, report.DryRun)
+	assert.GreaterOrEqual(t, report.RemovedScratchDirs, int64(1))
+	assert.Greater(t, report.ScratchBytesReclaimed, int64(0))
+	assert.Greater(t, report.ScratchInodesReclaimed, int64(0))
 }

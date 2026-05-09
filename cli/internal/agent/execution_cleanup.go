@@ -17,6 +17,24 @@ import (
 // and liveness for a DDx temp execution directory.
 const ExecutionCleanupMetadataFileName = "cleanup.json"
 
+const defaultExecutionCleanupScratchMinAge = 24 * time.Hour
+
+var defaultExecutionCleanupScratchPrefixes = []string{
+	"ddx-test-",
+	"ddx-e2e-",
+	"ddx-test-bin-",
+	"ddx-test-binary-",
+	"ddx-exec-keepalive",
+	"ddx-metric-keepalive",
+	"ddx-metaprompt-keepalive",
+	"ddx-persona-keepalive",
+	"ddx-gate-wt-",
+	"ddx-land-finalize-",
+	"ddx-land-wt-",
+	"ddx-push-recover-",
+	"ddx-conflict-recover-",
+}
+
 // ExecutionCleanupLiveness records the refreshable liveness signal attached to
 // a temp execution directory.
 type ExecutionCleanupLiveness struct {
@@ -81,13 +99,18 @@ type ExecutionCleanupSummary struct {
 	ScannedTempDirs      int `json:"scanned_temp_dirs"`
 	ScannedEvidenceDirs  int `json:"scanned_evidence_dirs"`
 	CompleteEvidenceDirs int `json:"complete_evidence_dirs"`
+	ScannedScratchDirs   int `json:"scanned_scratch_dirs"`
 
 	RemovedUnregisteredTempDirs int64 `json:"removed_unregistered_temp_dirs"`
 	RemovedRegisteredWorktrees  int64 `json:"removed_registered_worktrees"`
 	RemovedRunStateFiles        int64 `json:"removed_run_state_files"`
+	RemovedScratchDirs          int64 `json:"removed_scratch_dirs"`
+	PreservedActiveScratchDirs  int64 `json:"preserved_active_scratch_dirs"`
 
-	BytesReclaimed  int64 `json:"bytes_reclaimed"`
-	InodesReclaimed int64 `json:"inodes_reclaimed"`
+	BytesReclaimed         int64 `json:"bytes_reclaimed"`
+	InodesReclaimed        int64 `json:"inodes_reclaimed"`
+	ScratchBytesReclaimed  int64 `json:"scratch_bytes_reclaimed"`
+	ScratchInodesReclaimed int64 `json:"scratch_inodes_reclaimed"`
 
 	Warnings     []ExecutionCleanupWarning     `json:"warnings,omitempty"`
 	Issues       []ExecutionCleanupIssue       `json:"issues,omitempty"`
@@ -135,12 +158,15 @@ func (defaultExecutionCleanupLivenessProbe) IsLive(meta ExecutionCleanupMetadata
 // ExecutionCleanupManager owns conservative reclamation of DDx temp execution
 // resources for one project.
 type ExecutionCleanupManager struct {
-	ProjectRoot string
-	TempRoot    string
-	GitOps      GitOps
-	DryRun      bool
-	Now         func() time.Time
-	Probe       ExecutionCleanupLivenessProbe
+	ProjectRoot     string
+	TempRoot        string
+	ScratchRoots    []string
+	ScratchPrefixes []string
+	ScratchMinAge   time.Duration
+	GitOps          GitOps
+	DryRun          bool
+	Now             func() time.Time
+	Probe           ExecutionCleanupLivenessProbe
 }
 
 // NewExecutionCleanupManager constructs a cleanup manager with the default
@@ -241,16 +267,13 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 				continue
 			}
 		}
-		if meta.ProjectRoot != "" && filepath.Clean(meta.ProjectRoot) != filepath.Clean(m.ProjectRoot) {
-			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
-				Path:    path,
-				Class:   "ownership_mismatch",
-				Message: fmt.Sprintf("metadata project_root=%s does not match manager project_root=%s", meta.ProjectRoot, m.ProjectRoot),
-			})
-			continue
+		candidateRunStates := runStates
+		ownershipMismatch := meta.ProjectRoot != "" && !sameCleanPath(meta.ProjectRoot, m.ProjectRoot)
+		if ownershipMismatch {
+			candidateRunStates = m.runStatesForMetadata(meta, runStates, &summary)
 		}
 
-		matchedRunState := matchingRunStateForMeta(runStates, meta)
+		matchedRunState := matchingRunStateForMeta(candidateRunStates, meta)
 		live, reason := probe.IsLive(meta, matchedRunState, now())
 		if live {
 			if matchedRunState != nil {
@@ -262,6 +285,24 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 				Message: reason,
 			})
 			continue
+		}
+		if ownershipMismatch {
+			if !m.canReclaimForeignTestOwnedPath(meta.ProjectRoot, path) {
+				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+					Path:    path,
+					Class:   "ownership_mismatch",
+					Message: fmt.Sprintf("metadata project_root=%s does not match manager project_root=%s", meta.ProjectRoot, m.ProjectRoot),
+				})
+				continue
+			}
+			if m.isRegisteredWorktree(meta.ProjectRoot, path, &summary) {
+				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+					Path:    path,
+					Class:   "preserved_foreign_registered_worktree",
+					Message: "foreign project worktree is still registered",
+				})
+				continue
+			}
 		}
 
 		if _, ok := registered[filepath.Clean(path)]; ok {
@@ -358,6 +399,8 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 		})
 	}
 
+	m.cleanupScratchRoots(&summary, runStates, registered, probe, now())
+
 	if m.GitOps != nil && summary.RemovedRegisteredWorktrees > 0 && !m.DryRun {
 		if err := m.GitOps.WorktreePrune(m.ProjectRoot); err != nil {
 			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
@@ -388,6 +431,275 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 	summary.ScannedEvidenceDirs += scanCompleteEvidenceDirs(m.ProjectRoot, ".ddx/runs", "record.json", "", &summary)
 
 	return summary, nil
+}
+
+func (m *ExecutionCleanupManager) cleanupScratchRoots(summary *ExecutionCleanupSummary, runStates []RunState, registered map[string]struct{}, probe ExecutionCleanupLivenessProbe, now time.Time) {
+	prefixes := m.scratchPrefixes()
+	minAge := m.scratchMinAge()
+	tempRoot := filepath.Clean(summary.TempRoot)
+
+	for _, root := range m.scratchRoots(summary.TempRoot) {
+		entries, err := os.ReadDir(root)
+		if err != nil {
+			if !os.IsNotExist(err) {
+				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+					Path:    root,
+					Class:   "scratch_root_read",
+					Message: err.Error(),
+				})
+			}
+			continue
+		}
+		for _, entry := range entries {
+			if !entry.IsDir() || !hasAnyPrefix(entry.Name(), prefixes) {
+				continue
+			}
+			path := filepath.Join(root, entry.Name())
+			if sameCleanPath(path, tempRoot) || isPathWithin(path, tempRoot) {
+				continue
+			}
+			summary.ScannedScratchDirs++
+
+			info, err := entry.Info()
+			if err != nil {
+				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+					Path:    path,
+					Class:   "scratch_stat",
+					Message: err.Error(),
+				})
+				continue
+			}
+
+			meta, metaErr := ReadExecutionCleanupMetadata(path)
+			if metaErr != nil {
+				if !errors.Is(metaErr, os.ErrNotExist) {
+					summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+						Path:    path,
+						Class:   "scratch_metadata_read",
+						Message: metaErr.Error(),
+					})
+					continue
+				}
+				meta = ExecutionCleanupMetadata{
+					ProjectRoot:  m.ProjectRoot,
+					WorktreePath: path,
+				}
+			}
+			if meta.WorktreePath == "" {
+				meta.WorktreePath = path
+			}
+
+			candidateRunStates := runStates
+			if meta.ProjectRoot != "" && !sameCleanPath(meta.ProjectRoot, m.ProjectRoot) {
+				if !m.canReclaimForeignTestOwnedPath(meta.ProjectRoot, path) {
+					summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+						Path:    path,
+						Class:   "scratch_ownership_mismatch",
+						Message: fmt.Sprintf("metadata project_root=%s does not match manager project_root=%s", meta.ProjectRoot, m.ProjectRoot),
+					})
+					continue
+				}
+				candidateRunStates = m.runStatesForMetadata(meta, runStates, summary)
+				if m.isRegisteredWorktree(meta.ProjectRoot, path, summary) {
+					summary.PreservedActiveScratchDirs++
+					summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+						Path:    path,
+						Class:   "preserved_active_scratch_dir",
+						Message: "foreign project worktree is still registered",
+					})
+					continue
+				}
+			}
+			if _, ok := registered[filepath.Clean(path)]; ok {
+				summary.PreservedActiveScratchDirs++
+				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+					Path:    path,
+					Class:   "preserved_active_scratch_dir",
+					Message: "registered worktree",
+				})
+				continue
+			}
+
+			matchedRunState := matchingRunStateForMeta(candidateRunStates, meta)
+			if live, reason := probe.IsLive(meta, matchedRunState, now); live {
+				summary.PreservedActiveScratchDirs++
+				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+					Path:    path,
+					Class:   "preserved_active_scratch_dir",
+					Message: reason,
+				})
+				continue
+			}
+
+			if age := now.Sub(info.ModTime()); age < minAge {
+				summary.PreservedActiveScratchDirs++
+				summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+					Path:    path,
+					Class:   "preserved_active_scratch_dir",
+					Message: fmt.Sprintf("fresh scratch dir age=%s min_age=%s", age.Round(time.Second), minAge),
+				})
+				continue
+			}
+
+			reclaimedBytes, reclaimedInodes, measureErr := measureTree(path)
+			if measureErr != nil {
+				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+					Path:    path,
+					Class:   "scratch_measure_tree",
+					Message: measureErr.Error(),
+				})
+			}
+			if !m.DryRun {
+				if err := os.RemoveAll(path); err != nil {
+					summary.Issues = append(summary.Issues, ExecutionCleanupIssue{
+						Path:     path,
+						Class:    "scratch_dir_remove",
+						Message:  err.Error(),
+						Blocking: false,
+					})
+					continue
+				}
+			}
+			summary.RemovedScratchDirs++
+			summary.ScratchBytesReclaimed += reclaimedBytes
+			summary.ScratchInodesReclaimed += reclaimedInodes
+			summary.BytesReclaimed += reclaimedBytes
+			summary.InodesReclaimed += reclaimedInodes
+			class := "removed_scratch_dir"
+			if m.DryRun {
+				class = "would_remove_scratch_dir"
+			}
+			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+				Path:    path,
+				Class:   class,
+				Message: "stale DDx scratch dir",
+				Bytes:   reclaimedBytes,
+				Inodes:  reclaimedInodes,
+			})
+		}
+	}
+}
+
+func (m *ExecutionCleanupManager) runStatesForMetadata(meta ExecutionCleanupMetadata, fallback []RunState, summary *ExecutionCleanupSummary) []RunState {
+	if meta.ProjectRoot == "" || sameCleanPath(meta.ProjectRoot, m.ProjectRoot) {
+		return fallback
+	}
+	states, err := ReadRunStates(meta.ProjectRoot)
+	if err != nil {
+		summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+			Path:    runStateDirPath(meta.ProjectRoot),
+			Class:   "foreign_run_state_read",
+			Message: err.Error(),
+		})
+		return fallback
+	}
+	return states
+}
+
+func (m *ExecutionCleanupManager) canReclaimForeignTestOwnedPath(projectRoot, path string) bool {
+	return projectRoot != "" && isPathWithin(projectRoot, os.TempDir()) && isPathWithin(path, os.TempDir())
+}
+
+func (m *ExecutionCleanupManager) isRegisteredWorktree(projectRoot, path string, summary *ExecutionCleanupSummary) bool {
+	if m.GitOps == nil || projectRoot == "" || path == "" {
+		return false
+	}
+	paths, err := m.GitOps.WorktreeList(projectRoot)
+	if err != nil {
+		summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+			Path:    projectRoot,
+			Class:   "foreign_git_worktree_list",
+			Message: err.Error(),
+		})
+		return false
+	}
+	clean := filepath.Clean(path)
+	for _, p := range paths {
+		if filepath.Clean(p) == clean {
+			return true
+		}
+	}
+	return false
+}
+
+func (m *ExecutionCleanupManager) scratchRoots(tempRoot string) []string {
+	if len(m.ScratchRoots) > 0 {
+		return cleanUniquePaths(m.ScratchRoots)
+	}
+	var roots []string
+	if tempRoot != "" {
+		parent := filepath.Dir(filepath.Clean(tempRoot))
+		if parent != "" && parent != "." {
+			roots = append(roots, parent)
+		}
+	}
+	if len(roots) == 0 {
+		roots = append(roots, os.TempDir())
+	}
+	return cleanUniquePaths(roots)
+}
+
+func (m *ExecutionCleanupManager) scratchPrefixes() []string {
+	if len(m.ScratchPrefixes) > 0 {
+		return append([]string(nil), m.ScratchPrefixes...)
+	}
+	return append([]string(nil), defaultExecutionCleanupScratchPrefixes...)
+}
+
+func (m *ExecutionCleanupManager) scratchMinAge() time.Duration {
+	if m.ScratchMinAge > 0 {
+		return m.ScratchMinAge
+	}
+	return defaultExecutionCleanupScratchMinAge
+}
+
+func cleanUniquePaths(paths []string) []string {
+	seen := map[string]struct{}{}
+	var out []string
+	for _, p := range paths {
+		if p == "" {
+			continue
+		}
+		clean := filepath.Clean(p)
+		if _, ok := seen[clean]; ok {
+			continue
+		}
+		seen[clean] = struct{}{}
+		out = append(out, clean)
+	}
+	return out
+}
+
+func hasAnyPrefix(name string, prefixes []string) bool {
+	for _, prefix := range prefixes {
+		if prefix != "" && strings.HasPrefix(name, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func sameCleanPath(a, b string) bool {
+	if a == "" || b == "" {
+		return false
+	}
+	return filepath.Clean(a) == filepath.Clean(b)
+}
+
+func isPathWithin(path, root string) bool {
+	if path == "" || root == "" {
+		return false
+	}
+	cleanPath := filepath.Clean(path)
+	cleanRoot := filepath.Clean(root)
+	if cleanPath == cleanRoot {
+		return true
+	}
+	rel, err := filepath.Rel(cleanRoot, cleanPath)
+	if err != nil {
+		return false
+	}
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(os.PathSeparator))
 }
 
 func matchingRunStateForMeta(states []RunState, meta ExecutionCleanupMetadata) *RunState {

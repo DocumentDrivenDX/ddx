@@ -430,6 +430,125 @@ func TestExecutionCleanup_DryRunLeavesCandidatesOnDisk(t *testing.T) {
 	assert.True(t, hasObservationClass(summary.Observations, "would_remove_run_state"))
 }
 
+func TestExecutionCleanup_RemovesStaleDDXScratchDirs(t *testing.T) {
+	now := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	scratchRoot := t.TempDir()
+
+	stalePath := filepath.Join(scratchRoot, "ddx-test-scratch-stale")
+	nonDDXPath := filepath.Join(scratchRoot, "plain-old-dir")
+	writeExecutionCleanupCandidate(t, stalePath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		WorktreePath: stalePath,
+	}, map[string]string{"payload.txt": strings.Repeat("x", 32)})
+	require.NoError(t, os.MkdirAll(nonDDXPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(nonDDXPath, "keep.txt"), []byte("keep\n"), 0o644))
+	old := now.Add(-2 * time.Hour)
+	require.NoError(t, os.Chtimes(stalePath, old, old))
+	require.NoError(t, os.Chtimes(nonDDXPath, old, old))
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.ScratchRoots = []string{scratchRoot}
+	mgr.ScratchMinAge = time.Hour
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, stalePath)
+	assert.DirExists(t, nonDDXPath)
+	assert.Equal(t, 1, summary.ScannedScratchDirs)
+	assert.Equal(t, int64(1), summary.RemovedScratchDirs)
+	assert.Equal(t, int64(0), summary.RemovedUnregisteredTempDirs)
+	assert.Greater(t, summary.ScratchBytesReclaimed, int64(0))
+	assert.Greater(t, summary.ScratchInodesReclaimed, int64(0))
+	assert.True(t, hasObservationClass(summary.Observations, "removed_scratch_dir"))
+}
+
+func TestExecutionCleanup_PreservesActiveDDXScratchDirs(t *testing.T) {
+	now := time.Date(2026, 5, 8, 12, 0, 0, 0, time.UTC)
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	scratchRoot := t.TempDir()
+
+	livePath := filepath.Join(scratchRoot, "ddx-e2e-live")
+	freshPath := filepath.Join(scratchRoot, "ddx-test-fresh")
+	nonDDXPath := filepath.Join(scratchRoot, "plain-old-dir")
+	writeExecutionCleanupCandidate(t, livePath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		WorktreePath: livePath,
+		Liveness: &ExecutionCleanupLiveness{
+			ExpiresAt: now.Add(time.Hour),
+		},
+	}, map[string]string{"payload.txt": "live\n"})
+	writeExecutionCleanupCandidateWithoutMetadata(t, freshPath, map[string]string{"payload.txt": "fresh\n"})
+	require.NoError(t, os.MkdirAll(nonDDXPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(nonDDXPath, "keep.txt"), []byte("keep\n"), 0o644))
+	old := now.Add(-2 * time.Hour)
+	require.NoError(t, os.Chtimes(livePath, old, old))
+	require.NoError(t, os.Chtimes(nonDDXPath, old, old))
+	require.NoError(t, os.Chtimes(freshPath, now.Add(-10*time.Minute), now.Add(-10*time.Minute)))
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.ScratchRoots = []string{scratchRoot}
+	mgr.ScratchMinAge = time.Hour
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, livePath)
+	assert.DirExists(t, freshPath)
+	assert.DirExists(t, nonDDXPath)
+	assert.Equal(t, 2, summary.ScannedScratchDirs)
+	assert.Equal(t, int64(0), summary.RemovedScratchDirs)
+	assert.Equal(t, int64(2), summary.PreservedActiveScratchDirs)
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_active_scratch_dir"))
+}
+
+func TestExecutionCleanup_ReclaimsExpiredTestOwnedWorktrees(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	staleProjectRoot := filepath.Join(t.TempDir(), "stale-project")
+	activeProjectRoot := filepath.Join(t.TempDir(), "active-project")
+	require.NoError(t, os.MkdirAll(filepath.Join(staleProjectRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(activeProjectRoot, ".ddx"), 0o755))
+
+	stalePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-stale-foreign-20260508T120000-deadbeef")
+	activePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-active-foreign-20260508T120000-feedface")
+	writeExecutionCleanupCandidate(t, stalePath, ExecutionCleanupMetadata{
+		ProjectRoot:  staleProjectRoot,
+		BeadID:       "ddx-stale-foreign",
+		AttemptID:    "20260508T120000-deadbeef",
+		WorktreePath: stalePath,
+		Registered:   true,
+	}, map[string]string{"scratch.txt": "stale foreign\n"})
+	writeExecutionCleanupCandidate(t, activePath, ExecutionCleanupMetadata{
+		ProjectRoot:  activeProjectRoot,
+		BeadID:       "ddx-active-foreign",
+		AttemptID:    "20260508T120000-feedface",
+		WorktreePath: activePath,
+		Registered:   true,
+	}, map[string]string{"scratch.txt": "active foreign\n"})
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{
+		worktrees: []string{activePath},
+	})
+	mgr.TempRoot = tempRoot
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, stalePath)
+	assert.DirExists(t, activePath)
+	assert.Equal(t, int64(1), summary.RemovedUnregisteredTempDirs)
+	assert.True(t, hasObservationClass(summary.Observations, "removed_unregistered_temp_dir"))
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_foreign_registered_worktree"))
+}
+
 func hasObservationClass(observations []ExecutionCleanupObservation, class string) bool {
 	for _, obs := range observations {
 		if obs.Class == class {
