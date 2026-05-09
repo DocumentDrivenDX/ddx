@@ -45,7 +45,7 @@ Each pain point below maps to a specific DDx capability — the list is bounded 
 
 1. **Context assembly is manual.** Composing the right persona + pattern + spec + prior evidence into agent context is ad hoc and slow. *(DDx: artifact library + composition.)*
 2. **Documents drift silently.** When an upstream document changes, dependent artifacts go stale with no detection or reconciliation. *(DDx: artifact graph + staleness + reconciliation beads.)*
-3. **Work tracking is reinvented.** Every workflow tool reimplements issue storage, dependency DAGs, and ready/blocked queues. *(DDx: bead tracker + JSONL interchange.)*
+3. **Work tracking is reinvented.** Every workflow tool reimplements issue storage, dependency DAGs, and ready/waiting queues. *(DDx: bead tracker + JSONL interchange.)*
 4. **Agent runs leave no shared trace.** Each tool grows its own dispatch, logging, and evidence shape; nothing carries between invocations. *(DDx: task execution lifecycle on a unified on-disk substrate.)*
 5. **Cost of agentic work is invisible.** Token spend is a first-order constraint with no shared signal on the cheapest model that reliably closes beads. *(DDx: cost-tier routing + token awareness.)*
 6. **Skills and plugins don't compose.** Each project reinvents its agent instructions, skills, and supporting mechanics from scratch. *(DDx: single `ddx` skill + project-local plugin install.)*
@@ -118,7 +118,7 @@ deliver the artifacts agents produce and consume to build software.
 - **Multi-media artifact graph** — artifact identity, relationships, and content
   hashing across document and non-document media. Any file with a sidecar
   `.ddx.yaml` is a first-class artifact.
-- **Bead tracker** — work items with a dependency DAG, ready/blocked queues,
+- **Bead tracker** — work items with a dependency DAG, ready/waiting queues,
   and JSONL interchange. Beads are the unit of work agents execute.
 - **Three-layer run architecture** — `ddx run` (single agent invocation), `ddx
   try` (bead attempt in isolated worktree), `ddx work` (queue drain). Agent

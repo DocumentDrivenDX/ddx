@@ -3,8 +3,8 @@
 The intake gate is a pre-Claim phase in `ddx work` that evaluates each
 candidate bead before an agent worker claims it. Its purpose is to improve beads
 that can be safely clarified, prevent coarse epics from being dispatched as
-monolithic work items, and block ambiguous work before an implementer is forced
-to guess.
+monolithic work items, and hold ambiguous work for operator decision before an
+implementer is forced to guess.
 
 ## When the gate triggers
 
@@ -18,9 +18,10 @@ and prior attempt history to classify it as:
   or other safe, intent-preserving bead update through `ddx bead update`;
   proceeds to Claim after the mutation.
 - **too_large_decomposed** — multiple independent deliverables; the gate files
-  child beads, records the AC map, and blocks the parent.
-- **ambiguous_needs_human** — needs human clarification; the gate sets
-  `execution-eligible=false` or `blocked`, and adds `needs_human`.
+  child beads, records the AC map, and leaves the parent `status=open` with
+  dependency edges to the children.
+- **ambiguous_requires_operator** — needs human clarification; the gate moves
+  the bead to `status=proposed`.
 
 Safe rewrites may replace the bead body when the replacement is clearer,
 execution-ready, and validated against durable anchors. The gate should not
@@ -44,7 +45,8 @@ structured outcome whose rationale says the bead is too large or cannot be
 safely split inside the implementation worktree, `ddx work` must run the
 orchestrator-level splitter on the original bead. That fallback is not operator
 work unless the splitter cannot produce a lossless AC map or the configured
-decomposition depth has truly been exhausted at the queue level.
+decomposition depth has truly been exhausted at the queue level; those cases
+move the bead to `status=proposed`.
 
 ## Bypassing the gate per-bead
 
@@ -63,16 +65,18 @@ that the gate misclassifies.
 When the gate decomposes a bead:
 
 1. Child beads are filed with `parent: <id>` linking back to the epic.
-2. The parent's status is set to `blocked`.
+2. The parent's status remains `open`; dependency waiting is derived from the
+   new child dependency edges, not `status=blocked`.
 3. The parent receives a `kind:triage-decomposed` event whose JSON body lists
    the `child_ids`, the splitter's `rationale`, and an `ac_map`.
 4. Dependency edges are added: the parent depends on all children, ensuring it
    cannot be dispatched again until children close (should it be re-opened).
 
 The `ac_map` is load-bearing. Every parent acceptance criterion must map to at
-least one child acceptance criterion or be explicitly marked `needs_human` or
-`non_scope` with a rationale. A split that drops an AC is invalid and blocks for
-operator review instead of dispatching children as if the work were complete.
+least one child acceptance criterion or be explicitly marked
+`operator_required` or `non_scope` with a rationale. A split that drops an AC is
+invalid and moves the parent to `status=proposed` instead of dispatching
+children as if the work were complete.
 
 Children re-enter the triage gate on their next dispatch cycle. If a child is
 itself decomposable, the gate will split it further — up to the depth cap.
@@ -91,7 +95,7 @@ agent:
 When a bead at the queue-level depth cap is evaluated, the gate:
 
 1. Appends a `kind:triage-overflow` event.
-2. Sets `status=blocked` with `label=needs-human-decomposition`.
+2. Sets `status=proposed` and records the depth overflow in triage evidence.
 3. Does **not** invoke the classifier or splitter.
 4. Does **not** dispatch the bead.
 
@@ -107,7 +111,7 @@ after queue-level overflow or lossy/ambiguous decomposition is recorded.
 
 The `bead-split` prompt is evaluated against a held-out corpus using both:
 
-- hard AC traceability: every parent AC maps to child ACs, `needs_human`, or
+- hard AC traceability: every parent AC maps to child ACs, `operator_required`, or
   `non_scope`;
 - string-overlap metric: the fraction of unique AC tokens (alphanumeric tokens
   ≥ 3 chars) from the parent's acceptance criteria that appear in the combined
@@ -147,8 +151,9 @@ only requests the abstract smart ref, raises the power floor, and lets the agent
 route within any operator-supplied passthrough constraints. If no available
 route satisfies that strong floor, DDx records readiness as unavailable
 (`readiness_error` / `intake_error`) instead of marking the bead as ambiguous or
-`needs_human`. DDx must not silently fall back to weak decomposition; the worker
-continues, skips, or stops according to the configured readiness-failure mode.
+moving it to `status=proposed`. DDx must not silently fall back to weak
+decomposition; the worker continues, skips, or stops according to the configured
+readiness-failure mode.
 
 ## Disabling the gate
 

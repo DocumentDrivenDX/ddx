@@ -188,11 +188,12 @@ The readiness assessment result is one of:
   labels/parent/deps. The mutation is recorded through `ddx bead` paths before
   claim, with before/after hashes and enough evidence to audit the replacement.
 - `too_large_decomposed` — DDx created child beads, mapped every parent AC to
-  child ACs or an explicit `needs_human` / `non_scope` marker, blocked the
-  parent, and did not execute the parent.
-- `ambiguous_needs_human` — the bead/spec is unclear, contradictory,
+  child ACs or an explicit operator-required / `non_scope` marker, left the
+  parent `status=open` with dependency edges to the children, and did not
+  execute the parent.
+- `ambiguous_requires_operator` — the bead/spec is unclear, contradictory,
   unverifiable, or missing acceptance criteria that DDx cannot safely invent.
-  DDx blocks or marks the bead `needs_human` and does not claim it.
+  DDx moves the bead to `status=proposed` and does not claim it.
 - `readiness_error` / `intake_error` — readiness infrastructure failed. In
   migration/WARN mode this fails open with evidence; in reliable factory/BLOCK
   mode it may skip the candidate for the current pass but must not park it
@@ -211,8 +212,8 @@ prompt fitness rather than raw length: expanding a one-line underspecified bead
 is safe when the added durable context is required for execution, and compressing
 a noisy bead is safe when explicit commitments remain preserved.
 
-Readiness must reject the rewrite and park the bead as `ambiguous_needs_human`
-when preservation cannot be proven from durable anchors. It must not invent
+Readiness must reject the rewrite and move the bead to `status=proposed` when
+preservation cannot be proven from durable anchors. It must not invent
 product behavior, choose between conflicting requirements, change scope, delete
 unresolved constraints, or guess a missing governing artifact.
 
@@ -406,7 +407,8 @@ create commits or modify worktree state.
 **Terminal dispositions** for a candidate-cycle attempt:
 - `landed` — candidate was approved and merged to the base branch.
 - `preserved` — candidate is approved but land was deferred; worktree retained.
-- `parked` — repair budget exhausted without approval; bead moved to `needs_human`.
+- `parked` — repair budget exhausted without approval; bead moved to
+  `status=proposed`.
 - `conflicted` — approved candidate failed to land due to merge conflict; bead
   returned to `open` for re-attempt with a fresh `base_rev`.
 - `budget-stopped` — drain-level cost or no-progress budget tripped; worktree
@@ -428,7 +430,7 @@ create commits or modify worktree state.
    `repair_max_cycles`: emit `repair-cycle-started`, run append-only repair in
    same worktree, return to step 3.
 8. On `repair_max_cycles` exhausted: emit `repair-cycle-exhausted`, preserve
-   worktree, park bead in `needs_human`.
+   worktree, move bead to `status=proposed`.
 9. On approved candidate that fails to land (merge conflict): emit
    `approved-land-conflict`, release claim, return bead to `open`.
 
@@ -436,7 +438,7 @@ create commits or modify worktree state.
 no-progress budgets):
 
 - **`repair_max_cycles`** — maximum repair cycles per attempt. Exhaustion fires
-  `repair-cycle-exhausted` and parks the bead in `needs_human`; it does not
+  `repair-cycle-exhausted` and moves the bead to `status=proposed`; it does not
   consume the no-progress counter.
 - **`review_max_retries_per_candidate`** — maximum reviewer retry attempts for a
   single candidate ref when reviewer invocations fail. Exhaustion fires
@@ -460,8 +462,8 @@ The layer-3 drain evaluates each ready bead through this mechanical sequence:
    leave a clearer implementation prompt, expanding underspecified beads or
    compressing noisy/stale beads as the durable context requires; original text
    is preserved in readiness evidence for audit. Too-large work is decomposed
-   before an implementation attempt. Ambiguous or underspecified work is blocked
-   with `needs_human`. Readiness infrastructure failure records evidence and
+   before an implementation attempt. Ambiguous or underspecified work moves to
+   `status=proposed`. Readiness infrastructure failure records evidence and
    follows the configured fail-open/factory-mode policy; it never creates an
    unexplained cooldown.
 2. **Claim.** Claim only an `actionable_atomic` or safely rewritten bead. Claim
@@ -484,15 +486,15 @@ The layer-3 drain evaluates each ready bead through this mechanical sequence:
    prevents close. `review_fixable_gap` schedules a repair cycle on the same
    bead when `repair_max_cycles` allows, injecting the review findings as
    required repair context and optionally raising `MinPower`; it preserves the
-   retry path and does not park the bead in the `needs_human` lane.
+   retry path and does not move the bead to `status=proposed`.
    `review_spec_gap`, `review_missing_acceptance`, `review_too_large`, and
-   non-mechanical unsafe or out-of-scope findings park the bead in the
-   `needs_human` operator-attention lane, clear the active claim, and do not ask
-   another implementer to guess. Malformed, empty, context-overflow, and
+   non-mechanical unsafe or out-of-scope findings move the bead to
+   `status=proposed`, clear the active claim, and do not ask another implementer
+   to guess. Malformed, empty, context-overflow, and
    transport reviewer failures emit `review-error` scoped to `result_rev` and
    reviewer slot; after `review_max_retries_per_candidate` they emit
-   `review-manual-required`, clear the active claim, park the bead in the
-   `needs_human` lane, and do not close. The `review_fixable_gap` path stays on
+   `review-manual-required`, clear the active claim, move the bead to
+   `status=proposed`, and do not close. The `review_fixable_gap` path stays on
    the automatic retry track instead of converting into operator review.
 6. **Infrastructure fallback.** Transport, quota, rate-limit, command setup,
    context cancellation, routing preflight rejection, and worker disruption are
@@ -778,8 +780,8 @@ ddx work — drain complete
 
 remaining queue:
   execution-ready:   0
-  blocked:           3
-  needs-human:       1
+  waiting-on-deps:   3
+  proposed:          1
   cooldown/deferred: 1
   not-eligible:      0
   superseded:        0
@@ -794,32 +796,33 @@ can compute them:
 | Bucket | Definition |
 |---|---|
 | `execution-ready` | Beads whose dependencies are satisfied and that have no outstanding block |
-| `blocked` | Beads with unsatisfied dependencies or explicit block flags |
-| `needs-human` | Beads parked for operator attention (`needs_human` status) |
+| `waiting-on-deps` | `status=open` beads with unsatisfied dependencies; derived waiting, not `status=blocked` |
+| `blocked` | Beads with `status=blocked` because an external recheckable blocker is recorded |
+| `proposed` | Beads awaiting operator decision before autonomous execution |
 | `cooldown/deferred` | Beads on retry-after cooldown or explicitly deferred |
 | `not-eligible` | Beads in a non-runnable state (closed, cancelled, superseded-pending-removal) |
 | `superseded` | Beads explicitly superseded by later work |
 | `epic/closure-candidate` | Parent/epic beads that may be closable when all children complete |
 
-#### Human-review dependency pressure
+#### Operator-review dependency pressure
 
-When open beads are transitively blocked behind `needs_human` or
-needs-investigation blockers, the terminal summary and each watch-mode idle poll
-include a dependency-pressure section. The wording is:
+When open beads are transitively waiting behind `status=proposed` operator
+review blockers, the terminal summary and each watch-mode idle poll include a
+dependency-pressure section. The wording is:
 
 ```
-30 beads blocked behind 3 needs-human blockers:
+30 beads waiting behind 3 proposed blockers:
   ddx-a1b2c3d4 "resolve auth ambiguity" (12 downstream)
   ddx-e5f6a7b8 "clarify rate-limit spec" (11 downstream)
   ddx-c9d0e1f2 "investigate flaky test" (7 downstream)
 ```
 
-**Total blocked count** is the number of unique open downstream beads that are
-transitively blocked behind one or more `needs_human` or needs-investigation
-blockers — the deduplicated union across all such blockers. **Per-blocker
+**Total waiting count** is the number of unique open downstream beads that are
+transitively waiting behind one or more proposed operator-review blockers — the
+deduplicated union across all such blockers. **Per-blocker
 downstream count** is the count of unique open beads that are transitively
-blocked through that specific blocker. Per-blocker counts may sum higher than
-the total when a bead is blocked behind multiple human-review blockers.
+waiting through that specific blocker. Per-blocker counts may sum higher than
+the total when a bead is waiting behind multiple operator-review blockers.
 
 #### Watch mode idle stdout
 
@@ -827,12 +830,12 @@ While in watch mode with an empty queue, every idle poll prints a compact
 queue-state line:
 
 ```
-idle: no execution-ready beads; sleeping 30s [execution-ready: 0, blocked: 3, needs-human: 1]
+idle: no execution-ready beads; sleeping 30s [execution-ready: 0, waiting-on-deps: 3, proposed: 1]
 ```
 
 The idle line always includes: the literal `idle:` label, a reason phrase, the
 sleep duration, and a compact inline queue-state summary with at minimum the
-`execution-ready`, `blocked`, and `needs-human` counts.
+`execution-ready`, `waiting-on-deps`, and `proposed` counts.
 
 The full blocker list (blocker IDs, titles, and per-blocker downstream counts)
 may be suppressed on repeated idle polls when the queue state is unchanged from
@@ -933,7 +936,7 @@ by lifecycle classification, for example:
 - `readiness_actionable_atomic`
 - `readiness_rewritten`
 - `readiness_decomposed`
-- `readiness_needs_human`
+- `readiness_proposed`
 - `forced_with_reason`
 - `triage_prompt_quality`
 - `triage_task_quality`

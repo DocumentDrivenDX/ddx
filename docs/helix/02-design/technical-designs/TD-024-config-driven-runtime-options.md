@@ -675,7 +675,7 @@ TestReviewRetryThresholdFromConfigCLI:
   given the same setup,
   when the bead is seeded to fail on the first 5 attempts,
   then the bead emits review-manual-required on attempt 5,
-   and the bead transitions to `blocked` with `needs_human`.
+   and the bead transitions to `proposed`.
 
 TestReviewRetryThresholdFromConfigServer:
   given a registered project with the same config,

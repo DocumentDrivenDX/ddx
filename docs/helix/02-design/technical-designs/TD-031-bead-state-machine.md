@@ -14,7 +14,7 @@ This TD is the canonical reference for what bead state means in DDx and where
 each observed name in the codebase belongs. It exists because schema, docs,
 code, and persisted data have drifted: the bead-record JSON Schema enumerates
 six statuses (the bd/br canonical set), FEAT-004 still documents three, and
-several additional names appear in code paths (`done`, `needs_human`,
+several legacy/backcompat names appear in code paths (`done`, `needs_human`,
 `pending`, `ready`, `review`, `needs_investigation`) without a single decision
 record explaining whether each is a status, a derived queue category, an
 event kind, a label, or worker state.
@@ -59,7 +59,7 @@ TD does not authorize any such addition.
   returns only `open`, `in_progress`, `closed` for active rows today —
   `blocked`, `proposed`, and `cancelled` are schema-allowed but unused in
   the current active queue.
-- The names `done`, `needs_human`, `pending`, `ready`, `review`,
+- The legacy/backcompat names `done`, `needs_human`, `pending`, `ready`, `review`,
   `needs_investigation` appear in code paths but are **not** persisted bead
   statuses today. Each falls into one of the other categories defined below.
 
@@ -81,12 +81,12 @@ process state).
 | Category | Storage location | Lifecycle | Owner |
 |---|---|---|---|
 | Persisted bead status | `status` field on the bead record | Mutated by atomic snapshot rewrite | Bead store, locked to bd/br set |
-| Derived queue category | Computed on read from status + labels + deps | Never persisted | Queue derivation code (`ddx bead ready/blocked/status`) |
-| Event kind | Append-only entry in `Extra["events"][].kind` | Append-only | Drain loop, agent service, CLI |
+| Derived queue category | Computed on read from status + deps + preserved metadata | Never persisted | Queue derivation code (`ddx bead ready/blocked/status`) |
+| Event kind | Append-only entry in `Extra["events"][].kind` | Append-only; explains state, does not control lifecycle | Drain loop, agent service, CLI |
 | Terminal phase | A persisted `closed` status plus a closing event/label that names *why* | Mutated once on close | Drain loop / CLI |
 | Claim metadata | `assignee`, `claimed-at`, `claimed-pid` fields (preserved extras) | Set on claim, cleared on unclaim, expired by triage | Claim resolution path (TD-004) |
-| Label | Entry in the `labels` array | Add/remove during normal mutation | Anyone with `ddx bead update` |
-| Extra metadata field | Arbitrary key under preserved extras | Free-form per consumer | Subsystem owning that key |
+| Label | Entry in the `labels` array | Explains or filters state; never controls lifecycle | Anyone with `ddx bead update` |
+| Extra metadata field | Arbitrary key under preserved extras | Explains or filters state; never controls lifecycle | Subsystem owning that key |
 | Worker state | In-memory state of the drain process | Lives only for the worker's lifetime | Drain loop process |
 
 A name MUST NOT span categories. If a name today appears as both a label and
@@ -107,21 +107,24 @@ TD does **not** add, rename, or remove any persisted status.
 
 Plain-English semantics:
 
-- `open` — the bead exists and is eligible for queue derivation. No claim is
-  active.
+- `open` — accepted active work. No claim is active. This includes work that is
+  waiting on dependencies; dependency waiting is derived from the dependency DAG
+  while the persisted status remains `open`.
 - `in_progress` — the bead has an active claim (`assignee`, `claimed-at`,
   `claimed-pid` populated). The drain loop or an operator has taken
   ownership.
-- `closed` — the bead is terminal. The reason for closure is encoded in a
-  closing event and/or label; the status itself does not carry the reason.
-- `blocked` — the bead cannot progress because of a hard precondition (an
-  upstream dependency, an external blocker). The reason is encoded in a
-  label (`blocked-on-upstream:<id>`) or an event.
-- `proposed` — the bead is captured but has not been accepted into the
-  active queue. Used for triage backlogs; not consumed by drain.
-- `cancelled` — the bead was abandoned without completion. Distinct from
-  `closed`: `cancelled` means "we are not doing this work"; `closed` means
-  "the work is done (or determined unnecessary)".
+- `closed` — terminal satisfied work. A `closed` dependency satisfies
+  downstream beads. The reason for closure is encoded in a closing event and/or
+  label; the status itself does not carry the reason.
+- `blocked` — accepted work paused by a rare external, recheckable blocker.
+  Dependency waits are not `status=blocked`; they are derived from unsatisfied
+  dependencies while the bead remains `open`.
+- `proposed` — operator decision required. Proposed beads are not
+  autonomous-work eligible until an operator accepts, rewrites, splits, waives,
+  or cancels them.
+- `cancelled` — terminal not-doing. Distinct from `closed`: `cancelled` does
+  not satisfy dependents unless a later explicit dependency policy says
+  otherwise.
 
 ## 3. Transition Matrix
 
@@ -129,20 +132,42 @@ Plain-English semantics:
 |---|---|---|---|
 | `proposed` → `open` | yes | operator (`ddx bead update --status open`) | `triaged` |
 | `proposed` → `cancelled` | yes | operator | `cancelled` |
+| `open` → `proposed` | yes | readiness or operator found missing decision input | `triage-ambiguous` / `review-manual-required` |
 | `open` → `in_progress` | yes | drain loop or operator (claim) | `claimed` |
-| `open` → `blocked` | yes | operator or auto-triage | `blocked` |
+| `open` → `blocked` | yes | operator or auto-triage found an external recheckable blocker | `blocked` |
 | `open` → `cancelled` | yes | operator | `cancelled` |
 | `in_progress` → `open` | yes | unclaim (operator or stale-claim sweep) | `unclaimed` |
 | `in_progress` → `closed` | yes | drain loop (on merge/already-satisfied) or operator | `closed-merged` / `closed-already-satisfied` |
-| `in_progress` → `blocked` | yes | drain loop on non-automatable review/readiness finding, or operator | `review-block` / `blocked` |
+| `in_progress` → `proposed` | yes | non-automatable review/readiness finding or exhausted repair/review budget | `review-block` / `review-manual-required` |
+| `in_progress` → `blocked` | yes | drain loop or operator found an external recheckable blocker | `blocked` |
 | `blocked` → `open` | yes | operator (block resolved) | `unblocked` |
 | `blocked` → `cancelled` | yes | operator | `cancelled` |
 | `closed` → * | no | — | — (closed is terminal) |
 | `cancelled` → * | no | — | — (cancelled is terminal) |
-| any → `proposed` | no | — | proposed is an entry-only status |
 
-Closed and cancelled are terminal. Re-opening a closed bead is not a
-transition; it is filing a follow-up bead with `replaces` set.
+Closed and cancelled are terminal. `closed` satisfies dependency edges;
+`cancelled` does not satisfy dependency edges unless a future dependency policy
+explicitly defines an exception. Re-opening a closed bead is not a transition;
+it is filing a follow-up bead with `replaces` set.
+
+### 3.1 Derived Queue Buckets
+
+Persisted status is the sole DDx-owned lifecycle field. Queue buckets are
+computed read models over status, dependency edges, claim metadata, and
+preserved Extra fields:
+
+- `execution-ready` — `status=open`, no active claim, every dependency is
+  `closed`, and no execution-suppressing metadata is present.
+- `dependency-waiting` — `status=open` with at least one dependency that is not
+  `closed`; this is derived waiting, not `status=blocked`.
+- `operator-review` — `status=proposed`; these beads require an operator
+  decision before autonomous execution.
+- `externally-blocked` — `status=blocked`; the blocker must be external and
+  recheckable.
+- `active` — `status=in_progress`; claim metadata names the current owner.
+- `terminal-satisfied` — `status=closed`; this satisfies dependency edges.
+- `terminal-not-doing` — `status=cancelled`; this does not satisfy dependency
+  edges unless a future dependency policy explicitly says otherwise.
 
 ## 4. Event Vocabulary (unified)
 
@@ -170,8 +195,9 @@ Drain-outcome events (no_changes family — NoChangesContract):
   `verification_command`, but the command failed or could not run.
 - `no_changes_unjustified` — the attempt produced no commit without enough
   structured rationale to prove either satisfaction or a durable blocker.
-- `no_changes_needs_investigation` — the attempt explicitly asked for operator
-  triage with `status: needs_investigation`.
+- `no_changes_needs_investigation` — legacy/backcompat event name for an
+  attempt that explicitly asked for operator triage; maps to `status=proposed`
+  when operator input is required.
 - `no_changes_decomposed` — agent decomposed the bead instead of changing
   files.
 - `no_changes_blocked` — agent declared no_changes with a justified external
@@ -223,7 +249,7 @@ Candidate-cycle events (FEAT-010 candidate-cycle pipeline):
   worktree; body carries `cycle_index`, `repair_context_from_review_group`, and
   `attempt_id`
 - `repair-cycle-exhausted` — `repair_max_cycles` was reached for this attempt;
-  bead moves to the `needs_human` lane
+  bead moves to `status=proposed`
 - `approved-land-conflict` — the candidate received unanimous `APPROVE` but merge
   to the base branch conflicted; bead is re-queued at its base revision without
   blame on the implementer or reviewer
@@ -250,8 +276,10 @@ Lifecycle reliability invariants:
   time passes could plausibly succeed without human/spec/dependency changes.
 - Every bead excluded from ordinary `ddx work` execution MUST have an
   explainable durable reason using existing mechanisms: dependency edge,
-  `blocked` status, `needs_human`/triage labels, `execution-eligible=false`,
-  `superseded-by`, epic/parent queue mode, or an active retry cooldown.
+  `proposed` status, external `blocked` status, `execution-eligible=false`,
+  `superseded-by`, epic/parent queue mode, or an active retry cooldown. Labels,
+  events, and Extra fields may explain that reason but do not control
+  lifecycle.
 - `closed` means implementation, verification, and the default adversarial
   pre-close review gate have all passed, or the work was verified as already
   satisfied. Review failure never reopens a closed bead; it prevents close.
@@ -268,26 +296,27 @@ Lifecycle reliability invariants:
 |---|---|---|---|---|
 | `review_pass` after merged candidate | `in_progress → closed` | remove `claimed`, add `last-merged-rev:<sha>` (optional) | `review-pass` + `closed-merged` | `Extra["last-run"]`, `Extra["last-review"]`, and `Extra["closing_commit_sha"]` updated; clear stale `execute-loop-*` management fields |
 | `already_satisfied` | `in_progress → closed` | (none) | `closed-already-satisfied` | `Extra["last-run"]`; clear stale `execute-loop-*` management fields |
-| `review_fixable_gap` with retry budget remaining | no durable status change if continuing immediately; otherwise `in_progress → open` (claim released) | add no human label unless retry budget exhausted | `review-fixable-gap` + retry decision | `Extra["last-review"]` carries findings ref; next cycle records `repair_context_from_review_group` |
-| `review_fixable_gap` with retry budget exhausted | `in_progress → blocked` | add `needs_human` | `review-block` | `Extra["last-review"]` carries findings ref and exhausted budget |
-| `review_spec_gap` / `review_missing_acceptance` | `in_progress → blocked` | add `needs_human`, `triage:spec-gap` or `triage:missing-acceptance` | `review-block` | `Extra["last-review"]` carries findings ref |
-| `review_too_large` | `in_progress → blocked` after children are filed, or `in_progress → blocked` with `needs-human-decomposition` at depth cap | add `decomposed` when children exist; otherwise add `needs_human` | `review-too-large` and optionally `triage-decomposed` / `triage-overflow` | `Extra["children"]` and AC mapping when decomposed |
+| `review_fixable_gap` with retry budget remaining | no durable status change if continuing immediately; otherwise `in_progress → open` (claim released) | no lifecycle label required | `review-fixable-gap` + retry decision | `Extra["last-review"]` carries findings ref; next cycle records `repair_context_from_review_group` |
+| `review_fixable_gap` with retry budget exhausted | `in_progress → proposed` | optional explanatory review label only | `review-block` | `Extra["last-review"]` carries findings ref and exhausted budget |
+| `review_spec_gap` / `review_missing_acceptance` | `in_progress → proposed` | add `triage:spec-gap` or `triage:missing-acceptance` as explanatory labels | `review-block` | `Extra["last-review"]` carries findings ref |
+| `review_too_large` | `in_progress → open` after children and dependency edges are filed, or `in_progress → proposed` at depth cap/lossy split | add `decomposed` when children exist | `review-too-large` and optionally `triage-decomposed` / `triage-overflow` | `Extra["children"]` and AC mapping when decomposed |
 | `review_error` below retry cap | no durable status change; retry reviewer for same `result_rev` | (none) | `review-error` | `Extra["last-review-error"]` carries class, reviewer slot, and attempt count |
-| `review_error` exhausted | `in_progress → blocked` | add `needs_human` | `review-manual-required` | `Extra["last-review-error"]` carries class, reviewer slot, and attempt count |
+| `review_error` exhausted | `in_progress → proposed` | optional explanatory review label only | `review-manual-required` | `Extra["last-review-error"]` carries class, reviewer slot, and attempt count |
 | `execution_failed` | `in_progress → open` (claim released) | (none) | `unclaimed` + a structured failure event | `Extra["last-run"]` |
 | verified no_changes already satisfied | `in_progress → closed` | remove no_changes triage labels if present | `no_changes_verified` + `closed-already-satisfied` | `Extra["last-run"]`; clear `execute-loop-retry-after`, `execute-loop-last-status`, and `execute-loop-last-detail` |
 | unverified no_changes | `in_progress → open` (claim released) | add `triage:no-changes-unverified` | `no_changes_unverified` | record verification command/result; do not set retry cooldown by default |
 | unjustified no_changes / no rationale | `in_progress → open` (claim released) | add `triage:no-changes-unjustified` | `no_changes_unjustified` | record rationale absence/detail; do not set retry cooldown by default |
-| no_changes needs investigation because work is too large | `in_progress → blocked` after orchestrator child beads are filed, or `in_progress → blocked` with `needs-human-decomposition` at queue-level depth cap | add `decomposed` when children exist; add `needs_human` only for lossy/ambiguous/depth-overflow cases | `no_changes_needs_investigation` + `triage-decomposed` or `triage-overflow` | `Extra["last-rationale"]`, `Extra["children"]`, and AC mapping; do not set retry cooldown |
-| no_changes needs investigation for non-decomposition reason | `in_progress → open` (claim released) | add `triage:needs-investigation`; add `needs_human` when operator action is required before retry | `no_changes_needs_investigation` | `Extra["last-rationale"]`; do not set retry cooldown by default |
-| parent/epic/decomposed container | `in_progress → blocked` when children were created; otherwise `in_progress → open` with `execution-eligible=false` | add `decomposed` when children exist | `no_changes_decomposed` or `triage-decomposed` | `Extra["children"]` lists child IDs plus AC mapping, or `Extra["execution-eligible"]=false` explains container-only work |
-| external blocker | `in_progress → blocked` for hard blockers, or `in_progress → open` with a `blocked-on-upstream:<id>` label for visible soft blockers | add `needs_human` or `blocked-on-upstream:<id>` | `no_changes_blocked` | `Extra["last-rationale"]` names the external blocker |
+| legacy no_changes investigation because work is too large | `in_progress → open` after orchestrator child beads and dependency edges are filed, or `in_progress → proposed` at queue-level depth cap/lossy split | add `decomposed` when children exist | legacy/backcompat `no_changes_needs_investigation` + `triage-decomposed` or `triage-overflow` | `Extra["last-rationale"]`, `Extra["children"]`, and AC mapping; do not set retry cooldown |
+| legacy no_changes investigation for non-decomposition reason | `in_progress → proposed` when operator action is required before retry; otherwise `in_progress → open` (claim released) | optional explanatory triage labels only | legacy/backcompat `no_changes_needs_investigation` | `Extra["last-rationale"]`; do not set retry cooldown by default |
+| parent/epic/decomposed container | `in_progress → open` with dependency edges to children when children were created; otherwise `in_progress → open` with `execution-eligible=false` | add `decomposed` when children exist | `no_changes_decomposed` or `triage-decomposed` | `Extra["children"]` lists child IDs plus AC mapping, or `Extra["execution-eligible"]=false` explains container-only work |
+| external blocker | `in_progress → blocked` for hard external recheckable blockers, or `in_progress → open` for visible soft blockers | add `blocked-on-upstream:<id>` as explanatory label when useful | `no_changes_blocked` | `Extra["last-rationale"]` names the external blocker |
 | superseded work | no terminal success; leave open only if visible history is needed | add no triage labels | structured superseded event if appended by caller | `Extra["superseded-by"]` names the replacement and makes ordinary execution ineligible |
 | transient infra/quota/transport | `in_progress → open` (claim released) | (none) | `no_changes_recoverable`, `drain-paused-quota`, `rate-limit-retry`, or structured transport event | may set `execute-loop-retry-after` only for the retryable time-based condition |
 | stale no_changes tracker metadata | no status change unless latest terminal evidence closes the bead | remove stale no_changes triage labels only when contradicted by terminal evidence | preserve historical events; append reconciliation event if performed | clear stale `execute-loop-*` management fields when latest terminal event or close evidence proves they are obsolete |
 
-`needs_human` is a **label**, not a status. It is the standard signal that
-a human operator should look at the bead before drain re-attempts it.
+Legacy/backcompat `needs_human` and `triage:needs-investigation` labels are not
+lifecycle controls. New routing uses `status=proposed` for operator decisions;
+those labels may remain only as migration metadata until cleanup removes them.
 
 ## 6. Claim Semantics
 
@@ -358,16 +387,16 @@ appear as `status` values.
 | `open` | Persisted status | bd/br canonical; queue-eligible default. |
 | `in_progress` | Persisted status | bd/br canonical; implies an active claim. |
 | `closed` | Persisted status | bd/br canonical; terminal-success path. |
-| `blocked` | Persisted status | bd/br canonical; hard precondition unmet. |
-| `proposed` | Persisted status | bd/br canonical; pre-triage backlog. |
-| `cancelled` | Persisted status | bd/br canonical; terminal-abandoned path. |
+| `blocked` | Persisted status | bd/br canonical; accepted work paused by an external recheckable blocker. |
+| `proposed` | Persisted status | bd/br canonical; operator decision required before autonomous work. |
+| `cancelled` | Persisted status | bd/br canonical; terminal not-doing path that does not satisfy dependents. |
 | `done` | Removed alias | Historical alias of `closed` in code paths. Not a persisted status. The reconciliation sibling bead replaces remaining code references with `closed`. |
-| `pending` | Derived queue category | Used by queue derivation to mean "open AND has unmet deps" (a synonym for unsatisfied dependencies). Never persisted. The reconciliation sibling bead either renames it to `waiting` or folds it into `blocked` derivation. |
+| `pending` / `waiting` | Derived queue category | Used by queue derivation to mean "open AND has unmet deps"; this is derived dependency waiting, not `status=blocked`. Never persisted. |
 | `ready` | Derived queue category | "open AND no unmet deps AND not claimed". Computed from status+deps+claim; never persisted. |
-| `review` | Terminal phase / event | A *phase of work*, not a status. Implemented as the `review-block` / `review-pass` event pair plus the `needs_human` label. Never persisted as a status. |
-| `needs_human` | Label | Signals "an operator must intervene". Stays a label per bd/br compatibility — never a status. |
-| `needs_investigation` | Label | Signals "the cause is unclear; triage required". Stays a **label** per bd/br compatibility. The reconciliation sibling bead removes any code path that treats it as a status. |
-| `blocked-on-upstream:<id>` | Label | Parameterized label naming the upstream blocker. Distinct from the `blocked` status: a bead can carry the label while remaining `open` for visibility, or while `blocked` for enforcement. |
+| `review` | Terminal phase / event | A *phase of work*, not a status. Implemented as the `review-block` / `review-pass` event pair plus review evidence. Never persisted as a status. |
+| `needs_human` | Legacy/backcompat label | Migration-only signal formerly used for operator intervention. New lifecycle routing uses `status=proposed`; this label never controls lifecycle. |
+| `needs_investigation` | Legacy/backcompat label | Migration-only signal formerly used for unclear cause. New lifecycle routing uses `status=proposed` when operator action is required. |
+| `blocked-on-upstream:<id>` | Label | Parameterized label naming an external upstream blocker. Distinct from derived dependency waiting and from the `blocked` status; it explains state but does not control lifecycle. |
 | `decomposed` | Label | Set by drain on `no_changes_decomposed`; pairs with `Extra["children"]`. |
 | `triage` | Label | Set by drain on `no_changes_no_evidence` or by auto-triage. |
 | `idle` / `draining` / `paused-quota` / `paused-rate-limit` / `exiting` | Worker state | Lives in the drain loop process, not on the bead. See section 10. |
@@ -408,21 +437,24 @@ Status transitions used:
 - `open → open` when readiness applies a validated replacement rewrite or
   metadata-only safe improvement before implementation. The bead remains
   execution-ready unless a later readiness decision parks it.
-- `open → blocked` when triage decides a bead has an unmet hard
-  precondition.
-- `open → blocked` when readiness decomposes a parent, reaches decomposition depth
-  overflow, or finds ambiguity that cannot be safely rewritten.
+- `open → blocked` when triage decides a bead has an external recheckable
+  blocker.
+- `open → open` when readiness decomposes a parent and adds dependency edges to
+  children; the parent is dependency-waiting but remains `open`.
+- `open → proposed` when readiness reaches decomposition depth overflow or finds
+  ambiguity that cannot be safely rewritten.
 
 For successful replacement rewrites, the bead body may be materially shorter or
 longer than the original when prompt fitness requires it. Preservation is proven
 by the `triage-rewritten` / `intake-rewritten` evidence record and durable
 anchors, not by keeping old text inside the prompt body. For rejected rewrites,
-readiness parks the bead with `needs_human` instead of releasing it back into
+readiness moves the bead to `status=proposed` instead of releasing it back into
 the execution-ready lane.
 
-Labels added: `triage`, `needs_human`, `blocked-on-upstream:<id>`,
-`decomposed`, `needs-human-decomposition`, `triage:spec-gap`,
-`triage:missing-acceptance` (as applicable).
+Labels added: `triage`, `blocked-on-upstream:<id>`, `decomposed`,
+`triage:spec-gap`, `triage:missing-acceptance` (as applicable).
+Legacy/backcompat labels such as `needs_human` and `needs-human-decomposition`
+may be read during migration but must not be added as lifecycle controls.
 
 Labels removed: `triage` after a triaged bead is reclaimed cleanly (the
 reverse mutation of `triage` is "next successful claim removes the

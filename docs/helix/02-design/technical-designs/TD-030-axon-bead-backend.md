@@ -169,7 +169,7 @@ per Axon's pre-release CHANGELOG.
 | `ddx bead close` | `updateEntity` (status → closed) — fused with the closing-event write inside one `commitTransaction` mutation |
 | `ddx bead claim` | `updateEntity` (status → in_progress + `claimed_at` + `claimed_pid`) — atomic via OCC: on `expectedVersion` mismatch, the claim lost the race and the caller retries (or surfaces "claimed by another worker") |
 | `ddx bead ready` | per v1 policy: two-phase GraphQL (status filter, then per-candidate dep status check fused into the same response shape via nested traversal). Day 2 escalation path is the `isReady` field once axon `axon-05c1019d` ships. |
-| `ddx bead blocked` | symmetric to ready: query `status=open` then filter to those with at least one non-closed dependency; Day 2 uses a `blockedBy` computed field |
+| `ddx bead blocked` | historical command name for derived dependency waiting: query `status=open` then filter to those with at least one non-closed dependency; this is not `status=blocked`; Day 2 uses a `blockedBy` computed field |
 | `ddx bead dep add/remove` | `createLink` / `deleteLink` mutations (link type `depends_on`) |
 | `ddx bead dep tree` | `query { traverse(from: ..., type: "depends_on", direction: outgoing, transitive: true) { ... } }` |
 | `ddx bead evidence add` | `commitTransaction` mutation: `createEntity(collection: "ddx_bead_events")` + `createLink(type: "event_of")` |

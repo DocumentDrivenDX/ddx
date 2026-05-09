@@ -551,8 +551,8 @@ thresholds.
 **Acceptance Criteria:**
 - Given beads exist, when I open the board view, then I see columns for
   open, in_progress, and closed with cards sorted by priority
-- Given beads have dependencies, then blocking/blocked relationships are
-  visually indicated (dimmed cards, connector lines, or grouping)
+- Given beads have dependencies, then dependency relationships are visually
+  indicated (dimmed cards, connector lines, or grouping)
 - Given I drag a card to a new column, then the bead status updates via API
   and the card visually moves without a page reload
 - Given I click a card, then a detail panel opens showing description,
@@ -661,12 +661,12 @@ thresholds.
 **So that** I can route work to retry, split, obsolete, or defer without losing context
 
 **Acceptance Criteria:**
-- Given a bead is marked `needs_human`, when I choose the `Needs review` filter, then the Beads list shows only beads in that lane and excludes ordinary open beads
-- Given I open a `needs_human` bead, then the detail panel shows a dedicated review-resolution panel with the human-review metadata: reason, since, source, suggested action, and summary
+- Given a bead is `status=proposed`, when I choose the `Needs review` filter, then the Beads list shows only beads awaiting operator decision and excludes ordinary open beads
+- Given I open a proposed bead, then the detail panel shows a dedicated review-resolution panel with the human-review metadata: reason, since, source, suggested action, and summary
 - Given I choose retry, split, obsolete, or defer, then I must enter notes and the decision is recorded in the bead history
 - Given I resolve the bead, then it leaves the `Needs review` filter and the operator decision is visible in the bead history
 
-**E2E Test:** `beads.spec.ts` — full workflow: open bead list → apply Needs review filter → verify lane-only results → open needs_human bead → verify review-resolution panel fields → choose a resolution with notes → verify history entry and lane removal
+**E2E Test:** `beads.spec.ts` — full workflow: open bead list → apply Needs review filter → verify proposed-only results → open proposed bead → verify review-resolution panel fields → choose a resolution with notes → verify history entry and status update
 
 ### US-083: Developer Edits Document in Browser
 **As a** developer fixing a stale document

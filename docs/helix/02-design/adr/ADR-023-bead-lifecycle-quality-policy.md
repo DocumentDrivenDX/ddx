@@ -79,8 +79,8 @@ placement, and outcome classification.
 Post-attempt triage classifications feed
 [`TD-031`](../technical-designs/TD-031-bead-state-machine.md). ADR-023 does not
 define final queue mutation policy; TD-031 remains the source of truth for
-whether an attempt closes, stays open for human triage, becomes blocked, is
-superseded, or receives a retry cooldown.
+whether an attempt closes, stays open, moves to `status=proposed` for operator
+triage, becomes externally blocked, is superseded, or receives a retry cooldown.
 
 ### Staged Rollout And Factory Mode
 
@@ -158,15 +158,17 @@ files/tests, and still-valid root-cause evidence are explicit commitments and
 must be preserved or replaced with current durable evidence. If the old bead
 contains contradictions, stale anchors, or missing product choices, readiness may
 remove the confusing wording only when the replacement clearly marks the
-unresolved part as `needs_human` or preserves it as an explicit constraint.
+unresolved part as operator-required (`status=proposed`) or preserves it as an
+explicit constraint.
 Readiness must block for human input instead of inventing acceptance criteria,
 changing scope, choosing between conflicting requirements, deleting unresolved
 constraints, or guessing a missing governing artifact.
 
 If readiness finds the bead too broad, it decomposes before claim. Every parent AC
-must map to at least one child AC or be explicitly marked `needs_human` or
+must map to at least one child AC or be explicitly marked `operator_required` or
 `non_scope`; token-overlap metrics are heuristics, not proof of preservation.
-The parent is blocked/decomposed with child ids and the AC map in evidence.
+The parent remains `status=open` with child dependency edges when decomposition
+succeeds, or moves to `status=proposed` when the split would be lossy.
 
 When BLOCK mode stops dispatch, the operator-facing output must be actionable.
 It prints:

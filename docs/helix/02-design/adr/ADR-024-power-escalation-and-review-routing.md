@@ -163,28 +163,28 @@ Non-approve reviewer findings are classified before the next action:
   finding is plausibly capability-sensitive.
 - `review_spec_gap` / `review_missing_acceptance` — the bead or governing spec
   is ambiguous, unverifiable, contradictory, or missing acceptance criteria. DDx
-  parks the bead in the `needs_human` operator-attention lane, clears the
-  active claim, and does not ask another implementer to guess. The operator
-  resolves that lane by retry, split, obsolete, or defer actions recorded in
-  the bead history.
+  moves the bead to `status=proposed`, clears the active claim, and does not ask
+  another implementer to guess. The operator resolves that state by retry,
+  split, obsolete, or defer actions recorded in the bead history.
 - `review_too_large` — the result or bead is too broad for bounded review. DDx
-  runs the intake/decomposition path, blocks or decomposes the parent, and does
-  not re-run the same monolithic implementation attempt.
+  runs the intake/decomposition path, decomposes the parent when lossless child
+  work is possible, or moves it to `status=proposed` when operator input is
+  required. It does not re-run the same monolithic implementation attempt.
 - `review_unsafe_or_out_of_scope` — the implementation changed forbidden scope,
   removed checks, weakened behavior, or otherwise needs explicit repair. If the
-  repair is mechanical it follows `review_fixable_gap`; otherwise it parks in
-  `needs_human`.
+  repair is mechanical it follows `review_fixable_gap`; otherwise it moves to
+  `status=proposed`.
 
 Review errors retry the review path up to `review_max_retries_per_candidate` for
 the same candidate ref (`result_rev`) and reviewer slot. On exhaustion, DDx
-emits `review-manual-required`, clears the active claim, parks the bead in
-`needs_human`, and leaves it open for operator review without closing it. This
-terminal lane resolution is the same contract used by `review_spec_gap` and
-`review_missing_acceptance`: the bead remains open, carries the human-review
-context, and waits for an operator decision rather than another automatic
-implementation attempt. A new candidate ref (from a repair cycle or a fresh
-`ddx try`) resets this counter independently; it is strictly per-candidate. A
-new implementation result starts a new review-error retry scope, while
+emits `review-manual-required`, clears the active claim, moves the bead to
+`status=proposed`, and leaves it for operator review without closing it. This
+terminal resolution is the same contract used by `review_spec_gap` and
+`review_missing_acceptance`: the bead carries the human-review context and waits
+for an operator decision rather than another automatic implementation attempt. A
+new candidate ref (from a repair cycle or a fresh `ddx try`) resets this counter
+independently; it is strictly per-candidate. A new implementation result starts a
+new review-error retry scope, while
 `review_fixable_gap` continues through the normal repair retry path counted
 against `repair_max_cycles` instead of entering the operator lane.
 

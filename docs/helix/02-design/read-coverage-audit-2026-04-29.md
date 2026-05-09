@@ -140,7 +140,7 @@ Enumerate every CLI-visible read surface → map to HTTP REST and MCP tool cover
 **G3 · `ddx_bead_blocked` + `ddx_bead_dep_tree` MCP tools**
 - HTTP covers both: `GET /api/beads/blocked`, `GET /api/beads/dep/tree/{id}`
 - MCP missing both
-- Impact: Agents managing the bead queue via MCP can't check blocked state or inspect dependency trees. Required for agents doing queue drain planning or dependency-aware scheduling.
+- Impact: Agents managing the bead queue via MCP can't check derived waiting state or inspect dependency trees. Required for agents doing queue drain planning or dependency-aware scheduling.
 
 **G4 · MCP worker status tools**
 - HTTP covers: `GET /api/agent/workers`, `GET /api/agent/workers/{id}`, `GET /api/agent/workers/{id}/log`

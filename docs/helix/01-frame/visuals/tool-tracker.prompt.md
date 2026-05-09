@@ -64,7 +64,7 @@ metaphor.
 
 # Anchoring (recently-landed positioning)
 
-Anchored to **Work is a DAG** (`/docs/principles/work-is-a-dag/`). The priority queue is what `ddx work` drains; the DAG enforces dependency order. Ready beads enter execution; blocked beads wait on upstream closure; done beads carry evidence and a green check.
+Anchored to **Work is a DAG** (`/docs/principles/work-is-a-dag/`). The priority queue is what `ddx work` drains; the DAG enforces dependency order. Ready beads enter execution; waiting beads remain `status=open` until upstream dependencies close; done beads carry evidence and a green check.
 
 # Negative prompt
 

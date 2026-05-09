@@ -294,13 +294,13 @@ the preserved iteration ref rather than discarding the agent's work:
    the bead closes as `success`.
 2. **Focused conflict-resolve agent** (if `ConflictResolver` is configured on
    the worker). If clean, the bead closes as `success`.
-3. **Park with structured outcome.** Two new statuses replace the generic
+3. **Park with structured outcome.** Two structured outcomes replace the generic
    reopen when both recovery paths fail:
 
-| Status | Event kind | Meaning |
+| Outcome | Event kind | Meaning |
 | --- | --- | --- |
 | `land_conflict_unresolvable` | `land-conflict-unresolvable` | All auto-recovery failed; retryable after 15-min cooldown. |
-| `land_conflict_needs_human` | `land-conflict-needs-human` | Focused-resolve agent returned BLOCKING; human input required. |
+| `land_conflict_operator_required` | `land-conflict-operator-required` | Focused-resolve agent returned BLOCKING; move bead to `status=proposed`. |
 
 Both statuses use `LandConflictCooldown` (15 min) rather than the 24h cap used
 for `push_failed`, because land conflicts typically unblock quickly as sibling

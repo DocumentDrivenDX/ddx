@@ -169,7 +169,7 @@
 ## Execution Order
 
 1. **Parallel immediate work**
-   - `ddx-8fd9436e` — provider availability API (unblocked; depends on FEAT-014 signal model)
+   - `ddx-8fd9436e` — provider availability API (available; depends on FEAT-014 signal model)
    - `ddx-7869b685` — worker progress SSE + WorkerRecord schema update (unblocked)
    - `ddx-7004d730` — TP-002 multi-project Playwright coverage (blocked on FEAT-020 state persistence infrastructure, which is already implemented)
 2. **Dashboard UI chain** (after provider API)

@@ -191,8 +191,10 @@ The tracker queue views are derived from one in-memory snapshot.
 - Execution-ready views additionally filter on `execution-eligible` and
   `superseded-by`.
 - Execution-ready diagnostics must expose TD-031's distinct skipped reasons:
-  active cooldown, not executable, superseded, blocked, and epic-only/container
-  work. These reasons must not be collapsed into a generic cooldown bucket.
+  active cooldown, not executable, superseded, `status=proposed`,
+  dependency-waiting, external blockers, and epic-only/container work. External
+  blockers are the only skipped reason represented by `status=blocked`. These
+  reasons must not be collapsed into a generic cooldown bucket.
 - Results are sorted deterministically by:
   1. `priority` ascending
   2. explicit `queue-rank` ascending, with missing `queue-rank` sorted after
@@ -208,15 +210,20 @@ The tracker queue views are derived from one in-memory snapshot.
   has no available midpoint, DDx renormalizes only the affected priority bucket
   in current effective order before applying the move.
 
-### Blocked
+### Dependency-Waiting Query
 
-- Consider only `open` beads.
-- A bead is blocked when at least one dependency is not `closed`.
+- `ddx bead blocked` is the historical command name for derived
+  dependency-waiting: consider only `status=open` beads, then report beads with
+  at least one dependency that is not `closed`. This does not mutate or imply
+  `status=blocked`.
+- `status=blocked` is reserved by TD-031 for accepted work paused by an
+  external, recheckable blocker.
 
 ### Status
 
 - `Total` is the number of parsed beads.
-- `Open`, `Closed`, `Ready`, and `Blocked` are derived from the same snapshot.
+- Persisted-status counts and derived buckets (`Ready`, dependency-waiting,
+  execution-suppressed) are derived from the same snapshot.
 - Status reporting never reparses the file independently of the queue view.
 - Evidence history stored in `Extra["events"]` does not affect queue derivation.
 - Claim metadata does not affect queue derivation beyond the bead's status.

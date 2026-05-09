@@ -4,6 +4,8 @@
 
 Review open beads parked behind triage labels, unblock the ones whose latest
 reason is no longer valid, and record prevention patterns for automation.
+This is a legacy migration audit; mentions of old triage labels below describe
+historical cleanup inputs, not active lifecycle states.
 
 ## Summary
 
@@ -13,11 +15,11 @@ Observed patterns:
 
 | Pattern | Count | Meaning | Action |
 |---|---:|---|---|
-| provider_unavailable | 23 | Latest actionable event was `execution_failed` with `all tiers exhausted` / `no viable provider found`. | Removed `triage:needs-investigation`; these are retryable transport outages. |
+| provider_unavailable | 23 | Latest actionable event was `execution_failed` with `all tiers exhausted` / `no viable provider found`. | Removed legacy migration label `triage:needs-investigation`; these are retryable transport outages. |
 | verification_red_elsewhere | 4 | Targeted work appeared complete, but a required broad gate was red in unrelated tests. | Leave parked until each bead is verified or AC is narrowed. |
 | stale_execute_loop_spec | 6 | Old `ExecuteLoopSpec` refactor beads with no execution event, manual triage label, and deprecated execute-loop vocabulary. | Leave parked; rewrite or supersede against current `ddx work` / Fizeau boundary design. |
 | decomposition_or_epic | 3 | Parent/umbrella work where children or decomposition already own execution. | Leave parked pending completed-epic closure/supersede policy. |
-| no_changes_unverified | 5 | Agent reported already-satisfied or no-changes with verification command. | These do not block `ddx work` unless paired with needs-investigation; monitor for auto-verify/close. |
+| no_changes_unverified | 5 | Agent reported already-satisfied or no-changes with verification command. | Legacy migration note: these do not block `ddx work` unless paired with the old needs-investigation label; monitor for auto-verify/close. |
 | review_block_or_malfunction | 2 | Review blocked or malfunctioned on a no-changes/result path. | Leave parked pending review/triage cleanup. |
 
 Prevention beads filed:
@@ -27,7 +29,7 @@ Prevention beads filed:
 
 ## Unblocked Provider-Outage Beads
 
-Removed `triage:needs-investigation` from these beads because their latest
+Removed legacy migration label `triage:needs-investigation` from these beads because their latest
 actionable event was only a transient provider/routing outage:
 
 | Bead | Priority | Notes |
@@ -35,7 +37,7 @@ actionable event was only a transient provider/routing outage:
 | `ddx-9f20a4bd` | 0 | No viable provider; now retryable. |
 | `ddx-008d288f` | 1 | No viable provider; now retryable. |
 | `ddx-9228a484` | 1 | No viable provider; now retryable. |
-| `ddx-9c81b20f` | 1 | Removed needs-investigation; retained `triage:no-changes-unverified`. |
+| `ddx-9c81b20f` | 1 | Removed legacy migration needs-investigation label; retained `triage:no-changes-unverified`. |
 | `ddx-fb790086` | 1 | No viable provider; now retryable. |
 | `ddx-256af8b5` | 2 | No viable provider; now retryable. |
 | `ddx-4fd71cf3` | 2 | No viable provider; now retryable. |
@@ -52,8 +54,8 @@ actionable event was only a transient provider/routing outage:
 | `ddx-59459dd6` | 3 | No viable provider; now retryable. |
 | `ddx-a13eb42a` | 3 | No viable provider; now retryable. |
 | `ddx-cd42fc05` | 3 | No viable provider; now retryable. |
-| `ddx-d01e5017` | 3 | Removed needs-investigation; retained `triage:no-changes-unverified`. |
-| `ddx-e140727a` | 3 | Removed needs-investigation; retained `triage:no-changes-unverified`. |
+| `ddx-d01e5017` | 3 | Removed legacy migration needs-investigation label; retained `triage:no-changes-unverified`. |
+| `ddx-e140727a` | 3 | Removed legacy migration needs-investigation label; retained `triage:no-changes-unverified`. |
 | `ddx-eddb9ab6` | 3 | No viable provider; now retryable. |
 
 ## Remaining Parked Beads
@@ -106,11 +108,11 @@ These need direct inspection of the latest attempt evidence before unblocking.
 |---|---:|---|
 | `ddx-7f4cdb7a` | 2 | `triage:no-changes-unjustified` |
 | `ddx-9f6baafe` | 2 | `triage:no-changes-unjustified` |
-| `ddx-cfedee8e` | 2 | `triage:needs-investigation`; rationale says scope is pending/superseded by `ddx-9228a484`. |
+| `ddx-cfedee8e` | 2 | Legacy migration label `triage:needs-investigation`; rationale says scope is pending/superseded by `ddx-9228a484`. |
 
 ### No-Changes Unverified Only
 
-These labels are advisory unless paired with `triage:needs-investigation`;
+Legacy migration note: these labels were advisory unless paired with `triage:needs-investigation`;
 `ddx work plan` shows such beads as eligible. The scalable fix is to make
 verification-command no-changes evidence auto-close or auto-clear when green.
 
@@ -138,7 +140,7 @@ ddx bead list --status open --json | jq -r 'select(((.labels//[])|map(startswith
 Expected near-term signal:
 
 - Provider-unavailable beads should re-enter `ddx work plan`.
-- New no-viable-provider failures should not add `triage:needs-investigation`
+- New no-viable-provider failures should not add legacy migration label `triage:needs-investigation`
   once `ddx-66c98cde` lands.
 - Completed epics should stop appearing as structural no-ready-work noise once
   `ddx-c14f6525` lands.
