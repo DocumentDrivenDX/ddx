@@ -572,6 +572,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	complexityGuard := work.NewComplexityGuard(w.ComplexityGate, runtime.Log)
 	preclaimGuard := work.NewPreClaimGuard(runtime.PreClaimHook, w.Store, runtime.Log, now, 30*time.Second)
 	workLog := NewWorkLogRenderer(WorkLogRendererOptions{Now: now})
+	wasIdle := false
+	lastIdleQueueSignature := ""
 
 	emit := func(eventType string, data map[string]any) {
 		writeLoopEvent(runtime.EventSink, runtime.SessionID, eventType, data, now().UTC())
@@ -753,6 +755,13 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}) {
 				return result, nil
 			}
+			if runtime.Log != nil {
+				signature := workLogQueueSnapshotSignature(result.QueueSnapshot)
+				includeBlockers := signature != "" && signature != lastIdleQueueSignature
+				_, _ = fmt.Fprint(runtime.Log, workLog.FormatWatchIdle(idleInterval, result.QueueSnapshot, includeBlockers))
+				lastIdleQueueSignature = signature
+			}
+			wasIdle = true
 			// Watch mode treats an empty queue as idle, not terminal. --once
 			// and drain exits are classified above through work.StopCondition.
 			// Emit a transient "no_ready_work"
@@ -787,6 +796,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 		// Found a candidate: clear any "idle" substate set on the previous
 		// no-candidate iteration (ddx-dc157075 AC #5).
+		if wasIdle && runtime.Log != nil {
+			_, _ = fmt.Fprint(runtime.Log, workLog.FormatNextReadyTransition(candidate.ID, candidate.Title))
+		}
+		wasIdle = false
 		emitProgress(runtime.ProgressCh, ProgressEvent{
 			EventID:   "evt-" + randomProgressID(),
 			WorkerID:  runtime.WorkerID,

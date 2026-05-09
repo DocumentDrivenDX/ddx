@@ -59,6 +59,35 @@ func (r WorkLogRenderer) FormatHeader(beadID, title string) string {
 	return fmt.Sprintf("\n▶ %s: %s\n", beadID, title)
 }
 
+func (r WorkLogRenderer) FormatNextReadyTransition(beadID, title string) string {
+	beadID = strings.TrimSpace(beadID)
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return fmt.Sprintf("\n%s taking next ready bead from queue: %s\n", r.timestamp(), beadID)
+	}
+	return fmt.Sprintf("\n%s taking next ready bead from queue: %s — %s\n", r.timestamp(), beadID, title)
+}
+
+func (r WorkLogRenderer) FormatWatchIdle(interval time.Duration, snapshot *QueueSnapshot, includeBlockers bool) string {
+	message := "no execution-ready beads; sleeping " + interval.String()
+	if counts := formatWorkLogQueueCounts(snapshot); counts != "" {
+		message += "; " + counts
+	}
+	if summary := formatWorkLogHumanBlockerSummary(snapshot); summary != "" {
+		message += "; " + summary
+	}
+
+	var sb strings.Builder
+	sb.WriteString(r.FormatLifecycleLine(WorkLogLifecycleLine{
+		Phase:   "idle:",
+		Message: message,
+	}))
+	if includeBlockers && snapshot != nil {
+		sb.WriteString(formatWorkLogHumanBlockerEntries(snapshot.HumanReviewBlockers, 10))
+	}
+	return sb.String()
+}
+
 func (r WorkLogRenderer) FormatLifecycleLine(line WorkLogLifecycleLine) string {
 	parts := []string{r.timestamp()}
 	if phase := strings.TrimSpace(line.Phase); phase != "" {
@@ -150,4 +179,77 @@ func formatWorkLogRouteFields(harness, provider, model, reason string) string {
 		return ""
 	}
 	return "route: " + strings.Join(parts, " ")
+}
+
+func formatWorkLogQueueCounts(snapshot *QueueSnapshot) string {
+	if snapshot == nil {
+		return ""
+	}
+	parts := []string{
+		fmt.Sprintf("execution-ready=%d", snapshot.ExecutionReadyCount),
+		fmt.Sprintf("blocked=%d", snapshot.BlockedCount),
+		fmt.Sprintf("operator-attention=%d", snapshot.ProposedOperatorAttentionCount),
+		fmt.Sprintf("needs-human/investigation=%d", snapshot.HumanReviewBlockerCount),
+		fmt.Sprintf("cooldown/deferred=%d", snapshot.RetryCooldownCount),
+	}
+	if snapshot.NextRetryAfter != "" {
+		parts = append(parts, "next-retry="+snapshot.NextRetryAfter)
+	}
+	parts = append(parts,
+		fmt.Sprintf("execution-ineligible=%d", snapshot.ExecutionIneligibleCount),
+		fmt.Sprintf("superseded=%d", snapshot.SupersededCount),
+		fmt.Sprintf("epics=%d", snapshot.SkippedEpicsCount),
+		fmt.Sprintf("epic-closure-candidates=%d", snapshot.EpicClosureCandidatesCount),
+	)
+	return "queue: " + strings.Join(parts, " ")
+}
+
+func formatWorkLogHumanBlockerSummary(snapshot *QueueSnapshot) string {
+	if snapshot == nil || snapshot.HumanReviewBlockedTotal <= 0 || snapshot.HumanReviewBlockerCount <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("%d beads blocked behind %d needs-human blockers", snapshot.HumanReviewBlockedTotal, snapshot.HumanReviewBlockerCount)
+}
+
+func formatWorkLogHumanBlockerEntries(blockers []HumanReviewBlockerSnapshot, limit int) string {
+	if len(blockers) == 0 || limit <= 0 {
+		return ""
+	}
+	if len(blockers) < limit {
+		limit = len(blockers)
+	}
+	var sb strings.Builder
+	for i := 0; i < limit; i++ {
+		blocker := blockers[i]
+		sb.WriteString(fmt.Sprintf("  %d. %s %s (%d downstream)\n", i+1, blocker.ID, blocker.Title, blocker.DownstreamBlockedCount))
+	}
+	if more := len(blockers) - limit; more > 0 {
+		sb.WriteString(fmt.Sprintf("  and %d more\n", more))
+	}
+	return sb.String()
+}
+
+func workLogQueueSnapshotSignature(snapshot *QueueSnapshot) string {
+	if snapshot == nil {
+		return ""
+	}
+	parts := []string{
+		fmt.Sprintf("ready=%d", snapshot.ExecutionReadyCount),
+		fmt.Sprintf("blocked=%d", snapshot.BlockedCount),
+		fmt.Sprintf("deps=%d", snapshot.DependencyWaitingCount),
+		fmt.Sprintf("external=%d", snapshot.ExternalBlockedCount),
+		fmt.Sprintf("proposed=%d", snapshot.ProposedOperatorAttentionCount),
+		fmt.Sprintf("human-blockers=%d", snapshot.HumanReviewBlockerCount),
+		fmt.Sprintf("human-blocked=%d", snapshot.HumanReviewBlockedTotal),
+		fmt.Sprintf("cooldown=%d", snapshot.RetryCooldownCount),
+		"next-retry=" + snapshot.NextRetryAfter,
+		fmt.Sprintf("ineligible=%d", snapshot.ExecutionIneligibleCount),
+		fmt.Sprintf("superseded=%d", snapshot.SupersededCount),
+		fmt.Sprintf("epics=%d", snapshot.SkippedEpicsCount),
+		fmt.Sprintf("epic-closures=%d", snapshot.EpicClosureCandidatesCount),
+	}
+	for _, blocker := range snapshot.HumanReviewBlockers {
+		parts = append(parts, fmt.Sprintf("blocker=%s/%s/%d/%d", blocker.ID, blocker.Title, blocker.Priority, blocker.DownstreamBlockedCount))
+	}
+	return strings.Join(parts, "|")
 }

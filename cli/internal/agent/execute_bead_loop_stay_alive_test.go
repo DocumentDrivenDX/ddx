@@ -1,7 +1,10 @@
 package agent
 
 import (
+	"bytes"
 	"context"
+	"fmt"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -57,6 +60,205 @@ func TestLoop_StaysAliveWithEmptyQueue(t *testing.T) {
 	assert.Equal(t, 0, result.Attempts)
 	assert.True(t, elapsed >= cancelAfter,
 		"loop must run until ctx cancellation; ran for %s, expected >= %s", elapsed, cancelAfter)
+}
+
+func TestWorkWatchIdleStdout_PrintsQueueStatusAndHumanBlockers(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+	seedWatchIdleQueue(t, store)
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatalf("executor must not run on an idle queue")
+			return ExecuteBeadReport{}, nil
+		}),
+		Now: fixedWatchStdoutTime,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	progressCh := make(chan ProgressEvent, 16)
+	done := make(chan struct{})
+	var idleEvents int32
+	go func() {
+		for {
+			select {
+			case evt := <-progressCh:
+				if evt.Phase == "loop.idle" {
+					atomic.AddInt32(&idleEvents, 1)
+					cancel()
+					return
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+	defer close(done)
+
+	var logBuf bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:         executeloop.ModeWatch,
+		IdleInterval: 30 * time.Second,
+		Log:          &logBuf,
+		ProgressCh:   progressCh,
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotNil(t, result)
+	require.NotNil(t, result.QueueSnapshot)
+	assert.Equal(t, 3, result.QueueSnapshot.HumanReviewBlockerCount)
+	assert.Equal(t, 30, result.QueueSnapshot.HumanReviewBlockedTotal)
+	require.Len(t, result.QueueSnapshot.HumanReviewBlockers, 3)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&idleEvents), "watch mode must still emit loop.idle progress")
+
+	out := logBuf.String()
+	assert.Contains(t, out, "12:34:56 idle: no execution-ready beads; sleeping 30s")
+	assert.Contains(t, out, "queue: execution-ready=0")
+	assert.Contains(t, out, "operator-attention=1")
+	assert.Contains(t, out, "needs-human/investigation=3")
+	assert.Contains(t, out, "cooldown/deferred=1")
+	assert.Contains(t, out, "next-retry=")
+	assert.Contains(t, out, "execution-ineligible=1")
+	assert.Contains(t, out, "superseded=1")
+	assert.Contains(t, out, "epics=1")
+	assert.Contains(t, out, "epic-closure-candidates=1")
+	assert.Contains(t, out, "30 beads blocked behind 3 needs-human blockers")
+	assert.Contains(t, out, "1. ddx-human-1 Needs human 1 (10 downstream)")
+	assert.Contains(t, out, "2. ddx-human-2 Needs human 2 (10 downstream)")
+	assert.Contains(t, out, "3. ddx-human-3 Needs human 3 (10 downstream)")
+}
+
+func TestWorkWatchIdleStdout_RepeatedPollKeepsCompactQueueStatus(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+	seedWatchIdleQueue(t, store)
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatalf("executor must not run on an idle queue")
+			return ExecuteBeadReport{}, nil
+		}),
+		Now: fixedWatchStdoutTime,
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	wakeCh := make(chan struct{}, 1)
+	progressCh := make(chan ProgressEvent, 16)
+	done := make(chan struct{})
+	var idleEvents int32
+	go func() {
+		for {
+			select {
+			case evt := <-progressCh:
+				if evt.Phase != "loop.idle" {
+					continue
+				}
+				if atomic.AddInt32(&idleEvents, 1) == 1 {
+					wakeCh <- struct{}{}
+				} else {
+					cancel()
+					return
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+	defer close(done)
+
+	var logBuf bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:         executeloop.ModeWatch,
+		IdleInterval: time.Hour,
+		Log:          &logBuf,
+		ProgressCh:   progressCh,
+		WakeCh:       wakeCh,
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotNil(t, result)
+	assert.Equal(t, int32(2), atomic.LoadInt32(&idleEvents))
+
+	out := logBuf.String()
+	assert.Equal(t, 2, strings.Count(out, "idle: no execution-ready beads; sleeping 1h0m0s"))
+	assert.Equal(t, 2, strings.Count(out, "queue: execution-ready=0"))
+	assert.Equal(t, 2, strings.Count(out, "30 beads blocked behind 3 needs-human blockers"))
+	assert.Equal(t, 1, strings.Count(out, "ddx-human-1 Needs human 1 (10 downstream)"))
+	assert.Equal(t, 1, strings.Count(out, "ddx-human-2 Needs human 2 (10 downstream)"))
+	assert.Equal(t, 1, strings.Count(out, "ddx-human-3 Needs human 3 (10 downstream)"))
+}
+
+func TestWorkWatchStdout_PrintsNextReadyTransitionAfterIdle(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	ctx, cancel := context.WithCancel(context.Background())
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			cancel()
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-after-idle",
+				ResultRev: "feedface",
+			}, nil
+		}),
+		Now: fixedWatchStdoutTime,
+	}
+
+	wakeCh := make(chan struct{}, 1)
+	progressCh := make(chan ProgressEvent, 16)
+	done := make(chan struct{})
+	errCh := make(chan error, 1)
+	var activeEvents int32
+	go func() {
+		for {
+			select {
+			case evt := <-progressCh:
+				switch evt.Phase {
+				case "loop.idle":
+					errCh <- store.Create(&bead.Bead{
+						ID:       "ddx-ready-after-idle",
+						Title:    "spec: define full DDx temp cleanup in work cycle",
+						Priority: 0,
+					})
+					wakeCh <- struct{}{}
+				case "loop.active":
+					atomic.AddInt32(&activeEvents, 1)
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+	defer close(done)
+
+	var logBuf bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:         executeloop.ModeWatch,
+		IdleInterval: time.Hour,
+		Log:          &logBuf,
+		ProgressCh:   progressCh,
+		WakeCh:       wakeCh,
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	require.NoError(t, <-errCh)
+	require.NotNil(t, result)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&activeEvents), "watch mode must still emit loop.active progress")
+
+	out := logBuf.String()
+	transition := "taking next ready bead from queue: ddx-ready-after-idle — spec: define full DDx temp cleanup in work cycle"
+	header := "▶ ddx-ready-after-idle: spec: define full DDx temp cleanup in work cycle"
+	assert.Contains(t, out, "\n12:34:56 "+transition+"\n")
+	assert.Contains(t, out, header)
+	assert.Less(t, strings.Index(out, transition), strings.Index(out, header))
 }
 
 // TestDrain_RoutingPreflightRunsOnce covers the bootstrap behavior required
@@ -180,4 +382,83 @@ func TestLoop_ExplicitDrainExits(t *testing.T) {
 		"explicit poll=0 must exit promptly when queue is empty; took %s", elapsed)
 	assert.True(t, result.NoReadyWork)
 	assert.Equal(t, 0, result.Attempts)
+}
+
+func fixedWatchStdoutTime() time.Time {
+	return time.Date(2026, 5, 9, 12, 34, 56, 789000000, time.UTC)
+}
+
+func seedWatchIdleQueue(t *testing.T, store *bead.Store) {
+	t.Helper()
+
+	upstream := &bead.Bead{ID: "ddx-upstream", Title: "External blocker", Priority: 0}
+	require.NoError(t, store.Create(upstream))
+	require.NoError(t, store.UpdateWithLifecycleStatus(upstream.ID, bead.StatusBlocked, bead.LifecycleTransitionOptions{
+		ExternalBlockerReason: "waiting for upstream",
+		Reason:                "test fixture",
+		Source:                "test",
+	}, nil))
+
+	for i := 1; i <= 3; i++ {
+		blocker := &bead.Bead{
+			ID:       fmt.Sprintf("ddx-human-%d", i),
+			Title:    fmt.Sprintf("Needs human %d", i),
+			Priority: i,
+			Labels:   []string{bead.LabelNeedsHuman},
+		}
+		blocker.AddDep(upstream.ID, "blocks")
+		require.NoError(t, store.Create(blocker))
+
+		prevID := blocker.ID
+		for n := 1; n <= 10; n++ {
+			downstream := &bead.Bead{
+				ID:       fmt.Sprintf("ddx-down-%d-%02d", i, n),
+				Title:    fmt.Sprintf("Downstream %d %02d", i, n),
+				Priority: 4,
+			}
+			downstream.AddDep(prevID, "blocks")
+			require.NoError(t, store.Create(downstream))
+			prevID = downstream.ID
+		}
+	}
+
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:       "ddx-proposed",
+		Title:    "Proposed operator attention",
+		Status:   bead.StatusProposed,
+		Priority: 3,
+	}))
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:       "ddx-not-eligible",
+		Title:    "Execution ineligible",
+		Priority: 4,
+		Extra:    map[string]any{bead.ExtraExecutionElig: false},
+	}))
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:       "ddx-superseded",
+		Title:    "Superseded",
+		Priority: 4,
+		Extra:    map[string]any{"superseded-by": "ddx-replacement"},
+	}))
+
+	cooldown := &bead.Bead{ID: "ddx-cooldown", Title: "Retry later", Priority: 4}
+	require.NoError(t, store.Create(cooldown))
+	require.NoError(t, store.SetExecutionCooldown(cooldown.ID, fixedWatchStdoutTime().Add(time.Hour), ExecuteBeadStatusNoChanges, "retry later"))
+
+	ordinaryEpic := &bead.Bead{ID: "ddx-epic-open", Title: "Open epic", IssueType: "epic", Priority: 4}
+	ordinaryEpicChild := &bead.Bead{ID: "ddx-epic-open-child", Title: "Open epic child", Parent: ordinaryEpic.ID, Priority: 4}
+	ordinaryEpicChild.AddDep(upstream.ID, "blocks")
+	require.NoError(t, store.Create(ordinaryEpic))
+	require.NoError(t, store.Create(ordinaryEpicChild))
+
+	closureEpic := &bead.Bead{ID: "ddx-epic-closure", Title: "Closure epic", IssueType: "epic", Priority: 4}
+	closedChild := &bead.Bead{
+		ID:       "ddx-epic-closed-child",
+		Title:    "Closed epic child",
+		Status:   bead.StatusClosed,
+		Parent:   closureEpic.ID,
+		Priority: 4,
+	}
+	require.NoError(t, store.Create(closureEpic))
+	require.NoError(t, store.Create(closedChild))
 }
