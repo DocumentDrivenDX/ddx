@@ -72,8 +72,8 @@ func (f reviewerFn) ReviewBead(ctx context.Context, beadID, resultRev string, im
 	return f(ctx, beadID, resultRev, impl)
 }
 
-// TestReviewRetryThresholdFromConfigServer is the SD-024 Stage 1 behavioral
-// proof that the server dispatch path at runWorker carries
+// TestReviewRetryThresholdFromConfigServer is the SD-024 Stage 1 configuration
+// wiring proof that the server dispatch path at runWorker carries
 // review_max_retries from .ddx/config.yaml through to the running loop.
 //
 // The test mirrors the production wiring introduced in workers.go: it
@@ -84,20 +84,11 @@ func (f reviewerFn) ReviewBead(ctx context.Context, beadID, resultRev string, im
 // BeadWorkerFactory so behavior is observable end-to-end without a real
 // agent harness.
 //
-// Configured values:
-//   - .ddx/config.yaml: review_max_retries: 5
-//   - fixture: FailUntilCall=4 (attempts 1-4 return reviewer error,
-//     attempt 5 returns APPROVE)
-//
-// Expected behavior:
-//   - 5 StartExecuteLoop iterations drive 5 reviewer attempts.
-//   - attempts 1-4 emit review-error events.
-//   - attempt 5 emits an APPROVE review event and the loop closes
-//     the bead via CloseWithEvidence.
-//   - no review-manual-required event fires (threshold=5 ≥ attempts=5).
+// Candidate-cycle pre-land review now owns close eligibility, so execute-loop
+// must not invoke the legacy post-land reviewer/retry path. The fixture sets a
+// failing reviewer threshold to prove it remains unused.
 func TestReviewRetryThresholdFromConfigServer(t *testing.T) {
 	const (
-		failUntil = 4
 		threshold = 5
 		beadID    = "ddx-server-rmr-001"
 		fixedRev  = "cafebabe00112233"
@@ -126,7 +117,7 @@ review_max_retries: 5
 
 	runner := &reviewFailureRunner{
 		resultRev:     fixedRev,
-		failUntilCall: failUntil,
+		failUntilCall: threshold,
 	}
 
 	m := NewWorkerManager(projectRoot)
@@ -142,28 +133,17 @@ review_max_retries: 5
 		}
 	}
 
-	// Drive failUntil + 1 iterations through StartExecuteLoop → runWorker
-	// (one --once invocation per attempt, matching the production loop's
-	// per-iteration claim/release rhythm). Between iterations the test
-	// unclaims the bead because the loop intentionally leaves it claimed
-	// on a reviewer-error iteration.
-	const totalIterations = failUntil + 1
-	for i := 0; i < totalIterations; i++ {
-		rec, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
-			ProjectRoot: projectRoot,
-			Mode:        "once",
-		})
-		require.NoErrorf(t, err, "iteration %d: StartExecuteLoop", i+1)
-		_ = waitForWorkerExit(t, m, rec.ID, 10*time.Second)
-		if i < totalIterations-1 {
-			require.NoErrorf(t, store.Unclaim(beadID), "iteration %d: unclaim", i+1)
-		}
-	}
+	rec, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		ProjectRoot: projectRoot,
+		Mode:        "once",
+	})
+	require.NoError(t, err)
+	_ = waitForWorkerExit(t, m, rec.ID, 10*time.Second)
 
-	assert.Equal(t, totalIterations, runner.ReviewCalls(),
-		"reviewer must be invoked once per driven iteration")
-	assert.Equal(t, totalIterations, runner.ExecCalls(),
-		"executor must be invoked once per driven iteration")
+	assert.Equal(t, 0, runner.ReviewCalls(),
+		"legacy post-land reviewer must not be invoked by execute-loop")
+	assert.Equal(t, 1, runner.ExecCalls(),
+		"executor must be invoked once for the successful attempt")
 
 	events, err := store.Events(beadID)
 	require.NoError(t, err)
@@ -186,18 +166,17 @@ review_max_retries: 5
 		}
 	}
 
-	assert.Equal(t, failUntil, reviewErrorCount,
-		"reviewer-error count must match the fixture's FailUntilCall")
-	assert.Equal(t, 1, reviewApproveCount,
-		"the (FailUntilCall+1)th iteration must record an APPROVE review event")
+	assert.Equal(t, 0, reviewErrorCount,
+		"execute-loop must not emit legacy post-land review-error events")
+	assert.Equal(t, 0, reviewApproveCount,
+		"execute-loop must not emit legacy post-land review events")
 	assert.Equal(t, 0, manualRequiredCount,
-		"with review_max_retries=%d ≥ attempts=%d the loop must NOT emit review-manual-required",
-		threshold, totalIterations)
+		"execute-loop must not emit legacy post-land review-manual-required events")
 
 	got, err := store.Get(beadID)
 	require.NoError(t, err)
 	assert.Equal(t, "closed", got.Status,
-		"after APPROVE on attempt %d the loop must close the bead", totalIterations)
+		"successful execute-loop attempt must close directly after candidate-cycle approval")
 
 	// Defensive: a stale heartbeat ticker in the loop could outlive the
 	// final iteration. Give it a beat to settle so test cleanup is clean.
