@@ -16,9 +16,29 @@ type defaultConfig struct {
 	Severity   string     `yaml:"severity"`
 	Policy     string     `yaml:"policy"`
 	Runner     string     `yaml:"runner"`
+	Vale       ValeConfig `yaml:"vale"`
+	StylePack  StylePack  `yaml:"rule_pack"`
 	Includes   []string   `yaml:"includes"`
 	Excludes   []string   `yaml:"excludes"`
 	Vocabulary Vocabulary `yaml:"vocabulary"`
+}
+
+type ValeConfig struct {
+	Version    string `yaml:"version"`
+	StylesPath string `yaml:"styles_path"`
+	Style      string `yaml:"style"`
+}
+
+type StylePack struct {
+	Name    string      `yaml:"name"`
+	Version string      `yaml:"version"`
+	Path    string      `yaml:"path"`
+	Rules   []StyleRule `yaml:"rules"`
+}
+
+type StyleRule struct {
+	File   string `yaml:"file"`
+	RuleID string `yaml:"rule_id"`
 }
 
 type rulePack struct {
@@ -36,8 +56,10 @@ type ruleSpec struct {
 }
 
 type Vocabulary struct {
-	Accept []string `yaml:"accept"`
-	Reject []string `yaml:"reject"`
+	DefaultPath string   `yaml:"default_path,omitempty"`
+	ValeStyle   string   `yaml:"vale_style,omitempty"`
+	Accept      []string `yaml:"accept"`
+	Reject      []string `yaml:"reject"`
 }
 
 func defaultAssetRoot() (string, error) {

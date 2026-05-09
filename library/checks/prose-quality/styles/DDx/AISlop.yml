@@ -1,0 +1,6 @@
+extends: existence
+message: "Replace default polish with concrete detail."
+level: suggestion
+ignorecase: true
+tokens:
+  - __ddx_ai_slop_placeholder__

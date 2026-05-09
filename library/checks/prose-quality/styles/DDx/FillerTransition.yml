@@ -1,0 +1,6 @@
+extends: existence
+message: "Remove the filler transition unless it carries information."
+level: suggestion
+ignorecase: true
+tokens:
+  - __ddx_filler_transition_placeholder__

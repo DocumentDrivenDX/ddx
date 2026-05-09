@@ -8,6 +8,8 @@ type Settings struct {
 	Severity   string
 	Policy     string
 	Runner     string
+	Vale       ValeConfig
+	StylePack  StylePack
 	Includes   []string
 	Excludes   []string
 	Vocabulary Vocabulary
@@ -25,11 +27,24 @@ func DefaultSettings() (Settings, error) {
 		Severity: cfg.Severity,
 		Policy:   cfg.Policy,
 		Runner:   cfg.Runner,
+		Vale: ValeConfig{
+			Version:    cfg.Vale.Version,
+			StylesPath: cfg.Vale.StylesPath,
+			Style:      cfg.Vale.Style,
+		},
+		StylePack: StylePack{
+			Name:    cfg.StylePack.Name,
+			Version: cfg.StylePack.Version,
+			Path:    cfg.StylePack.Path,
+			Rules:   append([]StyleRule(nil), cfg.StylePack.Rules...),
+		},
 		Includes: append([]string(nil), cfg.Includes...),
 		Excludes: append([]string(nil), cfg.Excludes...),
 		Vocabulary: Vocabulary{
-			Accept: append([]string(nil), cfg.Vocabulary.Accept...),
-			Reject: append([]string(nil), cfg.Vocabulary.Reject...),
+			DefaultPath: cfg.Vocabulary.DefaultPath,
+			ValeStyle:   cfg.Vocabulary.ValeStyle,
+			Accept:      append([]string(nil), cfg.Vocabulary.Accept...),
+			Reject:      append([]string(nil), cfg.Vocabulary.Reject...),
 		},
 	}, nil
 }

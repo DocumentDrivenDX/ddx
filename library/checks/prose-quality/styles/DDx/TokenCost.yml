@@ -1,0 +1,6 @@
+extends: existence
+message: "Remove token-expensive filler that does not add execution value."
+level: suggestion
+ignorecase: true
+tokens:
+  - __ddx_token_cost_placeholder__

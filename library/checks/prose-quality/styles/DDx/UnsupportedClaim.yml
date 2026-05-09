@@ -1,0 +1,6 @@
+extends: existence
+message: "DDx prose claim needs a concrete subject, mechanism, or evidence."
+level: suggestion
+ignorecase: true
+tokens:
+  - __ddx_unsupported_claim_placeholder__
