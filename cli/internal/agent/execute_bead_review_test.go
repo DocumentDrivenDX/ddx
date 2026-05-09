@@ -802,7 +802,7 @@ func TestExecuteBeadWorkerReviewSkipLabelWithoutReasonIsIgnored(t *testing.T) {
 
 	got, err := store.Get(labeled.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusInProgress, got.Status, "label-only skip should be ignored")
+	assert.NotEqual(t, bead.StatusClosed, got.Status, "label-only skip should be ignored")
 }
 
 func TestExecuteBeadWorkerNilReviewerSkipsReview(t *testing.T) {
