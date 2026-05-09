@@ -116,6 +116,20 @@ func withTrackerLock(projectRoot string, fn func() error) error {
 	return withMainGitLock(projectRoot, fn)
 }
 
+// TrackerLockSample carries timing and contention metrics for one
+// withTrackerLock / withMainGitLock acquire+release cycle.
+type TrackerLockSample struct {
+	LockDir string
+	Wait    time.Duration // time from entry to lock acquisition
+	Hold    time.Duration // time the callback held the lock
+	Retries int           // number of sleep-and-retry iterations (0 = acquired on first try)
+}
+
+// TrackerLockMetricsSink is called after each successful tracker-lock
+// acquire+release cycle. The zero value (nil) is a no-op. Tests may swap
+// this to capture metrics.
+var TrackerLockMetricsSink func(TrackerLockSample)
+
 // withTrackerLockPolicy is the policy-parameterised form of
 // withTrackerLock; exposed at package scope so tests can pin a specific
 // curve.
@@ -126,6 +140,7 @@ func withTrackerLockPolicy(projectRoot string, policy LockRetryPolicy, fn func()
 	}
 
 	start := time.Now()
+	retries := 0
 	for attempt := 0; ; attempt++ {
 		err := os.Mkdir(lockDir, 0o755)
 		if err == nil {
@@ -160,6 +175,7 @@ func withTrackerLockPolicy(projectRoot string, policy LockRetryPolicy, fn func()
 			if policy.MaxElapsed > 0 && time.Since(start) >= policy.MaxElapsed {
 				return lockTimeoutError(lockDir, "max elapsed")
 			}
+			retries++
 			time.Sleep(policy.step(attempt))
 
 		case info.Mode().IsRegular():
@@ -179,8 +195,14 @@ func withTrackerLockPolicy(projectRoot string, policy LockRetryPolicy, fn func()
 		}
 	}
 
+	waitDur := time.Since(start)
+	holdStart := time.Now()
 	defer os.RemoveAll(lockDir)
-	return fn()
+	fnErr := fn()
+	if sink := TrackerLockMetricsSink; sink != nil {
+		sink(TrackerLockSample{LockDir: lockDir, Wait: waitDur, Hold: time.Since(holdStart), Retries: retries})
+	}
+	return fnErr
 }
 
 func lockTimeoutError(lockDir, why string) error {
@@ -188,7 +210,7 @@ func lockTimeoutError(lockDir, why string) error {
 	if pidData, perr := os.ReadFile(filepath.Join(lockDir, "pid")); perr == nil && len(pidData) > 0 {
 		owner = strings.TrimSpace(string(pidData))
 	}
-	return fmt.Errorf("tracker lock timeout (%s, owner pid: %s)", why, owner)
+	return fmt.Errorf("tracker lock timeout (%s, lock: %s, owner pid: %s)", why, lockDir, owner)
 }
 
 // breakStaleTrackerLock removes lockDir if its owner process is dead or the
