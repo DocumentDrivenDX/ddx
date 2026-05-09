@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -274,27 +275,31 @@ func TestReviewContextOverflow(t *testing.T) {
 	assert.Equal(t, 0, counter.calls,
 		"pre-dispatch short-circuit must skip the provider call entirely")
 
-	// Drive the worker loop with this reviewer so we can assert the
-	// review-error event lands on the bead and the bead is not closed.
-	store2 := store
-	worker := &ExecuteBeadWorker{
-		Store: store2,
-		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
-			return ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    ExecuteBeadStatusSuccess,
-				SessionID: "sess-overflow",
-				ResultRev: head,
-			}, nil
-		}),
-		Reviewer: reviewer,
-	}
+	// Drive the legacy/manual post-merge helper directly so we can assert the
+	// review-error event lands on the bead. execute-loop no longer invokes
+	// RunPostMergeReview after a candidate has landed.
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	_, err = worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	b, err := store.Get("ddx-overflow")
 	require.NoError(t, err)
+	outReview := RunPostMergeReview(context.Background(), PostMergeReviewInput{
+		Bead: *b,
+		Report: ExecuteBeadReport{
+			BeadID:    "ddx-overflow",
+			Status:    ExecuteBeadStatusSuccess,
+			SessionID: "sess-overflow",
+			ResultRev: head,
+		},
+		Reviewer:    reviewer,
+		Store:       store,
+		ProjectRoot: projectRoot,
+		Rcfg:        rcfg,
+		Now:         time.Now,
+		Assignee:    "worker",
+	})
+	require.False(t, outReview.Approved)
 
-	events, err := store2.Events("ddx-overflow")
+	events, err := store.Events("ddx-overflow")
 	require.NoError(t, err)
 	foundOverflow := false
 	for _, ev := range events {

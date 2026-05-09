@@ -81,23 +81,10 @@ func TestReviewErrorTaxonomy(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			store, first, _ := newExecuteLoopTestStore(t)
-			worker := &ExecuteBeadWorker{
-				Store: store,
-				Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
-					return ExecuteBeadReport{
-						BeadID:    beadID,
-						Status:    ExecuteBeadStatusSuccess,
-						SessionID: "sess-tax-" + tc.name,
-						ResultRev: "rev-" + tc.name,
-					}, nil
-				}),
-				Reviewer: tc.reviewer,
-			}
-
 			cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 			rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-			_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-			require.NoError(t, err)
+			out := runPostMergeReviewRetryFixture(t, store, first, "rev-"+tc.name, tc.reviewer, rcfg)
+			require.False(t, out.Approved)
 
 			events, err := store.Events(first.ID)
 			require.NoError(t, err)

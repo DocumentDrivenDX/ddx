@@ -46,10 +46,30 @@ func seedReviewErrorEvents(t *testing.T, store *bead.Store, beadID, resultRev, c
 	}
 }
 
+func runPostMergeReviewRetryFixture(t *testing.T, store *bead.Store, first *bead.Bead, resultRev string, reviewer BeadReviewer, rcfg config.ResolvedConfig) PostMergeReviewOutput {
+	t.Helper()
+	return RunPostMergeReview(context.Background(), PostMergeReviewInput{
+		Bead: *first,
+		Report: ExecuteBeadReport{
+			BeadID:    first.ID,
+			Status:    ExecuteBeadStatusSuccess,
+			SessionID: "sess-review-retry",
+			ResultRev: resultRev,
+		},
+		Reviewer:    reviewer,
+		Store:       store,
+		ProjectRoot: t.TempDir(),
+		Rcfg:        rcfg,
+		Now:         time.Now,
+		Assignee:    "worker",
+	})
+}
+
 // TestBoundedReviewRetry_NthFailureEmitsManualRequired covers FEAT-022 §14
-// case (a): after N (default 3) review-error events on the same result_rev,
-// the loop emits a terminal `review-manual-required` event and parks the
-// bead so a subsequent execute-loop iteration does NOT re-execute primary.
+// case (a) for the retained legacy/manual helper: after N (default 3)
+// review-error events on the same result_rev, the helper emits a terminal
+// `review-manual-required` event and parks the bead. execute-loop no longer
+// invokes this helper after a candidate has landed.
 func TestBoundedReviewRetry_NthFailureEmitsManualRequired(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	const resultRev = "deadbeef"
@@ -58,28 +78,10 @@ func TestBoundedReviewRetry_NthFailureEmitsManualRequired(t *testing.T) {
 	// reviewer attempt becomes the 3rd, which must trip the terminal event.
 	seedReviewErrorEvents(t, store, first.ID, resultRev, evidence.OutcomeReviewProviderEmpty, 2)
 
-	var execCount atomic.Int32
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
-			if beadID == first.ID {
-				execCount.Add(1)
-			}
-			return ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    ExecuteBeadStatusSuccess,
-				SessionID: "sess-r1",
-				ResultRev: resultRev,
-			}, nil
-		}),
-		Reviewer: failingReviewer(evidence.OutcomeReviewProviderEmpty),
-	}
-
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-	require.NoError(t, err)
-	assert.Equal(t, int32(1), execCount.Load(), "primary should run exactly once on this iteration")
+	out := runPostMergeReviewRetryFixture(t, store, first, resultRev, failingReviewer(evidence.OutcomeReviewProviderEmpty), rcfg)
+	require.False(t, out.Approved)
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
@@ -104,13 +106,6 @@ func TestBoundedReviewRetry_NthFailureEmitsManualRequired(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, bead.StatusClosed, got.Status,
 		"reviewer failure (even at terminal escalation) must never close the bead")
-
-	// Subsequent execute-loop iteration must NOT re-execute primary. The
-	// bead is parked via SetExecutionCooldown so ReadyExecution skips it.
-	_, err = worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-	require.NoError(t, err)
-	assert.Equal(t, int32(1), execCount.Load(),
-		"after review-manual-required the executor must not be invoked again")
 }
 
 // TestBoundedReviewRetry_FreshResultRevResetsCounter covers FEAT-022 §14
@@ -132,23 +127,10 @@ func TestBoundedReviewRetry_FreshResultRevResetsCounter(t *testing.T) {
 		Source:  "ddx agent execute-loop",
 	}))
 
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
-			return ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    ExecuteBeadStatusSuccess,
-				SessionID: "sess-fresh",
-				ResultRev: newRev,
-			}, nil
-		}),
-		Reviewer: failingReviewer(evidence.OutcomeReviewTransport),
-	}
-
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-	require.NoError(t, err)
+	out := runPostMergeReviewRetryFixture(t, store, first, newRev, failingReviewer(evidence.OutcomeReviewTransport), rcfg)
+	require.False(t, out.Approved)
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
@@ -268,24 +250,11 @@ func TestBoundedReviewRetry_RespectsConfiguredOverride(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	const resultRev = "c0ffee"
 
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
-			return ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    ExecuteBeadStatusSuccess,
-				SessionID: "sess-cfg",
-				ResultRev: resultRev,
-			}, nil
-		}),
-		Reviewer: failingReviewer(evidence.OutcomeReviewUnparseable),
-	}
-
 	// Override to 1: the very first failure should escalate to terminal.
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", ReviewMaxRetries: 1}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-	require.NoError(t, err)
+	out := runPostMergeReviewRetryFixture(t, store, first, resultRev, failingReviewer(evidence.OutcomeReviewUnparseable), rcfg)
+	require.False(t, out.Approved)
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)

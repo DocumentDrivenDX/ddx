@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -11,12 +12,12 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestExecuteBeadWorker_ReviewerFailureModesKeepBeadOpen covers ddx-738edf47
-// AC #3: on any reviewer terminal failure — nonzero exit, empty output, or
-// unparseable output — the loop must record a failure event and leave the
-// bead un-closed so a later attempt can retry. Closing on reviewer failure
-// is the silent-false-closure surface that 738edf47 eliminates.
-func TestExecuteBeadWorker_ReviewerFailureModesKeepBeadOpen(t *testing.T) {
+// TestRunPostMergeReview_ReviewerFailureModesKeepBeadOpen covers ddx-738edf47
+// AC #3 for the retained legacy/manual helper: on any reviewer terminal
+// failure — nonzero exit, empty output, or unparseable output — the helper
+// records a failure event and leaves the bead un-closed. execute-loop no
+// longer invokes this helper after a candidate has landed.
+func TestRunPostMergeReview_ReviewerFailureModesKeepBeadOpen(t *testing.T) {
 	tests := []struct {
 		name     string
 		reviewer beadReviewerFunc
@@ -32,8 +33,9 @@ func TestExecuteBeadWorker_ReviewerFailureModesKeepBeadOpen(t *testing.T) {
 			reviewer: beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
 				return &ReviewResult{
 					Verdict:   "",
+					Error:     "unparseable",
 					RawOutput: "",
-				}, nil
+				}, ErrReviewVerdictUnparseable
 			}),
 		},
 		{
@@ -41,31 +43,33 @@ func TestExecuteBeadWorker_ReviewerFailureModesKeepBeadOpen(t *testing.T) {
 			reviewer: beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
 				return &ReviewResult{
 					Verdict:   "",
+					Error:     "unparseable",
 					RawOutput: "Reviewer crashed mid-stream with no structured verdict.",
-				}, nil
+				}, ErrReviewVerdictUnparseable
 			}),
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			store, first, _ := newExecuteLoopTestStore(t)
-			worker := &ExecuteBeadWorker{
-				Store: store,
-				Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
-					return ExecuteBeadReport{
-						BeadID:    beadID,
-						Status:    ExecuteBeadStatusSuccess,
-						SessionID: "sess-x",
-						ResultRev: "c0ffee" + tc.name[:4],
-					}, nil
-				}),
-				Reviewer: tc.reviewer,
-			}
-
 			cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 			rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-			_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-			require.NoError(t, err)
+			out := RunPostMergeReview(context.Background(), PostMergeReviewInput{
+				Bead: *first,
+				Report: ExecuteBeadReport{
+					BeadID:    first.ID,
+					Status:    ExecuteBeadStatusSuccess,
+					SessionID: "sess-x",
+					ResultRev: "c0ffee" + tc.name[:4],
+				},
+				Reviewer:    tc.reviewer,
+				Store:       store,
+				ProjectRoot: t.TempDir(),
+				Rcfg:        rcfg,
+				Now:         time.Now,
+				Assignee:    "worker",
+			})
+			require.False(t, out.Approved)
 
 			got, err := store.Get(first.ID)
 			require.NoError(t, err)
@@ -73,4 +77,12 @@ func TestExecuteBeadWorker_ReviewerFailureModesKeepBeadOpen(t *testing.T) {
 				"reviewer failure of any kind must not close the bead — the whole point of this invariant is that a broken reviewer cannot silently end work")
 		})
 	}
+}
+
+// TestExecuteBeadWorker_ReviewerFailureModesKeepBeadOpen is kept as a
+// compatibility anchor for callers that reference the old worker-level test
+// name. The covered behavior now belongs to the retained helper, not the
+// automated execute-loop close path.
+func TestExecuteBeadWorker_ReviewerFailureModesKeepBeadOpen(t *testing.T) {
+	TestRunPostMergeReview_ReviewerFailureModesKeepBeadOpen(t)
 }

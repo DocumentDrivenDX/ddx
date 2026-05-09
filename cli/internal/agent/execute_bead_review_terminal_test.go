@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -33,45 +34,46 @@ func TestReviewTerminalClassifications_BlockWithoutNoProgress(t *testing.T) {
 	for _, tc := range classes {
 		t.Run(tc.name, func(t *testing.T) {
 			store, first, _ := newExecuteLoopTestStore(t)
-			worker := &ExecuteBeadWorker{
-				Store: store,
-				Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
-					return ExecuteBeadReport{
-						BeadID:    beadID,
-						Status:    ExecuteBeadStatusSuccess,
-						SessionID: "sess-terminal-" + tc.name,
-						ResultRev: "aabbcc01",
-						BaseRev:   "aabbcc00",
-					}, nil
-				}),
-				Reviewer: beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
-					return &ReviewResult{
-						Verdict:         VerdictBlock,
-						Rationale:       "This BLOCK is terminal: " + tc.class,
-						RawOutput:       "BLOCK: " + tc.class,
-						ReviewerHarness: "claude",
-						ReviewerModel:   "claude-opus-4-6",
-						Findings: []Finding{
-							{Severity: "block", Summary: "Structured terminal class: " + tc.class, Location: "bead:AC1"},
-						},
-					}, nil
-				}),
-			}
+			reviewer := beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+				return &ReviewResult{
+					Verdict:         VerdictBlock,
+					Rationale:       "This BLOCK is terminal: " + tc.class,
+					RawOutput:       "BLOCK: " + tc.class,
+					ReviewerHarness: "claude",
+					ReviewerModel:   "claude-opus-4-6",
+					Findings: []Finding{
+						{Severity: "block", Summary: "Structured terminal class: " + tc.class, Location: "bead:AC1"},
+					},
+				}, nil
+			})
 
 			cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 			rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-			result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-			require.NoError(t, err)
+			out := RunPostMergeReview(context.Background(), PostMergeReviewInput{
+				Bead: *first,
+				Report: ExecuteBeadReport{
+					BeadID:    first.ID,
+					Status:    ExecuteBeadStatusSuccess,
+					SessionID: "sess-terminal-" + tc.name,
+					ResultRev: "aabbcc01",
+					BaseRev:   "aabbcc00",
+				},
+				Reviewer:    reviewer,
+				Store:       store,
+				ProjectRoot: t.TempDir(),
+				Rcfg:        rcfg,
+				Now:         time.Now,
+				Assignee:    "worker",
+			})
+			require.False(t, out.Approved)
 
 			// Must count as a failure, not a success.
-			assert.Equal(t, 0, result.Successes)
-			assert.Equal(t, 1, result.Failures)
-			assert.Equal(t, ExecuteBeadStatusReviewTerminalBlock, result.LastFailureStatus)
+			assert.Equal(t, ExecuteBeadStatusReviewTerminalBlock, out.Report.Status)
 
 			// Bead must remain open (not closed).
 			got, err := store.Get(first.ID)
 			require.NoError(t, err)
-			assert.Equal(t, bead.StatusInProgress, got.Status, "terminal block must not close the bead")
+			assert.NotEqual(t, bead.StatusClosed, got.Status, "terminal block must not close the bead")
 
 			// Bead must carry the needs_human label.
 			assert.True(t, HasBeadLabel(got.Labels, TriageNeedsHumanLabel),
@@ -114,23 +116,10 @@ func TestReviewTerminalClassifications_ExhaustedReviewErrorNeedsHuman(t *testing
 	// reviewer attempt becomes the 3rd, which must trip the terminal event.
 	seedReviewErrorEvents(t, store, first.ID, resultRev, evidence.OutcomeReviewProviderEmpty, 2)
 
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
-			return ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    ExecuteBeadStatusSuccess,
-				SessionID: "sess-exhausted-terminal",
-				ResultRev: resultRev,
-			}, nil
-		}),
-		Reviewer: failingReviewer(evidence.OutcomeReviewProviderEmpty),
-	}
-
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-	require.NoError(t, err)
+	out := runPostMergeReviewRetryFixture(t, store, first, resultRev, failingReviewer(evidence.OutcomeReviewProviderEmpty), rcfg)
+	require.False(t, out.Approved)
 
 	// review-manual-required event must be present with the correct class.
 	events, err := store.Events(first.ID)

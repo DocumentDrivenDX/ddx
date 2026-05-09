@@ -598,29 +598,28 @@ func TestRunPostMergeReview_ApproveWithoutEvidenceIsReviewError(t *testing.T) {
 	assert.True(t, foundError, "expected evidence-free APPROVE to record review-error: unparseable")
 }
 
-func TestExecuteBeadWorkerReviewBlockWithoutRationaleIsMalfunction(t *testing.T) {
+func TestRunPostMergeReview_BlockWithoutRationaleIsMalfunction(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
-			return ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    ExecuteBeadStatusSuccess,
-				SessionID: "sess-review-4",
-				ResultRev: "cafed00d",
-			}, nil
-		}),
-		Reviewer: makeReviewer(VerdictBlock, "### Verdict: BLOCK"),
-	}
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Equal(t, 0, result.Successes)
-	assert.Equal(t, 1, result.Failures)
-	assert.Equal(t, ExecuteBeadStatusReviewMalfunction, result.LastFailureStatus)
+	out := RunPostMergeReview(context.Background(), PostMergeReviewInput{
+		Bead: *first,
+		Report: ExecuteBeadReport{
+			BeadID:    first.ID,
+			Status:    ExecuteBeadStatusSuccess,
+			SessionID: "sess-review-4",
+			ResultRev: "cafed00d",
+		},
+		Reviewer:    makeReviewer(VerdictBlock, "### Verdict: BLOCK"),
+		Store:       store,
+		ProjectRoot: t.TempDir(),
+		Rcfg:        rcfg,
+		Now:         time.Now,
+		Assignee:    "worker",
+	})
+	require.False(t, out.Approved)
+	assert.Equal(t, ExecuteBeadStatusReviewMalfunction, out.Report.Status)
 
 	got, err := store.Get(first.ID)
 	require.NoError(t, err)
@@ -632,10 +631,6 @@ func TestExecuteBeadWorkerReviewBlockWithoutRationaleIsMalfunction(t *testing.T)
 	assert.NotEqual(t, bead.StatusClosed, got.Status,
 		"malformed BLOCK must not close the bead — closing on reviewer malfunction was the silent-false-closure shape")
 	assert.NotContains(t, got.Notes, "REVIEW:BLOCK")
-
-	require.Len(t, result.Results, 1)
-	assert.Equal(t, ExecuteBeadStatusReviewMalfunction, result.Results[0].Status)
-	assert.Empty(t, result.Results[0].ReviewRationale)
 }
 
 func TestDefaultBeadReviewerWritesReviewArtifacts(t *testing.T) {
@@ -779,30 +774,31 @@ func TestExecuteBeadWorkerReviewSkipLabelWithoutReasonIsIgnored(t *testing.T) {
 	require.NoError(t, store.Create(labeled))
 
 	reviewerCalled := false
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
-			return ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    ExecuteBeadStatusSuccess,
-				SessionID: "sess-label-ignore",
-				ResultRev: "feedface",
-			}, nil
-		}),
-		Reviewer: beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
-			reviewerCalled = true
-			return &ReviewResult{Verdict: VerdictRequestChanges}, nil
-		}),
-	}
+	reviewer := beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+		reviewerCalled = true
+		return &ReviewResult{Verdict: VerdictRequestChanges}, nil
+	})
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-	require.NoError(t, err)
+	out := RunPostMergeReview(context.Background(), PostMergeReviewInput{
+		Bead: *labeled,
+		Report: ExecuteBeadReport{
+			BeadID:    labeled.ID,
+			Status:    ExecuteBeadStatusSuccess,
+			SessionID: "sess-label-ignore",
+			ResultRev: "feedface",
+		},
+		Reviewer:    reviewer,
+		Store:       store,
+		ProjectRoot: t.TempDir(),
+		Rcfg:        rcfg,
+		Now:         time.Now,
+		Assignee:    "worker",
+	})
+	require.False(t, out.Approved)
 	assert.True(t, reviewerCalled, "reviewer must be called when review:skip lacks a review:skip-reason label")
-	assert.Equal(t, 0, result.Successes)
-	assert.Equal(t, 1, result.Failures)
-	assert.Equal(t, ExecuteBeadStatusReviewRequestChanges, result.LastFailureStatus)
+	assert.Equal(t, ExecuteBeadStatusReviewRequestChanges, out.Report.Status)
 
 	got, err := store.Get(labeled.ID)
 	require.NoError(t, err)
@@ -835,11 +831,9 @@ func TestExecuteBeadWorkerNilReviewerSkipsReview(t *testing.T) {
 	assert.Equal(t, bead.StatusClosed, got.Status)
 }
 
-// TestExecuteBeadWorkerReviewBoundedByMaxTier verifies that REQUEST_CHANGES
-// reopens the bead for the next attempt but does not cause an infinite loop
-// within a single worker.Run call. The bead is visited once, the reviewer
-// returns REQUEST_CHANGES, the bead is reopened — but the "attempted" map
-// prevents it from being picked up again in the same run.
+// TestExecuteBeadWorkerReviewBoundedByMaxTier verifies the retired post-land
+// reviewer is unreachable from execute-loop success. Candidate-cycle review
+// owns repair/retry now, so a success closes directly within one worker.Run.
 func TestExecuteBeadWorkerReviewBoundedByMaxTier(t *testing.T) {
 	// Use a single-bead store so we can assert "exactly one attempt".
 	store := bead.NewStore(t.TempDir())
@@ -848,6 +842,7 @@ func TestExecuteBeadWorkerReviewBoundedByMaxTier(t *testing.T) {
 	require.NoError(t, store.Create(only))
 
 	executorCalls := 0
+	reviewerCalls := 0
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
@@ -859,7 +854,10 @@ func TestExecuteBeadWorkerReviewBoundedByMaxTier(t *testing.T) {
 				ResultRev: "11111111",
 			}, nil
 		}),
-		Reviewer: makeReviewer(VerdictRequestChanges, "### Verdict: REQUEST_CHANGES\n\nStill failing."),
+		Reviewer: beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+			reviewerCalls++
+			return &ReviewResult{Verdict: VerdictRequestChanges}, nil
+		}),
 	}
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
@@ -869,16 +867,16 @@ func TestExecuteBeadWorkerReviewBoundedByMaxTier(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// The executor should have been called exactly once; the attempted map
-	// prevents revisiting while the bead remains in_progress after review.
+	// The executor should have been called exactly once; the retired
+	// post-land review path should not run or trigger an in-loop retry.
 	assert.Equal(t, 1, executorCalls, "bead should be attempted exactly once within a single worker.Run call")
-	assert.Equal(t, 0, result.Successes)
-	assert.Equal(t, 1, result.Failures, "pre-close review block counts as a failure in this run")
+	assert.Equal(t, 0, reviewerCalls, "legacy post-land reviewer must not run from execute-loop success")
+	assert.Equal(t, 1, result.Successes)
+	assert.Equal(t, 0, result.Failures)
 
-	// Bead remains claimed/in_progress after the blocked review.
 	got, err := store.Get(only.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusInProgress, got.Status)
+	assert.Equal(t, bead.StatusClosed, got.Status)
 }
 
 // ---------------------------------------------------------------------------

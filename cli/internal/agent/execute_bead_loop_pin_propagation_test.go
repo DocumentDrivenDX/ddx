@@ -53,9 +53,8 @@ func pinCapturingExecutor(spec pinPropagationSpec, captured *[]capturedRequest, 
 }
 
 // alternatingReviewer returns REQUEST_CHANGES (or BLOCK) on the first call
-// and APPROVE on every subsequent call. Used to drive the loop into a
-// pre-close blocked review on the first iteration and verify the bead is not
-// immediately retried.
+// and APPROVE on every subsequent call. It is retained for legacy/manual
+// post-land review helper coverage; execute-loop success no longer invokes it.
 func alternatingReviewer(firstVerdict Verdict, calls *atomic.Int32) beadReviewerFunc {
 	return beadReviewerFunc(func(_ context.Context, _, resultRev string, _ ImplementerRouting) (*ReviewResult, error) {
 		n := calls.Add(1)
@@ -75,11 +74,11 @@ func alternatingReviewer(firstVerdict Verdict, calls *atomic.Int32) beadReviewer
 	})
 }
 
-// driveLoopAcrossBlockedReview runs the loop twice with Once=true, asserting
-// that the bead stays in_progress after a REQUEST_CHANGES/BLOCK review while
-// still being eligible for the next pass. Returns the captured requests so
-// callers can assert pin values.
-func driveLoopAcrossBlockedReview(t *testing.T, firstVerdict Verdict, spec pinPropagationSpec) []capturedRequest {
+// driveLoopAcrossIgnoredPostLandReview runs one successful loop iteration with
+// a legacy post-land reviewer installed. Candidate-cycle review owns close
+// eligibility now, so execute-loop must close directly and must not re-invoke
+// the old reviewer/retry path.
+func driveLoopAcrossIgnoredPostLandReview(t *testing.T, firstVerdict Verdict, spec pinPropagationSpec) []capturedRequest {
 	t.Helper()
 
 	store, first, _ := newExecuteLoopTestStore(t)
@@ -96,42 +95,32 @@ func driveLoopAcrossBlockedReview(t *testing.T, firstVerdict Verdict, spec pinPr
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
-	// Iteration 1: success → reviewer returns firstVerdict → bead remains
-	// in_progress.
 	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-	require.NoError(t, err, "iteration 1: worker.Run")
+	require.NoError(t, err, "worker.Run")
 
 	got, err := store.Get(first.ID)
 	require.NoError(t, err)
-	require.Equal(t, bead.StatusInProgress, got.Status,
-		"bead must stay in_progress after %s so the loop does not immediately retry it",
+	require.Equal(t, bead.StatusClosed, got.Status,
+		"post-land %s review path is retired; a successful pre-land-reviewed attempt closes directly",
 		firstVerdict)
 
-	// Iteration 2: the bead is still eligible, so the executor closure is
-	// invoked again. The important invariant is that the worker-level pins
-	// remain intact even without a reopen event.
-	_, err = worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-	require.NoError(t, err, "iteration 2: worker.Run")
-
-	require.Equalf(t, int32(2), execCalls.Load(),
-		"executor must run again after a pre-close %s review", firstVerdict)
-	require.Lenf(t, captured, 2,
-		"expected exactly 2 captured executor invocations after %s pre-close review", firstVerdict)
+	require.Equal(t, int32(0), reviewCalls.Load(),
+		"legacy post-land reviewer must not be called from execute-loop")
+	require.Equal(t, int32(1), execCalls.Load(),
+		"execute-loop should not retry after a legacy post-land %s review verdict", firstVerdict)
+	require.Len(t, captured, 1)
 	return captured
 }
 
-// TestExecuteLoopRetryReusesWorkerHarness is the FEAT-006 regression test
-// for ddx-c67969d5: when the worker is spawned with explicit pins (harness,
-// model, profile, provider), every retry triggered by a review-driven reopen
-// must re-issue the next iteration's executor invocation with the same pins.
+// TestExecuteLoopPostLandReviewIgnoredKeepsWorkerHarness verifies that when
+// the worker is spawned with explicit pins (harness, model, profile,
+// provider), the initial executor invocation still receives those operator
+// passthrough values while the retired post-land reviewer remains unreachable.
 //
 // The executor closure here mirrors the production wiring in
 // cmd/agent_cmd.go and internal/server/workers.go: the spec values are
-// captured by reference and read on each invocation. A regression that
-// recreated the closure with empty pins between iterations — or otherwise
-// dropped the worker-level overrides on retry — would surface as an empty
-// captured value on the second attempt.
-func TestExecuteLoopRetryReusesWorkerHarness(t *testing.T) {
+// captured by reference and read on invocation.
+func TestExecuteLoopPostLandReviewIgnoredKeepsWorkerHarness(t *testing.T) {
 	spec := pinPropagationSpec{
 		Harness:  "claude",
 		Model:    "claude-opus-4-7",
@@ -139,24 +128,18 @@ func TestExecuteLoopRetryReusesWorkerHarness(t *testing.T) {
 		Provider: "anthropic",
 	}
 
-	captured := driveLoopAcrossBlockedReview(t, VerdictRequestChanges, spec)
+	captured := driveLoopAcrossIgnoredPostLandReview(t, VerdictRequestChanges, spec)
 
-	// AC1 (REQUEST_CHANGES path): the post-review retry must carry the same
-	// Harness as the initial attempt — not "".
 	assert.Equal(t, spec.Harness, captured[0].Harness, "iteration 1: harness pin must be set on the initial attempt")
-	assert.Equal(t, spec.Harness, captured[1].Harness,
-		"iteration 2 (REQUEST_CHANGES retry): harness pin must propagate (not empty)")
-
-	// AC2: --model, --profile, --provider must propagate on retry too.
-	assert.Equal(t, spec.Model, captured[1].Model, "retry must reuse worker-level model pin")
-	assert.Equal(t, spec.Profile, captured[1].Profile, "retry must reuse worker-level profile pin")
-	assert.Equal(t, spec.Provider, captured[1].Provider, "retry must reuse worker-level provider pin")
+	assert.Equal(t, spec.Model, captured[0].Model, "initial attempt must reuse worker-level model pin")
+	assert.Equal(t, spec.Profile, captured[0].Profile, "initial attempt must reuse worker-level profile pin")
+	assert.Equal(t, spec.Provider, captured[0].Provider, "initial attempt must reuse worker-level provider pin")
 }
 
-// TestExecuteLoopRetryReusesWorkerHarness_BlockPreclose covers the second
-// review-driven path: BLOCK. Same invariant — every retry-triggering path
-// must re-issue the executor with the worker-level pins still attached.
-func TestExecuteLoopRetryReusesWorkerHarness_BlockPreclose(t *testing.T) {
+// TestExecuteLoopPostLandReviewIgnoredKeepsWorkerHarness_BlockPreclose covers
+// the legacy BLOCK post-land review shape. The reviewer is installed but
+// unreachable from the automated close path.
+func TestExecuteLoopPostLandReviewIgnoredKeepsWorkerHarness_BlockPreclose(t *testing.T) {
 	spec := pinPropagationSpec{
 		Harness:  "claude",
 		Model:    "claude-opus-4-7",
@@ -164,16 +147,16 @@ func TestExecuteLoopRetryReusesWorkerHarness_BlockPreclose(t *testing.T) {
 		Provider: "anthropic",
 	}
 
-	captured := driveLoopAcrossBlockedReview(t, VerdictBlock, spec)
+	captured := driveLoopAcrossIgnoredPostLandReview(t, VerdictBlock, spec)
 
-	assert.Equal(t, spec.Harness, captured[1].Harness,
-		"iteration 2 (BLOCK retry): harness pin must propagate (not empty)")
-	assert.Equal(t, spec.Model, captured[1].Model,
-		"iteration 2 (BLOCK retry): model pin must propagate")
-	assert.Equal(t, spec.Profile, captured[1].Profile,
-		"iteration 2 (BLOCK retry): profile pin must propagate")
-	assert.Equal(t, spec.Provider, captured[1].Provider,
-		"iteration 2 (BLOCK retry): provider pin must propagate")
+	assert.Equal(t, spec.Harness, captured[0].Harness,
+		"initial attempt: harness pin must propagate (not empty)")
+	assert.Equal(t, spec.Model, captured[0].Model,
+		"initial attempt: model pin must propagate")
+	assert.Equal(t, spec.Profile, captured[0].Profile,
+		"initial attempt: profile pin must propagate")
+	assert.Equal(t, spec.Provider, captured[0].Provider,
+		"initial attempt: provider pin must propagate")
 }
 
 // TestExecuteLoopRetryNoChangesReopen covers the no_changes-into-reopen
@@ -342,18 +325,15 @@ func TestExecuteLoopRetryPostRunCheckFailedReopen(t *testing.T) {
 		"iteration 2 (post_run_check_failed retry): provider pin must propagate")
 }
 
-// TestExecuteLoopRetryReusesWorkerHarness_NoPinAutoRoutes is the negative
-// control for AC4: when the worker is spawned WITHOUT --harness, retries
-// must continue to defer to auto-routing — i.e., the captured pin stays
-// empty on every iteration. This guards against an over-eager "fix" that
-// pins a routed harness from the first attempt onto subsequent retries.
-func TestExecuteLoopRetryReusesWorkerHarness_NoPinAutoRoutes(t *testing.T) {
+// TestExecuteLoopPostLandReviewIgnored_NoPinAutoRoutes is the negative
+// control for AC4: when the worker is spawned WITHOUT --harness, the loop
+// must continue to defer to auto-routing and must not synthesize pins.
+func TestExecuteLoopPostLandReviewIgnored_NoPinAutoRoutes(t *testing.T) {
 	spec := pinPropagationSpec{} // no pins → auto-routing
 
-	captured := driveLoopAcrossBlockedReview(t, VerdictRequestChanges, spec)
+	captured := driveLoopAcrossIgnoredPostLandReview(t, VerdictRequestChanges, spec)
 
 	assert.Empty(t, captured[0].Harness, "no --harness on initial attempt → empty pin")
-	assert.Empty(t, captured[1].Harness, "no --harness on retry → still empty (auto-routing preserved)")
-	assert.Empty(t, captured[1].Model, "no --model on retry → still empty")
-	assert.Empty(t, captured[1].Provider, "no --provider on retry → still empty")
+	assert.Empty(t, captured[0].Model, "no --model on initial attempt → empty pin")
+	assert.Empty(t, captured[0].Provider, "no --provider on initial attempt → empty pin")
 }
