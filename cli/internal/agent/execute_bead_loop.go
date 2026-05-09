@@ -779,6 +779,43 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 		}
 
+		// Dangling-success recovery (ddx-2b2d114e): when we just reclaimed a
+		// stale in_progress bead, check whether a prior task_succeeded result
+		// exists with a result_rev already merged into HEAD. If so, close the
+		// bead idempotently and skip re-execution — the work is already done.
+		if candidate.Status == bead.StatusInProgress {
+			recovered, recErr := recoverDanglingSuccess(
+				w.Store, runtime.ProjectRoot, candidate.ID,
+				true, assignee, now, emit,
+			)
+			if recErr != nil {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "dangling-success recovery error (%s): %v\n", candidate.ID, recErr)
+				}
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("recoverDanglingSuccess", assignee, result, recErr)
+				})
+				if ctx.Err() != nil {
+					return result, ctx.Err()
+				}
+				continue
+			}
+			if recovered {
+				result.Attempts++
+				result.Successes++
+				result.LastSuccessAt = now().UTC()
+				result.Results = append(result.Results, ExecuteBeadReport{
+					BeadID: candidate.ID,
+					Status: ExecuteBeadStatusSuccess,
+					Detail: "dangling-success recovery: bead closed idempotently (result_rev already merged)",
+				})
+				if applyStop(work.StopInput{Once: runtime.Once}) {
+					return result, nil
+				}
+				continue
+			}
+		}
+
 		// Pre-dispatch intake runs after claiming so that only the owning worker
 		// performs model-backed readiness evaluation. Concurrent workers that lose
 		// the claim race skip intake entirely (picker.claim_race above). Terminal
