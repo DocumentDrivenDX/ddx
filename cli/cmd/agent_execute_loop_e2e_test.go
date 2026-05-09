@@ -73,33 +73,22 @@ func (f reviewerFn) ReviewBead(ctx context.Context, beadID, resultRev string, im
 	return f(ctx, beadID, resultRev, impl)
 }
 
-// TestReviewRetryThresholdFromConfigCLI is the SD-024 Stage 1 behavioral
-// proof that the CLI dispatch path at runAgentExecuteLoop carries
-// review_max_retries from .ddx/config.yaml through to the running loop.
+// TestReviewRetryThresholdFromConfigCLI is the SD-024 Stage 1 configuration
+// wiring proof. The CLI dispatch path at runAgentExecuteLoop must still carry
+// review_max_retries from .ddx/config.yaml through to the resolved loop config.
 //
 // The test mirrors the production wiring introduced in agent_cmd.go:
 // it calls config.LoadAndResolve against a real on-disk .ddx/config.yaml
 // (the same call the CLI dispatch site issues) and then invokes
 // ExecuteBeadWorker.RunWithConfig with an ExecuteBeadLoopRuntime shaped
-// identically to the runtime the CLI builds. The deterministic
-// review-failure fixture (test-local) provides the executor +
-// reviewer pair so behavior is observable end-to-end without a real
-// agent harness.
+// identically to the runtime the CLI builds.
 //
-// Configured values:
-//   - .ddx/config.yaml: review_max_retries: 5
-//   - fixture: FailUntilCall=4 (attempts 1-4 return reviewer error,
-//     attempt 5 returns APPROVE)
-//
-// Expected behavior:
-//   - 5 RunWithConfig iterations drive 5 reviewer attempts.
-//   - attempts 1-4 emit review-error events.
-//   - attempt 5 emits an APPROVE review event and the loop closes
-//     the bead via CloseWithEvidence.
-//   - no review-manual-required event fires (threshold=5 ≥ attempts=5).
+// Candidate-cycle pre-land review now owns close eligibility, so execute-loop
+// must not invoke the legacy post-land reviewer/retry path. This test asserts
+// the resolved config still carries the threshold while a successful loop
+// attempt closes directly without review events.
 func TestReviewRetryThresholdFromConfigCLI(t *testing.T) {
 	const (
-		failUntil   = 4
 		threshold   = 5
 		beadID      = "ddx-cli-rmr-001"
 		fixedRev    = "cafebabe00112233"
@@ -129,7 +118,7 @@ review_max_retries: 5
 
 	runner := &reviewFailureRunner{
 		resultRev:     fixedRev,
-		failUntilCall: failUntil,
+		failUntilCall: threshold,
 	}
 
 	worker := &agent.ExecuteBeadWorker{
@@ -150,31 +139,20 @@ review_max_retries: 5
 		ProjectRoot: t.TempDir(), // execute-bead worktree base; isolated from project root.
 	}
 
-	// Drive failUntil + 1 iterations (one --once invocation per attempt,
-	// matching the production loop's per-iteration claim/release rhythm).
-	const totalIterations = failUntil + 1
-	for i := 0; i < totalIterations; i++ {
-		_, runErr := worker.Run(context.Background(), rcfg, runtime)
-		require.NoErrorf(t, runErr, "iteration %d: RunWithConfig", i+1)
-		if i < totalIterations-1 {
-			// On a reviewer-error iteration the loop intentionally leaves
-			// the bead claimed; production re-picks it up next poll. The
-			// test drives that re-pickup explicitly via Unclaim.
-			require.NoErrorf(t, store.Unclaim(beadID), "iteration %d: unclaim", i+1)
-		}
-	}
+	_, runErr := worker.Run(context.Background(), rcfg, runtime)
+	require.NoError(t, runErr)
 
-	assert.Equal(t, totalIterations, runner.ReviewCalls(),
-		"reviewer must be invoked once per driven iteration")
-	assert.Equal(t, totalIterations, runner.ExecCalls(),
-		"executor must be invoked once per driven iteration")
+	assert.Equal(t, 0, runner.ReviewCalls(),
+		"legacy post-land reviewer must not be invoked by execute-loop")
+	assert.Equal(t, 1, runner.ExecCalls(),
+		"executor must be invoked once for the successful attempt")
 
 	events, err := store.Events(beadID)
 	require.NoError(t, err)
 
 	var (
+		reviewEventCount    int
 		reviewErrorCount    int
-		reviewApproveCount  int
 		manualRequiredCount int
 	)
 	for _, ev := range events {
@@ -182,26 +160,23 @@ review_max_retries: 5
 		case "review-error":
 			reviewErrorCount++
 		case "review":
-			if ev.Summary == "APPROVE" {
-				reviewApproveCount++
-			}
+			reviewEventCount++
 		case "review-manual-required":
 			manualRequiredCount++
 		}
 	}
 
-	assert.Equal(t, failUntil, reviewErrorCount,
-		"reviewer-error count must match the fixture's FailUntilCall")
-	assert.Equal(t, 1, reviewApproveCount,
-		"the (FailUntilCall+1)th iteration must record an APPROVE review event")
+	assert.Equal(t, 0, reviewErrorCount,
+		"execute-loop must not emit legacy post-land review-error events")
+	assert.Equal(t, 0, reviewEventCount,
+		"execute-loop must not emit legacy post-land review events")
 	assert.Equal(t, 0, manualRequiredCount,
-		"with review_max_retries=%d ≥ attempts=%d the loop must NOT emit review-manual-required",
-		threshold, totalIterations)
+		"execute-loop must not emit legacy post-land review-manual-required events")
 
 	got, err := store.Get(beadID)
 	require.NoError(t, err)
 	assert.Equal(t, "closed", got.Status,
-		"after APPROVE on attempt %d the loop must close the bead", totalIterations)
+		"successful execute-loop attempt must close directly after pre-land review eligibility")
 
 	// Defensive: a stale heartbeat ticker in the loop could outlive the
 	// final iteration. Give it a beat to settle so test cleanup is clean.

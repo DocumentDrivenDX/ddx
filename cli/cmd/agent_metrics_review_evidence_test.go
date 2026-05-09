@@ -1,26 +1,47 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// TestReviewEvidenceApproveAttributesToTier verifies the full
-// execute-bead-loop → review-outcomes pipeline: when the executor returns
-// success and the reviewer APPROVEs, the bead carries both a kind:routing
-// event (with resolved_provider/resolved_model) and a kind:review event (with
-// APPROVE in summary), and computeReviewOutcomes attributes that review to
-// the executor's harness/model tier with approvals=1.
+func appendMetricsRoutingReviewEvents(t *testing.T, store *bead.Store, beadID, verdict string, createdAt time.Time) {
+	t.Helper()
+	body, err := json.Marshal(map[string]any{
+		"resolved_provider": "claude",
+		"resolved_model":    "sonnet",
+		"fallback_chain":    []string{},
+	})
+	require.NoError(t, err)
+	require.NoError(t, store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "routing",
+		Summary:   "provider=claude model=sonnet",
+		Body:      string(body),
+		Actor:     "ddx",
+		Source:    "ddx agent execute-loop",
+		CreatedAt: createdAt,
+	}))
+	require.NoError(t, store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "review",
+		Summary:   verdict,
+		Body:      "fixture review verdict",
+		Actor:     "worker",
+		Source:    "ddx agent review",
+		CreatedAt: createdAt.Add(time.Second),
+	}))
+}
+
+// TestReviewEvidenceApproveAttributesToTier verifies the review-outcomes
+// attribution pipeline over explicit bead evidence: when a kind:routing event
+// precedes an APPROVE kind:review event, computeReviewOutcomes attributes the
+// review to that provider/model tier with approvals=1.
 func TestReviewEvidenceApproveAttributesToTier(t *testing.T) {
 	dir := t.TempDir()
 	ddxDir := filepath.Join(dir, ".ddx")
@@ -29,35 +50,7 @@ func TestReviewEvidenceApproveAttributesToTier(t *testing.T) {
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{ID: "ddx-rev-approve", Title: "approve target"}))
-
-	worker := &agent.ExecuteBeadWorker{
-		Store: store,
-		Executor: agent.ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (agent.ExecuteBeadReport, error) {
-			return agent.ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    agent.ExecuteBeadStatusSuccess,
-				SessionID: "sess-approve",
-				ResultRev: "aabbccdd",
-				Harness:   "claude",
-				Provider:  "claude",
-				Model:     "sonnet",
-			}, nil
-		}),
-		Reviewer: reviewerFunc(func(_ context.Context, _, _ string, _ agent.ImplementerRouting) (*agent.ReviewResult, error) {
-			return &agent.ReviewResult{
-				Verdict:   agent.VerdictApprove,
-				RawOutput: "### Verdict: APPROVE",
-				PerAC: []agent.ReviewAC{
-					{Number: 1, Item: "routing", Grade: "pass", Evidence: "approve evidence"},
-				},
-			}, nil
-		}),
-	}
-
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
-	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	_, err := worker.Run(context.Background(), rcfg, agent.ExecuteBeadLoopRuntime{Once: true})
-	require.NoError(t, err)
+	appendMetricsRoutingReviewEvents(t, store, "ddx-rev-approve", "APPROVE", time.Date(2026, 5, 9, 1, 0, 0, 0, time.UTC))
 
 	events, err := store.Events("ddx-rev-approve")
 	require.NoError(t, err)
@@ -78,8 +71,8 @@ func TestReviewEvidenceApproveAttributesToTier(t *testing.T) {
 			assert.Equal(t, "APPROVE", e.Summary)
 		}
 	}
-	require.GreaterOrEqual(t, routingIdx, 0, "loop must append a kind:routing event before review")
-	require.GreaterOrEqual(t, reviewIdx, 0, "loop must append a kind:review event after APPROVE")
+	require.GreaterOrEqual(t, routingIdx, 0, "fixture must append a kind:routing event before review")
+	require.GreaterOrEqual(t, reviewIdx, 0, "fixture must append a kind:review event after APPROVE")
 	assert.Less(t, routingIdx, reviewIdx, "routing must precede review for correct tier attribution")
 
 	report, err := computeReviewOutcomesReport(dir, 0, time.Time{})
@@ -96,8 +89,8 @@ func TestReviewEvidenceApproveAttributesToTier(t *testing.T) {
 }
 
 // TestReviewEvidenceRequestChangesCountedAsRejection verifies that a
-// REQUEST_CHANGES verdict is attributed to the same tier as the executor's
-// report and counted as a rejection in review-outcomes.
+// REQUEST_CHANGES verdict is attributed to the most recent routing tier and
+// counted as a rejection in review-outcomes.
 func TestReviewEvidenceRequestChangesCountedAsRejection(t *testing.T) {
 	dir := t.TempDir()
 	ddxDir := filepath.Join(dir, ".ddx")
@@ -106,29 +99,7 @@ func TestReviewEvidenceRequestChangesCountedAsRejection(t *testing.T) {
 	store := bead.NewStore(ddxDir)
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{ID: "ddx-rev-reject", Title: "reject target"}))
-
-	worker := &agent.ExecuteBeadWorker{
-		Store: store,
-		Executor: agent.ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (agent.ExecuteBeadReport, error) {
-			return agent.ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    agent.ExecuteBeadStatusSuccess,
-				SessionID: "sess-reject",
-				ResultRev: "11223344",
-				Harness:   "claude",
-				Provider:  "claude",
-				Model:     "sonnet",
-			}, nil
-		}),
-		Reviewer: reviewerFunc(func(_ context.Context, _, _ string, _ agent.ImplementerRouting) (*agent.ReviewResult, error) {
-			return &agent.ReviewResult{Verdict: agent.VerdictRequestChanges, RawOutput: "### Verdict: REQUEST_CHANGES\n\n- needs tests"}, nil
-		}),
-	}
-
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
-	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	_, err := worker.Run(context.Background(), rcfg, agent.ExecuteBeadLoopRuntime{Once: true})
-	require.NoError(t, err)
+	appendMetricsRoutingReviewEvents(t, store, "ddx-rev-reject", "REQUEST_CHANGES", time.Date(2026, 5, 9, 2, 0, 0, 0, time.UTC))
 
 	events, err := store.Events("ddx-rev-reject")
 	require.NoError(t, err)
@@ -146,8 +117,8 @@ func TestReviewEvidenceRequestChangesCountedAsRejection(t *testing.T) {
 			assert.Equal(t, "REQUEST_CHANGES", e.Summary)
 		}
 	}
-	assert.True(t, hasRouting, "loop must append kind:routing on the reopened-after-review path")
-	assert.True(t, hasReview, "loop must append kind:review with REQUEST_CHANGES summary")
+	assert.True(t, hasRouting, "fixture must append kind:routing for tier attribution")
+	assert.True(t, hasReview, "fixture must append kind:review with REQUEST_CHANGES summary")
 
 	report, err := computeReviewOutcomesReport(dir, 0, time.Time{})
 	rows := report.Rows
