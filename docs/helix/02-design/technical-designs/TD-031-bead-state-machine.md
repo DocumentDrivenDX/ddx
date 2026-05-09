@@ -599,23 +599,59 @@ on any bead. Hygiene beads that affect worker state (QuotaPauseContract,
 RateLimitRetryContract) MUST NOT add new fields to the bead schema to
 represent these transient states.
 
-## 11. Migration Plan (placeholder)
+## 11. One-Way Lifecycle Migration And Startup Gate
 
-The actual migration survey — which existing beads carry orphaned status
-values, which code paths persist non-canonical statuses, and what the
-mechanical rename looks like — runs in the sibling reconciliation bead.
-This TD does not catalogue current data. The readiness assessment and triage
-queue-action contract in section 8.2 is already defined here; only
-compatibility wording such as `MODE: intake` remains legacy.
+The transition from label-owned lifecycle lanes to the status-owned lifecycle
+is one-way. Legacy/backcompat labels and pseudo-statuses such as
+`needs_human`, `triage:needs-investigation`, and `needs_investigation` are
+migration input only. Normal runtime MUST NOT maintain compatibility lanes,
+runtime aliases, or fallback queue behavior for those names after the lifecycle
+gate is enabled.
 
-Sibling beads handling the migration:
+DDx startup MUST refuse normal operation when the active project bead queue
+contains unmigrated lifecycle state. The preflight scans the active queue before
+ordinary commands load queue views or mutate beads. It fails closed when it
+finds any of:
 
-- Schema/docs/code reconciliation: align FEAT-004 line 65 with the
-  schema; rename code references to non-status names; add CI guards.
-- Hygiene-bead AC substitution: replace each hygiene bead's
-  contract section with a reference to TD-031 §8.x.
-- Migration survey: scan persisted bead stores in known DDx projects for
-  non-canonical status values and produce a remediation list.
+- open or in-progress beads carrying legacy lifecycle labels
+  (`needs_human`, `triage:needs-investigation`, or equivalent old operator-lane
+  labels);
+- non-canonical pseudo-status values outside the six persisted statuses;
+- legacy Extra fields that still control routing instead of merely preserving
+  historical evidence.
 
-When those siblings land, this section is replaced with a concrete
-migration record citing the sibling bead IDs and the survey result.
+Allowed bypass surfaces are intentionally narrow:
+
+- `ddx help`, `ddx --help`, `ddx version`, and equivalent metadata-only help
+  commands;
+- `ddx doctor` and other read-only diagnostics that do not derive worker
+  eligibility or mutate lifecycle;
+- `ddx bead migrate --lifecycle --dry-run`;
+- `ddx bead migrate --lifecycle --apply`.
+
+All other bead and worker surfaces MUST refuse to continue until migration is
+complete, including `ddx bead ready`, `ddx bead blocked`, `ddx bead status`,
+`ddx work`, server-managed workers, GraphQL worker starts, REST/MCP worker
+starts, and queue-readiness APIs. The refusal is a startup/configuration error,
+not a retryable worker outcome and not an agent routing failure.
+
+The startup error output MUST include:
+
+1. counts of legacy lifecycle labels by name;
+2. counts of non-canonical pseudo-status values by name;
+3. the first few affected bead IDs for operator orientation;
+4. the exact commands:
+
+   ```bash
+   ddx bead migrate --lifecycle --dry-run
+   ddx bead migrate --lifecycle --apply
+   ```
+
+5. the rollback instruction: use git rollback (for example, restore the prior
+   `.ddx/beads.jsonl` commit) if the one-way migration result is wrong.
+
+Because the bead store is git-tracked, rollback is git rollback, not dual
+semantics. The migrator owns translating old labels and pseudo-statuses into
+`status=proposed`, `status=open`, `status=blocked`, `status=closed`, or
+`status=cancelled` according to this TD. Runtime code consumes only the
+post-migration state-owned contract.

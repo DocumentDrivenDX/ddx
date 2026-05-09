@@ -63,6 +63,31 @@ pass.
 Tracker instructions, merge-policy, and safety rules in AGENTS.md are
 load-bearing in every mode and are never overridden by mode selection.
 
+### Lifecycle Migration Startup Gate
+
+`ddx work`, `ddx try`, server-managed workers, GraphQL worker starts, REST/MCP
+worker starts, and queue status/readiness commands must run the TD-031 lifecycle
+startup preflight before claiming beads or deriving worker eligibility. When the
+active queue still contains unmigrated legacy lifecycle labels or
+pseudo-statuses, these surfaces fail closed with a configuration/startup error.
+They do not call Fizeau, do not classify the failure as an agent attempt, and do
+not add cooldown or retry metadata.
+
+Allowed bypass commands are limited to help/version output, `ddx doctor` or
+other read-only diagnostics that do not mutate lifecycle, and the lifecycle
+migration command:
+
+```bash
+ddx bead migrate --lifecycle --dry-run
+ddx bead migrate --lifecycle --apply
+```
+
+The error must print counts of legacy labels and pseudo-statuses, a small sample
+of affected bead IDs, and the exact migration command. The migration is one-way:
+old `needs_human` and `triage:needs-investigation` lanes are not runtime
+compatibility modes. If the migration is wrong, the recovery path is git
+rollback of the tracker commit.
+
 ### Worker-capacity suggestion rules
 
 An agent in `queue_steward` mode may suggest running `ddx work` or point
@@ -567,6 +592,11 @@ Migration is one-way and read-compatible:
 The migration window, the rewrite tool, and the cutoff signal are
 specified in the implementation epic, not here.
 
+The lifecycle-state migration is separate from this run-substrate migration.
+TD-031 §11 owns that one-way queue migration contract. Unlike legacy run-record
+readers, normal task execution does not read through old lifecycle labels after
+the startup gate is enabled.
+
 ## `ddx work` Stop Conditions
 
 `ddx work` drains the queue until **any** of the following stop
@@ -905,6 +935,8 @@ the command about to run:
 - project root resolution;
 - `.ddx/config.yaml` parseability;
 - `.ddx/beads.jsonl` parseability for bead-execution commands;
+- TD-031 lifecycle migration status for queue-derived and worker-start
+  commands;
 - the root `ddx` project skill under `.agents/skills/ddx/SKILL.md` or
   `.claude/skills/ddx/SKILL.md`;
 - the nested `bead-lifecycle` skill when readiness/lint/triage hooks are wired;
@@ -912,8 +944,11 @@ the command about to run:
 
 Passing preflight checks are silent. Failed checks are observable and
 actionable. `ddx work` and `ddx try` fail on missing required project/tracker
-state, but warn once per process and continue for optional lifecycle-hook
-degradation in WARN-ONLY mode. `ddx server`
+state. Unmigrated lifecycle queues fail closed before worker startup with the
+TD-031 counts, affected bead sample, `ddx bead migrate --lifecycle --dry-run`,
+`ddx bead migrate --lifecycle --apply`, and git rollback guidance. Optional
+lifecycle-hook degradation in WARN-ONLY mode still warns once per process and
+continues after the lifecycle migration gate is clean. `ddx server`
 fails on missing required server project state, but missing lifecycle skills or
 legacy skill layout are surfaced as degraded startup diagnostics and health
 metadata rather than blocking the HTTP server. When the lifecycle skill is

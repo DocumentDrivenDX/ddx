@@ -88,6 +88,30 @@ bd/br statuses, labels, dependency edges, append-only events, and preserved
 `Extra` fields. FEAT-004 does not introduce additional status vocabulary for
 no_changes, cooldown, superseded, or execution-readiness cases.
 
+### Lifecycle Migration Gate
+
+The status-owned lifecycle migration is one-way. Legacy/backcompat
+`needs_human`, `triage:needs-investigation`, and pseudo-status lifecycle names
+are input to `ddx bead migrate --lifecycle`; normal runtime does not preserve
+them as compatibility queue lanes.
+
+Before queue commands derive readiness or mutate beads, DDx performs the TD-031
+lifecycle startup preflight. If the active store still contains unmigrated
+legacy lifecycle labels or pseudo-statuses, `ddx bead ready`, `ddx bead
+blocked`, `ddx bead status`, `ddx work`, and worker/API queue-readiness surfaces
+must refuse normal operation. The permitted bead commands during this state are
+the migration path and diagnostics:
+
+```bash
+ddx bead migrate --lifecycle --dry-run
+ddx bead migrate --lifecycle --apply
+```
+
+The refusal output must include counts by legacy label/pseudo-status, a sample
+of affected bead IDs, and the exact migration command to run. Because beads are
+git-tracked, recovery from an incorrect one-way migration is git rollback of
+the tracker commit rather than maintaining dual lifecycle semantics.
+
 Bead readiness assessment uses those existing metadata carriers. Lint/rubric
 scoring happens inside readiness, and post-attempt triage happens after
 execution. None of them add dedicated readiness fields or new schema fields;
