@@ -169,7 +169,7 @@ func TestExecutionCleanup_RemovesMetadataLessUnregisteredDDXTempDirs(t *testing.
 	assert.DirExists(t, activePath)
 	assert.Equal(t, int64(1), summary.RemovedUnregisteredTempDirs)
 	assert.True(t, hasObservationClass(summary.Observations, "removed_unregistered_temp_dir"))
-	assert.True(t, hasObservationClass(summary.Observations, "preserved_temp_dir"))
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_live_attempt"))
 }
 
 func TestExecutionCleanup_PreservesRegisteredMetadataLessWorktree(t *testing.T) {
