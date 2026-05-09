@@ -138,20 +138,12 @@ func TestStopCondition_NoProgress_IgnoresIntakeRoutingReviewAndOperatorStates(t 
 			},
 		},
 		{
-			name: "needs_human",
-			report: ExecuteBeadReport{
-				Status:        ExecuteBeadStatusExecutionFailed,
-				OutcomeReason: "needs_human",
-				BaseRev:       "abc123",
-				ResultRev:     "abc123",
-			},
-		},
-		{
 			name: "operator_required",
 			report: ExecuteBeadReport{
-				Status:    ExecuteBeadStatusLandConflictNeedsHuman,
-				BaseRev:   "abc123",
-				ResultRev: "abc123",
+				Status:        ExecuteBeadStatusLandConflictOperatorRequired,
+				OutcomeReason: "operator_required",
+				BaseRev:       "abc123",
+				ResultRev:     "abc123",
 			},
 		},
 	}

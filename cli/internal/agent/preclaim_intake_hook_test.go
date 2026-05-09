@@ -394,10 +394,16 @@ func TestPreClaimReadiness_DecodesLegacyIntakeJSON(t *testing.T) {
 			wantDetail:  "too broad",
 		},
 		{
-			name:        "ambiguous",
+			name:        "operator_required",
+			payload:     `{"classification":"operator_required","rationale":"unclear scope"}`,
+			wantOutcome: PreClaimIntakeOperatorRequired,
+			wantDetail:  "ambiguous_scope: unclear scope",
+		},
+		{
+			name:        "legacy ambiguous is rejected",
 			payload:     `{"classification":"ambiguous","reasoning":"unclear scope"}`,
-			wantOutcome: PreClaimIntakeAmbiguousNeedsHuman,
-			wantDetail:  "unclear scope",
+			wantOutcome: "",
+			wantDetail:  "",
 		},
 		{
 			name:        "rewritten",
@@ -409,6 +415,12 @@ func TestPreClaimReadiness_DecodesLegacyIntakeJSON(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got, err := decodePreClaimIntakePayloadResult(tt.payload)
+			if tt.wantOutcome == "" {
+				require.Error(t, err)
+				assert.Contains(t, err.Error(), "legacy classification")
+				assert.Contains(t, err.Error(), string(PreClaimIntakeOperatorRequired))
+				return
+			}
 			require.NoError(t, err)
 			assert.Equal(t, tt.wantOutcome, got.Outcome)
 			assert.Equal(t, tt.wantDetail, got.Detail)
@@ -436,9 +448,9 @@ func TestPreClaimReadiness_DecodesCanonicalReadinessJSON(t *testing.T) {
 			wantDetail:  "too broad",
 		},
 		{
-			name:        "ambiguous_needs_human",
-			payload:     `{"outcome":"ambiguous_needs_human","reason":"unclear scope"}`,
-			wantOutcome: PreClaimIntakeAmbiguousNeedsHuman,
+			name:        "operator_required",
+			payload:     `{"outcome":"operator_required","reason":"unclear scope"}`,
+			wantOutcome: PreClaimIntakeOperatorRequired,
 			wantDetail:  "unclear scope",
 		},
 		{
@@ -473,6 +485,16 @@ func TestPreClaimReadiness_DecodesCanonicalReadinessJSON(t *testing.T) {
 			assert.Equal(t, tt.wantOutcome, got.Outcome)
 			assert.Equal(t, tt.wantDetail, got.Detail)
 		})
+	}
+
+	for _, payload := range []string{
+		`{"outcome":"ambiguous_needs_human","reason":"unclear scope"}`,
+		`{"outcome":"needs_human","reason":"unclear scope"}`,
+	} {
+		_, err := decodePreClaimIntakePayloadResult(payload)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "legacy readiness outcome")
+		assert.Contains(t, err.Error(), string(PreClaimIntakeOperatorRequired))
 	}
 }
 

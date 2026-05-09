@@ -152,10 +152,10 @@ func TestExecuteBeadLoopLandConflict_AutoRecoverFails_EscalatesResolver(t *testi
 	assert.True(t, sawUnresolvable, "must emit kind:land-conflict-unresolvable event")
 }
 
-// TestExecuteBeadLoopLandConflict_BlockingResolver_NeedsHuman verifies that
-// when ConflictResolver signals isBlocking=true, the bead parks with
-// land_conflict_needs_human and a kind:land-conflict-needs-human event.
-func TestExecuteBeadLoopLandConflict_BlockingResolver_NeedsHuman(t *testing.T) {
+// TestExecuteBeadLoopLandConflict_BlockingResolver_Proposed verifies that
+// when ConflictResolver signals isBlocking=true, the bead moves to
+// status=proposed with land_conflict_operator_required evidence.
+func TestExecuteBeadLoopLandConflict_BlockingResolver_Proposed(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 
 	worker := &ExecuteBeadWorker{
@@ -186,17 +186,27 @@ func TestExecuteBeadLoopLandConflict_BlockingResolver_NeedsHuman(t *testing.T) {
 		ProjectRoot: t.TempDir(),
 	})
 	require.NoError(t, err)
-	assert.Equal(t, ExecuteBeadStatusLandConflictNeedsHuman, result.LastFailureStatus)
+	assert.Equal(t, ExecuteBeadStatusLandConflictOperatorRequired, result.LastFailureStatus)
+
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status, "blocking resolver must move bead to proposed")
+	assert.Empty(t, got.Owner, "bead must be unclaimed")
+	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman)
+	meta := bead.GetNeedsHumanMeta(*got)
+	assert.Contains(t, meta.Reason, "land conflict")
+	assert.Equal(t, "ddx agent try", meta.Source)
+	assert.NotContains(t, got.Extra, "execute-loop-retry-after", "proposed operator lane must not depend on cooldown")
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
-	var sawNeedsHuman bool
+	var sawOperatorRequired bool
 	for _, ev := range events {
-		if ev.Kind == "land-conflict-needs-human" {
-			sawNeedsHuman = true
+		if ev.Kind == "land-conflict-operator-required" {
+			sawOperatorRequired = true
 		}
 	}
-	assert.True(t, sawNeedsHuman, "must emit kind:land-conflict-needs-human event on blocking resolver")
+	assert.True(t, sawOperatorRequired, "must emit kind:land-conflict-operator-required event on blocking resolver")
 }
 
 // TestExecuteBeadLoopExecutionFailed_WithPreservedCommit_AttemptsRecovery

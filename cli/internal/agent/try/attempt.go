@@ -84,6 +84,7 @@ type Store interface {
 	CloseWithEvidence(beadID, sessionID, sha string) error
 	Unclaim(beadID string) error
 	SetExecutionCooldown(beadID string, until time.Time, status, detail string) error
+	UpdateWithLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions, mutate func(*bead.Bead) error) error
 	IncrNoChangesCount(beadID string) (int, error)
 }
 

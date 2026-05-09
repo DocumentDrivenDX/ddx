@@ -351,8 +351,8 @@ type ExecuteBeadLoopStore interface {
 	// intentionally transition a bead back into open state.
 	Reopen(id, reason, notes string) error
 	// Update mutates a bead in place. Used by the post-merge triage step to
-	// add labels (e.g. "needs_human") and metadata hints (e.g. tier-pin) when
-	// the triage policy escalates after repeated review BLOCKs.
+	// add metadata hints (e.g. tier-pin) when the triage policy escalates after
+	// repeated review BLOCKs.
 	Update(id string, mutate func(*bead.Bead)) error
 	UpdateWithLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions, mutate func(*bead.Bead) error) error
 }
@@ -437,7 +437,7 @@ type ExecuteBeadWorker struct {
 	// attempt a focused conflict-resolution pass (e.g. a cheap-tier agent run
 	// with the conflict files and bead AC) and return the new merged tip SHA on
 	// success. isBlocking=true signals the conflict requires human judgment
-	// (escalating to land_conflict_needs_human); false means failed-but-retriable.
+	// (escalating to land_conflict_operator_required); false means failed-but-retriable.
 	ConflictResolver func(ctx context.Context, beadID, preserveRef, projectRoot string) (newTip string, isBlocking bool, err error)
 
 	// conflictAutoRecoverFn replaces the default landConflictAutoRecover. Set
@@ -865,10 +865,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					}
 					emit("pre_claim_intake.blocked", map[string]any{
 						"bead_id": candidate.ID,
-						"outcome": string(PreClaimIntakeAmbiguousNeedsHuman),
+						"outcome": string(PreClaimIntakeOperatorRequired),
 						"detail":  warning,
 					})
-					if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeAmbiguousNeedsHuman, warning, now().UTC()); berr != nil && runtime.Log != nil {
+					if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeOperatorRequired, warning, now().UTC()); berr != nil && runtime.Log != nil {
 						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
 					}
 					_ = w.Store.Unclaim(candidate.ID)
@@ -901,7 +901,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					"detail":        warning,
 				})
 			default:
-				// Terminal non-actionable outcome: park with needs_human label so
+				// Terminal non-actionable outcome: move to status=proposed so
 				// ReadyExecution filters this bead until an operator reviews it.
 				warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
 				if warning == "" {
@@ -2493,7 +2493,7 @@ func isValidImplementationAttempt(report ExecuteBeadReport) bool {
 		FailureModeWorktreeLost,
 		ReadinessSystemReasonResourceExhausted,
 		ReadinessSystemReasonRepoConcurrency,
-		"needs_human":
+		"operator_required":
 		return false
 	}
 	// Operator/review status codes where the implementer did not run a full
@@ -2501,7 +2501,7 @@ func isValidImplementationAttempt(report ExecuteBeadReport) bool {
 	switch report.Status {
 	case ExecuteBeadStatusReviewMalfunction,
 		ExecuteBeadStatusDeclinedNeedsDecomposition,
-		ExecuteBeadStatusLandConflictNeedsHuman,
+		ExecuteBeadStatusLandConflictOperatorRequired,
 		ExecuteBeadStatusReviewTerminalBlock:
 		return false
 	}

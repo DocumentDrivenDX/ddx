@@ -309,10 +309,10 @@ func TestAcceptancePreservesCriteria_StrongBead_AxonFixture(t *testing.T) {
 
 // ---- AC1/AC2: end-to-end hook tests with mocked LLM --------------------
 
-// TestPreClaimIntakeHook_StrongBead_NeverAmbiguousNeedsHuman verifies that a
+// TestPreClaimIntakeHook_StrongBead_NeverOperatorRequired verifies that a
 // bead with 7 numbered ACs, file:line refs, and named tests is not classified
-// as ambiguous_needs_human (AC1 from ddx-ea3e3415).
-func TestPreClaimIntakeHook_StrongBead_NeverAmbiguousNeedsHuman(t *testing.T) {
+// as operator_required (AC1 from ddx-ea3e3415).
+func TestPreClaimIntakeHook_StrongBead_NeverOperatorRequired(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store := bead.NewStore(filepath.Join(root, ".ddx"))
 	require.NoError(t, store.Init())
@@ -347,8 +347,8 @@ func TestPreClaimIntakeHook_StrongBead_NeverAmbiguousNeedsHuman(t *testing.T) {
 	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
 	got, err := hook(context.Background(), strongBead.ID)
 	require.NoError(t, err)
-	assert.NotEqual(t, PreClaimIntakeAmbiguousNeedsHuman, got.Outcome,
-		"strong bead with 7 numbered ACs must not be classified ambiguous_needs_human; got outcome=%s detail=%s",
+	assert.NotEqual(t, PreClaimIntakeOperatorRequired, got.Outcome,
+		"strong bead with 7 numbered ACs must not be classified operator_required; got outcome=%s detail=%s",
 		got.Outcome, got.Detail)
 }
 
@@ -386,14 +386,14 @@ func TestPreClaimIntakeHook_StrongBead_RewriteACPrefixToNumeric(t *testing.T) {
 	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
 	got, err := hook(context.Background(), strongBead.ID)
 	require.NoError(t, err)
-	assert.NotEqual(t, PreClaimIntakeAmbiguousNeedsHuman, got.Outcome,
+	assert.NotEqual(t, PreClaimIntakeOperatorRequired, got.Outcome,
 		"reformatting AC1/AC2/AC3 to 1/2/3 must not be rejected as criteria-dropped; got outcome=%s detail=%s",
 		got.Outcome, got.Detail)
 }
 
 // TestPreClaimIntakeHook_WeakBead_ReturnsConcreteSuggestedFixes verifies that
 // a vague single-sentence AC either yields concrete suggested_fixes or yields
-// needs_human only when rationale cites a specific unresolved question
+// operator_required only when rationale cites a specific unresolved question
 // (AC2 from ddx-ea3e3415).
 func TestPreClaimIntakeHook_WeakBead_ReturnsConcreteSuggestedFixes(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
@@ -430,13 +430,13 @@ func TestPreClaimIntakeHook_WeakBead_ReturnsConcreteSuggestedFixes(t *testing.T)
 	got, err := hook(context.Background(), weakBead.ID)
 	require.NoError(t, err)
 
-	// If the outcome is needs_human, the detail must cite a specific unresolved
+	// If the outcome is operator_required, the detail must cite a specific unresolved
 	// question — not just the generic "acceptance criteria dropped or altered".
-	if got.Outcome == PreClaimIntakeAmbiguousNeedsHuman {
+	if got.Outcome == PreClaimIntakeOperatorRequired {
 		assert.NotEqual(t, "acceptance criteria dropped or altered", got.Detail,
-			"needs_human for a weak bead must cite a specific unresolved question, not the generic dropped-or-altered string")
+			"operator_required for a weak bead must cite a specific unresolved question, not the generic dropped-or-altered string")
 		assert.NotEmpty(t, got.Detail,
-			"needs_human must always include a non-empty rationale")
+			"operator_required must always include a non-empty rationale")
 	}
 }
 
@@ -465,7 +465,7 @@ func TestAcceptancePreservesCriteria_AxonFixture_044a5b5b(t *testing.T) {
 
 // TestPreClaimIntakePrompt_AsksForFitForPurposeValidatedReplacement verifies
 // that the intake prompt tells the model to optimize prompt fitness, avoid
-// append-only noise, and classify ambiguous cases as needs-human. (AC5)
+// append-only noise, and classify ambiguous cases as operator-required. (AC5)
 func TestPreClaimIntakePrompt_AsksForFitForPurposeValidatedReplacement(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
@@ -485,8 +485,8 @@ func TestPreClaimIntakePrompt_AsksForFitForPurposeValidatedReplacement(t *testin
 		strings.Contains(lower, "replacement") || strings.Contains(lower, "replace"),
 		"prompt must allow replacement rewrites; got:\n%s", prompt)
 
-	// Prompt must instruct the model to classify unclear cases as ambiguous_needs_human.
-	assert.True(t,
-		strings.Contains(lower, "ambiguous_needs_human") || strings.Contains(lower, "needs_human"),
-		"prompt must instruct classification as ambiguous_needs_human for unclear cases; got:\n%s", prompt)
+	// Prompt must instruct the model to classify unclear cases as operator_required.
+	assert.Contains(t, lower, "operator_required",
+		"prompt must instruct classification as operator_required for unclear cases; got:\n%s", prompt)
+	assert.NotContains(t, lower, "ambiguous_needs_human")
 }

@@ -267,7 +267,7 @@ func TestPreClaimIntakeRewriteRequiresOwnedReservation(t *testing.T) {
 // TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim is AC #4:
 // Covers the post-claim outcomes when intake or lint rejects the bead:
 //   - infra error: fail-open, proceed to execution
-//   - ambiguous_needs_human: park bead (needs_human label) and unclaim
+//   - operator_required: move bead to status=proposed and unclaim
 //   - lint-blocked: unclaim bead, no execution
 //   - actionable_atomic: proceed to implementation normally
 func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
@@ -301,7 +301,7 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		assert.Equal(t, bead.StatusClosed, got.Status, "bead must be closed after successful execution")
 	})
 
-	t.Run("ambiguous_needs_human_parks_and_unclaims", func(t *testing.T) {
+	t.Run("operator_required_proposes_and_unclaims", func(t *testing.T) {
 		store, candidate, _ := newExecuteLoopTestStore(t)
 		var eventSink bytes.Buffer
 		worker := &ExecuteBeadWorker{
@@ -319,7 +319,7 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 			EventSink: &eventSink,
 			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 				return PreClaimIntakeResult{
-					Outcome: PreClaimIntakeAmbiguousNeedsHuman,
+					Outcome: PreClaimIntakeOperatorRequired,
 					Detail:  "missing root cause with file:line",
 				}, nil
 			},
@@ -349,7 +349,7 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 			foundBlocked = true
 			var body map[string]any
 			require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
-			assert.Equal(t, string(PreClaimIntakeAmbiguousNeedsHuman), body["intake_outcome"])
+			assert.Equal(t, string(PreClaimIntakeOperatorRequired), body["intake_outcome"])
 		}
 		assert.True(t, foundBlocked, "an intake.blocked event must be recorded when bead is parked")
 

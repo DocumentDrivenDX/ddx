@@ -10,7 +10,7 @@ const (
 	PreClaimIntakeActionableAtomic       PreClaimIntakeOutcome = "actionable_atomic"
 	PreClaimIntakeActionableButRewritten PreClaimIntakeOutcome = "actionable_but_rewritten"
 	PreClaimIntakeTooLargeDecomposed     PreClaimIntakeOutcome = "too_large_decomposed"
-	PreClaimIntakeAmbiguousNeedsHuman    PreClaimIntakeOutcome = "ambiguous_needs_human"
+	PreClaimIntakeOperatorRequired       PreClaimIntakeOutcome = "operator_required"
 	PreClaimIntakeError                  PreClaimIntakeOutcome = "intake_error"
 )
 
@@ -43,7 +43,7 @@ func (r PreClaimIntakeResult) normalizedOutcome() PreClaimIntakeOutcome {
 	case "", PreClaimIntakeActionableAtomic:
 		return PreClaimIntakeActionableAtomic
 	case PreClaimIntakeActionableButRewritten, PreClaimIntakeTooLargeDecomposed,
-		PreClaimIntakeAmbiguousNeedsHuman, PreClaimIntakeError:
+		PreClaimIntakeOperatorRequired, PreClaimIntakeError:
 		return r.Outcome
 	default:
 		return PreClaimIntakeError

@@ -17,7 +17,7 @@ import (
 // unsafe_or_out_of_scope) is correctly classified as a terminal operator-
 // required outcome. Key assertions:
 //   - Report status is ExecuteBeadStatusReviewTerminalBlock.
-//   - Bead carries the needs_human label.
+//   - Bead moves to status=proposed with operator-required metadata.
 //   - A review-terminal-block event is appended with the correct class.
 //   - isValidImplementationAttempt returns false → no no-progress budget consumed.
 //   - Bead is NOT closed.
@@ -70,14 +70,18 @@ func TestReviewTerminalClassifications_BlockWithoutNoProgress(t *testing.T) {
 			// Must count as a failure, not a success.
 			assert.Equal(t, ExecuteBeadStatusReviewTerminalBlock, out.Report.Status)
 
-			// Bead must remain open (not closed).
+			// Bead must move to operator attention (not closed).
 			got, err := store.Get(first.ID)
 			require.NoError(t, err)
+			assert.Equal(t, bead.StatusProposed, got.Status, "terminal block must move to proposed")
 			assert.NotEqual(t, bead.StatusClosed, got.Status, "terminal block must not close the bead")
 
-			// Bead must carry the needs_human label.
-			assert.True(t, HasBeadLabel(got.Labels, TriageNeedsHumanLabel),
-				"terminal block must add needs_human label (class=%s)", tc.class)
+			// Bead must use status-owned operator metadata, not legacy labels.
+			assert.NotContains(t, got.Labels, TriageNeedsHumanLabel,
+				"terminal block must not add needs_human label (class=%s)", tc.class)
+			meta := bead.GetNeedsHumanMeta(*got)
+			assert.Contains(t, meta.Reason, tc.class)
+			assert.Equal(t, "ddx agent execute-loop", meta.Source)
 
 			// review-terminal-block event must be appended with the correct class.
 			events, err := store.Events(first.ID)
@@ -103,12 +107,12 @@ func TestReviewTerminalClassifications_BlockWithoutNoProgress(t *testing.T) {
 	}
 }
 
-// TestReviewTerminalClassifications_ExhaustedReviewErrorNeedsHuman verifies that
-// when review-error events exhaust the retry budget, the bead receives the
-// needs_human label alongside the terminal review-manual-required event. This
+// TestReviewTerminalClassifications_ExhaustedReviewErrorProposed verifies that
+// when review-error events exhaust the retry budget, the bead moves to
+// status=proposed alongside the terminal review-manual-required event. This
 // ensures exhausted review errors park the bead with operator-required metadata
 // rather than silently cycling.
-func TestReviewTerminalClassifications_ExhaustedReviewErrorNeedsHuman(t *testing.T) {
+func TestReviewTerminalClassifications_ExhaustedReviewErrorProposed(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	const resultRev = "cafebabe"
 
@@ -138,11 +142,16 @@ func TestReviewTerminalClassifications_ExhaustedReviewErrorNeedsHuman(t *testing
 	assert.Contains(t, manual.Body, "result_rev="+resultRev,
 		"review-manual-required body must carry result_rev")
 
-	// needs_human label must be added on exhausted review error.
+	// Operator parking must be status-owned on exhausted review error.
 	got, err := store.Get(first.ID)
 	require.NoError(t, err)
-	assert.True(t, HasBeadLabel(got.Labels, TriageNeedsHumanLabel),
-		"exhausted review_error must add needs_human label so the bead is surfaced for operator triage")
+	assert.Equal(t, bead.StatusProposed, got.Status,
+		"exhausted review_error must move bead to proposed for operator triage")
+	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel,
+		"exhausted review_error must not use needs_human label parking")
+	meta := bead.GetNeedsHumanMeta(*got)
+	assert.Contains(t, meta.Reason, evidence.OutcomeReviewProviderEmpty)
+	assert.Equal(t, "ddx agent execute-loop", meta.Source)
 
 	// Bead must NOT be closed by reviewer-failure escalation.
 	assert.NotEqual(t, bead.StatusClosed, got.Status,

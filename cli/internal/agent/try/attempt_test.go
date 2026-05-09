@@ -244,6 +244,46 @@ func TestAttempt_ConflictUnresolvable_ReturnsPark(t *testing.T) {
 	assert.Equal(t, "land-conflict-unresolvable", store.events[0].Kind)
 }
 
+func TestAttempt_ConflictOperatorRequired_MovesToProposed(t *testing.T) {
+	store := &attemptStore{}
+	target := bead.Bead{ID: "ddx-test"}
+
+	out, err := Attempt(context.Background(), store, target.ID, AttemptOpts{
+		Bead: target,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{
+				BeadID:      beadID,
+				Status:      StatusLandConflict,
+				Detail:      "merge conflict",
+				PreserveRef: "refs/ddx/iterations/ddx-test/attempt",
+				BaseRev:     "base",
+				ResultRev:   "result",
+				SessionID:   "session",
+			}, nil
+		}),
+		Store:       store,
+		ProjectRoot: t.TempDir(),
+		AutoRecover: func(wd, preserveRef string) (string, error) {
+			return "", fmt.Errorf("cannot auto-merge")
+		},
+		ConflictResolver: func(ctx context.Context, beadID, preserveRef, projectRoot string) (string, bool, error) {
+			return "", true, fmt.Errorf("requires operator judgment")
+		},
+		Assignee: "worker",
+		Now:      func() time.Time { return time.Date(2026, 5, 4, 1, 2, 3, 0, time.UTC) },
+		Cooldown: 15 * time.Minute,
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, OutcomePark, out.Disposition)
+	assert.Equal(t, StatusLandConflictOperatorRequired, out.Report.Status)
+	assert.True(t, store.unclaimed)
+	assert.Equal(t, bead.StatusProposed, store.lifecycleStatus)
+	assert.Empty(t, store.cooldownStatus, "operator-required conflicts must not rely on cooldown parking")
+	require.Len(t, store.events, 1)
+	assert.Equal(t, "land-conflict-operator-required", store.events[0].Kind)
+}
+
 func TestAttempt_DeclinedNeedsDecomposition_ParksWithStructuredEvent(t *testing.T) {
 	store := &attemptStore{}
 	now := time.Date(2026, 5, 5, 10, 11, 12, 0, time.UTC)
@@ -467,6 +507,7 @@ type attemptStore struct {
 	closedSHA           string
 	unclaimed           bool
 	cooldownStatus      string
+	lifecycleStatus     string
 	noChangesCountCalls int
 }
 
@@ -487,6 +528,14 @@ func (s *attemptStore) Unclaim(beadID string) error {
 
 func (s *attemptStore) SetExecutionCooldown(beadID string, until time.Time, status, detail string) error {
 	s.cooldownStatus = status
+	return nil
+}
+
+func (s *attemptStore) UpdateWithLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions, mutate func(*bead.Bead) error) error {
+	s.lifecycleStatus = status
+	if mutate != nil {
+		return mutate(&bead.Bead{ID: id, Status: bead.StatusOpen})
+	}
 	return nil
 }
 

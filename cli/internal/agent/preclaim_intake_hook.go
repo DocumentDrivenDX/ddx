@@ -223,7 +223,7 @@ func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bea
 	sb.WriteString("Use rewritten to improve prompt fitness: compress stale, duplicated, or noisy description prose, or expand a vague bead with durable context grounded in the repository or governing artifacts.\n")
 	sb.WriteString("Validated replacement is preferred over append-only amendment when it makes the bead a better implementation prompt.\n")
 	sb.WriteString("Preservation rules: non-scope items, governing artifact references (FEAT-NNN, ADR-NNN), named test functions (TestFoo), file:line evidence, and dependency IDs (ddx-XXXXXXXX) must all appear in the replacement description.\n")
-	sb.WriteString("When preservation cannot be proven from durable anchors, or when rewriting would require inventing acceptance criteria, changing scope, or choosing between conflicting requirements, classify as ambiguous_needs_human.\n")
+	sb.WriteString("When preservation cannot be proven from durable anchors, or when rewriting would require inventing acceptance criteria, changing scope, or choosing between conflicting requirements, classify as operator_required.\n")
 	sb.WriteString("Return exactly one JSON object matching the intake schema with classification, confidence, reasoning, and optional rewrite fields.\n")
 	sb.WriteString("When classification is rewritten, include rewrite.changed_fields, rewrite.description, and rewrite.acceptance.\n")
 	sb.WriteString("Do not include prose or markdown.\n\n")
@@ -316,7 +316,7 @@ func isReadinessClassificationPayload(classification, tractability, rationale st
 		"intake_error",
 		ReadinessClassificationNeedsRefine,
 		ReadinessClassificationNeedsSplit,
-		ReadinessClassificationNeedsHuman:
+		ReadinessClassificationOperatorRequired:
 		return true
 	case "ready":
 		return strings.TrimSpace(tractability) != "" ||
@@ -350,8 +350,10 @@ func decodeCanonicalReadinessPayload(payload string) (PreClaimIntakeResult, erro
 		return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableButRewritten, Detail: detail, Rewrite: rewrite}, nil
 	case "too_large_decomposed":
 		return PreClaimIntakeResult{Outcome: PreClaimIntakeTooLargeDecomposed, Reason: ReadinessReasonTooLarge, Detail: detail}, nil
-	case "ambiguous_needs_human":
-		return PreClaimIntakeResult{Outcome: PreClaimIntakeAmbiguousNeedsHuman, Reason: ReadinessReasonAmbiguousScope, Detail: detail}, nil
+	case "operator_required", "human_review_required":
+		return PreClaimIntakeResult{Outcome: PreClaimIntakeOperatorRequired, Reason: ReadinessReasonAmbiguousScope, Detail: detail}, nil
+	case "ambiguous_needs_human", "needs_human":
+		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: legacy readiness outcome %q removed by lifecycle migration; use %q", out.Outcome, PreClaimIntakeOperatorRequired)
 	case "readiness_error", "system_unready":
 		// system_unready maps to fail-open/skip per ADR-023/FEAT-010 policy
 		classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, detail)
@@ -364,7 +366,7 @@ func decodeCanonicalReadinessPayload(payload string) (PreClaimIntakeResult, erro
 	case "":
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: missing outcome")
 	default:
-		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: unknown readiness outcome %q: expected one of actionable_atomic, actionable_but_rewritten, too_large_decomposed, ambiguous_needs_human, readiness_error, system_unready", out.Outcome)
+		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: unknown readiness outcome %q: expected one of actionable_atomic, actionable_but_rewritten, too_large_decomposed, operator_required, readiness_error, system_unready", out.Outcome)
 	}
 }
 
@@ -475,8 +477,8 @@ func decodeLegacyIntakePayload(payload string) (PreClaimIntakeResult, error) {
 		}, nil
 	case "decomposable":
 		return PreClaimIntakeResult{Outcome: PreClaimIntakeTooLargeDecomposed, Detail: strings.TrimSpace(out.Reasoning)}, nil
-	case "ambiguous":
-		return PreClaimIntakeResult{Outcome: PreClaimIntakeAmbiguousNeedsHuman, Detail: strings.TrimSpace(out.Reasoning)}, nil
+	case "ambiguous", "ambiguous_scope", "needs_human", "ambiguous_needs_human":
+		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: legacy classification %q removed by lifecycle migration; use outcome %q", out.Classification, PreClaimIntakeOperatorRequired)
 	case "":
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: missing classification")
 	default:

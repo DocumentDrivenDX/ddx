@@ -10,8 +10,8 @@ import (
 )
 
 const (
-	StatusLandConflictUnresolvable = "land_conflict_unresolvable"
-	StatusLandConflictNeedsHuman   = "land_conflict_needs_human"
+	StatusLandConflictUnresolvable     = "land_conflict_unresolvable"
+	StatusLandConflictOperatorRequired = "land_conflict_operator_required"
 )
 
 type ConflictRecoveryDisposition int
@@ -19,7 +19,7 @@ type ConflictRecoveryDisposition int
 const (
 	ConflictRecoveryMerged ConflictRecoveryDisposition = iota
 	ConflictRecoveryPark
-	ConflictRecoveryNeedsHuman
+	ConflictRecoveryOperatorRequired
 )
 
 type ConflictRecoveryInput struct {
@@ -120,7 +120,7 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 			return out
 		}
 		if isBlocking {
-			report.Status = StatusLandConflictNeedsHuman
+			report.Status = StatusLandConflictOperatorRequired
 		} else {
 			report.Status = StatusLandConflictUnresolvable
 		}
@@ -144,8 +144,8 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 		bodyStr = string(body)
 	}
 	eventKind := "land-conflict-unresolvable"
-	if report.Status == StatusLandConflictNeedsHuman {
-		eventKind = "land-conflict-needs-human"
+	if report.Status == StatusLandConflictOperatorRequired {
+		eventKind = "land-conflict-operator-required"
 	}
 	_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
 		Kind:      eventKind,
@@ -156,6 +156,40 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 		CreatedAt: now().UTC(),
 	})
 	report.Detail = report.Status + ": preserve_ref=" + report.PreserveRef
+
+	if report.Status == StatusLandConflictOperatorRequired {
+		if err := in.Store.Unclaim(in.Bead.ID); err != nil {
+			out.StoreErrOp = "Unclaim"
+			out.StoreErr = err
+			out.Report = report
+			return out
+		}
+		reason := "land conflict requires operator judgment"
+		if err := in.Store.UpdateWithLifecycleStatus(in.Bead.ID, bead.StatusProposed, bead.LifecycleTransitionOptions{
+			OperatorRequired: true,
+			Reason:           reason,
+			Actor:            in.Assignee,
+			Source:           "ddx agent try",
+		}, func(b *bead.Bead) error {
+			b.Labels = removeConflictRecoveryLabels(b.Labels, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
+			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
+				Reason:          reason,
+				Since:           now().UTC().Format(time.RFC3339),
+				Source:          "ddx agent try",
+				SuggestedAction: "resolve the preserved land conflict manually or split the bead",
+				Summary:         "land conflict requires operator decision",
+			})
+			return nil
+		}); err != nil {
+			out.StoreErrOp = "UpdateWithLifecycleStatus"
+			out.StoreErr = err
+			out.Report = report
+			return out
+		}
+		out.Report = report
+		out.Disposition = ConflictRecoveryOperatorRequired
+		return out
+	}
 
 	if err := in.Store.Unclaim(in.Bead.ID); err != nil {
 		out.StoreErrOp = "Unclaim"
@@ -173,10 +207,26 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 	report.RetryAfter = parkUntil.Format(time.RFC3339)
 
 	out.Report = report
-	if report.Status == StatusLandConflictNeedsHuman {
-		out.Disposition = ConflictRecoveryNeedsHuman
-	} else {
-		out.Disposition = ConflictRecoveryPark
+	out.Disposition = ConflictRecoveryPark
+	return out
+}
+
+func removeConflictRecoveryLabels(labels []string, remove ...string) []string {
+	if len(labels) == 0 || len(remove) == 0 {
+		return labels
+	}
+	removeSet := make(map[string]struct{}, len(remove))
+	for _, label := range remove {
+		if label != "" {
+			removeSet[label] = struct{}{}
+		}
+	}
+	out := labels[:0]
+	for _, label := range labels {
+		if _, drop := removeSet[label]; drop {
+			continue
+		}
+		out = append(out, label)
 	}
 	return out
 }

@@ -6,11 +6,11 @@ import (
 )
 
 const (
-	ReadinessClassificationReady         = "ready"
-	ReadinessClassificationNeedsRefine   = "needs_refine"
-	ReadinessClassificationNeedsSplit    = "needs_split"
-	ReadinessClassificationNeedsHuman    = "needs_human"
-	ReadinessClassificationSystemUnready = "system_unready"
+	ReadinessClassificationReady            = "ready"
+	ReadinessClassificationNeedsRefine      = "needs_refine"
+	ReadinessClassificationNeedsSplit       = "needs_split"
+	ReadinessClassificationOperatorRequired = "operator_required"
+	ReadinessClassificationSystemUnready    = "system_unready"
 
 	ReadinessReasonTooLarge                       = "too_large"
 	ReadinessReasonAmbiguousScope                 = "ambiguous_scope"
@@ -82,16 +82,16 @@ func ClassifyReadiness(classification string, reasons []string, detail string) R
 			out.Reason = ReadinessReasonTooLarge
 		}
 		out.IntakeOutcome = PreClaimIntakeTooLargeDecomposed
-	case ReadinessClassificationNeedsHuman:
+	case ReadinessClassificationOperatorRequired:
 		if out.Reason == "" {
 			out.Reason = ReadinessReasonAmbiguousScope
 		}
-		out.IntakeOutcome = PreClaimIntakeAmbiguousNeedsHuman
+		out.IntakeOutcome = PreClaimIntakeOperatorRequired
 	case ReadinessClassificationNeedsRefine:
 		// Without a validated rewrite, a refinement need is not executable.
 		// The caller may override this to ActionableButRewritten after
 		// validating replacement text from the readiness payload.
-		out.IntakeOutcome = PreClaimIntakeAmbiguousNeedsHuman
+		out.IntakeOutcome = PreClaimIntakeOperatorRequired
 	default:
 		out.Classification = ReadinessClassificationSystemUnready
 		out.Reason = ReadinessReasonSystemUnready
@@ -110,8 +110,8 @@ func normalizeReadinessClassification(classification string) string {
 		return ReadinessClassificationNeedsRefine
 	case "needs_split", "too_large", "too_large_decomposed", "decomposable":
 		return ReadinessClassificationNeedsSplit
-	case "needs_human", "ambiguous_scope", "ambiguous_needs_human", "ambiguous":
-		return ReadinessClassificationNeedsHuman
+	case "operator_required", "human_review_required":
+		return ReadinessClassificationOperatorRequired
 	case "system_unready", "readiness_error", "intake_error":
 		return ReadinessClassificationSystemUnready
 	default:
@@ -151,7 +151,7 @@ func readinessClassificationForReason(reason string) string {
 	case ReadinessReasonTooLarge:
 		return ReadinessClassificationNeedsSplit
 	case ReadinessReasonAmbiguousScope, ReadinessReasonHiddenExternalBlocker:
-		return ReadinessClassificationNeedsHuman
+		return ReadinessClassificationOperatorRequired
 	case ReadinessReasonMissingRootCauseOrCurrentState,
 		ReadinessReasonMissingVerification,
 		ReadinessReasonMissingCodePathAssertion,

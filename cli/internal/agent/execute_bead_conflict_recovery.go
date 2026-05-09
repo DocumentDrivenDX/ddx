@@ -10,7 +10,7 @@ import (
 )
 
 // ConflictRecoveryDisposition is the routing decision RunConflictRecovery
-// returns. Maps onto try.Disposition (Merged / Park / NeedsHuman) at the
+// returns. Maps onto try.Disposition (Merged / Park / OperatorRequired) at the
 // orchestrator boundary; the agent package keeps a local enum to avoid a
 // try → agent → try import cycle.
 type ConflictRecoveryDisposition int
@@ -22,10 +22,10 @@ const (
 	// ConflictRecoveryPark — recovery failed; bead is unclaimed and parked
 	// under cooldown as land_conflict_unresolvable.
 	ConflictRecoveryPark
-	// ConflictRecoveryNeedsHuman — focused-resolve agent signalled the
-	// conflict requires human judgment; bead parks as
-	// land_conflict_needs_human.
-	ConflictRecoveryNeedsHuman
+	// ConflictRecoveryOperatorRequired — focused-resolve agent signalled the
+	// conflict requires operator judgment; bead moves to status=proposed as
+	// land_conflict_operator_required.
+	ConflictRecoveryOperatorRequired
 )
 
 // ConflictAutoRecoverFn matches the signature of LandConflictAutoRecover
@@ -34,7 +34,7 @@ type ConflictAutoRecoverFn func(wd, preserveRef string, gitOps LandingGitOps) (s
 
 // ConflictResolverFn matches the worker's optional focused-resolve callout.
 // Returns the new merged tip SHA on success; isBlocking=true requests the
-// land_conflict_needs_human escalation path.
+// land_conflict_operator_required escalation path.
 type ConflictResolverFn func(ctx context.Context, beadID, preserveRef, projectRoot string) (newTip string, isBlocking bool, err error)
 
 // ConflictRecoveryStore is the narrow subset of bead-tracker operations the
@@ -44,6 +44,7 @@ type ConflictRecoveryStore interface {
 	CloseWithEvidence(beadID, sessionID, sha string) error
 	Unclaim(beadID string) error
 	SetExecutionCooldown(beadID string, until time.Time, status, detail string) error
+	UpdateWithLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions, mutate func(*bead.Bead) error) error
 }
 
 // ConflictRecoveryInput bundles the data RunConflictRecovery needs from its
@@ -71,7 +72,7 @@ type ConflictRecoveryInput struct {
 // ConflictRecoveryOutput carries the recovery state machine's decision back
 // to the caller. Report is the (possibly updated) ExecuteBeadReport;
 // Disposition selects the routing decision the loop applies (Merged → close
-// done, Park / NeedsHuman → cooldown set). Store errors are surfaced via
+// done, Park / OperatorRequired → lifecycle parking). Store errors are surfaced via
 // StoreErrOp + StoreErr so callers can keep the existing
 // handleOutcomeStoreError pattern unchanged.
 type ConflictRecoveryOutput struct {
@@ -107,8 +108,8 @@ func ShouldAttemptConflictRecovery(report ExecuteBeadReport, projectRoot string)
 // Step 2 (if step 1 fails and ConflictResolver is set): focused
 // conflict-resolve agent. On success the bead is closed and Disposition is
 // Merged; on failure the bead is unclaimed and parked under in.Cooldown with
-// Disposition=Park (land_conflict_unresolvable) or Disposition=NeedsHuman
-// (land_conflict_needs_human).
+// Disposition=Park (land_conflict_unresolvable) or Disposition=OperatorRequired
+// (land_conflict_operator_required).
 //
 // This is the C4 (ddx-358f2457) extraction of the runConflictRecovery
 // method on ExecuteBeadWorker plus the surrounding success/park bookkeeping
@@ -180,7 +181,7 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 			return out
 		}
 		if isBlocking {
-			report.Status = ExecuteBeadStatusLandConflictNeedsHuman
+			report.Status = ExecuteBeadStatusLandConflictOperatorRequired
 		} else {
 			report.Status = ExecuteBeadStatusLandConflictUnresolvable
 		}
@@ -204,8 +205,8 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 		bodyStr = string(body)
 	}
 	eventKind := "land-conflict-unresolvable"
-	if report.Status == ExecuteBeadStatusLandConflictNeedsHuman {
-		eventKind = "land-conflict-needs-human"
+	if report.Status == ExecuteBeadStatusLandConflictOperatorRequired {
+		eventKind = "land-conflict-operator-required"
 	}
 	_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
 		Kind:      eventKind,
@@ -216,6 +217,40 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 		CreatedAt: now().UTC(),
 	})
 	report.Detail = report.Status + ": preserve_ref=" + report.PreserveRef
+
+	if report.Status == ExecuteBeadStatusLandConflictOperatorRequired {
+		if err := in.Store.Unclaim(in.Bead.ID); err != nil {
+			out.StoreErrOp = "Unclaim"
+			out.StoreErr = err
+			out.Report = report
+			return out
+		}
+		reason := "land conflict requires operator judgment"
+		if err := in.Store.UpdateWithLifecycleStatus(in.Bead.ID, bead.StatusProposed, bead.LifecycleTransitionOptions{
+			OperatorRequired: true,
+			Reason:           reason,
+			Actor:            in.Assignee,
+			Source:           "ddx agent execute-loop",
+		}, func(b *bead.Bead) error {
+			b.Labels = removeBeadLabels(b.Labels, TriageNeedsHumanLabel, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
+			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
+				Reason:          reason,
+				Since:           now().UTC().Format(time.RFC3339),
+				Source:          "ddx agent execute-loop",
+				SuggestedAction: "resolve the preserved land conflict manually or split the bead",
+				Summary:         "land conflict requires operator decision",
+			})
+			return nil
+		}); err != nil {
+			out.StoreErrOp = "UpdateWithLifecycleStatus"
+			out.StoreErr = err
+			out.Report = report
+			return out
+		}
+		out.Report = report
+		out.Disposition = ConflictRecoveryOperatorRequired
+		return out
+	}
 
 	if err := in.Store.Unclaim(in.Bead.ID); err != nil {
 		out.StoreErrOp = "Unclaim"
@@ -233,10 +268,6 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 	report.RetryAfter = parkUntil.Format(time.RFC3339)
 
 	out.Report = report
-	if report.Status == ExecuteBeadStatusLandConflictNeedsHuman {
-		out.Disposition = ConflictRecoveryNeedsHuman
-	} else {
-		out.Disposition = ConflictRecoveryPark
-	}
+	out.Disposition = ConflictRecoveryPark
 	return out
 }

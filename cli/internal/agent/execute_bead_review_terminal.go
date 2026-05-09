@@ -50,16 +50,20 @@ func reviewTerminalBlockEventBody(class, resultRev string) string {
 	return fmt.Sprintf("terminal_class=%s\nresult_rev=%s", class, resultRev)
 }
 
-// applyTerminalReviewBlock records terminal block state on a bead: adds the
-// needs_human label, appends a review-terminal-block event, and parks the
-// bead under MaxLoopCooldown. All store errors are best-effort — callers
+// applyTerminalReviewBlock records terminal block state on a bead: moves it to
+// status=proposed with operator-required metadata and appends a
+// review-terminal-block event. All store errors are best-effort — callers
 // continue regardless so a store-side failure cannot strand the bead.
 func applyTerminalReviewBlock(store ExecuteBeadLoopStore, beadID, actor string, now time.Time, class, resultRev string) {
-	_ = store.Update(beadID, func(b *bead.Bead) {
-		if !HasBeadLabel(b.Labels, TriageNeedsHumanLabel) {
-			b.Labels = append(b.Labels, TriageNeedsHumanLabel)
-		}
-	})
+	applyReviewOperatorRequiredParking(
+		store,
+		beadID,
+		actor,
+		now,
+		"terminal review block: "+class,
+		"review terminal block requires operator decision",
+		"review terminal BLOCK and accept, split, block, or cancel",
+	)
 	_ = store.AppendEvent(beadID, bead.BeadEvent{
 		Kind:      ReviewTerminalBlockEventKind,
 		Summary:   class,
@@ -68,6 +72,24 @@ func applyTerminalReviewBlock(store ExecuteBeadLoopStore, beadID, actor string, 
 		Source:    "ddx agent execute-loop",
 		CreatedAt: now.UTC(),
 	})
-	parkUntil := now.UTC().Add(CapLoopCooldown(MaxLoopCooldown))
-	_ = store.SetExecutionCooldown(beadID, parkUntil, ReviewTerminalBlockEventKind, class)
+}
+
+func applyReviewOperatorRequiredParking(store ExecuteBeadLoopStore, beadID, actor string, now time.Time, reason, summary, suggestedAction string) {
+	_ = store.UpdateWithLifecycleStatus(beadID, bead.StatusProposed, bead.LifecycleTransitionOptions{
+		OperatorRequired: true,
+		Reason:           reason,
+		Actor:            actor,
+		Source:           "ddx agent execute-loop",
+	}, func(b *bead.Bead) error {
+		b.Labels = removeBeadLabels(b.Labels, TriageNeedsHumanLabel, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
+		clearReviewTriageClaimMetadata(b)
+		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
+			Reason:          reason,
+			Since:           now.UTC().Format(time.RFC3339),
+			Source:          "ddx agent execute-loop",
+			SuggestedAction: suggestedAction,
+			Summary:         summary,
+		})
+		return nil
+	})
 }

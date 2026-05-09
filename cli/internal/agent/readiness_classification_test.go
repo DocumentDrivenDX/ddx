@@ -101,16 +101,16 @@ func TestReadinessClassification_BeadDefectsUseReadinessReasons(t *testing.T) {
 		{
 			name:               "ambiguous_scope",
 			reasons:            []string{ReadinessReasonAmbiguousScope},
-			wantClassification: ReadinessClassificationNeedsHuman,
+			wantClassification: ReadinessClassificationOperatorRequired,
 			wantReason:         ReadinessReasonAmbiguousScope,
-			wantOutcome:        PreClaimIntakeAmbiguousNeedsHuman,
+			wantOutcome:        PreClaimIntakeOperatorRequired,
 		},
 		{
 			name:               "missing_verification",
 			reasons:            []string{ReadinessReasonMissingVerification},
 			wantClassification: ReadinessClassificationNeedsRefine,
 			wantReason:         ReadinessReasonMissingVerification,
-			wantOutcome:        PreClaimIntakeAmbiguousNeedsHuman,
+			wantOutcome:        PreClaimIntakeOperatorRequired,
 		},
 	}
 
@@ -141,7 +141,7 @@ func TestReadinessClassification_DecodesReadinessSchema(t *testing.T) {
 
 	refine, err := decodePreClaimIntakePayloadResult(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}]}`)
 	require.NoError(t, err)
-	assert.Equal(t, PreClaimIntakeAmbiguousNeedsHuman, refine.Outcome)
+	assert.Equal(t, PreClaimIntakeOperatorRequired, refine.Outcome)
 	assert.Equal(t, ReadinessReasonMissingVerification, refine.Reason)
 	assert.Empty(t, refine.SystemReason)
 }

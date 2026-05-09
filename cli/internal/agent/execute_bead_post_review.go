@@ -190,13 +190,15 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 				Source:    "ddx agent execute-loop",
 				CreatedAt: now().UTC(),
 			})
-			_ = in.Store.Update(in.Bead.ID, func(b *bead.Bead) {
-				if !HasBeadLabel(b.Labels, TriageNeedsHumanLabel) {
-					b.Labels = append(b.Labels, TriageNeedsHumanLabel)
-				}
-			})
-			parkUntil := now().UTC().Add(CapLoopCooldown(MaxLoopCooldown))
-			_ = in.Store.SetExecutionCooldown(in.Bead.ID, parkUntil, "review-manual-required", class)
+			applyReviewOperatorRequiredParking(
+				in.Store,
+				in.Bead.ID,
+				in.Assignee,
+				now().UTC(),
+				"review retry budget exhausted: "+class,
+				"review error retry budget requires operator decision",
+				"review the pre-close review failure and accept, retry, block, or cancel",
+			)
 		} else {
 			body := ReviewErrorEventBody(class, attemptCount, report.ResultRev, reviewErr.Error())
 			if slotScoped {

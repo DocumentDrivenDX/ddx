@@ -198,7 +198,7 @@ func TestCandidateRefStore_RetentionPolicy(t *testing.T) {
 	for _, retainStatus := range []string{
 		ExecuteBeadStatusLandConflict,
 		ExecuteBeadStatusPreservedNeedsReview,
-		ExecuteBeadStatusLandConflictNeedsHuman,
+		ExecuteBeadStatusLandConflictOperatorRequired,
 		ExecuteBeadStatusLandConflictUnresolvable,
 		"manual",
 		"parked",

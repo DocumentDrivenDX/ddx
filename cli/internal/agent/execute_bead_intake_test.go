@@ -173,7 +173,7 @@ func TestIntake_NonAtomicSkipsClaim(t *testing.T) {
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			atomic.AddInt32(&intakeCalls, 1)
 			return PreClaimIntakeResult{
-				Outcome: PreClaimIntakeAmbiguousNeedsHuman,
+				Outcome: PreClaimIntakeOperatorRequired,
 				Detail:  "need human clarification",
 			}, nil
 		},
@@ -425,7 +425,7 @@ func TestIntake_UnsafeRewriteBlocksForHuman(t *testing.T) {
 	// does not proceed and the bead description/acceptance must be unchanged.
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "claim runs before intake check")
 	assert.Contains(t, eventSink.String(), "pre_claim_intake.blocked")
-	assert.Contains(t, eventSink.String(), "ambiguous_needs_human")
+	assert.Contains(t, eventSink.String(), "operator_required")
 	assert.Equal(t, 0, result.Attempts)
 
 	got, err := inner.Get(candidate.ID)
@@ -446,7 +446,7 @@ func TestIntake_UnsafeRewriteBlocksForHuman(t *testing.T) {
 		foundIntakeBlocked = true
 		var body map[string]any
 		require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
-		assert.Equal(t, "ambiguous_needs_human", body["intake_outcome"])
+		assert.Equal(t, "operator_required", body["intake_outcome"])
 	}
 	assert.True(t, foundIntakeBlocked, "rejected rewrite must append intake.blocked event to bead")
 }
@@ -551,7 +551,7 @@ func TestIntake_DescriptionPreservationFailureParksForHuman(t *testing.T) {
 		foundBlocked = true
 		var body map[string]any
 		require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
-		assert.Equal(t, "ambiguous_needs_human", body["intake_outcome"])
+		assert.Equal(t, "operator_required", body["intake_outcome"])
 		assert.Contains(t, fmt.Sprintf("%v", body["detail"]), "drops commitment")
 	}
 	assert.True(t, foundBlocked, "description preservation failure must append intake.blocked event")
