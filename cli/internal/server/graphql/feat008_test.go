@@ -125,7 +125,7 @@ install:
 	h := newGQLHandler(state, workDir, nil)
 
 	query := `{
-		queueSummary(projectId: "` + projectID + `") { ready blocked inProgress }
+		queueSummary(projectId: "` + projectID + `") { ready blocked inProgress operatorAttention dependencyWaiting externalBlocked cancelled }
 		efficacyRows { rowKey harness provider model attempts successes successRate medianInputTokens medianOutputTokens medianDurationMs medianCostUsd warning { kind threshold } }
 		efficacyAttempts(rowKey: "codex|openai|gpt-5") { rowKey attempts { beadId outcome durationMs costUsd evidenceBundleUrl } }
 		comparisons { id state armCount }
@@ -146,9 +146,13 @@ install:
 
 	var data struct {
 		QueueSummary struct {
-			Ready      int `json:"ready"`
-			Blocked    int `json:"blocked"`
-			InProgress int `json:"inProgress"`
+			Ready             int `json:"ready"`
+			Blocked           int `json:"blocked"`
+			InProgress        int `json:"inProgress"`
+			OperatorAttention int `json:"operatorAttention"`
+			DependencyWaiting int `json:"dependencyWaiting"`
+			ExternalBlocked   int `json:"externalBlocked"`
+			Cancelled         int `json:"cancelled"`
 		} `json:"queueSummary"`
 		EfficacyRows []struct {
 			RowKey             string   `json:"rowKey"`
@@ -195,8 +199,11 @@ install:
 	if data.QueueSummary.Ready < 2 {
 		t.Fatalf("queueSummary.ready: want at least 2, got %d", data.QueueSummary.Ready)
 	}
-	if data.QueueSummary.Blocked != 1 {
-		t.Fatalf("queueSummary.blocked: want 1, got %d", data.QueueSummary.Blocked)
+	if data.QueueSummary.Blocked != 0 {
+		t.Fatalf("queueSummary.blocked (externalBlocked): want 0, got %d", data.QueueSummary.Blocked)
+	}
+	if data.QueueSummary.DependencyWaiting != 1 {
+		t.Fatalf("queueSummary.dependencyWaiting: want 1, got %d", data.QueueSummary.DependencyWaiting)
 	}
 	if data.QueueSummary.InProgress != 1 {
 		t.Fatalf("queueSummary.inProgress: want 1, got %d", data.QueueSummary.InProgress)

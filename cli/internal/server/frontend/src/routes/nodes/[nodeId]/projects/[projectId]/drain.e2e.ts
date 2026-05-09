@@ -187,7 +187,7 @@ async function installGraphqlMocks(
 				contentType: 'application/json',
 				body: JSON.stringify({
 					data: {
-						queueSummary: { ready: QUEUE_READY, blocked: 0, inProgress: 0 }
+						queueSummary: { ready: QUEUE_READY, blocked: 0, inProgress: 0, operatorAttention: 0, dependencyWaiting: 0, externalBlocked: 0, cancelled: 0 }
 					}
 				})
 			});

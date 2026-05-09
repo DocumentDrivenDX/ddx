@@ -136,11 +136,16 @@
 			case 'open':
 				return 'badge-status-open';
 			case 'in-progress':
+			case 'in_progress':
 				return 'badge-status-in-progress';
 			case 'blocked':
 				return 'badge-status-blocked';
 			case 'closed':
 				return 'badge-status-closed';
+			case 'proposed':
+				return 'badge-status-proposed';
+			case 'cancelled':
+				return 'badge-status-cancelled';
 			default:
 				return 'badge-status-neutral';
 		}
@@ -176,10 +181,12 @@
 				bind:value={status}
 				class="{inputClass} {statusBadgeClass(status)}"
 			>
+				<option value="proposed">proposed</option>
 				<option value="open">open</option>
 				<option value="in-progress">in-progress</option>
 				<option value="blocked">blocked</option>
 				<option value="closed">closed</option>
+				<option value="cancelled">cancelled</option>
 			</select>
 		</div>
 		<div>

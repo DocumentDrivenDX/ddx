@@ -1129,9 +1129,13 @@ type ComplexityRoot struct {
 	}
 
 	QueueSummary struct {
-		Blocked    func(childComplexity int) int
-		InProgress func(childComplexity int) int
-		Ready      func(childComplexity int) int
+		Blocked           func(childComplexity int) int
+		InProgress        func(childComplexity int) int
+		Ready             func(childComplexity int) int
+		OperatorAttention func(childComplexity int) int
+		DependencyWaiting func(childComplexity int) int
+		ExternalBlocked   func(childComplexity int) int
+		Cancelled         func(childComplexity int) int
 	}
 
 	ReadyCheck struct {
@@ -6665,6 +6669,30 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.QueueSummary.Ready(childComplexity), true
+	case "QueueSummary.operatorAttention":
+		if e.ComplexityRoot.QueueSummary.OperatorAttention == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QueueSummary.OperatorAttention(childComplexity), true
+	case "QueueSummary.dependencyWaiting":
+		if e.ComplexityRoot.QueueSummary.DependencyWaiting == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QueueSummary.DependencyWaiting(childComplexity), true
+	case "QueueSummary.externalBlocked":
+		if e.ComplexityRoot.QueueSummary.ExternalBlocked == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QueueSummary.ExternalBlocked(childComplexity), true
+	case "QueueSummary.cancelled":
+		if e.ComplexityRoot.QueueSummary.Cancelled == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QueueSummary.Cancelled(childComplexity), true
 
 	case "ReadyCheck.name":
 		if e.ComplexityRoot.ReadyCheck.Name == nil {
@@ -35062,6 +35090,14 @@ func (ec *executionContext) fieldContext_Query_queueSummary(ctx context.Context,
 				return ec.fieldContext_QueueSummary_blocked(ctx, field)
 			case "inProgress":
 				return ec.fieldContext_QueueSummary_inProgress(ctx, field)
+			case "operatorAttention":
+				return ec.fieldContext_QueueSummary_operatorAttention(ctx, field)
+			case "dependencyWaiting":
+				return ec.fieldContext_QueueSummary_dependencyWaiting(ctx, field)
+			case "externalBlocked":
+				return ec.fieldContext_QueueSummary_externalBlocked(ctx, field)
+			case "cancelled":
+				return ec.fieldContext_QueueSummary_cancelled(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type QueueSummary", field.Name)
 		},
@@ -36072,6 +36108,122 @@ func (ec *executionContext) _QueueSummary_inProgress(ctx context.Context, field 
 }
 
 func (ec *executionContext) fieldContext_QueueSummary_inProgress(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QueueSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QueueSummary_operatorAttention(ctx context.Context, field graphql.CollectedField, obj *QueueSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QueueSummary_operatorAttention,
+		func(ctx context.Context) (any, error) {
+			return obj.OperatorAttention, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QueueSummary_operatorAttention(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QueueSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QueueSummary_dependencyWaiting(ctx context.Context, field graphql.CollectedField, obj *QueueSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QueueSummary_dependencyWaiting,
+		func(ctx context.Context) (any, error) {
+			return obj.DependencyWaiting, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QueueSummary_dependencyWaiting(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QueueSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QueueSummary_externalBlocked(ctx context.Context, field graphql.CollectedField, obj *QueueSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QueueSummary_externalBlocked,
+		func(ctx context.Context) (any, error) {
+			return obj.ExternalBlocked, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QueueSummary_externalBlocked(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "QueueSummary",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _QueueSummary_cancelled(ctx context.Context, field graphql.CollectedField, obj *QueueSummary) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_QueueSummary_cancelled,
+		func(ctx context.Context) (any, error) {
+			return obj.Cancelled, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_QueueSummary_cancelled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "QueueSummary",
 		Field:      field,
@@ -52895,6 +53047,26 @@ func (ec *executionContext) _QueueSummary(ctx context.Context, sel ast.Selection
 			}
 		case "inProgress":
 			out.Values[i] = ec._QueueSummary_inProgress(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "operatorAttention":
+			out.Values[i] = ec._QueueSummary_operatorAttention(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "dependencyWaiting":
+			out.Values[i] = ec._QueueSummary_dependencyWaiting(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "externalBlocked":
+			out.Values[i] = ec._QueueSummary_externalBlocked(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cancelled":
+			out.Values[i] = ec._QueueSummary_cancelled(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}

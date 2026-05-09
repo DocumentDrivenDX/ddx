@@ -1892,10 +1892,18 @@ type QueueAndWorkersSummary struct {
 type QueueSummary struct {
 	// Open beads with no unmet dependencies
 	Ready int `json:"ready"`
-	// Open beads blocked by unmet dependencies
+	// Beads with external blockers (alias for externalBlocked)
 	Blocked int `json:"blocked"`
 	// Beads currently claimed or executing
 	InProgress int `json:"inProgress"`
+	// Proposed beads awaiting operator decision
+	OperatorAttention int `json:"operatorAttention"`
+	// Beads blocked waiting on dependency completion
+	DependencyWaiting int `json:"dependencyWaiting"`
+	// Beads with external blockers (canonical name)
+	ExternalBlocked int `json:"externalBlocked"`
+	// Cancelled beads
+	Cancelled int `json:"cancelled"`
 }
 
 // ReadyCheck represents one subsystem readiness check

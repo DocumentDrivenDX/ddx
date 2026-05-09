@@ -297,28 +297,18 @@ func personaGraphQLError(err error) error {
 // QueueSummary is the resolver for the queueSummary field.
 func (r *queryResolver) QueueSummary(ctx context.Context, projectID string) (*QueueSummary, error) {
 	store := bead.NewStore(filepath.Join(r.projectRoot(ctx, projectID), ".ddx"))
-	ready, err := store.Ready()
+	counts, err := store.Status()
 	if err != nil {
 		return nil, err
-	}
-	blocked, err := store.BlockedAll()
-	if err != nil {
-		return nil, err
-	}
-	all, err := store.ReadAll()
-	if err != nil {
-		return nil, err
-	}
-	var inProgress int
-	for _, b := range all {
-		if b.Status == bead.StatusInProgress || b.Status == "in-progress" {
-			inProgress++
-		}
 	}
 	return &QueueSummary{
-		Ready:      len(ready),
-		Blocked:    len(blocked),
-		InProgress: inProgress,
+		Ready:             counts.Ready,
+		Blocked:           counts.ExternalBlocked,
+		InProgress:        counts.InProgress,
+		OperatorAttention: counts.OperatorAttention,
+		DependencyWaiting: counts.DependencyWaiting,
+		ExternalBlocked:   counts.ExternalBlocked,
+		Cancelled:         counts.Cancelled,
 	}, nil
 }
 

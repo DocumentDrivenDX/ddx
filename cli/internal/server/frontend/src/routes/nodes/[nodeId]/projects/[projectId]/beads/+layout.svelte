@@ -7,6 +7,7 @@
 	import { gql } from 'graphql-request';
 	import BeadForm from '$lib/components/BeadForm.svelte';
 	import { subscribeBeadLifecycle } from '$lib/gql/subscriptions';
+	import { BEAD_STATUS_OPTIONS, beadStatusWireValue } from '$lib/beadStatusOptions';
 
 	const BEADS_QUERY = gql`
 		query BeadsByProject(
@@ -74,7 +75,12 @@
 		};
 	}
 
-	const STATUS_OPTIONS = ['open', 'ready', 'in-progress', 'closed', 'blocked'];
+	const STATUS_OPTIONS = BEAD_STATUS_OPTIONS;
+
+	// Map display label (hyphenated) to wire value (underscored) for GraphQL
+	function statusWireValue(status: string): string {
+		return beadStatusWireValue(status);
+	}
 	const PRIORITY_OPTIONS = [0, 1, 2, 3, 4];
 
 	let { data, children }: { data: LayoutData; children: Snippet } = $props();
@@ -202,7 +208,8 @@
 	}
 
 	function toggleStatus(status: string) {
-		setFilter('status', data.activeStatus === status ? null : status);
+		const wire = statusWireValue(status);
+		setFilter('status', data.activeStatus === wire ? null : wire);
 	}
 
 	function togglePriority(priority: number) {
@@ -271,11 +278,16 @@
 			case 'open':
 				return 'badge-status-open';
 			case 'in-progress':
+			case 'in_progress':
 				return 'badge-status-in-progress';
 			case 'closed':
 				return 'badge-status-closed';
 			case 'blocked':
 				return 'badge-status-blocked';
+			case 'proposed':
+				return 'badge-status-proposed';
+			case 'cancelled':
+				return 'badge-status-cancelled';
 			case 'running':
 				return 'badge-status-running';
 			case 'completed':
@@ -334,8 +346,8 @@
 		{#each STATUS_OPTIONS as status}
 			<button
 				type="button"
-				aria-pressed={data.activeStatus === status}
-				class={chipClass(data.activeStatus === status)}
+				aria-pressed={data.activeStatus === statusWireValue(status)}
+				class={chipClass(data.activeStatus === statusWireValue(status))}
 				onclick={() => toggleStatus(status)}
 			>
 				{status}

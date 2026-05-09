@@ -1874,10 +1874,18 @@ type DefaultRouteStatus {
 type QueueSummary {
   """Open beads with no unmet dependencies"""
   ready: Int!
-  """Open beads blocked by unmet dependencies"""
+  """Beads with external blockers (alias for externalBlocked)"""
   blocked: Int!
   """Beads currently claimed or executing"""
   inProgress: Int!
+  """Proposed beads awaiting operator decision"""
+  operatorAttention: Int!
+  """Beads blocked waiting on dependency completion"""
+  dependencyWaiting: Int!
+  """Beads with external blockers (canonical name)"""
+  externalBlocked: Int!
+  """Cancelled beads"""
+  cancelled: Int!
 }
 
 """QueueAndWorkersSummary backs the global drain indicator. Combines the

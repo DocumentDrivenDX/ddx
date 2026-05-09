@@ -5,6 +5,7 @@
 	import { createClient } from '$lib/gql/client';
 	import { gql } from 'graphql-request';
 	import { federationBadgeClass } from '$lib/federationStatus';
+	import { BEAD_STATUS_OPTIONS, beadStatusWireValue } from '$lib/beadStatusOptions';
 
 	const BEADS_QUERY = gql`
 		query BeadsAllProjects($first: Int, $after: String, $status: String, $label: String, $projectID: String) {
@@ -56,7 +57,12 @@
 		};
 	}
 
-	const STATUS_OPTIONS = ['open', 'in-progress', 'closed', 'blocked'];
+	const STATUS_OPTIONS = BEAD_STATUS_OPTIONS;
+
+	// Map display label (hyphenated) to wire value (underscored) for GraphQL
+	function statusWireValue(status: string): string {
+		return beadStatusWireValue(status);
+	}
 
 	let { data }: { data: PageData } = $props();
 
@@ -97,7 +103,8 @@
 	}
 
 	function toggleStatus(status: string) {
-		setFilter('status', data.activeStatus === status ? null : status);
+		const wire = statusWireValue(status);
+		setFilter('status', data.activeStatus === wire ? null : wire);
 	}
 
 	function toggleLabel(label: string) {
@@ -138,11 +145,16 @@
 			case 'open':
 				return 'badge-status-open';
 			case 'in-progress':
+			case 'in_progress':
 				return 'badge-status-in-progress';
 			case 'closed':
 				return 'badge-status-closed';
 			case 'blocked':
 				return 'badge-status-blocked';
+			case 'proposed':
+				return 'badge-status-proposed';
+			case 'cancelled':
+				return 'badge-status-cancelled';
 			case 'running':
 				return 'badge-status-running';
 			case 'completed':
@@ -204,7 +216,7 @@
 	<div class="flex flex-wrap gap-2">
 		<span class="self-center text-xs text-fg-muted dark:text-dark-fg-muted">Status:</span>
 		{#each STATUS_OPTIONS as status}
-			<button class={chipClass(data.activeStatus === status)} onclick={() => toggleStatus(status)}>
+			<button class={chipClass(data.activeStatus === statusWireValue(status))} onclick={() => toggleStatus(status)}>
 				{status}
 			</button>
 		{/each}

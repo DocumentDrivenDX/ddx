@@ -27,6 +27,12 @@
 	--status-completed-text: var(--status-closed-text);
 	--status-completed-surface: var(--status-closed-surface);
 	--status-completed-border: var(--status-closed-border);
+	--status-proposed-text: oklch(41% 0.13 315);
+	--status-proposed-surface: oklch(97% 0.02 315);
+	--status-proposed-border: oklch(79% 0.09 315);
+	--status-cancelled-text: #6B6558;
+	--status-cancelled-surface: #FBF8F2;
+	--status-cancelled-border: #E4DDD0;
 
 	/* priority — P0/P1 error-red, P2 lever-steel, P3 closed-green, P4 neutral */
 	--priority-p0-text: #BA1A1A;
@@ -113,6 +119,12 @@
 	--status-completed-text: var(--status-closed-text);
 	--status-completed-surface: var(--status-closed-surface);
 	--status-completed-border: var(--status-closed-border);
+	--status-proposed-text: oklch(78% 0.12 315);
+	--status-proposed-surface: oklch(22% 0.04 315);
+	--status-proposed-border: oklch(47% 0.09 315);
+	--status-cancelled-text: #A39A86;
+	--status-cancelled-surface: #26231F;
+	--status-cancelled-border: oklch(35% 0.01 55);
 
 	--priority-p0-text: #FFB4AB;
 	--priority-p0-surface: oklch(22% 0.05 25);
@@ -250,6 +262,16 @@
 		color: var(--status-failed-text);
 		background-color: var(--status-failed-surface);
 		border-color: var(--status-failed-border);
+	}
+	.badge-status-proposed {
+		color: var(--status-proposed-text);
+		background-color: var(--status-proposed-surface);
+		border-color: var(--status-proposed-border);
+	}
+	.badge-status-cancelled {
+		color: var(--status-cancelled-text);
+		background-color: var(--status-cancelled-surface);
+		border-color: var(--status-cancelled-border);
 	}
 	.badge-status-neutral {
 		color: var(--fg-muted);

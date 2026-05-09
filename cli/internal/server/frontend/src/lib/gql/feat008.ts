@@ -6,6 +6,10 @@ export const PROJECT_QUEUE_SUMMARY_QUERY = gql`
 			ready
 			blocked
 			inProgress
+			operatorAttention
+			dependencyWaiting
+			externalBlocked
+			cancelled
 		}
 	}
 `;

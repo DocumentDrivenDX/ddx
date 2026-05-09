@@ -107,7 +107,7 @@ function fallbackDataForQuery(query: string): object | null {
 	}
 
 	if (query.includes('queueSummary')) {
-		data.queueSummary = { ready: 0, blocked: 0, inProgress: 0 };
+		data.queueSummary = { ready: 0, blocked: 0, inProgress: 0, operatorAttention: 0, dependencyWaiting: 0, externalBlocked: 0, cancelled: 0 };
 	}
 
 	if (query.includes('workersByProject')) {

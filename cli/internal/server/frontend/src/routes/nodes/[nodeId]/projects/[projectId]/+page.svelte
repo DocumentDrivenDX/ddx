@@ -18,6 +18,10 @@
 		ready: number;
 		blocked: number;
 		inProgress: number;
+		operatorAttention: number;
+		dependencyWaiting: number;
+		externalBlocked: number;
+		cancelled: number;
 	}
 
 	interface QueueSummaryResult {
@@ -174,8 +178,8 @@
 	}
 
 	function queueContext(): string {
-		const summary = queueSummary ?? { ready: 0, blocked: 0, inProgress: 0 };
-		return `${summary.ready} ready ${plural(summary.ready, 'bead')}, ${summary.blocked} blocked, ${summary.inProgress} in progress`;
+		const summary = queueSummary ?? { ready: 0, blocked: 0, inProgress: 0, operatorAttention: 0, dependencyWaiting: 0, externalBlocked: 0, cancelled: 0 };
+		return `${summary.ready} ready ${plural(summary.ready, 'bead')}, ${summary.externalBlocked} blocked, ${summary.dependencyWaiting} dep-waiting, ${summary.inProgress} in progress`;
 	}
 
 	function actionScope(action: ProjectAction): string {
@@ -231,7 +235,7 @@
 				</div>
 				<div class="border-x border-border-line px-4 py-3 dark:border-dark-border-line">
 					<div class="text-headline-lg font-semibold text-fg-ink dark:text-dark-fg-ink">
-						{queueSummary?.blocked ?? '...'}
+						{queueSummary?.externalBlocked ?? '...'}
 					</div>
 					<div class="text-xs text-fg-muted dark:text-dark-fg-muted">Blocked</div>
 				</div>
@@ -240,6 +244,23 @@
 						{queueSummary?.inProgress ?? '...'}
 					</div>
 					<div class="text-xs text-fg-muted dark:text-dark-fg-muted">In progress</div>
+				</div>
+			</div>
+			<div
+				class="grid min-w-60 grid-cols-2 overflow-hidden rounded-md border border-border-line text-center dark:border-dark-border-line"
+				aria-label="Queue secondary counts"
+			>
+				<div class="px-4 py-3">
+					<div class="text-headline-md font-semibold text-fg-ink dark:text-dark-fg-ink" data-testid="queue-dep-waiting">
+						{queueSummary?.dependencyWaiting ?? '...'}
+					</div>
+					<div class="text-xs text-fg-muted dark:text-dark-fg-muted">Dep-waiting</div>
+				</div>
+				<div class="border-l border-border-line px-4 py-3 dark:border-dark-border-line">
+					<div class="text-headline-md font-semibold text-fg-ink dark:text-dark-fg-ink" data-testid="queue-operator-attention">
+						{queueSummary?.operatorAttention ?? '...'}
+					</div>
+					<div class="text-xs text-fg-muted dark:text-dark-fg-muted">Proposed</div>
 				</div>
 			</div>
 		</div>

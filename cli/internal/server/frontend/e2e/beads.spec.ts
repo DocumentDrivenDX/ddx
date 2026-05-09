@@ -930,3 +930,153 @@ test('detail header: renders without horizontal scroll or clipped action buttons
 		expect(idBox!.x + idBox!.width).toBeLessThanOrEqual(delBox!.x);
 	}
 });
+
+// -----------------------------------------------------------------------
+// US-082h: Proposed lifecycle status — filter chips and badge rendering
+// -----------------------------------------------------------------------
+
+const PROPOSED_BEADS = [
+	{ id: 'bead-prop-1', title: 'Proposed work alpha', status: 'proposed', priority: 1, labels: null },
+	{ id: 'bead-prop-2', title: 'Proposed work beta', status: 'proposed', priority: 2, labels: null }
+];
+
+const CANCELLED_BEADS = [
+	{ id: 'bead-can-1', title: 'Cancelled work', status: 'cancelled', priority: 3, labels: null }
+];
+
+function makeStatusFilteredResponse(beads: typeof BEADS) {
+	return {
+		beadsByProject: {
+			edges: beads.map((b, i) => ({ node: b, cursor: `cursor-status-${i}` })),
+			pageInfo: { hasNextPage: false, endCursor: null },
+			totalCount: beads.length
+		}
+	};
+}
+
+test('US-082h.a: proposed filter chip sends in_progress wire value and only proposed beads render', async ({
+	page
+}) => {
+	// Mock: when status=proposed is in the request, return only proposed beads
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+		} else if (body.query.includes('BeadsByProject')) {
+			const vars = body.variables as { status?: string } | undefined;
+			const status = vars?.status;
+			if (status === 'proposed') {
+				await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: makeStatusFilteredResponse(PROPOSED_BEADS) }) });
+			} else {
+				await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: makeBeadsResponse() }) });
+			}
+		} else {
+			await route.continue();
+		}
+	});
+
+	await page.goto(BASE_URL);
+	await page.waitForSelector('[data-testid="bead-row"]');
+
+	// Click the proposed chip
+	const proposedChip = page.getByRole('button', { name: 'proposed' });
+	await expect(proposedChip).toBeVisible();
+	await proposedChip.click();
+
+	// After filter click, only proposed beads should be shown
+	await page.waitForURL(/status=proposed/);
+	const rows = page.locator('[data-testid="bead-row"]');
+	await expect(rows).toHaveCount(2);
+	await expect(page.getByText('Proposed work alpha')).toBeVisible();
+	await expect(page.getByText('Proposed work beta')).toBeVisible();
+	// Verify badge class for proposed status
+	const badge = page.locator('.badge-status-proposed').first();
+	await expect(badge).toBeVisible();
+});
+
+test('US-082h.b: cancelled filter chip sends cancelled wire value and only cancelled beads render', async ({
+	page
+}) => {
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string; variables?: Record<string, unknown> };
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+		} else if (body.query.includes('BeadsByProject')) {
+			const vars = body.variables as { status?: string } | undefined;
+			const status = vars?.status;
+			if (status === 'cancelled') {
+				await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: makeStatusFilteredResponse(CANCELLED_BEADS) }) });
+			} else {
+				await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: makeBeadsResponse() }) });
+			}
+		} else {
+			await route.continue();
+		}
+	});
+
+	await page.goto(BASE_URL);
+	await page.waitForSelector('[data-testid="bead-row"]');
+
+	const cancelledChip = page.getByRole('button', { name: 'cancelled' });
+	await expect(cancelledChip).toBeVisible();
+	await cancelledChip.click();
+
+	await page.waitForURL(/status=cancelled/);
+	const rows = page.locator('[data-testid="bead-row"]');
+	await expect(rows).toHaveCount(1);
+	await expect(page.getByText('Cancelled work')).toBeVisible();
+	const badge = page.locator('.badge-status-cancelled').first();
+	await expect(badge).toBeVisible();
+});
+
+test('US-082h.c: queue summary surfaces dependency-waiting and external-blocked as distinct counts', async ({
+	page
+}) => {
+	const PROJECT_PAGE_URL = `/nodes/node-abc/projects/${PROJECT_ID}`;
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as { query: string };
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { nodeInfo: NODE_INFO } }) });
+		} else if (body.query.includes('Projects')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((p) => ({ node: p })) } } }) });
+		} else if (body.query.includes('ProjectQueueSummary')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						queueSummary: {
+							ready: 3,
+							blocked: 1,
+							inProgress: 2,
+							operatorAttention: 4,
+							dependencyWaiting: 5,
+							externalBlocked: 1,
+							cancelled: 0
+						}
+					}
+				})
+			});
+		} else if (body.query.includes('QueueAndWorkersSummary') || body.query.includes('queueAndWorkersSummary')) {
+			await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ data: { queueAndWorkersSummary: { readyBeads: 3, runningWorkers: 0, totalWorkers: 0, maxCount: null } } }) });
+		} else {
+			await route.continue();
+		}
+	});
+
+	await page.goto(PROJECT_PAGE_URL);
+
+	// The secondary queue summary grid should show dep-waiting and proposed counts
+	const depWaiting = page.getByTestId('queue-dep-waiting');
+	await expect(depWaiting).toBeVisible();
+	await expect(depWaiting).toContainText('5');
+
+	const operatorAttention = page.getByTestId('queue-operator-attention');
+	await expect(operatorAttention).toBeVisible();
+	await expect(operatorAttention).toContainText('4');
+});

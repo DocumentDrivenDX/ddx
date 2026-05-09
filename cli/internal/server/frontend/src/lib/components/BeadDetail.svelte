@@ -256,11 +256,16 @@
 			case 'open':
 				return 'text-accent-lever dark:text-dark-accent-lever';
 			case 'in-progress':
+			case 'in_progress':
 				return 'text-accent-load dark:text-dark-accent-load';
 			case 'closed':
 				return 'text-status-closed dark:text-status-closed';
 			case 'blocked':
 				return 'text-error dark:text-dark-error';
+			case 'proposed':
+				return 'text-status-proposed dark:text-dark-status-proposed';
+			case 'cancelled':
+				return 'text-fg-muted dark:text-dark-fg-muted';
 			default:
 				return 'text-fg-muted dark:text-dark-fg-muted';
 		}
