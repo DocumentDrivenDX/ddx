@@ -380,6 +380,7 @@ type ExecuteBeadLoopStore interface {
 	// repeated review BLOCKs.
 	Update(id string, mutate func(*bead.Bead)) error
 	UpdateWithLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions, mutate func(*bead.Bead) error) error
+	ParkToProposed(id string, reason bead.ParkReason, mutate func(*bead.Bead)) error
 }
 
 // readyDiagnoser is the optional interface the work loop uses to explain an
@@ -2405,12 +2406,7 @@ func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, beadID, actor strin
 	if reason == "" {
 		reason = string(outcome)
 	}
-	if err := store.UpdateWithLifecycleStatus(beadID, bead.StatusProposed, bead.LifecycleTransitionOptions{
-		OperatorRequired: true,
-		Reason:           reason,
-		Actor:            actor,
-		Source:           "ddx agent execute-loop",
-	}, func(b *bead.Bead) error {
+	if err := store.ParkToProposed(beadID, bead.ParkIntakeRejection, func(b *bead.Bead) {
 		ensureBeadExtra(b)
 		// Migration-only cleanup: defensive removal for legacy rows that escaped
 		// the lifecycle migration or arrived via external import.
@@ -2422,7 +2418,6 @@ func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, beadID, actor strin
 			SuggestedAction: "review intake result and accept, rewrite, split, block, or cancel",
 			Summary:         "pre-claim intake blocked execution",
 		})
-		return nil
 	}); err != nil {
 		return err
 	}
@@ -2498,12 +2493,7 @@ func applyNoChangesOperatorRequired(store ExecuteBeadLoopStore, beadID, actor st
 	if suggestedAction == "" {
 		suggestedAction = "review and accept, split, block, or cancel this proposed work"
 	}
-	return store.UpdateWithLifecycleStatus(beadID, bead.StatusProposed, bead.LifecycleTransitionOptions{
-		OperatorRequired: true,
-		Reason:           reason,
-		Actor:            actor,
-		Source:           "ddx agent execute-loop",
-	}, func(b *bead.Bead) error {
+	return store.ParkToProposed(beadID, bead.ParkNoChangesOperatorRequired, func(b *bead.Bead) {
 		ensureBeadExtra(b)
 		clearNoChangesLifecycleLabels(b)
 		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
@@ -2516,7 +2506,6 @@ func applyNoChangesOperatorRequired(store ExecuteBeadLoopStore, beadID, actor st
 			SuggestedAction: suggestedAction,
 			Summary:         "no_changes requested operator attention",
 		})
-		return nil
 	})
 }
 
