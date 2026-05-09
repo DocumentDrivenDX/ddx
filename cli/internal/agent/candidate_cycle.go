@@ -44,8 +44,9 @@ type CandidateRefStore interface {
 
 // CandidateCheckResult carries the outcome of a pre-land quality check.
 type CandidateCheckResult struct {
-	Passed bool
-	Detail string
+	Passed    bool
+	Detail    string
+	Artifacts []string
 }
 
 // CandidateCheckRunner runs pre-land quality checks against a candidate.
@@ -116,6 +117,20 @@ type CandidateCycleEventBody struct {
 	ResultRev    string `json:"result_rev"`
 }
 
+const candidateChecksFailedEventKind = "candidate-checks-failed"
+
+// CandidateChecksFailedEventBody is the structured payload of a
+// candidate-checks-failed bead event.
+type CandidateChecksFailedEventBody struct {
+	CandidateRef string   `json:"candidate_ref,omitempty"`
+	CycleIndex   int      `json:"cycle_index"`
+	AttemptID    string   `json:"attempt_id,omitempty"`
+	BaseRev      string   `json:"base_rev,omitempty"`
+	ResultRev    string   `json:"result_rev,omitempty"`
+	Detail       string   `json:"detail,omitempty"`
+	Artifacts    []string `json:"artifacts,omitempty"`
+}
+
 // ShouldRetainCandidateRef returns true when the attempt outcome requires
 // keeping the candidate ref for operator inspection and recovery.
 // Only a successfully landed (merged) candidate allows the temporary ref to be
@@ -155,8 +170,9 @@ type AttemptCycleCoordinator struct {
 	BeadEvents  BeadEventAppender // nil → no candidate-cycle event emission
 }
 
-// Run executes one attempt cycle: implementation → land. Non-success statuses
-// (no_changes, execution_failed, etc.) return without calling the lander.
+// Run executes one attempt cycle: implementation → checks → land. Non-success
+// statuses (no_changes, execution_failed, etc.) return without calling the
+// lander.
 // The caller is responsible for worktree cleanup after Run returns.
 //
 // When RefStore and ProjectRoot are set, Run pins a candidate ref under
@@ -202,6 +218,28 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 		}
 	}
 
+	if c.Checks != nil {
+		checksResult, checksErr := c.Checks.RunChecks(ctx, c.ProjectRoot, candidate)
+		if checksErr != nil {
+			checksResult.Detail = checksErr.Error()
+		}
+		if checksErr != nil || !checksResult.Passed {
+			report := candidate.Report
+			if checksErr != nil {
+				report.Status = ExecuteBeadStatusExecutionFailed
+			} else {
+				report.Status = ExecuteBeadStatusPostRunCheckFailed
+			}
+			report.OutcomeReason = candidateChecksFailedEventKind
+			report.Detail = candidateChecksFailedDetail(checksResult.Detail)
+			if checksErr != nil && report.Error == "" {
+				report.Error = checksErr.Error()
+			}
+			c.appendCandidateChecksFailedEvent(beadID, report, checksResult)
+			return AttemptCycleResult{Report: report}, nil
+		}
+	}
+
 	landed, err := c.Lander.Land(ctx, candidate)
 	if err != nil {
 		return AttemptCycleResult{Report: candidate.Report}, err
@@ -226,6 +264,34 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 	}
 
 	return result, nil
+}
+
+func candidateChecksFailedDetail(detail string) string {
+	detail = strings.TrimSpace(detail)
+	if detail == "" {
+		return candidateChecksFailedEventKind
+	}
+	return candidateChecksFailedEventKind + ": " + detail
+}
+
+func (c *AttemptCycleCoordinator) appendCandidateChecksFailedEvent(beadID string, report ExecuteBeadReport, checksResult CandidateCheckResult) {
+	if c.BeadEvents == nil {
+		return
+	}
+	body, _ := json.Marshal(CandidateChecksFailedEventBody{
+		CandidateRef: report.CandidateRef,
+		CycleIndex:   report.CycleIndex,
+		AttemptID:    report.AttemptID,
+		BaseRev:      report.BaseRev,
+		ResultRev:    report.ResultRev,
+		Detail:       strings.TrimSpace(checksResult.Detail),
+		Artifacts:    append([]string(nil), checksResult.Artifacts...),
+	})
+	_ = c.BeadEvents.AppendEvent(beadID, bead.BeadEvent{
+		Kind:    candidateChecksFailedEventKind,
+		Summary: report.Detail,
+		Body:    string(body),
+	})
 }
 
 // MarkWorktreeActiveCycle sets the ActiveCandidateCycle flag in the worktree's
