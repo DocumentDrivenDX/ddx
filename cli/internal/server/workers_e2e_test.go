@@ -88,6 +88,9 @@ func (f reviewerFn) ReviewBead(ctx context.Context, beadID, resultRev string, im
 // must not invoke the legacy post-land reviewer/retry path. The fixture sets a
 // failing reviewer threshold to prove it remains unused.
 func TestReviewRetryThresholdFromConfigServer(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires execute-loop with review infrastructure; too slow for -short")
+	}
 	const (
 		threshold = 5
 		beadID    = "ddx-server-rmr-001"

@@ -18,6 +18,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -374,6 +375,9 @@ func runCmd(t *testing.T, dir string, name string, args ...string) {
 	t.Helper()
 	cmd := exec.Command(name, args...)
 	cmd.Dir = dir
+	if name == "git" {
+		cmd.Env = gitpkg.CleanEnv()
+	}
 	out, err := cmd.CombinedOutput()
 	require.NoError(t, err, "command %s %v: %s", name, args, string(out))
 }
@@ -576,6 +580,9 @@ func TestSubscribeProgress(t *testing.T) {
 // TestProjectWorkerShowEndpoint verifies GET /api/projects/:project/workers/:id
 // returns a WorkerRecord with the expected shape, including the new fields.
 func TestProjectWorkerShowEndpoint(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires StartExecuteLoop with agent infrastructure")
+	}
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
@@ -610,6 +617,9 @@ func TestProjectWorkerShowEndpoint(t *testing.T) {
 // endpoint sends a keepalive comment and returns 200 when no worker is
 // active (or subscriber channel is immediately closed).
 func TestProjectWorkerProgressKeepaliveOnIdleWorker(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires StartExecuteLoop with agent infrastructure")
+	}
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
@@ -757,6 +767,9 @@ func TestWorkerScopeToProject(t *testing.T) {
 // is zero). After the loop exits the counters must be Attempts=3, Successes=2,
 // Failures=1.
 func TestWorkerLiveCounters(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires execute-loop goroutine timing; too slow for -short")
+	}
 	root := t.TempDir()
 	ddxDir := filepath.Join(root, ".ddx")
 	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
@@ -845,6 +858,9 @@ func TestWorkerLiveCounters(t *testing.T) {
 // commits directly via git plumbing while still exercising the coordinator
 // integration (m.LandCoordinators.Get -> Submit -> agent.Land -> advance main).
 func TestWorkerLandsCommitViaCoordinator(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires land coordinator + git plumbing; too slow for -short")
+	}
 	root := t.TempDir()
 
 	// Real git repo fixture.
@@ -964,6 +980,9 @@ func TestWorkerLandsCommitViaCoordinator(t *testing.T) {
 // TestWorkerLandsEvidenceViaCoordinator is the AC (3) test: the server-worker path
 // commits execution evidence and leaves the worktree clean after the worker exits.
 func TestWorkerLandsEvidenceViaCoordinator(t *testing.T) {
+	if testing.Short() {
+		t.Skip("requires land coordinator + git plumbing; too slow for -short")
+	}
 	root := t.TempDir()
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "README.md"), []byte("# test\n"), 0o644))
