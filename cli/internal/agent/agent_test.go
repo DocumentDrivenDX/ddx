@@ -1012,6 +1012,7 @@ func TestMatchesCancelPattern(t *testing.T) {
 func TestOSExecutor_EarlyCancel(t *testing.T) {
 	// Shell prints an auth error on stderr then sleeps. Without early-cancel
 	// this would block for the full timeout.
+	start := time.Now()
 	ex := &OSExecutor{}
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
@@ -1023,6 +1024,7 @@ func TestOSExecutor_EarlyCancel(t *testing.T) {
 	assert.NotEmpty(t, result.CancelReason)
 	assert.Contains(t, result.Stderr, "429")
 	assert.Equal(t, -1, result.ExitCode)
+	require.Less(t, time.Since(start), 15*time.Second, "TestOSExecutor_EarlyCancel must not run longer than 15s")
 }
 
 // --- ValidateForExecuteLoop tests ---
