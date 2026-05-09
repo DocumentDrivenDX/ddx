@@ -1,0 +1,51 @@
+{
+  "attempt_id": "20260509T213752-42a68620",
+  "bead_id": "ddx-1fda33d2",
+  "base_rev": "b7ba102abbe5ec4cf4dfa68eea4f046738b64ea7",
+  "created_at": "2026-05-09T21:37:59.848641046Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1fda33d2",
+    "title": "fix(server): short-circuit agent-models provider probe in tests; gate with testing.Short",
+    "description": "PROBLEM\n  Four tests in cli/internal/server collectively block ~55 seconds per\n  pre-push run waiting for unreachable agent-provider endpoints to time\n  out. Each calls a server handler that runs ListProviders / ListModels\n  with a 10s context timeout; with no providers reachable in the test\n  environment, the handler waits for the full timeout before returning\n  empty. Pre-push lefthook runs without -short, so all four fire on\n  every push.\n\nROOT CAUSE\n  Affected tests + 10s probe timeouts:\n    - cli/internal/server/agent_models_test.go:11 TestHandleAgentModelsNoProviders\n      → handleAgentModels at agent_models.go:28 wraps context.WithTimeout(10s)\n      around ListProviders/ListModels. Test waits ~10s for empty result.\n    - cli/internal/server/agent_models_test.go:60 TestMCPAgentModels\n      → mcpAgentModels at agent_models.go:147 same pattern. ~10s.\n    - cli/internal/server/agent_models_test.go:119 TestMCPAgentModelsSingleProvider\n      → mcpAgentModels with single-provider path at agent_models.go:224\n      same context.WithTimeout(10s) pattern. ~5s observed.\n    - cli/internal/server/server_test.go:3419 TestMCPAgentDispatchTrustedAllowed\n      → mcpAgentDispatch at server.go:4731 calls\n      agent.RunWithConfigViaService which constructs a real agent.Service\n      and waits for provider discovery; ~40s observed.\n\n  None of these have testing.Short() gates. Pre-push runs the full set\n  without -short, so the ~55s aggregate cost lands on every push.\n\nPROPOSED FIX\n  - Add a testing.Short() skip at the top of each of the four tests:\n        if testing.Short() {\n            t.Skip(\"provider-probe test; runs only in non-short mode\")\n        }\n  - File:line edits required:\n        cli/internal/server/agent_models_test.go:11 (TestHandleAgentModelsNoProviders) — add skip inside func\n        cli/internal/server/agent_models_test.go:60 (TestMCPAgentModels) — add skip\n        cli/internal/server/agent_models_test.go:119 (TestMCPAgentModelsSingleProvider) — add skip\n        cli/internal/server/server_test.go:3419 (TestMCPAgentDispatchTrustedAllowed) — add skip\n\n  - The skip alone does not save pre-push time today because pre-push runs\n    without -short. The companion sister bead \"lefthook pre-push: add\n    -short gate\" (filed separately) flips pre-push to use -short. After\n    both land, pre-push wall-clock drops by ~55s for these 4 tests.\n\n  - Coverage for \"no providers returns empty array\" is independently\n    exercised by the integration job in CI (which runs without -short).\n\nNON-SCOPE\n  - Mocking the provider service — the timeout is the real-world\n    behavior; gating with testing.Short() preserves the test's existence\n    for non-short / CI runs.\n  - Reducing the 10s context timeout — that timeout is the production\n    behavior under real network latency.\n  - Modifying lefthook.yml itself (the sister bead handles the pre-push\n    -short flip).\n  - Other slow tests in cli/internal/server (covered by independent beads).\n\nINTERSECTIONS\n  - Sister bead: \"lefthook pre-push: add -short gate\" — depends on this\n    bead landing first so the four tests have skips before -short flips.",
+    "acceptance": "1. cli/internal/server/agent_models_test.go TestHandleAgentModelsNoProviders, TestMCPAgentModels, TestMCPAgentModelsSingleProvider each invoke testing.Short() and call t.Skip(...) at the top.\n2. cli/internal/server/server_test.go TestMCPAgentDispatchTrustedAllowed invokes testing.Short() and calls t.Skip(...) at the top.\n3. cd cli \u0026\u0026 go test -short -run 'TestHandleAgentModelsNoProviders|TestMCPAgentModels|TestMCPAgentModelsSingleProvider|TestMCPAgentDispatchTrustedAllowed' ./internal/server/... reports SKIP for all four.\n4. cd cli \u0026\u0026 go test -count=1 -run 'TestHandleAgentModelsNoProviders|TestMCPAgentModels|TestMCPAgentModelsSingleProvider|TestMCPAgentDispatchTrustedAllowed' ./internal/server/... (no -short) reports PASS for all four.\n5. cd cli \u0026\u0026 go test -short ./internal/server/... green.\n6. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "area:server",
+      "kind:fix",
+      "perf",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-09T21:36:46Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-09T21:37:52.679346826Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-09T21:36:46.510518602Z",
+      "queue-rank": "3"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260509T213752-42a68620",
+    "prompt": ".ddx/executions/20260509T213752-42a68620/prompt.md",
+    "manifest": ".ddx/executions/20260509T213752-42a68620/manifest.json",
+    "result": ".ddx/executions/20260509T213752-42a68620/result.json",
+    "checks": ".ddx/executions/20260509T213752-42a68620/checks.json",
+    "usage": ".ddx/executions/20260509T213752-42a68620/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-1fda33d2-20260509T213752-42a68620"
+  },
+  "prompt_sha": "c5ac60566384797eec25c071e7d5487e85e0f1a98a7de9f10c8e7c796fc06cca"
+}
