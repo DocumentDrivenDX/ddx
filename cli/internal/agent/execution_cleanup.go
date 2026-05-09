@@ -145,6 +145,9 @@ func (defaultExecutionCleanupLivenessProbe) IsLive(meta ExecutionCleanupMetadata
 		}
 	}
 	if meta.Liveness != nil {
+		if meta.Liveness.PID > 0 && trackerProcessAlive(meta.Liveness.PID) {
+			return true, "live pid"
+		}
 		if !meta.Liveness.ExpiresAt.IsZero() && now.Before(meta.Liveness.ExpiresAt) {
 			return true, "unexpired liveness"
 		}
@@ -279,9 +282,13 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 			if matchedRunState != nil {
 				liveRunStates[runStateLiveKey(*matchedRunState)] = struct{}{}
 			}
+			class := "preserved_temp_dir"
+			if isLiveAttemptPreservation(reason) {
+				class = "preserved_live_attempt"
+			}
 			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
 				Path:    path,
-				Class:   "preserved_temp_dir",
+				Class:   class,
 				Message: reason,
 			})
 			continue
@@ -713,6 +720,15 @@ func matchingRunStateForMeta(states []RunState, meta ExecutionCleanupMetadata) *
 		}
 	}
 	return nil
+}
+
+func isLiveAttemptPreservation(reason string) bool {
+	switch reason {
+	case "matched live run-state", "unexpired liveness", "fresh liveness", "live pid", "active candidate cycle":
+		return true
+	default:
+		return false
+	}
 }
 
 func runStateLiveKey(state RunState) string {

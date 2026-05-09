@@ -361,6 +361,186 @@ func TestExecutionCleanup_PreservesMultipleRunStateAttempts(t *testing.T) {
 	assert.Len(t, states, 2)
 }
 
+func TestExecutionCleanup_PreservesConcurrentLiveExecuteBeadWorktrees(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	now := time.Date(2026, 5, 7, 20, 0, 0, 0, time.UTC)
+
+	firstPath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-live-one-20260507T200000-11112222")
+	secondPath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-live-two-20260507T200001-33334444")
+	writeExecutionCleanupCandidate(t, firstPath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-live-one",
+		AttemptID:    "20260507T200000-11112222",
+		WorktreePath: firstPath,
+		Registered:   true,
+	}, map[string]string{"scratch.txt": "first\n"})
+	writeExecutionCleanupCandidate(t, secondPath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-live-two",
+		AttemptID:    "20260507T200001-33334444",
+		WorktreePath: secondPath,
+		Registered:   true,
+	}, map[string]string{"scratch.txt": "second\n"})
+	require.NoError(t, WriteRunState(projectRoot, RunState{
+		BeadID:       "ddx-live-one",
+		AttemptID:    "20260507T200000-11112222",
+		StartedAt:    now,
+		RefreshedAt:  now,
+		ExpiresAt:    now.Add(RunStateLivenessTTL),
+		WorktreePath: firstPath,
+	}))
+	require.NoError(t, WriteRunState(projectRoot, RunState{
+		BeadID:       "ddx-live-two",
+		AttemptID:    "20260507T200001-33334444",
+		StartedAt:    now,
+		RefreshedAt:  now,
+		ExpiresAt:    now.Add(RunStateLivenessTTL),
+		WorktreePath: secondPath,
+	}))
+
+	gitOps := &executionCleanupTestGitOps{worktrees: []string{firstPath, secondPath}}
+	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
+	mgr.TempRoot = tempRoot
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, firstPath)
+	assert.DirExists(t, secondPath)
+	assert.Empty(t, gitOps.removed)
+	assert.Equal(t, int64(0), summary.RemovedRegisteredWorktrees)
+	assert.GreaterOrEqual(t, countObservationClass(summary.Observations, "preserved_live_attempt"), 2)
+	states, err := ReadRunStates(projectRoot)
+	require.NoError(t, err)
+	assert.Len(t, states, 2)
+}
+
+func TestExecutionCleanup_RemovesExpiredAttemptOnlyAfterHeartbeatExpiry(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	now := time.Date(2026, 5, 7, 20, 30, 0, 0, time.UTC)
+
+	worktreePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-expiring-20260507T203000-11112222")
+	meta := ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-expiring",
+		AttemptID:    "20260507T203000-11112222",
+		WorktreePath: worktreePath,
+		Registered:   true,
+		Liveness: &ExecutionCleanupLiveness{
+			RefreshedAt: now,
+			ExpiresAt:   now.Add(time.Minute),
+		},
+	}
+	writeExecutionCleanupCandidate(t, worktreePath, meta, map[string]string{"scratch.txt": "active\n"})
+
+	gitOps := &executionCleanupTestGitOps{worktrees: []string{worktreePath}}
+	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
+	mgr.TempRoot = tempRoot
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+	assert.DirExists(t, worktreePath)
+	assert.Empty(t, gitOps.removed)
+	assert.Equal(t, int64(0), summary.RemovedRegisteredWorktrees)
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_live_attempt"))
+
+	meta.Liveness.RefreshedAt = now.Add(-10 * time.Minute)
+	meta.Liveness.ExpiresAt = now.Add(-time.Minute)
+	require.NoError(t, WriteExecutionCleanupMetadata(worktreePath, meta))
+	summary, err = mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, worktreePath)
+	assert.Equal(t, []string{worktreePath}, gitOps.removed)
+	assert.Equal(t, int64(1), summary.RemovedRegisteredWorktrees)
+	assert.True(t, hasObservationClass(summary.Observations, "removed_registered_worktree"))
+}
+
+func TestExecutionCleanup_DoesNotDeleteRegisteredActiveWorktree(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	parent := t.TempDir()
+	tempRoot := filepath.Join(parent, "ddx-exec-wt")
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
+	now := time.Date(2026, 5, 7, 21, 0, 0, 0, time.UTC)
+
+	activePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-active-20260507T210000-feedface")
+	writeExecutionCleanupCandidate(t, activePath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-active",
+		AttemptID:    "20260507T210000-feedface",
+		WorktreePath: activePath,
+		Registered:   true,
+		Liveness: &ExecutionCleanupLiveness{
+			RefreshedAt: now,
+			ExpiresAt:   now.Add(time.Minute),
+		},
+	}, map[string]string{"scratch.txt": "active\n"})
+
+	staleScratch := filepath.Join(parent, "ddx-test-stale-scratch")
+	require.NoError(t, os.MkdirAll(staleScratch, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(staleScratch, "payload.txt"), []byte("stale\n"), 0o644))
+	old := now.Add(-48 * time.Hour)
+	require.NoError(t, os.Chtimes(staleScratch, old, old))
+
+	gitOps := &executionCleanupTestGitOps{worktrees: []string{activePath}}
+	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
+	mgr.TempRoot = tempRoot
+	mgr.ScratchRoots = []string{parent}
+	mgr.ScratchMinAge = time.Hour
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, activePath)
+	assert.NoFileExists(t, staleScratch)
+	assert.Empty(t, gitOps.removed)
+	assert.Equal(t, int64(0), summary.RemovedRegisteredWorktrees)
+	assert.Equal(t, int64(1), summary.RemovedScratchDirs)
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_live_attempt"))
+	assert.True(t, hasObservationClass(summary.Observations, "removed_scratch_dir"))
+}
+
+func TestExecutionCleanup_ReportsPreservedLiveAttempt(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	now := time.Date(2026, 5, 7, 21, 30, 0, 0, time.UTC)
+
+	activePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-report-live-20260507T213000-feedface")
+	writeExecutionCleanupCandidate(t, activePath, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-report-live",
+		AttemptID:    "20260507T213000-feedface",
+		WorktreePath: activePath,
+		Registered:   true,
+		Liveness: &ExecutionCleanupLiveness{
+			RefreshedAt: now,
+			ExpiresAt:   now.Add(time.Minute),
+		},
+	}, map[string]string{"scratch.txt": "active\n"})
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{worktrees: []string{activePath}})
+	mgr.TempRoot = tempRoot
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	require.True(t, hasObservationClass(summary.Observations, "preserved_live_attempt"))
+	var message string
+	for _, obs := range summary.Observations {
+		if obs.Class == "preserved_live_attempt" {
+			message = obs.Message
+			break
+		}
+	}
+	assert.Equal(t, "unexpired liveness", message)
+}
+
 func TestExecutionCleanup_ReportsSummary(t *testing.T) {
 	projectRoot := setupExecutionCleanupProjectRoot(t)
 	tempRoot := t.TempDir()
@@ -556,4 +736,14 @@ func hasObservationClass(observations []ExecutionCleanupObservation, class strin
 		}
 	}
 	return false
+}
+
+func countObservationClass(observations []ExecutionCleanupObservation, class string) int {
+	count := 0
+	for _, obs := range observations {
+		if obs.Class == class {
+			count++
+		}
+	}
+	return count
 }
