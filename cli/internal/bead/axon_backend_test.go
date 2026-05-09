@@ -353,15 +353,25 @@ func TestAxonBackend_ListReadyBlocked(t *testing.T) {
 	a := &Bead{Title: "a"}
 	b := &Bead{Title: "b"}
 	c := &Bead{Title: "c"}
+	blockedStatus := &Bead{Title: "blocked status", Status: StatusBlocked}
+	proposedStatus := &Bead{Title: "proposed status", Status: StatusProposed}
+	cancelledStatus := &Bead{Title: "cancelled status", Status: StatusCancelled}
 	require.NoError(t, s.Create(a))
 	require.NoError(t, s.Create(b))
 	require.NoError(t, s.Create(c))
+	require.NoError(t, s.Create(blockedStatus))
+	require.NoError(t, s.Create(proposedStatus))
+	require.NoError(t, s.Create(cancelledStatus))
 	// b depends on a; c depends on a closed-bead-to-be.
 	require.NoError(t, s.DepAdd(b.ID, a.ID))
 
 	all, err := s.List("", "", nil)
 	require.NoError(t, err)
-	assert.Len(t, all, 3)
+	assert.Len(t, all, 6)
+	byID := beadByID(all)
+	assert.Equal(t, StatusBlocked, byID[blockedStatus.ID].Status)
+	assert.Equal(t, StatusProposed, byID[proposedStatus.ID].Status)
+	assert.Equal(t, StatusCancelled, byID[cancelledStatus.ID].Status)
 
 	ready, err := s.Ready()
 	require.NoError(t, err)
@@ -553,6 +563,14 @@ func beadIDSet(beads []Bead) map[string]bool {
 	out := make(map[string]bool, len(beads))
 	for _, b := range beads {
 		out[b.ID] = true
+	}
+	return out
+}
+
+func beadByID(beads []Bead) map[string]Bead {
+	out := make(map[string]Bead, len(beads))
+	for _, b := range beads {
+		out[b.ID] = b
 	}
 	return out
 }

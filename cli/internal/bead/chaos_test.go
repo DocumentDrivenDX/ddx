@@ -109,7 +109,7 @@ func TestChaos_ConcurrentAppendSafety(t *testing.T) {
 		for _, b := range beads {
 			assert.NotEmpty(t, b.ID, "bead ID must not be empty")
 			assert.NotEmpty(t, b.Title, "bead title must not be empty")
-			assert.Contains(t, []string{StatusOpen, StatusInProgress, StatusClosed}, b.Status,
+			assert.Contains(t, allLifecycleStatusesForTests(), b.Status,
 				"bead %s has invalid status %q", b.ID, b.Status)
 		}
 	})
@@ -127,7 +127,7 @@ func TestChaos_AtomicStatusTransitions(t *testing.T) {
 		const goroutines = 5
 		const iterations = 20
 
-		statuses := []string{StatusOpen, StatusInProgress, StatusClosed}
+		statuses := allLifecycleStatusesForTests()
 		var wg sync.WaitGroup
 
 		for g := 0; g < goroutines; g++ {
@@ -152,7 +152,7 @@ func TestChaos_AtomicStatusTransitions(t *testing.T) {
 		// Bead must still exist with a valid status
 		got, err := s.Get(id)
 		require.NoError(t, err, "bead must be readable after concurrent status updates")
-		assert.Contains(t, []string{StatusOpen, StatusInProgress, StatusClosed}, got.Status,
+		assert.Contains(t, allLifecycleStatusesForTests(), got.Status,
 			"bead must have a valid status after concurrent updates")
 
 		// Store must be parseable end-to-end

@@ -11,8 +11,8 @@ package bead
 //  2. TestStatusLiteralAudit — every persisted-status assignment to a
 //     bead.Bead.Status field anywhere under cli/internal/ must use a
 //     literal in CanonicalStatuses (or, preferably, the typed StatusXxx
-//     constant). Catches drift like writing "needs_investigation" as a
-//     status string instead of using a label.
+//     constant). Catches drift like writing "needs_investigation" as an
+//     active persisted status instead of migration metadata or an event.
 //  3. TestTDDocMatchesSchemaEnum — the persisted-status enumeration block
 //     in docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md
 //     §2 must equal the schema enum. Forces TD amendment when schema
@@ -235,7 +235,7 @@ func TestStatusLiteralAudit(t *testing.T) {
 		b.WriteString("Allowed values are bead.CanonicalStatuses: ")
 		b.WriteString(strings.Join(canonicalSorted(), ", "))
 		b.WriteString("\nUse the typed constants (bead.StatusOpen, bead.StatusInProgress, ...) where possible. ")
-		b.WriteString("If you intended to mark execution sub-state (e.g. needs_investigation), encode it as a label or event, not as a persisted status — see TD-031.")
+		b.WriteString("If you intended to preserve a legacy execution sub-state (e.g. needs_investigation), route it through lifecycle migration metadata or an event, not an active persisted status — see TD-031.")
 		t.Fatal(b.String())
 	}
 }

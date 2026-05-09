@@ -72,7 +72,7 @@ func TestChaos_MixedConcurrentOps(t *testing.T) {
 		beads, err := s.ReadAll()
 		require.NoError(t, err, "ReadAll must succeed after mixed concurrent ops")
 
-		validStatuses := []string{StatusOpen, StatusInProgress, StatusClosed}
+		validStatuses := allLifecycleStatusesForTests()
 
 		seen := make(map[string]int)
 		for _, b := range beads {
@@ -344,7 +344,7 @@ func TestChaos_ImpossibleTransitionsNeverPersist(t *testing.T) {
 		// After all failed updates the bead must still have a valid status.
 		got, err := s.Get(id)
 		require.NoError(t, err)
-		assert.Contains(t, []string{StatusOpen, StatusInProgress, StatusClosed}, got.Status,
+		assert.Contains(t, allLifecycleStatusesForTests(), got.Status,
 			"bead must have valid status after rejected invalid-status updates")
 	})
 }

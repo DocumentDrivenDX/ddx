@@ -102,7 +102,7 @@ func TestProperty_OneRowPerID(t *testing.T) {
 	}
 
 	// Perform random updates.
-	statuses := []string{StatusOpen, StatusInProgress, StatusClosed}
+	statuses := allLifecycleStatusesForTests()
 	for round := 0; round < 50; round++ {
 		id := ids[rng.Intn(len(ids))]
 		next := statuses[rng.Intn(len(statuses))]
@@ -135,7 +135,7 @@ func TestProperty_StatusMustBeValid(t *testing.T) {
 	require.NoError(t, s.Create(b))
 	id := b.ID
 
-	validStatuses := []string{StatusOpen, StatusInProgress, StatusClosed}
+	validStatuses := allLifecycleStatusesForTests()
 
 	// Attempt to set invalid status via Update — should be rejected.
 	err := s.Update(id, func(b *Bead) {
@@ -176,7 +176,7 @@ func TestProperty_ClaimStateMachine(t *testing.T) {
 	require.NoError(t, s.Create(b))
 	id := b.ID
 
-	validStatuses := []string{StatusOpen, StatusInProgress, StatusClosed}
+	validStatuses := allLifecycleStatusesForTests()
 
 	for step := 0; step < 200; step++ {
 		// Read current status before deciding the operation.
@@ -534,7 +534,7 @@ func TestProperty_RandomizedOpStream(t *testing.T) {
 	s := newTestStore(t)
 
 	var liveIDs []string
-	validStatuses := []string{StatusOpen, StatusInProgress, StatusClosed}
+	validStatuses := allLifecycleStatusesForTests()
 
 	type op struct {
 		name string

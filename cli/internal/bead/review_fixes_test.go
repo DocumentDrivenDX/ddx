@@ -134,7 +134,7 @@ func TestExportToWriter(t *testing.T) {
 
 // ── Finding #2: Import validates status/priority ────────────────────
 
-func TestImportNormalizesInvalidStatus(t *testing.T) {
+func TestImportRejectsInvalidStatus(t *testing.T) {
 	s := newTestStore(t)
 
 	importFile := filepath.Join(t.TempDir(), "import.jsonl")
@@ -142,12 +142,12 @@ func TestImportNormalizesInvalidStatus(t *testing.T) {
 	require.NoError(t, os.WriteFile(importFile, []byte(jsonl), 0o644))
 
 	n, err := s.Import("jsonl", importFile)
-	require.NoError(t, err)
-	assert.Equal(t, 1, n)
+	require.Error(t, err)
+	assert.Equal(t, 0, n)
+	assert.Contains(t, err.Error(), "invalid lifecycle status")
 
-	got, err := s.Get("bx-bad00001")
-	require.NoError(t, err)
-	assert.Equal(t, StatusOpen, got.Status) // normalized
+	_, err = s.Get("bx-bad00001")
+	require.Error(t, err)
 }
 
 func TestImportClampsPriority(t *testing.T) {

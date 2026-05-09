@@ -1,8 +1,10 @@
 package bead
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,6 +27,49 @@ func TestImportJSONL(t *testing.T) {
 	beads, err := s.ReadAll()
 	require.NoError(t, err)
 	assert.Len(t, beads, 2)
+}
+
+func TestImportPreservesAllLifecycleStatuses(t *testing.T) {
+	s := newTestStore(t)
+
+	importFile := filepath.Join(t.TempDir(), "import.jsonl")
+	var lines []string
+	for i, status := range CanonicalStatuses {
+		lines = append(lines, fmt.Sprintf(`{"id":"bx-status%02d","title":"%s status","type":"task","status":"%s","priority":2,"labels":[],"deps":[],"created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}`, i, status, status))
+	}
+	require.NoError(t, os.WriteFile(importFile, []byte(strings.Join(lines, "\n")), 0o644))
+
+	n, err := s.Import("jsonl", importFile)
+	require.NoError(t, err)
+	assert.Equal(t, len(CanonicalStatuses), n)
+
+	for i, status := range CanonicalStatuses {
+		got, err := s.Get(fmt.Sprintf("bx-status%02d", i))
+		require.NoError(t, err)
+		assert.Equal(t, status, got.Status)
+	}
+}
+
+func TestImportRejectsLegacyPseudoStatusesOutsideLifecycleMigrator(t *testing.T) {
+	for _, pseudoStatus := range []string{"needs_human", "needs_investigation"} {
+		t.Run(pseudoStatus, func(t *testing.T) {
+			s := newTestStore(t)
+
+			importFile := filepath.Join(t.TempDir(), "import.jsonl")
+			jsonl := fmt.Sprintf(`{"id":"bx-legacy01","title":"Legacy status","type":"task","status":"%s","priority":2,"labels":[],"deps":[],"created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}`, pseudoStatus)
+			require.NoError(t, os.WriteFile(importFile, []byte(jsonl), 0o644))
+
+			n, err := s.Import("jsonl", importFile)
+			require.Error(t, err)
+			assert.Equal(t, 0, n)
+			assert.Contains(t, err.Error(), pseudoStatus)
+			assert.Contains(t, err.Error(), "ddx bead migrate --lifecycle")
+
+			beads, readErr := s.ReadAll()
+			require.NoError(t, readErr)
+			assert.Empty(t, beads)
+		})
+	}
 }
 
 func TestImportSkipsDuplicates(t *testing.T) {

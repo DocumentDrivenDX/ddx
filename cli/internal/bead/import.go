@@ -258,9 +258,14 @@ func (s *Store) mergeBeads(incoming []Bead) (int, error) {
 			if existingIDs[b.ID] {
 				continue // skip duplicates
 			}
-			// Normalize: ensure valid status
-			if b.Status != StatusOpen && b.Status != StatusInProgress && b.Status != StatusClosed {
-				b.Status = StatusOpen
+			if !IsCanonicalStatus(b.Status) {
+				return fmt.Errorf("bead: import %s has invalid lifecycle status %q; run `ddx bead migrate --lifecycle` before importing legacy pseudo-status records", b.ID, b.Status)
+			}
+		}
+
+		for _, b := range incoming {
+			if existingIDs[b.ID] {
+				continue // skip duplicates
 			}
 			// Clamp priority
 			if b.Priority < MinPriority {
