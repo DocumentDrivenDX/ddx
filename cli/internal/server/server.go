@@ -1,6 +1,7 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/ecdsa"
 	"crypto/elliptic"
@@ -2274,25 +2275,14 @@ func (s *Server) handleAgentDispatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		Harness string `json:"harness"`
-		Prompt  string `json:"prompt"`
-		Model   string `json:"model"`
-		Effort  string `json:"effort"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+	var req agent.AgentRunDispatchSpec
+	dec := json.NewDecoder(r.Body)
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": fmt.Sprintf("invalid request body: %v", err)})
 		return
 	}
-	if req.Harness == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "harness is required"})
-		return
-	}
-	if req.Prompt == "" {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "prompt is required"})
-		return
-	}
-	if observed := len([]byte(req.Prompt)); observed > serverPromptCapBytes {
+	if observed := len([]byte(req.InlinePrompt())); observed > serverPromptCapBytes {
 		writeJSON(w, http.StatusRequestEntityTooLarge, map[string]any{
 			"error":          fmt.Sprintf("inline prompt body exceeds cap: observed %d bytes, cap %d bytes", observed, serverPromptCapBytes),
 			"observed_bytes": observed,
@@ -2303,16 +2293,13 @@ func (s *Server) handleAgentDispatch(w http.ResponseWriter, r *http.Request) {
 	}
 
 	workDir := s.workingDirForRequest(r)
-	rcfg, _ := config.LoadAndResolve(workDir, config.CLIOverrides{
-		Harness: req.Harness,
-		Model:   req.Model,
-		Effort:  req.Effort,
-	})
-	runtime := agent.AgentRunRuntime{
-		Prompt:  req.Prompt,
-		WorkDir: workDir,
+	prepared, err := agent.PrepareAgentRunDispatch(workDir, req)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
 	}
-	result, err := agent.RunWithConfigViaService(r.Context(), workDir, rcfg, runtime)
+	rcfg, _ := config.LoadAndResolve(workDir, prepared.Overrides)
+	result, err := agent.RunWithConfigViaService(r.Context(), workDir, rcfg, prepared.Runtime)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
@@ -3487,13 +3474,19 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"harness": map[string]any{"type": "string", "description": "Agent harness name (codex, claude, gemini)"},
-					"prompt":  map[string]any{"type": "string", "description": "Prompt text"},
-					"model":   map[string]any{"type": "string", "description": "Model override"},
-					"effort":  map[string]any{"type": "string", "description": "Effort/reasoning level"},
-					"project": projectProp,
+					"harness":       map[string]any{"type": "string", "description": "Agent harness name (codex, claude, gemini)"},
+					"prompt":        map[string]any{"type": "string", "description": "Prompt text (legacy alias for inline text)"},
+					"text":          map[string]any{"type": "string", "description": "Inline prompt text"},
+					"prompt_file":   map[string]any{"type": "string", "description": "Prompt file path"},
+					"prompt_source": map[string]any{"type": "string", "description": "Prompt source label"},
+					"model":         map[string]any{"type": "string", "description": "Model override"},
+					"profile":       map[string]any{"type": "string", "description": "Routing profile hint"},
+					"effort":        map[string]any{"type": "string", "description": "Effort/reasoning level"},
+					"permissions":   map[string]any{"type": "string", "description": "Permission level override"},
+					"timeout":       map[string]any{"type": "string", "description": "Timeout duration (for example, 30s or 5m)"},
+					"project":       projectProp,
 				},
-				"required": []string{"harness", "prompt"},
+				"required": []string{},
 			},
 		},
 		{
@@ -3848,11 +3841,11 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		if !isTrusted(r) {
 			return mcpToolResult{Content: []mcpContent{mcpText("forbidden: dispatch tools require trusted origin")}, IsError: true}
 		}
-		harness, _ := call.Arguments["harness"].(string)
-		prompt, _ := call.Arguments["prompt"].(string)
-		model, _ := call.Arguments["model"].(string)
-		effort, _ := call.Arguments["effort"].(string)
-		return s.mcpAgentDispatch(workingDir, harness, prompt, model, effort)
+		spec, err := agentRunDispatchSpecFromMCPArguments(call.Arguments)
+		if err != nil {
+			return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+		}
+		return s.mcpAgentDispatch(workingDir, spec)
 	case "ddx_doc_changed":
 		since, _ := call.Arguments["since"].(string)
 		return s.mcpDocChanged(workingDir, since)
@@ -4632,23 +4625,44 @@ func (s *Server) mcpExecDispatch(workingDir, id string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
-func (s *Server) mcpAgentDispatch(workingDir, harness, prompt, model, effort string) mcpToolResult {
-	if harness == "" {
-		return mcpToolResult{Content: []mcpContent{mcpText("harness is required")}, IsError: true}
+func agentRunDispatchSpecFromMCPArguments(args map[string]any) (agent.AgentRunDispatchSpec, error) {
+	filtered := make(map[string]any, len(args))
+	known := agent.AgentRunDispatchJSONFields()
+	for key, value := range args {
+		if key == "project" {
+			continue
+		}
+		if _, ok := known[key]; !ok {
+			return agent.AgentRunDispatchSpec{}, fmt.Errorf("unsupported agent run dispatch field %q", key)
+		}
+		filtered[key] = value
 	}
-	if prompt == "" {
-		return mcpToolResult{Content: []mcpContent{mcpText("prompt is required")}, IsError: true}
+	body, err := json.Marshal(filtered)
+	if err != nil {
+		return agent.AgentRunDispatchSpec{}, fmt.Errorf("invalid agent dispatch arguments: %w", err)
 	}
-	rcfg, _ := config.LoadAndResolve(workingDir, config.CLIOverrides{
-		Harness: harness,
-		Model:   model,
-		Effort:  effort,
-	})
-	runtime := agent.AgentRunRuntime{
-		Prompt:  prompt,
-		WorkDir: workingDir,
+	var spec agent.AgentRunDispatchSpec
+	dec := json.NewDecoder(bytes.NewReader(body))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(&spec); err != nil {
+		return agent.AgentRunDispatchSpec{}, fmt.Errorf("invalid agent dispatch arguments: %w", err)
 	}
-	result, err := agent.RunWithConfigViaService(context.Background(), workingDir, rcfg, runtime)
+	return spec, nil
+}
+
+func (s *Server) mcpAgentDispatch(workingDir string, spec agent.AgentRunDispatchSpec) mcpToolResult {
+	if observed := len([]byte(spec.InlinePrompt())); observed > serverPromptCapBytes {
+		return mcpToolResult{
+			Content: []mcpContent{mcpText(fmt.Sprintf("inline prompt body exceeds cap: observed %d bytes, cap %d bytes", observed, serverPromptCapBytes))},
+			IsError: true,
+		}
+	}
+	prepared, err := agent.PrepareAgentRunDispatch(workingDir, spec)
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
+	}
+	rcfg, _ := config.LoadAndResolve(workingDir, prepared.Overrides)
+	result, err := agent.RunWithConfigViaService(context.Background(), workingDir, rcfg, prepared.Runtime)
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText(err.Error())}, IsError: true}
 	}

@@ -3199,11 +3199,11 @@ func TestAgentDispatchLocalhostOnly(t *testing.T) {
 	}
 }
 
-func TestAgentDispatchMissingHarness(t *testing.T) {
+func TestAgentDispatchMissingPrompt(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
-	body := `{"prompt":"hello"}`
+	body := `{"profile":"smart"}`
 	req := httptest.NewRequest("POST", "/api/agent/run", strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
 	req.RemoteAddr = "127.0.0.1:12345"
@@ -3211,7 +3211,7 @@ func TestAgentDispatchMissingHarness(t *testing.T) {
 	srv.Handler().ServeHTTP(w, req)
 
 	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 for missing harness, got %d", w.Code)
+		t.Fatalf("expected 400 for missing prompt, got %d", w.Code)
 	}
 }
 
