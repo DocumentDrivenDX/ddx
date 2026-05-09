@@ -122,7 +122,7 @@ func approveReviewResult() *Result {
 	return &Result{
 		Harness:    "claude",
 		Model:      "claude-opus-4-6",
-		Output:     `{"schema_version":1,"verdict":"APPROVE","summary":"ok to land"}`,
+		Output:     `{"schema_version":1,"verdict":"APPROVE","summary":"ok to land","per_ac":[{"number":1,"item":"AC#1","grade":"pass","evidence":"candidate diff reviewed"}]}`,
 		DurationMS: 10,
 	}
 }
