@@ -256,6 +256,7 @@ func TestSubmitWithPreMergeChecks_DummyFailAbortsMerge(t *testing.T) {
 		"base_rev=" + r.baseSHA,
 		"result_rev=" + resultSHA,
 		"message=dummy-fail fixture: always blocks",
+		"output=dummy-fail fixture: always blocks",
 	} {
 		if !strings.Contains(failedBody, want) {
 			t.Fatalf("pre_merge_check_failed body missing %q; got %q", want, failedBody)

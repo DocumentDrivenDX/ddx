@@ -247,9 +247,13 @@ func preMergeCheckFailedEventBody(outcome *PreMergeChecksOutcome, r checks.Resul
 	}
 	if r.Message != "" {
 		lines = append(lines, "message="+eventExcerpt(r.Message))
+		lines = append(lines, "output="+eventExcerpt(r.Message))
 	}
 	if r.Stderr != "" {
 		lines = append(lines, "stderr_tail="+eventExcerpt(r.Stderr))
+		if r.Message == "" {
+			lines = append(lines, "output="+eventExcerpt(r.Stderr))
+		}
 	}
 	if len(r.Violations) > 0 {
 		lines = append(lines, fmt.Sprintf("violations=%d", len(r.Violations)))
