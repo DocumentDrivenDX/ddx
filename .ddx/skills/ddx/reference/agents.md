@@ -42,27 +42,27 @@ normal work path or infer route selection from a catalog.
 allowed only as passthrough constraints:
 
 ```bash
-ddx run --min-power 10 --model qwen3.6-27b --prompt task.md
+ddx run --min-power 10 --model qwen36 --prompt task.md
 ```
 
 DDx sends these values to Fizeau unchanged. DDx does not validate them,
 score them, use them for queue policy, rewrite them on retry, or use them as a
 fallback mechanism. Fizeau owns any fuzzy matching, alias resolution, provider
 fallback, or typed error for those raw strings. DDx stops on hard-pin
-exhaustion; it does not remove pins, widen pins, call `ResolveRoute`, or retry
-in a loop.
+exhaustion; it does not remove pins, widen pins, call route-selection helpers,
+or retry in a loop.
 
 ## Execution layering
 
 The intended command layering is:
 
 - `ddx run` — one Fizeau `Execute` call with requested `MinPower`/`MaxPower`.
-  No `ResolveRoute`.
+  No route-selection helper.
 - `ddx try <bead>` — one bead attempt layered over `run`.
 - `ddx work` — queue drain and retry policy layered over `try`.
 
-`ResolveRoute` is status/debug-only. Do not use it in `run`, `try`, or `work`,
-and never feed a `RouteDecision` back into `Execute`.
+Route diagnostics are status/debug-only. Do not use diagnostic route decisions
+in `run`, `try`, or `work`, and never feed one back into `Execute`.
 
 ## Personas
 
@@ -164,7 +164,7 @@ See the personas README for the authoring quality bar.
 ddx run --min-power 10 --prompt task.md
 ddx run --top-power --prompt task.md
 ddx run --min-power 10 --max-power 20 --prompt task.md
-ddx run --min-power 10 --provider openrouter --model qwen3.6-27b --model-ref qwen/qwen3.6-27b --profile default --prompt task.md
+ddx run --min-power 10 --provider openrouter --model qwen36 --model-ref qwen/qwen3.6-27b --profile default --prompt task.md
 ddx run --persona code-reviewer --prompt review.md
 
 # Introspection
