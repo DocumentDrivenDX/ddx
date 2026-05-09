@@ -347,6 +347,7 @@ func ApplyLandingToResult(res *ExecuteBeadResult, landing *BeadLandingResult) {
 	// the field; merge conflict or gate failure overrides the worker-level
 	// classification; other preserved outcomes keep the worker's mode.
 	res.FailureMode = classifyLandingFailureMode(landing.Outcome, landing.Reason, landing.GateResults, res.FailureMode)
+	res.OrchestratorStatus = res.Status
 }
 
 // ExtractGoverningIDsFromManifest reads governing artifact IDs from a manifest

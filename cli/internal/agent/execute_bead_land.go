@@ -1716,9 +1716,14 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 	if land.Status == "preserved" {
 		// Route preserve reasons through the land-conflict classifier so the
 		// loop sees land_conflict (not generic success).
-		reasonForStatus = "merge conflict"
+		if strings.HasPrefix(res.Reason, PreMergeChecksReason) {
+			reasonForStatus = res.Reason
+		} else {
+			reasonForStatus = "merge conflict"
+		}
 	}
 	res.Status = ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, reasonForStatus)
+	res.OrchestratorStatus = res.Status
 	res.Detail = ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
 }
 

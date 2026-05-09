@@ -235,14 +235,14 @@ func classifyLandingFailureMode(landingOutcome, landingReason string, gateResult
 		}
 		return FailureModeUnknown
 	case "preserved":
-		switch landingReason {
-		case "merge conflict", "merge failed", "ff-merge not possible":
+		switch {
+		case landingReason == "merge conflict" || landingReason == "merge failed" || landingReason == "ff-merge not possible":
 			return FailureModeMergeConflict
-		case "post-run checks failed":
+		case landingReason == "post-run checks failed", strings.HasPrefix(landingReason, PreMergeChecksReason):
 			return classifyGateFailure(gateResults)
-		case RatchetPreserveReason:
+		case landingReason == RatchetPreserveReason:
 			return FailureModeRatchetMiss
-		case OperatorCancelReason:
+		case landingReason == OperatorCancelReason:
 			return ""
 		}
 		// Other preserved reasons (e.g. "agent execution failed",
@@ -397,23 +397,22 @@ func ClassifyExecuteBeadStatus(outcome string, exitCode int, reason string) stri
 	case "error":
 		return ExecuteBeadStatusExecutionFailed
 	case "preserved":
-		switch reason {
-		case "merge conflict", "merge failed", "ff-merge not possible":
+		switch {
+		case reason == "merge conflict" || reason == "merge failed" || reason == "ff-merge not possible":
 			return ExecuteBeadStatusLandConflict
-		case "post-run checks failed":
+		case reason == "post-run checks failed", strings.HasPrefix(reason, PreMergeChecksReason):
 			return ExecuteBeadStatusPostRunCheckFailed
-		case RatchetPreserveReason:
+		case reason == RatchetPreserveReason:
 			return ExecuteBeadStatusRatchetFailed
-		case OperatorCancelReason:
+		case reason == OperatorCancelReason:
 			return ExecuteBeadStatusPreservedNeedsReview
-		default:
-			if isPreservedNeedsReviewReason(reason) {
-				return ExecuteBeadStatusPreservedNeedsReview
-			}
-			// Preserved iterations may still be success when the caller
-			// explicitly requested no merge.
-			return ExecuteBeadStatusSuccess
 		}
+		if isPreservedNeedsReviewReason(reason) {
+			return ExecuteBeadStatusPreservedNeedsReview
+		}
+		// Preserved iterations may still be success when the caller
+		// explicitly requested no merge.
+		return ExecuteBeadStatusSuccess
 	case ExecuteBeadOutcomeTaskSucceeded:
 		return ExecuteBeadStatusSuccess
 	case ExecuteBeadOutcomeTaskFailed:

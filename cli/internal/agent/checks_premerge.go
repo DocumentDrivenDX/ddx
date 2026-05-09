@@ -49,6 +49,11 @@ type PreMergeChecksOutcome struct {
 	// EvidenceDir is the absolute directory where per-check JSON result files
 	// were written (the directory the checks runner used as EVIDENCE_DIR).
 	EvidenceDir string
+	// AttemptID/BaseRev/ResultRev identify the worker attempt whose candidate
+	// was evaluated.
+	AttemptID string
+	BaseRev   string
+	ResultRev string
 }
 
 // RunPreMergeChecks loads all .ddx/checks/*.yaml definitions for the project,
@@ -131,6 +136,9 @@ func RunPreMergeChecks(ctx context.Context, projectRoot string, b *bead.Bead, ba
 		Results:     results,
 		Bypassed:    honouredBypass,
 		EvidenceDir: checksEvidence,
+		AttemptID:   filepath.Base(evidenceDir),
+		BaseRev:     baseRev,
+		ResultRev:   resultRev,
 	}
 	for _, r := range results {
 		if r.Status == checks.StatusBlock || r.Status == checks.StatusError {
@@ -152,8 +160,9 @@ func RunPreMergeChecks(ctx context.Context, projectRoot string, b *bead.Bead, ba
 const PreMergeChecksReason = "pre-merge checks blocked"
 
 // AppendPreMergeChecksEvents records one bead event per honoured bypass
-// (kind=checks-bypass) and, when blocked, one event per blocking check
-// (kind=checks-blocked). Best-effort: append failures are returned as the
+// (kind=checks-bypass) and, when blocked, both the compatibility
+// checks-blocked event plus a structured pre_merge_check_failed evidence event
+// for each blocking check. Best-effort: append failures are returned as the
 // first error encountered so callers can decide whether to surface or log.
 //
 // actor and source are forwarded onto every appended event so the audit
@@ -200,9 +209,61 @@ func AppendPreMergeChecksEvents(store BeadEventAppender, beadID string, outcome 
 			if err := store.AppendEvent(beadID, ev); err != nil && firstErr == nil {
 				firstErr = err
 			}
+			evidence := bead.BeadEvent{
+				Kind:      "pre_merge_check_failed",
+				Summary:   fmt.Sprintf("%s check=%s status=%s", PreMergeChecksReason, r.Name, r.Status),
+				Body:      preMergeCheckFailedEventBody(outcome, r),
+				Actor:     actor,
+				Source:    source,
+				CreatedAt: now,
+			}
+			if err := store.AppendEvent(beadID, evidence); err != nil && firstErr == nil {
+				firstErr = err
+			}
 		}
 	}
 	return firstErr
+}
+
+func preMergeCheckFailedEventBody(outcome *PreMergeChecksOutcome, r checks.Result) string {
+	lines := []string{
+		"check_name=" + r.Name,
+		"status=" + string(r.Status),
+		fmt.Sprintf("exit_code=%d", r.ExitCode),
+	}
+	if outcome != nil {
+		if outcome.AttemptID != "" {
+			lines = append(lines, "attempt_id="+outcome.AttemptID)
+		}
+		if outcome.BaseRev != "" {
+			lines = append(lines, "base_rev="+outcome.BaseRev)
+		}
+		if outcome.ResultRev != "" {
+			lines = append(lines, "result_rev="+outcome.ResultRev)
+		}
+		if outcome.EvidenceDir != "" {
+			lines = append(lines, "evidence_dir="+filepath.ToSlash(outcome.EvidenceDir))
+		}
+	}
+	if r.Message != "" {
+		lines = append(lines, "message="+eventExcerpt(r.Message))
+	}
+	if r.Stderr != "" {
+		lines = append(lines, "stderr_tail="+eventExcerpt(r.Stderr))
+	}
+	if len(r.Violations) > 0 {
+		lines = append(lines, fmt.Sprintf("violations=%d", len(r.Violations)))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func eventExcerpt(s string) string {
+	const limit = 2000
+	s = strings.TrimSpace(s)
+	if len(s) <= limit {
+		return s
+	}
+	return s[len(s)-limit:]
 }
 
 // PreserveAfterPreMergeChecks is the canonical preservation step invoked when

@@ -52,6 +52,7 @@ func MarkResultLandError(projectRoot string, res *ExecuteBeadResult, err error) 
 	res.Reason = reason
 	res.Error = err.Error()
 	res.Status = ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
+	res.OrchestratorStatus = res.Status
 	res.Detail = ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
 	res.FailureMode = classifyLandingFailureMode(res.Outcome, res.Reason, res.GateResults, res.FailureMode)
 }

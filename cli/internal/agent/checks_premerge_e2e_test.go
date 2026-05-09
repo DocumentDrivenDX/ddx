@@ -15,6 +15,7 @@ package agent
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -170,6 +171,9 @@ func TestSubmitWithPreMergeChecks_DummyFailAbortsMerge(t *testing.T) {
 		BaseRev:      r.baseSHA,
 		ResultRev:    resultSHA,
 		ExecutionDir: filepath.Join(".ddx", "executions", runID),
+		Outcome:      ExecuteBeadOutcomeTaskSucceeded,
+		Status:       ExecuteBeadStatusSuccess,
+		ExitCode:     0,
 	}
 
 	submitCalled := false
@@ -232,6 +236,65 @@ func TestSubmitWithPreMergeChecks_DummyFailAbortsMerge(t *testing.T) {
 	}
 	if !strings.Contains(blockedEvents[0].Body, "name=dummy-fail") {
 		t.Fatalf("checks-blocked event body should name dummy-fail; got %q", blockedEvents[0].Body)
+	}
+
+	var failedEvents []bead.BeadEvent
+	for _, e := range evs {
+		if e.Kind == "pre_merge_check_failed" {
+			failedEvents = append(failedEvents, e)
+		}
+	}
+	if len(failedEvents) != 1 {
+		t.Fatalf("expected exactly one pre_merge_check_failed event; got %d (events=%+v)", len(failedEvents), evs)
+	}
+	failedBody := failedEvents[0].Body
+	for _, want := range []string{
+		"check_name=dummy-fail",
+		"status=block",
+		"exit_code=0",
+		"attempt_id=" + runID,
+		"base_rev=" + r.baseSHA,
+		"result_rev=" + resultSHA,
+		"message=dummy-fail fixture: always blocks",
+	} {
+		if !strings.Contains(failedBody, want) {
+			t.Fatalf("pre_merge_check_failed body missing %q; got %q", want, failedBody)
+		}
+	}
+
+	ApplyLandResultToExecuteBeadResult(res, land)
+	if res.Status != ExecuteBeadStatusPostRunCheckFailed {
+		t.Fatalf("final status = %q, want %q", res.Status, ExecuteBeadStatusPostRunCheckFailed)
+	}
+	if err := WriteExecuteBeadResultArtifact(r.dir, res); err != nil {
+		t.Fatalf("WriteExecuteBeadResultArtifact: %v", err)
+	}
+	resultPath := filepath.Join(r.dir, res.ExecutionDir, "result.json")
+	rawResult, readResultErr := os.ReadFile(resultPath)
+	if readResultErr != nil {
+		t.Fatalf("read final result.json: %v", readResultErr)
+	}
+	var resultJSON struct {
+		Outcome            string `json:"outcome"`
+		Status             string `json:"status"`
+		OrchestratorStatus string `json:"orchestrator_status"`
+		Reason             string `json:"reason"`
+		PreserveRef        string `json:"preserve_ref"`
+	}
+	if err := json.Unmarshal(rawResult, &resultJSON); err != nil {
+		t.Fatalf("parse final result.json: %v", err)
+	}
+	if resultJSON.Outcome != "preserved" {
+		t.Fatalf("result outcome = %q, want preserved", resultJSON.Outcome)
+	}
+	if resultJSON.Status != ExecuteBeadStatusPostRunCheckFailed || resultJSON.OrchestratorStatus != ExecuteBeadStatusPostRunCheckFailed {
+		t.Fatalf("result status/orchestrator_status = %q/%q, want %q", resultJSON.Status, resultJSON.OrchestratorStatus, ExecuteBeadStatusPostRunCheckFailed)
+	}
+	if !strings.HasPrefix(resultJSON.Reason, PreMergeChecksReason) {
+		t.Fatalf("result reason = %q, want %q prefix", resultJSON.Reason, PreMergeChecksReason)
+	}
+	if resultJSON.PreserveRef != land.PreserveRef {
+		t.Fatalf("result preserve_ref = %q, want %q", resultJSON.PreserveRef, land.PreserveRef)
 	}
 }
 

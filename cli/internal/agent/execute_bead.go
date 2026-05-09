@@ -54,6 +54,10 @@ type ExecuteBeadResult struct {
 	Outcome string `json:"outcome"`
 	Status  string `json:"status,omitempty"`
 	Detail  string `json:"detail,omitempty"`
+	// OrchestratorStatus is populated after the landing/pre-merge orchestration
+	// decision so result.json can distinguish worker success from final
+	// non-landing outcomes.
+	OrchestratorStatus string `json:"orchestrator_status,omitempty"`
 
 	// Landing fields — populated by ApplyLandingToResult, not by ExecuteBead.
 	Reason      string `json:"reason,omitempty"`
@@ -2295,4 +2299,28 @@ func writeArtifactJSON(path string, payload any) error {
 		return err
 	}
 	return os.WriteFile(path, data, 0o644)
+}
+
+// WriteExecuteBeadResultArtifact rewrites result.json in the project root with
+// the final worker/orchestrator result after landing or preservation. The
+// worker writes the initial task-level result inside the attempt worktree;
+// callers use this helper after ApplyLandResultToExecuteBeadResult so the
+// durable evidence bundle does not continue to report worker success when the
+// orchestrator preserved the candidate.
+func WriteExecuteBeadResultArtifact(projectRoot string, res *ExecuteBeadResult) error {
+	if res == nil {
+		return nil
+	}
+	resultFile := strings.TrimSpace(res.ResultFile)
+	if resultFile == "" && strings.TrimSpace(res.ExecutionDir) != "" {
+		resultFile = filepath.ToSlash(filepath.Join(res.ExecutionDir, "result.json"))
+	}
+	if resultFile == "" {
+		return nil
+	}
+	path := filepath.FromSlash(resultFile)
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(projectRoot, path)
+	}
+	return writeArtifactJSON(path, res)
 }
