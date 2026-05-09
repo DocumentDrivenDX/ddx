@@ -281,7 +281,7 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 				report.Status = ExecuteBeadStatusReviewBlock
 				report.Detail = "pre-land review: BLOCK"
 			}
-			if classification.Class == ReviewFindingClassMalfunction {
+			if verdict == VerdictBlock && classification.Class == ReviewFindingClassMalfunction {
 				report.Status = ExecuteBeadStatusReviewMalfunction
 				report.Detail = "pre-land review: " + ReviewFindingClassMalfunction
 			}
