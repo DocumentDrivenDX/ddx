@@ -1,10 +1,13 @@
 package escalation
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 )
+
+const triageTierHintKey = "triage.tier_hint"
 
 // InferTier returns a recommended ModelTier for a bead based on its metadata.
 // It inspects, in priority order: an explicit "tier:" label, the kind/priority
@@ -18,6 +21,9 @@ import (
 func InferTier(b *bead.Bead) ModelTier {
 	if b == nil {
 		return TierCheap
+	}
+	if tier, ok := triageTierHint(b); ok {
+		return tier
 	}
 
 	kindLabel := ""
@@ -78,6 +84,37 @@ func InferTier(b *bead.Bead) ModelTier {
 		return TierStandard
 	default:
 		return TierCheap
+	}
+}
+
+func triageTierHint(b *bead.Bead) (ModelTier, bool) {
+	if b == nil || b.Extra == nil {
+		return "", false
+	}
+	raw, ok := b.Extra[triageTierHintKey]
+	if !ok {
+		return "", false
+	}
+	return parseTierValue(fmt.Sprint(raw))
+}
+
+func parseTierValue(raw string) (ModelTier, bool) {
+	l := strings.ToLower(strings.TrimSpace(raw))
+	if l == "" {
+		return "", false
+	}
+	if strings.HasPrefix(l, "tier:") {
+		return parseTierLabel(l)
+	}
+	switch l {
+	case string(TierSmart):
+		return TierSmart, true
+	case string(TierStandard):
+		return TierStandard, true
+	case string(TierCheap):
+		return TierCheap, true
+	default:
+		return "", false
 	}
 }
 

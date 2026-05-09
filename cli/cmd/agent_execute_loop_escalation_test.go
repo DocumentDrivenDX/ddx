@@ -7,6 +7,8 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	tierescalation "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
 	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -174,4 +176,43 @@ func TestZeroConfigEscalationIntegration_RealLadderAdvancesMinPower(t *testing.T
 	require.NoError(t, err)
 	assert.Equal(t, agent.ExecuteBeadStatusSuccess, report.Status)
 	assert.Equal(t, []int{0, 70, 90}, requested, "the helper should invoke the attempt once per rung")
+}
+
+func TestInvestigationRetry_RequestsSmartRoute(t *testing.T) {
+	ladder := tierescalation.NewLadder([]agentlib.ModelInfo{
+		{Power: 50, Available: true, AutoRoutable: true},
+		{Power: 70, Available: true, AutoRoutable: false},
+		{Power: 90, Available: true, AutoRoutable: true},
+	})
+	target := &bead.Bead{
+		ID: "ddx-smart-retry",
+		Extra: map[string]any{
+			agent.TriageTierHintKey: string(policyescalation.TierSmart),
+		},
+	}
+
+	initialMinPower, unavailableReport, unavailable := investigationRetryInitialMinPower(target, 0, 0, ladder)
+	require.False(t, unavailable, "a viable smart retry route should not produce a routing-unavailable report")
+	assert.Empty(t, unavailableReport.Status)
+	assert.Equal(t, 90, initialMinPower, "smart investigation retry should start at the strongest viable abstract power floor")
+
+	var requested []int
+	report, err := runEscalatingSingleTierAttempts(
+		context.Background(),
+		initialMinPower,
+		ladder,
+		func(_ context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+			requested = append(requested, requestedMinPower)
+			return agent.ExecuteBeadReport{
+				BeadID:      target.ID,
+				ActualPower: requestedMinPower,
+				Status:      agent.ExecuteBeadStatusSuccess,
+				Detail:      "ok",
+			}, nil
+		},
+		nil,
+	)
+	require.NoError(t, err)
+	assert.Equal(t, agent.ExecuteBeadStatusSuccess, report.Status)
+	assert.Equal(t, []int{90}, requested, "the next attempt should receive only the raised MinPower floor")
 }

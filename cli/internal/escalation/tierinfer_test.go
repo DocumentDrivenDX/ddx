@@ -137,6 +137,18 @@ func TestInferTier_ExplicitTierLabelOverridesPriority(t *testing.T) {
 	}
 }
 
+func TestInferTier_UsesTriageTierHint(t *testing.T) {
+	b := &bead.Bead{
+		Labels: []string{"priority:low", "kind:chore"},
+		Extra: map[string]any{
+			triageTierHintKey: string(TierSmart),
+		},
+	}
+	if got := InferTier(b); got != TierSmart {
+		t.Fatalf("triage tier hint: want %q, got %q", TierSmart, got)
+	}
+}
+
 func TestInferTier_PriorityCritical(t *testing.T) {
 	b := &bead.Bead{Labels: []string{"priority:critical", "kind:chore"}}
 	if got := InferTier(b); got != TierSmart {

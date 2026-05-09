@@ -1762,9 +1762,17 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		Store:    store,
 		Reviewer: reviewer,
 		Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+			targetBead, err := store.Get(beadID)
+			if err != nil {
+				return agent.ExecuteBeadReport{}, err
+			}
+			initialMinPower, unavailableReport, unavailable := investigationRetryInitialMinPower(targetBead, rcfg.MinPower(), spec.MaxPower, loadLadder())
+			if unavailable {
+				return unavailableReport, nil
+			}
 			report, err := runEscalatingSingleTierAttempts(
 				ctx,
-				rcfg.MinPower(),
+				initialMinPower,
 				loadLadder(),
 				func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
 					return singleTierAttempt(ctx, beadID, requestedMinPower, spec.Harness, spec.Provider, spec.Model)
