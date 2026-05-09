@@ -116,7 +116,7 @@ func TestWorkWatchIdleStdout_PrintsQueueStatusAndHumanBlockers(t *testing.T) {
 	out := logBuf.String()
 	assert.Contains(t, out, "12:34:56 idle: no execution-ready beads; sleeping 30s")
 	assert.Contains(t, out, "queue: execution-ready=0")
-	assert.Contains(t, out, "operator-attention=1")
+	assert.Contains(t, out, "operator-attention=4") // 3 proposed blockers + 1 standalone proposed bead
 	assert.Contains(t, out, "needs-human/investigation=3")
 	assert.Contains(t, out, "cooldown/deferred=1")
 	assert.Contains(t, out, "next-retry=")
@@ -404,10 +404,14 @@ func seedWatchIdleQueue(t *testing.T, store *bead.Store) {
 			ID:       fmt.Sprintf("ddx-human-%d", i),
 			Title:    fmt.Sprintf("Needs human %d", i),
 			Priority: i,
-			Labels:   []string{bead.LabelNeedsHuman},
 		}
 		blocker.AddDep(upstream.ID, "blocks")
 		require.NoError(t, store.Create(blocker))
+		require.NoError(t, store.UpdateWithLifecycleStatus(blocker.ID, bead.StatusProposed, bead.LifecycleTransitionOptions{
+			OperatorRequired: true,
+			Reason:           "test fixture: operator attention required",
+			Source:           "test",
+		}, nil))
 
 		prevID := blocker.ID
 		for n := 1; n <= 10; n++ {
@@ -443,7 +447,9 @@ func seedWatchIdleQueue(t *testing.T, store *bead.Store) {
 
 	cooldown := &bead.Bead{ID: "ddx-cooldown", Title: "Retry later", Priority: 4}
 	require.NoError(t, store.Create(cooldown))
-	require.NoError(t, store.SetExecutionCooldown(cooldown.ID, fixedWatchStdoutTime().Add(time.Hour), ExecuteBeadStatusNoChanges, "retry later"))
+	// Use time.Now().Add so the cooldown is always in the future regardless of when
+	// the test runs relative to fixedWatchStdoutTime (which is a fixed past date).
+	require.NoError(t, store.SetExecutionCooldown(cooldown.ID, time.Now().Add(24*time.Hour), ExecuteBeadStatusNoChanges, "retry later"))
 
 	ordinaryEpic := &bead.Bead{ID: "ddx-epic-open", Title: "Open epic", IssueType: "epic", Priority: 4}
 	ordinaryEpicChild := &bead.Bead{ID: "ddx-epic-open-child", Title: "Open epic child", Parent: ordinaryEpic.ID, Priority: 4}
