@@ -9,6 +9,9 @@ import (
 )
 
 func TestHandleAgentModelsNoProviders(t *testing.T) {
+	if testing.Short() {
+		t.Skip("provider-probe test; runs only in non-short mode")
+	}
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
@@ -58,6 +61,9 @@ func TestHandleAgentCapabilitiesNoHarness(t *testing.T) {
 }
 
 func TestMCPAgentModels(t *testing.T) {
+	if testing.Short() {
+		t.Skip("provider-probe test; runs only in non-short mode")
+	}
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
@@ -117,6 +123,9 @@ func TestMCPAgentCapabilitiesNoHarness(t *testing.T) {
 }
 
 func TestMCPAgentModelsSingleProvider(t *testing.T) {
+	if testing.Short() {
+		t.Skip("provider-probe test; runs only in non-short mode")
+	}
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 

@@ -3417,6 +3417,9 @@ func TestMCPExecDispatchTrustedAllowed(t *testing.T) {
 }
 
 func TestMCPAgentDispatchTrustedAllowed(t *testing.T) {
+	if testing.Short() {
+		t.Skip("provider-probe test; runs only in non-short mode")
+	}
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
