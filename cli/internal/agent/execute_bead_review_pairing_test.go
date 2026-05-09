@@ -100,7 +100,7 @@ func reviewPairingTestSetup(t *testing.T) (projectRoot, head string, store *bead
 // reviewerOutputApprove is a canned reviewer JSON verdict used by the pairing
 // tests. The strict parser (ParseReviewVerdict) requires a single JSON object
 // inside a ```json``` fence; anything else returns review-error: unparseable.
-const reviewerOutputApprove = "```json\n{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}\n```"
+const reviewerOutputApprove = "```json\n{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\",\"per_ac\":[{\"number\":1,\"item\":\"AC one\",\"grade\":\"pass\",\"evidence\":\"reviewed cli/internal/agent\"}]}\n```"
 
 // TestReviewBead_HappyPath_DifferentProvider_NoDegradedEvent verifies that
 // when the reviewer's resolved provider differs from the implementer's, no

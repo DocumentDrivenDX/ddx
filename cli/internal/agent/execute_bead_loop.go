@@ -2525,6 +2525,7 @@ func ClassifyReviewError(reviewErr error, reviewRes *ReviewResult) string {
 // reviewErrorEventBody). The format is intentionally line-oriented so it
 // survives the AppendEvent body cap without losing the rev association.
 var reResultRevField = regexp.MustCompile(`(?m)^result_rev=([^\s]+)\s*$`)
+var reReviewerIndexField = regexp.MustCompile(`(?m)^reviewer_index=([0-9]+)\s*$`)
 
 // CountPriorReviewErrors returns the number of `review-error` events already
 // recorded against this bead whose body cites the given result_rev. This is
@@ -2554,6 +2555,37 @@ func CountPriorReviewErrors(store ExecuteBeadLoopStore, beadID, resultRev string
 	return n
 }
 
+// CountPriorReviewErrorsForSlot is the two-slot review-group retry counter.
+// It scopes retry budget to the candidate result_rev and reviewer slot so a
+// malformed/empty/transport failure in one slot does not consume the other
+// slot's retry allowance.
+func CountPriorReviewErrorsForSlot(store ExecuteBeadLoopStore, beadID, resultRev string, reviewerIndex int) int {
+	if resultRev == "" {
+		return 0
+	}
+	events, err := store.Events(beadID)
+	if err != nil {
+		return 0
+	}
+	wantIndex := fmt.Sprintf("%d", reviewerIndex)
+	n := 0
+	for _, ev := range events {
+		if ev.Kind != "review-error" {
+			continue
+		}
+		rev := reResultRevField.FindStringSubmatch(ev.Body)
+		if rev == nil || rev[1] != resultRev {
+			continue
+		}
+		idx := reReviewerIndexField.FindStringSubmatch(ev.Body)
+		if idx == nil || idx[1] != wantIndex {
+			continue
+		}
+		n++
+	}
+	return n
+}
+
 // ReviewErrorEventBody is the canonical body shape for review-error and
 // review-manual-required events. It carries the failure class, attempt count,
 // and result_rev as discrete lines so operators can grep without parsing the
@@ -2564,6 +2596,19 @@ func ReviewErrorEventBody(class string, attemptCount int, resultRev, message str
 	fmt.Fprintf(&b, "failure_class=%s\n", class)
 	fmt.Fprintf(&b, "attempt_count=%d\n", attemptCount)
 	fmt.Fprintf(&b, "result_rev=%s\n", resultRev)
+	if message != "" {
+		b.WriteString("\n")
+		b.WriteString(message)
+	}
+	return b.String()
+}
+
+func ReviewErrorEventBodyForSlot(class string, attemptCount int, resultRev string, reviewerIndex int, message string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "failure_class=%s\n", class)
+	fmt.Fprintf(&b, "attempt_count=%d\n", attemptCount)
+	fmt.Fprintf(&b, "result_rev=%s\n", resultRev)
+	fmt.Fprintf(&b, "reviewer_index=%d\n", reviewerIndex)
 	if message != "" {
 		b.WriteString("\n")
 		b.WriteString(message)

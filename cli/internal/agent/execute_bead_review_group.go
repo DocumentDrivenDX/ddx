@@ -16,14 +16,20 @@ import (
 // returns the structured reviewer results alongside the shared bundle
 // metadata. It does not change execute-loop close/block behavior.
 func (r *DefaultBeadReviewer) ReviewGroup(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewGroupResult, error) {
+	diff, err := r.gitShow(resultRev)
+	if err != nil {
+		return nil, fmt.Errorf("review-group: git show %s: %w", resultRev, err)
+	}
+	return r.reviewGroupWithDiff(ctx, beadID, resultRev, impl, diff, r.ProjectRoot)
+}
+
+func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, resultRev string, impl ImplementerRouting, diff, reviewWorkDir string) (*ReviewGroupResult, error) {
 	b, err := r.BeadStore.Get(beadID)
 	if err != nil {
 		return nil, fmt.Errorf("review-group: get bead %s: %w", beadID, err)
 	}
-
-	diff, err := r.gitShow(resultRev)
-	if err != nil {
-		return nil, fmt.Errorf("review-group: git show %s: %w", resultRev, err)
+	if reviewWorkDir == "" {
+		reviewWorkDir = r.ProjectRoot
 	}
 
 	refs := ResolveGoverningRefs(r.ProjectRoot, b)
@@ -59,6 +65,7 @@ func (r *DefaultBeadReviewer) ReviewGroup(ctx context.Context, beadID, resultRev
 		Slots: make([]ReviewGroupSlotResult, 0, 2),
 	}
 
+	var firstErr error
 	for reviewerIndex := 0; reviewerIndex < 2; reviewerIndex++ {
 		slotRuntime := BuildReviewGroupExecuteRequest(impl, reviewHarness, reviewProfile.Name, ReviewGroupDispatchMeta{
 			GroupID:       groupID,
@@ -69,7 +76,7 @@ func (r *DefaultBeadReviewer) ReviewGroup(ctx context.Context, beadID, resultRev
 		}
 		reviewRouteLabel := r.applyExplicitReviewerPins(&slotRuntime)
 		slotRuntime.PromptFile = artifacts.PromptAbs
-		slotRuntime.WorkDir = r.ProjectRoot
+		slotRuntime.WorkDir = reviewWorkDir
 
 		slotResult, slotErr := r.reviewGroupSlot(ctx, b, impl, resultRev, built, artifacts, reviewHarness, reviewRouteLabel, slotRuntime, caps.MaxPromptBytes)
 		slot := ReviewGroupSlotResult{
@@ -77,18 +84,19 @@ func (r *DefaultBeadReviewer) ReviewGroup(ctx context.Context, beadID, resultRev
 			Runtime:       slotRuntime,
 		}
 		if slotResult != nil {
+			slotResult.ReviewerIndex = reviewerIndex
 			slot.Result = slotResult
 		}
 		if slotErr != nil {
 			slot.Error = slotErr.Error()
+			if firstErr == nil {
+				firstErr = slotErr
+			}
 		}
 		out.Slots = append(out.Slots, slot)
-		if slotErr != nil {
-			return out, slotErr
-		}
 	}
 
-	return out, nil
+	return out, firstErr
 }
 
 func (r *DefaultBeadReviewer) reviewGroupSlot(ctx context.Context, b *bead.Bead, impl ImplementerRouting, resultRev string, built BuildReviewPromptResult, artifacts *executeBeadArtifacts, reviewHarness, reviewModel string, runtime AgentRunRuntime, maxPromptBytes int) (*ReviewResult, error) {
@@ -181,6 +189,7 @@ func (r *DefaultBeadReviewer) reviewGroupSlot(ctx context.Context, b *bead.Bead,
 	reviewRes := &ReviewResult{
 		Verdict:          strictVerdict,
 		Rationale:        rationale,
+		PerAC:            parsed.PerAC,
 		Findings:         findings,
 		ProseFindings:    parsed.ProseFindings,
 		RawOutput:        output,

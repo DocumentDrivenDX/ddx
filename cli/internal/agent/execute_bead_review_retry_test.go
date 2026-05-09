@@ -298,3 +298,87 @@ func TestBoundedReviewRetry_RespectsConfiguredOverride(t *testing.T) {
 	assert.Equal(t, 1, manual,
 		"with ReviewMaxRetries=1, the first reviewer failure must escalate immediately")
 }
+
+func TestTwoSlotReview_PerSlotRetryBudget(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	const resultRev = "slot-retry-rev"
+	require.NoError(t, store.AppendEvent(first.ID, bead.BeadEvent{
+		Kind:    "review-error",
+		Summary: evidence.OutcomeReviewProviderEmpty,
+		Body:    ReviewErrorEventBodyForSlot(evidence.OutcomeReviewProviderEmpty, 1, resultRev, 0, "prior slot 0 failure"),
+		Actor:   "worker",
+		Source:  "ddx agent execute-loop",
+	}))
+
+	reviewer := beadReviewGroupFunc(func(_ context.Context, beadID, gotRev string, _ ImplementerRouting) (*ReviewGroupResult, error) {
+		slot0 := &ReviewResult{
+			Verdict:         VerdictApprove,
+			ReviewerHarness: "claude",
+			ReviewerModel:   "claude-opus-4-6",
+			ResultRev:       gotRev,
+			PerAC: []ReviewAC{
+				{Number: 1, Item: "AC#1", Evidence: "slot 0 approved"},
+			},
+		}
+		slot1 := &ReviewResult{
+			Verdict:         VerdictBlock,
+			Error:           evidence.OutcomeReviewProviderEmpty,
+			Rationale:       "empty reviewer output",
+			ReviewerHarness: "claude",
+			ReviewerModel:   "claude-opus-4-6",
+			ResultRev:       gotRev,
+		}
+		return &ReviewGroupResult{
+			BeadID:    beadID,
+			ResultRev: gotRev,
+			Bundle:    ReviewGroupBundle{GroupID: "review-group-1"},
+			Slots: []ReviewGroupSlotResult{
+				{ReviewerIndex: 0, Result: slot0},
+				{ReviewerIndex: 1, Result: slot1, Error: "provider_empty"},
+			},
+		}, fmt.Errorf("review-group slot 1: %s", evidence.OutcomeReviewProviderEmpty)
+	})
+
+	out := RunPostMergeReview(context.Background(), PostMergeReviewInput{
+		Bead: *first,
+		Report: ExecuteBeadReport{
+			BeadID:    first.ID,
+			Status:    ExecuteBeadStatusSuccess,
+			SessionID: "sess-slot-retry",
+			ResultRev: resultRev,
+		},
+		Reviewer:    reviewer,
+		Store:       store,
+		ProjectRoot: t.TempDir(),
+		Rcfg: config.NewTestConfigForLoop(config.TestLoopConfigOpts{
+			Assignee:         "worker",
+			ReviewMaxRetries: 2,
+		}).Resolve(config.TestLoopOverrides(config.TestLoopConfigOpts{
+			Assignee:         "worker",
+			ReviewMaxRetries: 2,
+		})),
+		Assignee: "worker",
+		Now:      time.Now,
+	})
+
+	require.False(t, out.Approved)
+	assert.Equal(t, ExecuteBeadStatusReviewMalfunction, out.Report.Status)
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+	var slot1Error *bead.BeadEvent
+	manualForSlot1 := 0
+	for i := range events {
+		ev := events[i]
+		if ev.Kind == "review-error" && strings.Contains(ev.Body, "reviewer_index=1") {
+			slot1Error = &events[i]
+		}
+		if ev.Kind == "review-manual-required" && strings.Contains(ev.Body, "reviewer_index=1") {
+			manualForSlot1++
+		}
+	}
+	require.NotNil(t, slot1Error, "slot 1 failure should emit its own review-error")
+	assert.Contains(t, slot1Error.Body, "attempt_count=1")
+	assert.Contains(t, slot1Error.Body, "reviewer_index=1")
+	assert.Equal(t, 0, manualForSlot1, "slot 0 retry history must not exhaust slot 1")
+}

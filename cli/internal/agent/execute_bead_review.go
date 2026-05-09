@@ -68,6 +68,7 @@ type ReviewResult struct {
 	ReviewerHarness  string     `json:"reviewer_harness,omitempty"`
 	ReviewerModel    string     `json:"reviewer_model,omitempty"`
 	ReviewerProvider string     `json:"reviewer_provider,omitempty"`
+	ReviewerIndex    int        `json:"reviewer_index,omitempty"`
 	SessionID        string     `json:"session_id,omitempty"`
 	BaseRev          string     `json:"base_rev,omitempty"`
 	ResultRev        string     `json:"result_rev,omitempty"`
@@ -217,6 +218,9 @@ Respond with EXACTLY one JSON object as your final response, fenced as a single 
   "schema_version": 1,
   "verdict": "APPROVE",
   "summary": "≤300 char human-readable verdict justification",
+  "per_ac": [
+    { "number": 1, "item": "acceptance criterion text", "grade": "pass", "evidence": "file:line or test evidence" }
+  ],
   "findings": [
     { "severity": "info", "summary": "what is wrong or notable", "location": "path/to/file.go:42" }
   ]
@@ -841,17 +845,25 @@ func (r *DefaultBeadReviewer) Review(ctx context.Context, projectRoot string, ca
 			"cycle_index":   fmt.Sprintf("%d", candidate.CycleIndex),
 		},
 	}
-	review, err := reviewer.reviewBeadWithDiff(ctx, beadID, candidate.Report.ResultRev, impl, diff, workDir)
+	group, groupErr := reviewer.reviewGroupWithDiff(ctx, beadID, candidate.Report.ResultRev, impl, diff, workDir)
+	review, reduceErr := reducePreCloseReviewGroup(group)
 	if review == nil {
-		return CandidateReviewResult{}, err
+		if reduceErr != nil {
+			return CandidateReviewResult{}, reduceErr
+		}
+		return CandidateReviewResult{}, groupErr
 	}
-	return CandidateReviewResult{
+	out := CandidateReviewResult{
 		Verdict:        string(review.Verdict),
 		Rationale:      review.Rationale,
 		PerAC:          append([]ReviewAC(nil), review.PerAC...),
 		Findings:       append([]Finding(nil), review.Findings...),
 		Classification: ClassifyReviewFindings(review).Class,
-	}, err
+	}
+	if reduceErr != nil {
+		return out, reduceErr
+	}
+	return out, groupErr
 }
 
 func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, resultRev string, impl ImplementerRouting, diff, reviewWorkDir string) (*ReviewResult, error) {
@@ -1057,6 +1069,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 	reviewRes := &ReviewResult{
 		Verdict:          strictVerdict,
 		Rationale:        rationale,
+		PerAC:            parsed.PerAC,
 		Findings:         findings,
 		ProseFindings:    parsed.ProseFindings,
 		RawOutput:        output,
@@ -1100,6 +1113,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 	}, reviewArtifactResult{
 		Verdict:          string(strictVerdict),
 		Rationale:        rationale,
+		PerAC:            parsed.PerAC,
 		Findings:         findings,
 		ProseFindings:    parsed.ProseFindings,
 		Error:            reviewRes.Error,

@@ -27,11 +27,12 @@ type Finding struct {
 // verdict values, missing verdict field, and truncated/unfenced JSON all
 // surface as ErrReviewVerdictUnparseable.
 type ReviewVerdict struct {
-	SchemaVersion int       `json:"schema_version,omitempty"`
-	Verdict       Verdict   `json:"verdict"`
-	Summary       string    `json:"summary,omitempty"`
-	Findings      []Finding `json:"findings,omitempty"`
-	ProseFindings []Finding `json:"prose_findings,omitempty"`
+	SchemaVersion int        `json:"schema_version,omitempty"`
+	Verdict       Verdict    `json:"verdict"`
+	Summary       string     `json:"summary,omitempty"`
+	PerAC         []ReviewAC `json:"per_ac,omitempty"`
+	Findings      []Finding  `json:"findings,omitempty"`
+	ProseFindings []Finding  `json:"prose_findings,omitempty"`
 }
 
 // ErrReviewVerdictUnparseable is the sentinel returned by ParseReviewVerdict

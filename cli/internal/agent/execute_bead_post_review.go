@@ -153,7 +153,11 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 	}
 	if reviewErr != nil {
 		class := ClassifyReviewError(reviewErr, reviewRes)
+		reviewerIndex, slotScoped := reviewErrorReviewerIndex(reviewGroup, reviewRes)
 		prior := CountPriorReviewErrors(in.Store, in.Bead.ID, report.ResultRev)
+		if slotScoped {
+			prior = CountPriorReviewErrorsForSlot(in.Store, in.Bead.ID, report.ResultRev, reviewerIndex)
+		}
 		attemptCount := prior + 1
 		maxRetries := in.Rcfg.ReviewMaxRetries()
 		if maxRetries <= 0 {
@@ -173,7 +177,11 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			}
 		}
 		if attemptCount >= maxRetries {
-			body := AppendEventSummary(ReviewErrorEventBody(class, attemptCount, report.ResultRev, reviewErr.Error()), errSummary)
+			body := ReviewErrorEventBody(class, attemptCount, report.ResultRev, reviewErr.Error())
+			if slotScoped {
+				body = ReviewErrorEventBodyForSlot(class, attemptCount, report.ResultRev, reviewerIndex, reviewErr.Error())
+			}
+			body = AppendEventSummary(body, errSummary)
 			_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
 				Kind:      "review-manual-required",
 				Summary:   class,
@@ -190,7 +198,11 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			parkUntil := now().UTC().Add(CapLoopCooldown(MaxLoopCooldown))
 			_ = in.Store.SetExecutionCooldown(in.Bead.ID, parkUntil, "review-manual-required", class)
 		} else {
-			body := AppendEventSummary(ReviewErrorEventBody(class, attemptCount, report.ResultRev, reviewErr.Error()), errSummary)
+			body := ReviewErrorEventBody(class, attemptCount, report.ResultRev, reviewErr.Error())
+			if slotScoped {
+				body = ReviewErrorEventBodyForSlot(class, attemptCount, report.ResultRev, reviewerIndex, reviewErr.Error())
+			}
+			body = AppendEventSummary(body, errSummary)
 			_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
 				Kind:      "review-error",
 				Summary:   class,
@@ -369,6 +381,26 @@ func runPreCloseReviewGroup(ctx context.Context, reviewer BeadReviewer, beadID, 
 		group.Slots[0].Error = err.Error()
 	}
 	return group, err
+}
+
+func reviewErrorReviewerIndex(group *ReviewGroupResult, res *ReviewResult) (int, bool) {
+	if group == nil || len(group.Slots) < 2 {
+		return 0, false
+	}
+	if res != nil {
+		for _, slot := range group.Slots {
+			if slot.Result == res {
+				return slot.ReviewerIndex, true
+			}
+		}
+		return res.ReviewerIndex, true
+	}
+	for _, slot := range group.Slots {
+		if slot.Error != "" {
+			return slot.ReviewerIndex, true
+		}
+	}
+	return 0, true
 }
 
 func reducePreCloseReviewGroup(group *ReviewGroupResult) (*ReviewResult, error) {
