@@ -12,6 +12,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -190,9 +191,9 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 		stdoutBuf         bytes.Buffer
 		stderrBuf         bytes.Buffer
 		cancelReason      string
-		timedOut          bool
-		wallClockTimedOut bool
-		wallClockElapsed  time.Duration
+		timedOut          atomic.Bool
+		wallClockTimedOut atomic.Bool
+		wallClockElapsed  atomic.Int64 // nanoseconds; convert via time.Duration on read
 		killOnce          sync.Once
 	)
 
@@ -229,7 +230,7 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 					}
 					timer.Reset(idleTimeout)
 				case <-timer.C:
-					timedOut = true
+					timedOut.Store(true)
 					stopProcess()
 					return
 				}
@@ -256,8 +257,8 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 			case <-ctx.Done():
 				return
 			case <-timer.C:
-				wallClockTimedOut = true
-				wallClockElapsed = time.Since(wallClockStart)
+				wallClockTimedOut.Store(true)
+				wallClockElapsed.Store(int64(time.Since(wallClockStart)))
 				cancel()
 				stopProcess()
 			}
@@ -302,8 +303,8 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 		Stderr:           stderrBuf.String(),
 		EarlyCancel:      cancelReason != "",
 		CancelReason:     cancelReason,
-		WallClockTimeout: wallClockTimedOut,
-		WallClockElapsed: wallClockElapsed,
+		WallClockTimeout: wallClockTimedOut.Load(),
+		WallClockElapsed: time.Duration(wallClockElapsed.Load()),
 	}
 
 	if runErr != nil {
@@ -312,11 +313,11 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 			result.ExitCode = -1
 			return result, nil
 		}
-		if wallClockTimedOut {
+		if wallClockTimedOut.Load() {
 			result.ExitCode = -1
 			return result, context.DeadlineExceeded
 		}
-		if timedOut {
+		if timedOut.Load() {
 			result.ExitCode = -1
 			return result, context.DeadlineExceeded
 		}
