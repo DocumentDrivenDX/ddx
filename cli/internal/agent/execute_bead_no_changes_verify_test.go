@@ -29,12 +29,27 @@ func TestParseNoChangesRationale(t *testing.T) {
 			want: ParsedNoChangesRationale{Kind: NoChangesKindVerified, VerificationCommand: "go test ./foo -run TestX"},
 		},
 		{
-			name: "needs_investigation with reason",
-			in:   "status: needs_investigation\nreason: provider quota unknown\nmore detail line",
-			want: ParsedNoChangesRationale{Kind: NoChangesKindNeedsInvestigation, NeedsInvestigationReason: "provider quota unknown more detail line"},
+			name: "open with reason and suggested action",
+			in:   "status: open\nreason: autonomous work remains possible\nmore detail line\nsuggested_action: retry with smart agent",
+			want: ParsedNoChangesRationale{
+				Kind:            NoChangesKindLifecycleStatus,
+				LifecycleStatus: "open",
+				Reason:          "autonomous work remains possible more detail line",
+				SuggestedAction: "retry with smart agent",
+			},
 		},
 		{
-			name: "verification_command takes precedence over needs_investigation",
+			name: "legacy needs_investigation rejected",
+			in:   "status: needs_investigation\nreason: provider quota unknown\nmore detail line",
+			want: ParsedNoChangesRationale{
+				Kind:            NoChangesKindRejectedLegacyStatus,
+				LifecycleStatus: "needs_investigation",
+				Reason:          "provider quota unknown more detail line",
+				RejectionReason: "status: needs_investigation is no longer accepted; use status: open, status: proposed, or status: blocked for new no_changes output, and run `ddx bead migrate --lifecycle` for stored legacy rows",
+			},
+		},
+		{
+			name: "verification_command takes precedence over status",
 			in:   "status: needs_investigation\nverification_command: true",
 			want: ParsedNoChangesRationale{Kind: NoChangesKindVerified, VerificationCommand: "true"},
 		},

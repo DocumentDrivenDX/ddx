@@ -16,34 +16,40 @@ type NoChangesRationaleKind string
 const (
 	// NoChangesKindVerified means the rationale included a verification_command.
 	NoChangesKindVerified NoChangesRationaleKind = "verified"
-	// NoChangesKindNeedsInvestigation means the agent asked for operator triage.
-	NoChangesKindNeedsInvestigation NoChangesRationaleKind = "needs_investigation"
+	// NoChangesKindLifecycleStatus means the rationale requested a canonical lifecycle status.
+	NoChangesKindLifecycleStatus NoChangesRationaleKind = "lifecycle_status"
+	// NoChangesKindRejectedLegacyStatus means the rationale used a removed pseudo-status.
+	NoChangesKindRejectedLegacyStatus NoChangesRationaleKind = "rejected_legacy_status"
 	// NoChangesKindUnjustified means neither structured marker was present.
 	NoChangesKindUnjustified NoChangesRationaleKind = "unjustified"
 )
 
 const (
-	NoChangesEventVerified           = "no_changes_verified"
-	NoChangesEventUnverified         = "no_changes_unverified"
-	NoChangesEventUnjustified        = "no_changes_unjustified"
-	NoChangesEventNeedsInvestigation = "no_changes_needs_investigation"
+	NoChangesEventVerified             = "no_changes_verified"
+	NoChangesEventUnverified           = "no_changes_unverified"
+	NoChangesEventUnjustified          = "no_changes_unjustified"
+	NoChangesEventAutonomousRetry      = "no_changes_autonomous_retry"
+	NoChangesEventOperatorRequired     = "no_changes_operator_required"
+	NoChangesEventBlocked              = "no_changes_blocked"
+	NoChangesEventLegacyStatusRejected = "no_changes_legacy_status_rejected"
 )
 
 const (
-	NoChangesLabelUnverified         = "triage:no-changes-unverified"
-	NoChangesLabelUnjustified        = "triage:no-changes-unjustified"
-	NoChangesLabelNeedsInvestigation = "triage:needs-investigation"
+	NoChangesLabelUnverified  = "triage:no-changes-unverified"
+	NoChangesLabelUnjustified = "triage:no-changes-unjustified"
 )
 
 type ParsedNoChangesRationale struct {
-	Kind                     NoChangesRationaleKind
-	VerificationCommand      string
-	NeedsInvestigationReason string
+	Kind                NoChangesRationaleKind
+	VerificationCommand string
+	LifecycleStatus     string
+	Reason              string
+	SuggestedAction     string
+	RejectionReason     string
 }
 
 func ParseNoChangesRationale(text string) ParsedNoChangesRationale {
 	p := ParsedNoChangesRationale{Kind: NoChangesKindUnjustified}
-	needsInv := false
 	var reasonLines []string
 	inReason := false
 	for _, raw := range strings.Split(text, "\n") {
@@ -59,9 +65,7 @@ func ParseNoChangesRationale(text string) ParsedNoChangesRationale {
 			inReason = false
 		case strings.HasPrefix(lower, "status:"):
 			v := strings.TrimSpace(strings.ToLower(line[len("status:"):]))
-			if v == "needs_investigation" {
-				needsInv = true
-			}
+			p.LifecycleStatus = v
 			inReason = false
 		case strings.HasPrefix(lower, "reason:"):
 			r := strings.TrimSpace(line[len("reason:"):])
@@ -69,6 +73,9 @@ func ParseNoChangesRationale(text string) ParsedNoChangesRationale {
 				reasonLines = append(reasonLines, r)
 			}
 			inReason = true
+		case strings.HasPrefix(lower, "suggested_action:"):
+			p.SuggestedAction = strings.TrimSpace(line[len("suggested_action:"):])
+			inReason = false
 		default:
 			if inReason && line != "" {
 				reasonLines = append(reasonLines, line)
@@ -76,11 +83,23 @@ func ParseNoChangesRationale(text string) ParsedNoChangesRationale {
 		}
 	}
 	if p.Kind == NoChangesKindVerified {
+		p.LifecycleStatus = ""
+		p.Reason = ""
+		p.SuggestedAction = ""
+		p.RejectionReason = ""
 		return p
 	}
-	if needsInv {
-		p.Kind = NoChangesKindNeedsInvestigation
-		p.NeedsInvestigationReason = strings.Join(reasonLines, " ")
+	p.Reason = strings.Join(reasonLines, " ")
+	switch p.LifecycleStatus {
+	case "":
+		return p
+	case "needs_investigation":
+		p.Kind = NoChangesKindRejectedLegacyStatus
+		p.RejectionReason = "status: needs_investigation is no longer accepted; use status: open, status: proposed, or status: blocked for new no_changes output, and run `ddx bead migrate --lifecycle` for stored legacy rows"
+	case "open", "proposed", "blocked", "closed", "cancelled":
+		p.Kind = NoChangesKindLifecycleStatus
+	default:
+		p.Kind = NoChangesKindUnjustified
 	}
 	return p
 }
@@ -129,13 +148,18 @@ type NoChangesOutcome struct {
 	EventKind        string
 	EventBody        string
 	Label            string
+	LifecycleStatus  string
+	Reason           string
+	SuggestedAction  string
 }
 
 type NoChangesLifecycleAction string
 
 const (
 	NoChangesActionCloseAlreadySatisfied NoChangesLifecycleAction = "close_already_satisfied"
-	NoChangesActionNeedsHumanNoCooldown  NoChangesLifecycleAction = "needs_human_no_cooldown"
+	NoChangesActionKeepOpenSmartRetry    NoChangesLifecycleAction = "keep_open_smart_retry"
+	NoChangesActionOperatorRequired      NoChangesLifecycleAction = "operator_required"
+	NoChangesActionBlockedExternal       NoChangesLifecycleAction = "blocked_external"
 	NoChangesActionBadAttemptNoCooldown  NoChangesLifecycleAction = "bad_attempt_no_cooldown"
 	NoChangesActionRetryLaterCooldown    NoChangesLifecycleAction = "retry_later_cooldown"
 )
@@ -200,18 +224,20 @@ func adjudicateNoChangesContract(ctx context.Context, beadID string, report Repo
 			EventBody:        body,
 			Label:            NoChangesLabelUnverified,
 		}, report, nil
-	case NoChangesKindNeedsInvestigation:
-		body := parsed.NeedsInvestigationReason
-		if body == "" {
-			body = "(no reason provided)"
+	case NoChangesKindLifecycleStatus:
+		return adjudicateNoChangesLifecycleStatus(parsed, report), report, nil
+	case NoChangesKindRejectedLegacyStatus:
+		body := parsed.RejectionReason
+		if parsed.Reason != "" {
+			body += "\nreason: " + parsed.Reason
 		}
 		return NoChangesOutcome{
 			Satisfied:        false,
-			Action:           NoChangesActionNeedsHumanNoCooldown,
+			Action:           NoChangesActionBadAttemptNoCooldown,
 			CooldownEligible: false,
-			EventKind:        NoChangesEventNeedsInvestigation,
+			EventKind:        NoChangesEventLegacyStatusRejected,
 			EventBody:        body,
-			Label:            NoChangesLabelNeedsInvestigation,
+			Reason:           body,
 		}, report, nil
 	default:
 		body := strings.TrimSpace(report.NoChangesRationale)
@@ -227,4 +253,102 @@ func adjudicateNoChangesContract(ctx context.Context, beadID string, report Repo
 			Label:            NoChangesLabelUnjustified,
 		}, report, nil
 	}
+}
+
+func adjudicateNoChangesLifecycleStatus(parsed ParsedNoChangesRationale, report Report) NoChangesOutcome {
+	reason := strings.TrimSpace(parsed.Reason)
+	suggestedAction := strings.TrimSpace(parsed.SuggestedAction)
+	switch parsed.LifecycleStatus {
+	case "open":
+		if reason == "" {
+			reason = "autonomous work remains possible"
+		}
+		if suggestedAction == "" {
+			suggestedAction = "retry with a smart agent"
+		}
+		return NoChangesOutcome{
+			Satisfied:        false,
+			Action:           NoChangesActionKeepOpenSmartRetry,
+			CooldownEligible: false,
+			EventKind:        NoChangesEventAutonomousRetry,
+			EventBody:        noChangesLifecycleEventBody(parsed.LifecycleStatus, reason, suggestedAction),
+			LifecycleStatus:  parsed.LifecycleStatus,
+			Reason:           reason,
+			SuggestedAction:  suggestedAction,
+		}
+	case "proposed":
+		if reason == "" {
+			reason = "operator decision required before another automated attempt"
+		}
+		if suggestedAction == "" {
+			suggestedAction = "review and accept, split, block, or cancel this proposed work"
+		}
+		return NoChangesOutcome{
+			Satisfied:        false,
+			Action:           NoChangesActionOperatorRequired,
+			CooldownEligible: false,
+			EventKind:        NoChangesEventOperatorRequired,
+			EventBody:        noChangesLifecycleEventBody(parsed.LifecycleStatus, reason, suggestedAction),
+			LifecycleStatus:  parsed.LifecycleStatus,
+			Reason:           reason,
+			SuggestedAction:  suggestedAction,
+		}
+	case "blocked":
+		if reason == "" {
+			return noChangesUnsupportedStatusOutcome(parsed.LifecycleStatus, "status: blocked requires reason: <external recheckable blocker>")
+		}
+		if suggestedAction == "" {
+			suggestedAction = "recheck the external blocker and move status to open when cleared"
+		}
+		return NoChangesOutcome{
+			Satisfied:        false,
+			Action:           NoChangesActionBlockedExternal,
+			CooldownEligible: false,
+			EventKind:        NoChangesEventBlocked,
+			EventBody:        noChangesLifecycleEventBody(parsed.LifecycleStatus, reason, suggestedAction),
+			LifecycleStatus:  parsed.LifecycleStatus,
+			Reason:           reason,
+			SuggestedAction:  suggestedAction,
+		}
+	case "closed":
+		return noChangesUnsupportedStatusOutcome(parsed.LifecycleStatus, "use verification_command to close an already-satisfied bead")
+	case "cancelled":
+		return noChangesUnsupportedStatusOutcome(parsed.LifecycleStatus, "cancelling work is an operator action, not a no_changes worker outcome")
+	default:
+		body := strings.TrimSpace(report.NoChangesRationale)
+		if body == "" {
+			body = "(rationale absent)"
+		}
+		return NoChangesOutcome{
+			Satisfied:        false,
+			Action:           NoChangesActionBadAttemptNoCooldown,
+			CooldownEligible: false,
+			EventKind:        NoChangesEventUnjustified,
+			EventBody:        body,
+			Label:            NoChangesLabelUnjustified,
+		}
+	}
+}
+
+func noChangesUnsupportedStatusOutcome(status, reason string) NoChangesOutcome {
+	body := fmt.Sprintf("status: %s rejected: %s", status, reason)
+	return NoChangesOutcome{
+		Satisfied:        false,
+		Action:           NoChangesActionBadAttemptNoCooldown,
+		CooldownEligible: false,
+		EventKind:        NoChangesEventUnjustified,
+		EventBody:        body,
+		Reason:           body,
+	}
+}
+
+func noChangesLifecycleEventBody(status, reason, suggestedAction string) string {
+	body := "status=" + status
+	if reason != "" {
+		body += "\nreason=" + reason
+	}
+	if suggestedAction != "" {
+		body += "\nsuggested_action=" + suggestedAction
+	}
+	return body
 }

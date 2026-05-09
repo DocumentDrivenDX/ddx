@@ -329,12 +329,14 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 
 		assert.Equal(t, 0, result.Attempts, "terminal intake outcome must not count as an attempt")
 
-		// Bead must be back to open (unclaimed) with needs_human label.
+		// Bead must be unclaimed and moved to status-owned operator attention.
 		got, err := store.Get(candidate.ID)
 		require.NoError(t, err)
-		assert.Equal(t, bead.StatusOpen, got.Status, "bead must be unclaimed after terminal intake")
-		assert.Contains(t, got.Labels, bead.LabelNeedsHuman,
-			"terminal intake outcome must park bead with needs_human label")
+		assert.Equal(t, bead.StatusProposed, got.Status, "bead must be operator-attention after terminal intake")
+		assert.Empty(t, got.Owner, "bead must be unclaimed after terminal intake")
+		assert.NotContains(t, got.Labels, bead.LabelNeedsHuman,
+			"terminal intake outcome must not rely on needs_human label parking")
+		assert.Contains(t, bead.GetNeedsHumanMeta(*got).Reason, "missing root cause")
 
 		// An intake.blocked event must be recorded on the bead.
 		events, err := store.Events(candidate.ID)

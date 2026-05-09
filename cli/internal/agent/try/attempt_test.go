@@ -26,7 +26,7 @@ func TestAttempt_WrapsLegacyExecutor(t *testing.T) {
 	assert.Equal(t, "abc123", out.Report.ResultRev)
 }
 
-func TestAttempt_NoChanges_StaysCanonical_NotNeedsInvestigation(t *testing.T) {
+func TestAttempt_NoChangesRejectsLegacyNeedsInvestigationStatus(t *testing.T) {
 	store := &attemptStore{}
 
 	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
@@ -45,10 +45,12 @@ func TestAttempt_NoChanges_StaysCanonical_NotNeedsInvestigation(t *testing.T) {
 	assert.Equal(t, StatusNoChanges, out.Report.Status)
 	require.NotNil(t, out.NoChanges)
 	assert.False(t, out.NoChanges.Satisfied)
-	assert.Equal(t, NoChangesActionNeedsHumanNoCooldown, out.NoChanges.Action)
+	assert.Equal(t, NoChangesActionBadAttemptNoCooldown, out.NoChanges.Action)
 	assert.False(t, out.NoChanges.CooldownEligible)
-	assert.Equal(t, NoChangesEventNeedsInvestigation, out.NoChanges.EventKind)
-	assert.Equal(t, NoChangesLabelNeedsInvestigation, out.NoChanges.Label)
+	assert.Equal(t, NoChangesEventLegacyStatusRejected, out.NoChanges.EventKind)
+	assert.Empty(t, out.NoChanges.Label)
+	assert.Contains(t, out.NoChanges.EventBody, "status: needs_investigation is no longer accepted")
+	assert.Contains(t, out.NoChanges.EventBody, "ddx bead migrate --lifecycle")
 	assert.Contains(t, out.NoChanges.EventBody, "provider quota unknown")
 	assert.Equal(t, 1, store.noChangesCountCalls)
 }
@@ -114,7 +116,7 @@ func TestAttempt_NoChangesVerified_ReturnsCloseAlreadySatisfied(t *testing.T) {
 	assert.Equal(t, 1, store.noChangesCountCalls)
 }
 
-func TestAttempt_NoChangesNeedsInvestigation_ReturnsNeedsHumanNoCooldown(t *testing.T) {
+func TestAttempt_NoChangesOpen_ReturnsSmartRetryNoCooldown(t *testing.T) {
 	store := &attemptStore{}
 
 	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
@@ -123,7 +125,7 @@ func TestAttempt_NoChangesNeedsInvestigation_ReturnsNeedsHumanNoCooldown(t *test
 			return Report{
 				BeadID:             beadID,
 				Status:             StatusNoChanges,
-				NoChangesRationale: "status: needs_investigation\nreason: spec conflict needs operator",
+				NoChangesRationale: "status: open\nreason: rerun with a stronger model\nsuggested_action: retry with smart agent",
 			}, nil
 		}),
 	})
@@ -133,11 +135,13 @@ func TestAttempt_NoChangesNeedsInvestigation_ReturnsNeedsHumanNoCooldown(t *test
 	assert.Equal(t, StatusNoChanges, out.Report.Status)
 	require.NotNil(t, out.NoChanges)
 	assert.False(t, out.NoChanges.Satisfied)
-	assert.Equal(t, NoChangesActionNeedsHumanNoCooldown, out.NoChanges.Action)
+	assert.Equal(t, NoChangesActionKeepOpenSmartRetry, out.NoChanges.Action)
 	assert.False(t, out.NoChanges.CooldownEligible)
-	assert.Equal(t, NoChangesEventNeedsInvestigation, out.NoChanges.EventKind)
-	assert.Equal(t, NoChangesLabelNeedsInvestigation, out.NoChanges.Label)
-	assert.Contains(t, out.NoChanges.EventBody, "spec conflict needs operator")
+	assert.Equal(t, NoChangesEventAutonomousRetry, out.NoChanges.EventKind)
+	assert.Empty(t, out.NoChanges.Label)
+	assert.Equal(t, "open", out.NoChanges.LifecycleStatus)
+	assert.Equal(t, "rerun with a stronger model", out.NoChanges.Reason)
+	assert.Equal(t, "retry with smart agent", out.NoChanges.SuggestedAction)
 	assert.Empty(t, out.Report.RetryAfter)
 }
 

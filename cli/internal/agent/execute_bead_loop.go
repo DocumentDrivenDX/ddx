@@ -354,6 +354,7 @@ type ExecuteBeadLoopStore interface {
 	// add labels (e.g. "needs_human") and metadata hints (e.g. tier-pin) when
 	// the triage policy escalates after repeated review BLOCKs.
 	Update(id string, mutate func(*bead.Bead)) error
+	UpdateWithLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions, mutate func(*bead.Bead) error) error
 }
 
 // readyDiagnoser is the optional interface the work loop uses to explain an
@@ -1367,6 +1368,42 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				result.Successes++
 				result.LastSuccessAt = now().UTC()
+			case agenttry.NoChangesActionKeepOpenSmartRetry:
+				if err := applyNoChangesSmartRetry(w.Store, candidate.ID, assignee, noChanges); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("applyNoChangesSmartRetry", assignee, result, err)
+					})
+					if ctx.Err() != nil {
+						return result, ctx.Err()
+					}
+					continue
+				}
+				result.Failures++
+				result.LastFailureStatus = report.Status
+			case agenttry.NoChangesActionOperatorRequired:
+				if err := applyNoChangesOperatorRequired(w.Store, candidate.ID, assignee, noChanges, now().UTC()); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("applyNoChangesOperatorRequired", assignee, result, err)
+					})
+					if ctx.Err() != nil {
+						return result, ctx.Err()
+					}
+					continue
+				}
+				result.Failures++
+				result.LastFailureStatus = report.Status
+			case agenttry.NoChangesActionBlockedExternal:
+				if err := applyNoChangesBlockedExternal(w.Store, candidate.ID, assignee, noChanges); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("applyNoChangesBlockedExternal", assignee, result, err)
+					})
+					if ctx.Err() != nil {
+						return result, ctx.Err()
+					}
+					continue
+				}
+				result.Failures++
+				result.LastFailureStatus = report.Status
 			case agenttry.NoChangesActionRetryLaterCooldown:
 				// Unresolved: suppress immediate retry so the queue can
 				// move on to other beads.
@@ -2213,12 +2250,32 @@ func classifyLoopReportFailure(report *ExecuteBeadReport) {
 	}
 }
 
-// parkBeadPostIntakeRejection adds the needs_human label and appends an
+// parkBeadPostIntakeRejection moves the bead to proposed and appends an
 // intake.blocked event so the bead is filtered from ReadyExecution until an
 // operator reviews the intake decision. It does not unclaim — the caller must
 // call Unclaim after this returns (whether or not parking succeeds).
 func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, beadID, actor string, outcome PreClaimIntakeOutcome, detail string, at time.Time) error {
-	if err := addBeadLabel(store, beadID, bead.LabelNeedsHuman); err != nil {
+	reason := strings.TrimSpace(detail)
+	if reason == "" {
+		reason = string(outcome)
+	}
+	if err := store.UpdateWithLifecycleStatus(beadID, bead.StatusProposed, bead.LifecycleTransitionOptions{
+		OperatorRequired: true,
+		Reason:           reason,
+		Actor:            actor,
+		Source:           "ddx agent execute-loop",
+	}, func(b *bead.Bead) error {
+		ensureBeadExtra(b)
+		b.Labels = removeBeadLabels(b.Labels, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
+		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
+			Reason:          reason,
+			Since:           at.UTC().Format(time.RFC3339),
+			Source:          "ddx agent execute-loop",
+			SuggestedAction: "review intake result and accept, rewrite, split, block, or cancel",
+			Summary:         "pre-claim intake blocked execution",
+		})
+		return nil
+	}); err != nil {
 		return err
 	}
 	body, _ := json.Marshal(map[string]any{
@@ -2251,6 +2308,151 @@ func addBeadLabel(store ExecuteBeadLoopStore, beadID, label string) error {
 	})
 }
 
+const (
+	executeLoopSmartRetryKey                = "execute-loop-smart-retry"
+	executeLoopSmartRetryReasonKey          = "execute-loop-smart-retry-reason"
+	executeLoopSmartRetrySuggestedActionKey = "execute-loop-smart-retry-suggested-action"
+	executeLoopSuggestedActionKey           = "execute-loop-suggested-action"
+)
+
+func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, noChanges *agenttry.NoChangesOutcome) error {
+	reason := strings.TrimSpace(noChanges.Reason)
+	if reason == "" {
+		reason = "autonomous work remains possible"
+	}
+	suggestedAction := strings.TrimSpace(noChanges.SuggestedAction)
+	if suggestedAction == "" {
+		suggestedAction = "retry with a smart agent"
+	}
+	return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
+		Reason: reason,
+		Actor:  actor,
+		Source: "ddx agent execute-loop",
+	}, func(b *bead.Bead) error {
+		ensureBeadExtra(b)
+		clearNoChangesLifecycleLabels(b)
+		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
+		setNoChangesLifecycleMetadata(b, noChanges.EventKind, reason, suggestedAction)
+		b.Extra[TriageTierHintKey] = string(escalation.TierSmart)
+		b.Extra[executeLoopSmartRetryKey] = true
+		b.Extra[executeLoopSmartRetryReasonKey] = reason
+		b.Extra[executeLoopSmartRetrySuggestedActionKey] = suggestedAction
+		return nil
+	})
+}
+
+func applyNoChangesOperatorRequired(store ExecuteBeadLoopStore, beadID, actor string, noChanges *agenttry.NoChangesOutcome, at time.Time) error {
+	reason := strings.TrimSpace(noChanges.Reason)
+	if reason == "" {
+		reason = "operator decision required before another automated attempt"
+	}
+	suggestedAction := strings.TrimSpace(noChanges.SuggestedAction)
+	if suggestedAction == "" {
+		suggestedAction = "review and accept, split, block, or cancel this proposed work"
+	}
+	return store.UpdateWithLifecycleStatus(beadID, bead.StatusProposed, bead.LifecycleTransitionOptions{
+		OperatorRequired: true,
+		Reason:           reason,
+		Actor:            actor,
+		Source:           "ddx agent execute-loop",
+	}, func(b *bead.Bead) error {
+		ensureBeadExtra(b)
+		clearNoChangesLifecycleLabels(b)
+		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
+		clearSmartRetryMetadata(b)
+		setNoChangesLifecycleMetadata(b, noChanges.EventKind, reason, suggestedAction)
+		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
+			Reason:          reason,
+			Since:           at.UTC().Format(time.RFC3339),
+			Source:          "ddx agent execute-loop",
+			SuggestedAction: suggestedAction,
+			Summary:         "no_changes requested operator attention",
+		})
+		return nil
+	})
+}
+
+func applyNoChangesBlockedExternal(store ExecuteBeadLoopStore, beadID, actor string, noChanges *agenttry.NoChangesOutcome) error {
+	reason := strings.TrimSpace(noChanges.Reason)
+	if reason == "" {
+		reason = "external recheckable blocker"
+	}
+	suggestedAction := strings.TrimSpace(noChanges.SuggestedAction)
+	if suggestedAction == "" {
+		suggestedAction = "recheck the external blocker and move status to open when cleared"
+	}
+	return store.UpdateWithLifecycleStatus(beadID, bead.StatusBlocked, bead.LifecycleTransitionOptions{
+		ExternalBlockerReason: reason,
+		Reason:                reason,
+		Actor:                 actor,
+		Source:                "ddx agent execute-loop",
+	}, func(b *bead.Bead) error {
+		ensureBeadExtra(b)
+		clearNoChangesLifecycleLabels(b)
+		clearSmartRetryMetadata(b)
+		setNoChangesLifecycleMetadata(b, noChanges.EventKind, reason, suggestedAction)
+		return nil
+	})
+}
+
+func ensureBeadExtra(b *bead.Bead) {
+	if b.Extra == nil {
+		b.Extra = make(map[string]any)
+	}
+}
+
+func clearNoChangesLifecycleLabels(b *bead.Bead) {
+	b.Labels = removeBeadLabels(b.Labels,
+		bead.LabelNoChangesUnverified,
+		bead.LabelNoChangesUnjustified,
+		bead.LabelNeedsInvestigation,
+	)
+}
+
+func removeBeadLabels(labels []string, remove ...string) []string {
+	if len(labels) == 0 || len(remove) == 0 {
+		return labels
+	}
+	removeSet := make(map[string]struct{}, len(remove))
+	for _, label := range remove {
+		removeSet[label] = struct{}{}
+	}
+	out := labels[:0]
+	for _, label := range labels {
+		if _, drop := removeSet[label]; drop {
+			continue
+		}
+		out = append(out, label)
+	}
+	return out
+}
+
+func setNoChangesLifecycleMetadata(b *bead.Bead, lastStatus, detail, suggestedAction string) {
+	ensureBeadExtra(b)
+	delete(b.Extra, bead.ExtraRetryAfter)
+	setOrDeleteBeadExtra(b.Extra, bead.ExtraLastStatus, strings.TrimSpace(lastStatus))
+	setOrDeleteBeadExtra(b.Extra, bead.ExtraLastDetail, strings.TrimSpace(detail))
+	setOrDeleteBeadExtra(b.Extra, executeLoopSuggestedActionKey, strings.TrimSpace(suggestedAction))
+}
+
+func clearSmartRetryMetadata(b *bead.Bead) {
+	if b.Extra == nil {
+		return
+	}
+	delete(b.Extra, TriageTierHintKey)
+	delete(b.Extra, executeLoopSmartRetryKey)
+	delete(b.Extra, executeLoopSmartRetryReasonKey)
+	delete(b.Extra, executeLoopSmartRetrySuggestedActionKey)
+}
+
+func setOrDeleteBeadExtra(extra map[string]any, key, value string) {
+	if value == "" {
+		delete(extra, key)
+		return
+	}
+	extra[key] = value
+}
+
 func clearExecuteLoopNoChangesMetadata(store ExecuteBeadLoopStore, beadID string) error {
 	return store.Update(beadID, func(b *bead.Bead) {
 		if b.Extra == nil {
@@ -2259,6 +2461,8 @@ func clearExecuteLoopNoChangesMetadata(store ExecuteBeadLoopStore, beadID string
 		delete(b.Extra, "execute-loop-retry-after")
 		delete(b.Extra, "execute-loop-last-status")
 		delete(b.Extra, "execute-loop-last-detail")
+		delete(b.Extra, executeLoopSuggestedActionKey)
+		clearSmartRetryMetadata(b)
 	})
 }
 

@@ -183,14 +183,16 @@ func TestIntake_NonAtomicSkipsClaim(t *testing.T) {
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&intakeCalls))
 	// Claim now happens before intake; for terminal outcomes the bead is
-	// claimed then immediately unclaimed, so claimCalls == 1 but the bead
-	// returns to StatusOpen and execution does not proceed.
+	// claimed, moved to operator attention, then unclaimed. Execution does not
+	// proceed.
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "claim must run before intake check")
 	assert.Equal(t, 0, result.Attempts)
 
 	got, err := inner.Get("ddx-0001")
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Equal(t, bead.StatusProposed, got.Status)
+	assert.Empty(t, got.Owner)
+	assert.Contains(t, bead.GetNeedsHumanMeta(*got).Reason, "human clarification")
 }
 
 func TestIntake_ErrorContinuesToClaimWithoutParkingCandidate(t *testing.T) {
@@ -428,10 +430,11 @@ func TestIntake_UnsafeRewriteBlocksForHuman(t *testing.T) {
 
 	got, err := inner.Get(candidate.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, got.Status, "rejected rewrite must leave bead open")
+	assert.Equal(t, bead.StatusProposed, got.Status, "rejected rewrite must move bead to operator attention")
 	assert.NotContains(t, got.Description, "invented product semantics", "original description must be preserved")
 	assert.Equal(t, "1. preserve the original intent\n2. name the verification command", got.Acceptance)
-	assert.Contains(t, got.Labels, bead.LabelNeedsHuman, "rejected rewrite must add needs_human label")
+	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman, "operator parking must be status-owned, not needs_human label-owned")
+	assert.Contains(t, bead.GetNeedsHumanMeta(*got).Reason, "acceptance criteria")
 
 	events, err := inner.Events(candidate.ID)
 	require.NoError(t, err)
@@ -533,8 +536,9 @@ func TestIntake_DescriptionPreservationFailureParksForHuman(t *testing.T) {
 
 	got, err := inner.Get(candidate.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, got.Status, "bead must remain open after description preservation failure")
-	assert.Contains(t, got.Labels, bead.LabelNeedsHuman, "description preservation failure must add needs_human label")
+	assert.Equal(t, bead.StatusProposed, got.Status, "bead must move to operator attention after description preservation failure")
+	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman, "operator parking must be status-owned, not needs_human label-owned")
+	assert.Contains(t, bead.GetNeedsHumanMeta(*got).Reason, "description")
 	assert.Contains(t, got.Description, "original problem text", "original description must not be overwritten")
 
 	events, err := inner.Events(candidate.ID)
@@ -620,8 +624,8 @@ func TestReadinessUnavailableOutputIsActionable(t *testing.T) {
 
 	var logBuf bytes.Buffer
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once:    true,
-		Log:     &logBuf,
+		Once: true,
+		Log:  &logBuf,
 		PreDispatchLintHook: func(ctx context.Context, beadID string) (LintResult, error) {
 			return LintResult{}, ErrLintHookMissingHarness
 		},

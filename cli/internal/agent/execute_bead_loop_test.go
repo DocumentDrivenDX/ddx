@@ -13,6 +13,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -620,7 +621,7 @@ func TestExecuteBeadWorkerNoChangesStaysOpenAndContinues(t *testing.T) {
 	assert.True(t, sawTriage, "no_changes_unjustified triage event must be appended")
 }
 
-func TestExecuteBeadWorkerNoChangesUnjustifiedSkippedAcrossRuns(t *testing.T) {
+func TestExecuteBeadWorkerNoChangesUnjustifiedRemainsRunnableAcrossRuns(t *testing.T) {
 	store, first, second := newExecuteLoopTestStore(t)
 	callCount := 0
 	now := time.Now().UTC().Truncate(time.Second)
@@ -673,11 +674,12 @@ func TestExecuteBeadWorkerNoChangesUnjustifiedSkippedAcrossRuns(t *testing.T) {
 	require.NotNil(t, secondRun)
 	assert.Equal(t, 1, secondRun.Attempts)
 	require.Len(t, secondRun.Results, 1)
-	assert.Equal(t, second.ID, secondRun.Results[0].BeadID)
+	assert.Equal(t, first.ID, secondRun.Results[0].BeadID)
+	assert.Equal(t, ExecuteBeadStatusNoChanges, secondRun.LastFailureStatus)
 
 	gotSecond, err := store.Get(second.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusClosed, gotSecond.Status)
+	assert.Equal(t, bead.StatusOpen, gotSecond.Status)
 	assert.Equal(t, 2, callCount)
 }
 
@@ -721,7 +723,7 @@ func TestExecuteBeadWorker_NoViableProviderUsesRetryableTransportPolicy(t *testi
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	assert.Empty(t, got.Owner)
-	assert.NotContains(t, got.Labels, NoChangesLabelNeedsInvestigation)
+	assert.NotContains(t, got.Labels, bead.LabelNeedsInvestigation)
 	require.NotNil(t, got.Extra)
 	assert.Equal(t, ExecuteBeadStatusExecutionFailed, got.Extra["execute-loop-last-status"])
 	assert.Equal(t, now.Add(ProviderUnavailableCooldown).Format(time.RFC3339), got.Extra["execute-loop-retry-after"])
@@ -1178,7 +1180,7 @@ func TestExecuteBeadWorkerEmitsLoopEventsWithNoReadyWork(t *testing.T) {
 
 // TestExecuteBeadWorkerNoChangesUnjustifiedStaysOpenWithLabel verifies the
 // NoChangesContract (TD-031 §8.1, ddx-b24e9630) "unjustified" path: when the
-// rationale carries neither verification_command nor needs_investigation, the
+// rationale carries neither verification_command nor a canonical lifecycle status, the
 // bead stays open with a triage:no-changes-unjustified label and a
 // no_changes_unjustified event. There is no count-based fallback under the new
 // contract — only structured rationales close the bead.
@@ -1405,13 +1407,13 @@ func TestExecuteBeadWorkerNoChangesDoesNotStarveQueue(t *testing.T) {
 	assert.Equal(t, bead.StatusClosed, w2.Status)
 	assert.Equal(t, bead.StatusOpen, nc.Status, "ncBead must stay open after first no_changes")
 
-	// Pass 2: only ncBead remains open, but the unjustified label keeps it out
-	// of ReadyExecution.
+	// Pass 2: only ncBead remains open. The unjustified label is explanatory
+	// metadata only, so the status-owned queue can retry it.
 	result2, err := worker.Run(context.Background(), rcfg, runtime)
 	require.NoError(t, err)
-	assert.Equal(t, 0, result2.Attempts)
+	assert.Equal(t, 1, result2.Attempts)
 	assert.Equal(t, 0, result2.Successes)
-	assert.Equal(t, 0, result2.Failures)
+	assert.Equal(t, 1, result2.Failures)
 
 	nc, _ = store.Get(ncBead.ID)
 	assert.Equal(t, bead.StatusOpen, nc.Status, "ncBead stays open under NoChangesContract")
@@ -1527,15 +1529,11 @@ func TestExecuteBeadWorkerNoChangesVerificationFailsKeepsBeadOpen(t *testing.T) 
 	assert.True(t, sawUnverified, "no_changes_unverified event must be emitted")
 }
 
-// TestExecuteBeadWorkerNoChangesNeedsInvestigationKeepsBeadOpen verifies the
-// NoChangesContract needs_investigation path: when the agent declares it cannot
-// make progress, the bead stays open with a triage:needs-investigation label
-// and a no_changes_needs_investigation event capturing the reason.
-func TestExecuteBeadWorker_NeedsInvestigationRationaleStillParks(t *testing.T) {
+func TestNoChangesAutonomousInvestigationRemainsOpen(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
-	b := &bead.Bead{ID: "ddx-inv01", Title: "Bead the agent cannot make progress on"}
+	b := &bead.Bead{ID: "ddx-open01", Title: "Bead that needs a stronger retry"}
 	require.NoError(t, store.Create(b))
 
 	worker := &ExecuteBeadWorker{
@@ -1544,7 +1542,7 @@ func TestExecuteBeadWorker_NeedsInvestigationRationaleStillParks(t *testing.T) {
 			return ExecuteBeadReport{
 				BeadID:             beadID,
 				Status:             ExecuteBeadStatusNoChanges,
-				NoChangesRationale: "status: needs_investigation\nreason: spec ambiguous; need operator input",
+				NoChangesRationale: "status: open\nreason: retryable after stronger code search\nsuggested_action: retry with smart agent",
 			}, nil
 		}),
 	}
@@ -1557,21 +1555,127 @@ func TestExecuteBeadWorker_NeedsInvestigationRationaleStillParks(t *testing.T) {
 
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusOpen, got.Status, "needs_investigation must NOT close the bead")
-	assert.Contains(t, got.Labels, NoChangesLabelNeedsInvestigation)
+	assert.Equal(t, bead.StatusOpen, got.Status, "autonomous no_changes must remain worker-runnable")
+	assert.NotContains(t, got.Labels, bead.LabelNeedsInvestigation)
+	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman)
 	_, hasRetry := got.Extra["execute-loop-retry-after"]
-	assert.False(t, hasRetry, "needs_investigation no_changes must not set execute-loop-retry-after by default")
+	assert.False(t, hasRetry, "smart-runnable no_changes must not set execute-loop-retry-after")
+	assert.Equal(t, true, got.Extra[executeLoopSmartRetryKey])
+	assert.Equal(t, string(escalation.TierSmart), got.Extra[TriageTierHintKey])
+	assert.Equal(t, NoChangesEventAutonomousRetry, got.Extra[bead.ExtraLastStatus])
+	assert.Contains(t, got.Extra[bead.ExtraLastDetail], "stronger code search")
 
 	events, err := store.Events(b.ID)
 	require.NoError(t, err)
-	var sawNeedsInv bool
+	var sawAutonomous bool
 	for _, ev := range events {
-		if ev.Kind == NoChangesEventNeedsInvestigation {
-			sawNeedsInv = true
-			assert.Contains(t, ev.Body, "spec ambiguous")
+		if ev.Kind == NoChangesEventAutonomousRetry {
+			sawAutonomous = true
+			assert.Contains(t, ev.Body, "status=open")
+			assert.Contains(t, ev.Body, "stronger code search")
 		}
 	}
-	assert.True(t, sawNeedsInv, "no_changes_needs_investigation event must be emitted")
+	assert.True(t, sawAutonomous, "no_changes_autonomous_retry event must be emitted")
+}
+
+func TestNoChangesOperatorRequiredBecomesProposed(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{ID: "ddx-prop01", Title: "Bead requiring operator choice"}
+	require.NoError(t, store.Create(b))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:             beadID,
+				Status:             ExecuteBeadStatusNoChanges,
+				NoChangesRationale: "status: proposed\nreason: AC conflicts with governing spec\nsuggested_action: choose whether to update the spec or cancel",
+			}, nil
+		}),
+		Now: func() time.Time {
+			return time.Date(2026, 5, 9, 8, 0, 0, 0, time.UTC)
+		},
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	r, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	assert.Equal(t, 0, r.Successes)
+
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status)
+	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman)
+	assert.NotContains(t, got.Labels, bead.LabelNeedsInvestigation)
+	assert.Equal(t, NoChangesEventOperatorRequired, got.Extra[bead.ExtraLastStatus])
+	assert.Contains(t, got.Extra[bead.ExtraLastDetail], "governing spec")
+
+	meta := bead.GetNeedsHumanMeta(*got)
+	assert.Equal(t, "AC conflicts with governing spec", meta.Reason)
+	assert.Equal(t, "choose whether to update the spec or cancel", meta.SuggestedAction)
+	assert.Equal(t, "ddx agent execute-loop", meta.Source)
+
+	events, err := store.Events(b.ID)
+	require.NoError(t, err)
+	var sawOperator bool
+	for _, ev := range events {
+		if ev.Kind == NoChangesEventOperatorRequired {
+			sawOperator = true
+			assert.Contains(t, ev.Body, "status=proposed")
+		}
+	}
+	assert.True(t, sawOperator, "no_changes_operator_required event must be emitted")
+}
+
+func TestNoChangesRejectsLegacyNeedsInvestigationStatus(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{ID: "ddx-legacy01", Title: "Bead with legacy no_changes output"}
+	require.NoError(t, store.Create(b))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:             beadID,
+				Status:             ExecuteBeadStatusNoChanges,
+				NoChangesRationale: "status: needs_investigation\nreason: ambiguous legacy output",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	r, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	assert.Equal(t, 0, r.Successes)
+	assert.Equal(t, 1, r.Failures)
+
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman)
+	assert.NotContains(t, got.Labels, bead.LabelNeedsInvestigation)
+	assert.NotContains(t, got.Labels, NoChangesLabelUnjustified)
+	if got.Extra != nil {
+		assert.NotContains(t, got.Extra, "execute-loop-retry-after")
+	}
+
+	events, err := store.Events(b.ID)
+	require.NoError(t, err)
+	var sawRejected bool
+	for _, ev := range events {
+		if ev.Kind == NoChangesEventLegacyStatusRejected {
+			sawRejected = true
+			assert.Contains(t, ev.Body, "status: needs_investigation is no longer accepted")
+			assert.Contains(t, ev.Body, "ddx bead migrate --lifecycle")
+		}
+	}
+	assert.True(t, sawRejected, "legacy needs_investigation output must be rejected explicitly")
 }
 
 func TestExecuteBeadWorkerNoChangesUnjustifiedKeepsOpenWithoutLongCooldown(t *testing.T) {
@@ -1610,7 +1714,8 @@ func TestExecuteBeadWorkerNoChangesUnjustifiedKeepsOpenWithoutLongCooldown(t *te
 	assert.False(t, hasRetry, "unjustified no_changes must not set execute-loop-retry-after by default")
 	ready, err := store.ReadyExecution()
 	require.NoError(t, err)
-	assert.Empty(t, ready, "unjustified no_changes must require triage before another worker can claim it")
+	require.Len(t, ready, 1)
+	assert.Equal(t, b.ID, ready[0].ID, "unjustified no_changes stays worker-runnable under status-owned lifecycle")
 
 	events, err := store.Events(b.ID)
 	require.NoError(t, err)

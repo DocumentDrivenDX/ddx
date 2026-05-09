@@ -1814,12 +1814,14 @@ const instrNoChangesContract = `
 
 ## no_changes contract
 
-If you write ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + `, it MUST carry one of:
+` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` must contain one:
 
-- ` + "`verification_command: <one-line shell command>`" + ` — the loop runs it (cwd = project root, 60s); exit 0 closes the bead, non-zero rejects.
-- ` + "`status: needs_investigation`" + ` + ` + "`reason: <why>`" + ` — bead stays open for triage.
+- ` + "`verification_command: <cmd>`" + ` — repo cwd; exit 0 closes, nonzero rejects.
+- ` + "`status: open`" + ` + ` + "`reason: <retryable>`" + ` — open, smart retry.
+- ` + "`status: proposed`" + ` + ` + "`reason: <operator needed>`" + ` — operator lane.
+- ` + "`status: blocked`" + ` + ` + "`reason: <external blocker>`" + ` — blocked lane.
 
-Bare rationales ("nothing to do") are rejected.`
+No pseudo-statuses. Bare rationales and ` + "`status: needs_investigation`" + ` reject.`
 
 // instrInvestigationReports is the shared report-output rule.
 const instrInvestigationReports = `

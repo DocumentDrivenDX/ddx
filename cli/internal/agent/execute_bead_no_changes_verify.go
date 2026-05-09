@@ -10,22 +10,25 @@ type NoChangesRationaleKind = agenttry.NoChangesRationaleKind
 type SatisfactionChecker = agenttry.SatisfactionChecker
 
 const (
-	NoChangesKindVerified           = agenttry.NoChangesKindVerified
-	NoChangesKindNeedsInvestigation = agenttry.NoChangesKindNeedsInvestigation
-	NoChangesKindUnjustified        = agenttry.NoChangesKindUnjustified
+	NoChangesKindVerified             = agenttry.NoChangesKindVerified
+	NoChangesKindLifecycleStatus      = agenttry.NoChangesKindLifecycleStatus
+	NoChangesKindRejectedLegacyStatus = agenttry.NoChangesKindRejectedLegacyStatus
+	NoChangesKindUnjustified          = agenttry.NoChangesKindUnjustified
 )
 
 const (
-	NoChangesEventVerified           = agenttry.NoChangesEventVerified
-	NoChangesEventUnverified         = agenttry.NoChangesEventUnverified
-	NoChangesEventUnjustified        = agenttry.NoChangesEventUnjustified
-	NoChangesEventNeedsInvestigation = agenttry.NoChangesEventNeedsInvestigation
+	NoChangesEventVerified             = agenttry.NoChangesEventVerified
+	NoChangesEventUnverified           = agenttry.NoChangesEventUnverified
+	NoChangesEventUnjustified          = agenttry.NoChangesEventUnjustified
+	NoChangesEventAutonomousRetry      = agenttry.NoChangesEventAutonomousRetry
+	NoChangesEventOperatorRequired     = agenttry.NoChangesEventOperatorRequired
+	NoChangesEventBlocked              = agenttry.NoChangesEventBlocked
+	NoChangesEventLegacyStatusRejected = agenttry.NoChangesEventLegacyStatusRejected
 )
 
 const (
-	NoChangesLabelUnverified         = agenttry.NoChangesLabelUnverified
-	NoChangesLabelUnjustified        = agenttry.NoChangesLabelUnjustified
-	NoChangesLabelNeedsInvestigation = agenttry.NoChangesLabelNeedsInvestigation
+	NoChangesLabelUnverified  = agenttry.NoChangesLabelUnverified
+	NoChangesLabelUnjustified = agenttry.NoChangesLabelUnjustified
 )
 
 type ParsedNoChangesRationale = agenttry.ParsedNoChangesRationale
