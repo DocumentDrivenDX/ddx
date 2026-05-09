@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/DocumentDrivenDX/ddx/internal/triage"
 	"gopkg.in/yaml.v3"
 )
 
@@ -175,6 +176,30 @@ func (c *Config) Validate() error {
 				Message:    "library repository branch is required",
 				Suggestion: "add 'branch: \"main\"' or another valid branch name",
 			})
+		}
+	}
+
+	if c.Triage != nil {
+		for mode, actions := range c.Triage.Policies {
+			if _, err := triage.ParseFailureMode(mode); err != nil {
+				errors = append(errors, &ConfigError{
+					Field:      "triage.policies." + mode,
+					Value:      mode,
+					Message:    err.Error(),
+					Suggestion: "use review_block, lock_contention, execution_failed, or no_changes",
+				})
+				continue
+			}
+			for i, action := range actions {
+				if _, err := triage.ParseAction(action); err != nil {
+					errors = append(errors, &ConfigError{
+						Field:      fmt.Sprintf("triage.policies.%s[%d]", mode, i),
+						Value:      action,
+						Message:    err.Error(),
+						Suggestion: "use re_attempt_with_context, escalate_tier, retry_with_backoff, file_followup, or operator_required",
+					})
+				}
+			}
 		}
 	}
 

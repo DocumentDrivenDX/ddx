@@ -54,8 +54,8 @@ func newTriageTestStore(t *testing.T) (*bead.Store, *bead.Bead) {
 }
 
 // TestApplyReviewTriageDecision_FirstBlockReAttempts verifies that the first
-// BLOCK on a bead chooses re_attempt_with_context: no tier hint is set, no
-// needs_human label is added, and a triage-decision event records the action.
+// BLOCK on a bead chooses re_attempt_with_context: no tier hint is set, the
+// bead remains worker-runnable, and a triage-decision event records the action.
 func TestApplyReviewTriageDecision_FirstBlockReAttempts(t *testing.T) {
 	store, b := newTriageTestStore(t)
 	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
@@ -96,22 +96,31 @@ func TestApplyReviewTriageDecision_SecondBlockEscalates(t *testing.T) {
 	assert.Contains(t, ev.Body, "smart")
 }
 
-// TestApplyReviewTriageDecision_ThirdBlockNeedsHuman verifies that the third
-// BLOCK chooses needs_human: a needs_human label is appended and a
-// triage-decision event records the action.
-func TestApplyReviewTriageDecision_ThirdBlockNeedsHuman(t *testing.T) {
+// TestApplyReviewTriageDecision_ThirdBlockOperatorRequired verifies that the
+// third BLOCK chooses operator_required: the bead moves to status=proposed
+// without an active needs_human label and a triage-decision event records the
+// action.
+func TestApplyReviewTriageDecision_ThirdBlockOperatorRequired(t *testing.T) {
 	store, b := newTriageTestStore(t)
 	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
+	require.NoError(t, store.Claim(b.ID, "worker"))
 	seedBlocks(t, store, b.ID, now, 3)
 
 	require.NoError(t, applyReviewTriageDecision(store, b.ID, "ddx", now.Add(time.Hour), string(escalation.TierSmart)))
 
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
-	assert.Contains(t, got.Labels, TriageNeedsHumanLabel)
+	assert.Equal(t, bead.StatusProposed, got.Status)
+	assert.Empty(t, got.Owner)
+	assert.NotContains(t, got.Labels, TriageNeedsHumanLabel)
+	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman)
+	assert.NotContains(t, got.Extra, "claimed-at")
+	meta := bead.GetNeedsHumanMeta(*got)
+	assert.Contains(t, meta.Reason, "operator-required")
+	assert.Equal(t, "ddx agent execute-loop", meta.Source)
 	ev := findEvent(t, store, b.ID, "triage-decision")
 	require.NotNil(t, ev)
-	assert.Contains(t, ev.Summary, "needs_human")
+	assert.Contains(t, ev.Summary, "operator_required")
 }
 
 // TestApplyReviewTriageDecision_PairingDegradedBiasesToReAttempt verifies that

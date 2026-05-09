@@ -14,14 +14,14 @@ func TestNewConfigParsesTopLevelTriageBlock(t *testing.T) {
 version: "1.0"
 triage:
   policies:
-    review_block: [escalate_tier, needs_human]
-    lock_contention: [retry_with_backoff, retry_with_backoff, needs_human]
+    review_block: [escalate_tier, operator_required]
+    lock_contention: [retry_with_backoff, retry_with_backoff, operator_required]
 `
 	var cfg NewConfig
 	require.NoError(t, yaml.Unmarshal([]byte(raw), &cfg))
 	require.NotNil(t, cfg.Triage)
 	assert.Equal(t,
-		[]string{"escalate_tier", "needs_human"},
+		[]string{"escalate_tier", "operator_required"},
 		cfg.Triage.Policies["review_block"])
 }
 
@@ -36,7 +36,7 @@ func TestResolveTriagePolicy_ConfigOverridesDefault(t *testing.T) {
 	cfg := &NewConfig{
 		Triage: &TriagePolicyConfig{
 			Policies: map[string][]string{
-				"review_block": {"escalate_tier", "needs_human"},
+				"review_block": {"escalate_tier", "operator_required"},
 			},
 		},
 	}
@@ -55,15 +55,15 @@ func TestResolveTriagePolicy_DropsUnknownNames(t *testing.T) {
 	cfg := &NewConfig{
 		Triage: &TriagePolicyConfig{
 			Policies: map[string][]string{
-				"review_block":    {"not_a_real_action", "needs_human"},
+				"review_block":    {"not_a_real_action", "operator_required"},
 				"not_a_real_mode": {"escalate_tier"},
 			},
 		},
 	}
 	policy := cfg.ResolveTriagePolicy()
-	// Unknown action filtered out; only needs_human remains for review_block.
+	// Unknown action filtered out; only operator_required remains for review_block.
 	assert.Equal(t,
-		triage.ActionNeedsHuman,
+		triage.ActionOperatorRequired,
 		policy.Decide("ddx-test", triage.FailureModeReviewBlock, nil))
 }
 
@@ -73,12 +73,12 @@ func TestSchemaAcceptsTopLevelTriageBlock(t *testing.T) {
 	yamlDoc := []byte(`version: "1.0"
 triage:
   policies:
-    review_block: [re_attempt_with_context, escalate_tier, needs_human]
+    review_block: [re_attempt_with_context, escalate_tier, operator_required]
 `)
 	require.NoError(t, v.Validate(yamlDoc))
 }
 
-func TestSchemaRejectsUnknownTriageActionAndMode(t *testing.T) {
+func TestSchemaRejectsUnknownAndLegacyTriageActionAndMode(t *testing.T) {
 	v, err := NewValidator()
 	require.NoError(t, err)
 	require.Error(t, v.Validate([]byte(`version: "1.0"
@@ -89,21 +89,42 @@ triage:
 	require.Error(t, v.Validate([]byte(`version: "1.0"
 triage:
   policies:
-    bogus_mode: [needs_human]
+    review_block: [needs_human]
+`)))
+	require.Error(t, v.Validate([]byte(`version: "1.0"
+triage:
+  policies:
+    bogus_mode: [operator_required]
 `)))
 }
 
-func TestResolvedConfig_TriagePolicyAccessor(t *testing.T) {
+func TestConfigValidateRejectsLegacyNeedsHumanTriageAction(t *testing.T) {
 	cfg := &NewConfig{
+		Version: "1.0",
 		Triage: &TriagePolicyConfig{
 			Policies: map[string][]string{
 				"review_block": {"needs_human"},
 			},
 		},
 	}
+	err := cfg.Validate()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "triage.policies.review_block[0]")
+	assert.Contains(t, err.Error(), "needs_human")
+	assert.Contains(t, err.Error(), "operator_required")
+}
+
+func TestResolvedConfig_TriagePolicyAccessor(t *testing.T) {
+	cfg := &NewConfig{
+		Triage: &TriagePolicyConfig{
+			Policies: map[string][]string{
+				"review_block": {"operator_required"},
+			},
+		},
+	}
 	resolved := cfg.Resolve(CLIOverrides{})
 	got := resolved.TriagePolicy().Decide("ddx-test", triage.FailureModeReviewBlock, nil)
-	assert.Equal(t, triage.ActionNeedsHuman, got)
+	assert.Equal(t, triage.ActionOperatorRequired, got)
 }
 
 func TestSchemaAcceptsBeadQualityLintBlockThreshold(t *testing.T) {

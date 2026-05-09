@@ -6,8 +6,7 @@ package agent
 // default tier on the next drain pass.
 const TriageTierHintKey = "triage.tier_hint"
 
-// TriageNeedsHumanLabel is appended to a bead when the BLOCK ladder reaches
-// its terminal rung. The execute-loop label-filter and the human triage UI
-// both use this label to surface beads that no longer benefit from automated
-// re-attempts.
+// TriageNeedsHumanLabel is the legacy manual-review label retained for
+// compatibility paths outside review-block triage. Review-block triage now
+// moves beads to status=proposed instead of appending this label.
 const TriageNeedsHumanLabel = "needs_human"

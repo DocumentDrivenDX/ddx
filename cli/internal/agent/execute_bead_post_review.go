@@ -540,8 +540,8 @@ func latestBlockPairedDegraded(blocks, pairing []time.Time) bool {
 }
 
 // applyTriageAction performs the side effects for a chosen Action: writes a
-// tier-pin hint into bead.Extra (escalate_tier), appends a needs_human label
-// (needs_human), and always records a kind:triage-decision event.
+// tier-pin hint into bead.Extra (escalate_tier), moves the bead to proposed
+// for operator-required outcomes, and always records a triage-decision event.
 func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now time.Time, action triage.Action, currentTier string, pairedDegraded bool) error {
 	body := map[string]any{
 		"action": string(action),
@@ -561,12 +561,31 @@ func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now tim
 			}
 			b.Extra[TriageTierHintKey] = string(nextTier)
 		})
-	case triage.ActionNeedsHuman:
-		_ = store.Update(beadID, func(b *bead.Bead) {
-			if !HasBeadLabel(b.Labels, TriageNeedsHumanLabel) {
-				b.Labels = append(b.Labels, TriageNeedsHumanLabel)
+	case triage.ActionOperatorRequired:
+		reason := "review BLOCK triage reached operator-required rung"
+		if err := store.UpdateWithLifecycleStatus(beadID, bead.StatusProposed, bead.LifecycleTransitionOptions{
+			OperatorRequired: true,
+			Reason:           reason,
+			Actor:            actor,
+			Source:           "ddx agent execute-loop",
+		}, func(b *bead.Bead) error {
+			if b.Extra == nil {
+				b.Extra = make(map[string]any)
 			}
-		})
+			delete(b.Extra, TriageTierHintKey)
+			b.Labels = removeBeadLabels(b.Labels, TriageNeedsHumanLabel, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
+			clearReviewTriageClaimMetadata(b)
+			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
+				Reason:          reason,
+				Since:           now.UTC().Format(time.RFC3339),
+				Source:          "ddx agent execute-loop",
+				SuggestedAction: "review the blocked attempt and accept, split, block, or cancel",
+				Summary:         "review BLOCK triage requires operator decision",
+			})
+			return nil
+		}); err != nil {
+			return err
+		}
 	}
 
 	bodyJSON, _ := json.Marshal(body)
@@ -578,6 +597,19 @@ func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now tim
 		Source:    "ddx agent execute-loop",
 		CreatedAt: now,
 	})
+}
+
+func clearReviewTriageClaimMetadata(b *bead.Bead) {
+	b.Owner = ""
+	if b.Extra == nil {
+		return
+	}
+	delete(b.Extra, "claimed-at")
+	delete(b.Extra, "claimed-pid")
+	delete(b.Extra, "claimed-machine")
+	delete(b.Extra, "claimed-session")
+	delete(b.Extra, "claimed-worktree")
+	delete(b.Extra, "execute-loop-heartbeat-at")
 }
 
 // nextEscalatedTier returns the next tier above `current`. An unrecognised or

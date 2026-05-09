@@ -38,41 +38,41 @@ const (
 	ActionRetryWithBackoff Action = "retry_with_backoff"
 	// ActionFileFollowup — file a follow-up bead and close this one.
 	ActionFileFollowup Action = "file_followup"
-	// ActionNeedsHuman — park the bead for manual triage.
-	ActionNeedsHuman Action = "needs_human"
+	// ActionOperatorRequired — move the bead to status=proposed for operator triage.
+	ActionOperatorRequired Action = "operator_required"
 )
 
 // TriagePolicy maps a FailureMode to an ordered ladder of Actions. The
 // nth time a given mode is seen in a bead's history, the nth rung of
 // its ladder is returned. Past the end of the ladder, the final rung
-// (typically ActionNeedsHuman) is returned.
+// (typically ActionOperatorRequired) is returned.
 type TriagePolicy struct {
 	Ladders map[FailureMode][]Action
 }
 
 // DefaultPolicy returns the built-in policy. Mirrors the parent bead's
-// AC#3: BLOCK → re_attempt_with_context, escalate_tier, needs_human.
+// AC#3: BLOCK → re_attempt_with_context, escalate_tier, operator_required.
 func DefaultPolicy() TriagePolicy {
 	return TriagePolicy{Ladders: map[FailureMode][]Action{
 		FailureModeReviewBlock: {
 			ActionReAttemptWithContext,
 			ActionEscalateTier,
-			ActionNeedsHuman,
+			ActionOperatorRequired,
 		},
 		FailureModeLockContention: {
 			ActionRetryWithBackoff,
 			ActionRetryWithBackoff,
-			ActionNeedsHuman,
+			ActionOperatorRequired,
 		},
 		FailureModeExecutionFailed: {
 			ActionReAttemptWithContext,
 			ActionEscalateTier,
-			ActionNeedsHuman,
+			ActionOperatorRequired,
 		},
 		FailureModeNoChanges: {
 			ActionReAttemptWithContext,
 			ActionFileFollowup,
-			ActionNeedsHuman,
+			ActionOperatorRequired,
 		},
 	}}
 }
@@ -86,7 +86,7 @@ func DefaultPolicy() TriagePolicy {
 func (p TriagePolicy) Decide(beadID string, mode FailureMode, history []FailureMode) Action {
 	ladder := p.Ladders[mode]
 	if len(ladder) == 0 {
-		return ActionNeedsHuman
+		return ActionOperatorRequired
 	}
 	n := 0
 	for _, m := range history {
@@ -107,8 +107,10 @@ func ParseAction(s string) (Action, error) {
 		ActionEscalateTier,
 		ActionRetryWithBackoff,
 		ActionFileFollowup,
-		ActionNeedsHuman:
+		ActionOperatorRequired:
 		return Action(s), nil
+	case Action("needs_human"):
+		return "", fmt.Errorf("triage: legacy action %q removed; use %q", s, ActionOperatorRequired)
 	default:
 		return "", fmt.Errorf("triage: unknown action %q", s)
 	}
