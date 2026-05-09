@@ -68,6 +68,7 @@ func TestWorkLogRenderer_WrapsServiceRouteAndProgress(t *testing.T) {
 	renderer := NewWorkLogRenderer(WorkLogRendererOptions{
 		Now:           fixedWorkLogTime,
 		CurrentBeadID: "ddx-live",
+		WorkPhase:     "do",
 	})
 
 	route := renderer.FormatRoutingDecision(&agentlib.ServiceRoutingDecisionData{
@@ -89,7 +90,7 @@ func TestWorkLogRenderer_WrapsServiceRouteAndProgress(t *testing.T) {
 		},
 	})
 
-	assert.Equal(t, "12:34:56 route: harness=agent provider=openrouter model=gpt-5.4-mini reason=profile\n", route)
-	assert.Equal(t, "12:34:56 ok 2 run tests to cli/internal/bead < out=42B 3 lines\n", progress)
+	assert.Equal(t, "12:34:56 do route agent/gpt-5.4-mini provider=openrouter reason=profile\n", route)
+	assert.Equal(t, "12:34:56 do ok 2 run tests to cli/internal/bead < out=42B 3 lines\n", progress)
 	assert.NotContains(t, strings.TrimSpace(progress), "ddx-live")
 }

@@ -173,7 +173,7 @@ func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*agentlib.ServiceF
 }
 
 func drainServiceEventsWithWriter(events <-chan agentlib.ServiceEvent, w io.Writer) (*agentlib.ServiceFinalData, *agentlib.ServiceRoutingDecisionData, []agentlib.ServiceProgressData) {
-	return drainServiceEventsWithRenderer(events, w, NewWorkLogRenderer(WorkLogRendererOptions{}))
+	return drainServiceEventsWithRenderer(events, w, NewWorkLogRenderer(WorkLogRendererOptions{WorkPhase: "do"}))
 }
 
 func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Writer, renderer WorkLogRenderer) (*agentlib.ServiceFinalData, *agentlib.ServiceRoutingDecisionData, []agentlib.ServiceProgressData) {

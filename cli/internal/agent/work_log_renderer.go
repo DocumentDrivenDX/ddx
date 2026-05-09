@@ -11,11 +11,13 @@ import (
 type WorkLogRendererOptions struct {
 	Now           func() time.Time
 	CurrentBeadID string
+	WorkPhase     string
 }
 
 type WorkLogRenderer struct {
 	now           func() time.Time
 	currentBeadID string
+	workPhase     string
 }
 
 type WorkLogLifecycleLine struct {
@@ -36,11 +38,17 @@ func NewWorkLogRenderer(opts WorkLogRendererOptions) WorkLogRenderer {
 	return WorkLogRenderer{
 		now:           now,
 		currentBeadID: strings.TrimSpace(opts.CurrentBeadID),
+		workPhase:     strings.TrimSpace(opts.WorkPhase),
 	}
 }
 
 func (r WorkLogRenderer) WithCurrentBeadID(beadID string) WorkLogRenderer {
 	r.currentBeadID = strings.TrimSpace(beadID)
+	return r
+}
+
+func (r WorkLogRenderer) WithWorkPhase(phase string) WorkLogRenderer {
+	r.workPhase = strings.TrimSpace(phase)
 	return r
 }
 
@@ -106,6 +114,9 @@ func (r WorkLogRenderer) FormatLifecycleLine(line WorkLogLifecycleLine) string {
 }
 
 func (r WorkLogRenderer) FormatRoutingDecision(routing *agentlib.ServiceRoutingDecisionData) string {
+	if r.workPhase != "" {
+		return r.formatWorkPhaseRoutingDecision(routing)
+	}
 	line := strings.TrimSpace(FormatServiceRoutingDecision(routing))
 	if line == "" {
 		return ""
@@ -127,10 +138,31 @@ func (r WorkLogRenderer) prefixRenderedLines(rendered string) string {
 		line = r.suppressCurrentBeadID(line)
 		sb.WriteString(r.timestamp())
 		sb.WriteString(" ")
+		if r.workPhase != "" {
+			sb.WriteString(r.workPhase)
+			sb.WriteString(" ")
+		}
 		sb.WriteString(line)
 		sb.WriteString("\n")
 	}
 	return sb.String()
+}
+
+func (r WorkLogRenderer) formatWorkPhaseRoutingDecision(routing *agentlib.ServiceRoutingDecisionData) string {
+	if routing == nil || (routing.Model == "" && routing.Harness == "" && routing.Provider == "") {
+		return ""
+	}
+	parts := []string{r.timestamp(), r.workPhase, "route"}
+	if target := formatWorkLogRouteTarget(routing.Harness, routing.Model); target != "" {
+		parts = append(parts, target)
+	}
+	if routing.Provider != "" {
+		parts = append(parts, "provider="+routing.Provider)
+	}
+	if routing.Reason != "" {
+		parts = append(parts, "reason="+routing.Reason)
+	}
+	return strings.Join(parts, " ") + "\n"
 }
 
 func (r WorkLogRenderer) visibleBeadID(beadID string) string {
@@ -179,6 +211,21 @@ func formatWorkLogRouteFields(harness, provider, model, reason string) string {
 		return ""
 	}
 	return "route: " + strings.Join(parts, " ")
+}
+
+func formatWorkLogRouteTarget(harness, model string) string {
+	harness = strings.TrimSpace(harness)
+	model = strings.TrimSpace(model)
+	switch {
+	case harness != "" && model != "":
+		return harness + "/" + model
+	case model != "":
+		return model
+	case harness != "":
+		return harness
+	default:
+		return ""
+	}
 }
 
 func formatWorkLogQueueCounts(snapshot *QueueSnapshot) string {

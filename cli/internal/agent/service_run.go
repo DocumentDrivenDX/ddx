@@ -253,6 +253,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 
 	renderer := NewWorkLogRenderer(WorkLogRendererOptions{
 		CurrentBeadID: runtime.Correlation["bead_id"],
+		WorkPhase:     "do",
 	})
 	final, routing, _ := drainServiceEventsWithRenderer(events, runtime.Output, renderer)
 	finishedAt := time.Now().UTC()

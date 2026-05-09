@@ -123,7 +123,7 @@ func TestDrainServiceEvents_ForwardsCanonicalProgressPayload(t *testing.T) {
 	assert.Contains(t, FormatServiceProgressEntries(progress), "18.4 tok/s")
 }
 
-func TestDrainServiceEvents_WritesLiveRouteAndProgress(t *testing.T) {
+func TestDrainServiceEventsWithWriter_LabelsRoutesByPhase(t *testing.T) {
 	events := make(chan agentlib.ServiceEvent, 2)
 	events <- agentlib.ServiceEvent{
 		Type: "routing_decision",
@@ -141,8 +141,9 @@ func TestDrainServiceEvents_WritesLiveRouteAndProgress(t *testing.T) {
 	_, routing, progress := drainServiceEventsWithWriter(events, &out)
 	require.NotNil(t, routing)
 	require.Len(t, progress, 1)
-	assert.Contains(t, out.String(), "route: harness=agent provider=openrouter model=gpt-5.4-mini reason=profile")
-	assert.Contains(t, out.String(), "ok ddx-live 2 run tests to cli/internal/bead < out=42B 3 lines")
+	assert.Contains(t, out.String(), "12:00:00 do route agent/gpt-5.4-mini provider=openrouter reason=profile")
+	assert.Contains(t, out.String(), "12:00:01 do ok ddx-live 2 run tests to cli/internal/bead < out=42B 3 lines")
+	assert.NotContains(t, out.String(), "route: harness=agent")
 }
 
 // TestAgentExecution_UsesFizeauServicePathOnly proves transcript-producing

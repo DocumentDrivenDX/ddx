@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	agentlib "github.com/DocumentDrivenDX/fizeau"
 	"github.com/stretchr/testify/assert"
@@ -158,6 +159,59 @@ func TestFormatServiceProgressEntries_UsesToolCallIndexAndSummary(t *testing.T) 
 
 	require.Equal(t, "  ok ddx-live 2 run go test ./internal/agent/... < command finished successfully\n", got)
 	assert.NotContains(t, got, "\n  >")
+}
+
+func TestFormatServiceProgressEntries_WithScopedWorkPhaseSuppressesCurrentBead(t *testing.T) {
+	renderer := NewWorkLogRenderer(WorkLogRendererOptions{
+		Now:           fixedProgressFormatTime,
+		CurrentBeadID: "ddx-live",
+		WorkPhase:     "do",
+	})
+
+	got := renderer.FormatServiceProgressEntries([]agentlib.ServiceProgressData{
+		{
+			Phase:       "tool",
+			State:       "complete",
+			TaskID:      "ddx-live",
+			TurnIndex:   2,
+			Action:      "run tests",
+			Target:      "cli/internal/bead",
+			OutputBytes: 42,
+			OutputLines: 3,
+		},
+	})
+
+	require.Equal(t, "12:34:56 do ok 2 run tests to cli/internal/bead < out=42B 3 lines\n", got)
+	assert.NotContains(t, strings.TrimSpace(got), "ddx-live")
+}
+
+func TestFormatServiceProgressEntries_PreservesDifferentReferencedBead(t *testing.T) {
+	renderer := NewWorkLogRenderer(WorkLogRendererOptions{
+		Now:           fixedProgressFormatTime,
+		CurrentBeadID: "ddx-current",
+		WorkPhase:     "do",
+	})
+
+	got := renderer.FormatServiceProgressEntries([]agentlib.ServiceProgressData{
+		{
+			Phase:       "tool",
+			State:       "complete",
+			TaskID:      "ddx-other",
+			TurnIndex:   3,
+			Action:      "inspect related bead",
+			Target:      "cli/internal/agent",
+			OutputBytes: 128,
+			OutputLines: 4,
+		},
+	})
+
+	require.Equal(t, "12:34:56 do ok ddx-other 3 inspect related bead to cli/internal/agent < out=128B 4 lines\n", got)
+	assert.Contains(t, got, "ddx-other")
+	assert.NotContains(t, got, "ddx-current")
+}
+
+func fixedProgressFormatTime() time.Time {
+	return time.Date(2026, 5, 9, 12, 34, 56, 789000000, time.UTC)
 }
 
 func renderedLineContaining(t *testing.T, rendered, want string) string {
