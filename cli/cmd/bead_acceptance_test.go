@@ -973,8 +973,15 @@ func TestBeadCommandsDependencyViews(t *testing.T) {
 
 	var blocked []map[string]any
 	require.NoError(t, json.Unmarshal([]byte(blockedOut), &blocked))
-	require.Len(t, blocked, 1)
-	assert.Equal(t, secondID, blocked[0]["id"])
+	require.Empty(t, blocked, "dependency-waiting work is not an external blocked bead")
+
+	statusBeforeCloseOut, err := executeCommand(factory.NewRootCommand(), "bead", "status", "--json")
+	require.NoError(t, err)
+
+	var statusBeforeClose map[string]any
+	require.NoError(t, json.Unmarshal([]byte(statusBeforeCloseOut), &statusBeforeClose))
+	assert.Equal(t, float64(1), statusBeforeClose["dependency_waiting"])
+	assert.Equal(t, float64(0), statusBeforeClose["external_blocked"])
 
 	treeOut, err := executeCommand(rootCmd, "bead", "dep", "tree")
 	require.NoError(t, err)
@@ -1006,7 +1013,7 @@ func TestBeadCommandsDependencyViews(t *testing.T) {
 	assert.Equal(t, float64(0), status["blocked"])
 }
 
-func TestBeadBlockedSurfacesRetryParkedBeads(t *testing.T) {
+func TestBeadBlockedExcludesDependencyWaiting(t *testing.T) {
 	workingDir := t.TempDir()
 	factory := newBeadTestRoot(t, workingDir)
 	rootCmd := factory.NewRootCommand()
@@ -1030,12 +1037,21 @@ func TestBeadBlockedSurfacesRetryParkedBeads(t *testing.T) {
 	until := time.Now().UTC().Add(3 * time.Hour).Truncate(time.Second)
 	require.NoError(t, store.SetExecutionCooldown(parkedID, until, "no_changes", "agent made no commits"))
 
+	externalOut, err := executeCommand(rootCmd, "bead", "create", "External blocked", "--priority", "3")
+	require.NoError(t, err)
+	externalID := strings.TrimSpace(externalOut)
+	require.NoError(t, store.UpdateWithLifecycleStatus(externalID, bead.StatusBlocked, bead.LifecycleTransitionOptions{
+		ExternalBlockerReason: "waiting on upstream release",
+		Reason:                "test external blocker",
+		Source:                "test",
+	}, nil))
+
 	blockedJSON, err := executeCommand(rootCmd, "bead", "blocked", "--json")
 	require.NoError(t, err)
 
 	var entries []map[string]any
 	require.NoError(t, json.Unmarshal([]byte(blockedJSON), &entries))
-	require.Len(t, entries, 2, "dep-blocked and retry-parked beads must both surface")
+	require.Len(t, entries, 1, "only status=blocked external blockers should surface")
 
 	byID := map[string]map[string]any{}
 	for _, e := range entries {
@@ -1043,39 +1059,32 @@ func TestBeadBlockedSurfacesRetryParkedBeads(t *testing.T) {
 		byID[id] = e
 	}
 
-	depEntry, ok := byID[depBlockedID]
-	require.True(t, ok, "dep-blocked entry missing from JSON: %s", blockedJSON)
-	require.Equal(t, "Dep blocked child", depEntry["title"])
-	depBlocker, ok := depEntry["blocker"].(map[string]any)
-	require.True(t, ok, "dep entry missing blocker object: %#v", depEntry)
-	assert.Equal(t, "dependency", depBlocker["kind"])
-	depIDs, _ := depBlocker["unclosed_dep_ids"].([]any)
-	require.Len(t, depIDs, 1)
-	assert.Equal(t, depRootID, depIDs[0])
-	_, hasNextEligible := depBlocker["next_eligible_at"]
-	assert.False(t, hasNextEligible, "dependency blocker must not emit next_eligible_at")
+	externalEntry, ok := byID[externalID]
+	require.True(t, ok, "external blocked entry missing from JSON: %s", blockedJSON)
+	require.Equal(t, "External blocked", externalEntry["title"])
+	externalBlocker, ok := externalEntry["blocker"].(map[string]any)
+	require.True(t, ok, "external entry missing blocker object: %#v", externalEntry)
+	assert.Equal(t, "blocked-status", externalBlocker["kind"])
+	assert.Equal(t, "waiting on upstream release", externalBlocker["reason"])
+	assert.NotContains(t, byID, depBlockedID, "dependency waits belong in derived queue counts, not bead blocked")
+	assert.NotContains(t, byID, parkedID, "retry cooldowns belong in work focus/status, not bead blocked")
 
-	parkedEntry, ok := byID[parkedID]
-	require.True(t, ok, "retry-parked entry missing from JSON: %s", blockedJSON)
-	require.Equal(t, "Retry parked", parkedEntry["title"])
-	parkedBlocker, ok := parkedEntry["blocker"].(map[string]any)
-	require.True(t, ok, "parked entry missing blocker object: %#v", parkedEntry)
-	assert.Equal(t, "retry-cooldown", parkedBlocker["kind"])
-	assert.Equal(t, until.Format(time.RFC3339), parkedBlocker["next_eligible_at"])
-	assert.Equal(t, "no_changes", parkedBlocker["last_status"])
-	assert.Equal(t, "agent made no commits", parkedBlocker["last_detail"])
-	_, hasDepField := parkedBlocker["unclosed_dep_ids"]
-	assert.False(t, hasDepField, "cooldown blocker must not emit unclosed_dep_ids")
-
-	// Non-JSON output must distinguish blocker kinds without dropping the existing dep line.
+	// Non-JSON output must show the external blocker and omit dependency/cooldown rows.
 	// Rebuild the root command so the --json flag state does not leak across invocations.
 	textCmd := factory.NewRootCommand()
 	textOut, err := executeCommand(textCmd, "bead", "blocked")
 	require.NoError(t, err)
-	assert.Contains(t, textOut, depBlockedID+"  P2  Dep blocked child  deps: "+depRootID,
-		"dep-blocked line missing or malformed: %s", textOut)
-	assert.Contains(t, textOut, parkedID+"  P0  Retry parked  retry-after: "+until.Format(time.RFC3339),
-		"retry-parked line missing or malformed: %s", textOut)
+	assert.Contains(t, textOut, externalID+"  P3  External blocked  blocked-status: waiting on upstream release",
+		"external-blocked line missing or malformed: %s", textOut)
+	assert.NotContains(t, textOut, depBlockedID)
+	assert.NotContains(t, textOut, parkedID)
+
+	statusOut, err := executeCommand(factory.NewRootCommand(), "bead", "status", "--json")
+	require.NoError(t, err)
+	var status map[string]any
+	require.NoError(t, json.Unmarshal([]byte(statusOut), &status))
+	assert.Equal(t, float64(1), status["dependency_waiting"])
+	assert.Equal(t, float64(1), status["external_blocked"])
 
 	// ReadyExecution filtering must be unchanged: parked bead stays suppressed.
 	execReady, err := store.ReadyExecution()

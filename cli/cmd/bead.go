@@ -1035,7 +1035,7 @@ type beadNeedsHumanRow struct {
 func (f *CommandFactory) newBeadNeedsHumanCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "needs-human",
-		Short: "List beads requiring operator attention",
+		Short: "Deprecated alias: list proposed operator-attention beads",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			beads, err := f.beadStore().NeedsHuman()
@@ -1054,7 +1054,7 @@ func (f *CommandFactory) newBeadNeedsHumanCommand() *cobra.Command {
 				return enc.Encode(rows)
 			}
 			if len(rows) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No needs-human beads.")
+				fmt.Fprintln(cmd.OutOrStdout(), "No operator-attention beads.")
 				return nil
 			}
 			for _, row := range rows {
@@ -1081,7 +1081,7 @@ func (f *CommandFactory) newBeadNeedsHumanCommand() *cobra.Command {
 func (f *CommandFactory) newBeadHumanCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "human",
-		Short: "Resolve human-attention bead lanes",
+		Short: "Deprecated alias: resolve proposed operator-attention beads",
 		Run: func(cmd *cobra.Command, args []string) {
 			_ = cmd.Help()
 		},
@@ -1089,7 +1089,7 @@ func (f *CommandFactory) newBeadHumanCommand() *cobra.Command {
 
 	resolveCmd := &cobra.Command{
 		Use:   "resolve <id>",
-		Short: "Resolve a needs-human bead",
+		Short: "Resolve a proposed operator-attention bead",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			action, _ := cmd.Flags().GetString("action")
@@ -1252,8 +1252,12 @@ func validateSplitChildren(s *bead.Store, parentID string, children []string) er
 func (f *CommandFactory) newBeadBlockedCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "blocked",
-		Short: "List beads blocked by deps or retry cooldowns",
-		Args:  cobra.NoArgs,
+		Short: "List externally blocked beads",
+		Long: `List beads with status=blocked because of a hard external,
+recheckable blocker. Ordinary dependency waits, retry cooldowns, proposed
+operator-attention work, and epic/planning buckets are lifecycle-derived queue
+state surfaced by "ddx bead status" and "ddx work focus", not by this command.`,
+		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := f.checkLifecycleMigrationGate(cmd); err != nil {
 				return err
@@ -1263,6 +1267,7 @@ func (f *CommandFactory) newBeadBlockedCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
+			entries = externalBlockedEntries(entries)
 			if entries == nil {
 				entries = []bead.BlockedBead{}
 			}
@@ -1275,7 +1280,7 @@ func (f *CommandFactory) newBeadBlockedCommand() *cobra.Command {
 			}
 
 			if len(entries) == 0 {
-				fmt.Fprintln(cmd.OutOrStdout(), "No blocked beads.")
+				fmt.Fprintln(cmd.OutOrStdout(), "No externally blocked beads.")
 				return nil
 			}
 
@@ -1297,6 +1302,16 @@ func (f *CommandFactory) newBeadBlockedCommand() *cobra.Command {
 	}
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	return cmd
+}
+
+func externalBlockedEntries(entries []bead.BlockedBead) []bead.BlockedBead {
+	filtered := entries[:0]
+	for _, entry := range entries {
+		if entry.Blocker.Kind == bead.BlockerKindBlockedStatus {
+			filtered = append(filtered, entry)
+		}
+	}
+	return filtered
 }
 
 func (f *CommandFactory) newBeadReconcileCommand() *cobra.Command {

@@ -81,7 +81,7 @@ func TestBeadNeedsHumanCommand_Text(t *testing.T) {
 	assert.Contains(t, out, "operator decision required")
 }
 
-func TestBeadReadyUsesProposedForOperatorAttention(t *testing.T) {
+func TestBeadReadyExcludesProposedByDefault(t *testing.T) {
 	ready := &bead.Bead{ID: "ddx-ready-normal", Title: "Normal ready"}
 	proposed := &bead.Bead{ID: "ddx-ready-human", Title: "Human ready", Status: bead.StatusProposed}
 	_, factory, _ := setupBeadHumanEnv(t, ready, proposed)
@@ -95,13 +95,32 @@ func TestBeadReadyUsesProposedForOperatorAttention(t *testing.T) {
 	assertReadyIDs(t, out, []string{ready.ID})
 }
 
-func TestBeadStatusIncludesOperatorAttentionAndWorkerReady(t *testing.T) {
+func TestBeadStatusIncludesSixLifecycleStates(t *testing.T) {
 	ready := &bead.Bead{ID: "ddx-status-ready", Title: "Ready"}
-	nh := &bead.Bead{ID: "ddx-status-human", Title: "Needs human", Status: bead.StatusProposed}
-	_, factory, _ := setupBeadHumanEnv(t, ready, nh)
+	dependencyRoot := &bead.Bead{ID: "ddx-status-dep-root", Title: "Dependency root"}
+	dependencyWaiting := &bead.Bead{ID: "ddx-status-dep-wait", Title: "Dependency waiting"}
+	dependencyWaiting.AddDep(dependencyRoot.ID, "blocks")
+	inProgress := &bead.Bead{ID: "ddx-status-in-progress", Title: "In progress"}
+	externalBlocked := &bead.Bead{ID: "ddx-status-blocked", Title: "Blocked"}
+	proposed := &bead.Bead{ID: "ddx-status-proposed", Title: "Proposed", Status: bead.StatusProposed}
+	closed := &bead.Bead{ID: "ddx-status-closed", Title: "Closed", Status: bead.StatusClosed}
+	cancelled := &bead.Bead{ID: "ddx-status-cancelled", Title: "Cancelled", Status: bead.StatusCancelled}
+	_, factory, store := setupBeadHumanEnv(t, ready, dependencyRoot, dependencyWaiting, inProgress, externalBlocked, proposed, closed, cancelled)
+	require.NoError(t, store.Claim(inProgress.ID, "worker"))
+	require.NoError(t, store.UpdateWithLifecycleStatus(externalBlocked.ID, bead.StatusBlocked, bead.LifecycleTransitionOptions{
+		ExternalBlockerReason: "waiting on upstream release",
+		Reason:                "test external blocker",
+		Source:                "test",
+	}, nil))
 
 	text, err := executeCommand(factory.NewRootCommand(), "bead", "status")
 	require.NoError(t, err)
+	assert.Contains(t, text, "Open:")
+	assert.Contains(t, text, "In progress:")
+	assert.Contains(t, text, "Closed:")
+	assert.Contains(t, text, "Blocked:")
+	assert.Contains(t, text, "Proposed:")
+	assert.Contains(t, text, "Cancelled:")
 	assert.Contains(t, text, "Operator attention:")
 	assert.Contains(t, text, "Worker ready:")
 
@@ -109,9 +128,19 @@ func TestBeadStatusIncludesOperatorAttentionAndWorkerReady(t *testing.T) {
 	require.NoError(t, err)
 	var counts map[string]any
 	require.NoError(t, json.Unmarshal([]byte(out), &counts))
+	assert.Equal(t, float64(8), counts["total"])
+	assert.Equal(t, float64(3), counts["open"])
+	assert.Equal(t, float64(1), counts["in_progress"])
+	assert.Equal(t, float64(1), counts["closed"])
+	assert.Equal(t, float64(1), counts["blocked"])
+	assert.Equal(t, float64(1), counts["proposed"])
+	assert.Equal(t, float64(1), counts["cancelled"])
 	assert.Equal(t, float64(1), counts["needs_human"])
 	assert.Equal(t, float64(1), counts["operator_attention"])
-	assert.Equal(t, float64(1), counts["worker_ready"])
+	assert.Equal(t, float64(2), counts["ready"])
+	assert.Equal(t, float64(2), counts["worker_ready"])
+	assert.Equal(t, float64(1), counts["dependency_waiting"])
+	assert.Equal(t, float64(1), counts["external_blocked"])
 }
 
 func TestBeadHumanResolveRetryRequiresNote(t *testing.T) {
@@ -182,7 +211,7 @@ func TestBeadHumanResolveSplitObsoleteDefer(t *testing.T) {
 		assert.Equal(t, "action=obsolete", events[len(events)-1].Summary)
 	})
 
-	t.Run("defer preserves needs-human with note event", func(t *testing.T) {
+	t.Run("defer preserves operator attention with note event", func(t *testing.T) {
 		nh := &bead.Bead{ID: "ddx-human-defer", Title: "Defer", Status: bead.StatusProposed}
 		_, factory, store := setupBeadHumanEnv(t, nh)
 

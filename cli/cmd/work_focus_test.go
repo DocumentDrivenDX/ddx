@@ -23,15 +23,15 @@ func setupWorkFocusEnv(t *testing.T, beads ...*bead.Bead) *TestEnvironment {
 	return env
 }
 
-// TestWorkFocusReportsInterventionQueue verifies that proposed/operator-attention and
-// review-blocked beads appear in human_required, and dep-blocked beads appear
+// TestWorkFocusReportsInterventionQueue verifies that proposed/operator-attention
+// beads appear in human_required, and dependency-waiting beads appear
 // in blocked_or_planning.
 func TestWorkFocusReportsInterventionQueue(t *testing.T) {
 	blocker := &bead.Bead{
 		ID:    "ddx-focus-blocker",
 		Title: "Blocker bead",
 	}
-	// needs_human bead (operator attention required).
+	// Proposed bead (operator attention required).
 	nhBead := &bead.Bead{
 		ID:     "ddx-focus-nh",
 		Title:  "Needs human attention",
@@ -41,7 +41,7 @@ func TestWorkFocusReportsInterventionQueue(t *testing.T) {
 			bead.ExtraNeedsHumanReason: "review returned terminal BLOCK",
 		},
 	}
-	// Dep-blocked bead (planning required before work can proceed).
+	// Dependency-waiting bead (planning required before work can proceed).
 	depBlocked := &bead.Bead{
 		ID:    "ddx-focus-dep",
 		Title: "Dep-blocked planning bead",
@@ -57,7 +57,7 @@ func TestWorkFocusReportsInterventionQueue(t *testing.T) {
 	var report WorkFocusReport
 	require.NoError(t, json.Unmarshal([]byte(out), &report))
 
-	// needs_human bead must appear in human_required.
+	// Proposed bead must appear in human_required.
 	var foundNH bool
 	for _, item := range report.HumanRequired {
 		if item.ID == nhBead.ID {
@@ -65,14 +65,14 @@ func TestWorkFocusReportsInterventionQueue(t *testing.T) {
 			assert.Equal(t, "review returned terminal BLOCK", item.Reason)
 		}
 	}
-	assert.True(t, foundNH, "needs_human bead must appear in human_required")
+	assert.True(t, foundNH, "proposed bead must appear in human_required")
 
-	// needs_human bead must NOT appear in blocked_or_planning.
+	// Proposed bead must NOT appear in blocked_or_planning.
 	for _, item := range report.BlockedOrPlanning {
-		assert.NotEqual(t, nhBead.ID, item.ID, "needs_human bead must not appear in blocked_or_planning")
+		assert.NotEqual(t, nhBead.ID, item.ID, "proposed bead must not appear in blocked_or_planning")
 	}
 
-	// Dep-blocked bead must appear in blocked_or_planning.
+	// Dependency-waiting bead must appear in blocked_or_planning.
 	var foundDep bool
 	for _, item := range report.BlockedOrPlanning {
 		if item.ID == depBlocked.ID {
@@ -80,7 +80,7 @@ func TestWorkFocusReportsInterventionQueue(t *testing.T) {
 			assert.Equal(t, bead.BlockerKindDependency, item.BlockerKind)
 		}
 	}
-	assert.True(t, foundDep, "dep-blocked bead must appear in blocked_or_planning")
+	assert.True(t, foundDep, "dependency-waiting bead must appear in blocked_or_planning")
 }
 
 // TestWorkFocusOmitsWorkerReadyBeadsByDefault verifies that worker-ready
@@ -119,14 +119,14 @@ func TestWorkFocusOmitsWorkerReadyBeadsByDefault(t *testing.T) {
 	assert.Equal(t, 1, report.ReadySummary.Count)
 	assert.NotEmpty(t, report.ReadySummary.Depth)
 
-	// The needs_human bead must appear in human_required.
+	// The proposed bead must appear in human_required.
 	var foundNH bool
 	for _, item := range report.HumanRequired {
 		if item.ID == nhBead.ID {
 			foundNH = true
 		}
 	}
-	assert.True(t, foundNH, "needs_human bead must still appear in human_required")
+	assert.True(t, foundNH, "proposed bead must still appear in human_required")
 }
 
 // TestWorkFocusJSONIncludesUnknownHazards verifies that the JSON output's
@@ -197,7 +197,7 @@ func TestWorkFocusEmptyQueueExitsSuccessfully(t *testing.T) {
 
 	out, err := executeCommand(root, "work", "focus")
 	require.NoError(t, err)
-	assert.Contains(t, out, "Requires human")
+	assert.Contains(t, out, "Operator attention")
 	assert.Contains(t, out, "Blocked / planning")
 	assert.Contains(t, out, "Worker-ready summary")
 	assert.Contains(t, out, "Worker recommendation")

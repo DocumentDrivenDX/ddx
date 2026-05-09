@@ -9,7 +9,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-// WorkFocusBead is one item in the human_required or blocked_or_planning sections.
+// WorkFocusBead is one item in the operator-attention section.
 type WorkFocusBead struct {
 	ID              string `json:"id"`
 	Title           string `json:"title"`
@@ -57,16 +57,16 @@ func workerReadyDepthLabel(count int) string {
 // buildWorkFocusReport queries the store and returns a WorkFocusReport.
 func buildWorkFocusReport(store *bead.Store) (WorkFocusReport, error) {
 	// Collect operator-attention beads (status=proposed, any dep state).
-	needsHumanBeads, err := store.NeedsHuman()
+	operatorAttentionBeads, err := store.NeedsHuman()
 	if err != nil {
-		return WorkFocusReport{}, fmt.Errorf("work focus: needs_human query: %w", err)
+		return WorkFocusReport{}, fmt.Errorf("work focus: operator attention query: %w", err)
 	}
 
 	// Build a set of operator-attention IDs so we can exclude them from blocked section.
-	nhSet := make(map[string]bool, len(needsHumanBeads))
-	humanRequired := make([]WorkFocusBead, 0, len(needsHumanBeads))
-	for _, b := range needsHumanBeads {
-		nhSet[b.ID] = true
+	operatorAttentionSet := make(map[string]bool, len(operatorAttentionBeads))
+	humanRequired := make([]WorkFocusBead, 0, len(operatorAttentionBeads))
+	for _, b := range operatorAttentionBeads {
+		operatorAttentionSet[b.ID] = true
 		meta := bead.GetNeedsHumanMeta(b)
 		item := WorkFocusBead{
 			ID:    b.ID,
@@ -90,7 +90,7 @@ func buildWorkFocusReport(store *bead.Store) (WorkFocusReport, error) {
 	}
 	var blockedOrPlanning []WorkFocusBlockedBead
 	for _, bb := range allBlocked {
-		if nhSet[bb.ID] {
+		if operatorAttentionSet[bb.ID] {
 			continue
 		}
 		item := WorkFocusBlockedBead{
@@ -181,9 +181,9 @@ func buildWorkerRecommendation(readyCount, inProgressCount int) string {
 func (f *CommandFactory) newWorkFocusCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "focus",
-		Short: "Show work requiring human intervention",
-		Long: `focus shows a read-only summary of queue items that require human
-attention — needs_human/review-blocked beads, dependency-blocked or
+		Short: "Show work requiring operator attention",
+		Long: `focus shows a read-only summary of queue items that require operator
+attention — proposed beads, external blockers, dependency-waiting or
 planning-required beads — along with a conservative worker-capacity
 recommendation based on observable queue depth and in-progress signals.
 
@@ -230,8 +230,8 @@ func (f *CommandFactory) runWorkFocus(cmd *cobra.Command, _ []string) error {
 func printWorkFocusText(cmd *cobra.Command, r WorkFocusReport) error {
 	out := cmd.OutOrStdout()
 
-	// Section: Requires human
-	fmt.Fprintf(out, "=== Requires human (%d) ===\n", len(r.HumanRequired))
+	// Section: Operator attention
+	fmt.Fprintf(out, "=== Operator attention (%d) ===\n", len(r.HumanRequired))
 	if len(r.HumanRequired) == 0 {
 		fmt.Fprintln(out, "  (none)")
 	} else {
