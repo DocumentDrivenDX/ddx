@@ -140,13 +140,13 @@ func printWorkPlanText(cmd *cobra.Command, entries []agent.QueueEntry, breakdown
 	_ = w.Flush()
 
 	if breakdown != nil {
-		if len(breakdown.SkippedEpics) > 0 {
+		if len(breakdown.Epics) > 0 {
 			fmt.Fprintf(out, "  skipped %d ready epic(s) with open children (epics are structural containers; decompose into tasks): %s\n",
-				len(breakdown.SkippedEpics), strings.Join(breakdown.SkippedEpics, ", "))
+				len(breakdown.Epics), strings.Join(breakdown.Epics, ", "))
 		}
-		if len(breakdown.SkippedEpicClosureCandidates) > 0 {
+		if len(breakdown.EpicClosureCandidates) > 0 {
 			fmt.Fprintf(out, "  completed epic closure candidate(s) (all direct children closed; surfaced for closure evaluation): %s\n",
-				strings.Join(breakdown.SkippedEpicClosureCandidates, ", "))
+				strings.Join(breakdown.EpicClosureCandidates, ", "))
 		}
 	}
 

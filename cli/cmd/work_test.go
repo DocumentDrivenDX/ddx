@@ -272,6 +272,70 @@ func TestWorkDefaultOutput_PrintsSelectedRouteEconomics(t *testing.T) {
 	assert.Contains(t, got, expected)
 }
 
+func TestWorkStopSummary_ProposedVsDependencyWaiting(t *testing.T) {
+	var out bytes.Buffer
+	err := writeExecuteLoopResult(&out, "/tmp/project", &agent.ExecuteBeadLoopResult{
+		NoReadyWork: true,
+		NoReadyWorkDetail: agent.NoReadyWorkBreakdown{
+			ProposedOperatorAttention: []string{"ddx-proposed"},
+			DependencyWaiting:         []string{"ddx-waiting"},
+			ExternalBlocked:           []string{"ddx-external"},
+			RetryCooldown:             []string{"ddx-cooldown"},
+			NotEligible:               []string{"ddx-ineligible"},
+			Superseded:                []string{"ddx-superseded"},
+			Epics:                     []string{"ddx-epic"},
+			NextRetryAfter:            "2026-05-09T12:00:00Z",
+		},
+	}, false)
+	require.NoError(t, err)
+
+	got := out.String()
+	assert.Contains(t, got, "operator attention: 1 proposed bead(s) stop autonomous work and may block downstream dependents: ddx-proposed")
+	assert.Contains(t, got, "waiting on dependencies: 1 open bead(s): ddx-waiting")
+	assert.Contains(t, got, "external blocked: 1 bead(s) with explicit blocked status: ddx-external")
+	assert.Contains(t, got, "retry cooldown: 1 bead(s) (next retry-after: 2026-05-09T12:00:00Z): ddx-cooldown")
+	assert.Contains(t, got, "not execution eligible: 1 bead(s): ddx-ineligible")
+	assert.Contains(t, got, "superseded: 1 bead(s): ddx-superseded")
+	assert.Contains(t, got, "epic containers: 1 ready epic(s) with open children")
+	assert.NotContains(t, got, "needs investigation")
+	assert.NotContains(t, got, "blocked/proposed")
+}
+
+func TestWorkStopSummary_CompletedThenDrainedIncludesNoReadyDetail(t *testing.T) {
+	var out bytes.Buffer
+	err := writeExecuteLoopResult(&out, "/tmp/project", &agent.ExecuteBeadLoopResult{
+		Attempts:    1,
+		Successes:   1,
+		NoReadyWork: true,
+		NoReadyWorkDetail: agent.NoReadyWorkBreakdown{
+			ProposedOperatorAttention: []string{"ddx-proposed"},
+			DependencyWaiting:         []string{"ddx-waiting"},
+		},
+		Results: []agent.ExecuteBeadReport{{
+			BeadID: "ddx-done",
+			Status: agent.ExecuteBeadStatusSuccess,
+			Detail: "merged cleanly",
+		}},
+	}, false)
+	require.NoError(t, err)
+
+	got := out.String()
+	assert.Contains(t, got, "completed: 1  |  successes: 1  |  failures: 0")
+	assert.Contains(t, got, "No execution-ready beads.")
+	assert.Contains(t, got, "operator attention: 1 proposed bead(s) stop autonomous work")
+	assert.Contains(t, got, "waiting on dependencies: 1 open bead(s): ddx-waiting")
+}
+
+func TestWorkStopSummary_DrainedEmptyQueue(t *testing.T) {
+	var out bytes.Buffer
+	err := writeExecuteLoopResult(&out, "/tmp/project", &agent.ExecuteBeadLoopResult{
+		NoReadyWork: true,
+	}, false)
+	require.NoError(t, err)
+
+	assert.Contains(t, out.String(), "queue drained: no open work remains in lifecycle queues.")
+}
+
 func TestWorkJSONOutput_IncludesRouteEconomicsWithoutHumanLines(t *testing.T) {
 	var out bytes.Buffer
 	err := writeExecuteLoopResult(&out, "/tmp/project", &agent.ExecuteBeadLoopResult{

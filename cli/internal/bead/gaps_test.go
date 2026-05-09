@@ -203,9 +203,38 @@ func TestReadyExecutionBreakdown_SeparatesCooldownFromNonExecutable(t *testing.T
 
 	breakdown, err := s.ReadyExecutionBreakdown()
 	require.NoError(t, err)
-	assert.Equal(t, []string{cooldown.ID}, breakdown.SkippedOnCooldown)
-	assert.Equal(t, []string{notEligible.ID}, breakdown.SkippedNotEligible)
-	assert.Empty(t, breakdown.SkippedSuperseded)
+	assert.Equal(t, []string{cooldown.ID}, breakdown.RetryCooldown)
+	assert.Equal(t, []string{notEligible.ID}, breakdown.NotEligible)
+	assert.Empty(t, breakdown.Superseded)
+}
+
+func TestReadyExecutionBreakdown_UsesLifecycleBuckets(t *testing.T) {
+	s := newTestStore(t)
+
+	ready := &Bead{ID: "ddx-ready", Title: "Ready", Priority: 0}
+	proposed := &Bead{ID: "ddx-proposed", Title: "Proposed", Status: StatusProposed, Priority: 1}
+	externalBlocked := &Bead{
+		ID:       "ddx-external-blocked",
+		Title:    "External blocked",
+		Status:   StatusBlocked,
+		Priority: 2,
+		Extra: map[string]any{
+			ExtraLifecycleExternalBlockerReason: "waiting for upstream release",
+		},
+	}
+	dependencyWaiting := &Bead{ID: "ddx-dependency-waiting", Title: "Dependency waiting", Priority: 3}
+	dependencyWaiting.AddDep(externalBlocked.ID, "blocks")
+	require.NoError(t, s.Create(ready))
+	require.NoError(t, s.Create(proposed))
+	require.NoError(t, s.Create(externalBlocked))
+	require.NoError(t, s.Create(dependencyWaiting))
+
+	breakdown, err := s.ReadyExecutionBreakdown()
+	require.NoError(t, err)
+	assert.Equal(t, []string{ready.ID}, breakdown.ExecutionReady)
+	assert.Equal(t, []string{proposed.ID}, breakdown.ProposedOperatorAttention)
+	assert.Equal(t, []string{externalBlocked.ID}, breakdown.ExternalBlocked)
+	assert.Equal(t, []string{dependencyWaiting.ID}, breakdown.DependencyWaiting)
 }
 
 func TestReadyExecution_ExcludesOrdinaryEpics(t *testing.T) {
@@ -223,7 +252,7 @@ func TestReadyExecution_ExcludesOrdinaryEpics(t *testing.T) {
 
 	breakdown, err := s.ReadyExecutionBreakdown()
 	require.NoError(t, err)
-	assert.Equal(t, []string{epic.ID}, breakdown.SkippedEpics)
+	assert.Equal(t, []string{epic.ID}, breakdown.Epics)
 }
 
 func TestReadyExecutionBreakdown_ClassifiesEpicClosureCandidates(t *testing.T) {
@@ -249,8 +278,8 @@ func TestReadyExecutionBreakdown_ClassifiesEpicClosureCandidates(t *testing.T) {
 
 	breakdown, err := s.ReadyExecutionBreakdown()
 	require.NoError(t, err)
-	assert.Equal(t, []string{activeEpic.ID}, breakdown.SkippedEpics)
-	assert.Equal(t, []string{completedEpic.ID}, breakdown.SkippedEpicClosureCandidates)
+	assert.Equal(t, []string{activeEpic.ID}, breakdown.Epics)
+	assert.Equal(t, []string{completedEpic.ID}, breakdown.EpicClosureCandidates)
 }
 
 func TestBlockedAllClassifiesDepAndRetryCooldown(t *testing.T) {

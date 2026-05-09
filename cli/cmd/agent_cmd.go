@@ -1863,42 +1863,8 @@ func writeExecuteLoopResult(w io.Writer, projectRoot string, result *agent.Execu
 		return enc.Encode(payload)
 	}
 
-	if result.NoReadyWork {
-		fmt.Fprintf(w, "project: %s\n", projectRoot)
-		fmt.Fprintln(w, "No execution-ready beads.")
-		d := result.NoReadyWorkDetail
-		if len(d.SkippedEpics) > 0 {
-			fmt.Fprintf(w, "  skipped %d ready epic(s) with open children (epics are structural containers; decompose into tasks): %s\n",
-				len(d.SkippedEpics), strings.Join(d.SkippedEpics, ", "))
-		}
-		if len(d.SkippedEpicClosureCandidates) > 0 {
-			fmt.Fprintf(w, "  completed epic closure candidate(s) (all direct children closed; surfaced for closure evaluation): %s\n",
-				strings.Join(d.SkippedEpicClosureCandidates, ", "))
-		}
-		if len(d.SkippedOnCooldown) > 0 {
-			retryHint := ""
-			if d.NextRetryAfter != "" {
-				retryHint = " (next retry-after: " + d.NextRetryAfter + ")"
-			}
-			fmt.Fprintf(w, "  skipped %d bead(s) on retry cooldown%s: %s\n",
-				len(d.SkippedOnCooldown), retryHint, strings.Join(d.SkippedOnCooldown, ", "))
-		}
-		if len(d.SkippedNeedsInvestigation) > 0 {
-			fmt.Fprintf(w, "  skipped %d bead(s) needing investigation or human input: %s\n",
-				len(d.SkippedNeedsInvestigation), strings.Join(d.SkippedNeedsInvestigation, ", "))
-		}
-		if len(d.SkippedBlocked) > 0 {
-			fmt.Fprintf(w, "  skipped %d bead(s) with blocked/proposed/cancelled lifecycle status: %s\n",
-				len(d.SkippedBlocked), strings.Join(d.SkippedBlocked, ", "))
-		}
-		if len(d.SkippedNotEligible) > 0 {
-			fmt.Fprintf(w, "  skipped %d bead(s) with execution-eligible=false: %s\n",
-				len(d.SkippedNotEligible), strings.Join(d.SkippedNotEligible, ", "))
-		}
-		if len(d.SkippedSuperseded) > 0 {
-			fmt.Fprintf(w, "  skipped %d superseded bead(s): %s\n",
-				len(d.SkippedSuperseded), strings.Join(d.SkippedSuperseded, ", "))
-		}
+	if result.NoReadyWork && result.Attempts == 0 {
+		writeNoReadyWorkSummary(w, projectRoot, result.NoReadyWorkDetail)
 		return nil
 	}
 
@@ -1921,7 +1887,70 @@ func writeExecuteLoopResult(w io.Writer, projectRoot string, result *agent.Execu
 			}
 		}
 	}
+	if result.NoReadyWork {
+		fmt.Fprintln(w)
+		writeNoReadyWorkSummary(w, "", result.NoReadyWorkDetail)
+	}
 	return nil
+}
+
+func writeNoReadyWorkSummary(w io.Writer, projectRoot string, d agent.NoReadyWorkBreakdown) {
+	if projectRoot != "" {
+		fmt.Fprintf(w, "project: %s\n", projectRoot)
+	}
+	fmt.Fprintln(w, "No execution-ready beads.")
+	if noReadyWorkBreakdownEmpty(d) {
+		fmt.Fprintln(w, "  queue drained: no open work remains in lifecycle queues.")
+	}
+	if len(d.ProposedOperatorAttention) > 0 {
+		fmt.Fprintf(w, "  operator attention: %d proposed bead(s) stop autonomous work and may block downstream dependents: %s\n",
+			len(d.ProposedOperatorAttention), strings.Join(d.ProposedOperatorAttention, ", "))
+	}
+	if len(d.DependencyWaiting) > 0 {
+		fmt.Fprintf(w, "  waiting on dependencies: %d open bead(s): %s\n",
+			len(d.DependencyWaiting), strings.Join(d.DependencyWaiting, ", "))
+	}
+	if len(d.ExternalBlocked) > 0 {
+		fmt.Fprintf(w, "  external blocked: %d bead(s) with explicit blocked status: %s\n",
+			len(d.ExternalBlocked), strings.Join(d.ExternalBlocked, ", "))
+	}
+	if len(d.RetryCooldown) > 0 {
+		retryHint := ""
+		if d.NextRetryAfter != "" {
+			retryHint = " (next retry-after: " + d.NextRetryAfter + ")"
+		}
+		fmt.Fprintf(w, "  retry cooldown: %d bead(s)%s: %s\n",
+			len(d.RetryCooldown), retryHint, strings.Join(d.RetryCooldown, ", "))
+	}
+	if len(d.NotEligible) > 0 {
+		fmt.Fprintf(w, "  not execution eligible: %d bead(s): %s\n",
+			len(d.NotEligible), strings.Join(d.NotEligible, ", "))
+	}
+	if len(d.Superseded) > 0 {
+		fmt.Fprintf(w, "  superseded: %d bead(s): %s\n",
+			len(d.Superseded), strings.Join(d.Superseded, ", "))
+	}
+	if len(d.Epics) > 0 {
+		fmt.Fprintf(w, "  epic containers: %d ready epic(s) with open children (decompose into tasks): %s\n",
+			len(d.Epics), strings.Join(d.Epics, ", "))
+	}
+	if len(d.EpicClosureCandidates) > 0 {
+		fmt.Fprintf(w, "  completed epic closure candidate(s) (all direct children closed; surfaced for closure evaluation): %s\n",
+			strings.Join(d.EpicClosureCandidates, ", "))
+	}
+}
+
+func noReadyWorkBreakdownEmpty(d agent.NoReadyWorkBreakdown) bool {
+	return len(d.ExecutionReady) == 0 &&
+		len(d.DependencyWaiting) == 0 &&
+		len(d.ProposedOperatorAttention) == 0 &&
+		len(d.RetryCooldown) == 0 &&
+		len(d.ExternalBlocked) == 0 &&
+		len(d.NotEligible) == 0 &&
+		len(d.Superseded) == 0 &&
+		len(d.Epics) == 0 &&
+		len(d.EpicClosureCandidates) == 0 &&
+		d.NextRetryAfter == ""
 }
 
 // resolveProjectRoot returns the project root to use for work, execute-bead,

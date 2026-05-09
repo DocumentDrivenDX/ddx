@@ -823,8 +823,8 @@ func TestExecuteBeadWorkerEpicIsNotOrdinaryWork(t *testing.T) {
 	require.NotNil(t, result)
 	assert.True(t, result.NoReadyWork, "ordinary ddx work must skip epic containers")
 	assert.Empty(t, executed, "ordinary ddx work must not execute epics")
-	assert.Equal(t, []string{"ddx-epic-001"}, result.NoReadyWorkDetail.SkippedEpics)
-	assert.Equal(t, []string{"ddx-task-002"}, result.NoReadyWorkDetail.SkippedOnCooldown)
+	assert.Equal(t, []string{"ddx-epic-001"}, result.NoReadyWorkDetail.Epics)
+	assert.Equal(t, []string{"ddx-task-002"}, result.NoReadyWorkDetail.RetryCooldown)
 }
 
 func TestExecuteBeadWorkerEvaluatesCompletedEpicForClosure(t *testing.T) {
@@ -855,8 +855,77 @@ func TestExecuteBeadWorkerEvaluatesCompletedEpicForClosure(t *testing.T) {
 	require.NotNil(t, result)
 	assert.True(t, result.NoReadyWork)
 	assert.Empty(t, result.Results)
-	assert.Equal(t, []string{"ddx-epic-open"}, result.NoReadyWorkDetail.SkippedEpics)
-	assert.Equal(t, []string{"ddx-epic-closed"}, result.NoReadyWorkDetail.SkippedEpicClosureCandidates)
+	assert.Equal(t, []string{"ddx-epic-open"}, result.NoReadyWorkDetail.Epics)
+	assert.Equal(t, []string{"ddx-epic-closed"}, result.NoReadyWorkDetail.EpicClosureCandidates)
+}
+
+func TestExecuteBeadLoopResult_LifecycleQueueSnapshot(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	runnable := &bead.Bead{ID: "ddx-runnable", Title: "Runnable", Priority: 0}
+	proposed := &bead.Bead{ID: "ddx-proposed", Title: "Proposed", Status: bead.StatusProposed, Priority: 1}
+	externalBlocked := &bead.Bead{ID: "ddx-external", Title: "External blocked", Priority: 2}
+	dependencyWaiting := &bead.Bead{ID: "ddx-waiting", Title: "Waiting on dep", Priority: 3}
+	dependencyWaiting.AddDep(externalBlocked.ID, "blocks")
+	cooldown := &bead.Bead{ID: "ddx-cooldown", Title: "Retry later", Priority: 4}
+
+	require.NoError(t, store.Create(runnable))
+	require.NoError(t, store.Create(proposed))
+	require.NoError(t, store.Create(externalBlocked))
+	require.NoError(t, store.UpdateWithLifecycleStatus(externalBlocked.ID, bead.StatusBlocked, bead.LifecycleTransitionOptions{
+		ExternalBlockerReason: "waiting for upstream release",
+		Reason:                "test external blocker",
+		Source:                "test",
+	}, nil))
+	require.NoError(t, store.Create(dependencyWaiting))
+	require.NoError(t, store.Create(cooldown))
+	require.NoError(t, store.SetExecutionCooldown(cooldown.ID, time.Now().UTC().Add(time.Hour), ExecuteBeadStatusNoChanges, "retry later"))
+
+	var executed []string
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			executed = append(executed, beadID)
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				Detail:    "merged cleanly",
+				SessionID: "sess-" + beadID,
+				ResultRev: "feedface",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, []string{runnable.ID}, executed)
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
+	assert.True(t, result.NoReadyWork, "no-ready detail must be captured after the completed attempt drains the executable queue")
+	assert.Empty(t, result.NoReadyWorkDetail.ExecutionReady)
+	assert.ElementsMatch(t, []string{proposed.ID}, result.NoReadyWorkDetail.ProposedOperatorAttention)
+	assert.ElementsMatch(t, []string{externalBlocked.ID}, result.NoReadyWorkDetail.ExternalBlocked)
+	assert.ElementsMatch(t, []string{dependencyWaiting.ID}, result.NoReadyWorkDetail.DependencyWaiting)
+	assert.ElementsMatch(t, []string{cooldown.ID}, result.NoReadyWorkDetail.RetryCooldown)
+}
+
+func TestNoReadyWorkDetail_DoesNotExposeNeedsInvestigation(t *testing.T) {
+	body, err := json.Marshal(ExecuteBeadLoopResult{
+		NoReadyWork: true,
+		NoReadyWorkDetail: NoReadyWorkBreakdown{
+			ProposedOperatorAttention: []string{"ddx-proposed"},
+			DependencyWaiting:         []string{"ddx-waiting"},
+		},
+	})
+	require.NoError(t, err)
+	assert.Contains(t, string(body), "proposed_operator_attention")
+	assert.Contains(t, string(body), "dependency_waiting")
+	assert.NotContains(t, string(body), "skipped_needs_investigation")
+	assert.NotContains(t, string(body), "needs_investigation")
 }
 
 func TestExecuteBeadWorkerConcurrentWorkersDoNotDoubleExecuteSameBead(t *testing.T) {

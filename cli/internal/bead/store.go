@@ -1580,21 +1580,19 @@ func (s *Store) NeedsHuman() ([]Bead, error) {
 	return result, nil
 }
 
-// ReadyExecutionBreakdown classifies dependency-ready beads by the reason
-// they are NOT execution-eligible: lifecycle-blocked statuses, epic
-// containers, retry cooldown, execution-eligible=false, or superseded. It's
-// the diagnostic the work loop emits when the execution queue is empty but
-// `ddx bead ready` is not.
+// ReadyExecutionBreakdown is the lifecycle-derived queue snapshot used by the
+// worker when explaining an empty execution queue.
 type ReadyExecutionBreakdown struct {
-	SkippedEpics                 []string
-	SkippedEpicClosureCandidates []string
-	SkippedOnCooldown            []string
-	SkippedNeedsInvestigation    []string
-	SkippedOperatorAttention     []string
-	SkippedBlocked               []string
-	SkippedNotEligible           []string
-	SkippedSuperseded            []string
-	NextRetryAfter               string
+	ExecutionReady            []string
+	DependencyWaiting         []string
+	ProposedOperatorAttention []string
+	RetryCooldown             []string
+	ExternalBlocked           []string
+	NotEligible               []string
+	Superseded                []string
+	Epics                     []string
+	EpicClosureCandidates     []string
+	NextRetryAfter            string
 }
 
 func (s *Store) ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error) {
@@ -1606,32 +1604,30 @@ func (s *Store) ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error) {
 	now := time.Now().UTC()
 	var soonestRetry time.Time
 	for _, entry := range s.classifyLifecycleQueue(beads, now) {
-		if entry.Decision.WorkerEligible {
-			continue
-		}
-		if !entry.Decision.DependenciesSatisfied {
-			continue
-		}
 		switch entry.Decision.Bucket {
+		case LifecycleBucketReady:
+			out.ExecutionReady = append(out.ExecutionReady, entry.ID)
+		case LifecycleBucketWaitingDependencies:
+			out.DependencyWaiting = append(out.DependencyWaiting, entry.ID)
 		case LifecycleBucketRetryCooldown:
-			out.SkippedOnCooldown = append(out.SkippedOnCooldown, entry.ID)
+			out.RetryCooldown = append(out.RetryCooldown, entry.ID)
 			if !entry.RetryAfter.IsZero() && (soonestRetry.IsZero() || entry.RetryAfter.Before(soonestRetry)) {
 				soonestRetry = entry.RetryAfter
 			}
 		case LifecycleBucketEpicContainer:
 			if entry.EpicClosureCandidate {
-				out.SkippedEpicClosureCandidates = append(out.SkippedEpicClosureCandidates, entry.ID)
+				out.EpicClosureCandidates = append(out.EpicClosureCandidates, entry.ID)
 			} else {
-				out.SkippedEpics = append(out.SkippedEpics, entry.ID)
+				out.Epics = append(out.Epics, entry.ID)
 			}
 		case LifecycleBucketNotEligible:
-			out.SkippedNotEligible = append(out.SkippedNotEligible, entry.ID)
+			out.NotEligible = append(out.NotEligible, entry.ID)
 		case LifecycleBucketSuperseded:
-			out.SkippedSuperseded = append(out.SkippedSuperseded, entry.ID)
-		case LifecycleBucketBlockedExternal, LifecycleBucketCancelledTerminal:
-			out.SkippedBlocked = append(out.SkippedBlocked, entry.ID)
+			out.Superseded = append(out.Superseded, entry.ID)
+		case LifecycleBucketBlockedExternal:
+			out.ExternalBlocked = append(out.ExternalBlocked, entry.ID)
 		case LifecycleBucketProposed:
-			out.SkippedOperatorAttention = append(out.SkippedOperatorAttention, entry.ID)
+			out.ProposedOperatorAttention = append(out.ProposedOperatorAttention, entry.ID)
 		}
 	}
 	if !soonestRetry.IsZero() {

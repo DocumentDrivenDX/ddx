@@ -363,18 +363,20 @@ type readyDiagnoser interface {
 	ReadyExecutionBreakdown() (bead.ReadyExecutionBreakdown, error)
 }
 
-// NoReadyWorkBreakdown explains why the execution-ready queue is empty when
-// dependency-ready beads exist. Populated on an ExecuteBeadLoopResult when
-// NoReadyWork fires and the store exposes ReadyExecutionBreakdown.
+// NoReadyWorkBreakdown explains why the execution-ready queue is empty.
+// Populated on an ExecuteBeadLoopResult when NoReadyWork fires and the store
+// exposes ReadyExecutionBreakdown.
 type NoReadyWorkBreakdown struct {
-	SkippedEpics                 []string `json:"skipped_epics,omitempty"`
-	SkippedEpicClosureCandidates []string `json:"skipped_epic_closure_candidates,omitempty"`
-	SkippedOnCooldown            []string `json:"skipped_on_cooldown,omitempty"`
-	SkippedNeedsInvestigation    []string `json:"skipped_needs_investigation,omitempty"`
-	SkippedBlocked               []string `json:"skipped_blocked,omitempty"`
-	SkippedNotEligible           []string `json:"skipped_not_eligible,omitempty"`
-	SkippedSuperseded            []string `json:"skipped_superseded,omitempty"`
-	NextRetryAfter               string   `json:"next_retry_after,omitempty"`
+	ExecutionReady            []string `json:"execution_ready,omitempty"`
+	DependencyWaiting         []string `json:"dependency_waiting,omitempty"`
+	ProposedOperatorAttention []string `json:"proposed_operator_attention,omitempty"`
+	RetryCooldown             []string `json:"retry_cooldown,omitempty"`
+	ExternalBlocked           []string `json:"external_blocked,omitempty"`
+	NotEligible               []string `json:"not_eligible,omitempty"`
+	Superseded                []string `json:"superseded,omitempty"`
+	Epics                     []string `json:"epics,omitempty"`
+	EpicClosureCandidates     []string `json:"epic_closure_candidates,omitempty"`
+	NextRetryAfter            string   `json:"next_retry_after,omitempty"`
 }
 
 // ProgressEvent is the FEAT-006 structured progress event. It is defined
@@ -672,21 +674,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			if hasGuardSkips(skips) {
 				continue
 			}
-			if result.Attempts == 0 {
-				result.NoReadyWork = true
-				if diag, ok := w.Store.(readyDiagnoser); ok {
-					if breakdown, bErr := diag.ReadyExecutionBreakdown(); bErr == nil {
-						result.NoReadyWorkDetail = NoReadyWorkBreakdown{
-							SkippedEpics:                 breakdown.SkippedEpics,
-							SkippedEpicClosureCandidates: breakdown.SkippedEpicClosureCandidates,
-							SkippedOnCooldown:            breakdown.SkippedOnCooldown,
-							SkippedNeedsInvestigation:    breakdown.SkippedNeedsInvestigation,
-							SkippedBlocked:               breakdown.SkippedBlocked,
-							SkippedNotEligible:           breakdown.SkippedNotEligible,
-							SkippedSuperseded:            breakdown.SkippedSuperseded,
-							NextRetryAfter:               breakdown.NextRetryAfter,
-						}
-					}
+			result.NoReadyWork = true
+			if diag, ok := w.Store.(readyDiagnoser); ok {
+				if breakdown, bErr := diag.ReadyExecutionBreakdown(); bErr == nil {
+					result.NoReadyWorkDetail = noReadyWorkBreakdownFromLifecycle(breakdown)
 				}
 			}
 			if applyStop(work.StopInput{
@@ -1564,6 +1555,21 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			applyStop(work.StopInput{Once: true})
 			return result, nil
 		}
+	}
+}
+
+func noReadyWorkBreakdownFromLifecycle(b bead.ReadyExecutionBreakdown) NoReadyWorkBreakdown {
+	return NoReadyWorkBreakdown{
+		ExecutionReady:            b.ExecutionReady,
+		DependencyWaiting:         b.DependencyWaiting,
+		ProposedOperatorAttention: b.ProposedOperatorAttention,
+		RetryCooldown:             b.RetryCooldown,
+		ExternalBlocked:           b.ExternalBlocked,
+		NotEligible:               b.NotEligible,
+		Superseded:                b.Superseded,
+		Epics:                     b.Epics,
+		EpicClosureCandidates:     b.EpicClosureCandidates,
+		NextRetryAfter:            b.NextRetryAfter,
 	}
 }
 
