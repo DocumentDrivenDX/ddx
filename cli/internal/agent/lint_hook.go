@@ -291,33 +291,78 @@ func lintPromptSafeCustomValue(v any) (any, bool) {
 	}
 }
 
-func hasBeadLifecycleSkill(projectRoot string) bool {
-	if strings.TrimSpace(projectRoot) == "" {
-		return false
-	}
-	candidates := []string{
-		filepath.Join(projectRoot, ".agents", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
-		filepath.Join(projectRoot, ".claude", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
-	}
-	for _, p := range candidates {
+type BeadLifecycleSkillDiagnostics struct {
+	ProjectRoot  string
+	CheckedPaths []string
+	FoundPath    string
+}
+
+func HasBeadLifecycleSkillDiagnostics(projectRoot string) (bool, BeadLifecycleSkillDiagnostics) {
+	diag := beadLifecycleSkillDiagnostics(projectRoot)
+	for _, p := range diag.CheckedPaths {
 		if _, err := os.Stat(p); err == nil {
-			return true
+			diag.FoundPath = p
+			return true, diag
 		}
 	}
-	return false
+	return false, diag
+}
+
+func beadLifecycleSkillDiagnostics(projectRoot string) BeadLifecycleSkillDiagnostics {
+	root := strings.TrimSpace(projectRoot)
+	if root != "" {
+		if abs, err := filepath.Abs(root); err == nil {
+			root = abs
+		} else {
+			root = filepath.Clean(root)
+		}
+	}
+	checked := []string{}
+	if root != "" {
+		checked = []string{
+			filepath.Join(root, ".agents", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
+			filepath.Join(root, ".claude", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
+		}
+	}
+	return BeadLifecycleSkillDiagnostics{
+		ProjectRoot:  root,
+		CheckedPaths: checked,
+	}
+}
+
+func hasBeadLifecycleSkill(projectRoot string) bool {
+	ok, _ := HasBeadLifecycleSkillDiagnostics(projectRoot)
+	return ok
+}
+
+func beadLifecycleSkillMissingError(diag BeadLifecycleSkillDiagnostics, cause error) error {
+	parts := []string{"skill missing: bead-lifecycle"}
+	if diag.ProjectRoot != "" {
+		parts = append(parts, "project_root="+diag.ProjectRoot)
+	}
+	if len(diag.CheckedPaths) > 0 {
+		parts = append(parts, "checked_paths="+strings.Join(diag.CheckedPaths, ","))
+	}
+	if cause != nil {
+		parts = append(parts, "auto-install failed: "+cause.Error())
+	}
+	parts = append(parts, "remediation: run `ddx update --force` from the project root, then run `ddx doctor`")
+	return errors.New(strings.Join(parts, "; "))
 }
 
 func ensureBeadLifecycleSkill(projectRoot string) error {
-	if hasBeadLifecycleSkill(projectRoot) {
+	ok, diag := HasBeadLifecycleSkillDiagnostics(projectRoot)
+	if ok {
 		return nil
 	}
 	if err := skills.Install(skills.SkillFiles, projectRoot, skills.Options{Force: true}); err != nil {
-		return fmt.Errorf("skill missing: bead-lifecycle; auto-install failed: %w; run `ddx update --force` from the project root", err)
+		return beadLifecycleSkillMissingError(diag, err)
 	}
-	if hasBeadLifecycleSkill(projectRoot) {
+	ok, diag = HasBeadLifecycleSkillDiagnostics(projectRoot)
+	if ok {
 		return nil
 	}
-	return fmt.Errorf("skill missing: bead-lifecycle; run `ddx update --force` from the project root")
+	return beadLifecycleSkillMissingError(diag, nil)
 }
 
 func isUnknownHarnessError(err error) bool {
