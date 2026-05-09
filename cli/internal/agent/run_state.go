@@ -41,6 +41,14 @@ type RunState struct {
 	SessionID    string    `json:"session_id,omitempty"`
 	RefreshedAt  time.Time `json:"refreshed_at,omitempty"`
 	ExpiresAt    time.Time `json:"expires_at,omitempty"`
+	// Candidate-cycle fields mirror cleanup metadata so operators can see
+	// which candidate phase owns a long-lived attempt worktree.
+	CandidateCyclePhase string `json:"candidate_cycle_phase,omitempty"`
+	CandidateRef        string `json:"candidate_ref,omitempty"`
+	CandidateRev        string `json:"candidate_rev,omitempty"`
+	CycleIndex          int    `json:"cycle_index,omitempty"`
+	ReviewActive        bool   `json:"review_active,omitempty"`
+	RepairActive        bool   `json:"repair_active,omitempty"`
 }
 
 // runStatePath returns the absolute path of the run-state file for the

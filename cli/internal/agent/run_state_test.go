@@ -78,6 +78,56 @@ func TestRunState_WriteReadCleanupCycle(t *testing.T) {
 	}
 }
 
+func TestRunState_CandidateCycleFieldsRoundTrip(t *testing.T) {
+	projectRoot := t.TempDir()
+	want := RunState{
+		BeadID:              "ddx-cycle",
+		AttemptID:           "attempt-cycle",
+		StartedAt:           time.Date(2026, 5, 9, 3, 0, 0, 0, time.UTC),
+		WorktreePath:        filepath.Join(projectRoot, "wt"),
+		CandidateCyclePhase: "review",
+		CandidateRef:        "refs/ddx/iterations/attempt-cycle/0",
+		CandidateRev:        "abc123",
+		CycleIndex:          0,
+		ReviewActive:        true,
+	}
+	if err := WriteRunState(projectRoot, want); err != nil {
+		t.Fatalf("WriteRunState: %v", err)
+	}
+	got, err := ReadRunState(projectRoot)
+	if err != nil || got == nil {
+		t.Fatalf("ReadRunState: got (%+v, %v)", got, err)
+	}
+	if got.CandidateCyclePhase != want.CandidateCyclePhase ||
+		got.CandidateRef != want.CandidateRef ||
+		got.CandidateRev != want.CandidateRev ||
+		got.CycleIndex != want.CycleIndex ||
+		!got.ReviewActive ||
+		got.RepairActive {
+		t.Fatalf("candidate-cycle fields did not round trip: got %+v want %+v", *got, want)
+	}
+}
+
+func TestRunState_OldJSONWithoutCandidateCycleFields(t *testing.T) {
+	projectRoot := t.TempDir()
+	requireDir := filepath.Join(projectRoot, ".ddx")
+	if err := os.MkdirAll(requireDir, 0o755); err != nil {
+		t.Fatalf("mkdir .ddx: %v", err)
+	}
+	raw := `{"bead_id":"ddx-old","attempt_id":"attempt-old","started_at":"2026-05-09T03:15:00Z","worktree_path":"/tmp/ddx-old-wt"}` + "\n"
+	if err := os.WriteFile(filepath.Join(requireDir, "run-state.json"), []byte(raw), 0o644); err != nil {
+		t.Fatalf("write legacy run-state: %v", err)
+	}
+	got, err := ReadRunState(projectRoot)
+	if err != nil || got == nil {
+		t.Fatalf("ReadRunState: got (%+v, %v)", got, err)
+	}
+	if got.CandidateCyclePhase != "" || got.CandidateRef != "" || got.CandidateRev != "" ||
+		got.CycleIndex != 0 || got.ReviewActive || got.RepairActive {
+		t.Fatalf("legacy run-state should default candidate-cycle fields to zero values: %+v", *got)
+	}
+}
+
 func TestRunState_WriteOverwritesExisting(t *testing.T) {
 	projectRoot := t.TempDir()
 	if err := WriteRunState(projectRoot, RunState{BeadID: "first", AttemptID: "a1", StartedAt: time.Now().UTC()}); err != nil {

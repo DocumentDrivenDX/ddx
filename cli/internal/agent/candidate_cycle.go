@@ -25,6 +25,18 @@ type CandidateResult struct {
 	CycleIndex int
 }
 
+// CandidateCycleState is the shared on-disk snapshot of the candidate-cycle
+// phase currently owning a live attempt worktree.
+type CandidateCycleState struct {
+	Active       bool
+	Phase        string
+	CandidateRef string
+	CandidateRev string
+	CycleIndex   int
+	ReviewActive bool
+	RepairActive bool
+}
+
 // ImplementationPass runs the agent in an isolated worktree and returns a
 // CandidateResult. It does not own terminal cleanup — the AttemptCycleCoordinator
 // is responsible for worktree removal after disposition.
@@ -223,10 +235,30 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 	repairCycles := 0
 	var pinnedRefs []string
 	for {
+		c.recordCandidateCycleState(candidate, CandidateCycleState{
+			Active:       true,
+			Phase:        "candidate",
+			CandidateRev: candidate.Report.ResultRev,
+			CycleIndex:   candidate.CycleIndex,
+		})
 		c.pinCandidateRef(beadID, &candidate)
 		pinnedRefs = appendUniqueString(pinnedRefs, candidate.Report.CandidateRef)
+		c.recordCandidateCycleState(candidate, CandidateCycleState{
+			Active:       true,
+			Phase:        "candidate_pinned",
+			CandidateRef: candidate.Report.CandidateRef,
+			CandidateRev: candidate.Report.ResultRev,
+			CycleIndex:   candidate.CycleIndex,
+		})
 
 		if c.Checks != nil {
+			c.recordCandidateCycleState(candidate, CandidateCycleState{
+				Active:       true,
+				Phase:        "checks",
+				CandidateRef: candidate.Report.CandidateRef,
+				CandidateRev: candidate.Report.ResultRev,
+				CycleIndex:   candidate.CycleIndex,
+			})
 			checksResult, checksErr := c.Checks.RunChecks(ctx, c.ProjectRoot, candidate)
 			if checksErr != nil {
 				checksResult.Detail = checksErr.Error()
@@ -252,6 +284,14 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 			break
 		}
 
+		c.recordCandidateCycleState(candidate, CandidateCycleState{
+			Active:       true,
+			Phase:        "review",
+			CandidateRef: candidate.Report.CandidateRef,
+			CandidateRev: candidate.Report.ResultRev,
+			CycleIndex:   candidate.CycleIndex,
+			ReviewActive: true,
+		})
 		reviewResult, reviewErr := c.Reviewer.Review(ctx, c.ProjectRoot, candidate)
 		if reviewErr != nil {
 			report := candidate.Report
@@ -297,6 +337,14 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 			}
 			prompt := BuildRepairPrompt(repairPromptInput(beadID, candidate, reviewResult, repairCycles+1))
 			c.appendRepairCycleStartedEvent(beadID, candidate, repairCycles+1, classification.Class)
+			c.recordCandidateCycleState(candidate, CandidateCycleState{
+				Active:       true,
+				Phase:        "repair",
+				CandidateRef: candidate.Report.CandidateRef,
+				CandidateRev: candidate.Report.ResultRev,
+				CycleIndex:   candidate.CycleIndex,
+				RepairActive: true,
+			})
 			repaired, repairErr := c.Repair.Repair(ctx, candidate, prompt)
 			if repairErr != nil {
 				report.Status = ExecuteBeadStatusExecutionFailed
@@ -348,6 +396,13 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 	}
 
 	return result, nil
+}
+
+func (c *AttemptCycleCoordinator) recordCandidateCycleState(candidate CandidateResult, state CandidateCycleState) {
+	if candidate.WorktreePath == "" {
+		return
+	}
+	_ = WriteWorktreeCandidateCycleState(c.ProjectRoot, candidate.WorktreePath, candidate.Report.AttemptID, state)
 }
 
 func candidateChecksFailedDetail(detail string) string {
@@ -524,16 +579,47 @@ func (c *AttemptCycleCoordinator) appendRepairCycleStartedEvent(beadID string, c
 	})
 }
 
+// WriteWorktreeCandidateCycleState updates cleanup metadata and, when a
+// matching run-state exists, the per-attempt run-state snapshot for a live
+// candidate-cycle worktree.
+func WriteWorktreeCandidateCycleState(projectRoot, wtPath, attemptID string, state CandidateCycleState) error {
+	meta, err := ReadExecutionCleanupMetadata(wtPath)
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("write candidate cycle state: read metadata: %w", err)
+	}
+	meta.WorktreePath = firstNonEmpty(meta.WorktreePath, wtPath)
+	meta.ProjectRoot = firstNonEmpty(meta.ProjectRoot, projectRoot)
+	meta.AttemptID = firstNonEmpty(meta.AttemptID, attemptID)
+	applyCandidateCycleStateToMetadata(&meta, state)
+	if err := WriteExecutionCleanupMetadata(wtPath, meta); err != nil {
+		return err
+	}
+	if projectRoot == "" || meta.AttemptID == "" {
+		return nil
+	}
+	states, err := ReadRunStates(projectRoot)
+	if err != nil {
+		return nil
+	}
+	for i := range states {
+		current := states[i]
+		if current.AttemptID != meta.AttemptID {
+			continue
+		}
+		applyCandidateCycleStateToRunState(&current, state)
+		return WriteRunState(projectRoot, current)
+	}
+	return nil
+}
+
 // MarkWorktreeActiveCycle sets the ActiveCandidateCycle flag in the worktree's
 // cleanup metadata. The cleanup manager preserves any worktree with this flag
 // set so it is never deleted mid-cycle before the coordinator disposes it.
 func MarkWorktreeActiveCycle(wtPath string) error {
-	meta, err := ReadExecutionCleanupMetadata(wtPath)
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("mark active cycle: read metadata: %w", err)
-	}
-	meta.ActiveCandidateCycle = true
-	return WriteExecutionCleanupMetadata(wtPath, meta)
+	return WriteWorktreeCandidateCycleState("", wtPath, "", CandidateCycleState{
+		Active: true,
+		Phase:  "active",
+	})
 }
 
 // ClearWorktreeActiveCycle clears the ActiveCandidateCycle flag in the
@@ -547,5 +633,27 @@ func ClearWorktreeActiveCycle(wtPath string) error {
 		return fmt.Errorf("clear active cycle: read metadata: %w", err)
 	}
 	meta.ActiveCandidateCycle = false
+	meta.CandidateCyclePhase = ""
+	meta.ReviewActive = false
+	meta.RepairActive = false
 	return WriteExecutionCleanupMetadata(wtPath, meta)
+}
+
+func applyCandidateCycleStateToMetadata(meta *ExecutionCleanupMetadata, state CandidateCycleState) {
+	meta.ActiveCandidateCycle = state.Active
+	meta.CandidateCyclePhase = state.Phase
+	meta.CandidateRef = state.CandidateRef
+	meta.CandidateRev = state.CandidateRev
+	meta.CycleIndex = state.CycleIndex
+	meta.ReviewActive = state.ReviewActive
+	meta.RepairActive = state.RepairActive
+}
+
+func applyCandidateCycleStateToRunState(runState *RunState, state CandidateCycleState) {
+	runState.CandidateCyclePhase = state.Phase
+	runState.CandidateRef = state.CandidateRef
+	runState.CandidateRev = state.CandidateRev
+	runState.CycleIndex = state.CycleIndex
+	runState.ReviewActive = state.ReviewActive
+	runState.RepairActive = state.RepairActive
 }

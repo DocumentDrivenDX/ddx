@@ -812,7 +812,7 @@ func startRunStateRefresh(ctx context.Context, projectRoot string, state RunStat
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				_ = WriteRunState(projectRoot, state)
+				_ = WriteRunState(projectRoot, mergeLatestCandidateCycleRunState(projectRoot, state))
 			}
 		}
 	}()
@@ -820,6 +820,31 @@ func startRunStateRefresh(ctx context.Context, projectRoot string, state RunStat
 		cancel()
 		<-done
 	}
+}
+
+func mergeLatestCandidateCycleRunState(projectRoot string, state RunState) RunState {
+	states, err := ReadRunStates(projectRoot)
+	if err != nil {
+		return state
+	}
+	for i := range states {
+		current := states[i]
+		if state.AttemptID != "" && current.AttemptID != state.AttemptID {
+			continue
+		}
+		if state.AttemptID == "" && state.WorktreePath != "" && current.WorktreePath != "" &&
+			filepath.Clean(current.WorktreePath) != filepath.Clean(state.WorktreePath) {
+			continue
+		}
+		state.CandidateCyclePhase = current.CandidateCyclePhase
+		state.CandidateRef = current.CandidateRef
+		state.CandidateRev = current.CandidateRev
+		state.CycleIndex = current.CycleIndex
+		state.ReviewActive = current.ReviewActive
+		state.RepairActive = current.RepairActive
+		return state
+	}
+	return state
 }
 
 func buildAttemptDiagnostic(projectRoot, wtPath, beadID, attemptID, headRevErr string, gitOps GitOps) *AttemptDiagnostic {

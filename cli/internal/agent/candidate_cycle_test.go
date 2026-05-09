@@ -154,6 +154,53 @@ func TestAttemptCycleCoordinator_LiveWorktreeProtected(t *testing.T) {
 	assert.False(t, live2, "cleared worktree must no longer be protected by active-cycle flag")
 }
 
+func TestCandidateCycleState_WritesMetadataAndRunState(t *testing.T) {
+	projectRoot := t.TempDir()
+	dir := t.TempDir()
+	attemptID := "attempt-cycle-state"
+	require.NoError(t, WriteExecutionCleanupMetadata(dir, ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-cycle-state",
+		AttemptID:    attemptID,
+		WorktreePath: dir,
+		Registered:   true,
+	}))
+	require.NoError(t, WriteRunState(projectRoot, RunState{
+		BeadID:       "ddx-cycle-state",
+		AttemptID:    attemptID,
+		StartedAt:    time.Now().UTC(),
+		WorktreePath: dir,
+	}))
+
+	state := CandidateCycleState{
+		Active:       true,
+		Phase:        "repair",
+		CandidateRef: "refs/ddx/iterations/attempt-cycle-state/1",
+		CandidateRev: "cafed00d",
+		CycleIndex:   1,
+		RepairActive: true,
+	}
+	require.NoError(t, WriteWorktreeCandidateCycleState(projectRoot, dir, attemptID, state))
+
+	meta, err := ReadExecutionCleanupMetadata(dir)
+	require.NoError(t, err)
+	assert.True(t, meta.ActiveCandidateCycle)
+	assert.Equal(t, "repair", meta.CandidateCyclePhase)
+	assert.Equal(t, state.CandidateRef, meta.CandidateRef)
+	assert.Equal(t, state.CandidateRev, meta.CandidateRev)
+	assert.Equal(t, 1, meta.CycleIndex)
+	assert.True(t, meta.RepairActive)
+
+	runState, err := ReadRunState(projectRoot)
+	require.NoError(t, err)
+	require.NotNil(t, runState)
+	assert.Equal(t, "repair", runState.CandidateCyclePhase)
+	assert.Equal(t, state.CandidateRef, runState.CandidateRef)
+	assert.Equal(t, state.CandidateRev, runState.CandidateRev)
+	assert.Equal(t, 1, runState.CycleIndex)
+	assert.True(t, runState.RepairActive)
+}
+
 func TestCandidateChecks_RunBeforeReview(t *testing.T) {
 	refStore := &inMemoryCandidateRefStore{}
 	events := &inMemoryEventAppender{}

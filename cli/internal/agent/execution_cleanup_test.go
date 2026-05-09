@@ -14,12 +14,13 @@ import (
 )
 
 type executionCleanupTestGitOps struct {
-	worktrees  []string
-	removed    []string
-	pruneCalls int
-	listErr    error
-	removeErr  error
-	pruneErr   error
+	worktrees   []string
+	removed     []string
+	deletedRefs []string
+	pruneCalls  int
+	listErr     error
+	removeErr   error
+	pruneErr    error
 }
 
 func (g *executionCleanupTestGitOps) HeadRev(string) (string, error)            { return "", nil }
@@ -47,7 +48,10 @@ func (g *executionCleanupTestGitOps) SynthesizeCommit(string, string) (bool, err
 	return false, nil
 }
 func (g *executionCleanupTestGitOps) UpdateRef(string, string, string) error { return nil }
-func (g *executionCleanupTestGitOps) DeleteRef(string, string) error         { return nil }
+func (g *executionCleanupTestGitOps) DeleteRef(_ string, ref string) error {
+	g.deletedRefs = append(g.deletedRefs, ref)
+	return nil
+}
 
 type executionCleanupTestProbe struct {
 	live           map[string]bool
@@ -729,6 +733,154 @@ func TestExecutionCleanup_ReclaimsExpiredTestOwnedWorktrees(t *testing.T) {
 	assert.True(t, hasObservationClass(summary.Observations, "preserved_foreign_registered_worktree"))
 }
 
+func TestExecutionCleanup_PreservesActiveAttemptCycle(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	now := time.Date(2026, 5, 9, 2, 0, 0, 0, time.UTC)
+
+	activePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-cycle-active-20260509T020000-feedface")
+	writeExecutionCleanupCandidate(t, activePath, ExecutionCleanupMetadata{
+		ProjectRoot:         projectRoot,
+		BeadID:              "ddx-cycle-active",
+		AttemptID:           "20260509T020000-feedface",
+		WorktreePath:        activePath,
+		Registered:          true,
+		CandidateCyclePhase: "review",
+		CandidateRef:        "refs/ddx/iterations/20260509T020000-feedface/0",
+		CandidateRev:        "abc123",
+		CycleIndex:          0,
+		ReviewActive:        true,
+	}, map[string]string{"scratch.txt": "active\n"})
+	require.NoError(t, WriteRunState(projectRoot, RunState{
+		BeadID:              "ddx-cycle-active",
+		AttemptID:           "20260509T020000-feedface",
+		StartedAt:           now,
+		RefreshedAt:         now,
+		ExpiresAt:           now.Add(RunStateLivenessTTL),
+		WorktreePath:        activePath,
+		CandidateCyclePhase: "review",
+		CandidateRef:        "refs/ddx/iterations/20260509T020000-feedface/0",
+		CandidateRev:        "abc123",
+		ReviewActive:        true,
+	}))
+
+	gitOps := &executionCleanupTestGitOps{worktrees: []string{activePath}}
+	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
+	mgr.TempRoot = tempRoot
+	mgr.Now = func() time.Time { return now }
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, activePath)
+	assert.Empty(t, gitOps.removed)
+	assert.Equal(t, int64(0), summary.RemovedRegisteredWorktrees)
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_live_attempt"))
+	assert.Contains(t, firstObservationMessage(summary.Observations, "preserved_live_attempt"), "phase=review")
+}
+
+func TestExecutionCleanup_RecoversPinnedCandidateAfterCrash(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+
+	crashedPath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-cycle-crashed-20260509T021000-cafed00d")
+	candidateRef := "refs/ddx/iterations/20260509T021000-cafed00d/1"
+	writeExecutionCleanupCandidate(t, crashedPath, ExecutionCleanupMetadata{
+		ProjectRoot:         projectRoot,
+		BeadID:              "ddx-cycle-crashed",
+		AttemptID:           "20260509T021000-cafed00d",
+		WorktreePath:        crashedPath,
+		CandidateCyclePhase: "repair",
+		CandidateRef:        candidateRef,
+		CandidateRev:        "def456",
+		CycleIndex:          1,
+		RepairActive:        true,
+	}, map[string]string{"scratch.txt": "crashed\n"})
+
+	gitOps := &executionCleanupTestGitOps{}
+	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
+	mgr.TempRoot = tempRoot
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, crashedPath)
+	assert.Empty(t, gitOps.removed)
+	assert.Equal(t, int64(0), summary.RemovedUnregisteredTempDirs)
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_live_attempt"))
+	msg := firstObservationMessage(summary.Observations, "preserved_live_attempt")
+	assert.Contains(t, msg, "candidate_ref="+candidateRef)
+	assert.Contains(t, msg, "repair_active=true")
+}
+
+func TestExecutionCleanup_ReclaimsStaleUnpinnedCandidateWorktree(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+
+	stalePath := filepath.Join(tempRoot, ExecuteBeadWtPrefix+"ddx-cycle-stale-20260509T022000-deadbeef")
+	writeExecutionCleanupCandidate(t, stalePath, ExecutionCleanupMetadata{
+		ProjectRoot:         projectRoot,
+		BeadID:              "ddx-cycle-stale",
+		AttemptID:           "20260509T022000-deadbeef",
+		WorktreePath:        stalePath,
+		CandidateCyclePhase: "review",
+		CandidateRev:        "abc999",
+		CycleIndex:          0,
+	}, map[string]string{"scratch.txt": "stale\n"})
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, stalePath)
+	assert.Equal(t, int64(1), summary.RemovedUnregisteredTempDirs)
+	assert.True(t, hasObservationClass(summary.Observations, "removed_unregistered_temp_dir"))
+}
+
+func TestExecutionCleanup_PrunesTemporaryCandidateRefs(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	candidateRef := "refs/ddx/iterations/20260509T023000-aabbccdd/0"
+	retainedRef := "refs/ddx/iterations/20260509T023100-eeff0011/0"
+
+	resultDir := filepath.Join(projectRoot, ".ddx", "executions", "20260509T023000-aabbccdd")
+	require.NoError(t, os.MkdirAll(resultDir, 0o755))
+	require.NoError(t, writeArtifactJSON(filepath.Join(resultDir, "manifest.json"), map[string]string{"attempt_id": "20260509T023000-aabbccdd"}))
+	require.NoError(t, writeArtifactJSON(filepath.Join(resultDir, "result.json"), map[string]any{
+		"status":        ExecuteBeadStatusSuccess,
+		"candidate_ref": candidateRef,
+		"cycle_index":   0,
+		"attempt_id":    "20260509T023000-aabbccdd",
+		"base_rev":      "base",
+		"result_rev":    "result",
+	}))
+
+	retainedDir := filepath.Join(projectRoot, ".ddx", "executions", "20260509T023100-eeff0011")
+	require.NoError(t, os.MkdirAll(retainedDir, 0o755))
+	require.NoError(t, writeArtifactJSON(filepath.Join(retainedDir, "manifest.json"), map[string]string{"attempt_id": "20260509T023100-eeff0011"}))
+	require.NoError(t, writeArtifactJSON(filepath.Join(retainedDir, "result.json"), map[string]any{
+		"status":        ExecuteBeadStatusLandConflict,
+		"candidate_ref": retainedRef,
+		"cycle_index":   0,
+		"attempt_id":    "20260509T023100-eeff0011",
+		"base_rev":      "base",
+		"result_rev":    "result",
+	}))
+
+	gitOps := &executionCleanupTestGitOps{}
+	mgr := NewExecutionCleanupManager(projectRoot, gitOps)
+	mgr.TempRoot = tempRoot
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, []string{candidateRef}, gitOps.deletedRefs)
+	assert.Equal(t, int64(1), summary.PrunedCandidateRefs)
+	assert.True(t, hasObservationClass(summary.Observations, "pruned_candidate_ref"))
+}
+
 func hasObservationClass(observations []ExecutionCleanupObservation, class string) bool {
 	for _, obs := range observations {
 		if obs.Class == class {
@@ -736,6 +888,15 @@ func hasObservationClass(observations []ExecutionCleanupObservation, class strin
 		}
 	}
 	return false
+}
+
+func firstObservationMessage(observations []ExecutionCleanupObservation, class string) string {
+	for _, obs := range observations {
+		if obs.Class == class {
+			return obs.Message
+		}
+	}
+	return ""
 }
 
 func countObservationClass(observations []ExecutionCleanupObservation, class string) int {

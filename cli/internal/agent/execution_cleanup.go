@@ -59,9 +59,18 @@ type ExecutionCleanupMetadata struct {
 	// worktree open for candidate evaluation (checks, review, repair). The
 	// cleanup manager preserves any worktree with this flag set so it is never
 	// deleted mid-cycle before the coordinator reaches terminal disposition.
-	ActiveCandidateCycle bool                      `json:"active_candidate_cycle,omitempty"`
-	CreatedAt            time.Time                 `json:"created_at,omitempty"`
-	Liveness             *ExecutionCleanupLiveness `json:"liveness,omitempty"`
+	ActiveCandidateCycle bool `json:"active_candidate_cycle,omitempty"`
+	// Candidate-cycle metadata lets crash recovery distinguish a stale
+	// unpinned worktree from one that still has a project-root candidate ref
+	// worth preserving for operator inspection.
+	CandidateCyclePhase string                    `json:"candidate_cycle_phase,omitempty"`
+	CandidateRef        string                    `json:"candidate_ref,omitempty"`
+	CandidateRev        string                    `json:"candidate_rev,omitempty"`
+	CycleIndex          int                       `json:"cycle_index,omitempty"`
+	ReviewActive        bool                      `json:"review_active,omitempty"`
+	RepairActive        bool                      `json:"repair_active,omitempty"`
+	CreatedAt           time.Time                 `json:"created_at,omitempty"`
+	Liveness            *ExecutionCleanupLiveness `json:"liveness,omitempty"`
 }
 
 // ExecutionCleanupObservation is a structured note emitted by the cleanup
@@ -106,6 +115,7 @@ type ExecutionCleanupSummary struct {
 	RemovedRunStateFiles        int64 `json:"removed_run_state_files"`
 	RemovedScratchDirs          int64 `json:"removed_scratch_dirs"`
 	PreservedActiveScratchDirs  int64 `json:"preserved_active_scratch_dirs"`
+	PrunedCandidateRefs         int64 `json:"pruned_candidate_refs"`
 
 	BytesReclaimed         int64 `json:"bytes_reclaimed"`
 	InodesReclaimed        int64 `json:"inodes_reclaimed"`
@@ -134,9 +144,15 @@ func (defaultExecutionCleanupLivenessProbe) IsLive(meta ExecutionCleanupMetadata
 		return true, "preserved metadata"
 	}
 	if meta.ActiveCandidateCycle {
-		return true, "active candidate cycle"
+		return true, candidateCycleRecoveryReason(meta, "active candidate cycle")
+	}
+	if strings.TrimSpace(meta.CandidateRef) != "" {
+		return true, candidateCycleRecoveryReason(meta, "candidate ref recovery")
 	}
 	if runState != nil {
+		if strings.TrimSpace(runState.CandidateCyclePhase) != "" {
+			return true, candidateCycleRecoveryReason(candidateCycleMetadataFromRunState(*runState), "active candidate cycle")
+		}
 		if meta.WorktreePath != "" && filepath.Clean(runState.WorktreePath) == filepath.Clean(meta.WorktreePath) {
 			return true, "matched live run-state"
 		}
@@ -436,6 +452,7 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 
 	summary.ScannedEvidenceDirs += scanCompleteEvidenceDirs(m.ProjectRoot, ExecuteBeadArtifactDir, "manifest.json", "result.json", &summary)
 	summary.ScannedEvidenceDirs += scanCompleteEvidenceDirs(m.ProjectRoot, ".ddx/runs", "record.json", "", &summary)
+	m.cleanupDurableLandedCandidateRefs(&summary)
 
 	return summary, nil
 }
@@ -710,6 +727,18 @@ func isPathWithin(path, root string) bool {
 }
 
 func matchingRunStateForMeta(states []RunState, meta ExecutionCleanupMetadata) *RunState {
+	if meta.CandidateRef != "" {
+		for i := range states {
+			state := states[i]
+			if state.CandidateRef != meta.CandidateRef {
+				continue
+			}
+			if meta.CycleIndex != 0 && state.CycleIndex != meta.CycleIndex {
+				continue
+			}
+			return &states[i]
+		}
+	}
 	for i := range states {
 		state := states[i]
 		if meta.AttemptID != "" && state.AttemptID == meta.AttemptID {
@@ -723,11 +752,52 @@ func matchingRunStateForMeta(states []RunState, meta ExecutionCleanupMetadata) *
 }
 
 func isLiveAttemptPreservation(reason string) bool {
+	if strings.HasPrefix(reason, "active candidate cycle") || strings.HasPrefix(reason, "candidate ref recovery") {
+		return true
+	}
 	switch reason {
 	case "matched live run-state", "unexpired liveness", "fresh liveness", "live pid", "active candidate cycle":
 		return true
 	default:
 		return false
+	}
+}
+
+func candidateCycleRecoveryReason(meta ExecutionCleanupMetadata, prefix string) string {
+	var parts []string
+	if meta.CandidateCyclePhase != "" {
+		parts = append(parts, "phase="+meta.CandidateCyclePhase)
+	}
+	if meta.CandidateRef != "" {
+		parts = append(parts, "candidate_ref="+meta.CandidateRef)
+	}
+	if meta.CandidateRev != "" {
+		parts = append(parts, "candidate_rev="+meta.CandidateRev)
+	}
+	if meta.ReviewActive {
+		parts = append(parts, "review_active=true")
+	}
+	if meta.RepairActive {
+		parts = append(parts, "repair_active=true")
+	}
+	if len(parts) == 0 {
+		return prefix
+	}
+	return prefix + " (" + strings.Join(parts, " ") + ")"
+}
+
+func candidateCycleMetadataFromRunState(state RunState) ExecutionCleanupMetadata {
+	return ExecutionCleanupMetadata{
+		BeadID:               state.BeadID,
+		AttemptID:            state.AttemptID,
+		WorktreePath:         state.WorktreePath,
+		ActiveCandidateCycle: strings.TrimSpace(state.CandidateCyclePhase) != "",
+		CandidateCyclePhase:  state.CandidateCyclePhase,
+		CandidateRef:         state.CandidateRef,
+		CandidateRev:         state.CandidateRev,
+		CycleIndex:           state.CycleIndex,
+		ReviewActive:         state.ReviewActive,
+		RepairActive:         state.RepairActive,
 	}
 }
 
@@ -812,6 +882,84 @@ func (m *ExecutionCleanupManager) tempRoot() string {
 		return executionCleanupTempRoot(m.ProjectRoot)
 	}
 	return executionCleanupTempRoot("")
+}
+
+type candidateRefResultMetadata struct {
+	Status       string `json:"status"`
+	CandidateRef string `json:"candidate_ref"`
+	CycleIndex   int    `json:"cycle_index"`
+	AttemptID    string `json:"attempt_id"`
+	BaseRev      string `json:"base_rev"`
+	ResultRev    string `json:"result_rev"`
+}
+
+func (m *ExecutionCleanupManager) cleanupDurableLandedCandidateRefs(summary *ExecutionCleanupSummary) {
+	if m == nil || m.GitOps == nil || m.ProjectRoot == "" {
+		return
+	}
+	resultRoot := filepath.Join(m.ProjectRoot, filepath.FromSlash(ExecuteBeadArtifactDir))
+	entries, err := os.ReadDir(resultRoot)
+	if err != nil {
+		return
+	}
+	seen := map[string]struct{}{}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		resultPath := filepath.Join(resultRoot, entry.Name(), "result.json")
+		data, readErr := os.ReadFile(resultPath)
+		if readErr != nil {
+			continue
+		}
+		var meta candidateRefResultMetadata
+		if err := json.Unmarshal(data, &meta); err != nil {
+			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+				Path:    resultPath,
+				Class:   "candidate_ref_result_parse",
+				Message: err.Error(),
+			})
+			continue
+		}
+		if !candidateRefResultDurable(meta) {
+			continue
+		}
+		if _, ok := seen[meta.CandidateRef]; ok {
+			continue
+		}
+		seen[meta.CandidateRef] = struct{}{}
+		if _, err := m.GitOps.ResolveRev(m.ProjectRoot, meta.CandidateRef); err != nil {
+			continue
+		}
+		if !m.DryRun {
+			if err := m.GitOps.DeleteRef(m.ProjectRoot, meta.CandidateRef); err != nil {
+				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+					Path:    meta.CandidateRef,
+					Class:   "candidate_ref_prune",
+					Message: err.Error(),
+				})
+				continue
+			}
+		}
+		summary.PrunedCandidateRefs++
+		class := "pruned_candidate_ref"
+		if m.DryRun {
+			class = "would_prune_candidate_ref"
+		}
+		summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+			Path:    meta.CandidateRef,
+			Class:   class,
+			Message: "landed candidate metadata durable in " + filepath.ToSlash(filepath.Join(ExecuteBeadArtifactDir, entry.Name(), "result.json")),
+		})
+	}
+}
+
+func candidateRefResultDurable(meta candidateRefResultMetadata) bool {
+	return meta.Status == ExecuteBeadStatusSuccess &&
+		strings.HasPrefix(strings.TrimSpace(meta.CandidateRef), "refs/ddx/iterations/") &&
+		strings.TrimSpace(meta.AttemptID) != "" &&
+		strings.TrimSpace(meta.BaseRev) != "" &&
+		strings.TrimSpace(meta.ResultRev) != ""
 }
 
 func executionCleanupTempRoot(projectRoot string) string {
