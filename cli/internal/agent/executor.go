@@ -152,6 +152,7 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 	defer cancel()
 
 	cmd := exec.Command(binary, args...)
+	cmdSetProcessGroup(cmd)
 	if dir != "" {
 		cmd.Dir = dir
 	}
@@ -197,9 +198,7 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 
 	stopProcess := func() {
 		killOnce.Do(func() {
-			if cmd.Process != nil {
-				_ = cmd.Process.Kill()
-			}
+			cmdKillProcessGroup(cmd)
 		})
 	}
 
