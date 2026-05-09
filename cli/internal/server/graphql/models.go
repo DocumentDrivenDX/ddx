@@ -365,7 +365,7 @@ type Bead struct {
 	ID string `json:"id"`
 	// Short summary of the work
 	Title string `json:"title"`
-	// Lifecycle status: open, in-progress, closed, blocked
+	// Lifecycle status: proposed, open, in_progress, blocked, closed, cancelled
 	Status string `json:"status"`
 	// Numeric priority (lower is higher priority)
 	Priority int `json:"priority"`
@@ -393,14 +393,6 @@ type Bead struct {
 	Notes *string `json:"notes,omitempty"`
 	// Dependency edges to other beads
 	Dependencies []*Dependency `json:"dependencies,omitempty"`
-	// Whether this bead is flagged for human review (has needs_human label)
-	NeedsHuman bool `json:"needsHuman"`
-	// Failure mode from the last triage-decision event (e.g. "review-block")
-	NeedsHumanReason *string `json:"needsHumanReason,omitempty"`
-	// Triage action recorded in the last triage-decision event (e.g. "needs_human")
-	NeedsHumanSuggestedAction *string `json:"needsHumanSuggestedAction,omitempty"`
-	// Summary text from the last triage-decision event
-	NeedsHumanSummary *string `json:"needsHumanSummary,omitempty"`
 }
 
 func (Bead) IsNode() {}
@@ -498,18 +490,28 @@ type BeadInput struct {
 type BeadStatusCounts struct {
 	// Number of beads in open status
 	Open int `json:"open"`
+	// Number of beads in in_progress status
+	InProgress int `json:"inProgress"`
 	// Number of beads in closed status
 	Closed int `json:"closed"`
-	// Number of beads with unclosed dependencies
+	// Number of beads in blocked status (external blocker set)
 	Blocked int `json:"blocked"`
+	// Number of beads in proposed status (awaiting operator approval)
+	Proposed int `json:"proposed"`
+	// Number of beads in cancelled status
+	Cancelled int `json:"cancelled"`
 	// Number of open beads whose dependencies are all closed
 	Ready int `json:"ready"`
-	// Total number of beads
-	Total int `json:"total"`
-	// Number of open beads flagged needs_human
-	NeedsHuman int `json:"needsHuman"`
 	// Number of execution-eligible ready beads
 	WorkerReady int `json:"workerReady"`
+	// Number of open/in_progress beads with unmet dependencies
+	DependencyWaiting int `json:"dependencyWaiting"`
+	// Number of beads with an external blocker reason set
+	ExternalBlocked int `json:"externalBlocked"`
+	// Number of beads requiring operator attention (proposed)
+	OperatorAttention int `json:"operatorAttention"`
+	// Total number of beads
+	Total int `json:"total"`
 }
 
 // Input type for updating an existing bead
@@ -1015,7 +1017,6 @@ type Execution struct {
 	// Git revision the attempt started from.
 	BaseRev *string `json:"baseRev,omitempty"`
 	// Git revision the attempt produced (commit SHA when one was made).
-	// Backwards-compat alias; after a successful land this mirrors LandedRev.
 	ResultRev *string `json:"resultRev,omitempty"`
 	// ImplementationRev is the worker's own commit SHA before landing.
 	// Distinct from LandedRev on the merge-commit path.
@@ -2851,66 +2852,6 @@ func (e *RunLayer) UnmarshalJSON(b []byte) error {
 }
 
 func (e RunLayer) MarshalJSON() ([]byte, error) {
-	var buf bytes.Buffer
-	e.MarshalGQL(&buf)
-	return buf.Bytes(), nil
-}
-
-// HumanResolveAction is the operator decision when resolving a needs-human bead
-type HumanResolveAction string
-
-const (
-	HumanResolveActionRetry    HumanResolveAction = "retry"
-	HumanResolveActionSplit    HumanResolveAction = "split"
-	HumanResolveActionObsolete HumanResolveAction = "obsolete"
-	HumanResolveActionDefer    HumanResolveAction = "defer"
-)
-
-var AllHumanResolveAction = []HumanResolveAction{
-	HumanResolveActionRetry,
-	HumanResolveActionSplit,
-	HumanResolveActionObsolete,
-	HumanResolveActionDefer,
-}
-
-func (e HumanResolveAction) IsValid() bool {
-	switch e {
-	case HumanResolveActionRetry, HumanResolveActionSplit, HumanResolveActionObsolete, HumanResolveActionDefer:
-		return true
-	}
-	return false
-}
-
-func (e HumanResolveAction) String() string {
-	return string(e)
-}
-
-func (e *HumanResolveAction) UnmarshalGQL(v any) error {
-	str, ok := v.(string)
-	if !ok {
-		return fmt.Errorf("enums must be strings")
-	}
-
-	*e = HumanResolveAction(str)
-	if !e.IsValid() {
-		return fmt.Errorf("%s is not a valid HumanResolveAction", str)
-	}
-	return nil
-}
-
-func (e HumanResolveAction) MarshalGQL(w io.Writer) {
-	fmt.Fprint(w, strconv.Quote(e.String()))
-}
-
-func (e *HumanResolveAction) UnmarshalJSON(b []byte) error {
-	s, err := strconv.Unquote(string(b))
-	if err != nil {
-		return err
-	}
-	return e.UnmarshalGQL(s)
-}
-
-func (e HumanResolveAction) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	e.MarshalGQL(&buf)
 	return buf.Bytes(), nil

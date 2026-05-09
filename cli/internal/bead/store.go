@@ -1771,6 +1771,43 @@ func (s *Store) Blocked() ([]Bead, error) {
 	return blocked, nil
 }
 
+// ExternalBlocked returns beads with status=blocked and an ExternalBlockerReason set.
+// This is the new semantics for the /api/beads/blocked endpoint — explicit external
+// blockers only, not dependency-waiting beads.
+func (s *Store) ExternalBlocked() ([]Bead, error) {
+	beads, err := s.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+
+	var result []Bead
+	for _, entry := range s.classifyLifecycleQueue(beads, time.Now().UTC()) {
+		if entry.Decision.Bucket == LifecycleBucketBlockedExternal {
+			result = append(result, entry.Bead)
+		}
+	}
+	sortBeadsForQueue(result)
+	return result, nil
+}
+
+// DependencyWaiting returns open/in_progress beads with unmet dependencies.
+// This is the semantics for /api/beads/dependency-waiting.
+func (s *Store) DependencyWaiting() ([]Bead, error) {
+	beads, err := s.ReadAll()
+	if err != nil {
+		return nil, err
+	}
+
+	var result []Bead
+	for _, entry := range s.classifyLifecycleQueue(beads, time.Now().UTC()) {
+		if entry.Decision.Bucket == LifecycleBucketWaitingDependencies {
+			result = append(result, entry.Bead)
+		}
+	}
+	sortBeadsForQueue(result)
+	return result, nil
+}
+
 // BlockedAll returns open beads that are currently not runnable, classified
 // by blocker kind. Dependency-blocked beads are emitted first (any unclosed
 // dep in their DAG); retry-parked beads whose execute-loop-retry-after is in

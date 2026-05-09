@@ -66,19 +66,19 @@ func TestGraphQLBeadsPagination(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", xdgDir)
 	t.Setenv("DDX_NODE_NAME", "gql-test-node")
 
-	workDir := setupTestDir(t) // creates 3 beads: bx-001, bx-002, bx-003
+	workDir := setupTestDir(t) // creates 4 beads: bx-001, bx-002, bx-003, bx-004
 	srv := New(":0", workDir)
 
-	// Page 1: first 2 beads.
-	page1 := gqlBeadsQuery(t, srv, "first: 2")
-	if page1.Data.Beads.TotalCount != 3 {
-		t.Errorf("expected totalCount=3, got %d", page1.Data.Beads.TotalCount)
+	// Page 1: first 3 beads.
+	page1 := gqlBeadsQuery(t, srv, "first: 3")
+	if page1.Data.Beads.TotalCount != 4 {
+		t.Errorf("expected totalCount=4, got %d", page1.Data.Beads.TotalCount)
 	}
-	if len(page1.Data.Beads.Edges) != 2 {
-		t.Fatalf("expected 2 edges on page 1, got %d", len(page1.Data.Beads.Edges))
+	if len(page1.Data.Beads.Edges) != 3 {
+		t.Fatalf("expected 3 edges on page 1, got %d", len(page1.Data.Beads.Edges))
 	}
 	if !page1.Data.Beads.PageInfo.HasNextPage {
-		t.Error("expected hasNextPage=true after first page of 2")
+		t.Error("expected hasNextPage=true after first page of 3")
 	}
 	if page1.Data.Beads.PageInfo.EndCursor == nil {
 		t.Fatal("expected non-nil endCursor on page 1")
@@ -178,10 +178,10 @@ func TestGraphQLBeadsByProject(t *testing.T) {
 	if len(resp.Errors) > 0 {
 		t.Fatalf("GraphQL errors: %v", resp.Errors)
 	}
-	if resp.Data.BeadsByProject.TotalCount != 3 {
-		t.Errorf("expected 3 beads for project, got %d", resp.Data.BeadsByProject.TotalCount)
+	if resp.Data.BeadsByProject.TotalCount != 4 {
+		t.Errorf("expected 4 beads for project, got %d", resp.Data.BeadsByProject.TotalCount)
 	}
 	if resp.Data.BeadsByProject.PageInfo.HasNextPage {
-		t.Error("expected hasNextPage=false when first=10 and only 3 beads exist")
+		t.Error("expected hasNextPage=false when first=10 and only 4 beads exist")
 	}
 }

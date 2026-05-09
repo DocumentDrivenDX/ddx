@@ -793,6 +793,7 @@ func (s *Server) routes() {
 	legacy("GET /api/beads", s.handleListBeads)
 	legacy("GET /api/beads/ready", s.handleBeadsReady)
 	legacy("GET /api/beads/blocked", s.handleBeadsBlocked)
+	legacy("GET /api/beads/dependency-waiting", s.handleBeadsDependencyWaiting)
 	legacy("GET /api/beads/status", s.handleBeadsStatus)
 	legacy("GET /api/beads/dep/tree/{id}", s.handleBeadDepTree)
 	legacy("GET /api/beads/{id}", s.handleShowBead)
@@ -804,6 +805,7 @@ func (s *Server) routes() {
 	scoped("GET /api/projects/{project}/beads", s.handleListBeads)
 	scoped("GET /api/projects/{project}/beads/ready", s.handleBeadsReady)
 	scoped("GET /api/projects/{project}/beads/blocked", s.handleBeadsBlocked)
+	scoped("GET /api/projects/{project}/beads/dependency-waiting", s.handleBeadsDependencyWaiting)
 	scoped("GET /api/projects/{project}/beads/status", s.handleBeadsStatus)
 	scoped("GET /api/projects/{project}/beads/dep/tree/{id}", s.handleBeadDepTree)
 	scoped("GET /api/projects/{project}/beads/{id}", s.handleShowBead)
@@ -1532,7 +1534,7 @@ func (s *Server) handleBeadsReady(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleBeadsBlocked(w http.ResponseWriter, r *http.Request) {
 	store := s.beadStoreForRequest(r)
-	blocked, err := store.Blocked()
+	blocked, err := store.ExternalBlocked()
 	if err != nil {
 		writeJSON(w, http.StatusOK, []any{})
 		return
@@ -1541,6 +1543,19 @@ func (s *Server) handleBeadsBlocked(w http.ResponseWriter, r *http.Request) {
 		blocked = []bead.Bead{}
 	}
 	writeJSON(w, http.StatusOK, blocked)
+}
+
+func (s *Server) handleBeadsDependencyWaiting(w http.ResponseWriter, r *http.Request) {
+	store := s.beadStoreForRequest(r)
+	waiting, err := store.DependencyWaiting()
+	if err != nil {
+		writeJSON(w, http.StatusOK, []any{})
+		return
+	}
+	if waiting == nil {
+		waiting = []bead.Bead{}
+	}
+	writeJSON(w, http.StatusOK, waiting)
 }
 
 func (s *Server) handleBeadsStatus(w http.ResponseWriter, r *http.Request) {
@@ -3163,7 +3178,7 @@ func (s *Server) mcpTools() []mcpTool {
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
-					"status":  map[string]any{"type": "string", "description": "Filter by status (open, in_progress, closed)"},
+					"status":  map[string]any{"type": "string", "description": "Filter by status: open, in_progress, closed, blocked, proposed, cancelled"},
 					"label":   map[string]any{"type": "string", "description": "Filter by label"},
 					"project": projectProp,
 				},
@@ -3203,7 +3218,17 @@ func (s *Server) mcpTools() []mcpTool {
 		},
 		{
 			Name:        "ddx_bead_blocked",
-			Description: "List blocked beads (open beads with unmet dependencies)",
+			Description: "List externally-blocked beads (status=blocked with external blocker reason set)",
+			InputSchema: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"project": projectProp,
+				},
+			},
+		},
+		{
+			Name:        "ddx_bead_dependency_waiting",
+			Description: "List open/in_progress beads with unmet dependencies (dependency-waiting bucket)",
 			InputSchema: map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -3392,7 +3417,7 @@ func (s *Server) mcpTools() []mcpTool {
 				"type": "object",
 				"properties": map[string]any{
 					"id":          map[string]any{"type": "string", "description": "Bead ID"},
-					"status":      map[string]any{"type": "string", "description": "New status (open, in_progress, closed)"},
+					"status":      map[string]any{"type": "string", "description": "New status: open, in_progress, closed, blocked, proposed, cancelled"},
 					"labels":      map[string]any{"type": "string", "description": "Comma-separated labels (replaces existing)"},
 					"description": map[string]any{"type": "string", "description": "New description"},
 					"acceptance":  map[string]any{"type": "string", "description": "New acceptance criteria"},
@@ -3766,6 +3791,8 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		return s.mcpBeadStatus(workingDir)
 	case "ddx_bead_blocked":
 		return s.mcpBeadBlocked(workingDir)
+	case "ddx_bead_dependency_waiting":
+		return s.mcpBeadDependencyWaiting(workingDir)
 	case "ddx_bead_dep_tree":
 		id, _ := call.Arguments["id"].(string)
 		return s.mcpBeadDepTree(workingDir, id)
@@ -4187,7 +4214,7 @@ func (s *Server) mcpBeadStatus(workingDir string) mcpToolResult {
 
 func (s *Server) mcpBeadBlocked(workingDir string) mcpToolResult {
 	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
-	blocked, err := store.Blocked()
+	blocked, err := store.ExternalBlocked()
 	if err != nil {
 		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}
 	}
@@ -4195,6 +4222,19 @@ func (s *Server) mcpBeadBlocked(workingDir string) mcpToolResult {
 		blocked = []bead.Bead{}
 	}
 	data, _ := json.Marshal(blocked)
+	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
+}
+
+func (s *Server) mcpBeadDependencyWaiting(workingDir string) mcpToolResult {
+	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
+	waiting, err := store.DependencyWaiting()
+	if err != nil {
+		return mcpToolResult{Content: []mcpContent{mcpText("[]")}}
+	}
+	if waiting == nil {
+		waiting = []bead.Bead{}
+	}
+	data, _ := json.Marshal(waiting)
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 

@@ -175,15 +175,14 @@ func beadConnectionFromBeads(beads []bead.Bead, first *int, after *string, last 
 
 func beadFromSnapshot(s BeadSnapshot) *Bead {
 	b := &Bead{
-		ID:         s.ID,
-		Title:      s.Title,
-		Status:     s.Status,
-		Priority:   s.Priority,
-		IssueType:  s.IssueType,
-		CreatedAt:  s.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:  s.UpdatedAt.UTC().Format(time.RFC3339),
-		Labels:     s.Labels,
-		NeedsHuman: s.Status == bead.StatusProposed,
+		ID:        s.ID,
+		Title:     s.Title,
+		Status:    s.Status,
+		Priority:  s.Priority,
+		IssueType: s.IssueType,
+		CreatedAt: s.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt: s.UpdatedAt.UTC().Format(time.RFC3339),
+		Labels:    s.Labels,
 	}
 	if s.ProjectID != "" {
 		b.ProjectID = &s.ProjectID
@@ -240,89 +239,31 @@ func (r *queryResolver) BeadsReady(ctx context.Context, first *int, after *strin
 }
 
 // BeadsBlocked is the resolver for the beadsBlocked field.
+// Returns ONLY external-blocked beads (status=blocked with ExternalBlockerReason set).
 func (r *queryResolver) BeadsBlocked(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error) {
 	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
 	store := bead.NewStore(filepath.Join(r.workingDir(ctx), ".ddx"))
-	beads, err := store.Blocked()
+	beads, err := store.ExternalBlocked()
 	if err != nil {
 		return nil, err
 	}
 	return beadConnectionFromBeads(beads, first, after, last, before), nil
 }
 
-// BeadsNeedsHuman is the resolver for the beadsNeedsHuman field.
-func (r *queryResolver) BeadsNeedsHuman(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error) {
+// BeadsDependencyWaiting is the resolver for the beadsDependencyWaiting field.
+// Returns open/in_progress beads with unmet dependencies.
+func (r *queryResolver) BeadsDependencyWaiting(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error) {
 	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
 	store := bead.NewStore(filepath.Join(r.workingDir(ctx), ".ddx"))
-	beads, err := store.NeedsHuman()
+	beads, err := store.DependencyWaiting()
 	if err != nil {
 		return nil, err
 	}
-
-	all := make([]*BeadEdge, len(beads))
-	for i := range beads {
-		all[i] = &BeadEdge{
-			Node:   beadModelFromBead(&beads[i]),
-			Cursor: encodeStableCursor(beads[i].ID),
-		}
-	}
-
-	startIdx := 0
-	if after != nil {
-		if afterID, ok := decodeStableCursor(*after); ok {
-			for i, e := range all {
-				if e.Node.ID == afterID {
-					startIdx = i + 1
-					break
-				}
-			}
-		}
-	}
-	endIdx := len(all)
-	if before != nil {
-		if beforeID, ok := decodeStableCursor(*before); ok {
-			for i, e := range all {
-				if e.Node.ID == beforeID {
-					endIdx = i
-					break
-				}
-			}
-		}
-	}
-	if startIdx > endIdx {
-		startIdx = endIdx
-	}
-
-	slice := all[startIdx:endIdx]
-	truncatedByFirst := false
-	truncatedByLast := false
-	if first != nil && *first >= 0 && *first < len(slice) {
-		slice = slice[:*first]
-		truncatedByFirst = true
-	}
-	if last != nil && *last >= 0 && *last < len(slice) {
-		slice = slice[len(slice)-*last:]
-		truncatedByLast = true
-	}
-
-	pageInfo := &PageInfo{
-		HasPreviousPage: startIdx > 0 || truncatedByLast,
-		HasNextPage:     endIdx < len(all) || truncatedByFirst,
-	}
-	if len(slice) > 0 {
-		pageInfo.StartCursor = &slice[0].Cursor
-		pageInfo.EndCursor = &slice[len(slice)-1].Cursor
-	}
-
-	return &BeadConnection{
-		Edges:      slice,
-		PageInfo:   pageInfo,
-		TotalCount: len(all),
-	}, nil
+	return beadConnectionFromBeads(beads, first, after, last, before), nil
 }
 
 // BeadsStatus is the resolver for the beadsStatus field.
@@ -336,12 +277,17 @@ func (r *queryResolver) BeadsStatus(ctx context.Context) (*BeadStatusCounts, err
 		return nil, err
 	}
 	return &BeadStatusCounts{
-		Open:        counts.Open,
-		Closed:      counts.Closed,
-		Blocked:     counts.Blocked,
-		Ready:       counts.Ready,
-		Total:       counts.Total,
-		NeedsHuman:  counts.NeedsHuman,
-		WorkerReady: counts.WorkerReady,
+		Open:              counts.Open,
+		InProgress:        counts.InProgress,
+		Closed:            counts.Closed,
+		Blocked:           counts.Blocked,
+		Proposed:          counts.Proposed,
+		Cancelled:         counts.Cancelled,
+		Ready:             counts.Ready,
+		WorkerReady:       counts.WorkerReady,
+		DependencyWaiting: counts.DependencyWaiting,
+		ExternalBlocked:   counts.ExternalBlocked,
+		OperatorAttention: counts.OperatorAttention,
+		Total:             counts.Total,
 	}, nil
 }

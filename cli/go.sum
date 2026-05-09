@@ -8,10 +8,6 @@ github.com/99designs/gqlgen v0.17.89 h1:KzEcxPiMgQoMw3m/E85atUEHyZyt0PbAflMia5Kw
 github.com/99designs/gqlgen v0.17.89/go.mod h1:GFqruTVGB7ZTdrf1uzOagpXbY7DrEt1pIxnTdhIbWvQ=
 github.com/BurntSushi/toml v1.5.0 h1:W5quZX/G/csjUnuI8SUYlsHs9M38FC7znL0lIO+DvMg=
 github.com/BurntSushi/toml v1.5.0/go.mod h1:ukJfTF/6rtPPRCnwkur4qwRxa8vTRFBF0uk2lLoLwho=
-github.com/DocumentDrivenDX/fizeau v0.10.13 h1:8L6b2CczW7pS0n6dfJImIeBJwnC+UPi3QMcVPWZeH4Q=
-github.com/DocumentDrivenDX/fizeau v0.10.13/go.mod h1:VRC15vEJwNxLG32XFB6qeeMdCZI9lpULX82803uQOQo=
-github.com/DocumentDrivenDX/fizeau v0.10.14 h1:yYA9SlSew3AsutG/06yrHw9i+hHGnjF8YV7DwuZrvIQ=
-github.com/DocumentDrivenDX/fizeau v0.10.14/go.mod h1:VRC15vEJwNxLG32XFB6qeeMdCZI9lpULX82803uQOQo=
 github.com/DocumentDrivenDX/fizeau v0.10.15 h1:0GtbZ6+V9gj1v9J1F8aRuB563pjwk6ad3kTzc9dQ3+M=
 github.com/DocumentDrivenDX/fizeau v0.10.15/go.mod h1:VRC15vEJwNxLG32XFB6qeeMdCZI9lpULX82803uQOQo=
 github.com/agnivade/levenshtein v1.2.1 h1:EHBY3UOn1gwdy/VbFwgo4cxecRznFk7fKWN1KOX7eoM=

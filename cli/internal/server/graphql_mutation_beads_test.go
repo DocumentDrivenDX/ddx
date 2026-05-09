@@ -118,9 +118,9 @@ func TestGraphQLBeadCreate(t *testing.T) {
 	if err := json.Unmarshal(queryResp["data"], &qdata); err != nil {
 		t.Fatalf("parse query data: %v", err)
 	}
-	// setupTestDir creates 3 beads; we added 1 more.
-	if qdata.Beads.TotalCount != 4 {
-		t.Errorf("expected 4 total beads after create, got %d", qdata.Beads.TotalCount)
+	// setupTestDir creates 4 beads; we added 1 more.
+	if qdata.Beads.TotalCount != 5 {
+		t.Errorf("expected 5 total beads after create, got %d", qdata.Beads.TotalCount)
 	}
 }
 

@@ -105,8 +105,9 @@ library:
 	// Create beads.jsonl with sample beads
 	beadOpen := `{"id":"bx-001","title":"Open bead","status":"open","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","labels":["p0"]}`
 	beadClosed := `{"id":"bx-002","title":"Closed bead","status":"closed","priority":2,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z"}`
-	beadBlocked := `{"id":"bx-003","title":"Blocked bead","status":"open","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","dependencies":[{"issue_id":"bx-003","depends_on_id":"bx-001","type":"blocks"}]}`
-	beadsContent := beadOpen + "\n" + beadClosed + "\n" + beadBlocked + "\n"
+	beadDepWaiting := `{"id":"bx-003","title":"Dep-waiting bead","status":"open","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","dependencies":[{"issue_id":"bx-003","depends_on_id":"bx-001","type":"blocks"}]}`
+	beadExtBlocked := `{"id":"bx-004","title":"Externally blocked bead","status":"blocked","priority":1,"issue_type":"task","created_at":"2026-01-01T00:00:00Z","updated_at":"2026-01-01T00:00:00Z","lifecycle-external-blocker-reason":"waiting for partner API"}`
+	beadsContent := beadOpen + "\n" + beadClosed + "\n" + beadDepWaiting + "\n" + beadExtBlocked + "\n"
 	if err := os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(beadsContent), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -888,7 +889,7 @@ func TestMCPBeadRouting(t *testing.T) {
 func TestListBeads(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
-	// Isolate state to only this project so the aggregating handler sees exactly 3 beads.
+	// Isolate state to only this project so the aggregating handler sees exactly 4 beads.
 	srv.state.mu.Lock()
 	srv.state.Projects = nil
 	srv.state.mu.Unlock()
@@ -910,8 +911,8 @@ func TestListBeads(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &beads); err != nil {
 		t.Fatalf("invalid JSON: %v", err)
 	}
-	if len(beads) != 3 {
-		t.Fatalf("expected 3 beads, got %d", len(beads))
+	if len(beads) != 4 {
+		t.Fatalf("expected 4 beads, got %d", len(beads))
 	}
 }
 
@@ -1023,6 +1024,7 @@ func TestBeadsBlocked(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
+	// /api/beads/blocked returns ONLY external-blocked beads (status=blocked with reason)
 	req := httptest.NewRequest("GET", "/api/beads/blocked", nil)
 	req.RemoteAddr = "127.0.0.1:12345"
 	w := httptest.NewRecorder()
@@ -1040,6 +1042,33 @@ func TestBeadsBlocked(t *testing.T) {
 	}
 	if len(beads) != 1 {
 		t.Fatalf("expected 1 blocked bead, got %d", len(beads))
+	}
+	if beads[0].ID != "bx-004" {
+		t.Errorf("expected bx-004, got %s", beads[0].ID)
+	}
+}
+
+func TestBeadsDependencyWaiting(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	req := httptest.NewRequest("GET", "/api/beads/dependency-waiting", nil)
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var beads []struct {
+		ID string `json:"id"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &beads); err != nil {
+		t.Fatal(err)
+	}
+	if len(beads) != 1 {
+		t.Fatalf("expected 1 dep-waiting bead, got %d: %v", len(beads), beads)
 	}
 	if beads[0].ID != "bx-003" {
 		t.Errorf("expected bx-003, got %s", beads[0].ID)
@@ -1069,14 +1098,17 @@ func TestBeadsStatus(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &counts); err != nil {
 		t.Fatal(err)
 	}
-	if counts.Total != 3 {
-		t.Errorf("expected total=3, got %d", counts.Total)
+	if counts.Total != 4 {
+		t.Errorf("expected total=4, got %d", counts.Total)
 	}
 	if counts.Open != 2 {
 		t.Errorf("expected open=2, got %d", counts.Open)
 	}
 	if counts.Closed != 1 {
 		t.Errorf("expected closed=1, got %d", counts.Closed)
+	}
+	if counts.Blocked != 1 {
+		t.Errorf("expected blocked=1, got %d", counts.Blocked)
 	}
 }
 
@@ -1363,8 +1395,8 @@ func TestProjectLegacyRoutesSingleton(t *testing.T) {
 		if err := json.Unmarshal(w.Body.Bytes(), &counts); err != nil {
 			t.Fatal(err)
 		}
-		if counts["total"] != 3 {
-			t.Errorf("expected total=3, got %d", counts["total"])
+		if counts["total"] != 4 {
+			t.Errorf("expected total=4, got %d", counts["total"])
 		}
 	})
 
@@ -1766,8 +1798,8 @@ func TestMCPToolsList(t *testing.T) {
 	if !ok {
 		t.Fatal("expected tools array")
 	}
-	if len(tools) != 51 {
-		t.Fatalf("expected 51 MCP tools, got %d", len(tools))
+	if len(tools) != 52 {
+		t.Fatalf("expected 52 MCP tools, got %d", len(tools))
 	}
 
 	names := map[string]bool{}
@@ -1874,8 +1906,8 @@ func TestMCPListBeads(t *testing.T) {
 	if err := json.Unmarshal([]byte(text), &beads); err != nil {
 		t.Fatalf("MCP beads response not valid JSON: %v", err)
 	}
-	if len(beads) != 3 {
-		t.Errorf("expected 3 beads, got %d", len(beads))
+	if len(beads) != 4 {
+		t.Errorf("expected 4 beads, got %d", len(beads))
 	}
 }
 
@@ -1955,8 +1987,8 @@ func TestMCPBeadStatus(t *testing.T) {
 	if err := json.Unmarshal([]byte(text), &counts); err != nil {
 		t.Fatalf("MCP bead_status not valid JSON: %v", err)
 	}
-	if counts["total"].(float64) != 3 {
-		t.Errorf("expected total=3, got %v", counts["total"])
+	if counts["total"].(float64) != 4 {
+		t.Errorf("expected total=4, got %v", counts["total"])
 	}
 }
 
@@ -1964,6 +1996,7 @@ func TestMCPBeadBlocked(t *testing.T) {
 	dir := setupTestDir(t)
 	srv := New(":0", dir)
 
+	// ddx_bead_blocked returns ONLY external-blocked beads
 	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_bead_blocked","arguments":{}}`)
 	if w.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d", w.Code)
@@ -1983,10 +2016,86 @@ func TestMCPBeadBlocked(t *testing.T) {
 		t.Fatalf("MCP bead_blocked response not valid JSON: %v", err)
 	}
 	if len(beads) != 1 {
-		t.Fatalf("expected 1 blocked bead, got %d", len(beads))
+		t.Fatalf("expected 1 externally-blocked bead, got %d", len(beads))
+	}
+	if beads[0]["id"] != "bx-004" {
+		t.Errorf("expected blocked bead bx-004, got %v", beads[0]["id"])
+	}
+}
+
+func TestMCPBeadDependencyWaiting(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/call", `{"name":"ddx_bead_dependency_waiting","arguments":{}}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", w.Code)
+	}
+
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	content := result["content"].([]any)
+	textMap := content[0].(map[string]any)
+	text := textMap["text"].(string)
+
+	var beads []map[string]any
+	if err := json.Unmarshal([]byte(text), &beads); err != nil {
+		t.Fatalf("MCP bead_dependency_waiting response not valid JSON: %v", err)
+	}
+	if len(beads) != 1 {
+		t.Fatalf("expected 1 dep-waiting bead, got %d", len(beads))
 	}
 	if beads[0]["id"] != "bx-003" {
-		t.Errorf("expected blocked bead bx-003, got %v", beads[0]["id"])
+		t.Errorf("expected dep-waiting bead bx-003, got %v", beads[0]["id"])
+	}
+}
+
+func TestMCPBeadStatusSchemasIncludeSixLifecycleStatuses(t *testing.T) {
+	dir := setupTestDir(t)
+	srv := New(":0", dir)
+
+	w := mcpRequest(t, srv, "tools/list", `{}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var resp jsonRPCResponse
+	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
+		t.Fatal(err)
+	}
+	result := resp.Result.(map[string]any)
+	tools, _ := result["tools"].([]any)
+
+	sixStatuses := []string{"open", "in_progress", "closed", "blocked", "proposed", "cancelled"}
+	toolsToCheck := map[string]bool{"ddx_list_beads": false, "ddx_bead_update": false}
+
+	for _, tool := range tools {
+		toolMap, ok := tool.(map[string]any)
+		if !ok {
+			continue
+		}
+		name, _ := toolMap["name"].(string)
+		if _, shouldCheck := toolsToCheck[name]; !shouldCheck {
+			continue
+		}
+		inputSchema, _ := toolMap["inputSchema"].(map[string]any)
+		properties, _ := inputSchema["properties"].(map[string]any)
+		statusProp, _ := properties["status"].(map[string]any)
+		desc, _ := statusProp["description"].(string)
+		for _, token := range sixStatuses {
+			if !strings.Contains(desc, token) {
+				t.Errorf("tool %q status description missing token %q: %q", name, token, desc)
+			}
+		}
+		toolsToCheck[name] = true
+	}
+	for name, found := range toolsToCheck {
+		if !found {
+			t.Errorf("tool %q not found in tools/list response", name)
+		}
 	}
 }
 

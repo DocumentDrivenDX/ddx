@@ -221,26 +221,22 @@ type ComplexityRoot struct {
 	}
 
 	Bead struct {
-		Acceptance                func(childComplexity int) int
-		CreatedAt                 func(childComplexity int) int
-		CreatedBy                 func(childComplexity int) int
-		Dependencies              func(childComplexity int) int
-		Description               func(childComplexity int) int
-		ID                        func(childComplexity int) int
-		IssueType                 func(childComplexity int) int
-		Labels                    func(childComplexity int) int
-		NeedsHuman                func(childComplexity int) int
-		NeedsHumanReason          func(childComplexity int) int
-		NeedsHumanSuggestedAction func(childComplexity int) int
-		NeedsHumanSummary         func(childComplexity int) int
-		Notes                     func(childComplexity int) int
-		Owner                     func(childComplexity int) int
-		Parent                    func(childComplexity int) int
-		Priority                  func(childComplexity int) int
-		ProjectID                 func(childComplexity int) int
-		Status                    func(childComplexity int) int
-		Title                     func(childComplexity int) int
-		UpdatedAt                 func(childComplexity int) int
+		Acceptance   func(childComplexity int) int
+		CreatedAt    func(childComplexity int) int
+		CreatedBy    func(childComplexity int) int
+		Dependencies func(childComplexity int) int
+		Description  func(childComplexity int) int
+		ID           func(childComplexity int) int
+		IssueType    func(childComplexity int) int
+		Labels       func(childComplexity int) int
+		Notes        func(childComplexity int) int
+		Owner        func(childComplexity int) int
+		Parent       func(childComplexity int) int
+		Priority     func(childComplexity int) int
+		ProjectID    func(childComplexity int) int
+		Status       func(childComplexity int) int
+		Title        func(childComplexity int) int
+		UpdatedAt    func(childComplexity int) int
 	}
 
 	BeadConnection struct {
@@ -280,13 +276,18 @@ type ComplexityRoot struct {
 	}
 
 	BeadStatusCounts struct {
-		Blocked     func(childComplexity int) int
-		Closed      func(childComplexity int) int
-		NeedsHuman  func(childComplexity int) int
-		Open        func(childComplexity int) int
-		Ready       func(childComplexity int) int
-		Total       func(childComplexity int) int
-		WorkerReady func(childComplexity int) int
+		Blocked           func(childComplexity int) int
+		Cancelled         func(childComplexity int) int
+		Closed            func(childComplexity int) int
+		DependencyWaiting func(childComplexity int) int
+		ExternalBlocked   func(childComplexity int) int
+		InProgress        func(childComplexity int) int
+		Open              func(childComplexity int) int
+		OperatorAttention func(childComplexity int) int
+		Proposed          func(childComplexity int) int
+		Ready             func(childComplexity int) int
+		Total             func(childComplexity int) int
+		WorkerReady       func(childComplexity int) int
 	}
 
 	Commit struct {
@@ -775,10 +776,12 @@ type ComplexityRoot struct {
 
 	Mutation struct {
 		ArtifactRegenerate    func(childComplexity int, artifactID string) int
+		BeadApprove           func(childComplexity int, id string, note string) int
+		BeadBlock             func(childComplexity int, id string, externalBlockerReason string) int
+		BeadCancel            func(childComplexity int, id string, reason string) int
 		BeadClaim             func(childComplexity int, id string, assignee string) int
 		BeadClose             func(childComplexity int, id string, reason *string) int
 		BeadCreate            func(childComplexity int, input BeadInput) int
-		BeadHumanResolve      func(childComplexity int, id string, action HumanResolveAction, note string, children []string) int
 		BeadReopen            func(childComplexity int, id string) int
 		BeadUnclaim           func(childComplexity int, id string) int
 		BeadUpdate            func(childComplexity int, id string, input BeadUpdateInput) int
@@ -1045,7 +1048,7 @@ type ComplexityRoot struct {
 		Beads                       func(childComplexity int, first *int, after *string, last *int, before *string, status *string, label *string, projectID *string) int
 		BeadsBlocked                func(childComplexity int, first *int, after *string, last *int, before *string) int
 		BeadsByProject              func(childComplexity int, projectID string, first *int, after *string, last *int, before *string, status *string, label *string, search *string) int
-		BeadsNeedsHuman             func(childComplexity int, first *int, after *string, last *int, before *string) int
+		BeadsDependencyWaiting      func(childComplexity int, first *int, after *string, last *int, before *string) int
 		BeadsReady                  func(childComplexity int, first *int, after *string, last *int, before *string) int
 		BeadsStatus                 func(childComplexity int) int
 		Commits                     func(childComplexity int, projectID string, first *int, after *string, last *int, before *string, since *string, author *string) int
@@ -1449,7 +1452,9 @@ type MutationResolver interface {
 	BeadUnclaim(ctx context.Context, id string) (*Bead, error)
 	BeadReopen(ctx context.Context, id string) (*Bead, error)
 	BeadClose(ctx context.Context, id string, reason *string) (*Bead, error)
-	BeadHumanResolve(ctx context.Context, id string, action HumanResolveAction, note string, children []string) (*Bead, error)
+	BeadApprove(ctx context.Context, id string, note string) (*Bead, error)
+	BeadCancel(ctx context.Context, id string, reason string) (*Bead, error)
+	BeadBlock(ctx context.Context, id string, externalBlockerReason string) (*Bead, error)
 	DocumentWrite(ctx context.Context, path string, content string) (*Document, error)
 	WorkerDispatch(ctx context.Context, kind string, projectID string, args *string) (*WorkerDispatchResult, error)
 	StartWorker(ctx context.Context, input StartWorkerInput) (*WorkerDispatchResult, error)
@@ -1476,8 +1481,8 @@ type QueryResolver interface {
 	BeadsByProject(ctx context.Context, projectID string, first *int, after *string, last *int, before *string, status *string, label *string, search *string) (*BeadConnection, error)
 	BeadsReady(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error)
 	BeadsBlocked(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error)
+	BeadsDependencyWaiting(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error)
 	BeadsStatus(ctx context.Context) (*BeadStatusCounts, error)
-	BeadsNeedsHuman(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error)
 	BeadDepTree(ctx context.Context, beadID string) (string, error)
 	Bead(ctx context.Context, id string) (*Bead, error)
 	Documents(ctx context.Context, first *int, after *string, last *int, before *string, typeArg *string) (*DocumentConnection, error)
@@ -2401,30 +2406,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Bead.Labels(childComplexity), true
-	case "Bead.needsHuman":
-		if e.ComplexityRoot.Bead.NeedsHuman == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Bead.NeedsHuman(childComplexity), true
-	case "Bead.needsHumanReason":
-		if e.ComplexityRoot.Bead.NeedsHumanReason == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Bead.NeedsHumanReason(childComplexity), true
-	case "Bead.needsHumanSuggestedAction":
-		if e.ComplexityRoot.Bead.NeedsHumanSuggestedAction == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Bead.NeedsHumanSuggestedAction(childComplexity), true
-	case "Bead.needsHumanSummary":
-		if e.ComplexityRoot.Bead.NeedsHumanSummary == nil {
-			break
-		}
-
-		return e.ComplexityRoot.Bead.NeedsHumanSummary(childComplexity), true
 	case "Bead.notes":
 		if e.ComplexityRoot.Bead.Notes == nil {
 			break
@@ -2628,24 +2609,54 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.BeadStatusCounts.Blocked(childComplexity), true
+	case "BeadStatusCounts.cancelled":
+		if e.ComplexityRoot.BeadStatusCounts.Cancelled == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BeadStatusCounts.Cancelled(childComplexity), true
 	case "BeadStatusCounts.closed":
 		if e.ComplexityRoot.BeadStatusCounts.Closed == nil {
 			break
 		}
 
 		return e.ComplexityRoot.BeadStatusCounts.Closed(childComplexity), true
-	case "BeadStatusCounts.needsHuman":
-		if e.ComplexityRoot.BeadStatusCounts.NeedsHuman == nil {
+	case "BeadStatusCounts.dependencyWaiting":
+		if e.ComplexityRoot.BeadStatusCounts.DependencyWaiting == nil {
 			break
 		}
 
-		return e.ComplexityRoot.BeadStatusCounts.NeedsHuman(childComplexity), true
+		return e.ComplexityRoot.BeadStatusCounts.DependencyWaiting(childComplexity), true
+	case "BeadStatusCounts.externalBlocked":
+		if e.ComplexityRoot.BeadStatusCounts.ExternalBlocked == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BeadStatusCounts.ExternalBlocked(childComplexity), true
+	case "BeadStatusCounts.inProgress":
+		if e.ComplexityRoot.BeadStatusCounts.InProgress == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BeadStatusCounts.InProgress(childComplexity), true
 	case "BeadStatusCounts.open":
 		if e.ComplexityRoot.BeadStatusCounts.Open == nil {
 			break
 		}
 
 		return e.ComplexityRoot.BeadStatusCounts.Open(childComplexity), true
+	case "BeadStatusCounts.operatorAttention":
+		if e.ComplexityRoot.BeadStatusCounts.OperatorAttention == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BeadStatusCounts.OperatorAttention(childComplexity), true
+	case "BeadStatusCounts.proposed":
+		if e.ComplexityRoot.BeadStatusCounts.Proposed == nil {
+			break
+		}
+
+		return e.ComplexityRoot.BeadStatusCounts.Proposed(childComplexity), true
 	case "BeadStatusCounts.ready":
 		if e.ComplexityRoot.BeadStatusCounts.Ready == nil {
 			break
@@ -4645,6 +4656,39 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.ArtifactRegenerate(childComplexity, args["artifactId"].(string)), true
+	case "Mutation.beadApprove":
+		if e.ComplexityRoot.Mutation.BeadApprove == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_beadApprove_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.BeadApprove(childComplexity, args["id"].(string), args["note"].(string)), true
+	case "Mutation.beadBlock":
+		if e.ComplexityRoot.Mutation.BeadBlock == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_beadBlock_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.BeadBlock(childComplexity, args["id"].(string), args["externalBlockerReason"].(string)), true
+	case "Mutation.beadCancel":
+		if e.ComplexityRoot.Mutation.BeadCancel == nil {
+			break
+		}
+
+		args, err := ec.field_Mutation_beadCancel_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Mutation.BeadCancel(childComplexity, args["id"].(string), args["reason"].(string)), true
 	case "Mutation.beadClaim":
 		if e.ComplexityRoot.Mutation.BeadClaim == nil {
 			break
@@ -4678,17 +4722,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Mutation.BeadCreate(childComplexity, args["input"].(BeadInput)), true
-	case "Mutation.beadHumanResolve":
-		if e.ComplexityRoot.Mutation.BeadHumanResolve == nil {
-			break
-		}
-
-		args, err := ec.field_Mutation_beadHumanResolve_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Mutation.BeadHumanResolve(childComplexity, args["id"].(string), args["action"].(HumanResolveAction), args["note"].(string), args["children"].([]string)), true
 	case "Mutation.beadReopen":
 		if e.ComplexityRoot.Mutation.BeadReopen == nil {
 			break
@@ -5886,6 +5919,17 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.BeadsByProject(childComplexity, args["projectID"].(string), args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string), args["status"].(*string), args["label"].(*string), args["search"].(*string)), true
+	case "Query.beadsDependencyWaiting":
+		if e.ComplexityRoot.Query.BeadsDependencyWaiting == nil {
+			break
+		}
+
+		args, err := ec.field_Query_beadsDependencyWaiting_args(ctx, rawArgs)
+		if err != nil {
+			return 0, false
+		}
+
+		return e.ComplexityRoot.Query.BeadsDependencyWaiting(childComplexity, args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 	case "Query.beadsReady":
 		if e.ComplexityRoot.Query.BeadsReady == nil {
 			break
@@ -5897,17 +5941,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.Query.BeadsReady(childComplexity, args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
-	case "Query.beadsNeedsHuman":
-		if e.ComplexityRoot.Query.BeadsNeedsHuman == nil {
-			break
-		}
-
-		args, err := ec.field_Query_beadsNeedsHuman_args(ctx, rawArgs)
-		if err != nil {
-			return 0, false
-		}
-
-		return e.ComplexityRoot.Query.BeadsNeedsHuman(childComplexity, args["first"].(*int), args["after"].(*string), args["last"].(*int), args["before"].(*string)), true
 	case "Query.beadsStatus":
 		if e.ComplexityRoot.Query.BeadsStatus == nil {
 			break
@@ -8037,6 +8070,54 @@ func (ec *executionContext) field_Mutation_artifactRegenerate_args(ctx context.C
 	return args, nil
 }
 
+func (ec *executionContext) field_Mutation_beadApprove_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "note", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["note"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_beadBlock_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "externalBlockerReason", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["externalBlockerReason"] = arg1
+	return args, nil
+}
+
+func (ec *executionContext) field_Mutation_beadCancel_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+	var err error
+	args := map[string]any{}
+	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
+	if err != nil {
+		return nil, err
+	}
+	args["id"] = arg0
+	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "reason", ec.unmarshalNString2string)
+	if err != nil {
+		return nil, err
+	}
+	args["reason"] = arg1
+	return args, nil
+}
+
 func (ec *executionContext) field_Mutation_beadClaim_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
@@ -8077,32 +8158,6 @@ func (ec *executionContext) field_Mutation_beadCreate_args(ctx context.Context, 
 		return nil, err
 	}
 	args["input"] = arg0
-	return args, nil
-}
-
-func (ec *executionContext) field_Mutation_beadHumanResolve_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
-	var err error
-	args := map[string]any{}
-	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "id", ec.unmarshalNID2string)
-	if err != nil {
-		return nil, err
-	}
-	args["id"] = arg0
-	arg1, err := graphql.ProcessArgField(ctx, rawArgs, "action", ec.unmarshalNHumanResolveAction2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐHumanResolveAction)
-	if err != nil {
-		return nil, err
-	}
-	args["action"] = arg1
-	arg2, err := graphql.ProcessArgField(ctx, rawArgs, "note", ec.unmarshalNString2string)
-	if err != nil {
-		return nil, err
-	}
-	args["note"] = arg2
-	arg3, err := graphql.ProcessArgField(ctx, rawArgs, "children", ec.unmarshalOString2ᚕstringᚄ)
-	if err != nil {
-		return nil, err
-	}
-	args["children"] = arg3
 	return args, nil
 }
 
@@ -8645,7 +8700,7 @@ func (ec *executionContext) field_Query_beadsByProject_args(ctx context.Context,
 	return args, nil
 }
 
-func (ec *executionContext) field_Query_beadsReady_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Query_beadsDependencyWaiting_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
@@ -8671,7 +8726,7 @@ func (ec *executionContext) field_Query_beadsReady_args(ctx context.Context, raw
 	return args, nil
 }
 
-func (ec *executionContext) field_Query_beadsNeedsHuman_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
+func (ec *executionContext) field_Query_beadsReady_args(ctx context.Context, rawArgs map[string]any) (map[string]any, error) {
 	var err error
 	args := map[string]any{}
 	arg0, err := graphql.ProcessArgField(ctx, rawArgs, "first", ec.unmarshalOInt2ᚖint)
@@ -14261,122 +14316,6 @@ func (ec *executionContext) fieldContext_Bead_dependencies(_ context.Context, fi
 	return fc, nil
 }
 
-func (ec *executionContext) _Bead_needsHuman(ctx context.Context, field graphql.CollectedField, obj *Bead) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Bead_needsHuman,
-		func(ctx context.Context) (any, error) {
-			return obj.NeedsHuman, nil
-		},
-		nil,
-		ec.marshalNBoolean2bool,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_Bead_needsHuman(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Bead",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Boolean does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Bead_needsHumanReason(ctx context.Context, field graphql.CollectedField, obj *Bead) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Bead_needsHumanReason,
-		func(ctx context.Context) (any, error) {
-			return obj.NeedsHumanReason, nil
-		},
-		nil,
-		ec.marshalOString2ᚖstring,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_Bead_needsHumanReason(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Bead",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Bead_needsHumanSuggestedAction(ctx context.Context, field graphql.CollectedField, obj *Bead) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Bead_needsHumanSuggestedAction,
-		func(ctx context.Context) (any, error) {
-			return obj.NeedsHumanSuggestedAction, nil
-		},
-		nil,
-		ec.marshalOString2ᚖstring,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_Bead_needsHumanSuggestedAction(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Bead",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _Bead_needsHumanSummary(ctx context.Context, field graphql.CollectedField, obj *Bead) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_Bead_needsHumanSummary,
-		func(ctx context.Context) (any, error) {
-			return obj.NeedsHumanSummary, nil
-		},
-		nil,
-		ec.marshalOString2ᚖstring,
-		true,
-		false,
-	)
-}
-
-func (ec *executionContext) fieldContext_Bead_needsHumanSummary(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "Bead",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _BeadConnection_edges(ctx context.Context, field graphql.CollectedField, obj *BeadConnection) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -15168,6 +15107,35 @@ func (ec *executionContext) fieldContext_BeadStatusCounts_open(_ context.Context
 	return fc, nil
 }
 
+func (ec *executionContext) _BeadStatusCounts_inProgress(ctx context.Context, field graphql.CollectedField, obj *BeadStatusCounts) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BeadStatusCounts_inProgress,
+		func(ctx context.Context) (any, error) {
+			return obj.InProgress, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BeadStatusCounts_inProgress(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BeadStatusCounts",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _BeadStatusCounts_closed(ctx context.Context, field graphql.CollectedField, obj *BeadStatusCounts) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -15226,6 +15194,64 @@ func (ec *executionContext) fieldContext_BeadStatusCounts_blocked(_ context.Cont
 	return fc, nil
 }
 
+func (ec *executionContext) _BeadStatusCounts_proposed(ctx context.Context, field graphql.CollectedField, obj *BeadStatusCounts) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BeadStatusCounts_proposed,
+		func(ctx context.Context) (any, error) {
+			return obj.Proposed, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BeadStatusCounts_proposed(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BeadStatusCounts",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BeadStatusCounts_cancelled(ctx context.Context, field graphql.CollectedField, obj *BeadStatusCounts) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BeadStatusCounts_cancelled,
+		func(ctx context.Context) (any, error) {
+			return obj.Cancelled, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BeadStatusCounts_cancelled(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BeadStatusCounts",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
 func (ec *executionContext) _BeadStatusCounts_ready(ctx context.Context, field graphql.CollectedField, obj *BeadStatusCounts) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -15255,64 +15281,6 @@ func (ec *executionContext) fieldContext_BeadStatusCounts_ready(_ context.Contex
 	return fc, nil
 }
 
-func (ec *executionContext) _BeadStatusCounts_total(ctx context.Context, field graphql.CollectedField, obj *BeadStatusCounts) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_BeadStatusCounts_total,
-		func(ctx context.Context) (any, error) {
-			return obj.Total, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_BeadStatusCounts_total(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "BeadStatusCounts",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _BeadStatusCounts_needsHuman(ctx context.Context, field graphql.CollectedField, obj *BeadStatusCounts) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_BeadStatusCounts_needsHuman,
-		func(ctx context.Context) (any, error) {
-			return obj.NeedsHuman, nil
-		},
-		nil,
-		ec.marshalNInt2int,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_BeadStatusCounts_needsHuman(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "BeadStatusCounts",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
 func (ec *executionContext) _BeadStatusCounts_workerReady(ctx context.Context, field graphql.CollectedField, obj *BeadStatusCounts) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
@@ -15330,6 +15298,122 @@ func (ec *executionContext) _BeadStatusCounts_workerReady(ctx context.Context, f
 }
 
 func (ec *executionContext) fieldContext_BeadStatusCounts_workerReady(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BeadStatusCounts",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BeadStatusCounts_dependencyWaiting(ctx context.Context, field graphql.CollectedField, obj *BeadStatusCounts) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BeadStatusCounts_dependencyWaiting,
+		func(ctx context.Context) (any, error) {
+			return obj.DependencyWaiting, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BeadStatusCounts_dependencyWaiting(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BeadStatusCounts",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BeadStatusCounts_externalBlocked(ctx context.Context, field graphql.CollectedField, obj *BeadStatusCounts) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BeadStatusCounts_externalBlocked,
+		func(ctx context.Context) (any, error) {
+			return obj.ExternalBlocked, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BeadStatusCounts_externalBlocked(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BeadStatusCounts",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BeadStatusCounts_operatorAttention(ctx context.Context, field graphql.CollectedField, obj *BeadStatusCounts) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BeadStatusCounts_operatorAttention,
+		func(ctx context.Context) (any, error) {
+			return obj.OperatorAttention, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BeadStatusCounts_operatorAttention(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "BeadStatusCounts",
+		Field:      field,
+		IsMethod:   false,
+		IsResolver: false,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			return nil, errors.New("field of type Int does not have child fields")
+		},
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _BeadStatusCounts_total(ctx context.Context, field graphql.CollectedField, obj *BeadStatusCounts) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_BeadStatusCounts_total,
+		func(ctx context.Context) (any, error) {
+			return obj.Total, nil
+		},
+		nil,
+		ec.marshalNInt2int,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_BeadStatusCounts_total(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "BeadStatusCounts",
 		Field:      field,
@@ -25779,15 +25863,15 @@ func (ec *executionContext) fieldContext_Mutation_beadClose(ctx context.Context,
 	return fc, nil
 }
 
-func (ec *executionContext) _Mutation_beadHumanResolve(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Mutation_beadApprove(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Mutation_beadHumanResolve,
+		ec.fieldContext_Mutation_beadApprove,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Mutation().BeadHumanResolve(ctx, fc.Args["id"].(string), fc.Args["action"].(HumanResolveAction), fc.Args["note"].(string), fc.Args["children"].([]string))
+			return ec.Resolvers.Mutation().BeadApprove(ctx, fc.Args["id"].(string), fc.Args["note"].(string))
 		},
 		nil,
 		ec.marshalNBead2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐBead,
@@ -25796,7 +25880,7 @@ func (ec *executionContext) _Mutation_beadHumanResolve(ctx context.Context, fiel
 	)
 }
 
-func (ec *executionContext) fieldContext_Mutation_beadHumanResolve(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Mutation_beadApprove(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Mutation",
 		Field:      field,
@@ -25836,14 +25920,6 @@ func (ec *executionContext) fieldContext_Mutation_beadHumanResolve(ctx context.C
 				return ec.fieldContext_Bead_notes(ctx, field)
 			case "dependencies":
 				return ec.fieldContext_Bead_dependencies(ctx, field)
-			case "needsHuman":
-				return ec.fieldContext_Bead_needsHuman(ctx, field)
-			case "needsHumanReason":
-				return ec.fieldContext_Bead_needsHumanReason(ctx, field)
-			case "needsHumanSuggestedAction":
-				return ec.fieldContext_Bead_needsHumanSuggestedAction(ctx, field)
-			case "needsHumanSummary":
-				return ec.fieldContext_Bead_needsHumanSummary(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type Bead", field.Name)
 		},
@@ -25855,7 +25931,157 @@ func (ec *executionContext) fieldContext_Mutation_beadHumanResolve(ctx context.C
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Mutation_beadHumanResolve_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Mutation_beadApprove_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_beadCancel(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_beadCancel,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().BeadCancel(ctx, fc.Args["id"].(string), fc.Args["reason"].(string))
+		},
+		nil,
+		ec.marshalNBead2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐBead,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_beadCancel(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Bead_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Bead_title(ctx, field)
+			case "status":
+				return ec.fieldContext_Bead_status(ctx, field)
+			case "priority":
+				return ec.fieldContext_Bead_priority(ctx, field)
+			case "issueType":
+				return ec.fieldContext_Bead_issueType(ctx, field)
+			case "owner":
+				return ec.fieldContext_Bead_owner(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Bead_createdAt(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Bead_createdBy(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Bead_updatedAt(ctx, field)
+			case "labels":
+				return ec.fieldContext_Bead_labels(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
+			case "parent":
+				return ec.fieldContext_Bead_parent(ctx, field)
+			case "description":
+				return ec.fieldContext_Bead_description(ctx, field)
+			case "acceptance":
+				return ec.fieldContext_Bead_acceptance(ctx, field)
+			case "notes":
+				return ec.fieldContext_Bead_notes(ctx, field)
+			case "dependencies":
+				return ec.fieldContext_Bead_dependencies(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Bead", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_beadCancel_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+		ec.Error(ctx, err)
+		return fc, err
+	}
+	return fc, nil
+}
+
+func (ec *executionContext) _Mutation_beadBlock(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+	return graphql.ResolveField(
+		ctx,
+		ec.OperationContext,
+		field,
+		ec.fieldContext_Mutation_beadBlock,
+		func(ctx context.Context) (any, error) {
+			fc := graphql.GetFieldContext(ctx)
+			return ec.Resolvers.Mutation().BeadBlock(ctx, fc.Args["id"].(string), fc.Args["externalBlockerReason"].(string))
+		},
+		nil,
+		ec.marshalNBead2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐBead,
+		true,
+		true,
+	)
+}
+
+func (ec *executionContext) fieldContext_Mutation_beadBlock(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+	fc = &graphql.FieldContext{
+		Object:     "Mutation",
+		Field:      field,
+		IsMethod:   true,
+		IsResolver: true,
+		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
+			switch field.Name {
+			case "id":
+				return ec.fieldContext_Bead_id(ctx, field)
+			case "title":
+				return ec.fieldContext_Bead_title(ctx, field)
+			case "status":
+				return ec.fieldContext_Bead_status(ctx, field)
+			case "priority":
+				return ec.fieldContext_Bead_priority(ctx, field)
+			case "issueType":
+				return ec.fieldContext_Bead_issueType(ctx, field)
+			case "owner":
+				return ec.fieldContext_Bead_owner(ctx, field)
+			case "createdAt":
+				return ec.fieldContext_Bead_createdAt(ctx, field)
+			case "createdBy":
+				return ec.fieldContext_Bead_createdBy(ctx, field)
+			case "updatedAt":
+				return ec.fieldContext_Bead_updatedAt(ctx, field)
+			case "labels":
+				return ec.fieldContext_Bead_labels(ctx, field)
+			case "projectID":
+				return ec.fieldContext_Bead_projectID(ctx, field)
+			case "parent":
+				return ec.fieldContext_Bead_parent(ctx, field)
+			case "description":
+				return ec.fieldContext_Bead_description(ctx, field)
+			case "acceptance":
+				return ec.fieldContext_Bead_acceptance(ctx, field)
+			case "notes":
+				return ec.fieldContext_Bead_notes(ctx, field)
+			case "dependencies":
+				return ec.fieldContext_Bead_dependencies(ctx, field)
+			}
+			return nil, fmt.Errorf("no field named %q was found under type Bead", field.Name)
+		},
+	}
+	defer func() {
+		if r := recover(); r != nil {
+			err = ec.Recover(ctx, r)
+			ec.Error(ctx, err)
+		}
+	}()
+	ctx = graphql.WithFieldContext(ctx, fc)
+	if fc.Args, err = ec.field_Mutation_beadBlock_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -31417,15 +31643,15 @@ func (ec *executionContext) fieldContext_Query_beadsBlocked(ctx context.Context,
 	return fc, nil
 }
 
-func (ec *executionContext) _Query_beadsNeedsHuman(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
+func (ec *executionContext) _Query_beadsDependencyWaiting(ctx context.Context, field graphql.CollectedField) (ret graphql.Marshaler) {
 	return graphql.ResolveField(
 		ctx,
 		ec.OperationContext,
 		field,
-		ec.fieldContext_Query_beadsNeedsHuman,
+		ec.fieldContext_Query_beadsDependencyWaiting,
 		func(ctx context.Context) (any, error) {
 			fc := graphql.GetFieldContext(ctx)
-			return ec.Resolvers.Query().BeadsNeedsHuman(ctx, fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
+			return ec.Resolvers.Query().BeadsDependencyWaiting(ctx, fc.Args["first"].(*int), fc.Args["after"].(*string), fc.Args["last"].(*int), fc.Args["before"].(*string))
 		},
 		nil,
 		ec.marshalNBeadConnection2ᚖgithubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐBeadConnection,
@@ -31434,7 +31660,7 @@ func (ec *executionContext) _Query_beadsNeedsHuman(ctx context.Context, field gr
 	)
 }
 
-func (ec *executionContext) fieldContext_Query_beadsNeedsHuman(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
+func (ec *executionContext) fieldContext_Query_beadsDependencyWaiting(ctx context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
 	fc = &graphql.FieldContext{
 		Object:     "Query",
 		Field:      field,
@@ -31459,7 +31685,7 @@ func (ec *executionContext) fieldContext_Query_beadsNeedsHuman(ctx context.Conte
 		}
 	}()
 	ctx = graphql.WithFieldContext(ctx, fc)
-	if fc.Args, err = ec.field_Query_beadsNeedsHuman_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
+	if fc.Args, err = ec.field_Query_beadsDependencyWaiting_args(ctx, field.ArgumentMap(ec.Variables)); err != nil {
 		ec.Error(ctx, err)
 		return fc, err
 	}
@@ -31492,18 +31718,28 @@ func (ec *executionContext) fieldContext_Query_beadsStatus(_ context.Context, fi
 			switch field.Name {
 			case "open":
 				return ec.fieldContext_BeadStatusCounts_open(ctx, field)
+			case "inProgress":
+				return ec.fieldContext_BeadStatusCounts_inProgress(ctx, field)
 			case "closed":
 				return ec.fieldContext_BeadStatusCounts_closed(ctx, field)
 			case "blocked":
 				return ec.fieldContext_BeadStatusCounts_blocked(ctx, field)
+			case "proposed":
+				return ec.fieldContext_BeadStatusCounts_proposed(ctx, field)
+			case "cancelled":
+				return ec.fieldContext_BeadStatusCounts_cancelled(ctx, field)
 			case "ready":
 				return ec.fieldContext_BeadStatusCounts_ready(ctx, field)
-			case "total":
-				return ec.fieldContext_BeadStatusCounts_total(ctx, field)
-			case "needsHuman":
-				return ec.fieldContext_BeadStatusCounts_needsHuman(ctx, field)
 			case "workerReady":
 				return ec.fieldContext_BeadStatusCounts_workerReady(ctx, field)
+			case "dependencyWaiting":
+				return ec.fieldContext_BeadStatusCounts_dependencyWaiting(ctx, field)
+			case "externalBlocked":
+				return ec.fieldContext_BeadStatusCounts_externalBlocked(ctx, field)
+			case "operatorAttention":
+				return ec.fieldContext_BeadStatusCounts_operatorAttention(ctx, field)
+			case "total":
+				return ec.fieldContext_BeadStatusCounts_total(ctx, field)
 			}
 			return nil, fmt.Errorf("no field named %q was found under type BeadStatusCounts", field.Name)
 		},
@@ -45478,17 +45714,6 @@ func (ec *executionContext) _Bead(ctx context.Context, sel ast.SelectionSet, obj
 			out.Values[i] = ec._Bead_notes(ctx, field, obj)
 		case "dependencies":
 			out.Values[i] = ec._Bead_dependencies(ctx, field, obj)
-		case "needsHuman":
-			out.Values[i] = ec._Bead_needsHuman(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "needsHumanReason":
-			out.Values[i] = ec._Bead_needsHumanReason(ctx, field, obj)
-		case "needsHumanSuggestedAction":
-			out.Values[i] = ec._Bead_needsHumanSuggestedAction(ctx, field, obj)
-		case "needsHumanSummary":
-			out.Values[i] = ec._Bead_needsHumanSummary(ctx, field, obj)
 		default:
 			panic("unknown field " + strconv.Quote(field.Name))
 		}
@@ -45760,6 +45985,11 @@ func (ec *executionContext) _BeadStatusCounts(ctx context.Context, sel ast.Selec
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "inProgress":
+			out.Values[i] = ec._BeadStatusCounts_inProgress(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "closed":
 			out.Values[i] = ec._BeadStatusCounts_closed(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
@@ -45770,23 +46000,43 @@ func (ec *executionContext) _BeadStatusCounts(ctx context.Context, sel ast.Selec
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
+		case "proposed":
+			out.Values[i] = ec._BeadStatusCounts_proposed(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "cancelled":
+			out.Values[i] = ec._BeadStatusCounts_cancelled(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
 		case "ready":
 			out.Values[i] = ec._BeadStatusCounts_ready(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "total":
-			out.Values[i] = ec._BeadStatusCounts_total(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
-		case "needsHuman":
-			out.Values[i] = ec._BeadStatusCounts_needsHuman(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "workerReady":
 			out.Values[i] = ec._BeadStatusCounts_workerReady(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "dependencyWaiting":
+			out.Values[i] = ec._BeadStatusCounts_dependencyWaiting(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "externalBlocked":
+			out.Values[i] = ec._BeadStatusCounts_externalBlocked(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "operatorAttention":
+			out.Values[i] = ec._BeadStatusCounts_operatorAttention(ctx, field, obj)
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "total":
+			out.Values[i] = ec._BeadStatusCounts_total(ctx, field, obj)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
@@ -48985,9 +49235,23 @@ func (ec *executionContext) _Mutation(ctx context.Context, sel ast.SelectionSet)
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
 			}
-		case "beadHumanResolve":
+		case "beadApprove":
 			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
-				return ec._Mutation_beadHumanResolve(ctx, field)
+				return ec._Mutation_beadApprove(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "beadCancel":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_beadCancel(ctx, field)
+			})
+			if out.Values[i] == graphql.Null {
+				out.Invalids++
+			}
+		case "beadBlock":
+			out.Values[i] = ec.OperationContext.RootResolverMiddleware(innerCtx, func(ctx context.Context) (res graphql.Marshaler) {
+				return ec._Mutation_beadBlock(ctx, field)
 			})
 			if out.Values[i] == graphql.Null {
 				out.Invalids++
@@ -50961,7 +51225,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 			}
 
 			out.Concurrently(i, func(ctx context.Context) graphql.Marshaler { return rrm(innerCtx) })
-		case "beadsNeedsHuman":
+		case "beadsDependencyWaiting":
 			field := field
 
 			innerFunc := func(ctx context.Context, fs *graphql.FieldSet) (res graphql.Marshaler) {
@@ -50970,7 +51234,7 @@ func (ec *executionContext) _Query(ctx context.Context, sel ast.SelectionSet) gr
 						ec.Error(ctx, ec.Recover(ctx, r))
 					}
 				}()
-				res = ec._Query_beadsNeedsHuman(ctx, field)
+				res = ec._Query_beadsDependencyWaiting(ctx, field)
 				if res == graphql.Null {
 					atomic.AddUint32(&fs.Invalids, 1)
 				}
@@ -55279,12 +55543,6 @@ func (ec *executionContext) marshalNBeadStatusCounts2ᚖgithubᚗcomᚋDocumentD
 
 func (ec *executionContext) unmarshalNBeadUpdateInput2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐBeadUpdateInput(ctx context.Context, v any) (BeadUpdateInput, error) {
 	res, err := ec.unmarshalInputBeadUpdateInput(ctx, v)
-	return res, graphql.ErrorOnPath(ctx, err)
-}
-
-func (ec *executionContext) unmarshalNHumanResolveAction2githubᚗcomᚋDocumentDrivenDXᚋddxᚋinternalᚋserverᚋgraphqlᚐHumanResolveAction(ctx context.Context, v any) (HumanResolveAction, error) {
-	var res HumanResolveAction
-	err := res.UnmarshalGQL(v)
 	return res, graphql.ErrorOnPath(ctx, err)
 }
 

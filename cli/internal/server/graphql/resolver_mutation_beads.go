@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -18,24 +19,14 @@ func (r *mutationResolver) beadStore(ctx context.Context) *bead.Store {
 // beadModelFromBead converts a bead.Bead to the GraphQL Bead model.
 func beadModelFromBead(b *bead.Bead) *Bead {
 	gql := &Bead{
-		ID:         b.ID,
-		Title:      b.Title,
-		Status:     b.Status,
-		Priority:   b.Priority,
-		IssueType:  b.IssueType,
-		CreatedAt:  b.CreatedAt.UTC().Format(time.RFC3339),
-		UpdatedAt:  b.UpdatedAt.UTC().Format(time.RFC3339),
-		Labels:     b.Labels,
-		NeedsHuman: b.Status == bead.StatusProposed,
-	}
-	if v, ok := b.Extra["needs-human-reason"].(string); ok && v != "" {
-		gql.NeedsHumanReason = &v
-	}
-	if v, ok := b.Extra["needs-human-suggested-action"].(string); ok && v != "" {
-		gql.NeedsHumanSuggestedAction = &v
-	}
-	if v, ok := b.Extra["needs-human-summary"].(string); ok && v != "" {
-		gql.NeedsHumanSummary = &v
+		ID:        b.ID,
+		Title:     b.Title,
+		Status:    b.Status,
+		Priority:  b.Priority,
+		IssueType: b.IssueType,
+		CreatedAt: b.CreatedAt.UTC().Format(time.RFC3339),
+		UpdatedAt: b.UpdatedAt.UTC().Format(time.RFC3339),
+		Labels:    b.Labels,
 	}
 	if b.Owner != "" {
 		gql.Owner = &b.Owner
@@ -229,51 +220,96 @@ func (r *mutationResolver) BeadReopen(ctx context.Context, id string) (*Bead, er
 	return beadModelFromBead(b), nil
 }
 
-// BeadHumanResolve is the resolver for the beadHumanResolve mutation.
-func (r *mutationResolver) BeadHumanResolve(ctx context.Context, id string, action HumanResolveAction, note string, children []string) (*Bead, error) {
+// BeadApprove is the resolver for the beadApprove mutation.
+// Transitions a proposed bead to open status (operator approval).
+func (r *mutationResolver) BeadApprove(ctx context.Context, id string, note string) (*Bead, error) {
 	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
-	if note == "" {
+	if strings.TrimSpace(note) == "" {
 		return nil, fmt.Errorf("note is required")
 	}
 
 	store := r.beadStore(ctx)
-
-	switch action {
-	case HumanResolveActionRetry:
-		if err := store.UpdateWithLifecycleStatus(id, bead.StatusOpen, bead.LifecycleTransitionOptions{
-			Reason: "graphql human resolve retry",
-			Actor:  "operator",
-			Source: "graphql:beadHumanResolve",
-		}, func(b *bead.Bead) error {
-			var filtered []string
-			for _, l := range b.Labels {
-				if l != "needs_human" {
-					filtered = append(filtered, l)
-				}
-			}
-			b.Labels = filtered
-			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
-			return nil
-		}); err != nil {
-			return nil, err
-		}
-	case HumanResolveActionDefer:
-		// Leave status=proposed in the operator-attention lane.
-	case HumanResolveActionObsolete, HumanResolveActionSplit:
-		if err := store.Close(id); err != nil {
-			return nil, err
-		}
+	if err := store.TransitionLifecycle(id, bead.StatusOpen, bead.LifecycleTransitionOptions{
+		ManualReopen: true,
+		Reason:       "graphql bead approve",
+		Actor:        "operator",
+		Source:       "graphql:beadApprove",
+	}, nil); err != nil {
+		return nil, err
 	}
 
 	if err := store.AppendEvent(id, bead.BeadEvent{
 		Kind:    "human-resolution",
-		Summary: string(action),
-		Body:    fmt.Sprintf(`{"action":%q,"note":%q}`, action, note),
+		Summary: "approve",
+		Body:    note,
 		Actor:   "operator",
 		Source:  "graphql",
 	}); err != nil {
+		return nil, err
+	}
+
+	b, err := store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	return beadModelFromBead(b), nil
+}
+
+// BeadCancel is the resolver for the beadCancel mutation.
+// Cancels a bead from open, in_progress, blocked, or proposed status.
+func (r *mutationResolver) BeadCancel(ctx context.Context, id string, reason string) (*Bead, error) {
+	if r.workingDir(ctx) == "" {
+		return nil, fmt.Errorf("working directory not configured")
+	}
+	if strings.TrimSpace(reason) == "" {
+		return nil, fmt.Errorf("reason is required")
+	}
+
+	store := r.beadStore(ctx)
+	if err := store.TransitionLifecycle(id, bead.StatusCancelled, bead.LifecycleTransitionOptions{
+		Reason: reason,
+		Actor:  "operator",
+		Source: "graphql:beadCancel",
+	}, nil); err != nil {
+		return nil, err
+	}
+
+	if err := store.AppendEvent(id, bead.BeadEvent{
+		Kind:    "human-resolution",
+		Summary: "cancel",
+		Body:    reason,
+		Actor:   "operator",
+		Source:  "graphql",
+	}); err != nil {
+		return nil, err
+	}
+
+	b, err := store.Get(id)
+	if err != nil {
+		return nil, err
+	}
+	return beadModelFromBead(b), nil
+}
+
+// BeadBlock is the resolver for the beadBlock mutation.
+// Blocks a bead with an external blocker reason.
+func (r *mutationResolver) BeadBlock(ctx context.Context, id string, externalBlockerReason string) (*Bead, error) {
+	if r.workingDir(ctx) == "" {
+		return nil, fmt.Errorf("working directory not configured")
+	}
+	if strings.TrimSpace(externalBlockerReason) == "" {
+		return nil, fmt.Errorf("externalBlockerReason is required")
+	}
+
+	store := r.beadStore(ctx)
+	if err := store.TransitionLifecycle(id, bead.StatusBlocked, bead.LifecycleTransitionOptions{
+		ExternalBlockerReason: externalBlockerReason,
+		Reason:                "graphql bead block",
+		Actor:                 "operator",
+		Source:                "graphql:beadBlock",
+	}, nil); err != nil {
 		return nil, err
 	}
 
