@@ -35,12 +35,20 @@ exact definitions.
 
 - **Bead** — a portable work item (task, bug, epic, chore) with
   metadata, dependencies, and acceptance criteria. `ddx bead create`.
-- **Queue** — the set of open beads. The *ready queue* is the subset
-  with all dependencies closed. `ddx bead ready`, `ddx bead blocked`.
+- **Queue** — the set of active beads. The *execution-ready queue* is
+  `status=open` work whose dependencies are closed and which is not parked by
+  cooldown, supersession, or execution-eligibility policy. `ddx bead ready`,
+  `ddx bead status`.
+- **Lifecycle status** — the persisted bead state: `proposed`, `open`,
+  `in_progress`, `blocked`, `closed`, or `cancelled`.
 - **Ready** — a bead whose dependencies are all closed and which is
   eligible to be picked up next. `ddx bead ready`.
-- **Blocked** — a bead with at least one unclosed dependency.
-  `ddx bead blocked`.
+- **Blocked** — `status=blocked` work paused by a hard external recheckable
+  blocker. Ordinary dependency waits are derived queue state, not blocked
+  status. `ddx bead blocked`.
+- **Proposed** — work awaiting operator decision before autonomous execution.
+  Proposed beads are not worker-eligible until accepted, rewritten, split,
+  blocked externally, cancelled, or otherwise resolved.
 - **Claim** — mark a bead as in-progress by an agent (concurrent-write
   protection). `ddx bead update <id> --claim`.
 - **Close** — mark a bead as done, with evidence (session, commit

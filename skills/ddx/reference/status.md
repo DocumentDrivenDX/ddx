@@ -24,9 +24,9 @@ interchangeably.
 "What's ready to work on?" "What's blocked?"
 
 ```bash
-ddx bead ready      # beads with all deps satisfied (actionable)
-ddx bead blocked    # beads with at least one unclosed dep
-ddx bead status     # aggregate counts: Open / Closed / Ready / Blocked
+ddx bead ready      # execution-ready open beads; use --execution for worker view
+ddx bead blocked    # status=blocked external/recheckable blockers
+ddx bead status     # aggregate lifecycle and derived queue counts
 ddx bead list       # all beads (filter with --status, --label, --where)
 ```
 
@@ -38,6 +38,8 @@ Typical answers:
 - "Why isn't bead X moving?" → `ddx bead show <id>` for full state;
   `ddx bead dep tree <id>` to see what it depends on.
 - "How many beads are open right now?" → `ddx bead status`.
+- "What is waiting on dependencies?" → `ddx bead ready` / `ddx bead status`;
+  dependency waits are derived queue state, not `status=blocked`.
 
 ## Am I healthy?
 

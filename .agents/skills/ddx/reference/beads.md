@@ -83,8 +83,8 @@ Good:
 > 1. `cd cli && go test ./internal/bead/... -run TestDep` passes.
 > 2. `ddx bead dep tree ddx-test-0001` returns a tree with the
 >    expected parent→child relationships (see test fixture).
-> 3. `ddx bead blocked` lists the dependent bead when its parent is
->    open.
+> 3. `ddx bead dep tree ddx-test-0001` shows the dependent bead waiting
+>    on its open parent.
 
 Each AC line is a verifiable condition. No subjective language.
 
@@ -146,10 +146,10 @@ ddx bead create "Title" --type task --labels area:cli,kind:bug \
 
 # Query
 ddx bead list [--status open|closed] [--label <l>]
-ddx bead ready                 # actionable (deps satisfied)
-ddx bead blocked               # deps unmet
+ddx bead ready                 # execution-ready open beads
+ddx bead blocked               # status=blocked external blockers
 ddx bead show <id>             # full detail
-ddx bead status                # aggregate counts
+ddx bead status                # lifecycle and derived queue counts
 
 # Update
 ddx bead update <id> --labels ... --acceptance "..."

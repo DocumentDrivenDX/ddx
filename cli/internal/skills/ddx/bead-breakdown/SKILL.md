@@ -125,12 +125,13 @@ After filing, check the queue reflects the expected shape:
 ```bash
 ddx bead list --label plan-<date>   # all beads for this plan
 ddx bead ready                      # beads with satisfied deps
-ddx bead blocked                    # beads waiting on deps
+ddx bead status                     # derived dependency-waiting counts
 ddx bead dep tree <epic-id>         # full dependency tree
 ```
 
 Confirm that the beads with no predecessors appear in `ddx bead ready` and that
-downstream beads appear in `ddx bead blocked`.
+downstream beads appear as dependency-waiting in `ddx bead status` or the
+dependency tree.
 
 ### 6. Commit the tracker state
 
@@ -231,7 +232,7 @@ ddx bead dep add <B-id> <A-id>
 # Inspect the queue after filing
 ddx bead list --label plan-2026-04-29
 ddx bead ready
-ddx bead blocked
+ddx bead status
 ddx bead dep tree <epic-id>
 
 # Commit the tracker state

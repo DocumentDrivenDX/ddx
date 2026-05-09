@@ -72,7 +72,7 @@ Return JSON only:
 
 ```json
 {
-  "classification": "ready|needs_refine|needs_split|needs_human|system_unready",
+  "classification": "ready|needs_refine|needs_split|operator_required|system_unready",
   "tractability": "tractable|too_large|ambiguous|blocked|unknown",
   "score": 0,
   "rationale": "brief evidence-grounded explanation",
@@ -123,10 +123,16 @@ Return JSON only:
 Use `ready` only when the bead is tractable and the sufficient-prompt rubric
 passes after legitimate waivers. Use `needs_refine` when targeted metadata or
 AC edits can make the bead ready without changing intent. Use `needs_split`
-when child beads are required. Use `needs_human` when intent, scope, or
-external state cannot be safely inferred. Use `system_unready` only when the
-readiness assessment itself cannot run or the provided context proves an
-infrastructure blocker rather than a bead defect.
+when child beads are required. Use `operator_required` when intent, scope, or
+external state cannot be safely inferred and autonomous execution should pause
+for `status=proposed`. Use `system_unready` only when the readiness assessment
+itself cannot run or the provided context proves an infrastructure blocker
+rather than a bead defect.
+
+Legacy migration input aliases only: older records or prompts may mention `needs_human`.
+Treat that as a one-way migration signal for
+`operator_required` / `status=proposed`; never emit it as a current lifecycle
+classification.
 
 ## LINT MODE
 
@@ -205,7 +211,6 @@ Valid classifications:
   failed or could not run.
 - `no_changes_unjustified` — no-change evidence lacks enough structured
   rationale to prove satisfaction or a durable blocker.
-- `needs_investigation` — evidence is ambiguous or asks for operator triage.
 - `decomposed` — parent/epic/container work was decomposed or should be made
   execution-ineligible for ordinary queue execution.
 - `blocked` — a hard external precondition prevents progress.
@@ -220,15 +225,31 @@ Valid classifications:
 - `recoverable` — transient infrastructure or time-based condition can plausibly
   succeed by retrying the same bead later.
 
+Lifecycle interpretation:
+
+- Operator-required outcomes are `status=proposed` in TD-031. Classify them
+  with the narrow evidence class above and state the proposed/operator-required
+  reason in `rationale`.
+- Autonomous smart-agent investigation remains `status=open` and should
+  continue through retry policy when the evidence suggests a stronger route can
+  make progress.
+- Hard external recheckable blockers are `status=blocked`; ordinary dependency
+  waits are derived queue state, not `status=blocked`.
+- Satisfied work is `status=closed`; intentionally not-doing work is
+  `status=cancelled`.
+
 Valid recommended actions:
 
 - `close_already_satisfied`
 - `release_claim_retry`
-- `release_claim_needs_investigation`
 - `release_claim_mark_blocked`
 - `release_claim_mark_superseded`
 - `release_claim_wait_retry`
 - `close_decomposed_or_mark_execution_ineligible`
+
+Legacy migration input aliases only: historical triage may contain `needs_investigation` or `release_claim_needs_investigation`. Treat them as
+one-way migration signals for proposed/operator-required review or autonomous
+smart retry, depending on the evidence. Never emit them in new output.
 
 Prefer the narrowest classification supported by the evidence. If the log shows
 both a vague bead and a tool timeout, classify the first event that explains why
@@ -243,7 +264,7 @@ attempt evidence should be classified as follows:
   contention are `recoverable` infrastructure failures unless the log proves a
   deterministic repository defect.
 - A pre-execute checkpoint or pre-commit failure before implementation starts
-  is `recoverable` or `needs_investigation` unless the failing test output
+  is `recoverable` or `no_changes_unjustified` unless the failing test output
   identifies a bead-owned code regression.
 - `no_changes` with passing verification is `already_satisfied`; `no_changes`
   without enough proof is `no_changes_unjustified`.
@@ -253,8 +274,8 @@ Return JSON only:
 
 ```json
 {
-  "classification": "already_satisfied|no_changes_unverified|no_changes_unjustified|needs_investigation|decomposed|blocked|superseded|routing|quota|transport|tests_red|merge_conflict|review_block|timeout|recoverable",
-  "recommended_action": "close_already_satisfied|release_claim_retry|release_claim_needs_investigation|release_claim_mark_blocked|release_claim_mark_superseded|release_claim_wait_retry|close_decomposed_or_mark_execution_ineligible",
+  "classification": "already_satisfied|no_changes_unverified|no_changes_unjustified|decomposed|blocked|superseded|routing|quota|transport|tests_red|merge_conflict|review_block|timeout|recoverable",
+  "recommended_action": "close_already_satisfied|release_claim_retry|release_claim_mark_blocked|release_claim_mark_superseded|release_claim_wait_retry|close_decomposed_or_mark_execution_ineligible",
   "rationale": "brief evidence-grounded explanation",
   "suggested_amendments": [
     {

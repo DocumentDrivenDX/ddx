@@ -73,17 +73,18 @@ ddx work focus
 If `ddx work focus` is unavailable (exits non-zero for `--help`), fall back to:
 
 ```bash
-ddx bead status         # aggregate counts: Open / Closed / Ready / Blocked
-ddx bead blocked        # beads with unmet deps
-ddx bead ready          # actionable beads
+ddx bead status         # lifecycle and derived queue counts
+ddx bead blocked        # status=blocked external/recheckable blockers
+ddx bead ready          # actionable execution-ready open beads
 ddx bead show <id>      # targeted inspection of the top ready bead
 ```
 
 If `ddx work focus` exists but fails, report that failure — do not silently fall
 back.
 
-`QueueFacts` includes: total open, total ready, top ready bead IDs, current
-blockers, and any error from the focus command.
+`QueueFacts` includes: total open, execution-ready bead IDs, dependency-waiting
+beads, proposed/operator-attention beads, external blockers, and any error from
+the focus command.
 
 ### plan → SessionBrief
 
