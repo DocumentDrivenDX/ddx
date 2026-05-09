@@ -291,6 +291,15 @@ Lifecycle reliability invariants:
 - Latest terminal events and close evidence beat stale `execute-loop-*` Extra
   metadata. Reconciliation may clear stale management fields, but MUST preserve
   append-only events and evidence.
+- `ClosureGate` (store.go:1245, inside `closeWithEvidence`) applies exclusively
+  to evidence-bearing execute-bead closes via `CloseWithEvidence`. The
+  dependency-satisfied reconcile-close path (`applyReconcilePlan` at
+  reconcile.go:208-254, `CloseSatisfied=true`) is a distinct meta-close that
+  intentionally bypasses `ClosureGate`: the bead has no execution session and no
+  `closing_commit_sha` of its own. The bypass is safe because every transitive
+  dependency is `closed` — each having individually passed `ClosureGate` or been
+  a prior meta-close — so the parent's closure inherits its evidence by reference
+  through the dependency edges.
 
 | Outcome or lifecycle action | Status transition | Label changes | Events appended | Extra updates |
 |---|---|---|---|---|
@@ -313,6 +322,7 @@ Lifecycle reliability invariants:
 | superseded work | no terminal success; leave open only if visible history is needed | add no triage labels | structured superseded event if appended by caller | `Extra["superseded-by"]` names the replacement and makes ordinary execution ineligible |
 | transient infra/quota/transport | `in_progress → open` (claim released) | (none) | `no_changes_recoverable`, `drain-paused-quota`, `rate-limit-retry`, or structured transport event | may set `execute-loop-retry-after` only for the retryable time-based condition |
 | stale no_changes tracker metadata | no status change unless latest terminal evidence closes the bead | remove stale no_changes triage labels only when contradicted by terminal evidence | preserve historical events; append reconciliation event if performed | clear stale `execute-loop-*` management fields when latest terminal event or close evidence proves they are obsolete |
+| dependency-satisfied reconcile close (`ddx bead reconcile`, `CloseSatisfied=true`; see reconcile.go:208-254) | `open → closed` via `UpdateWithLifecycleStatus`, `ManualClose=true`; `ClosureGate` is **not** invoked on this path (see store.go:1245 and the invariant above) | remove stale `execute-loop-*` labels if present; add `reconciled-nochanges-state` label | `lifecycle_reconciled` | `Extra["execute-loop-*"]` management fields cleared per `ReconcilePlan.ClearFields`; `externalizeEvents` called at reconcile.go:252 after close |
 
 Legacy/backcompat `needs_human` and `triage:needs-investigation` labels are not
 lifecycle controls. New routing uses `status=proposed` for operator decisions;
