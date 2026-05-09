@@ -423,9 +423,9 @@ type ExecuteBeadWorker struct {
 	// nil, DefaultVerificationCommandRunner is used.
 	VerificationRunner agenttry.VerificationCommandRunner
 	Now                func() time.Time
-	// Reviewer, when non-nil, is called after every successful merge to
-	// validate the commit against the bead's acceptance criteria. When nil,
-	// post-merge review is skipped (same behaviour as --no-review).
+	// Reviewer is retained for legacy/manual review helper tests. Automated
+	// close eligibility is owned by pre-land candidate-cycle review, so the
+	// execute-loop success path no longer calls this post-land reviewer.
 	Reviewer BeadReviewer
 	// ComplexityGate, when non-nil, is consulted before a bead is claimed.
 	// The zero value fail-opens once and then allows.
@@ -1280,30 +1280,13 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					}
 				}
 			}
-			// Post-merge review state machine (C3 ddx-a921ff01): the pre-close
-			// review / event-emission / triage logic now lives in
-			// try.RunPostMergeReview so the loop only sees a structured outcome
-			// (updated report + approved bool / Disposition). Store errors are
-			// surfaced via StoreErrOp/StoreErr so this loop continues to drive
-			// commitOutcome unchanged.
-			reviewOut := RunPostMergeReview(ctx, PostMergeReviewInput{
-				Bead:          candidate,
-				Report:        report,
-				Reviewer:      w.Reviewer,
-				Store:         w.Store,
-				ProjectRoot:   runtime.ProjectRoot,
-				Rcfg:          rcfg,
-				NoReview:      runtime.NoReview,
-				Log:           runtime.Log,
-				Assignee:      assignee,
-				Now:           now,
-				ReviewCostCap: runtime.ReviewCostCap,
-			})
-			report = reviewOut.Report
-			reviewApproved := reviewOut.Approved
-			if reviewOut.StoreErr != nil {
+			// Automated close eligibility is now owned by the pre-land
+			// candidate-cycle reviewer. The old post-land/pre-close reviewer
+			// remains available as a reusable/manual helper, but execute-loop
+			// must not run it after a candidate has already landed.
+			if err := w.Store.CloseWithEvidence(candidate.ID, report.SessionID, report.ResultRev); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
-					return commitOutcomeError(reviewOut.StoreErrOp, assignee, result, reviewOut.StoreErr)
+					return commitOutcomeError("CloseWithEvidence", assignee, result, err)
 				})
 				if ctx.Err() != nil {
 					return result, ctx.Err()
@@ -1311,13 +1294,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				continue
 			}
 
-			if reviewApproved {
-				result.Successes++
-				result.LastSuccessAt = now().UTC()
-			} else {
-				result.Failures++
-				result.LastFailureStatus = report.Status
-			}
+			result.Successes++
+			result.LastSuccessAt = now().UTC()
 		} else if attemptOut.Disposition == agenttry.OutcomePark {
 			result.Failures++
 			result.LastFailureStatus = report.Status

@@ -203,8 +203,9 @@ func makeReviewerWithCost(verdict Verdict, output string, costUSD float64) beadR
 	})
 }
 
-func TestExecuteBeadWorkerReviewApproveClosesBead(t *testing.T) {
+func TestPostLandReviewPath_UnreachableInCandidateCycle(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
+	reviewerCalls := 0
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
@@ -215,7 +216,10 @@ func TestExecuteBeadWorkerReviewApproveClosesBead(t *testing.T) {
 				ResultRev: "aabbccdd",
 			}, nil
 		}),
-		Reviewer: makeReviewer(VerdictApprove, "### Verdict: APPROVE\n\nAll good."),
+		Reviewer: beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+			reviewerCalls++
+			return &ReviewResult{Verdict: VerdictRequestChanges, Rationale: "legacy reviewer should not run"}, nil
+		}),
 	}
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
@@ -225,26 +229,20 @@ func TestExecuteBeadWorkerReviewApproveClosesBead(t *testing.T) {
 	require.NotNil(t, result)
 	assert.Equal(t, 1, result.Successes)
 	assert.Equal(t, 0, result.Failures)
+	assert.Equal(t, 0, reviewerCalls, "legacy post-land reviewer must not run after candidate-cycle land")
 
-	// Bead must remain closed.
 	got, err := store.Get(first.ID)
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusClosed, got.Status)
 
-	// Review event must be appended.
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
-	found := false
 	for _, ev := range events {
-		if ev.Kind == "review" && ev.Summary == "APPROVE" {
-			found = true
-		}
+		assert.NotEqual(t, "review", ev.Kind, "legacy post-land review event must not be emitted")
 	}
-	assert.True(t, found, "expected a review:APPROVE event on the bead")
 
-	// Report must carry the verdict.
 	require.Len(t, result.Results, 1)
-	assert.Equal(t, "APPROVE", result.Results[0].ReviewVerdict)
+	assert.Empty(t, result.Results[0].ReviewVerdict)
 	assert.Equal(t, ExecuteBeadStatusSuccess, result.Results[0].Status)
 }
 
@@ -364,8 +362,9 @@ func TestRunPostMergeReviewChargesReviewCostOnReviewerError(t *testing.T) {
 	assert.True(t, foundDeferred, "expected review cost to be charged and deferred on reviewer error")
 }
 
-func TestPreCloseReview_RequestChangesPreventsClose(t *testing.T) {
+func TestPostLandReviewPath_RequestChangesIgnoredAfterLand(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
+	reviewerCalls := 0
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
@@ -376,7 +375,10 @@ func TestPreCloseReview_RequestChangesPreventsClose(t *testing.T) {
 				ResultRev: "11223344",
 			}, nil
 		}),
-		Reviewer: makeReviewer(VerdictRequestChanges, "### Verdict: REQUEST_CHANGES\n\n- Missing tests."),
+		Reviewer: beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+			reviewerCalls++
+			return &ReviewResult{Verdict: VerdictRequestChanges, Rationale: "missing tests"}, nil
+		}),
 	}
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
@@ -384,33 +386,29 @@ func TestPreCloseReview_RequestChangesPreventsClose(t *testing.T) {
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, 0, result.Successes)
-	assert.Equal(t, 1, result.Failures)
-	assert.Equal(t, ExecuteBeadStatusReviewRequestChanges, result.LastFailureStatus)
+	assert.Equal(t, 1, result.Successes)
+	assert.Equal(t, 0, result.Failures)
+	assert.Equal(t, 0, reviewerCalls)
 
-	// Bead stays open because the pre-close gate blocks without reopening.
 	got, err := store.Get(first.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusInProgress, got.Status, "REQUEST_CHANGES should not close the bead")
+	assert.Equal(t, bead.StatusClosed, got.Status)
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
-	foundReview := false
 	for _, ev := range events {
-		assert.NotEqual(t, "reopen", ev.Kind, "pre-close REQUEST_CHANGES must not invoke Reopen")
-		if ev.Kind == "review" && ev.Summary == "REQUEST_CHANGES" {
-			foundReview = true
-		}
+		assert.NotEqual(t, "review", ev.Kind)
+		assert.NotEqual(t, "reopen", ev.Kind)
 	}
-	assert.True(t, foundReview, "REQUEST_CHANGES should record a review event")
 
 	require.Len(t, result.Results, 1)
-	assert.Equal(t, "REQUEST_CHANGES", result.Results[0].ReviewVerdict)
-	assert.Equal(t, ExecuteBeadStatusReviewRequestChanges, result.Results[0].Status)
+	assert.Empty(t, result.Results[0].ReviewVerdict)
+	assert.Equal(t, ExecuteBeadStatusSuccess, result.Results[0].Status)
 }
 
-func TestPreCloseReview_BlockPreventsClose(t *testing.T) {
+func TestPostLandReviewPath_BlockIgnoredAfterLand(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
+	reviewerCalls := 0
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
@@ -422,6 +420,7 @@ func TestPreCloseReview_BlockPreventsClose(t *testing.T) {
 			}, nil
 		}),
 		Reviewer: beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+			reviewerCalls++
 			return &ReviewResult{
 				Verdict:   VerdictBlock,
 				Rationale: "AC#3 regression test missing",
@@ -438,94 +437,74 @@ func TestPreCloseReview_BlockPreventsClose(t *testing.T) {
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, 0, result.Successes)
-	assert.Equal(t, 1, result.Failures)
-	// First non-terminal BLOCK is classified as review_fixable_gap (one repair
-	// cycle scheduled). A second BLOCK on the same result_rev falls through to
-	// review_block; this test covers the first-BLOCK path.
-	assert.Equal(t, ExecuteBeadStatusReviewFixableGap, result.LastFailureStatus)
+	assert.Equal(t, 1, result.Successes)
+	assert.Equal(t, 0, result.Failures)
+	assert.Equal(t, 0, reviewerCalls)
 
 	got, err := store.Get(first.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusInProgress, got.Status)
+	assert.Equal(t, bead.StatusClosed, got.Status)
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
-	foundReview := false
 	for _, ev := range events {
-		assert.NotEqual(t, "reopen", ev.Kind, "pre-close BLOCK must not invoke Reopen")
-		if ev.Kind == "review" && ev.Summary == "BLOCK" {
-			foundReview = true
-			assert.Contains(t, ev.Body, "AC#3 regression test missing")
-		}
+		assert.NotEqual(t, "review", ev.Kind)
+		assert.NotEqual(t, "reopen", ev.Kind)
 	}
-	assert.True(t, foundReview, "BLOCK should record a review event")
-
 	require.Len(t, result.Results, 1)
-	assert.Equal(t, "BLOCK", result.Results[0].ReviewVerdict)
-	assert.Equal(t, ExecuteBeadStatusReviewFixableGap, result.Results[0].Status)
-
-	events, err = store.Events(first.ID)
-	require.NoError(t, err)
-	found := false
-	for _, ev := range events {
-		if ev.Kind == "execute-bead" && ev.Summary == ExecuteBeadStatusReviewFixableGap {
-			assert.Contains(t, ev.Body, "AC#3 regression test missing")
-			found = true
-		}
-	}
-	assert.True(t, found, "expected execute-bead review_fixable_gap event with rationale")
+	assert.Empty(t, result.Results[0].ReviewVerdict)
+	assert.Equal(t, ExecuteBeadStatusSuccess, result.Results[0].Status)
 }
 
-func TestPreCloseReview_UnanimousApproveCloses(t *testing.T) {
+func TestRunPostMergeReview_UnanimousApproveCloses(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
-			return ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    ExecuteBeadStatusSuccess,
-				SessionID: "sess-review-preclose-approve",
-				ResultRev: "aa11bb22",
-			}, nil
-		}),
-		Reviewer: beadReviewGroupFunc(func(_ context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewGroupResult, error) {
-			slot := func(index int) ReviewGroupSlotResult {
-				return ReviewGroupSlotResult{
-					ReviewerIndex: index,
-					Result: &ReviewResult{
-						Verdict:         VerdictApprove,
-						RawOutput:       "```json\n{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}\n```",
-						ReviewerHarness: "claude",
-						ReviewerModel:   "claude-opus-4-6",
-						ResultRev:       resultRev,
-						PerAC: []ReviewAC{
-							{
-								Number:   1,
-								Item:     "AC#1",
-								Evidence: fmt.Sprintf("bead=%s reviewer=%d", beadID, index),
-							},
+	reviewer := beadReviewGroupFunc(func(_ context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewGroupResult, error) {
+		slot := func(index int) ReviewGroupSlotResult {
+			return ReviewGroupSlotResult{
+				ReviewerIndex: index,
+				Result: &ReviewResult{
+					Verdict:         VerdictApprove,
+					RawOutput:       "```json\n{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}\n```",
+					ReviewerHarness: "claude",
+					ReviewerModel:   "claude-opus-4-6",
+					ResultRev:       resultRev,
+					PerAC: []ReviewAC{
+						{
+							Number:   1,
+							Item:     "AC#1",
+							Evidence: fmt.Sprintf("bead=%s reviewer=%d", beadID, index),
 						},
 					},
-				}
-			}
-			return &ReviewGroupResult{
-				BeadID:    beadID,
-				ResultRev: resultRev,
-				Slots: []ReviewGroupSlotResult{
-					slot(0),
-					slot(1),
 				},
-			}, nil
-		}),
-	}
+			}
+		}
+		return &ReviewGroupResult{
+			BeadID:    beadID,
+			ResultRev: resultRev,
+			Slots: []ReviewGroupSlotResult{
+				slot(0),
+				slot(1),
+			},
+		}, nil
+	})
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Equal(t, 1, result.Successes)
-	assert.Equal(t, 0, result.Failures)
+	out := RunPostMergeReview(context.Background(), PostMergeReviewInput{
+		Bead: *first,
+		Report: ExecuteBeadReport{
+			BeadID:    first.ID,
+			Status:    ExecuteBeadStatusSuccess,
+			SessionID: "sess-review-preclose-approve",
+			ResultRev: "aa11bb22",
+		},
+		Reviewer:    reviewer,
+		Store:       store,
+		ProjectRoot: t.TempDir(),
+		Rcfg:        rcfg,
+		Now:         time.Now,
+		Assignee:    "worker",
+	})
+	require.True(t, out.Approved)
 
 	got, err := store.Get(first.ID)
 	require.NoError(t, err)
@@ -543,63 +522,63 @@ func TestPreCloseReview_UnanimousApproveCloses(t *testing.T) {
 	assert.Equal(t, 1, approveCount, "approved pre-close review should record one terminal review event before closing")
 }
 
-func TestPreCloseReview_ApproveWithoutEvidenceIsReviewError(t *testing.T) {
+func TestRunPostMergeReview_ApproveWithoutEvidenceIsReviewError(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
-			return ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    ExecuteBeadStatusSuccess,
-				SessionID: "sess-review-preclose-unparseable",
-				ResultRev: "cc33dd44",
-			}, nil
-		}),
-		Reviewer: beadReviewGroupFunc(func(_ context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewGroupResult, error) {
-			return &ReviewGroupResult{
-				BeadID:    beadID,
-				ResultRev: resultRev,
-				Slots: []ReviewGroupSlotResult{
-					{
-						ReviewerIndex: 0,
-						Result: &ReviewResult{
-							Verdict:         VerdictApprove,
-							RawOutput:       "```json\n{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}\n```",
-							ReviewerHarness: "claude",
-							ReviewerModel:   "claude-opus-4-6",
-							ResultRev:       resultRev,
-						},
+	reviewer := beadReviewGroupFunc(func(_ context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewGroupResult, error) {
+		return &ReviewGroupResult{
+			BeadID:    beadID,
+			ResultRev: resultRev,
+			Slots: []ReviewGroupSlotResult{
+				{
+					ReviewerIndex: 0,
+					Result: &ReviewResult{
+						Verdict:         VerdictApprove,
+						RawOutput:       "```json\n{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}\n```",
+						ReviewerHarness: "claude",
+						ReviewerModel:   "claude-opus-4-6",
+						ResultRev:       resultRev,
 					},
-					{
-						ReviewerIndex: 1,
-						Result: &ReviewResult{
-							Verdict:         VerdictApprove,
-							RawOutput:       "```json\n{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}\n```",
-							ReviewerHarness: "claude",
-							ReviewerModel:   "claude-opus-4-6",
-							ResultRev:       resultRev,
-							PerAC: []ReviewAC{
-								{
-									Number:   1,
-									Item:     "AC#1",
-									Evidence: "evidence-backed approval",
-								},
+				},
+				{
+					ReviewerIndex: 1,
+					Result: &ReviewResult{
+						Verdict:         VerdictApprove,
+						RawOutput:       "```json\n{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}\n```",
+						ReviewerHarness: "claude",
+						ReviewerModel:   "claude-opus-4-6",
+						ResultRev:       resultRev,
+						PerAC: []ReviewAC{
+							{
+								Number:   1,
+								Item:     "AC#1",
+								Evidence: "evidence-backed approval",
 							},
 						},
 					},
 				},
-			}, nil
-		}),
-	}
+			},
+		}, nil
+	})
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-	require.NoError(t, err)
-	require.NotNil(t, result)
-	assert.Equal(t, 0, result.Successes)
-	assert.Equal(t, 1, result.Failures)
-	assert.Equal(t, ExecuteBeadStatusReviewMalfunction, result.LastFailureStatus)
+	out := RunPostMergeReview(context.Background(), PostMergeReviewInput{
+		Bead: *first,
+		Report: ExecuteBeadReport{
+			BeadID:    first.ID,
+			Status:    ExecuteBeadStatusSuccess,
+			SessionID: "sess-review-preclose-unparseable",
+			ResultRev: "cc33dd44",
+		},
+		Reviewer:    reviewer,
+		Store:       store,
+		ProjectRoot: t.TempDir(),
+		Rcfg:        rcfg,
+		Now:         time.Now,
+		Assignee:    "worker",
+	})
+	require.False(t, out.Approved)
+	assert.Equal(t, ExecuteBeadStatusReviewMalfunction, out.Report.Status)
 
 	got, err := store.Get(first.ID)
 	require.NoError(t, err)
