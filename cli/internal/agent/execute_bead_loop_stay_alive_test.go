@@ -213,44 +213,73 @@ func TestWorkWatchStdout_PrintsNextReadyTransitionAfterIdle(t *testing.T) {
 
 	wakeCh := make(chan struct{}, 1)
 	progressCh := make(chan ProgressEvent, 16)
-	done := make(chan struct{})
-	errCh := make(chan error, 1)
-	var activeEvents int32
+
+	var logBuf bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	// Run the worker in a goroutine so the main goroutine can process progress
+	// events synchronously, eliminating goroutine-scheduling races under load.
+	type workerResult struct {
+		result *ExecuteBeadLoopResult
+		err    error
+	}
+	workerDone := make(chan workerResult, 1)
 	go func() {
-		for {
-			select {
-			case evt := <-progressCh:
-				switch evt.Phase {
-				case "loop.idle":
-					errCh <- store.Create(&bead.Bead{
+		r, e := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+			Mode:         executeloop.ModeWatch,
+			IdleInterval: time.Hour,
+			Log:          &logBuf,
+			ProgressCh:   progressCh,
+			WakeCh:       wakeCh,
+		})
+		workerDone <- workerResult{r, e}
+	}()
+
+	// Deterministic: on loop.idle, create the bead and send the wake signal
+	// immediately from the main goroutine with no scheduling gap.
+	var activeEvents int32
+	var beadCreateErr error
+	var wr workerResult
+	idleHandled := false
+	finished := false
+	for !finished {
+		select {
+		case evt := <-progressCh:
+			switch evt.Phase {
+			case "loop.idle":
+				if !idleHandled {
+					idleHandled = true
+					beadCreateErr = store.Create(&bead.Bead{
 						ID:       "ddx-ready-after-idle",
 						Title:    "spec: define full DDx temp cleanup in work cycle",
 						Priority: 0,
 					})
 					wakeCh <- struct{}{}
-				case "loop.active":
-					atomic.AddInt32(&activeEvents, 1)
 				}
-			case <-done:
-				return
+			case "loop.active":
+				atomic.AddInt32(&activeEvents, 1)
 			}
+		case wr = <-workerDone:
+			finished = true
 		}
-	}()
-	defer close(done)
+	}
+	// Drain events emitted just before the worker signalled done.
+drainLoop:
+	for {
+		select {
+		case evt := <-progressCh:
+			if evt.Phase == "loop.active" {
+				atomic.AddInt32(&activeEvents, 1)
+			}
+		default:
+			break drainLoop
+		}
+	}
 
-	var logBuf bytes.Buffer
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
-	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
-		Mode:         executeloop.ModeWatch,
-		IdleInterval: time.Hour,
-		Log:          &logBuf,
-		ProgressCh:   progressCh,
-		WakeCh:       wakeCh,
-	})
-	require.ErrorIs(t, err, context.Canceled)
-	require.NoError(t, <-errCh)
-	require.NotNil(t, result)
+	require.NoError(t, beadCreateErr)
+	require.ErrorIs(t, wr.err, context.Canceled)
+	require.NotNil(t, wr.result)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&activeEvents), "watch mode must still emit loop.active progress")
 
 	out := logBuf.String()
