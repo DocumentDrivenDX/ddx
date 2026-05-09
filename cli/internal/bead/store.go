@@ -1696,6 +1696,11 @@ func humanReviewBlockerPressure(beads []Bead) ([]HumanReviewBlockerPressure, int
 			}
 		}
 		walk(b.ID)
+		if len(seen) == 0 {
+			// A proposed/needs-human bead with no active downstream is operator
+			// attention only; it does not contribute to HumanReviewBlockers.
+			continue
+		}
 		blockers = append(blockers, HumanReviewBlockerPressure{
 			ID:                     b.ID,
 			Title:                  b.Title,
@@ -1714,6 +1719,11 @@ func humanReviewBlockerPressure(beads []Bead) ([]HumanReviewBlockerPressure, int
 }
 
 func isHumanReviewBlocker(b Bead) bool {
+	// Post-lifecycle: proposed status is the canonical operator-attention signal.
+	if b.Status == StatusProposed {
+		return true
+	}
+	// Legacy: open beads with investigation/human-review labels still count.
 	if b.Status != StatusOpen {
 		return false
 	}
