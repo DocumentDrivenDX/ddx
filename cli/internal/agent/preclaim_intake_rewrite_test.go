@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"encoding/json"
 	"path/filepath"
 	"strings"
@@ -208,6 +209,258 @@ func TestPreClaimIntakeRewrite_RecordsReplacementEvidence(t *testing.T) {
 		assert.NotContains(t, ev.Body, "stale chat noise from RFC-47")
 	}
 	require.True(t, found, "intake-rewritten event must be recorded")
+}
+
+// ---- AC3: acceptancePreservesCriteria structural tests ------------------
+
+// TestAcceptancePreservesCriteria_Identical verifies that identical text
+// always preserves criteria.
+func TestAcceptancePreservesCriteria_Identical(t *testing.T) {
+	ac := "1. cargo test --workspace passes.\n2. cargo clippy -- -D warnings passes."
+	assert.True(t, acceptancePreservesCriteria(ac, ac), "identical text must preserve criteria")
+}
+
+// TestAcceptancePreservesCriteria_ReformattedEquivalent verifies that
+// renumbering (AC1. → 1.) and whitespace changes are not treated as drops.
+func TestAcceptancePreservesCriteria_ReformattedEquivalent(t *testing.T) {
+	before := "AC1. crates/axon-cypher/src/storage_adapter_store.rs exists.\n" +
+		"AC2. cargo tree -p axon-storage does not list axon-cypher.\n" +
+		"AC3. cargo test --workspace passes."
+
+	// Same bodies, different bullet style.
+	after := "1. crates/axon-cypher/src/storage_adapter_store.rs exists.\n" +
+		"2. cargo tree -p axon-storage does not list axon-cypher.\n" +
+		"3. cargo test --workspace passes."
+
+	assert.True(t, acceptancePreservesCriteria(before, after),
+		"renumbering AC1/AC2/AC3 to 1/2/3 must not be treated as a drop")
+}
+
+// TestAcceptancePreservesCriteria_ReorderedEquivalent verifies that reordering
+// numbered criteria is not treated as a drop.
+func TestAcceptancePreservesCriteria_ReorderedEquivalent(t *testing.T) {
+	before := "1. cargo test --workspace passes.\n2. cargo clippy -- -D warnings passes."
+	after := "1. cargo clippy -- -D warnings passes.\n2. cargo test --workspace passes."
+	assert.True(t, acceptancePreservesCriteria(before, after),
+		"reordering criteria must not be treated as a drop")
+}
+
+// TestAcceptancePreservesCriteria_CriterionActuallyDropped verifies that a
+// rewrite which omits a verifiable assertion body is detected as a drop.
+func TestAcceptancePreservesCriteria_CriterionActuallyDropped(t *testing.T) {
+	before := "AC1. crates/axon-cypher/src/storage_adapter_store.rs exists.\n" +
+		"AC2. cargo tree -p axon-storage does not list axon-cypher.\n" +
+		"AC3. cargo test --workspace passes."
+
+	// AC2 is silently removed in the rewrite.
+	after := "1. crates/axon-cypher/src/storage_adapter_store.rs exists.\n" +
+		"2. cargo test --workspace passes."
+
+	assert.False(t, acceptancePreservesCriteria(before, after),
+		"dropping a criterion must be detected even when count changes")
+}
+
+// TestAcceptancePreservesCriteria_UnstructuredOriginalExpandsToNumbered verifies
+// that a vague one-sentence original AC is accepted when the rewrite expands it
+// into numbered criteria (expansion, never a drop).
+func TestAcceptancePreservesCriteria_UnstructuredOriginalExpandsToNumbered(t *testing.T) {
+	before := "Contractor audit lineage applies the same redaction as entity reads and leaks no commercial values into the DOM."
+	after := "1. Contractor audit lineage applies redactValue() before display.\n" +
+		"2. Restricted values render as \"[redacted]\" in the DOM.\n" +
+		"3. cd ui && pnpm test:e2e intent-audit-lineage passes."
+	assert.True(t, acceptancePreservesCriteria(before, after),
+		"expanding a vague sentence into numbered criteria must always be allowed")
+}
+
+// TestAcceptancePreservesCriteria_BulletDashPrefix verifies that dash-bullet
+// criteria are parsed and matched correctly.
+func TestAcceptancePreservesCriteria_BulletDashPrefix(t *testing.T) {
+	before := "- cargo test --workspace passes.\n- cargo clippy -- -D warnings passes."
+	after := "1. cargo test --workspace passes.\n2. cargo clippy -- -D warnings passes."
+	assert.True(t, acceptancePreservesCriteria(before, after),
+		"dash-bullet criteria must match numbered rewrite")
+}
+
+// TestAcceptancePreservesCriteria_StrongBead_AxonFixture verifies the exact
+// shape from axon-11508cde: 7 AC-prefixed criteria rewritten to 7 numbered
+// criteria must pass validation.
+func TestAcceptancePreservesCriteria_StrongBead_AxonFixture(t *testing.T) {
+	// Verbatim from axon-11508cde (trimmed to key assertions).
+	before := "AC1. crates/axon-cypher/src/storage_adapter_store.rs exists; crates/axon-storage/src/storage_adapter_store.rs does not.\n" +
+		"AC2. cargo tree -p axon-storage -e normal does not list axon-cypher (or axon-cypher-ast) as a direct dep.\n" +
+		"AC3. cargo tree -p axon-cypher -e normal lists axon-storage as a direct dep.\n" +
+		"AC4. axon_cypher::StorageAdapterQueryStore re-exports the type at the same public name.\n" +
+		"AC5. The 15 unit tests originally under axon_storage::storage_adapter_store::tests are present in axon-cypher and pass via cargo test -p axon-cypher.\n" +
+		"AC6. cargo test --workspace passes; cargo clippy --workspace -- -D warnings passes.\n" +
+		"AC7. The dep cycle described in axon-5956e527's intake.blocked event is gone: cargo build -p axon-cypher succeeds with the StorageAdapter-backed QueryStore physically in axon-cypher."
+
+	// Same assertions, renumbered to plain 1./2./…/7.
+	after := "1. crates/axon-cypher/src/storage_adapter_store.rs exists; crates/axon-storage/src/storage_adapter_store.rs does not.\n" +
+		"2. cargo tree -p axon-storage -e normal does not list axon-cypher (or axon-cypher-ast) as a direct dep.\n" +
+		"3. cargo tree -p axon-cypher -e normal lists axon-storage as a direct dep.\n" +
+		"4. axon_cypher::StorageAdapterQueryStore re-exports the type at the same public name.\n" +
+		"5. The 15 unit tests originally under axon_storage::storage_adapter_store::tests are present in axon-cypher and pass via cargo test -p axon-cypher.\n" +
+		"6. cargo test --workspace passes; cargo clippy --workspace -- -D warnings passes.\n" +
+		"7. The dep cycle described in axon-5956e527's intake.blocked event is gone: cargo build -p axon-cypher succeeds with the StorageAdapter-backed QueryStore physically in axon-cypher."
+
+	assert.True(t, acceptancePreservesCriteria(before, after),
+		"axon-11508cde: 7 AC-prefixed criteria renumbered to 1–7 must not appear as a drop")
+}
+
+// ---- AC1/AC2: end-to-end hook tests with mocked LLM --------------------
+
+// TestPreClaimIntakeHook_StrongBead_NeverAmbiguousNeedsHuman verifies that a
+// bead with 7 numbered ACs, file:line refs, and named tests is not classified
+// as ambiguous_needs_human (AC1 from ddx-ea3e3415).
+func TestPreClaimIntakeHook_StrongBead_NeverAmbiguousNeedsHuman(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	require.NoError(t, store.Init())
+
+	// Strong bead fixture derived from axon-11508cde: 7 numbered ACs with
+	// cargo tree flags, file paths, and a rollback plan.
+	strongBead := &bead.Bead{
+		ID:        "ddx-strongbead",
+		Title:     "refactor(axon-cypher): relocate StorageAdapterQueryStore from axon-storage",
+		IssueType: bead.DefaultType,
+		Status:    bead.StatusOpen,
+		Priority:  0,
+		Labels:    []string{"helix", "feat-009", "area:cypher", "area:storage", "kind:refactor"},
+		Acceptance: "AC1. crates/axon-cypher/src/storage_adapter_store.rs exists; crates/axon-storage/src/storage_adapter_store.rs does not.\n" +
+			"AC2. cargo tree -p axon-storage -e normal does not list axon-cypher (or axon-cypher-ast) as a direct dep.\n" +
+			"AC3. cargo tree -p axon-cypher -e normal lists axon-storage as a direct dep.\n" +
+			"AC4. axon_cypher::StorageAdapterQueryStore re-exports the type at the same public name.\n" +
+			"AC5. The 15 unit tests originally under axon_storage::storage_adapter_store::tests are present in axon-cypher and pass via cargo test -p axon-cypher.\n" +
+			"AC6. cargo test --workspace passes; cargo clippy --workspace -- -D warnings passes.\n" +
+			"AC7. The dep cycle described in axon-5956e527's intake.blocked event is gone.",
+		Description: "Move StorageAdapterQueryStore from axon-storage to axon-cypher.\n\n" +
+			"In-scope files:\n  - crates/axon-cypher/src/storage_adapter_store.rs (moved)\n  - crates/axon-storage/src/lib.rs\n\n" +
+			"Rollback: revert all six file changes atomically.",
+	}
+	require.NoError(t, store.Create(strongBead))
+
+	// The LLM returns actionable_atomic for this well-formed bead.
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"classification":"atomic","confidence":0.97,"reasoning":"7 numbered ACs with cargo tree flags and rollback; single-slice refactor"}`,
+	}
+
+	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+	got, err := hook(context.Background(), strongBead.ID)
+	require.NoError(t, err)
+	assert.NotEqual(t, PreClaimIntakeAmbiguousNeedsHuman, got.Outcome,
+		"strong bead with 7 numbered ACs must not be classified ambiguous_needs_human; got outcome=%s detail=%s",
+		got.Outcome, got.Detail)
+}
+
+// TestPreClaimIntakeHook_StrongBead_RewriteACPrefixToNumeric verifies that
+// when the LLM rewrites a bead with AC-prefixed criteria to plain-numeric
+// criteria, the rewrite is accepted (not rejected as "criteria dropped or
+// altered") (AC4 from ddx-ea3e3415).
+func TestPreClaimIntakeHook_StrongBead_RewriteACPrefixToNumeric(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	require.NoError(t, store.Init())
+
+	strongBead := &bead.Bead{
+		ID:        "ddx-strongbead2",
+		Title:     "refactor(axon-cypher): relocate StorageAdapterQueryStore from axon-storage",
+		IssueType: bead.DefaultType,
+		Status:    bead.StatusOpen,
+		Priority:  0,
+		Acceptance: "AC1. crates/axon-cypher/src/storage_adapter_store.rs exists; crates/axon-storage/src/storage_adapter_store.rs does not.\n" +
+			"AC2. cargo tree -p axon-storage -e normal does not list axon-cypher.\n" +
+			"AC3. cargo test --workspace passes; cargo clippy --workspace -- -D warnings passes.",
+		Description: "Move StorageAdapterQueryStore from axon-storage to axon-cypher.",
+	}
+	require.NoError(t, store.Create(strongBead))
+
+	// LLM rewrites the AC field: same assertions, plain 1./2./3. numbering.
+	rewrittenAC := "1. crates/axon-cypher/src/storage_adapter_store.rs exists; crates/axon-storage/src/storage_adapter_store.rs does not.\n" +
+		"2. cargo tree -p axon-storage -e normal does not list axon-cypher.\n" +
+		"3. cargo test --workspace passes; cargo clippy --workspace -- -D warnings passes."
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"classification":"rewritten","confidence":0.95,"reasoning":"normalised AC prefix style","rewrite":{"changed_fields":["acceptance"],"acceptance":"` +
+			strings.ReplaceAll(rewrittenAC, "\n", `\n`) + `"}}`,
+	}
+
+	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+	got, err := hook(context.Background(), strongBead.ID)
+	require.NoError(t, err)
+	assert.NotEqual(t, PreClaimIntakeAmbiguousNeedsHuman, got.Outcome,
+		"reformatting AC1/AC2/AC3 to 1/2/3 must not be rejected as criteria-dropped; got outcome=%s detail=%s",
+		got.Outcome, got.Detail)
+}
+
+// TestPreClaimIntakeHook_WeakBead_ReturnsConcreteSuggestedFixes verifies that
+// a vague single-sentence AC either yields concrete suggested_fixes or yields
+// needs_human only when rationale cites a specific unresolved question
+// (AC2 from ddx-ea3e3415).
+func TestPreClaimIntakeHook_WeakBead_ReturnsConcreteSuggestedFixes(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store := bead.NewStore(filepath.Join(root, ".ddx"))
+	require.NoError(t, store.Init())
+
+	// Weak bead fixture derived from axon-044a5b5b (pre-refinement): vague AC.
+	weakBead := &bead.Bead{
+		ID:        "ddx-weakbead",
+		Title:     "fix(ui): contractor audit lineage redacts metadata fields",
+		IssueType: bead.DefaultType,
+		Status:    bead.StatusOpen,
+		Priority:  0,
+		Acceptance: "Contractor audit lineage applies the same redaction as entity reads " +
+			"and leaks no commercial values into the DOM. Covered by intent-audit-lineage.spec.ts.",
+		Description: "Ensure contractor audit lineage metadata fields are redacted before display.",
+	}
+	require.NoError(t, store.Create(weakBead))
+
+	// LLM returns a rewrite with expanded numbered ACs (the ideal case).
+	refinedAC := "1. Lineage metadata fields rendered at audit/+page.svelte pass through redactValue().\n" +
+		"2. Restricted values render as \"[redacted]\" for contractor policy users.\n" +
+		"3. cd ui && pnpm test:e2e intent-audit-lineage passes."
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"classification":"rewritten","confidence":0.88,"reasoning":"expanded vague AC into numbered verifiable assertions","rewrite":{"changed_fields":["acceptance"],"acceptance":"` +
+			strings.ReplaceAll(refinedAC, "\"", `\"`) + strings.ReplaceAll("\n", "\n", `\n`) + `"}}`,
+	}
+	// Build the JSON manually to avoid escaping issues.
+	refinedACEscaped := strings.ReplaceAll(refinedAC, "\n", `\n`)
+	refinedACEscaped = strings.ReplaceAll(refinedACEscaped, `"`, `\"`)
+	svc.finalText = `{"classification":"rewritten","confidence":0.88,"reasoning":"expanded vague AC into numbered verifiable assertions","rewrite":{"changed_fields":["acceptance"],"acceptance":"` + refinedACEscaped + `"}}`
+
+	hook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+	got, err := hook(context.Background(), weakBead.ID)
+	require.NoError(t, err)
+
+	// If the outcome is needs_human, the detail must cite a specific unresolved
+	// question — not just the generic "acceptance criteria dropped or altered".
+	if got.Outcome == PreClaimIntakeAmbiguousNeedsHuman {
+		assert.NotEqual(t, "acceptance criteria dropped or altered", got.Detail,
+			"needs_human for a weak bead must cite a specific unresolved question, not the generic dropped-or-altered string")
+		assert.NotEmpty(t, got.Detail,
+			"needs_human must always include a non-empty rationale")
+	}
+}
+
+// ---- AC4: axon fixture integration tests --------------------------------
+
+// TestAcceptancePreservesCriteria_AxonFixture_044a5b5b verifies that the
+// refined axon-044a5b5b acceptance field (7 numbered ACs) is accepted when
+// replacing the original single-sentence AC.
+func TestAcceptancePreservesCriteria_AxonFixture_044a5b5b(t *testing.T) {
+	// Original single-sentence AC from axon-044a5b5b.
+	before := "Contractor audit lineage applies the same redaction as entity reads " +
+		"and leaks no commercial values into the DOM. Covered by intent-audit-lineage.spec.ts."
+
+	// Refined form (the actual acceptance field from the refined bead).
+	after := "AC1. Lineage metadata fields rendered at ui/src/routes/tenants/[tenant]/databases/[database]/audit/+page.svelte:397-434 (decision, policy_version, schema_version, approver.actor, approver.user_id, reason, origin.surface, origin.tool_name) pass through redactValue() before display, using the redaction list returned by the intent-detail GraphQL query.\n" +
+		"AC2. Existing redaction of data_before/data_after at audit/+page.svelte:437-442 is unchanged.\n" +
+		"AC3. ui/tests/e2e/intent-audit-lineage.spec.ts adds a test named \"contractor lineage redacts metadata fields\" asserting that, for a fixture user with contractor policy, lineage metadata fields render \"[redacted]\" for restricted values and plain text for permitted ones.\n" +
+		"AC4. Same spec adds DOM-leakage assertions per the axon-c3895a14 sibling pattern: redacted values are absent from DOM snapshots, window.localStorage / window.sessionStorage, copied text (clipboard simulation), and console logs (page.evaluate inspections).\n" +
+		"AC5. The existing 8 tests in ui/tests/e2e/intent-audit-lineage.spec.ts continue to pass for the operator role.\n" +
+		"AC6. cd ui && pnpm test:e2e intent-audit-lineage passes.\n" +
+		"AC7. cd ui && pnpm lint && pnpm check passes."
+
+	assert.True(t, acceptancePreservesCriteria(before, after),
+		"axon-044a5b5b: replacing vague single-sentence AC with 7 numbered ACs must be accepted as expansion")
 }
 
 // TestPreClaimIntakePrompt_AsksForFitForPurposeValidatedReplacement verifies

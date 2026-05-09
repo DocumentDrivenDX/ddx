@@ -286,18 +286,61 @@ func hashText(text string) string {
 	return hex.EncodeToString(sum[:])
 }
 
+// acceptancePreservesCriteria returns true when the rewritten acceptance field
+// ("after") contains all verifiable assertions from the original ("before").
+//
+// Structural reformatting — renumbering ("AC1." → "1."), reordering,
+// normalising whitespace, or splitting one unnumbered sentence into several
+// numbered criteria — is treated as preserving the criteria, not dropping them.
+//
+// A drop is detected only when the original had parseable numbered criteria and
+// one or more of those criteria bodies are absent from the rewrite.
+//
+// When the original has no parseable numbered criteria (e.g. a single vague
+// sentence), any rewrite that adds structured numbered criteria is accepted as
+// an expansion; a rewrite that only rephrases the same prose content is checked
+// by full-text containment.
 func acceptancePreservesCriteria(before, after string) bool {
 	beforeCriteria := parseAcceptanceCriteria(before)
 	afterCriteria := parseAcceptanceCriteria(after)
+
+	// If the original had no parseable numbered criteria, use a lenient path:
+	// any rewrite that introduces numbered criteria is an expansion (always
+	// accepted). If the rewrite is also unstructured, fall back to full-text
+	// containment on the normalised bodies.
 	if len(beforeCriteria) == 0 {
-		beforeCriteria = []string{normalizeWhitespace(strings.TrimSpace(before))}
+		if len(afterCriteria) > 0 {
+			// Unstructured original → structured rewrite: expansion always allowed.
+			return true
+		}
+		normBefore := normalizeWhitespace(strings.TrimSpace(before))
+		normAfter := normalizeWhitespace(strings.TrimSpace(after))
+		if normBefore == "" {
+			return true
+		}
+		return strings.Contains(normAfter, normBefore)
 	}
+
+	// Original had structured numbered criteria. Require each criterion body to
+	// appear in at least one criterion body of the rewrite (either verbatim or
+	// as a substring). The count check is a fast early-exit: if fewer criteria
+	// are present in the rewrite there must be a drop.
 	if len(afterCriteria) == 0 {
-		afterCriteria = []string{normalizeWhitespace(strings.TrimSpace(after))}
+		// Rewrite lost all structure — fall back to full-text containment of
+		// each criterion body inside the normalised rewrite text.
+		normAfter := normalizeWhitespace(strings.TrimSpace(after))
+		for _, criterion := range beforeCriteria {
+			if !strings.Contains(normAfter, criterion) {
+				return false
+			}
+		}
+		return true
 	}
+
 	if len(afterCriteria) < len(beforeCriteria) {
 		return false
 	}
+
 	for _, criterion := range beforeCriteria {
 		found := false
 		for _, candidate := range afterCriteria {
@@ -324,23 +367,94 @@ func parseAcceptanceCriteria(raw string) []string {
 	return out
 }
 
+// parseAcceptanceCriterionBody extracts the verifiable assertion text from a
+// single acceptance criterion line. It recognises common bullet-prefix
+// conventions used in bead acceptance fields:
+//
+//   - Pure numeric:  "1. body"  "42. body"
+//   - AC-prefix:     "AC1. body"  "AC2. body"  (letters then digits before ".")
+//   - Dash/bullet:   "- body"  "• body"  "* body"
+//
+// All these forms are normalised so that a reformat (e.g. "AC1." → "1.") does
+// not appear to have dropped a criterion when the assertion text is identical.
 func parseAcceptanceCriterionBody(line string) (string, bool) {
 	trimmed := strings.TrimSpace(line)
 	if trimmed == "" {
 		return "", false
 	}
+
+	// Dash/star/bullet prefix: "- body", "* body", "+ body", "• body"
+	// The bullet character (•, U+2022) is multi-byte in UTF-8, so we use
+	// HasPrefix rather than a byte switch for that case.
+	if len(trimmed) >= 2 {
+		switch trimmed[0] {
+		case '-', '*', '+':
+			body := normalizeWhitespace(trimmed[1:])
+			if body != "" {
+				return body, true
+			}
+		}
+	}
+	if strings.HasPrefix(trimmed, "•") {
+		body := normalizeWhitespace(strings.TrimPrefix(trimmed, "•"))
+		if body != "" {
+			return body, true
+		}
+	}
+
 	dot := strings.Index(trimmed, ".")
 	if dot <= 0 {
 		return "", false
 	}
-	if !allDigits(trimmed[:dot]) {
+	prefix := trimmed[:dot]
+
+	// Pure numeric: "1.", "42."
+	if allDigits(prefix) {
+		body := normalizeWhitespace(strings.TrimSpace(trimmed[dot+1:]))
+		if body != "" {
+			return body, true
+		}
 		return "", false
 	}
-	body := normalizeWhitespace(strings.TrimSpace(trimmed[dot+1:]))
-	if body == "" {
+
+	// AC-prefix: letters immediately followed by digits before the dot.
+	// Matches "AC1", "AC12", "A1", etc.
+	if isAlphaNumericBullet(prefix) {
+		body := normalizeWhitespace(strings.TrimSpace(trimmed[dot+1:]))
+		if body != "" {
+			return body, true
+		}
 		return "", false
 	}
-	return body, true
+
+	return "", false
+}
+
+// isAlphaNumericBullet returns true when s looks like a labelled-list prefix
+// of the form letters+digits (e.g. "AC1", "AC12", "A1"). At least one letter
+// and one digit must be present; the digits must all trail the letters.
+func isAlphaNumericBullet(s string) bool {
+	if s == "" {
+		return false
+	}
+	// Find the split point where letters end and digits begin.
+	splitAt := -1
+	for i, r := range s {
+		isLetter := (r >= 'A' && r <= 'Z') || (r >= 'a' && r <= 'z')
+		isDigit := r >= '0' && r <= '9'
+		if !isLetter && !isDigit {
+			return false
+		}
+		if isDigit && splitAt == -1 {
+			splitAt = i
+		}
+		if isLetter && splitAt != -1 {
+			// letter after digit — not a clean ACN prefix
+			return false
+		}
+	}
+	// Must have at least one letter (splitAt > 0) and at least one digit.
+	return splitAt > 0
 }
 
 func allDigits(s string) bool {
