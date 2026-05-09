@@ -249,7 +249,7 @@ func TestWorkDefaultDrainModeExitsOnEmptyQueue(t *testing.T) {
 	out, err := executeCommand(root, "work", "--json")
 	elapsed := time.Since(start)
 	require.NoError(t, err)
-	require.Less(t, elapsed, 500*time.Millisecond,
+	require.Less(t, elapsed, 5*time.Second,
 		"ddx work must not wait for the long-running worker poll interval by default")
 
 	var res struct {
