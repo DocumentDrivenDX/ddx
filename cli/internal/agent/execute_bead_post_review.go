@@ -266,7 +266,8 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 		out.Approved = false
 	case VerdictBlock:
 		rationale := strings.TrimSpace(reviewRes.Rationale)
-		if rationale == "" {
+		classification := ClassifyReviewFindings(reviewRes)
+		if rationale == "" && len(classification.Evidence) == 0 {
 			_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
 				Kind:      "review-malfunction",
 				Summary:   "BLOCK without rationale",
@@ -290,6 +291,21 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 			Source:    "ddx agent execute-loop",
 			CreatedAt: now().UTC(),
 		})
+		if classification.Class == ReviewFindingClassMalfunction {
+			_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
+				Kind:      "review-malfunction",
+				Summary:   ReviewFindingClassMalfunction,
+				Body:      AppendEventSummary(classification.Reason, reviewSummary),
+				Actor:     in.Assignee,
+				Source:    "ddx agent execute-loop",
+				CreatedAt: now().UTC(),
+			})
+			report.Status = ExecuteBeadStatusReviewMalfunction
+			report.Detail = "pre-close review: " + ReviewFindingClassMalfunction
+			out.Report = report
+			out.Approved = false
+			return out
+		}
 		if terminalClass := classifyTerminalReviewBlock(reviewRes); terminalClass != "" {
 			applyTerminalReviewBlock(in.Store, in.Bead.ID, in.Assignee, now().UTC(), terminalClass, report.ResultRev)
 			report.Status = ExecuteBeadStatusReviewTerminalBlock
@@ -301,7 +317,7 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 		// Non-terminal BLOCK: schedule one bounded repair cycle (review_fixable_gap).
 		// If a repair cycle has already been scheduled for this result_rev, fall
 		// through to the regular BLOCK triage path so the policy cannot loop.
-		if !hasReviewFixableGapRepairScheduled(in.Store, in.Bead.ID, report.ResultRev) {
+		if classification.AutomatedRepairEligible && !hasReviewFixableGapRepairScheduled(in.Store, in.Bead.ID, report.ResultRev) {
 			groupID := ""
 			if reviewGroup != nil {
 				groupID = reviewGroup.Bundle.GroupID

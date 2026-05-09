@@ -2,7 +2,6 @@ package agent
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -22,25 +21,22 @@ const (
 	ReviewTerminalClassUnsafeOrOutScope  = "review_unsafe_or_out_of_scope"
 )
 
-// classifyTerminalReviewBlock returns the terminal class label if the BLOCK
-// result's rationale signals a human-required condition, or "" if the BLOCK is
-// a regular fixable gap that should re-enter the automated retry cycle.
-//
-// Detection is substring-based on the lowercased rationale so reviewer output
-// only needs to include the class label anywhere in the text.
+// classifyTerminalReviewBlock returns the terminal class label if structured
+// review evidence identifies a human-required condition, or "" if the BLOCK is
+// a regular fixable gap that may enter the automated retry cycle.
 func classifyTerminalReviewBlock(res *ReviewResult) string {
 	if res == nil || res.Verdict != VerdictBlock {
 		return ""
 	}
-	text := strings.ToLower(res.Rationale)
-	switch {
-	case strings.Contains(text, ReviewTerminalClassSpecGap):
+	classification := ClassifyReviewFindings(res)
+	switch classification.Class {
+	case ReviewTerminalClassSpecGap:
 		return ReviewTerminalClassSpecGap
-	case strings.Contains(text, ReviewTerminalClassMissingAcceptance):
+	case ReviewTerminalClassMissingAcceptance:
 		return ReviewTerminalClassMissingAcceptance
-	case strings.Contains(text, ReviewTerminalClassTooLarge):
+	case ReviewTerminalClassTooLarge:
 		return ReviewTerminalClassTooLarge
-	case strings.Contains(text, ReviewTerminalClassUnsafeOrOutScope):
+	case ReviewTerminalClassUnsafeOrOutScope:
 		return ReviewTerminalClassUnsafeOrOutScope
 	default:
 		return ""

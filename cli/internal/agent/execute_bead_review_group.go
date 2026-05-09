@@ -178,6 +178,7 @@ func (r *DefaultBeadReviewer) reviewGroupSlot(ctx context.Context, b *bead.Bead,
 	reviewRes := &ReviewResult{
 		Verdict:          strictVerdict,
 		Rationale:        rationale,
+		Findings:         findings,
 		ProseFindings:    parsed.ProseFindings,
 		RawOutput:        output,
 		ReviewerHarness:  actualHarness,

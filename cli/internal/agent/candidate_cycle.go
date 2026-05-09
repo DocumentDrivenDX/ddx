@@ -57,8 +57,11 @@ type CandidateCheckRunner interface {
 // CandidateReviewResult carries a reviewer verdict for a committed candidate.
 type CandidateReviewResult struct {
 	// Verdict is one of "APPROVE", "REQUEST_CHANGES", or "BLOCK".
-	Verdict   string
-	Rationale string
+	Verdict        string
+	Rationale      string
+	PerAC          []ReviewAC
+	Findings       []Finding
+	Classification string
 }
 
 // CandidateReviewer runs a read-only review pass against a committed candidate
@@ -118,6 +121,7 @@ type CandidateCycleEventBody struct {
 }
 
 const candidateChecksFailedEventKind = "candidate-checks-failed"
+const candidateReviewClassifiedEventKind = "candidate-review-classified"
 
 // CandidateChecksFailedEventBody is the structured payload of a
 // candidate-checks-failed bead event.
@@ -129,6 +133,19 @@ type CandidateChecksFailedEventBody struct {
 	ResultRev    string   `json:"result_rev,omitempty"`
 	Detail       string   `json:"detail,omitempty"`
 	Artifacts    []string `json:"artifacts,omitempty"`
+}
+
+// CandidateReviewClassifiedEventBody is the structured payload of a
+// candidate-review-classified bead event.
+type CandidateReviewClassifiedEventBody struct {
+	CandidateRef   string `json:"candidate_ref,omitempty"`
+	CycleIndex     int    `json:"cycle_index"`
+	AttemptID      string `json:"attempt_id,omitempty"`
+	BaseRev        string `json:"base_rev,omitempty"`
+	ResultRev      string `json:"result_rev,omitempty"`
+	Verdict        string `json:"verdict,omitempty"`
+	Classification string `json:"classification,omitempty"`
+	Reason         string `json:"reason,omitempty"`
 }
 
 // ShouldRetainCandidateRef returns true when the attempt outcome requires
@@ -246,6 +263,7 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 			report.Detail = "pre-land review: " + reviewErr.Error()
 			report.ReviewVerdict = strings.TrimSpace(reviewResult.Verdict)
 			report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
+			c.appendCandidateReviewClassifiedEvent(beadID, report, reviewResult, ReviewFindingClassMalfunction, reviewErr.Error())
 			return AttemptCycleResult{Report: report}, nil
 		}
 		verdict := Verdict(strings.TrimSpace(reviewResult.Verdict))
@@ -254,18 +272,26 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 			candidate.Report.ReviewVerdict = string(VerdictApprove)
 			candidate.Report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
 		case VerdictRequestChanges:
+			classification := c.classifyCandidateReview(reviewResult)
 			report := candidate.Report
 			report.Status = ExecuteBeadStatusReviewRequestChanges
 			report.Detail = "pre-land review: REQUEST_CHANGES"
 			report.ReviewVerdict = string(VerdictRequestChanges)
 			report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
+			c.appendCandidateReviewClassifiedEvent(beadID, report, reviewResult, classification.Class, classification.Reason)
 			return AttemptCycleResult{Report: report}, nil
 		case VerdictBlock:
+			classification := c.classifyCandidateReview(reviewResult)
 			report := candidate.Report
 			report.Status = ExecuteBeadStatusReviewBlock
 			report.Detail = "pre-land review: BLOCK"
 			report.ReviewVerdict = string(VerdictBlock)
 			report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
+			if classification.Class == ReviewFindingClassMalfunction {
+				report.Status = ExecuteBeadStatusReviewMalfunction
+				report.Detail = "pre-land review: " + ReviewFindingClassMalfunction
+			}
+			c.appendCandidateReviewClassifiedEvent(beadID, report, reviewResult, classification.Class, classification.Reason)
 			return AttemptCycleResult{Report: report}, nil
 		default:
 			report := candidate.Report
@@ -273,6 +299,7 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 			report.Detail = "pre-land review: malformed verdict"
 			report.ReviewVerdict = strings.TrimSpace(reviewResult.Verdict)
 			report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
+			c.appendCandidateReviewClassifiedEvent(beadID, report, reviewResult, ReviewFindingClassMalfunction, "malformed review verdict")
 			return AttemptCycleResult{Report: report}, nil
 		}
 	}
@@ -327,6 +354,39 @@ func (c *AttemptCycleCoordinator) appendCandidateChecksFailedEvent(beadID string
 	_ = c.BeadEvents.AppendEvent(beadID, bead.BeadEvent{
 		Kind:    candidateChecksFailedEventKind,
 		Summary: report.Detail,
+		Body:    string(body),
+	})
+}
+
+func (c *AttemptCycleCoordinator) classifyCandidateReview(review CandidateReviewResult) ReviewFindingClassification {
+	if review.Classification != "" {
+		return reviewClassification(review.Classification, nil, "", review.Classification == ReviewFindingClassFixableGap)
+	}
+	return ClassifyReviewFindings(&ReviewResult{
+		Verdict:   Verdict(strings.TrimSpace(review.Verdict)),
+		Rationale: strings.TrimSpace(review.Rationale),
+		PerAC:     append([]ReviewAC(nil), review.PerAC...),
+		Findings:  append([]Finding(nil), review.Findings...),
+	})
+}
+
+func (c *AttemptCycleCoordinator) appendCandidateReviewClassifiedEvent(beadID string, report ExecuteBeadReport, review CandidateReviewResult, class, reason string) {
+	if c.BeadEvents == nil {
+		return
+	}
+	body, _ := json.Marshal(CandidateReviewClassifiedEventBody{
+		CandidateRef:   report.CandidateRef,
+		CycleIndex:     report.CycleIndex,
+		AttemptID:      report.AttemptID,
+		BaseRev:        report.BaseRev,
+		ResultRev:      report.ResultRev,
+		Verdict:        strings.TrimSpace(review.Verdict),
+		Classification: strings.TrimSpace(class),
+		Reason:         strings.TrimSpace(reason),
+	})
+	_ = c.BeadEvents.AppendEvent(beadID, bead.BeadEvent{
+		Kind:    candidateReviewClassifiedEventKind,
+		Summary: strings.TrimSpace(class),
 		Body:    string(body),
 	})
 }

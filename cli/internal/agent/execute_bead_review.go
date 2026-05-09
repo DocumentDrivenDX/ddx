@@ -62,6 +62,7 @@ type ReviewResult struct {
 	Verdict          Verdict    `json:"verdict"`
 	Rationale        string     `json:"rationale,omitempty"`
 	PerAC            []ReviewAC `json:"per_ac,omitempty"`
+	Findings         []Finding  `json:"findings,omitempty"`
 	ProseFindings    []Finding  `json:"prose_findings,omitempty"`
 	RawOutput        string     `json:"raw_output,omitempty"`
 	ReviewerHarness  string     `json:"reviewer_harness,omitempty"`
@@ -799,8 +800,11 @@ func (r *DefaultBeadReviewer) Review(ctx context.Context, projectRoot string, ca
 		return CandidateReviewResult{}, err
 	}
 	return CandidateReviewResult{
-		Verdict:   string(review.Verdict),
-		Rationale: review.Rationale,
+		Verdict:        string(review.Verdict),
+		Rationale:      review.Rationale,
+		PerAC:          append([]ReviewAC(nil), review.PerAC...),
+		Findings:       append([]Finding(nil), review.Findings...),
+		Classification: ClassifyReviewFindings(review).Class,
 	}, err
 }
 
@@ -1004,6 +1008,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 	reviewRes := &ReviewResult{
 		Verdict:          strictVerdict,
 		Rationale:        rationale,
+		Findings:         findings,
 		ProseFindings:    parsed.ProseFindings,
 		RawOutput:        output,
 		ReviewerHarness:  actualHarness,

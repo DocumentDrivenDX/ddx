@@ -51,6 +51,9 @@ func TestReviewTerminalClassifications_BlockWithoutNoProgress(t *testing.T) {
 						RawOutput:       "BLOCK: " + tc.class,
 						ReviewerHarness: "claude",
 						ReviewerModel:   "claude-opus-4-6",
+						Findings: []Finding{
+							{Severity: "block", Summary: "Structured terminal class: " + tc.class, Location: "bead:AC1"},
+						},
 					}, nil
 				}),
 			}

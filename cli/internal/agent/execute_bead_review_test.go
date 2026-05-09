@@ -426,6 +426,9 @@ func TestPreCloseReview_BlockPreventsClose(t *testing.T) {
 				Verdict:   VerdictBlock,
 				Rationale: "AC#3 regression test missing",
 				RawOutput: "### Verdict: BLOCK\n\n### Findings\n- AC#3 regression test missing",
+				Findings: []Finding{
+					{Severity: "block", Summary: "AC#3 regression test missing", Location: "cli/internal/agent/foo_test.go:42"},
+				},
 			}, nil
 		}),
 	}

@@ -390,7 +390,7 @@ func TestPreLandReview_RequestChangesPreventsLand(t *testing.T) {
 		},
 		{
 			name:       "block",
-			review:     CandidateReviewResult{Verdict: "BLOCK", Rationale: "unsafe scope"},
+			review:     CandidateReviewResult{Verdict: "BLOCK", Rationale: "unsafe scope", Findings: []Finding{{Severity: "block", Summary: "unsafe scope", Location: "bead:AC1"}}},
 			wantStatus: ExecuteBeadStatusReviewBlock,
 			wantDetail: "pre-land review: BLOCK",
 		},
@@ -438,6 +438,62 @@ func TestPreLandReview_RequestChangesPreventsLand(t *testing.T) {
 			assert.Empty(t, refStore.unpinned, "rejected review candidates must retain their ref")
 		})
 	}
+}
+
+func TestReviewClassification_CandidateCycleEventIncludesCandidateRev(t *testing.T) {
+	events := &inMemoryEventAppender{}
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:    beadID,
+					AttemptID: "attempt-review-class-001",
+					Status:    ExecuteBeadStatusSuccess,
+					BaseRev:   "base-rev",
+					ResultRev: "candidate-rev",
+				},
+			}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, _ CandidateResult) (CandidateReviewResult, error) {
+			return CandidateReviewResult{
+				Verdict:   "BLOCK",
+				Rationale: "scope problem",
+				Findings: []Finding{
+					{Severity: "block", Summary: "Forbidden out-of-scope file change.", Location: "cli/internal/fizeauadapter/router.go:12"},
+				},
+			}, nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			return candidate.Report, nil
+		}),
+		RefStore:    &inMemoryCandidateRefStore{},
+		ProjectRoot: "/project",
+		BeadEvents:  events,
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-review-bead")
+	require.NoError(t, err)
+	assert.False(t, result.Landed)
+	assert.Equal(t, ExecuteBeadStatusReviewBlock, result.Report.Status)
+
+	var body CandidateReviewClassifiedEventBody
+	foundClassified := false
+	for _, event := range events.events {
+		if event.Kind != candidateReviewClassifiedEventKind {
+			continue
+		}
+		foundClassified = true
+		require.NoError(t, json.Unmarshal([]byte(event.Body), &body))
+		assert.Equal(t, ReviewTerminalClassUnsafeOrOutScope, event.Summary)
+		break
+	}
+	require.True(t, foundClassified, "candidate review classification event must be emitted")
+	assert.Equal(t, "refs/ddx/iterations/attempt-review-class-001/0", body.CandidateRef)
+	assert.Equal(t, "attempt-review-class-001", body.AttemptID)
+	assert.Equal(t, "base-rev", body.BaseRev)
+	assert.Equal(t, "candidate-rev", body.ResultRev)
+	assert.Equal(t, "BLOCK", body.Verdict)
+	assert.Equal(t, ReviewTerminalClassUnsafeOrOutScope, body.Classification)
 }
 
 type beadEventWithBody struct {

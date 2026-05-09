@@ -36,6 +36,9 @@ func TestPreCloseReviewFixableGap_PreventsCloseAndSchedulesRepair(t *testing.T) 
 			ReviewerHarness: "claude",
 			ReviewerModel:   "claude-opus-4-6",
 			ResultRev:       resultRev,
+			Findings: []Finding{
+				{Severity: "block", Summary: blockRationale, Location: "pkg/foo.go:42"},
+			},
 		}, nil
 	})
 
@@ -109,6 +112,9 @@ func TestRetryPolicy_ReviewFixableGapStopsAfterOneRepairCycle(t *testing.T) {
 			ReviewerHarness: "claude",
 			ReviewerModel:   "claude-opus-4-6",
 			ResultRev:       resultRev,
+			Findings: []Finding{
+				{Severity: "block", Summary: blockRationale, Location: "pkg/foo.go:42"},
+			},
 		}, nil
 	})
 
