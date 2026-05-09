@@ -108,3 +108,52 @@ func TestWorkResourcePreflight_FailsBeforeClaim(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusOpen, got.Status)
 }
+
+func TestTryResourceExhaustionEndToEnd_Reclaimable(t *testing.T) {
+	projectRoot := t.TempDir()
+	beadID := "ddx-resource-try-reclaimable"
+	seedOpenBead(t, projectRoot, beadID)
+
+	result := agent.ExecutionResourceCheckResult{
+		ProjectRoot: projectRoot,
+		TempRoot:    filepath.Join(projectRoot, ".ddx", "tmp"),
+		EvidenceRoots: []string{
+			filepath.Join(projectRoot, ".ddx", "executions"),
+		},
+		CleanupSummary: agent.ExecutionCleanupSummary{
+			ProjectRoot:                 projectRoot,
+			TempRoot:                    filepath.Join(projectRoot, ".ddx", "tmp"),
+			RemovedUnregisteredTempDirs: 1,
+			BytesReclaimed:              1024,
+		},
+	}
+	checker := &fakeCommandResourceChecker{
+		result: result,
+		err: &agent.ResourceExhaustedError{
+			Detail: "temp root and evidence root are full",
+			Result: result,
+		},
+	}
+
+	factory := NewCommandFactory(projectRoot)
+	factory.resourceCheckerOverride = checker
+	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+		t.Fatalf("executor must not run when try resource preflight fails")
+		return agent.ExecuteBeadReport{}, fmt.Errorf("unexpected executor call")
+	})
+
+	out, err := executeCommand(factory.NewRootCommand(), "try", beadID)
+	require.Error(t, err)
+	assert.Contains(t, out, "resource_exhausted")
+	assert.Equal(t, 1, checker.calls)
+
+	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
+	got, err := store.Get(beadID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Empty(t, got.Owner)
+	if got.Extra != nil {
+		_, hasRetry := got.Extra["execute-loop-retry-after"]
+		assert.False(t, hasRetry, "resource exhaustion must not write execute-loop-retry-after")
+	}
+}
