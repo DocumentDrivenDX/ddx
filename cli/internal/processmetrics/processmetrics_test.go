@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/require"
 )
 
@@ -163,6 +164,119 @@ func TestServiceDerivesCostLifecycleAndRework(t *testing.T) {
 	require.InDelta(t, 2.518, summary.Cost.KnownCostUSD+summary.Cost.EstimatedCostUSD, 1e-9)
 	require.Equal(t, 2, summary.CycleTime.KnownCount)
 	require.Equal(t, 2, summary.Rework.KnownClosed)
+}
+
+func writeLifecycleStatusMetricsFixture(t *testing.T) string {
+	t.Helper()
+
+	dir := t.TempDir()
+	ddxDir := filepath.Join(dir, ".ddx")
+	require.NoError(t, os.MkdirAll(filepath.Join(ddxDir, "agent-logs"), 0o755))
+
+	beads := []string{
+		`{"id":"bx-life-cancelled","title":"Cancelled lifecycle","status":"cancelled","priority":1,"issue_type":"task","created_at":"2026-04-01T00:00:00Z","updated_at":"2026-04-01T06:00:00Z","events":[{"kind":"status","summary":"proposed","created_at":"2026-04-01T00:00:00Z","source":"test"},{"kind":"status","summary":"open","created_at":"2026-04-01T01:00:00Z","source":"test"},{"kind":"status","summary":"in_progress","created_at":"2026-04-01T02:00:00Z","source":"test"},{"kind":"status","summary":"blocked","created_at":"2026-04-01T03:00:00Z","source":"test"},{"kind":"status","summary":"open","created_at":"2026-04-01T04:00:00Z","source":"test"},{"kind":"status","summary":"cancelled","created_at":"2026-04-01T05:00:00Z","source":"test"}]}`,
+		`{"id":"bx-life-closed","title":"Closed lifecycle","status":"closed","priority":1,"issue_type":"task","created_at":"2026-04-02T00:00:00Z","updated_at":"2026-04-02T03:00:00Z","events":[{"kind":"status","summary":"proposed","created_at":"2026-04-02T00:00:00Z","source":"test"},{"kind":"status","summary":"open","created_at":"2026-04-02T01:00:00Z","source":"test"},{"kind":"status","summary":"closed","created_at":"2026-04-02T03:00:00Z","source":"test"}]}`,
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "beads.jsonl"), []byte(beads[0]+"\n"+beads[1]+"\n"), 0o644))
+
+	return dir
+}
+
+func TestProcessMetrics_StatusFromEventSixLifecycleStatuses(t *testing.T) {
+	tests := []struct {
+		name  string
+		event bead.BeadEvent
+		want  string
+	}{
+		{
+			name:  "proposed from status prefix",
+			event: bead.BeadEvent{Kind: "status:proposed"},
+			want:  bead.StatusProposed,
+		},
+		{
+			name:  "open from status summary",
+			event: bead.BeadEvent{Kind: "status", Summary: "open"},
+			want:  bead.StatusOpen,
+		},
+		{
+			name:  "in progress from transition prefix",
+			event: bead.BeadEvent{Kind: "transition:in-progress"},
+			want:  bead.StatusInProgress,
+		},
+		{
+			name:  "blocked from state body",
+			event: bead.BeadEvent{Kind: "state", Body: "blocked"},
+			want:  bead.StatusBlocked,
+		},
+		{
+			name:  "closed from done alias",
+			event: bead.BeadEvent{Kind: "done"},
+			want:  bead.StatusClosed,
+		},
+		{
+			name:  "cancelled from status assignment",
+			event: bead.BeadEvent{Kind: "status=cancelled"},
+			want:  bead.StatusCancelled,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, ok := statusFromEvent(tt.event)
+			require.True(t, ok)
+			require.Equal(t, tt.want, got)
+		})
+	}
+}
+
+func TestProcessMetrics_CycleTimeIncludesProposedBlockedCancelled(t *testing.T) {
+	dir := writeLifecycleStatusMetricsFixture(t)
+	svc := New(dir)
+	hourMS := int64(time.Hour / time.Millisecond)
+
+	cycle, err := svc.CycleTime(Query{})
+	require.NoError(t, err)
+	require.Equal(t, 1, cycle.Summary.KnownCount)
+	require.Equal(t, 1, cycle.Summary.UnknownCount)
+
+	rows := map[string]CycleTimeRow{}
+	for _, row := range cycle.Beads {
+		rows[row.BeadID] = row
+	}
+
+	cancelled := rows["bx-life-cancelled"]
+	require.Equal(t, bead.StatusCancelled, cancelled.Status)
+	require.Equal(t, State(stateUnknown), cancelled.CycleState)
+	require.Nil(t, cancelled.CycleTimeMS, "cancelled is terminal not-done, not successful cycle time")
+	require.Equal(t, hourMS, *cancelled.TimeInProposedMS)
+	require.Equal(t, 2*hourMS, *cancelled.TimeInOpenMS)
+	require.Equal(t, hourMS, *cancelled.TimeInProgressMS)
+	require.Equal(t, hourMS, *cancelled.TimeInBlockedMS)
+	require.Equal(t, hourMS, *cancelled.TimeInCancelledMS)
+	require.Nil(t, cancelled.TimeInClosedMS)
+
+	closed := rows["bx-life-closed"]
+	require.Equal(t, bead.StatusClosed, closed.Status)
+	require.Equal(t, State(stateKnown), closed.CycleState)
+	require.NotNil(t, closed.CycleTimeMS)
+	require.Equal(t, 3*hourMS, *closed.CycleTimeMS)
+	require.Equal(t, hourMS, *closed.TimeInProposedMS)
+	require.Equal(t, 2*hourMS, *closed.TimeInOpenMS)
+	require.Nil(t, closed.TimeInCancelledMS)
+
+	rework, err := svc.Rework(Query{})
+	require.NoError(t, err)
+	require.Equal(t, 1, rework.Summary.KnownClosed)
+	require.Equal(t, 1, rework.Summary.UnknownCount)
+	require.Equal(t, 0, rework.Summary.KnownReopened)
+
+	summary, err := svc.Summary(Query{})
+	require.NoError(t, err)
+	require.Equal(t, 2, summary.Beads.Total)
+	require.Equal(t, 1, summary.Beads.Closed)
+	require.Equal(t, 1, summary.Beads.Cancelled)
+	require.Equal(t, 1, summary.Beads.KnownCycleTime)
+	require.Equal(t, 1, summary.Beads.UnknownCycleTime)
 }
 
 func TestServiceMarksZeroCostKnownAndSentinelUnknown(t *testing.T) {

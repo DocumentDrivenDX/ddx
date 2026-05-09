@@ -85,6 +85,9 @@ type AggregateSummary struct {
 		Open             int `json:"open"`
 		InProgress       int `json:"in_progress"`
 		Closed           int `json:"closed"`
+		Blocked          int `json:"blocked"`
+		Proposed         int `json:"proposed"`
+		Cancelled        int `json:"cancelled"`
 		Reopened         int `json:"reopened"`
 		KnownCycleTime   int `json:"known_cycle_time"`
 		UnknownCycleTime int `json:"unknown_cycle_time"`
@@ -198,21 +201,24 @@ type CycleTimeSummary struct {
 
 // CycleTimeRow describes one bead's lifecycle timing.
 type CycleTimeRow struct {
-	BeadID           string      `json:"bead_id"`
-	Title            string      `json:"title"`
-	SpecID           string      `json:"spec_id,omitempty"`
-	Status           string      `json:"status"`
-	CreatedAt        time.Time   `json:"created_at"`
-	FirstClosedAt    *time.Time  `json:"first_closed_at,omitempty"`
-	LastClosedAt     *time.Time  `json:"last_closed_at,omitempty"`
-	CycleTimeMS      *int64      `json:"cycle_time_ms,omitempty"`
-	ReopenCount      *int        `json:"reopen_count,omitempty"`
-	RevisionCount    *int        `json:"revision_count,omitempty"`
-	TimeInOpenMS     *int64      `json:"time_in_open_ms,omitempty"`
-	TimeInProgressMS *int64      `json:"time_in_in_progress_ms,omitempty"`
-	TimeInClosedMS   *int64      `json:"time_in_closed_ms,omitempty"`
-	CycleState       State       `json:"cycle_state"`
-	Provenance       []SourceRef `json:"provenance,omitempty"`
+	BeadID            string      `json:"bead_id"`
+	Title             string      `json:"title"`
+	SpecID            string      `json:"spec_id,omitempty"`
+	Status            string      `json:"status"`
+	CreatedAt         time.Time   `json:"created_at"`
+	FirstClosedAt     *time.Time  `json:"first_closed_at,omitempty"`
+	LastClosedAt      *time.Time  `json:"last_closed_at,omitempty"`
+	CycleTimeMS       *int64      `json:"cycle_time_ms,omitempty"`
+	ReopenCount       *int        `json:"reopen_count,omitempty"`
+	RevisionCount     *int        `json:"revision_count,omitempty"`
+	TimeInProposedMS  *int64      `json:"time_in_proposed_ms,omitempty"`
+	TimeInOpenMS      *int64      `json:"time_in_open_ms,omitempty"`
+	TimeInProgressMS  *int64      `json:"time_in_in_progress_ms,omitempty"`
+	TimeInBlockedMS   *int64      `json:"time_in_blocked_ms,omitempty"`
+	TimeInClosedMS    *int64      `json:"time_in_closed_ms,omitempty"`
+	TimeInCancelledMS *int64      `json:"time_in_cancelled_ms,omitempty"`
+	CycleState        State       `json:"cycle_state"`
+	Provenance        []SourceRef `json:"provenance,omitempty"`
 }
 
 // ReworkReport describes reopen and post-close churn.
@@ -294,6 +300,12 @@ func (s *Service) Summary(query Query) (AggregateSummary, error) {
 			summary.Beads.InProgress++
 		case bead.StatusClosed:
 			summary.Beads.Closed++
+		case bead.StatusBlocked:
+			summary.Beads.Blocked++
+		case bead.StatusProposed:
+			summary.Beads.Proposed++
+		case bead.StatusCancelled:
+			summary.Beads.Cancelled++
 		}
 	}
 	var cycleKnownTotalMS int64
@@ -933,7 +945,7 @@ func buildCycleTimeRow(workingDir string, b bead.Bead, sessionByID map[string]ag
 	var firstClosedSeen bool
 	var reopenCount int
 	var revisionCount int
-	var openMS, inProgressMS, closedMS int64
+	var timing lifecycleTimingBuckets
 	for i, tr := range transitions {
 		if i == 0 {
 			lastStatus = bead.StatusOpen
@@ -943,14 +955,7 @@ func buildCycleTimeRow(workingDir string, b bead.Bead, sessionByID map[string]ag
 			continue
 		}
 		delta := tr.At.Sub(lastAt).Milliseconds()
-		switch lastStatus {
-		case bead.StatusOpen:
-			openMS += delta
-		case bead.StatusInProgress:
-			inProgressMS += delta
-		case bead.StatusClosed:
-			closedMS += delta
-		}
+		timing.add(lastStatus, delta)
 		if tr.Status == bead.StatusClosed && !firstClosedSeen {
 			firstClosedSeen = true
 			if row.FirstClosedAt == nil {
@@ -980,24 +985,26 @@ func buildCycleTimeRow(workingDir string, b bead.Bead, sessionByID map[string]ag
 	}
 	if !end.IsZero() {
 		delta := end.Sub(lastAt).Milliseconds()
-		switch lastStatus {
-		case bead.StatusOpen:
-			openMS += delta
-		case bead.StatusInProgress:
-			inProgressMS += delta
-		case bead.StatusClosed:
-			closedMS += delta
-		}
+		timing.add(lastStatus, delta)
 	}
 
-	if openMS > 0 {
-		row.TimeInOpenMS = int64Ptr(openMS)
+	if timing.proposedMS > 0 {
+		row.TimeInProposedMS = int64Ptr(timing.proposedMS)
 	}
-	if inProgressMS > 0 {
-		row.TimeInProgressMS = int64Ptr(inProgressMS)
+	if timing.openMS > 0 {
+		row.TimeInOpenMS = int64Ptr(timing.openMS)
 	}
-	if closedMS > 0 {
-		row.TimeInClosedMS = int64Ptr(closedMS)
+	if timing.inProgressMS > 0 {
+		row.TimeInProgressMS = int64Ptr(timing.inProgressMS)
+	}
+	if timing.blockedMS > 0 {
+		row.TimeInBlockedMS = int64Ptr(timing.blockedMS)
+	}
+	if timing.closedMS > 0 {
+		row.TimeInClosedMS = int64Ptr(timing.closedMS)
+	}
+	if timing.cancelledMS > 0 {
+		row.TimeInCancelledMS = int64Ptr(timing.cancelledMS)
 	}
 	if firstClosedSeen {
 		row.ReopenCount = intPtr(reopenCount)
@@ -1015,6 +1022,35 @@ func buildCycleTimeRow(workingDir string, b bead.Bead, sessionByID map[string]ag
 		row.LastClosedAt = lastClose
 	}
 	return row
+}
+
+type lifecycleTimingBuckets struct {
+	proposedMS   int64
+	openMS       int64
+	inProgressMS int64
+	blockedMS    int64
+	closedMS     int64
+	cancelledMS  int64
+}
+
+func (b *lifecycleTimingBuckets) add(status string, deltaMS int64) {
+	if deltaMS <= 0 {
+		return
+	}
+	switch status {
+	case bead.StatusProposed:
+		b.proposedMS += deltaMS
+	case bead.StatusOpen:
+		b.openMS += deltaMS
+	case bead.StatusInProgress:
+		b.inProgressMS += deltaMS
+	case bead.StatusBlocked:
+		b.blockedMS += deltaMS
+	case bead.StatusClosed:
+		b.closedMS += deltaMS
+	case bead.StatusCancelled:
+		b.cancelledMS += deltaMS
+	}
 }
 
 func buildReworkRow(workingDir string, b bead.Bead, sessionByID map[string]agent.SessionEntry) ReworkRow {
@@ -1319,50 +1355,43 @@ func beadEvents(b bead.Bead) []bead.BeadEvent {
 }
 
 func statusFromEvent(event bead.BeadEvent) (string, bool) {
-	kind := normalizeToken(event.Kind)
-	switch kind {
-	case "open", "opened":
-		return bead.StatusOpen, true
-	case "in_progress", "inprogress", "started", "start", "working":
-		return bead.StatusInProgress, true
-	case "closed", "close", "finished", "done":
-		return bead.StatusClosed, true
-	case "reopened", "reopen":
-		return bead.StatusOpen, true
+	for _, candidate := range []string{event.Kind, firstNonEmpty(event.Summary, event.Body)} {
+		if status, ok := statusFromEventToken(candidate); ok {
+			return status, true
+		}
 	}
+	return "", false
+}
 
-	candidate := normalizeToken(firstNonEmpty(event.Summary, event.Body))
-	switch candidate {
-	case "open", "opened":
-		return bead.StatusOpen, true
-	case "in_progress", "inprogress", "started", "start", "working":
-		return bead.StatusInProgress, true
-	case "closed", "close", "finished", "done":
-		return bead.StatusClosed, true
-	case "reopened", "reopen":
-		return bead.StatusOpen, true
+func statusFromEventToken(raw string) (string, bool) {
+	normalized := normalizeToken(raw)
+	if status, ok := statusFromToken(normalized); ok {
+		return status, true
 	}
-
-	if strings.HasPrefix(kind, "status:") {
-		return statusFromToken(strings.TrimPrefix(kind, "status:"))
-	}
-	if strings.HasPrefix(kind, "state:") {
-		return statusFromToken(strings.TrimPrefix(kind, "state:"))
-	}
-	if strings.HasPrefix(kind, "transition:") {
-		return statusFromToken(strings.TrimPrefix(kind, "transition:"))
+	for _, prefix := range []string{"status", "state", "transition"} {
+		for _, marker := range []string{prefix + ":", prefix + "=", prefix + "_"} {
+			if strings.HasPrefix(normalized, marker) {
+				return statusFromToken(strings.TrimLeft(strings.TrimPrefix(normalized, marker), "_:="))
+			}
+		}
 	}
 	return "", false
 }
 
 func statusFromToken(raw string) (string, bool) {
 	switch normalizeToken(raw) {
+	case "proposed", "proposal":
+		return bead.StatusProposed, true
 	case "open", "opened":
 		return bead.StatusOpen, true
 	case "in_progress", "inprogress", "started", "start", "working":
 		return bead.StatusInProgress, true
+	case "blocked", "block":
+		return bead.StatusBlocked, true
 	case "closed", "close", "finished", "done":
 		return bead.StatusClosed, true
+	case "cancelled", "canceled", "cancel":
+		return bead.StatusCancelled, true
 	case "reopened", "reopen":
 		return bead.StatusOpen, true
 	default:
