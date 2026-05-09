@@ -516,6 +516,22 @@ func TestExecuteOnService_InvalidPowerBoundsFailBeforeService(t *testing.T) {
 	}
 }
 
+func TestRouting_PassthroughUnsatisfiedStops(t *testing.T) {
+	svc := &passthroughTestService{}
+	rcfg := resolvedWithPassthrough("claude", "anthropic", "claude-3-7-sonnet", 0, 8)
+
+	_, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt:           "repair this",
+		MinPowerOverride: 90,
+	})
+	require.Error(t, err)
+	assert.False(t, svc.executeCalled, "invalid passthrough+power request must stop before Execute")
+	assert.Equal(t,
+		FailureModeBlockedByPassthroughConstraint,
+		ClassifyFailureMode("task_failed", 1, err.Error()),
+	)
+}
+
 // TestAppendBeadRoutingEvidence_RecordsPassthroughConstraintsSeparately (AC5):
 // The routing evidence body must contain requested_harness/provider/model and
 // requested_min_power/max_power as distinct fields, separate from the

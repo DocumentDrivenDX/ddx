@@ -261,3 +261,78 @@ func TestPostMergeReviewer_DispatchesWithStrongestAboveImplPowerAndNoModelPin(t 
 	assert.Empty(t, svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
 }
+
+func TestReviewRouting_MissingActualPowerUsesSmartFloor(t *testing.T) {
+	projectRoot, head, store := reviewPairingTestSetup(t)
+	svc := &passthroughTestService{
+		listProfiles: []agentlib.ProfileInfo{
+			{Name: "smart", MinPower: 9, MaxPower: 10},
+			{Name: "frontier", MinPower: 71, MaxPower: 80},
+		},
+		listModels: []agentlib.ModelInfo{
+			{ID: "smart-model", Power: 10, Available: true, AutoRoutable: true},
+			{ID: "frontier-model", Power: 72, Available: true, AutoRoutable: true},
+		},
+		executeEvents: []agentlib.ServiceEvent{
+			{
+				Type: "final",
+				Data: []byte(`{"status":"success","final_text":"{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}"}`),
+			},
+		},
+	}
+	reviewer := &DefaultBeadReviewer{
+		ProjectRoot: projectRoot,
+		BeadStore:   store,
+		Service:     svc,
+	}
+
+	res, err := reviewer.ReviewBead(context.Background(), "ddx-pairing", head, ImplementerRouting{
+		Harness:  "codex",
+		Provider: "openai",
+		Model:    "gpt-5",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "smart", svc.lastReq.Profile)
+	assert.Equal(t, 9, svc.lastReq.MinPower)
+	assert.Empty(t, svc.lastReq.Model)
+	assert.Empty(t, svc.lastReq.ModelRef)
+}
+
+func TestReviewRouting_KnownActualPowerUsesNextFloor(t *testing.T) {
+	projectRoot, head, store := reviewPairingTestSetup(t)
+	svc := &passthroughTestService{
+		listProfiles: []agentlib.ProfileInfo{
+			{Name: "smart", MinPower: 9, MaxPower: 10},
+			{Name: "frontier", MinPower: 71, MaxPower: 80},
+		},
+		listModels: []agentlib.ModelInfo{
+			{ID: "smart-model", Power: 10, Available: true, AutoRoutable: true},
+			{ID: "frontier-model", Power: 72, Available: true, AutoRoutable: true},
+		},
+		executeEvents: []agentlib.ServiceEvent{
+			{
+				Type: "final",
+				Data: []byte(`{"status":"success","final_text":"{\"schema_version\":1,\"verdict\":\"APPROVE\",\"summary\":\"ok\"}"}`),
+			},
+		},
+	}
+	reviewer := &DefaultBeadReviewer{
+		ProjectRoot: projectRoot,
+		BeadStore:   store,
+		Service:     svc,
+	}
+
+	res, err := reviewer.ReviewBead(context.Background(), "ddx-pairing", head, ImplementerRouting{
+		Harness:     "codex",
+		Provider:    "openai",
+		Model:       "gpt-5",
+		ActualPower: 70,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, res)
+	assert.Equal(t, "frontier", svc.lastReq.Profile)
+	assert.Equal(t, 71, svc.lastReq.MinPower)
+	assert.Empty(t, svc.lastReq.Model)
+	assert.Empty(t, svc.lastReq.ModelRef)
+}

@@ -85,6 +85,7 @@ func ClassifyFailureMode(outcome string, exitCode int, errMsg string) string {
 		"passthrough constraint:",
 		"max_power is less than min_power",
 		"max_power exceeds min_power",
+		"must be less than max_power",
 		"no viable routing candidate for pins",
 		"harness cannot satisfy power constraint",
 		"harness pin incompatible with power bounds",

@@ -44,7 +44,7 @@ func (r *DefaultBeadReviewer) ReviewGroup(ctx context.Context, beadID, resultRev
 	}
 
 	reviewHarness := r.Harness
-	reviewProfile := r.reviewerProfileForDispatch(ctx, impl)
+	reviewProfile := r.reviewerDispatchProfile(ctx, impl)
 
 	out := &ReviewGroupResult{
 		BeadID:    beadID,
@@ -60,10 +60,13 @@ func (r *DefaultBeadReviewer) ReviewGroup(ctx context.Context, beadID, resultRev
 	}
 
 	for reviewerIndex := 0; reviewerIndex < 2; reviewerIndex++ {
-		slotRuntime := BuildReviewGroupExecuteRequest(impl, reviewHarness, reviewProfile, ReviewGroupDispatchMeta{
+		slotRuntime := BuildReviewGroupExecuteRequest(impl, reviewHarness, reviewProfile.Name, ReviewGroupDispatchMeta{
 			GroupID:       groupID,
 			ReviewerIndex: reviewerIndex,
 		})
+		if slotRuntime.MinPowerOverride == 0 && reviewProfile.MinPower > 0 {
+			slotRuntime.MinPowerOverride = reviewProfile.MinPower
+		}
 		reviewRouteLabel := r.applyExplicitReviewerPins(&slotRuntime)
 		slotRuntime.PromptFile = artifacts.PromptAbs
 		slotRuntime.WorkDir = r.ProjectRoot

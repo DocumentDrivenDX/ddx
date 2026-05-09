@@ -124,6 +124,11 @@ type ReviewGroupDispatchMeta struct {
 	ReviewerIndex int
 }
 
+type reviewerDispatchProfile struct {
+	Name     string
+	MinPower int
+}
+
 type reviewArtifactManifest struct {
 	Harness          string                     `json:"harness,omitempty"`
 	Model            string                     `json:"model,omitempty"`
@@ -682,16 +687,57 @@ func BuildReviewGroupExecuteRequest(impl ImplementerRouting, reviewerHarness, re
 }
 
 func (r *DefaultBeadReviewer) reviewerProfileForDispatch(ctx context.Context, impl ImplementerRouting) string {
+	return r.reviewerDispatchProfile(ctx, impl).Name
+}
+
+func (r *DefaultBeadReviewer) reviewerDispatchProfile(ctx context.Context, impl ImplementerRouting) reviewerDispatchProfile {
 	floor := 0
 	if impl.ActualPower > 0 {
 		floor = impl.ActualPower + 1
 	}
-	return selectProfileForDispatch(ctx, r.ProjectRoot, r.Service, r.Runner, func(snap ProfileSnapshot) string {
-		if floor > 0 {
-			return SelectStrongestProfileAbove(snap, floor)
+	if r.Runner != nil {
+		return reviewerDispatchProfile{MinPower: floor}
+	}
+	selectedSvc := r.Service
+	if selectedSvc == nil {
+		factory := serviceRunFactory
+		if factory == nil {
+			factory = NewServiceFromWorkDir
 		}
-		return SelectStrongestProfile(snap)
-	})
+		built, err := factory(r.ProjectRoot)
+		if err != nil {
+			return reviewerDispatchProfile{MinPower: floor}
+		}
+		selectedSvc = built
+	}
+	snap, err := LoadProfileSnapshot(ctx, selectedSvc)
+	if err != nil {
+		return reviewerDispatchProfile{MinPower: floor}
+	}
+	name := ""
+	if floor > 0 {
+		name = SelectStrongestProfileAbove(snap, floor)
+	} else {
+		name = selectSmartReviewerProfile(snap)
+	}
+	if name == "" {
+		return reviewerDispatchProfile{MinPower: floor}
+	}
+	for _, profile := range snap.Profiles {
+		if profile.Name == name {
+			return reviewerDispatchProfile{Name: name, MinPower: profile.MinPower}
+		}
+	}
+	return reviewerDispatchProfile{Name: name, MinPower: floor}
+}
+
+func selectSmartReviewerProfile(snap ProfileSnapshot) string {
+	for _, profile := range snap.Profiles {
+		if profile.Name == "smart" && !profile.Deprecated && profileHasAvailableModel(profile, snap.Models) {
+			return profile.Name
+		}
+	}
+	return SelectStrongestProfile(snap)
 }
 
 func (r *DefaultBeadReviewer) applyExplicitReviewerPins(runtime *AgentRunRuntime) string {
@@ -843,8 +889,8 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 	// records the failure and leaves the bead open for retry.
 	if built.Overflow {
 		baseRev := resolveReviewBaseRev(r.ProjectRoot, resultRev)
-		reviewProfile := r.reviewerProfileForDispatch(ctx, impl)
-		reviewRouteLabel := reviewProfile
+		reviewProfile := r.reviewerDispatchProfile(ctx, impl)
+		reviewRouteLabel := reviewProfile.Name
 		if r.Model != "" {
 			reviewRouteLabel = r.Model
 		} else if r.ModelRef != "" {
@@ -892,10 +938,13 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 	// operator override; otherwise DDx sends only a fizeau profile hint plus
 	// the reviewer MinPower floor.
 	reviewHarness := r.Harness
-	reviewProfile := r.reviewerProfileForDispatch(ctx, impl)
+	reviewProfile := r.reviewerDispatchProfile(ctx, impl)
 
 	start := time.Now()
-	runRuntime := BuildReviewExecuteRequest(impl, reviewHarness, reviewProfile)
+	runRuntime := BuildReviewExecuteRequest(impl, reviewHarness, reviewProfile.Name)
+	if runRuntime.MinPowerOverride == 0 && reviewProfile.MinPower > 0 {
+		runRuntime.MinPowerOverride = reviewProfile.MinPower
+	}
 	reviewRouteLabel := r.applyExplicitReviewerPins(&runRuntime)
 	runRuntime.Prompt = prompt
 	runRuntime.WorkDir = reviewWorkDir
