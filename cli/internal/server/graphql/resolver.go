@@ -180,16 +180,6 @@ type subscriptionResolver struct{ *Resolver }
 
 // ─── Unimplemented query stubs ─────────────────────────────────────────────
 
-// BeadsReady is the resolver for the beadsReady field.
-func (r *queryResolver) BeadsReady(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error) {
-	panic("not implemented")
-}
-
-// BeadsBlocked is the resolver for the beadsBlocked field.
-func (r *queryResolver) BeadsBlocked(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error) {
-	panic("not implemented")
-}
-
 // BeadsStatus is the resolver for the beadsStatus field.
 // Implemented in resolver_beads.go.
 

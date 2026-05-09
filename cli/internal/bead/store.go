@@ -1440,33 +1440,140 @@ func matchesWhere(b Bead, where map[string]string) bool {
 	return true
 }
 
-// Ready returns open beads whose dependencies are all closed, sorted by
-// priority (0 = highest first).
+type lifecycleQueueEntry struct {
+	Bead
+	Decision             LifecycleQueueDecision
+	UnclosedDepIDs       []string
+	RetryAfter           time.Time
+	LastStatus           string
+	LastDetail           string
+	ExecutionSkipReason  string
+	SupersededBy         string
+	EpicClosureCandidate bool
+}
+
+func (s *Store) classifyLifecycleQueue(beads []Bead, now time.Time) []lifecycleQueueEntry {
+	statusMap := make(map[string]string)
+	childCount := make(map[string]int)
+	openChildCount := make(map[string]int)
+	for _, b := range beads {
+		statusMap[b.ID] = b.Status
+		if b.Parent != "" {
+			childCount[b.Parent]++
+			if b.Status != StatusClosed {
+				openChildCount[b.Parent]++
+			}
+		}
+	}
+
+	entries := make([]lifecycleQueueEntry, 0, len(beads))
+	for _, b := range beads {
+		unclosed := unclosedDependencyIDs(b, statusMap)
+		retryAfter, retryActive := activeRetryCooldown(b, now)
+		executionEligible, executionEligibleKnown := lifecycleExecutionEligible(b)
+		supersededBy := lifecycleSupersededBy(b)
+		entry := lifecycleQueueEntry{
+			Bead:                 b,
+			UnclosedDepIDs:       unclosed,
+			RetryAfter:           retryAfter,
+			LastStatus:           extraStringVal(b.Extra, ExtraLastStatus),
+			LastDetail:           extraStringVal(b.Extra, ExtraLastDetail),
+			ExecutionSkipReason:  extraStringVal(b.Extra, ExtraExecutionReason),
+			SupersededBy:         supersededBy,
+			EpicClosureCandidate: isEpicClosureCandidate(b, childCount[b.ID], openChildCount[b.ID]),
+		}
+		entry.Decision = EvaluateLifecycleQueue(LifecycleQueueFacts{
+			Status:                 b.Status,
+			Dependencies:           lifecycleDependencyStates(b, statusMap),
+			ClaimFresh:             b.Status == StatusInProgress && !claimLeaseIsStale(s, b.Extra, b.ID),
+			RetryCooldownActive:    retryActive,
+			ExecutionEligible:      executionEligible,
+			ExecutionEligibleKnown: executionEligibleKnown,
+			SupersededBy:           supersededBy,
+			EpicContainer:          isOrdinaryEpicContainer(b, childCount[b.ID]),
+			ExternalBlockerReason:  extraStringVal(b.Extra, ExtraLifecycleExternalBlockerReason),
+			LegacyLabels:           b.Labels,
+		})
+		entries = append(entries, entry)
+	}
+	return entries
+}
+
+func lifecycleDependencyStates(b Bead, statusMap map[string]string) []LifecycleDependencyState {
+	depIDs := b.DepIDs()
+	if len(depIDs) == 0 {
+		return nil
+	}
+	deps := make([]LifecycleDependencyState, 0, len(depIDs))
+	for _, depID := range depIDs {
+		deps = append(deps, LifecycleDependencyState{Status: statusMap[depID]})
+	}
+	return deps
+}
+
+func unclosedDependencyIDs(b Bead, statusMap map[string]string) []string {
+	var unclosed []string
+	for _, depID := range b.DepIDs() {
+		if !LifecycleStatusSatisfiesDependency(statusMap[depID]) {
+			unclosed = append(unclosed, depID)
+		}
+	}
+	return unclosed
+}
+
+func activeRetryCooldown(b Bead, now time.Time) (time.Time, bool) {
+	retryAfterStr := extraStringVal(b.Extra, ExtraRetryAfter)
+	if retryAfterStr == "" {
+		return time.Time{}, false
+	}
+	retryAfter, err := time.Parse(time.RFC3339, retryAfterStr)
+	if err != nil {
+		return time.Time{}, false
+	}
+	return retryAfter, retryAfter.After(now)
+}
+
+func lifecycleExecutionEligible(b Bead) (bool, bool) {
+	eligible, ok := b.Extra[ExtraExecutionElig]
+	if !ok {
+		return true, false
+	}
+	val, isBool := eligible.(bool)
+	if !isBool {
+		return true, false
+	}
+	return val, true
+}
+
+func lifecycleSupersededBy(b Bead) string {
+	return strings.TrimSpace(extraStringVal(b.Extra, "superseded-by"))
+}
+
+// Ready returns open beads in the derived ready bucket, sorted by priority
+// (0 = highest first).
 func (s *Store) Ready() ([]Bead, error) {
 	return s.readyFiltered(false)
 }
 
 // ReadyExecution returns ready beads that are also execution-eligible and
-// not superseded. This is the filter HELIX uses for its build loop.
+// not superseded. This is the filter HELIX uses for its build loop. It also
+// surfaces stale in_progress claims so Claim can atomically reclaim them.
 func (s *Store) ReadyExecution() ([]Bead, error) {
 	return s.readyFiltered(true)
 }
 
-// NeedsHuman returns open beads that carry the needs_human label, sorted by
-// queue order. These beads require operator attention before a worker can
-// resume them.
+// NeedsHuman returns operator-attention beads, sorted by queue order. The
+// persisted lifecycle state for that lane is status=proposed; the legacy
+// needs_human label is explanatory metadata only.
 func (s *Store) NeedsHuman() ([]Bead, error) {
 	beads, err := s.ReadAll()
 	if err != nil {
 		return nil, err
 	}
 	var result []Bead
-	for _, b := range beads {
-		if b.Status != StatusOpen {
-			continue
-		}
-		if hasLabel(b, LabelNeedsHuman) {
-			result = append(result, b)
+	for _, entry := range s.classifyLifecycleQueue(beads, time.Now().UTC()) {
+		if entry.Decision.OperatorAttention {
+			result = append(result, entry.Bead)
 		}
 	}
 	sortBeadsForQueue(result)
@@ -1483,6 +1590,7 @@ type ReadyExecutionBreakdown struct {
 	SkippedEpicClosureCandidates []string
 	SkippedOnCooldown            []string
 	SkippedNeedsInvestigation    []string
+	SkippedOperatorAttention     []string
 	SkippedBlocked               []string
 	SkippedNotEligible           []string
 	SkippedSuperseded            []string
@@ -1495,70 +1603,35 @@ func (s *Store) ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error) {
 	if err != nil {
 		return out, err
 	}
-	statusMap := make(map[string]string)
-	childCount := make(map[string]int)
-	openChildCount := make(map[string]int)
-	for _, b := range beads {
-		statusMap[b.ID] = b.Status
-		if b.Parent != "" {
-			childCount[b.Parent]++
-			if b.Status != StatusClosed {
-				openChildCount[b.Parent]++
-			}
-		}
-	}
 	now := time.Now().UTC()
 	var soonestRetry time.Time
-	for _, b := range beads {
-		if !depsSatisfied(b, statusMap) {
+	for _, entry := range s.classifyLifecycleQueue(beads, now) {
+		if entry.Decision.WorkerEligible {
 			continue
 		}
-		switch b.Status {
-		case StatusBlocked, StatusProposed, StatusCancelled:
-			out.SkippedBlocked = append(out.SkippedBlocked, b.ID)
+		if !entry.Decision.DependenciesSatisfied {
 			continue
-		case StatusInProgress:
-			if !claimLeaseIsStale(s, b.Extra, b.ID) {
-				continue
+		}
+		switch entry.Decision.Bucket {
+		case LifecycleBucketRetryCooldown:
+			out.SkippedOnCooldown = append(out.SkippedOnCooldown, entry.ID)
+			if !entry.RetryAfter.IsZero() && (soonestRetry.IsZero() || entry.RetryAfter.Before(soonestRetry)) {
+				soonestRetry = entry.RetryAfter
 			}
-		case StatusOpen:
-		default:
-			continue
-		}
-		if retryAfterRaw, ok := b.Extra["execute-loop-retry-after"]; ok {
-			if retryAfterStr, isStr := retryAfterRaw.(string); isStr && retryAfterStr != "" {
-				if retryAfter, err := time.Parse(time.RFC3339, retryAfterStr); err == nil && retryAfter.After(now) {
-					out.SkippedOnCooldown = append(out.SkippedOnCooldown, b.ID)
-					if soonestRetry.IsZero() || retryAfter.Before(soonestRetry) {
-						soonestRetry = retryAfter
-					}
-					continue
-				}
-			}
-		}
-		if isOrdinaryEpicContainer(b, childCount[b.ID]) {
-			if isEpicClosureCandidate(b, childCount[b.ID], openChildCount[b.ID]) {
-				out.SkippedEpicClosureCandidates = append(out.SkippedEpicClosureCandidates, b.ID)
+		case LifecycleBucketEpicContainer:
+			if entry.EpicClosureCandidate {
+				out.SkippedEpicClosureCandidates = append(out.SkippedEpicClosureCandidates, entry.ID)
 			} else {
-				out.SkippedEpics = append(out.SkippedEpics, b.ID)
+				out.SkippedEpics = append(out.SkippedEpics, entry.ID)
 			}
-			continue
-		}
-		if hasLabel(b, LabelNeedsInvestigation) || hasLabel(b, LabelNeedsHuman) || hasNoChangesTriageLabel(b) {
-			out.SkippedNeedsInvestigation = append(out.SkippedNeedsInvestigation, b.ID)
-			continue
-		}
-		if eligible, ok := b.Extra["execution-eligible"]; ok {
-			if val, isBool := eligible.(bool); isBool && !val {
-				out.SkippedNotEligible = append(out.SkippedNotEligible, b.ID)
-				continue
-			}
-		}
-		if sup, ok := b.Extra["superseded-by"]; ok {
-			if s, isStr := sup.(string); isStr && s != "" {
-				out.SkippedSuperseded = append(out.SkippedSuperseded, b.ID)
-				continue
-			}
+		case LifecycleBucketNotEligible:
+			out.SkippedNotEligible = append(out.SkippedNotEligible, entry.ID)
+		case LifecycleBucketSuperseded:
+			out.SkippedSuperseded = append(out.SkippedSuperseded, entry.ID)
+		case LifecycleBucketBlockedExternal, LifecycleBucketCancelledTerminal:
+			out.SkippedBlocked = append(out.SkippedBlocked, entry.ID)
+		case LifecycleBucketProposed:
+			out.SkippedOperatorAttention = append(out.SkippedOperatorAttention, entry.ID)
 		}
 	}
 	if !soonestRetry.IsZero() {
@@ -1572,65 +1645,19 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 	if err != nil {
 		return nil, err
 	}
-	statusMap := make(map[string]string)
-	childCount := make(map[string]int)
-	for _, b := range beads {
-		statusMap[b.ID] = b.Status
-		if b.Parent != "" {
-			childCount[b.Parent]++
-		}
-	}
 
 	var ready []Bead
-	for _, b := range beads {
-		if b.Status != StatusOpen {
-			// Surface stalled in_progress beads so a fresh worker can
-			// reclaim them atomically in Claim().
-			if executionOnly && b.Status == StatusInProgress && claimLeaseIsStale(s, b.Extra, b.ID) {
-				// fall through to dependency check below
-			} else {
-				continue
-			}
-		}
-		allSatisfied := true
-		for _, depID := range b.DepIDs() {
-			if statusMap[depID] != StatusClosed {
-				allSatisfied = false
-				break
-			}
-		}
-		if !allSatisfied {
+	for _, entry := range s.classifyLifecycleQueue(beads, time.Now().UTC()) {
+		if entry.Decision.Bucket != LifecycleBucketReady {
 			continue
 		}
 		if executionOnly {
-			if hasLabel(b, LabelNeedsInvestigation) || hasLabel(b, LabelNeedsHuman) || hasNoChangesTriageLabel(b) {
-				continue
-			}
-			if isOrdinaryEpicContainer(b, childCount[b.ID]) {
-				continue
-			}
-			// Filter by execution-eligible (default true if absent)
-			eligible, ok := b.Extra["execution-eligible"]
-			if ok {
-				if val, isBool := eligible.(bool); isBool && !val {
-					continue
-				}
-			}
-			// Filter out superseded beads
-			if sup, ok := b.Extra["superseded-by"]; ok {
-				if s, isStr := sup.(string); isStr && s != "" {
-					continue
-				}
-			}
-			if retryAfterRaw, ok := b.Extra["execute-loop-retry-after"]; ok {
-				if retryAfterStr, isStr := retryAfterRaw.(string); isStr && retryAfterStr != "" {
-					if retryAfter, err := time.Parse(time.RFC3339, retryAfterStr); err == nil && retryAfter.After(time.Now().UTC()) {
-						continue
-					}
-				}
-			}
+			ready = append(ready, entry.Bead)
+			continue
 		}
-		ready = append(ready, b)
+		if entry.Status == StatusOpen {
+			ready = append(ready, entry.Bead)
+		}
 	}
 
 	sortBeadsForQueue(ready)
@@ -1638,31 +1665,17 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 	return ready, nil
 }
 
-func hasNoChangesTriageLabel(b Bead) bool {
-	return hasLabel(b, LabelNoChangesUnjustified) || hasLabel(b, LabelNoChangesUnverified)
-}
-
-// Blocked returns open beads with at least one unclosed dependency.
+// Blocked returns open beads in the derived dependency-waiting bucket.
 func (s *Store) Blocked() ([]Bead, error) {
 	beads, err := s.ReadAll()
 	if err != nil {
 		return nil, err
 	}
-	statusMap := make(map[string]string)
-	for _, b := range beads {
-		statusMap[b.ID] = b.Status
-	}
 
 	var blocked []Bead
-	for _, b := range beads {
-		if b.Status != StatusOpen {
-			continue
-		}
-		for _, depID := range b.DepIDs() {
-			if statusMap[depID] != StatusClosed {
-				blocked = append(blocked, b)
-				break
-			}
+	for _, entry := range s.classifyLifecycleQueue(beads, time.Now().UTC()) {
+		if entry.Decision.Bucket == LifecycleBucketWaitingDependencies && entry.Status == StatusOpen {
+			blocked = append(blocked, entry.Bead)
 		}
 	}
 	sortBeadsForQueue(blocked)
@@ -1680,127 +1693,74 @@ func (s *Store) BlockedAll() ([]BlockedBead, error) {
 	if err != nil {
 		return nil, err
 	}
-	statusMap := make(map[string]string)
-	childCount := make(map[string]int)
-	for _, b := range beads {
-		statusMap[b.ID] = b.Status
-		if b.Parent != "" {
-			childCount[b.Parent]++
-		}
-	}
 
 	now := time.Now().UTC()
 	var entries []BlockedBead
-	for _, b := range beads {
-		if b.Status != StatusOpen && b.Status != StatusBlocked {
-			continue
-		}
-
-		var unclosed []string
-		for _, depID := range b.DepIDs() {
-			if statusMap[depID] != StatusClosed {
-				unclosed = append(unclosed, depID)
-			}
-		}
-		if len(unclosed) > 0 {
+	for _, entry := range s.classifyLifecycleQueue(beads, now) {
+		switch entry.Decision.Bucket {
+		case LifecycleBucketWaitingDependencies:
 			entries = append(entries, BlockedBead{
-				Bead: b,
+				Bead: entry.Bead,
 				Blocker: Blocker{
 					Kind:           BlockerKindDependency,
-					UnclosedDepIDs: unclosed,
+					UnclosedDepIDs: entry.UnclosedDepIDs,
 				},
 			})
-			continue
-		}
-		if b.Status == StatusBlocked {
+		case LifecycleBucketBlockedExternal:
+			reason := entry.Decision.ExternalBlockerReason
+			if reason == "" && len(entry.Decision.Issues) > 0 {
+				reason = entry.Decision.Issues[0].Detail
+			}
 			entries = append(entries, BlockedBead{
-				Bead: b,
+				Bead: entry.Bead,
 				Blocker: Blocker{
 					Kind:   BlockerKindBlockedStatus,
-					Reason: "persisted blocked status",
+					Reason: reason,
 				},
 			})
-			continue
-		}
-
-		if hasLabel(b, LabelNeedsInvestigation) || hasLabel(b, LabelNeedsHuman) {
+		case LifecycleBucketProposed:
 			entries = append(entries, BlockedBead{
-				Bead: b,
+				Bead: entry.Bead,
 				Blocker: Blocker{
-					Kind:       BlockerKindNeedsInvestigation,
-					LastStatus: "no_changes",
-					Reason:     "triage needs investigation before retry",
+					Kind:   BlockerKindOperatorAttention,
+					Reason: "status=proposed requires operator attention",
 				},
 			})
-			continue
-		}
-		if isOrdinaryEpicContainer(b, childCount[b.ID]) {
+		case LifecycleBucketEpicContainer:
 			entries = append(entries, BlockedBead{
-				Bead: b,
+				Bead: entry.Bead,
 				Blocker: Blocker{
 					Kind:   BlockerKindEpicOnly,
 					Reason: "ordinary ddx work skips epic/container beads",
 				},
 			})
-			continue
+		case LifecycleBucketNotEligible:
+			entries = append(entries, BlockedBead{
+				Bead: entry.Bead,
+				Blocker: Blocker{
+					Kind:   BlockerKindNotEligible,
+					Reason: entry.ExecutionSkipReason,
+				},
+			})
+		case LifecycleBucketSuperseded:
+			entries = append(entries, BlockedBead{
+				Bead: entry.Bead,
+				Blocker: Blocker{
+					Kind:   BlockerKindSuperseded,
+					Reason: entry.SupersededBy,
+				},
+			})
+		case LifecycleBucketRetryCooldown:
+			entries = append(entries, BlockedBead{
+				Bead: entry.Bead,
+				Blocker: Blocker{
+					Kind:           BlockerKindRetryCooldown,
+					NextEligibleAt: entry.RetryAfter.UTC().Format(time.RFC3339),
+					LastStatus:     entry.LastStatus,
+					LastDetail:     entry.LastDetail,
+				},
+			})
 		}
-
-		if eligible, ok := b.Extra["execution-eligible"]; ok {
-			if val, isBool := eligible.(bool); isBool && !val {
-				reason, _ := b.Extra["execution-skip-reason"].(string)
-				entries = append(entries, BlockedBead{
-					Bead: b,
-					Blocker: Blocker{
-						Kind:   BlockerKindNotEligible,
-						Reason: reason,
-					},
-				})
-				continue
-			}
-		}
-		if sup, ok := b.Extra["superseded-by"]; ok {
-			if s, isStr := sup.(string); isStr && s != "" {
-				entries = append(entries, BlockedBead{
-					Bead: b,
-					Blocker: Blocker{
-						Kind:   BlockerKindSuperseded,
-						Reason: s,
-					},
-				})
-				continue
-			}
-		}
-
-		retryAfterRaw, ok := b.Extra["execute-loop-retry-after"]
-		if !ok {
-			continue
-		}
-		retryAfterStr, isStr := retryAfterRaw.(string)
-		if !isStr || retryAfterStr == "" {
-			continue
-		}
-		retryAfter, err := time.Parse(time.RFC3339, retryAfterStr)
-		if err != nil || !retryAfter.After(now) {
-			continue
-		}
-		blocker := Blocker{
-			Kind:           BlockerKindRetryCooldown,
-			NextEligibleAt: retryAfter.UTC().Format(time.RFC3339),
-		}
-		if v, ok := b.Extra["execute-loop-last-status"]; ok {
-			if s, ok := v.(string); ok {
-				blocker.LastStatus = s
-			}
-		}
-		if v, ok := b.Extra["execute-loop-last-detail"]; ok {
-			if s, ok := v.(string); ok {
-				blocker.LastDetail = s
-			}
-		}
-		entries = append(entries, BlockedBead{
-			Bead:    b,
-			Blocker: blocker,
-		})
 	}
 
 	sort.SliceStable(entries, func(i, j int) bool {
@@ -1813,15 +1773,6 @@ func (s *Store) BlockedAll() ([]BlockedBead, error) {
 		return entries[i].ID < entries[j].ID
 	})
 	return entries, nil
-}
-
-func depsSatisfied(b Bead, statusMap map[string]string) bool {
-	for _, depID := range b.DepIDs() {
-		if statusMap[depID] != StatusClosed {
-			return false
-		}
-	}
-	return true
 }
 
 func isOrdinaryEpicContainer(b Bead, childCount int) bool {
@@ -1908,10 +1859,6 @@ func (s *Store) Status() (*StatusCounts, error) {
 	if err != nil {
 		return nil, err
 	}
-	blocked, err := s.Blocked()
-	if err != nil {
-		return nil, err
-	}
 	workerReady, err := s.ReadyExecution()
 	if err != nil {
 		return nil, err
@@ -1946,18 +1893,34 @@ func (s *Store) Status() (*StatusCounts, error) {
 	}
 
 	counts := &StatusCounts{
-		Total:       len(all),
-		Ready:       len(ready),
-		Blocked:     len(blocked),
-		WorkerReady: len(workerReady),
-		NeedsHuman:  len(needsHuman),
+		Total:             len(all),
+		Ready:             len(ready),
+		WorkerReady:       len(workerReady),
+		NeedsHuman:        len(needsHuman),
+		OperatorAttention: len(needsHuman),
 	}
 	for _, b := range all {
 		switch b.Status {
 		case StatusOpen:
 			counts.Open++
+		case StatusInProgress:
+			counts.InProgress++
 		case StatusClosed:
 			counts.Closed++
+		case StatusBlocked:
+			counts.Blocked++
+		case StatusProposed:
+			counts.Proposed++
+		case StatusCancelled:
+			counts.Cancelled++
+		}
+	}
+	for _, entry := range s.classifyLifecycleQueue(beads, time.Now().UTC()) {
+		switch entry.Decision.Bucket {
+		case LifecycleBucketWaitingDependencies:
+			counts.DependencyWaiting++
+		case LifecycleBucketBlockedExternal:
+			counts.ExternalBlocked++
 		}
 	}
 	return counts, nil

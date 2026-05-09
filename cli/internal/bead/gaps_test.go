@@ -85,10 +85,13 @@ func TestReadyExecutionFilters(t *testing.T) {
 {"id":"hx-004","title":"No metadata","type":"task","status":"open","priority":2,"labels":[],"deps":[],"created":"2026-01-01T00:00:00Z","updated":"2026-01-01T00:00:00Z"}`
 	require.NoError(t, os.WriteFile(s.File, []byte(jsonl+"\n"), 0o644))
 
-	// Regular ready returns all 4
+	// Regular ready is now the lifecycle-derived ready bucket, so it excludes
+	// explicitly non-executable and superseded beads.
 	all, err := s.Ready()
 	require.NoError(t, err)
-	assert.Len(t, all, 4)
+	require.Len(t, all, 2)
+	assert.Equal(t, "hx-001", all[0].ID)
+	assert.Equal(t, "hx-004", all[1].ID)
 
 	// Execution-filtered ready excludes non-eligible and superseded
 	exec, err := s.ReadyExecution()

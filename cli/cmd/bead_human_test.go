@@ -35,6 +35,7 @@ func TestBeadNeedsHumanCommand_JSON(t *testing.T) {
 		ID:       "ddx-needs-human-json",
 		Title:    "Needs operator",
 		Priority: 0,
+		Status:   bead.StatusProposed,
 		Labels:   []string{bead.LabelNeedsHuman, "area:cli"},
 	}
 	plain := &bead.Bead{ID: "ddx-plain-json", Title: "Plain"}
@@ -65,6 +66,7 @@ func TestBeadNeedsHumanCommand_Text(t *testing.T) {
 		ID:       "ddx-needs-human-text",
 		Title:    "Needs text output",
 		Priority: 1,
+		Status:   bead.StatusProposed,
 		Labels:   []string{bead.LabelNeedsHuman},
 	}
 	_, factory, store := setupBeadHumanEnv(t, nh)
@@ -80,28 +82,29 @@ func TestBeadNeedsHumanCommand_Text(t *testing.T) {
 	assert.Contains(t, out, "operator decision required")
 }
 
-func TestBeadReadyExcludesNeedsHumanByDefault(t *testing.T) {
+func TestBeadReadyUsesProposedForOperatorAttention(t *testing.T) {
 	ready := &bead.Bead{ID: "ddx-ready-normal", Title: "Normal ready"}
-	nh := &bead.Bead{ID: "ddx-ready-human", Title: "Human ready", Labels: []string{bead.LabelNeedsHuman}}
-	_, factory, _ := setupBeadHumanEnv(t, ready, nh)
+	legacy := &bead.Bead{ID: "ddx-ready-legacy", Title: "Legacy label ready", Labels: []string{bead.LabelNeedsHuman}}
+	proposed := &bead.Bead{ID: "ddx-ready-human", Title: "Human ready", Status: bead.StatusProposed, Labels: []string{bead.LabelNeedsHuman}}
+	_, factory, _ := setupBeadHumanEnv(t, ready, legacy, proposed)
 
 	out, err := executeCommand(factory.NewRootCommand(), "bead", "ready", "--json")
 	require.NoError(t, err)
-	assertReadyIDs(t, out, []string{ready.ID})
+	assertReadyIDs(t, out, []string{ready.ID, legacy.ID})
 
 	out, err = executeCommand(factory.NewRootCommand(), "bead", "ready", "--include-human", "--json")
 	require.NoError(t, err)
-	assertReadyIDs(t, out, []string{ready.ID, nh.ID})
+	assertReadyIDs(t, out, []string{ready.ID, legacy.ID})
 }
 
-func TestBeadStatusIncludesNeedsHumanAndWorkerReady(t *testing.T) {
+func TestBeadStatusIncludesOperatorAttentionAndWorkerReady(t *testing.T) {
 	ready := &bead.Bead{ID: "ddx-status-ready", Title: "Ready"}
-	nh := &bead.Bead{ID: "ddx-status-human", Title: "Needs human", Labels: []string{bead.LabelNeedsHuman}}
+	nh := &bead.Bead{ID: "ddx-status-human", Title: "Needs human", Status: bead.StatusProposed, Labels: []string{bead.LabelNeedsHuman}}
 	_, factory, _ := setupBeadHumanEnv(t, ready, nh)
 
 	text, err := executeCommand(factory.NewRootCommand(), "bead", "status")
 	require.NoError(t, err)
-	assert.Contains(t, text, "Needs human:")
+	assert.Contains(t, text, "Operator attention:")
 	assert.Contains(t, text, "Worker ready:")
 
 	out, err := executeCommand(factory.NewRootCommand(), "bead", "status", "--json")
@@ -109,6 +112,7 @@ func TestBeadStatusIncludesNeedsHumanAndWorkerReady(t *testing.T) {
 	var counts map[string]any
 	require.NoError(t, json.Unmarshal([]byte(out), &counts))
 	assert.Equal(t, float64(1), counts["needs_human"])
+	assert.Equal(t, float64(1), counts["operator_attention"])
 	assert.Equal(t, float64(1), counts["worker_ready"])
 }
 
@@ -116,6 +120,7 @@ func TestBeadHumanResolveRetryRequiresNote(t *testing.T) {
 	nh := &bead.Bead{
 		ID:     "ddx-human-retry",
 		Title:  "Retry human bead",
+		Status: bead.StatusProposed,
 		Labels: []string{bead.LabelNeedsHuman},
 	}
 	_, factory, store := setupBeadHumanEnv(t, nh)
@@ -146,7 +151,7 @@ func TestBeadHumanResolveRetryRequiresNote(t *testing.T) {
 
 func TestBeadHumanResolveSplitObsoleteDefer(t *testing.T) {
 	t.Run("split requires children and links them", func(t *testing.T) {
-		parent := &bead.Bead{ID: "ddx-human-split", Title: "Split", Labels: []string{bead.LabelNeedsHuman}}
+		parent := &bead.Bead{ID: "ddx-human-split", Title: "Split", Status: bead.StatusProposed, Labels: []string{bead.LabelNeedsHuman}}
 		child := &bead.Bead{ID: "ddx-human-child", Title: "Child"}
 		_, factory, store := setupBeadHumanEnv(t, parent, child)
 
@@ -164,7 +169,7 @@ func TestBeadHumanResolveSplitObsoleteDefer(t *testing.T) {
 	})
 
 	t.Run("obsolete closes with evidence", func(t *testing.T) {
-		nh := &bead.Bead{ID: "ddx-human-obsolete", Title: "Obsolete", Labels: []string{bead.LabelNeedsHuman}}
+		nh := &bead.Bead{ID: "ddx-human-obsolete", Title: "Obsolete", Status: bead.StatusProposed, Labels: []string{bead.LabelNeedsHuman}}
 		_, factory, store := setupBeadHumanEnv(t, nh)
 
 		_, err := executeCommand(factory.NewRootCommand(), "bead", "human", "resolve", nh.ID, "--action", "obsolete", "--note", "superseded")
@@ -181,7 +186,7 @@ func TestBeadHumanResolveSplitObsoleteDefer(t *testing.T) {
 	})
 
 	t.Run("defer preserves needs-human with note event", func(t *testing.T) {
-		nh := &bead.Bead{ID: "ddx-human-defer", Title: "Defer", Labels: []string{bead.LabelNeedsHuman}}
+		nh := &bead.Bead{ID: "ddx-human-defer", Title: "Defer", Status: bead.StatusProposed, Labels: []string{bead.LabelNeedsHuman}}
 		_, factory, store := setupBeadHumanEnv(t, nh)
 
 		_, err := executeCommand(factory.NewRootCommand(), "bead", "human", "resolve", nh.ID, "--action", "defer", "--note", "wait for operator window")
@@ -189,7 +194,7 @@ func TestBeadHumanResolveSplitObsoleteDefer(t *testing.T) {
 
 		got, err := store.Get(nh.ID)
 		require.NoError(t, err)
-		assert.Equal(t, bead.StatusOpen, got.Status)
+		assert.Equal(t, bead.StatusProposed, got.Status)
 		assert.True(t, hasTestLabel(got.Labels, bead.LabelNeedsHuman))
 		events, err := store.Events(nh.ID)
 		require.NoError(t, err)

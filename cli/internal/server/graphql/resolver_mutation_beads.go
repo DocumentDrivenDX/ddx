@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"slices"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -27,7 +26,7 @@ func beadModelFromBead(b *bead.Bead) *Bead {
 		CreatedAt:  b.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:  b.UpdatedAt.UTC().Format(time.RFC3339),
 		Labels:     b.Labels,
-		NeedsHuman: slices.Contains(b.Labels, "needs_human"),
+		NeedsHuman: b.Status == bead.StatusProposed,
 	}
 	if v, ok := b.Extra["needs-human-reason"].(string); ok && v != "" {
 		gql.NeedsHumanReason = &v
@@ -242,8 +241,12 @@ func (r *mutationResolver) BeadHumanResolve(ctx context.Context, id string, acti
 	store := r.beadStore(ctx)
 
 	switch action {
-	case HumanResolveActionRetry, HumanResolveActionDefer:
-		if err := store.Update(id, func(b *bead.Bead) {
+	case HumanResolveActionRetry:
+		if err := store.UpdateWithLifecycleStatus(id, bead.StatusOpen, bead.LifecycleTransitionOptions{
+			Reason: "graphql human resolve retry",
+			Actor:  "operator",
+			Source: "graphql:beadHumanResolve",
+		}, func(b *bead.Bead) error {
 			var filtered []string
 			for _, l := range b.Labels {
 				if l != "needs_human" {
@@ -251,9 +254,13 @@ func (r *mutationResolver) BeadHumanResolve(ctx context.Context, id string, acti
 				}
 			}
 			b.Labels = filtered
+			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
+			return nil
 		}); err != nil {
 			return nil, err
 		}
+	case HumanResolveActionDefer:
+		// Leave status=proposed in the operator-attention lane.
 	case HumanResolveActionObsolete, HumanResolveActionSplit:
 		if err := store.Close(id); err != nil {
 			return nil, err

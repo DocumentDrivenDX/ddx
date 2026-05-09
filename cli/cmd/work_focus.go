@@ -56,13 +56,13 @@ func workerReadyDepthLabel(count int) string {
 
 // buildWorkFocusReport queries the store and returns a WorkFocusReport.
 func buildWorkFocusReport(store *bead.Store) (WorkFocusReport, error) {
-	// Collect needs_human beads (open, with needs_human label, any dep state).
+	// Collect operator-attention beads (status=proposed, any dep state).
 	needsHumanBeads, err := store.NeedsHuman()
 	if err != nil {
 		return WorkFocusReport{}, fmt.Errorf("work focus: needs_human query: %w", err)
 	}
 
-	// Build a set of needs_human IDs so we can exclude them from blocked section.
+	// Build a set of operator-attention IDs so we can exclude them from blocked section.
 	nhSet := make(map[string]bool, len(needsHumanBeads))
 	humanRequired := make([]WorkFocusBead, 0, len(needsHumanBeads))
 	for _, b := range needsHumanBeads {
@@ -83,7 +83,7 @@ func buildWorkFocusReport(store *bead.Store) (WorkFocusReport, error) {
 		humanRequired = append(humanRequired, item)
 	}
 
-	// Collect all blocked beads; exclude needs_human beads already captured above.
+	// Collect all blocked beads; exclude operator-attention beads already captured above.
 	allBlocked, err := store.BlockedAll()
 	if err != nil {
 		return WorkFocusReport{}, fmt.Errorf("work focus: blocked query: %w", err)

@@ -38,27 +38,29 @@ func TestNeedsHumanMetadataRoundTrip(t *testing.T) {
 	assert.Equal(t, meta.Summary, gotMeta.Summary)
 }
 
-func TestStoreNeedsHumanListsOpenNeedsHumanSorted(t *testing.T) {
+func TestStoreNeedsHumanListsProposedOperatorAttentionSorted(t *testing.T) {
 	s := newTestStore(t)
 
-	// Create a blocker so we can verify dep-blocked needs_human beads are included.
+	// Create a blocker so we can verify dep-waiting proposed beads are included.
 	blocker := &Bead{Title: "blocker", Priority: 0}
 	require.NoError(t, s.Create(blocker))
 
-	// needs_human beads at different priorities.
-	nh1 := &Bead{Title: "needs-human P1", Priority: 1, Labels: []string{LabelNeedsHuman}}
-	nh2 := &Bead{Title: "needs-human P0", Priority: 0, Labels: []string{LabelNeedsHuman}}
-	// Dep-blocked needs_human bead — should still appear.
-	nhDep := &Bead{Title: "needs-human dep-blocked P0", Priority: 0, Labels: []string{LabelNeedsHuman}}
-	// Open bead without needs_human — must be excluded.
+	// Proposed beads at different priorities.
+	nh1 := &Bead{Title: "operator attention P1", Priority: 1, Status: StatusProposed}
+	nh2 := &Bead{Title: "operator attention P0", Priority: 0, Status: StatusProposed}
+	// Dep-waiting proposed bead should still appear in the operator lane.
+	nhDep := &Bead{Title: "operator attention dep-waiting P0", Priority: 0, Status: StatusProposed}
+	// Open bead with legacy needs_human metadata must be excluded.
 	plain := &Bead{Title: "plain open"}
-	// Closed needs_human bead — must be excluded.
+	legacy := &Bead{Title: "legacy label only", Labels: []string{LabelNeedsHuman}}
+	// Closed needs_human bead must be excluded.
 	closed := &Bead{Title: "closed needs-human", Labels: []string{LabelNeedsHuman}}
 
 	require.NoError(t, s.Create(nh1))
 	require.NoError(t, s.Create(nh2))
 	require.NoError(t, s.Create(nhDep))
 	require.NoError(t, s.Create(plain))
+	require.NoError(t, s.Create(legacy))
 	require.NoError(t, s.Create(closed))
 	require.NoError(t, s.DepAdd(nhDep.ID, blocker.ID))
 	require.NoError(t, s.Close(closed.ID))
@@ -71,13 +73,14 @@ func TestStoreNeedsHumanListsOpenNeedsHumanSorted(t *testing.T) {
 		ids[i] = b.ID
 	}
 
-	// Must include all open needs_human beads regardless of dep status.
+	// Must include all proposed beads regardless of dep status.
 	assert.Contains(t, ids, nh1.ID)
 	assert.Contains(t, ids, nh2.ID)
 	assert.Contains(t, ids, nhDep.ID)
 
-	// Must exclude non-needs_human and closed beads.
+	// Must exclude non-proposed, legacy-label-only, and closed beads.
 	assert.NotContains(t, ids, plain.ID)
+	assert.NotContains(t, ids, legacy.ID)
 	assert.NotContains(t, ids, closed.ID)
 
 	// Must be sorted by queue order: P0 before P1.
@@ -93,34 +96,40 @@ func TestStoreNeedsHumanListsOpenNeedsHumanSorted(t *testing.T) {
 	assert.Less(t, p0idx, p1idx, "P0 needs_human bead should sort before P1")
 }
 
-func TestReadyExecutionSkipsNeedsHumanButReadyCanIncludeWhenRequested(t *testing.T) {
+func TestReadyExecutionSkipsProposedButIgnoresLegacyNeedsHumanLabel(t *testing.T) {
 	s := newTestStore(t)
 
-	// Open bead with needs_human label and no unsatisfied deps.
-	nh := &Bead{Title: "needs-human open", Labels: []string{LabelNeedsHuman}}
-	require.NoError(t, s.Create(nh))
+	legacy := &Bead{Title: "legacy needs-human open", Labels: []string{LabelNeedsHuman}}
+	proposed := &Bead{Title: "proposed attention", Status: StatusProposed}
+	require.NoError(t, s.Create(legacy))
+	require.NoError(t, s.Create(proposed))
 
-	// Worker drain must skip it.
+	// Worker drain ignores legacy lifecycle labels but skips proposed status.
 	executionReady, err := s.ReadyExecution()
 	require.NoError(t, err)
+	foundLegacy := false
 	for _, b := range executionReady {
-		assert.NotEqual(t, nh.ID, b.ID, "ReadyExecution must not include needs_human beads")
+		if b.ID == legacy.ID {
+			foundLegacy = true
+		}
+		assert.NotEqual(t, proposed.ID, b.ID, "ReadyExecution must not include proposed beads")
 	}
+	assert.True(t, foundLegacy, "ReadyExecution must not filter legacy needs_human labels")
 
-	// Dep-ready query must include it.
+	// Ready query has the same status-owned semantics.
 	depReady, err := s.Ready()
 	require.NoError(t, err)
 	found := false
 	for _, b := range depReady {
-		if b.ID == nh.ID {
+		if b.ID == legacy.ID {
 			found = true
 			break
 		}
 	}
-	assert.True(t, found, "Ready must include dep-satisfied needs_human beads when not filtering for execution")
+	assert.True(t, found, "Ready must include dep-satisfied legacy needs_human labels")
 }
 
-func TestStatusCountsIncludeNeedsHumanAndWorkerReady(t *testing.T) {
+func TestStatusCountsIncludeOperatorAttentionAndWorkerReady(t *testing.T) {
 	s := newTestStore(t)
 
 	// Two plain open beads with no deps → both dep-ready and worker-ready.
@@ -129,8 +138,8 @@ func TestStatusCountsIncludeNeedsHumanAndWorkerReady(t *testing.T) {
 	require.NoError(t, s.Create(a))
 	require.NoError(t, s.Create(b))
 
-	// One open needs_human bead with satisfied deps → dep-ready but NOT worker-ready.
-	nh := &Bead{Title: "needs-human", Labels: []string{LabelNeedsHuman}}
+	// One proposed bead with satisfied deps → operator-attention, not ready.
+	nh := &Bead{Title: "operator attention", Status: StatusProposed, Labels: []string{LabelNeedsHuman}}
 	require.NoError(t, s.Create(nh))
 
 	// One closed bead.
@@ -142,9 +151,11 @@ func TestStatusCountsIncludeNeedsHumanAndWorkerReady(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 4, counts.Total)
-	assert.Equal(t, 3, counts.Open)        // a, b, nh
+	assert.Equal(t, 2, counts.Open)        // a, b
+	assert.Equal(t, 1, counts.Proposed)    // nh
 	assert.Equal(t, 1, counts.Closed)      // c
-	assert.Equal(t, 3, counts.Ready)       // a, b, nh (all dep-satisfied open beads)
-	assert.Equal(t, 2, counts.WorkerReady) // a, b (needs_human excluded)
-	assert.Equal(t, 1, counts.NeedsHuman)  // nh
+	assert.Equal(t, 2, counts.Ready)       // a, b
+	assert.Equal(t, 2, counts.WorkerReady) // a, b
+	assert.Equal(t, 1, counts.NeedsHuman)  // compatibility alias for operator attention
+	assert.Equal(t, 1, counts.OperatorAttention)
 }

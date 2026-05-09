@@ -192,13 +192,19 @@ const (
 
 // StatusCounts holds aggregate counts for a bead store.
 type StatusCounts struct {
-	Open        int `json:"open"`
-	Closed      int `json:"closed"`
-	Blocked     int `json:"blocked"`
-	Ready       int `json:"ready"`
-	NeedsHuman  int `json:"needs_human"`
-	WorkerReady int `json:"worker_ready"`
-	Total       int `json:"total"`
+	Open              int `json:"open"`
+	InProgress        int `json:"in_progress"`
+	Closed            int `json:"closed"`
+	Blocked           int `json:"blocked"`
+	Proposed          int `json:"proposed"`
+	Cancelled         int `json:"cancelled"`
+	Ready             int `json:"ready"`
+	NeedsHuman        int `json:"needs_human"`
+	WorkerReady       int `json:"worker_ready"`
+	DependencyWaiting int `json:"dependency_waiting"`
+	ExternalBlocked   int `json:"external_blocked"`
+	OperatorAttention int `json:"operator_attention"`
+	Total             int `json:"total"`
 }
 
 // Blocker kinds surfaced through BlockedAll. These strings are part of the
@@ -208,6 +214,7 @@ const (
 	BlockerKindBlockedStatus      = "blocked-status"
 	BlockerKindRetryCooldown      = "retry-cooldown"
 	BlockerKindNeedsInvestigation = "needs-investigation"
+	BlockerKindOperatorAttention  = "operator-attention"
 	BlockerKindNotEligible        = "not-execution-eligible"
 	BlockerKindSuperseded         = "superseded"
 	BlockerKindEpicOnly           = "epic-only"

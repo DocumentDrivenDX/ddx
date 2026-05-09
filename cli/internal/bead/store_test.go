@@ -560,7 +560,8 @@ func TestStatusCounts(t *testing.T) {
 	assert.Equal(t, 2, counts.Open)
 	assert.Equal(t, 1, counts.Closed)
 	assert.Equal(t, 1, counts.Ready)   // A is ready (no deps)
-	assert.Equal(t, 1, counts.Blocked) // C is blocked by A
+	assert.Equal(t, 0, counts.Blocked) // persisted status=blocked, not dependency waiting
+	assert.Equal(t, 1, counts.DependencyWaiting)
 }
 
 func TestUnknownFieldPreservation(t *testing.T) {

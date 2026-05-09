@@ -192,11 +192,7 @@ func EvaluateLifecycleQueue(f LifecycleQueueFacts) LifecycleQueueDecision {
 			decision.Bucket = LifecycleBucketClaimed
 			return decision
 		}
-		decision.Bucket = LifecycleBucketReady
-		decision.WorkerEligible = decision.DependenciesSatisfied
-		if !decision.DependenciesSatisfied {
-			decision.Bucket = LifecycleBucketWaitingDependencies
-		}
+		decision = evaluateOpenLifecycleQueue(f, decision)
 	case StatusBlocked:
 		decision.Bucket = LifecycleBucketBlockedExternal
 		decision.ExternalBlockerReason = strings.TrimSpace(f.ExternalBlockerReason)

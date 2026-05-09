@@ -23,7 +23,7 @@ func setupWorkFocusEnv(t *testing.T, beads ...*bead.Bead) *TestEnvironment {
 	return env
 }
 
-// TestWorkFocusReportsInterventionQueue verifies that needs_human and
+// TestWorkFocusReportsInterventionQueue verifies that proposed/operator-attention and
 // review-blocked beads appear in human_required, and dep-blocked beads appear
 // in blocked_or_planning.
 func TestWorkFocusReportsInterventionQueue(t *testing.T) {
@@ -35,6 +35,7 @@ func TestWorkFocusReportsInterventionQueue(t *testing.T) {
 	nhBead := &bead.Bead{
 		ID:     "ddx-focus-nh",
 		Title:  "Needs human attention",
+		Status: bead.StatusProposed,
 		Labels: []string{bead.LabelNeedsHuman},
 		Extra: map[string]any{
 			bead.ExtraNeedsHumanReason: "review returned terminal BLOCK",
@@ -93,6 +94,7 @@ func TestWorkFocusOmitsWorkerReadyBeadsByDefault(t *testing.T) {
 	nhBead := &bead.Bead{
 		ID:     "ddx-focus-nh2",
 		Title:  "Needs human",
+		Status: bead.StatusProposed,
 		Labels: []string{bead.LabelNeedsHuman},
 	}
 

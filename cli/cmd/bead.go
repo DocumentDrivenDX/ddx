@@ -927,20 +927,16 @@ func (f *CommandFactory) newBeadListCommand() *cobra.Command {
 func (f *CommandFactory) newBeadReadyCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "ready",
-		Short: "List beads ready for work (no unclosed deps)",
-		Long: `List beads whose dependencies are all closed, sorted by priority.
+		Short: "List beads ready for work",
+		Long: `List beads in the lifecycle-derived ready bucket, sorted by priority.
 
-By default this is the dependency-ready set: any open bead with no blocking
-deps, including epics and beads on retry cooldown. 'ddx work' operates on a
-narrower "execution-ready" subset — use --execution to see exactly what
-'ddx work' would pick from, or the reverse: if 'ddx bead ready' shows work
-but 'ddx work' reports none, the diff is epics, cooldown-waiting beads,
-beads with execution-eligible=false, and superseded beads.`,
+Ready work has status=open, closed dependencies, and no active cooldown,
+external blocker, supersession, ineligible marker, or epic-container exclusion.
+Use --execution to include stale in_progress claims that ddx work can reclaim.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
 			execution, _ := cmd.Flags().GetBool("execution")
-			includeHuman, _ := cmd.Flags().GetBool("include-human")
 
 			var beads []bead.Bead
 			var err error
@@ -954,9 +950,6 @@ beads with execution-eligible=false, and superseded beads.`,
 			}
 			if beads == nil {
 				beads = []bead.Bead{}
-			}
-			if !execution && !includeHuman {
-				beads = filterNeedsHumanBeads(beads)
 			}
 
 			asJSON, _ := cmd.Flags().GetBool("json")
@@ -979,7 +972,7 @@ beads with execution-eligible=false, and superseded beads.`,
 	}
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	cmd.Flags().Bool("execution", false, "Filter to the execution-ready subset (what ddx work picks from): open, deps-closed, not an epic, execution-eligible, not superseded, not on retry cooldown")
-	cmd.Flags().Bool("include-human", false, "Include needs_human beads in the dependency-ready output")
+	cmd.Flags().Bool("include-human", false, "Deprecated no-op; operator-attention work is status=proposed and excluded from ready output")
 	return cmd
 }
 
@@ -1154,26 +1147,6 @@ func needsHumanRow(b bead.Bead) beadNeedsHumanRow {
 	}
 }
 
-func filterNeedsHumanBeads(beads []bead.Bead) []bead.Bead {
-	filtered := make([]bead.Bead, 0, len(beads))
-	for _, b := range beads {
-		if hasBeadLabel(b, bead.LabelNeedsHuman) {
-			continue
-		}
-		filtered = append(filtered, b)
-	}
-	return filtered
-}
-
-func hasBeadLabel(b bead.Bead, label string) bool {
-	for _, existing := range b.Labels {
-		if existing == label {
-			return true
-		}
-	}
-	return false
-}
-
 func removeBeadLabel(b *bead.Bead, label string) {
 	if b == nil {
 		return
@@ -1264,7 +1237,7 @@ func (f *CommandFactory) newBeadBlockedCommand() *cobra.Command {
 				case bead.BlockerKindRetryCooldown:
 					fmt.Fprintf(cmd.OutOrStdout(), "%s  P%d  %s  retry-after: %s\n",
 						e.ID, e.Priority, e.Title, e.Blocker.NextEligibleAt)
-				case bead.BlockerKindNeedsInvestigation, bead.BlockerKindNotEligible, bead.BlockerKindBlockedStatus, bead.BlockerKindSuperseded, bead.BlockerKindEpicOnly:
+				case bead.BlockerKindNeedsInvestigation, bead.BlockerKindOperatorAttention, bead.BlockerKindNotEligible, bead.BlockerKindBlockedStatus, bead.BlockerKindSuperseded, bead.BlockerKindEpicOnly:
 					fmt.Fprintf(cmd.OutOrStdout(), "%s  P%d  %s  %s: %s\n",
 						e.ID, e.Priority, e.Title, e.Blocker.Kind, e.Blocker.Reason)
 				default:
@@ -1358,13 +1331,18 @@ func (f *CommandFactory) newBeadStatusCommand() *cobra.Command {
 			}
 
 			out := cmd.OutOrStdout()
-			fmt.Fprintf(out, "Total:   %d\n", counts.Total)
-			fmt.Fprintf(out, "Open:    %d\n", counts.Open)
-			fmt.Fprintf(out, "Closed:  %d\n", counts.Closed)
-			fmt.Fprintf(out, "Ready:   %d\n", counts.Ready)
-			fmt.Fprintf(out, "Blocked: %d\n", counts.Blocked)
-			fmt.Fprintf(out, "Needs human:  %d\n", counts.NeedsHuman)
-			fmt.Fprintf(out, "Worker ready: %d\n", counts.WorkerReady)
+			fmt.Fprintf(out, "Total:              %d\n", counts.Total)
+			fmt.Fprintf(out, "Open:               %d\n", counts.Open)
+			fmt.Fprintf(out, "In progress:        %d\n", counts.InProgress)
+			fmt.Fprintf(out, "Closed:             %d\n", counts.Closed)
+			fmt.Fprintf(out, "Blocked:            %d\n", counts.Blocked)
+			fmt.Fprintf(out, "Proposed:           %d\n", counts.Proposed)
+			fmt.Fprintf(out, "Cancelled:          %d\n", counts.Cancelled)
+			fmt.Fprintf(out, "Ready:              %d\n", counts.Ready)
+			fmt.Fprintf(out, "Worker ready:       %d\n", counts.WorkerReady)
+			fmt.Fprintf(out, "Dependency waiting: %d\n", counts.DependencyWaiting)
+			fmt.Fprintf(out, "External blocked:   %d\n", counts.ExternalBlocked)
+			fmt.Fprintf(out, "Operator attention: %d\n", counts.OperatorAttention)
 			return nil
 		},
 	}

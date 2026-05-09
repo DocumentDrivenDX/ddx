@@ -2313,7 +2313,7 @@ type Query {
     search: String
   ): BeadConnection!
 
-  """List open beads whose dependencies are all closed (maps to GET /api/beads/ready)"""
+  """List beads in the lifecycle-derived ready bucket (maps to GET /api/beads/ready)"""
   beadsReady(
     """Return the first N edges after the cursor"""
     first: Int,
@@ -2325,7 +2325,7 @@ type Query {
     before: String
   ): BeadConnection!
 
-  """List open beads with unclosed dependencies (maps to GET /api/beads/blocked)"""
+  """List open beads in the derived dependency-waiting bucket (maps to GET /api/beads/blocked)"""
   beadsBlocked(
     """Return the first N edges after the cursor"""
     first: Int,

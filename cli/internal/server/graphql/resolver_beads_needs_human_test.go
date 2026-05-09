@@ -11,7 +11,7 @@ import (
 )
 
 // TestGraphQLBeadsNeedsHumanQuery verifies that beadsNeedsHuman returns only
-// needs_human-labeled open beads and that needsHuman/needsHumanReason fields
+// proposed operator-attention beads and that needsHuman/needsHumanReason fields
 // are populated from the bead store's Extra metadata.
 func TestGraphQLBeadsNeedsHumanQuery(t *testing.T) {
 	workDir, store := setupIntegrationDir(t)
@@ -24,7 +24,7 @@ func TestGraphQLBeadsNeedsHumanQuery(t *testing.T) {
 
 	nh := &bead.Bead{
 		Title:  "Needs human bead",
-		Status: bead.StatusOpen,
+		Status: bead.StatusProposed,
 		Labels: []string{"needs_human"},
 	}
 	if err := store.Create(nh); err != nil {
@@ -95,6 +95,75 @@ func TestGraphQLBeadsNeedsHumanQuery(t *testing.T) {
 	}
 }
 
+func TestGraphQLBeadsReadyAndBlockedUseLifecycleBuckets(t *testing.T) {
+	workDir, store := setupIntegrationDir(t)
+
+	ready := &bead.Bead{Title: "Ready bead", Status: bead.StatusOpen}
+	dep := &bead.Bead{Title: "Dependency bead", Status: bead.StatusOpen}
+	waiting := &bead.Bead{Title: "Waiting bead", Status: bead.StatusOpen}
+	proposed := &bead.Bead{Title: "Operator attention", Status: bead.StatusProposed}
+	for _, b := range []*bead.Bead{ready, dep, waiting, proposed} {
+		if err := store.Create(b); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := store.DepAdd(waiting.ID, dep.ID); err != nil {
+		t.Fatal(err)
+	}
+
+	state := newTestStateProvider(workDir, store)
+	h := newGQLHandler(state, workDir, nil)
+
+	resp := gqlPost(t, h, `{
+		beadsReady(first: 10) { edges { node { id status needsHuman } } totalCount }
+		beadsBlocked(first: 10) { edges { node { id status needsHuman } } totalCount }
+	}`)
+	var data struct {
+		BeadsReady struct {
+			Edges []struct {
+				Node struct {
+					ID         string `json:"id"`
+					Status     string `json:"status"`
+					NeedsHuman bool   `json:"needsHuman"`
+				} `json:"node"`
+			} `json:"edges"`
+			TotalCount int `json:"totalCount"`
+		} `json:"beadsReady"`
+		BeadsBlocked struct {
+			Edges []struct {
+				Node struct {
+					ID         string `json:"id"`
+					Status     string `json:"status"`
+					NeedsHuman bool   `json:"needsHuman"`
+				} `json:"node"`
+			} `json:"edges"`
+			TotalCount int `json:"totalCount"`
+		} `json:"beadsBlocked"`
+	}
+	if err := json.Unmarshal(resp["data"], &data); err != nil {
+		t.Fatalf("parse data: %v", err)
+	}
+	if data.BeadsReady.TotalCount != 2 {
+		t.Fatalf("ready totalCount: want 2, got %d", data.BeadsReady.TotalCount)
+	}
+	readyIDs := map[string]bool{}
+	for _, edge := range data.BeadsReady.Edges {
+		readyIDs[edge.Node.ID] = true
+		if edge.Node.ID == proposed.ID && edge.Node.NeedsHuman {
+			t.Fatal("proposed bead must not be in ready output")
+		}
+	}
+	if !readyIDs[ready.ID] || !readyIDs[dep.ID] || readyIDs[waiting.ID] || readyIDs[proposed.ID] {
+		t.Fatalf("unexpected ready IDs: %#v", readyIDs)
+	}
+	if data.BeadsBlocked.TotalCount != 1 {
+		t.Fatalf("blocked totalCount: want 1, got %d", data.BeadsBlocked.TotalCount)
+	}
+	if len(data.BeadsBlocked.Edges) != 1 || data.BeadsBlocked.Edges[0].Node.ID != waiting.ID {
+		t.Fatalf("blocked edge: want %s, got %+v", waiting.ID, data.BeadsBlocked.Edges)
+	}
+}
+
 // TestGraphQLBeadHumanResolveRetry verifies that beadHumanResolve with action
 // retry removes the needs_human label and appends a human-resolution event.
 func TestGraphQLBeadHumanResolveRetry(t *testing.T) {
@@ -102,7 +171,7 @@ func TestGraphQLBeadHumanResolveRetry(t *testing.T) {
 
 	nh := &bead.Bead{
 		Title:  "Needs human bead",
-		Status: bead.StatusOpen,
+		Status: bead.StatusProposed,
 		Labels: []string{"needs_human"},
 	}
 	if err := store.Create(nh); err != nil {
@@ -168,7 +237,7 @@ func TestGraphQLBeadHumanResolveRequiresNote(t *testing.T) {
 
 	nh := &bead.Bead{
 		Title:  "Needs human bead",
-		Status: bead.StatusOpen,
+		Status: bead.StatusProposed,
 		Labels: []string{"needs_human"},
 	}
 	if err := store.Create(nh); err != nil {
@@ -205,14 +274,14 @@ func TestGraphQLBeadHumanResolveRequiresNote(t *testing.T) {
 func TestGraphQLBeadStatusCountsNeedsHuman(t *testing.T) {
 	workDir, store := setupIntegrationDir(t)
 
-	// 2 ordinary open, 1 needs_human, 1 closed.
+	// 2 ordinary open, 1 proposed operator-attention, 1 closed.
 	for i := 0; i < 2; i++ {
 		b := &bead.Bead{Title: "Open bead", Status: bead.StatusOpen}
 		if err := store.Create(b); err != nil {
 			t.Fatal(err)
 		}
 	}
-	nh := &bead.Bead{Title: "Needs human", Status: bead.StatusOpen, Labels: []string{"needs_human"}}
+	nh := &bead.Bead{Title: "Needs human", Status: bead.StatusProposed, Labels: []string{"needs_human"}}
 	if err := store.Create(nh); err != nil {
 		t.Fatal(err)
 	}

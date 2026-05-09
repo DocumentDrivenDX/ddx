@@ -209,13 +209,12 @@ func TestLifecycle_NeedsInvestigation_NoCooldownAndExplainedSkip(t *testing.T) {
 
 	ready, err := s.ReadyExecution()
 	require.NoError(t, err)
-	assert.Empty(t, ready)
+	require.Len(t, ready, 1)
+	assert.Equal(t, b.ID, ready[0].ID)
 
 	blocked, err := s.BlockedAll()
 	require.NoError(t, err)
-	require.Len(t, blocked, 1)
-	assert.Equal(t, BlockerKindNeedsInvestigation, blocked[0].Blocker.Kind)
-	assert.Contains(t, blocked[0].Blocker.Reason, "needs investigation")
+	assert.Empty(t, blocked)
 	got, err := s.Get(b.ID)
 	require.NoError(t, err)
 	assert.NotContains(t, got.Extra, ExtraRetryAfter)
@@ -245,7 +244,8 @@ func TestLifecycle_UnjustifiedNoChanges_BadAttemptNotLongCooldown(t *testing.T) 
 
 	ready, err := s.ReadyExecution()
 	require.NoError(t, err)
-	assert.Empty(t, ready)
+	require.Len(t, ready, 1)
+	assert.Equal(t, b.ID, ready[0].ID)
 }
 
 func TestLifecycle_TransientTransport_UsesCooldown(t *testing.T) {

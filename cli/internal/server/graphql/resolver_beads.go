@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
-	"slices"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -111,6 +110,69 @@ func beadConnectionFromSnapshots(snaps []BeadSnapshot, first *int, after *string
 	}
 }
 
+func beadConnectionFromBeads(beads []bead.Bead, first *int, after *string, last *int, before *string) *BeadConnection {
+	all := make([]*BeadEdge, len(beads))
+	for i := range beads {
+		all[i] = &BeadEdge{
+			Node:   beadModelFromBead(&beads[i]),
+			Cursor: encodeStableCursor(beads[i].ID),
+		}
+	}
+
+	startIdx := 0
+	if after != nil {
+		if afterID, ok := decodeStableCursor(*after); ok {
+			for i, e := range all {
+				if e.Node.ID == afterID {
+					startIdx = i + 1
+					break
+				}
+			}
+		}
+	}
+	endIdx := len(all)
+	if before != nil {
+		if beforeID, ok := decodeStableCursor(*before); ok {
+			for i, e := range all {
+				if e.Node.ID == beforeID {
+					endIdx = i
+					break
+				}
+			}
+		}
+	}
+	if startIdx > endIdx {
+		startIdx = endIdx
+	}
+
+	slice := all[startIdx:endIdx]
+	truncatedByFirst := false
+	truncatedByLast := false
+	if first != nil && *first >= 0 && *first < len(slice) {
+		slice = slice[:*first]
+		truncatedByFirst = true
+	}
+	if last != nil && *last >= 0 && *last < len(slice) {
+		slice = slice[len(slice)-*last:]
+		truncatedByLast = true
+	}
+
+	pageInfo := &PageInfo{
+		HasPreviousPage: startIdx > 0 || truncatedByLast,
+		HasNextPage:     endIdx < len(all) || truncatedByFirst,
+	}
+	if len(slice) > 0 {
+		pageInfo.StartCursor = &slice[0].Cursor
+		pageInfo.EndCursor = &slice[len(slice)-1].Cursor
+	}
+
+	return &BeadConnection{
+		Edges:      slice,
+		PageInfo:   pageInfo,
+		TotalCount: len(all),
+	}
+}
+
 func beadFromSnapshot(s BeadSnapshot) *Bead {
 	b := &Bead{
 		ID:         s.ID,
@@ -121,7 +183,7 @@ func beadFromSnapshot(s BeadSnapshot) *Bead {
 		CreatedAt:  s.CreatedAt.UTC().Format(time.RFC3339),
 		UpdatedAt:  s.UpdatedAt.UTC().Format(time.RFC3339),
 		Labels:     s.Labels,
-		NeedsHuman: slices.Contains(s.Labels, "needs_human"),
+		NeedsHuman: s.Status == bead.StatusProposed,
 	}
 	if s.ProjectID != "" {
 		b.ProjectID = &s.ProjectID
@@ -164,13 +226,39 @@ func beadFromSnapshot(s BeadSnapshot) *Bead {
 	return b
 }
 
+// BeadsReady is the resolver for the beadsReady field.
+func (r *queryResolver) BeadsReady(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error) {
+	if r.workingDir(ctx) == "" {
+		return nil, fmt.Errorf("working directory not configured")
+	}
+	store := bead.NewStore(filepath.Join(r.workingDir(ctx), ".ddx"))
+	beads, err := store.Ready()
+	if err != nil {
+		return nil, err
+	}
+	return beadConnectionFromBeads(beads, first, after, last, before), nil
+}
+
+// BeadsBlocked is the resolver for the beadsBlocked field.
+func (r *queryResolver) BeadsBlocked(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error) {
+	if r.workingDir(ctx) == "" {
+		return nil, fmt.Errorf("working directory not configured")
+	}
+	store := bead.NewStore(filepath.Join(r.workingDir(ctx), ".ddx"))
+	beads, err := store.Blocked()
+	if err != nil {
+		return nil, err
+	}
+	return beadConnectionFromBeads(beads, first, after, last, before), nil
+}
+
 // BeadsNeedsHuman is the resolver for the beadsNeedsHuman field.
 func (r *queryResolver) BeadsNeedsHuman(ctx context.Context, first *int, after *string, last *int, before *string) (*BeadConnection, error) {
 	if r.workingDir(ctx) == "" {
 		return nil, fmt.Errorf("working directory not configured")
 	}
 	store := bead.NewStore(filepath.Join(r.workingDir(ctx), ".ddx"))
-	beads, err := store.List("open", "needs_human", nil)
+	beads, err := store.NeedsHuman()
 	if err != nil {
 		return nil, err
 	}
@@ -247,21 +335,13 @@ func (r *queryResolver) BeadsStatus(ctx context.Context) (*BeadStatusCounts, err
 	if err != nil {
 		return nil, err
 	}
-	nhBeads, err := store.List("open", "needs_human", nil)
-	if err != nil {
-		return nil, err
-	}
-	wBeads, err := store.ReadyExecution()
-	if err != nil {
-		return nil, err
-	}
 	return &BeadStatusCounts{
 		Open:        counts.Open,
 		Closed:      counts.Closed,
 		Blocked:     counts.Blocked,
 		Ready:       counts.Ready,
 		Total:       counts.Total,
-		NeedsHuman:  len(nhBeads),
-		WorkerReady: len(wBeads),
+		NeedsHuman:  counts.NeedsHuman,
+		WorkerReady: counts.WorkerReady,
 	}, nil
 }
