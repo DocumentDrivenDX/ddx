@@ -5,6 +5,9 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main ]
+  schedule:
+    - cron: '0 4 * * 1'  # Weekly on Monday at 04:00 UTC
+  workflow_dispatch:
 
 # Minimal permissions by default
 permissions:
@@ -255,3 +258,23 @@ jobs:
     - name: Run frontend Playwright E2E tests
       working-directory: cli/internal/server/frontend
       run: bun run test:e2e
+
+  # Perf tests — non-gating; run weekly on schedule or on manual dispatch only
+  perf:
+    name: Perf Tests
+    runs-on: ubuntu-latest
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version-file: 'cli/go.mod'
+        cache-dependency-path: cli/go.sum
+
+    - name: Run perf tests
+      run: make test-perf
