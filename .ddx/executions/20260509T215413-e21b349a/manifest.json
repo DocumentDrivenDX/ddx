@@ -1,0 +1,51 @@
+{
+  "attempt_id": "20260509T215413-e21b349a",
+  "bead_id": "ddx-150758e7",
+  "base_rev": "bcc41f3a77c00618c1199941e858aff66cc6e7c5",
+  "created_at": "2026-05-09T21:54:20.014657784Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-150758e7",
+    "title": "tests: move internal/server/perf behind //go:build perf tag; add make test-perf target",
+    "description": "PROBLEM\n  The cli/internal/server/perf package contains performance benchmarks\n  that run for ~80 seconds during the default lefthook pre-push\n  full-tests step. These are perf tests by intent, not unit tests; they\n  should not block every push. Today they have no build tag or skip\n  gate, so they run on every full-test invocation.\n\nCURRENT STATE\n  - cli/internal/server/perf/ contains benchmark tests (e.g.\n    TestGraphQLPerfMatrix_Baseline) that take ~80s when not skipped.\n  - The package has a testing.Short() skip in some tests but not all,\n    and pre-push runs without -short.\n  - Makefile has a bench-graphql target (lines ~121-127) that writes a\n    Markdown baseline report when DDX_BENCH_REPORT_DIR is set, but it is\n    not invoked from CI today.\n  - .github/workflows/ci.yml does not invoke `make bench-graphql` or\n    otherwise run the perf package as a dedicated step.\n\nPROPOSED FIX\n  - Add `//go:build perf` tag to every test file in\n    cli/internal/server/perf/. Files to edit (run `ls\n    cli/internal/server/perf/*_test.go` and tag each).\n  - Update Makefile:\n      a. Add a `test-perf` target that runs `go test -tags=perf\n         ./internal/server/perf/...` with an appropriate timeout (e.g.\n         5 minutes).\n      b. Document that `make test` excludes perf; `make test-perf` runs\n         them.\n  - Update .github/workflows/ci.yml:\n      a. Add a new step or job that runs `make test-perf` on a schedule\n         OR on pull requests touching cli/internal/server/perf/. Don't\n         run on every PR by default; perf is non-gating.\n  - Update lefthook.yml ci block (or full-tests step) only if it\n    explicitly references perf (it doesn't appear to).\n  - Verify default `cd cli \u0026\u0026 go test ./...` no longer pulls perf tests\n    in (they should be excluded by the build tag).\n\nNON-SCOPE\n  - Other test packages outside cli/internal/server/perf/ (covered by\n    sister beads).\n  - Designing a perf-regression dashboard (separate concern; this bead\n    just gates the slow tests behind a tag).\n  - Removing the perf tests; they remain valuable, just not on the\n    default path.\n\nINTERSECTIONS\n  - Sister bead: \"lefthook pre-push: add -short gate\" (independent — the\n    -short flip and the perf-tag move both reduce pre-push time, by\n    different mechanisms; they compose).",
+    "acceptance": "1. Every *_test.go file in cli/internal/server/perf/ has a //go:build perf tag at the top.\n2. cd cli \u0026\u0026 go test ./... (no -tags=perf) reports zero tests run from cli/internal/server/perf/...\n3. cd cli \u0026\u0026 go test -tags=perf ./internal/server/perf/... runs the perf tests as before.\n4. Makefile contains a test-perf target invoking the tagged build.\n5. .github/workflows/ci.yml contains a step or job that invokes make test-perf on an appropriate trigger (schedule, perf-touching PR, or manual workflow dispatch).\n6. cd cli \u0026\u0026 go test ./... green.\n7. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "area:tests",
+      "area:server",
+      "kind:refactor",
+      "perf"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-09T21:53:09Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3533406",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-09T21:54:13.860396706Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-09T21:53:09.688433446Z",
+      "queue-rank": "5"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260509T215413-e21b349a",
+    "prompt": ".ddx/executions/20260509T215413-e21b349a/prompt.md",
+    "manifest": ".ddx/executions/20260509T215413-e21b349a/manifest.json",
+    "result": ".ddx/executions/20260509T215413-e21b349a/result.json",
+    "checks": ".ddx/executions/20260509T215413-e21b349a/checks.json",
+    "usage": ".ddx/executions/20260509T215413-e21b349a/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-150758e7-20260509T215413-e21b349a"
+  },
+  "prompt_sha": "1c5b527f473ee67eed635104061afecdc884db54f16962ea5a8d9d9b9108c13a"
+}
