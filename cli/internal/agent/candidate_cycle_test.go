@@ -332,6 +332,114 @@ func TestCandidateChecks_ErrorStopsBeforeLand(t *testing.T) {
 	assert.Equal(t, "check runner crashed", body.Detail)
 }
 
+func TestPreLandReview_ApprovesThenLands(t *testing.T) {
+	refStore := &inMemoryCandidateRefStore{}
+	reviewerCalled := false
+	landerCalled := false
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return CandidateResult{
+				Report: ExecuteBeadReport{
+					BeadID:    beadID,
+					AttemptID: "attempt-review-001",
+					Status:    ExecuteBeadStatusSuccess,
+					BaseRev:   "base-rev",
+					ResultRev: "candidate-rev",
+				},
+				WorktreePath: "/attempt/worktree",
+			}, nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, projectRoot string, candidate CandidateResult) (CandidateReviewResult, error) {
+			reviewerCalled = true
+			assert.Equal(t, "/project", projectRoot)
+			assert.Equal(t, "/attempt/worktree", candidate.WorktreePath)
+			return CandidateReviewResult{Verdict: "APPROVE", Rationale: "ready to land"}, nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			landerCalled = true
+			assert.Equal(t, "APPROVE", candidate.Report.ReviewVerdict)
+			assert.Equal(t, "ready to land", candidate.Report.ReviewRationale)
+			return candidate.Report, nil
+		}),
+		RefStore:    refStore,
+		ProjectRoot: "/project",
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-review-bead")
+	require.NoError(t, err)
+	assert.True(t, reviewerCalled)
+	assert.True(t, landerCalled)
+	assert.True(t, result.Landed)
+	assert.Equal(t, ExecuteBeadStatusSuccess, result.Report.Status)
+	assert.Equal(t, []string{"refs/ddx/iterations/attempt-review-001/0"}, refStore.unpinned)
+}
+
+func TestPreLandReview_RequestChangesPreventsLand(t *testing.T) {
+	tests := []struct {
+		name       string
+		review     CandidateReviewResult
+		reviewErr  error
+		wantStatus string
+		wantDetail string
+	}{
+		{
+			name:       "request changes",
+			review:     CandidateReviewResult{Verdict: "REQUEST_CHANGES", Rationale: "missing AC evidence"},
+			wantStatus: ExecuteBeadStatusReviewRequestChanges,
+			wantDetail: "pre-land review: REQUEST_CHANGES",
+		},
+		{
+			name:       "block",
+			review:     CandidateReviewResult{Verdict: "BLOCK", Rationale: "unsafe scope"},
+			wantStatus: ExecuteBeadStatusReviewBlock,
+			wantDetail: "pre-land review: BLOCK",
+		},
+		{
+			name:       "review error",
+			reviewErr:  errors.New("review provider empty"),
+			wantStatus: ExecuteBeadStatusReviewMalfunction,
+			wantDetail: "pre-land review: review provider empty",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			refStore := &inMemoryCandidateRefStore{}
+			landerCalled := false
+			coord := &AttemptCycleCoordinator{
+				Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+					return CandidateResult{
+						Report: ExecuteBeadReport{
+							BeadID:    beadID,
+							AttemptID: "attempt-review-002",
+							Status:    ExecuteBeadStatusSuccess,
+							BaseRev:   "base-rev",
+							ResultRev: "candidate-rev",
+						},
+					}, nil
+				}),
+				Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, _ CandidateResult) (CandidateReviewResult, error) {
+					return tc.review, tc.reviewErr
+				}),
+				Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+					landerCalled = true
+					return candidate.Report, nil
+				}),
+				RefStore:    refStore,
+				ProjectRoot: "/project",
+			}
+
+			result, err := coord.Run(context.Background(), "ddx-review-bead")
+			require.NoError(t, err)
+			assert.False(t, result.Landed)
+			assert.False(t, landerCalled)
+			assert.Equal(t, tc.wantStatus, result.Report.Status)
+			assert.Equal(t, tc.wantDetail, result.Report.Detail)
+			assert.Empty(t, refStore.unpinned, "rejected review candidates must retain their ref")
+		})
+	}
+}
+
 type beadEventWithBody struct {
 	kind string
 	body string

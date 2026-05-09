@@ -749,15 +749,65 @@ func reviewPairingDegradedBody(impl ImplementerRouting, reviewerHarness, reviewe
 
 // ReviewBead implements BeadReviewer.
 func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev string, impl ImplementerRouting) (*ReviewResult, error) {
-	b, err := r.BeadStore.Get(beadID)
-	if err != nil {
-		return nil, fmt.Errorf("reviewer: get bead %s: %w", beadID, err)
-	}
-
 	// Fetch the git diff for the commit being reviewed.
 	diff, err := r.gitShow(resultRev)
 	if err != nil {
 		return nil, fmt.Errorf("reviewer: git show %s: %w", resultRev, err)
+	}
+	return r.reviewBeadWithDiff(ctx, beadID, resultRev, impl, diff, r.ProjectRoot)
+}
+
+// Review implements CandidateReviewer for the pre-land candidate-cycle path.
+// It reviews the full base_rev..candidate_rev range and dispatches the reviewer
+// inside the still-live attempt worktree.
+func (r *DefaultBeadReviewer) Review(ctx context.Context, projectRoot string, candidate CandidateResult) (CandidateReviewResult, error) {
+	reviewer := *r
+	if reviewer.ProjectRoot == "" {
+		reviewer.ProjectRoot = projectRoot
+	}
+	if reviewer.ProjectRoot == "" {
+		return CandidateReviewResult{}, fmt.Errorf("candidate reviewer: project_root required")
+	}
+	beadID := candidate.Report.BeadID
+	if beadID == "" {
+		return CandidateReviewResult{}, fmt.Errorf("candidate reviewer: bead_id required")
+	}
+	diff, err := reviewer.gitDiff(candidate.Report.BaseRev, candidate.Report.ResultRev)
+	if err != nil {
+		return CandidateReviewResult{}, fmt.Errorf("candidate reviewer: git diff %s..%s: %w", candidate.Report.BaseRev, candidate.Report.ResultRev, err)
+	}
+	workDir := candidate.WorktreePath
+	if workDir == "" {
+		workDir = reviewer.ProjectRoot
+	}
+	impl := ImplementerRouting{
+		Harness:     candidate.Report.Harness,
+		Provider:    candidate.Report.Provider,
+		Model:       candidate.Report.Model,
+		ActualPower: candidate.Report.ActualPower,
+		Correlation: map[string]string{
+			"bead_id":       beadID,
+			"attempt_id":    candidate.Report.AttemptID,
+			"session_id":    candidate.Report.SessionID,
+			"result_rev":    candidate.Report.ResultRev,
+			"candidate_ref": candidate.Report.CandidateRef,
+			"cycle_index":   fmt.Sprintf("%d", candidate.CycleIndex),
+		},
+	}
+	review, err := reviewer.reviewBeadWithDiff(ctx, beadID, candidate.Report.ResultRev, impl, diff, workDir)
+	if review == nil {
+		return CandidateReviewResult{}, err
+	}
+	return CandidateReviewResult{
+		Verdict:   string(review.Verdict),
+		Rationale: review.Rationale,
+	}, err
+}
+
+func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, resultRev string, impl ImplementerRouting, diff, reviewWorkDir string) (*ReviewResult, error) {
+	b, err := r.BeadStore.Get(beadID)
+	if err != nil {
+		return nil, fmt.Errorf("reviewer: get bead %s: %w", beadID, err)
 	}
 
 	// Resolve governing document references.
@@ -844,7 +894,7 @@ func (r *DefaultBeadReviewer) ReviewBead(ctx context.Context, beadID, resultRev 
 	runRuntime := BuildReviewExecuteRequest(impl, reviewHarness, reviewProfile)
 	reviewRouteLabel := r.applyExplicitReviewerPins(&runRuntime)
 	runRuntime.Prompt = prompt
-	runRuntime.WorkDir = r.ProjectRoot
+	runRuntime.WorkDir = reviewWorkDir
 	result, runErr := r.dispatchReviewRun(ctx, runRuntime)
 
 	durationMS := int(time.Since(start).Milliseconds())
@@ -1037,6 +1087,20 @@ func (r *DefaultBeadReviewer) gitShow(rev string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	args := append([]string{"show", rev, "--", "."}, EvidenceReviewExcludePathspecs()...)
+	out, err := internalgit.Command(ctx, r.ProjectRoot, args...).Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
+}
+
+func (r *DefaultBeadReviewer) gitDiff(baseRev, resultRev string) (string, error) {
+	if strings.TrimSpace(baseRev) == "" || strings.TrimSpace(resultRev) == "" {
+		return "", fmt.Errorf("base_rev and result_rev are required")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+	defer cancel()
+	args := append([]string{"diff", baseRev, resultRev, "--", "."}, EvidenceReviewExcludePathspecs()...)
 	out, err := internalgit.Command(ctx, r.ProjectRoot, args...).Output()
 	if err != nil {
 		return "", err

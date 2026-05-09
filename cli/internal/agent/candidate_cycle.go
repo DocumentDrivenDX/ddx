@@ -155,10 +155,8 @@ type AttemptCycleResult struct {
 // Pass and Lander are required. Nil optional fields (Checks, Reviewer, Repair,
 // RefStore) skip their respective phases.
 //
-// Review and repair loops are reserved for future implementation. When Reviewer
-// and Repair are non-nil the coordinator will run review/repair cycles before
-// landing. Today they are accepted in the struct but not invoked (non-scope
-// per FEAT-010 candidate-cycle spec).
+// Repair loops are reserved for future implementation. When Reviewer is non-nil
+// the coordinator runs one pre-land candidate review before landing.
 type AttemptCycleCoordinator struct {
 	Pass        ImplementationPass
 	Checks      CandidateCheckRunner // nil → skip pre-land checks
@@ -236,6 +234,45 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 				report.Error = checksErr.Error()
 			}
 			c.appendCandidateChecksFailedEvent(beadID, report, checksResult)
+			return AttemptCycleResult{Report: report}, nil
+		}
+	}
+
+	if c.Reviewer != nil {
+		reviewResult, reviewErr := c.Reviewer.Review(ctx, c.ProjectRoot, candidate)
+		if reviewErr != nil {
+			report := candidate.Report
+			report.Status = ExecuteBeadStatusReviewMalfunction
+			report.Detail = "pre-land review: " + reviewErr.Error()
+			report.ReviewVerdict = strings.TrimSpace(reviewResult.Verdict)
+			report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
+			return AttemptCycleResult{Report: report}, nil
+		}
+		verdict := Verdict(strings.TrimSpace(reviewResult.Verdict))
+		switch verdict {
+		case VerdictApprove:
+			candidate.Report.ReviewVerdict = string(VerdictApprove)
+			candidate.Report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
+		case VerdictRequestChanges:
+			report := candidate.Report
+			report.Status = ExecuteBeadStatusReviewRequestChanges
+			report.Detail = "pre-land review: REQUEST_CHANGES"
+			report.ReviewVerdict = string(VerdictRequestChanges)
+			report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
+			return AttemptCycleResult{Report: report}, nil
+		case VerdictBlock:
+			report := candidate.Report
+			report.Status = ExecuteBeadStatusReviewBlock
+			report.Detail = "pre-land review: BLOCK"
+			report.ReviewVerdict = string(VerdictBlock)
+			report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
+			return AttemptCycleResult{Report: report}, nil
+		default:
+			report := candidate.Report
+			report.Status = ExecuteBeadStatusReviewMalfunction
+			report.Detail = "pre-land review: malformed verdict"
+			report.ReviewVerdict = strings.TrimSpace(reviewResult.Verdict)
+			report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
 			return AttemptCycleResult{Report: report}, nil
 		}
 	}

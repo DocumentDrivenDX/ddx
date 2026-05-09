@@ -20,11 +20,13 @@ import (
 )
 
 type reviewRunnerStub struct {
-	result *Result
-	err    error
+	result   *Result
+	err      error
+	lastOpts RunArgs
 }
 
 func (r *reviewRunnerStub) Run(opts RunArgs) (*Result, error) {
+	r.lastOpts = opts
 	return r.result, r.err
 }
 
@@ -36,6 +38,105 @@ func TestSelectReviewerTier_AlwaysSmart(t *testing.T) {
 	assert.Equal(t, escalation.TierSmart, SelectReviewerTier(escalation.TierCheap))
 	assert.Equal(t, escalation.TierSmart, SelectReviewerTier(escalation.TierStandard))
 	assert.Equal(t, escalation.TierSmart, SelectReviewerTier(escalation.TierSmart))
+}
+
+func TestPreLandReview_UsesAttemptWorktree(t *testing.T) {
+	projectRoot, baseRev, store := newReviewArtifactsFixture(t)
+	resultRev := commitReviewFixtureFile(t, projectRoot, "candidate.txt", "candidate change\n")
+	attemptWorktree := t.TempDir()
+	runner := &reviewRunnerStub{result: approveReviewResult()}
+	reviewer := &DefaultBeadReviewer{
+		ProjectRoot: projectRoot,
+		BeadStore:   store,
+		Runner:      runner,
+	}
+
+	res, err := reviewer.Review(context.Background(), projectRoot, CandidateResult{
+		Report: ExecuteBeadReport{
+			BeadID:    "ddx-review-happy",
+			AttemptID: "attempt-preland-worktree",
+			Status:    ExecuteBeadStatusSuccess,
+			BaseRev:   baseRev,
+			ResultRev: resultRev,
+		},
+		WorktreePath: attemptWorktree,
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "APPROVE", res.Verdict)
+	assert.Equal(t, attemptWorktree, runner.lastOpts.WorkDir)
+}
+
+func TestPreLandReview_ReadOnlyProfileRequired(t *testing.T) {
+	projectRoot, baseRev, store := newReviewArtifactsFixture(t)
+	resultRev := commitReviewFixtureFile(t, projectRoot, "candidate.txt", "candidate change\n")
+	runner := &reviewRunnerStub{result: approveReviewResult()}
+	reviewer := &DefaultBeadReviewer{
+		ProjectRoot: projectRoot,
+		BeadStore:   store,
+		Runner:      runner,
+	}
+
+	_, err := reviewer.Review(context.Background(), projectRoot, CandidateResult{
+		Report: ExecuteBeadReport{
+			BeadID:    "ddx-review-happy",
+			AttemptID: "attempt-preland-readonly",
+			Status:    ExecuteBeadStatusSuccess,
+			BaseRev:   baseRev,
+			ResultRev: resultRev,
+		},
+		WorktreePath: t.TempDir(),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, PermissionsReadOnlyReviewer, runner.lastOpts.Permissions)
+	assert.Equal(t, "reviewer", runner.lastOpts.Role)
+}
+
+func TestPreLandReview_DiffCoversBaseToCandidate(t *testing.T) {
+	projectRoot, baseRev, store := newReviewArtifactsFixture(t)
+	_ = commitReviewFixtureFile(t, projectRoot, "first.txt", "first candidate line\n")
+	resultRev := commitReviewFixtureFile(t, projectRoot, "second.txt", "second candidate line\n")
+	runner := &reviewRunnerStub{result: approveReviewResult()}
+	reviewer := &DefaultBeadReviewer{
+		ProjectRoot: projectRoot,
+		BeadStore:   store,
+		Runner:      runner,
+	}
+
+	_, err := reviewer.Review(context.Background(), projectRoot, CandidateResult{
+		Report: ExecuteBeadReport{
+			BeadID:    "ddx-review-happy",
+			AttemptID: "attempt-preland-diff",
+			Status:    ExecuteBeadStatusSuccess,
+			BaseRev:   baseRev,
+			ResultRev: resultRev,
+		},
+		WorktreePath: t.TempDir(),
+	})
+	require.NoError(t, err)
+	assert.Contains(t, runner.lastOpts.Prompt, "first candidate line", "pre-land review must cover the full base..candidate range")
+	assert.Contains(t, runner.lastOpts.Prompt, "second candidate line")
+	assert.NotContains(t, runner.lastOpts.Prompt, "commit "+resultRev, "candidate review must not use single-commit git show output")
+}
+
+func approveReviewResult() *Result {
+	return &Result{
+		Harness:    "claude",
+		Model:      "claude-opus-4-6",
+		Output:     `{"schema_version":1,"verdict":"APPROVE","summary":"ok to land"}`,
+		DurationMS: 10,
+	}
+}
+
+func commitReviewFixtureFile(t *testing.T, projectRoot, name, body string) string {
+	t.Helper()
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, name), []byte(body), 0o644))
+	out, err := exec.Command("git", "-C", projectRoot, "add", name).CombinedOutput()
+	require.NoError(t, err, string(out))
+	out, err = exec.Command("git", "-C", projectRoot, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-m", "candidate "+name).CombinedOutput()
+	require.NoError(t, err, string(out))
+	headRaw, err := exec.Command("git", "-C", projectRoot, "rev-parse", "HEAD").Output()
+	require.NoError(t, err)
+	return strings.TrimSpace(string(headRaw))
 }
 
 // ---------------------------------------------------------------------------
