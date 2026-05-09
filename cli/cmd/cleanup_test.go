@@ -163,6 +163,35 @@ func TestCleanupCommand_DoesNotRemovePreservedEvidence(t *testing.T) {
 	assert.FileExists(t, filepath.Join(runsDir, "record.json"))
 }
 
+func TestCleanupEndToEnd_PreservesPublishedEvidence(t *testing.T) {
+	projectRoot, tempRoot := setupCleanupCommandProject(t)
+	stalePath := writeCleanupCommandCandidate(t, tempRoot, agent.ExecuteBeadWtPrefix+"ddx-cleanup-published-20260508T120000-abcdef12", projectRoot, "20260508T120000-abcdef12")
+
+	executionsDir := filepath.Join(projectRoot, ".ddx", "executions", "attempt-published")
+	require.NoError(t, os.MkdirAll(executionsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(executionsDir, "manifest.json"), []byte(`{"attempt_id":"attempt-published"}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(executionsDir, "result.json"), []byte(`{"status":"success"}`), 0o644))
+
+	runsDir := filepath.Join(projectRoot, ".ddx", "runs", "run-published")
+	require.NoError(t, os.MkdirAll(runsDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(runsDir, "record.json"), []byte(`{"run_id":"run-published"}`), 0o644))
+
+	refPath := filepath.Join(projectRoot, ".git", "refs", "ddx", "iterations", "ddx-published", "attempt-1")
+	require.NoError(t, os.MkdirAll(filepath.Dir(refPath), 0o755))
+	require.NoError(t, os.WriteFile(refPath, []byte("abcdef1234567890abcdef1234567890abcdef12\n"), 0o644))
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	out, err := executeCommand(root, "cleanup", "--apply")
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, stalePath)
+	assert.FileExists(t, filepath.Join(executionsDir, "manifest.json"))
+	assert.FileExists(t, filepath.Join(executionsDir, "result.json"))
+	assert.FileExists(t, filepath.Join(runsDir, "record.json"))
+	assert.FileExists(t, refPath)
+	assert.Contains(t, out, "cleanup: preserved 2 complete evidence bundle(s)")
+}
+
 func TestCleanupCommand_ReportsScratchReclamation(t *testing.T) {
 	projectRoot, tempRoot := setupCleanupCommandProject(t)
 	scratchPath, err := os.MkdirTemp(filepath.Dir(tempRoot), "ddx-test-cleanup-scratch-")
