@@ -1122,7 +1122,7 @@ func TestExecuteLoopProjectRootViaHTTP(t *testing.T) {
 	t.Run("registered project is accepted and worker runs in target root", func(t *testing.T) {
 		body, _ := json.Marshal(map[string]any{
 			"project_root": projectB,
-			"once":         true,
+			"mode":         "once",
 		})
 		req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/execute-loop",
 			strings.NewReader(string(body)))
@@ -1148,7 +1148,7 @@ func TestExecuteLoopProjectRootViaHTTP(t *testing.T) {
 		unregistered := t.TempDir() // valid directory, but not registered with server
 		body, _ := json.Marshal(map[string]any{
 			"project_root": unregistered,
-			"once":         true,
+			"mode":         "once",
 		})
 		req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/execute-loop",
 			strings.NewReader(string(body)))
@@ -1163,6 +1163,127 @@ func TestExecuteLoopProjectRootViaHTTP(t *testing.T) {
 		require.NoError(t, json.Unmarshal(w.Body.Bytes(), &errResp))
 		assert.Contains(t, errResp["error"], "no registered project matches")
 	})
+}
+
+func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "test-node-rest-spec")
+
+	projectA := setupTestDir(t)
+	projectB := t.TempDir()
+	setupBeadStore(t, projectB)
+
+	srv := New(":0", projectA)
+	srv.state.RegisterProject(projectB)
+	installFastSuccessWorker(srv.workers)
+
+	body, _ := json.Marshal(map[string]any{
+		"project_root":       projectB,
+		"harness":            "fiz",
+		"model":              "qwen/qwen3.6",
+		"profile":            "default",
+		"provider":           "openrouter",
+		"model_ref":          "openrouter/qwen/qwen3.6",
+		"effort":             "high",
+		"label_filter":       "phase:reliability",
+		"mode":               "watch",
+		"idle_interval":      "17s",
+		"no_review":          true,
+		"review_harness":     "review-harness",
+		"review_model":       "review-model",
+		"opaque_passthrough": true,
+		"max_cost_usd":       0.75,
+		"request_timeout":    "47s",
+		"min_power":          7,
+		"max_power":          8,
+		"from_rev":           "HEAD~1",
+		"spec_version":       executeloop.SpecCurrentVersion,
+		"future_server_hint": "ignored",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/execute-loop", strings.NewReader(string(body)))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code, "body: %s", w.Body.String())
+
+	var record WorkerRecord
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &record))
+	t.Cleanup(func() {
+		_ = srv.workers.Stop(record.ID)
+		_ = waitForWorkerExit(t, srv.workers, record.ID, 5*time.Second)
+	})
+	assert.Equal(t, projectB, record.ProjectRoot)
+	assert.Equal(t, "fiz", record.Harness)
+	assert.Equal(t, "qwen/qwen3.6", record.Model)
+	assert.Equal(t, "default", record.Profile)
+	assert.False(t, record.Once)
+	assert.Equal(t, "17s", record.PollInterval)
+
+	data, err := os.ReadFile(filepath.Join(projectA, record.SpecPath))
+	require.NoError(t, err)
+	var persisted ExecuteLoopWorkerSpec
+	require.NoError(t, json.Unmarshal(data, &persisted))
+	assert.Equal(t, projectB, persisted.ProjectRoot)
+	assert.Equal(t, "fiz", persisted.Harness)
+	assert.Equal(t, "qwen/qwen3.6", persisted.Model)
+	assert.Equal(t, "default", persisted.Profile)
+	assert.Equal(t, "openrouter", persisted.Provider)
+	assert.Equal(t, "openrouter/qwen/qwen3.6", persisted.ModelRef)
+	assert.Equal(t, "high", persisted.Effort)
+	assert.Equal(t, "phase:reliability", persisted.LabelFilter)
+	assert.Equal(t, executeloop.ModeWatch, persisted.Mode)
+	assert.Equal(t, 17*time.Second, persisted.IdleInterval.Duration)
+	assert.True(t, persisted.NoReview)
+	assert.Equal(t, "review-harness", persisted.ReviewHarness)
+	assert.Equal(t, "review-model", persisted.ReviewModel)
+	assert.True(t, persisted.OpaquePassthrough)
+	assert.Equal(t, 0.75, persisted.MaxCostUSD)
+	assert.Equal(t, 47*time.Second, persisted.RequestTimeout.Duration)
+	assert.Equal(t, 7, persisted.MinPower)
+	assert.Equal(t, 8, persisted.MaxPower)
+	assert.Equal(t, "HEAD~1", persisted.FromRev)
+	assert.Equal(t, executeloop.SpecCurrentVersion, persisted.SpecVersion)
+}
+
+func TestRESTWorkerStart_UnknownSpecVersion(t *testing.T) {
+	xdgDir := t.TempDir()
+	t.Setenv("XDG_DATA_HOME", xdgDir)
+	t.Setenv("DDX_NODE_NAME", "test-node-rest-spec-version")
+
+	projectRoot := setupTestDir(t)
+	srv := New(":0", projectRoot)
+
+	body, _ := json.Marshal(map[string]any{
+		"mode":               "once",
+		"opaque_passthrough": true,
+		"spec_version":       executeloop.SpecCurrentVersion + 1,
+		"unknown_field":      "tolerated",
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/execute-loop", strings.NewReader(string(body)))
+	req.Header.Set("Content-Type", "application/json")
+	req.RemoteAddr = "127.0.0.1:12345"
+	w := httptest.NewRecorder()
+	srv.Handler().ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusBadRequest, w.Code, "body: %s", w.Body.String())
+	var resp struct {
+		Error        string `json:"error"`
+		Capabilities struct {
+			ExecuteLoopSpecVersions []int    `json:"execute_loop_spec_versions"`
+			ExecuteLoopModes        []string `json:"execute_loop_modes"`
+		} `json:"capabilities"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &resp))
+	assert.Contains(t, resp.Error, "unsupported spec_version")
+	assert.Equal(t, []int{executeloop.SpecCurrentVersion}, resp.Capabilities.ExecuteLoopSpecVersions)
+	assert.ElementsMatch(t, []string{"once", "drain", "watch"}, resp.Capabilities.ExecuteLoopModes)
+
+	workers, err := srv.workers.List()
+	require.NoError(t, err)
+	assert.Empty(t, workers)
 }
 
 // TC-013.6 — Workers for two different registered projects run in parallel

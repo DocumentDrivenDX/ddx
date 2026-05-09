@@ -31,6 +31,7 @@ import (
 	"github.com/99designs/gqlgen/graphql/handler"
 	"github.com/99designs/gqlgen/graphql/handler/transport"
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
@@ -2386,29 +2387,15 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "dispatch endpoints are localhost-only"})
 		return
 	}
-	var req struct {
-		ProjectRoot   string `json:"project_root"`
-		Harness       string `json:"harness"`
-		Model         string `json:"model"`
-		Profile       string `json:"profile"`
-		Provider      string `json:"provider"`
-		ModelRef      string `json:"model_ref"`
-		Effort        string `json:"effort"`
-		LabelFilter   string `json:"label_filter"`
-		Once          bool   `json:"once"`
-		PollInterval  string `json:"poll_interval"`
-		NoReview      bool   `json:"no_review"`
-		ReviewHarness string `json:"review_harness"`
-		ReviewModel   string `json:"review_model"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	var spec executeloop.ExecuteLoopSpec
+	if err := json.NewDecoder(r.Body).Decode(&spec); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
 	}
 
 	// Resolve project_root: if provided, validate it against registered projects.
 	// An empty project_root means "use the server's primary project" (default).
-	projectRoot := req.ProjectRoot
+	projectRoot := spec.ProjectRoot
 	if projectRoot != "" {
 		resolved := s.resolveRequestedProject(projectRoot)
 		if resolved == "" {
@@ -2419,40 +2406,36 @@ func (s *Server) handleStartExecuteLoopWorker(w http.ResponseWriter, r *http.Req
 		}
 		projectRoot = resolved
 	}
-
-	// Default poll-interval = 30s for server-managed workers (ddx-dc157075).
-	// Operators wanting drain-and-exit semantics must pass --once or an
-	// explicit poll_interval=0 in the dispatch payload.
-	pollInterval := 30 * time.Second
-	if strings.TrimSpace(req.PollInterval) != "" {
-		d, err := time.ParseDuration(req.PollInterval)
-		if err != nil {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid poll_interval"})
-			return
-		}
-		pollInterval = d
+	spec.ProjectRoot = projectRoot
+	if spec.Mode == "" {
+		spec.Mode = executeloop.ModeWatch
 	}
-	mode, idleInterval := executeLoopModeFromLegacy(req.Once, pollInterval)
-	record, err := s.workers.StartExecuteLoop(ExecuteLoopWorkerSpec{
-		ProjectRoot:   projectRoot,
-		Harness:       req.Harness,
-		Model:         req.Model,
-		Profile:       req.Profile,
-		Provider:      req.Provider,
-		ModelRef:      req.ModelRef,
-		Effort:        req.Effort,
-		LabelFilter:   req.LabelFilter,
-		Mode:          mode,
-		IdleInterval:  idleInterval,
-		NoReview:      req.NoReview,
-		ReviewHarness: req.ReviewHarness,
-		ReviewModel:   req.ReviewModel,
-	})
+	spec.ApplyDefaults()
+	if err := spec.Validate(); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{
+			"error":        err.Error(),
+			"capabilities": executeLoopSpecCapabilities(),
+		})
+		return
+	}
+
+	record, err := s.workers.StartExecuteLoop(ExecuteLoopWorkerSpec(spec))
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
 		return
 	}
 	writeJSON(w, http.StatusCreated, record)
+}
+
+func executeLoopSpecCapabilities() map[string]any {
+	return map[string]any{
+		"execute_loop_spec_versions": []int{executeloop.SpecCurrentVersion},
+		"execute_loop_modes": []string{
+			string(executeloop.ModeOnce),
+			string(executeloop.ModeDrain),
+			string(executeloop.ModeWatch),
+		},
+	}
 }
 
 // resolveRequestedProject matches a requested project_root string against
