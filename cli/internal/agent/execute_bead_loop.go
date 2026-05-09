@@ -404,6 +404,34 @@ type NoReadyWorkBreakdown struct {
 	NextRetryAfter            string   `json:"next_retry_after,omitempty"`
 }
 
+// QueueSnapshot is the structured count-oriented companion to the legacy
+// no_ready_work_detail ID lists.
+type QueueSnapshot struct {
+	ExecutionReadyCount            int                          `json:"execution_ready_count"`
+	BlockedCount                   int                          `json:"blocked_count"`
+	DependencyWaitingCount         int                          `json:"dependency_waiting_count"`
+	ExternalBlockedCount           int                          `json:"external_blocked_count"`
+	ProposedOperatorAttentionCount int                          `json:"proposed_operator_attention_count"`
+	HumanReviewBlockerCount        int                          `json:"human_review_blocker_count"`
+	HumanReviewBlockedTotal        int                          `json:"human_review_blocked_total"`
+	HumanReviewBlockers            []HumanReviewBlockerSnapshot `json:"human_review_blockers,omitempty"`
+	RetryCooldownCount             int                          `json:"retry_cooldown_count"`
+	NextRetryAfter                 string                       `json:"next_retry_after,omitempty"`
+	ExecutionIneligibleCount       int                          `json:"execution_ineligible_count"`
+	SupersededCount                int                          `json:"superseded_count"`
+	SkippedEpicsCount              int                          `json:"skipped_epics_count"`
+	EpicClosureCandidatesCount     int                          `json:"epic_closure_candidates_count"`
+}
+
+// HumanReviewBlockerSnapshot reports one open human-review blocker and how
+// many active downstream beads are transitively waiting on it.
+type HumanReviewBlockerSnapshot struct {
+	ID                     string `json:"id"`
+	Title                  string `json:"title"`
+	Priority               int    `json:"priority"`
+	DownstreamBlockedCount int    `json:"downstream_blocked_count"`
+}
+
 // ProgressEvent is the FEAT-006 structured progress event. It is defined
 // separately in the server package (server.ProgressEvent); this alias lets
 // the agent package emit events without importing the server package.
@@ -432,8 +460,11 @@ type ExecuteBeadLoopResult struct {
 	Attempts          int                  `json:"attempts"`
 	Successes         int                  `json:"successes"`
 	Failures          int                  `json:"failures"`
+	StopCondition     string               `json:"stop_condition,omitempty"`
+	ExitReason        string               `json:"exit_reason,omitempty"`
 	NoReadyWork       bool                 `json:"no_ready_work,omitempty"`
 	NoReadyWorkDetail NoReadyWorkBreakdown `json:"no_ready_work_detail,omitempty"`
+	QueueSnapshot     *QueueSnapshot       `json:"queue_snapshot,omitempty"`
 	LastSuccessAt     time.Time            `json:"last_success_at,omitempty"`
 	LastFailureStatus string               `json:"last_failure_status,omitempty"`
 	Results           []ExecuteBeadReport  `json:"results,omitempty"`
@@ -568,12 +599,17 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	// preflight_failed, resource_exhausted, and future provider exhaustion are
 	// still subsystem-specific exits.
 	exitReason := ""
+	setExit := func(condition, reason string) {
+		exitReason = reason
+		result.StopCondition = condition
+		result.ExitReason = reason
+	}
 	applyStop := func(input work.StopInput) bool {
 		decision, ok := work.ClassifyStop(input)
 		if !ok {
 			return false
 		}
-		exitReason = decision.ExitReason
+		setExit(string(decision.Condition), decision.ExitReason)
 		return true
 	}
 	if runtime.RoutePreflight != nil {
@@ -602,7 +638,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			result.Failures++
 			result.LastFailureStatus = report.Status
 			result.Results = append(result.Results, report)
-			exitReason = "preflight_failed"
+			setExit("Preflight", "preflight_failed")
 			return result, nil
 		}
 	}
@@ -670,21 +706,21 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					result.Failures++
 					result.LastFailureStatus = report.Status
 					result.Results = append(result.Results, report)
-					exitReason = "resource_exhausted"
+					setExit("ResourceExhausted", "resource_exhausted")
 					emitResourceExhausted(emit, nil, "", report, assignee, now().UTC())
 					if runtime.Log != nil {
 						_, _ = fmt.Fprintln(runtime.Log, ResourceExhaustedStopMessage)
 					}
 					return result, nil
 				}
-				exitReason = "preflight_failed"
+				setExit("Preflight", "preflight_failed")
 				return result, checkErr
 			}
 		}
 
 		candidate, skips, ok, err := w.nextCandidate(ctx, result.Results[resultsResetIdx:], []work.Guard{complexityGuard, preclaimGuard}, runtime.LabelFilter, runtime.TargetBeadID)
 		if err != nil {
-			exitReason = "fatal_config"
+			setExit("FatalConfig", "fatal_config")
 			return result, err
 		}
 		// Diagnostic: when nextCandidate selected a lower-priority bead while
@@ -705,6 +741,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			if diag, ok := w.Store.(readyDiagnoser); ok {
 				if breakdown, bErr := diag.ReadyExecutionBreakdown(); bErr == nil {
 					result.NoReadyWorkDetail = noReadyWorkBreakdownFromLifecycle(breakdown)
+					snapshot := queueSnapshotFromLifecycle(breakdown)
+					result.QueueSnapshot = &snapshot
 				}
 			}
 			if applyStop(work.StopInput{
@@ -1062,7 +1100,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		classifyLoopReportFailure(&report)
 		if IsResourceExhaustedStatus(report.Status) {
 			result.Attempts++
-			exitReason = "resource_exhausted"
+			setExit("ResourceExhausted", "resource_exhausted")
 			if err := w.Store.Unclaim(candidate.ID); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("Unclaim", assignee, result, err)
@@ -1186,7 +1224,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			if runtime.Log != nil {
 				_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
 			}
-			exitReason = "routing_unavailable"
+			setExit("RoutingUnavailable", "routing_unavailable")
 			return result, nil
 		}
 		// ddx-5b3e57f4: distinguish worker-disrupted from model-gave-up.
@@ -1597,6 +1635,34 @@ func noReadyWorkBreakdownFromLifecycle(b bead.ReadyExecutionBreakdown) NoReadyWo
 		Epics:                     b.Epics,
 		EpicClosureCandidates:     b.EpicClosureCandidates,
 		NextRetryAfter:            b.NextRetryAfter,
+	}
+}
+
+func queueSnapshotFromLifecycle(b bead.ReadyExecutionBreakdown) QueueSnapshot {
+	humanBlockers := make([]HumanReviewBlockerSnapshot, 0, len(b.HumanReviewBlockers))
+	for _, blocker := range b.HumanReviewBlockers {
+		humanBlockers = append(humanBlockers, HumanReviewBlockerSnapshot{
+			ID:                     blocker.ID,
+			Title:                  blocker.Title,
+			Priority:               blocker.Priority,
+			DownstreamBlockedCount: blocker.DownstreamBlockedCount,
+		})
+	}
+	return QueueSnapshot{
+		ExecutionReadyCount:            len(b.ExecutionReady),
+		BlockedCount:                   len(b.DependencyWaiting) + len(b.ExternalBlocked),
+		DependencyWaitingCount:         len(b.DependencyWaiting),
+		ExternalBlockedCount:           len(b.ExternalBlocked),
+		ProposedOperatorAttentionCount: len(b.ProposedOperatorAttention),
+		HumanReviewBlockerCount:        len(b.HumanReviewBlockers),
+		HumanReviewBlockedTotal:        b.HumanReviewBlockedTotal,
+		HumanReviewBlockers:            humanBlockers,
+		RetryCooldownCount:             len(b.RetryCooldown),
+		NextRetryAfter:                 b.NextRetryAfter,
+		ExecutionIneligibleCount:       len(b.NotEligible),
+		SupersededCount:                len(b.Superseded),
+		SkippedEpicsCount:              len(b.Epics),
+		EpicClosureCandidatesCount:     len(b.EpicClosureCandidates),
 	}
 }
 

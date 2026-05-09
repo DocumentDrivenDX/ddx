@@ -1593,6 +1593,17 @@ type ReadyExecutionBreakdown struct {
 	Epics                     []string
 	EpicClosureCandidates     []string
 	NextRetryAfter            string
+	HumanReviewBlockedTotal   int
+	HumanReviewBlockers       []HumanReviewBlockerPressure
+}
+
+// HumanReviewBlockerPressure describes an open human-review blocker and the
+// number of active downstream beads that transitively depend on it.
+type HumanReviewBlockerPressure struct {
+	ID                     string
+	Title                  string
+	Priority               int
+	DownstreamBlockedCount int
 }
 
 func (s *Store) ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error) {
@@ -1633,7 +1644,89 @@ func (s *Store) ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error) {
 	if !soonestRetry.IsZero() {
 		out.NextRetryAfter = soonestRetry.Format(time.RFC3339)
 	}
+	out.HumanReviewBlockers, out.HumanReviewBlockedTotal = humanReviewBlockerPressure(beads)
 	return out, nil
+}
+
+func humanReviewBlockerPressure(beads []Bead) ([]HumanReviewBlockerPressure, int) {
+	byID := make(map[string]Bead, len(beads))
+	reverseDeps := make(map[string][]string, len(beads))
+	for _, b := range beads {
+		byID[b.ID] = b
+		if !activeForDependencyPressure(b) {
+			continue
+		}
+		for _, dep := range b.Dependencies {
+			if dep.DependsOnID == "" {
+				continue
+			}
+			reverseDeps[dep.DependsOnID] = append(reverseDeps[dep.DependsOnID], b.ID)
+		}
+	}
+
+	var blockers []HumanReviewBlockerPressure
+	totalBlocked := map[string]struct{}{}
+	for _, b := range beads {
+		if !isHumanReviewBlocker(b) {
+			continue
+		}
+		seen := map[string]struct{}{}
+		var walk func(string)
+		walk = func(id string) {
+			for _, childID := range reverseDeps[id] {
+				if childID == b.ID {
+					continue
+				}
+				child, ok := byID[childID]
+				if !ok || !activeForDependencyPressure(child) {
+					continue
+				}
+				if _, exists := seen[childID]; exists {
+					continue
+				}
+				seen[childID] = struct{}{}
+				totalBlocked[childID] = struct{}{}
+				walk(childID)
+			}
+		}
+		walk(b.ID)
+		blockers = append(blockers, HumanReviewBlockerPressure{
+			ID:                     b.ID,
+			Title:                  b.Title,
+			Priority:               b.Priority,
+			DownstreamBlockedCount: len(seen),
+		})
+	}
+
+	sort.SliceStable(blockers, func(i, j int) bool {
+		if blockers[i].Priority != blockers[j].Priority {
+			return blockers[i].Priority < blockers[j].Priority
+		}
+		return blockers[i].ID < blockers[j].ID
+	})
+	return blockers, len(totalBlocked)
+}
+
+func isHumanReviewBlocker(b Bead) bool {
+	if b.Status != StatusOpen {
+		return false
+	}
+	for _, label := range b.Labels {
+		switch label {
+		case LabelNeedsHuman, LabelNeedsInvestigation, LabelNoChangesUnverified, LabelNoChangesUnjustified:
+			return true
+		}
+	}
+	return false
+}
+
+func activeForDependencyPressure(b Bead) bool {
+	switch b.Status {
+	case StatusClosed, StatusCancelled:
+		return false
+	default:
+		return true
+	}
 }
 
 func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {

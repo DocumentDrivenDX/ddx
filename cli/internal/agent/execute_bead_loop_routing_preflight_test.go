@@ -126,6 +126,8 @@ func TestRoutingPreflightRejectionExitsLoopWithoutClaim(t *testing.T) {
 	assert.Equal(t, ExecuteBeadStatusExecutionFailed, result.LastFailureStatus)
 	assert.Equal(t, 1, result.Failures)
 	assert.Equal(t, 0, result.Attempts)
+	assert.Equal(t, "Preflight", result.StopCondition)
+	assert.Equal(t, "preflight_failed", result.ExitReason)
 
 	// AC#4: no bead-specific attempt events were appended.
 	events, err := store.Events(candidate.ID)

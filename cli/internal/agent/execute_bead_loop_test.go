@@ -859,7 +859,7 @@ func TestExecuteBeadWorkerEvaluatesCompletedEpicForClosure(t *testing.T) {
 	assert.Equal(t, []string{"ddx-epic-closed"}, result.NoReadyWorkDetail.EpicClosureCandidates)
 }
 
-func TestExecuteBeadLoopResult_LifecycleQueueSnapshot(t *testing.T) {
+func TestExecuteBeadLoopResult_IncludesQueueSnapshotAfterSuccessfulDrain(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
@@ -911,6 +911,14 @@ func TestExecuteBeadLoopResult_LifecycleQueueSnapshot(t *testing.T) {
 	assert.ElementsMatch(t, []string{externalBlocked.ID}, result.NoReadyWorkDetail.ExternalBlocked)
 	assert.ElementsMatch(t, []string{dependencyWaiting.ID}, result.NoReadyWorkDetail.DependencyWaiting)
 	assert.ElementsMatch(t, []string{cooldown.ID}, result.NoReadyWorkDetail.RetryCooldown)
+	require.NotNil(t, result.QueueSnapshot)
+	assert.Equal(t, 0, result.QueueSnapshot.ExecutionReadyCount)
+	assert.Equal(t, 2, result.QueueSnapshot.BlockedCount)
+	assert.Equal(t, 1, result.QueueSnapshot.DependencyWaitingCount)
+	assert.Equal(t, 1, result.QueueSnapshot.ExternalBlockedCount)
+	assert.Equal(t, 1, result.QueueSnapshot.ProposedOperatorAttentionCount)
+	assert.Equal(t, 1, result.QueueSnapshot.RetryCooldownCount)
+	assert.NotEmpty(t, result.QueueSnapshot.NextRetryAfter)
 }
 
 func TestNoReadyWorkDetail_DoesNotExposeNeedsInvestigation(t *testing.T) {
@@ -920,10 +928,16 @@ func TestNoReadyWorkDetail_DoesNotExposeNeedsInvestigation(t *testing.T) {
 			ProposedOperatorAttention: []string{"ddx-proposed"},
 			DependencyWaiting:         []string{"ddx-waiting"},
 		},
+		QueueSnapshot: &QueueSnapshot{
+			ProposedOperatorAttentionCount: 1,
+			DependencyWaitingCount:         1,
+		},
 	})
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "proposed_operator_attention")
 	assert.Contains(t, string(body), "dependency_waiting")
+	assert.Contains(t, string(body), "queue_snapshot")
+	assert.Contains(t, string(body), "proposed_operator_attention_count")
 	assert.NotContains(t, string(body), "skipped_needs_investigation")
 	assert.NotContains(t, string(body), "needs_investigation")
 }
@@ -1237,6 +1251,8 @@ func TestExecuteBeadWorkerEmitsLoopEventsWithNoReadyWork(t *testing.T) {
 	assert.Equal(t, "loop.end", end["type"])
 	endData, _ := end["data"].(map[string]any)
 	assert.EqualValues(t, 0, endData["attempts"])
+	assert.Equal(t, "drained", endData["exit_reason"])
+	assert.Equal(t, "drained", result.ExitReason)
 }
 
 // TestExecuteBeadWorkerNoChangesUnjustifiedStaysOpenWithLabel verifies the

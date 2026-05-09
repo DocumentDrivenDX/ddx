@@ -237,6 +237,43 @@ func TestReadyExecutionBreakdown_UsesLifecycleBuckets(t *testing.T) {
 	assert.Equal(t, []string{dependencyWaiting.ID}, breakdown.DependencyWaiting)
 }
 
+func TestQueueSnapshot_HumanReviewBlockersAggregateTransitiveBlockedBeads(t *testing.T) {
+	s := newTestStore(t)
+
+	blockers := []Bead{
+		{ID: "ddx-human-1", Title: "Needs human", Priority: 0, Labels: []string{LabelNeedsHuman}},
+		{ID: "ddx-human-2", Title: "Needs investigation", Priority: 1, Labels: []string{LabelNeedsInvestigation}},
+		{ID: "ddx-human-3", Title: "No changes unverified", Priority: 2, Labels: []string{LabelNoChangesUnverified}},
+	}
+	for i := range blockers {
+		require.NoError(t, s.Create(&blockers[i]))
+		prevID := blockers[i].ID
+		for n := 0; n < 10; n++ {
+			id := fmt.Sprintf("ddx-down-%d-%02d", i+1, n+1)
+			b := &Bead{
+				ID:       id,
+				Title:    fmt.Sprintf("Downstream %d %02d", i+1, n+1),
+				Priority: 4,
+			}
+			b.AddDep(prevID, "blocks")
+			require.NoError(t, s.Create(b))
+			prevID = id
+		}
+	}
+
+	breakdown, err := s.ReadyExecutionBreakdown()
+	require.NoError(t, err)
+	assert.Equal(t, 30, breakdown.HumanReviewBlockedTotal)
+	require.Len(t, breakdown.HumanReviewBlockers, 3)
+
+	for i, blocker := range breakdown.HumanReviewBlockers {
+		assert.Equal(t, blockers[i].ID, blocker.ID)
+		assert.Equal(t, blockers[i].Title, blocker.Title)
+		assert.Equal(t, blockers[i].Priority, blocker.Priority)
+		assert.Equal(t, 10, blocker.DownstreamBlockedCount)
+	}
+}
+
 func TestReadyExecution_ExcludesOrdinaryEpics(t *testing.T) {
 	s := newTestStore(t)
 

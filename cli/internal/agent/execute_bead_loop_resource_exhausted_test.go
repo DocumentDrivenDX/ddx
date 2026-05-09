@@ -188,6 +188,8 @@ func TestExecuteBeadWorkerResourceExhaustedLoopEndEvent(t *testing.T) {
 
 	require.Len(t, byType["loop.end"], 1)
 	assert.Equal(t, "resource_exhausted", byType["loop.end"][0]["exit_reason"])
+	assert.Equal(t, "ResourceExhausted", result.StopCondition)
+	assert.Equal(t, "resource_exhausted", result.ExitReason)
 
 	require.NotEmpty(t, byType["resource.exhausted"], "resource.exhausted loop event must be emitted")
 	data := byType["resource.exhausted"][0]

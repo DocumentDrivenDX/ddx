@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/work"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
@@ -36,6 +38,8 @@ func TestExecuteBeadWorkerStopConditionWiredIntoRun(t *testing.T) {
 		require.NotNil(t, result)
 		assert.True(t, result.NoReadyWork)
 		assert.Equal(t, "drained", exitReason)
+		assert.Equal(t, string(work.StopConditionDrained), result.StopCondition)
+		assert.Equal(t, exitReason, result.ExitReason)
 	})
 
 	t.Run("once complete", func(t *testing.T) {
@@ -58,6 +62,8 @@ func TestExecuteBeadWorkerStopConditionWiredIntoRun(t *testing.T) {
 		require.NotNil(t, result)
 		assert.Equal(t, 1, result.Attempts)
 		assert.Equal(t, "once_complete", exitReason)
+		assert.Equal(t, string(work.StopConditionOnce), result.StopCondition)
+		assert.Equal(t, exitReason, result.ExitReason)
 	})
 
 	t.Run("signal canceled", func(t *testing.T) {
@@ -79,6 +85,8 @@ func TestExecuteBeadWorkerStopConditionWiredIntoRun(t *testing.T) {
 		require.ErrorIs(t, err, context.Canceled)
 		require.NotNil(t, result)
 		assert.Equal(t, "sigint", exitReason)
+		assert.Equal(t, string(work.StopConditionSignal), result.StopCondition)
+		assert.Equal(t, exitReason, result.ExitReason)
 	})
 
 	t.Run("budget stop before claim", func(t *testing.T) {
@@ -104,6 +112,8 @@ func TestExecuteBeadWorkerStopConditionWiredIntoRun(t *testing.T) {
 		require.NoError(t, err)
 		require.NotNil(t, result)
 		assert.Equal(t, "budget", exitReason)
+		assert.Equal(t, string(work.StopConditionBudget), result.StopCondition)
+		assert.Equal(t, exitReason, result.ExitReason)
 		assert.Equal(t, int32(0), atomic.LoadInt32(&store.claimCalls))
 		assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls))
 		require.Len(t, result.Results, 1)
@@ -153,8 +163,81 @@ func TestStopCondition_BudgetAfterImplementerCostStopsBeforeNextClaim(t *testing
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.Equal(t, "budget", exitReason)
+	assert.Equal(t, string(work.StopConditionBudget), result.StopCondition)
+	assert.Equal(t, exitReason, result.ExitReason)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&execCalls), "first bead must be attempted")
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "second bead must not be claimed after budget stop")
+}
+
+func TestExecuteBeadLoopResult_IncludesStopReasonOnDrainExit(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatalf("executor must not run for drained queue")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+	result, exitReason, err := runStopConditionCase(t, worker, context.Background(), ExecuteBeadLoopRuntime{
+		Mode: executeloop.ModeDrain,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, string(work.StopConditionDrained), result.StopCondition)
+	assert.Equal(t, "drained", result.ExitReason)
+	assert.Equal(t, result.ExitReason, exitReason)
+}
+
+type fatalReadyStore struct {
+	*bead.Store
+	err error
+}
+
+func (s *fatalReadyStore) ReadyExecution() ([]bead.Bead, error) {
+	return nil, s.err
+}
+
+func TestExecuteBeadLoopResult_IncludesStopReasonOnFatalConfigExit(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+	fatalErr := errors.New("ready execution unavailable")
+
+	worker := &ExecuteBeadWorker{
+		Store: &fatalReadyStore{Store: store, err: fatalErr},
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatalf("executor must not run after fatal queue error")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+	result, exitReason, err := runStopConditionCase(t, worker, context.Background(), ExecuteBeadLoopRuntime{
+		Mode: executeloop.ModeDrain,
+	})
+	require.ErrorIs(t, err, fatalErr)
+	require.NotNil(t, result)
+	assert.Equal(t, "FatalConfig", result.StopCondition)
+	assert.Equal(t, "fatal_config", result.ExitReason)
+	assert.Equal(t, result.ExitReason, exitReason)
+}
+
+func TestExecuteBeadLoopResult_PreservesLoopEndExitReason(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatalf("executor must not run for drained queue")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+	result, exitReason, err := runStopConditionCase(t, worker, context.Background(), ExecuteBeadLoopRuntime{
+		Mode: executeloop.ModeDrain,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, result.ExitReason, exitReason)
 }
 
 // TestStopCondition_BudgetAfterReviewCostPreventsClose verifies that when
