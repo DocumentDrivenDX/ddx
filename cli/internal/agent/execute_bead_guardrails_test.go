@@ -162,8 +162,8 @@ func TestExecuteBeadInstructionsContainsBeadExecutionMode(t *testing.T) {
 			for _, sub := range []string{
 				"DDX_MODE=bead_execution",
 				"edit code/docs for bead AC",
-				"Only the broad queue-steward default is overridden",
-				"tracker, merge-policy, verification, and safety rules remain active",
+				"Only broad queue-steward default is overridden",
+				"tracker, merge-policy, verification, safety stay active",
 			} {
 				if !strings.Contains(rendered, sub) {
 					t.Errorf("rendered %s prompt missing execution-mode substring %q", c.variant, sub)

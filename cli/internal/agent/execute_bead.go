@@ -1846,7 +1846,7 @@ const instrBeadOverride = `
 
 ## Mode and overrides
 
-DDX_MODE=bead_execution: edit code/docs for bead AC. Only the broad queue-steward default is overridden; tracker, merge-policy, verification, and safety rules remain active. Bead description/AC override CLAUDE.md, AGENTS.md, and project defaults.`
+DDX_MODE=bead_execution: edit code/docs for bead AC. Only broad queue-steward default is overridden; tracker, merge-policy, verification, safety stay active. Bead description/AC override CLAUDE.md, AGENTS.md, and project defaults.`
 
 // instrCoreConstraints is the shared core-constraints tail.
 const instrCoreConstraints = `
