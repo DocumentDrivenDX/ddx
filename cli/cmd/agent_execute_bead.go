@@ -218,6 +218,7 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 
 		if landing, landErr := agent.LandBeadResult(projectRoot, res, orchestratorGitOps, landingOpts); landErr == nil {
 			agent.ApplyLandingToResult(res, landing)
+			_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
 		} else if err == nil {
 			err = landErr
 		}

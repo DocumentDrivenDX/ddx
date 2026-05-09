@@ -1716,8 +1716,10 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			)
 			if landErr == nil {
 				agent.ApplyLandResultToExecuteBeadResult(res, landRes)
+				_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
 			} else {
 				agent.MarkResultLandError(projectRoot, res, landErr)
+				_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
 				return agent.ReportFromExecuteBeadResult(res, ""), nil
 			}
 		} else if res != nil && (res.Outcome == agent.ExecuteBeadOutcomeTaskFailed || res.ExitCode != 0) {

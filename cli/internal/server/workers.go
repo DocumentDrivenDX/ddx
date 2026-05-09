@@ -1777,6 +1777,7 @@ func evaluateGatesAndSubmit(
 			}
 			res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
 			res.Detail = agent.ExecuteBeadStatusDetail(res.Status, res.Reason, res.Error)
+			_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
 			return nil
 		}
 	}
@@ -1790,6 +1791,7 @@ func evaluateGatesAndSubmit(
 		return landErr
 	}
 	agent.ApplyLandResultToExecuteBeadResult(res, landRes)
+	_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
 	return nil
 }
 
