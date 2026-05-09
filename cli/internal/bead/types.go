@@ -61,17 +61,15 @@ const (
 	StatusOpen       = "open"
 	StatusInProgress = "in_progress"
 	StatusClosed     = "closed"
-	// StatusBlocked marks a bead that is not eligible for agent dispatch —
-	// either decomposed into child beads by the triage gate or parked for
-	// human intervention after a triage-overflow event. Blocked beads are
-	// excluded from ReadyExecution and will not be auto-dispatched.
+	// StatusBlocked marks an explicit external blocker that can be rechecked.
+	// Dependency waits are derived from dependency status and do not persist as
+	// blocked.
 	StatusBlocked = "blocked"
-	// StatusProposed marks an operator-prompt bead awaiting approval. It is
-	// excluded from execute-loop drain until transitioned to open via the
-	// approval flow, or to cancelled when the operator declines it.
+	// StatusProposed marks work awaiting operator approval or clarification.
+	// It is outside worker dispatch until transitioned to open or cancelled.
 	StatusProposed = "proposed"
-	// StatusCancelled marks a bead that was rejected before any execution
-	// took place (e.g. an operator-prompt bead the user chose not to run).
+	// StatusCancelled marks work that will not run and does not satisfy
+	// dependents.
 	StatusCancelled = "cancelled"
 )
 
