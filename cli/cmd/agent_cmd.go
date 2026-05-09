@@ -1879,7 +1879,7 @@ func buildCLIPreClaimHook(projectRoot string, gitOps agent.LandingGitOps) func(c
 		}
 		res, err := gitOps.FetchOriginAncestryCheck(projectRoot, branch)
 		if err != nil {
-			if !strings.Contains(err.Error(), "git fetch origin") {
+			if !agent.IsIgnorableFetchOriginError(err) {
 				return err
 			}
 			return nil // fetch failure is non-fatal

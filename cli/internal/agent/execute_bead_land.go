@@ -41,6 +41,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -193,6 +194,36 @@ type PreClaimResult struct {
 	Action    string
 	LocalSHA  string
 	OriginSHA string
+}
+
+type fetchOriginError struct {
+	targetBranch string
+	output       string
+	err          error
+}
+
+func (e *fetchOriginError) Error() string {
+	if e.output == "" {
+		return fmt.Sprintf("git fetch origin %s: %v", e.targetBranch, e.err)
+	}
+	return fmt.Sprintf("git fetch origin %s: %s: %v", e.targetBranch, e.output, e.err)
+}
+
+func (e *fetchOriginError) Unwrap() error { return e.err }
+
+// IsIgnorableFetchOriginError reports whether a pre-claim ancestry-check
+// failure came from the best-effort network fetch. Local worktree safety
+// failures must propagate so workers do not claim work from an unsafe trunk.
+func IsIgnorableFetchOriginError(err error) bool {
+	if err == nil {
+		return false
+	}
+	var fetchErr *fetchOriginError
+	if errors.As(err, &fetchErr) {
+		return true
+	}
+	msg := err.Error()
+	return strings.HasPrefix(msg, "git fetch origin ") || strings.HasPrefix(msg, "git fetch origin:")
 }
 
 // LandingGitOps abstracts the git operations Land() needs. RealLandingGitOps
@@ -705,7 +736,11 @@ func fetchOriginAncestryCheckLocked(dir, targetBranch string) (PreClaimResult, e
 
 	// Step 2: fetch origin/targetBranch (best-effort; failure is non-fatal but surfaced).
 	if fetchOut, fetchErr := internalgit.Command(context.Background(), dir, "fetch", "origin", targetBranch).CombinedOutput(); fetchErr != nil {
-		return PreClaimResult{}, fmt.Errorf("git fetch origin %s: %s: %w", targetBranch, strings.TrimSpace(string(fetchOut)), fetchErr)
+		return PreClaimResult{}, &fetchOriginError{
+			targetBranch: targetBranch,
+			output:       strings.TrimSpace(string(fetchOut)),
+			err:          fetchErr,
+		}
 	}
 
 	// Step 3: resolve local tip.

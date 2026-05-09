@@ -1639,8 +1639,10 @@ func buildPreClaimHook(projectRoot string, gitOps agent.LandingGitOps) func(ctx 
 		}
 		res, err := gitOps.FetchOriginAncestryCheck(projectRoot, branch)
 		if err != nil {
-			// Fetch failure is non-fatal (air-gap friendly); skip the check.
-			return nil
+			if !agent.IsIgnorableFetchOriginError(err) {
+				return err
+			}
+			return nil // fetch failure is non-fatal
 		}
 		if res.Action == "diverged" {
 			return fmt.Errorf("local branch %s has diverged from origin (local=%s origin=%s); reconcile manually before claiming",
