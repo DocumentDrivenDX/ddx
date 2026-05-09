@@ -1,0 +1,83 @@
+{
+  "attempt_id": "20260509T225401-286e8c4e",
+  "bead_id": "ddx-f93b0762",
+  "base_rev": "e64f875b397e79b9e95e22c8373bc37619d67004",
+  "created_at": "2026-05-09T22:54:11.779172534Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f93b0762",
+    "title": "agent/store: extract Store.ParkToProposed helper for the 6 duplicate sites",
+    "description": "PROBLEM\n  Six call sites in cli/internal/agent/ each implement the same\n  \"park bead to proposed for operator attention\" pattern: status transition\n  open|in_progress -\u003e proposed via UpdateWithLifecycleStatus with\n  OperatorRequired=true plus a Reason and Source string, then a mutate\n  closure to set Extra fields. The boilerplate duplication makes it easy\n  to forget OperatorRequired=true (the validator would reject the call,\n  but the failure is far from the call site) or to set inconsistent\n  Source strings.\n\nROOT CAUSE\n  Six near-identical call sites:\n  - cli/internal/agent/execute_bead_loop.go:2408 parkBeadPostIntakeRejection\n  - cli/internal/agent/execute_bead_loop.go:2475 applyNoChangesSmartRetry\n    (open path, comparison reference)\n  - cli/internal/agent/execute_bead_loop.go:2501 applyNoChangesOperatorRequired\n  - cli/internal/agent/execute_bead_loop.go:2532 applyNoChangesBlockedExternal\n    (blocked path, comparison reference; not a \"park\" but uses the same\n    UpdateWithLifecycleStatus shape)\n  - cli/internal/agent/execute_bead_post_review.go:568 review malfunction\n  - cli/internal/agent/execute_bead_review_terminal.go:78 review terminal error\n  - cli/internal/agent/execute_bead_conflict_recovery.go:229 git merge conflict\n\n  Each repeats the LifecycleTransitionOptions{OperatorRequired: true,\n  Reason: ..., Source: ...} initializer plus a mutate function that sets\n  one or more Extra fields.\n\nPROPOSED FIX\n  - Add Store.ParkToProposed in cli/internal/bead/store.go (or a new file\n    under cli/internal/bead/) with signature:\n        func (s *Store) ParkToProposed(id string, reason ParkReason,\n            mutate func(*Bead)) error\n    where ParkReason is a string-typed enum (or struct) with constants:\n        ParkIntakeRejection\n        ParkNoChangesOperatorRequired\n        ParkPostReviewMalfunction\n        ParkReviewTerminal\n        ParkConflictRecovery\n    Each constant maps internally to a (Reason, Source) pair so call sites\n    only pass the enum.\n  - Convert the 5 actual park call sites (excluding the comparison-only\n    sites at 2475 and 2532) to call ParkToProposed.\n  - Add a unit test TestParkToProposed_TransitionAndMetadata in\n    cli/internal/bead/store_test.go asserting:\n      a. Park transitions open|in_progress -\u003e proposed.\n      b. The mutate callback runs after the transition.\n      c. The Reason/Source pair matches the ParkReason mapping.\n      d. Park does NOT change status when called on a terminal-status bead\n         (relies on existing ValidateLifecycleTransition).\n\nNON-SCOPE\n  - Changing the underlying lifecycle gate or validator.\n  - Touching applyNoChangesSmartRetry (-\u003e open) or applyNoChangesBlockedExternal\n    (-\u003e blocked); they are not park-to-proposed and are listed only as\n    comparison reference.\n  - Removing or renaming the existing helper functions that wrap each\n    call site; they may keep their public signatures and just delegate.\n  - Adding ParkToProposed to the agent package; the helper belongs in\n    cli/internal/bead/ alongside the rest of the lifecycle API.\n\nINTERSECTIONS\n  - ddx-ca1c66ee (epic parent).\n  - No deps on B1/B2/B3/B4; can run in parallel.",
+    "acceptance": "1. Store.ParkToProposed exists in cli/internal/bead/store.go (or a sibling file under cli/internal/bead/) with the signature documented in PROPOSED FIX, taking (id string, reason ParkReason, mutate func(*Bead)) error.\n2. ParkReason enum constants exist for ParkIntakeRejection, ParkNoChangesOperatorRequired, ParkPostReviewMalfunction, ParkReviewTerminal, ParkConflictRecovery.\n3. The 5 park call sites (execute_bead_loop.go:2408, execute_bead_loop.go:2501, execute_bead_post_review.go:568, execute_bead_review_terminal.go:78, execute_bead_conflict_recovery.go:229) call Store.ParkToProposed instead of inlining UpdateWithLifecycleStatus + LifecycleTransitionOptions.\n4. TestParkToProposed_TransitionAndMetadata in cli/internal/bead/store_test.go asserts the four behavioral properties listed in PROPOSED FIX (transition, mutate, reason/source mapping, terminal-status rejection).\n5. cd cli \u0026\u0026 go test ./internal/bead/... ./internal/agent/... ./cmd/... green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-ca1c66ee",
+    "labels": [
+      "phase:6",
+      "area:agent",
+      "area:bead",
+      "kind:refactor",
+      "spec:TD-031"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-09T22:52:55Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3533406",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-09T22:50:10.230191098Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-f93b0762\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-09T22:50:40.995271636Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "tracker lock timeout (max elapsed, owner pid: 3533406)\noutcome_reason=timeout",
+          "created_at": "2026-05-09T22:51:13.209885794Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-09T22:54:01.251100477Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-09T22:52:55.022890723Z",
+      "spec-id": "TD-031"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-031",
+      "path": "docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md",
+      "title": "Technical Design: Bead State Machine and Naming-Role Decisions"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260509T225401-286e8c4e",
+    "prompt": ".ddx/executions/20260509T225401-286e8c4e/prompt.md",
+    "manifest": ".ddx/executions/20260509T225401-286e8c4e/manifest.json",
+    "result": ".ddx/executions/20260509T225401-286e8c4e/result.json",
+    "checks": ".ddx/executions/20260509T225401-286e8c4e/checks.json",
+    "usage": ".ddx/executions/20260509T225401-286e8c4e/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-f93b0762-20260509T225401-286e8c4e"
+  },
+  "prompt_sha": "2fe3d82f201a3728d1c667749fc1ecaec707edfe02eaf8e5a9ea84e66cabe764"
+}
