@@ -764,6 +764,54 @@ func TestExecuteBeadWorker_RoutingFailureStopsLoopWithoutCoolingBead(t *testing.
 	assert.Empty(t, gotSecond.Owner)
 }
 
+func TestInvestigationRetry_NoSmartRouteDoesNotAddLegacyLabels(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+	target := &bead.Bead{
+		ID:       "ddx-smart-retry",
+		Title:    "Smart retry",
+		Priority: 0,
+		Extra: map[string]any{
+			TriageTierHintKey: string(escalation.TierSmart),
+		},
+	}
+	require.NoError(t, store.Create(target))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:        beadID,
+				Status:        ExecuteBeadStatusExecutionFailed,
+				Detail:        "smart retry route unavailable: no viable routing candidate satisfies requested MinPower 90",
+				OutcomeReason: FailureModeNoViableProvider,
+				BaseRev:       "aaaa1111",
+				ResultRev:     "aaaa1111",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Results, 1)
+	assert.Equal(t, FailureModeNoViableProvider, result.Results[0].OutcomeReason)
+	assert.True(t, result.Results[0].Disrupted)
+	assert.Equal(t, "routing", result.Results[0].DisruptionReason)
+
+	got, err := store.Get(target.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Empty(t, got.Owner)
+	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman)
+	assert.NotContains(t, got.Labels, bead.LabelNeedsInvestigation)
+	require.NotNil(t, got.Extra)
+	assert.Equal(t, string(escalation.TierSmart), got.Extra[TriageTierHintKey])
+	assert.NotContains(t, got.Extra, "execute-loop-retry-after")
+}
+
 func TestExecuteBeadWorkerNoReadyWork(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
