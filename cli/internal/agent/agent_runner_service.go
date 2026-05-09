@@ -173,6 +173,10 @@ func drainServiceEvents(events <-chan agentlib.ServiceEvent) (*agentlib.ServiceF
 }
 
 func drainServiceEventsWithWriter(events <-chan agentlib.ServiceEvent, w io.Writer) (*agentlib.ServiceFinalData, *agentlib.ServiceRoutingDecisionData, []agentlib.ServiceProgressData) {
+	return drainServiceEventsWithRenderer(events, w, NewWorkLogRenderer(WorkLogRendererOptions{}))
+}
+
+func drainServiceEventsWithRenderer(events <-chan agentlib.ServiceEvent, w io.Writer, renderer WorkLogRenderer) (*agentlib.ServiceFinalData, *agentlib.ServiceRoutingDecisionData, []agentlib.ServiceProgressData) {
 	var final *agentlib.ServiceFinalData
 	var routing *agentlib.ServiceRoutingDecisionData
 	var progress []agentlib.ServiceProgressData
@@ -186,14 +190,14 @@ func drainServiceEventsWithWriter(events <-chan agentlib.ServiceEvent, w io.Writ
 		case decoded.RoutingDecision != nil:
 			routing = decoded.RoutingDecision
 			if w != nil {
-				if line := FormatServiceRoutingDecision(decoded.RoutingDecision); line != "" {
-					_, _ = fmt.Fprintln(w, line)
+				if line := renderer.at(ev.Time).FormatRoutingDecision(decoded.RoutingDecision); line != "" {
+					_, _ = fmt.Fprint(w, line)
 				}
 			}
 		case decoded.Progress != nil:
 			progress = append(progress, *decoded.Progress)
 			if w != nil {
-				_, _ = fmt.Fprint(w, FormatServiceProgressEntries([]agentlib.ServiceProgressData{*decoded.Progress}))
+				_, _ = fmt.Fprint(w, renderer.at(ev.Time).FormatServiceProgressEntries([]agentlib.ServiceProgressData{*decoded.Progress}))
 			}
 		case decoded.Final != nil:
 			final = decoded.Final

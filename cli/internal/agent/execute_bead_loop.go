@@ -571,6 +571,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	resultsResetIdx := 0
 	complexityGuard := work.NewComplexityGuard(w.ComplexityGate, runtime.Log)
 	preclaimGuard := work.NewPreClaimGuard(runtime.PreClaimHook, w.Store, runtime.Log, now, 30*time.Second)
+	workLog := NewWorkLogRenderer(WorkLogRendererOptions{Now: now})
 
 	emit := func(eventType string, data map[string]any) {
 		writeLoopEvent(runtime.EventSink, runtime.SessionID, eventType, data, now().UTC())
@@ -829,11 +830,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		})
 
 		if runtime.Log != nil {
-			if candidate.Title != "" {
-				_, _ = fmt.Fprintf(runtime.Log, "\n▶ %s: %s\n", candidate.ID, candidate.Title)
-			} else {
-				_, _ = fmt.Fprintf(runtime.Log, "\n▶ %s\n", candidate.ID)
-			}
+			workLog = workLog.WithCurrentBeadID(candidate.ID)
+			_, _ = fmt.Fprint(runtime.Log, workLog.FormatHeader(candidate.ID, candidate.Title))
 		}
 
 		// Dangling-success recovery (ddx-2b2d114e): when we just reclaimed a
@@ -880,7 +878,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		// re-appear in ReadyExecution until an operator reviews it.
 		if runtime.PreClaimIntakeHook != nil {
 			if runtime.Log != nil {
-				_, _ = fmt.Fprintf(runtime.Log, "readiness check: starting %s\n", candidate.ID)
+				_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
+					Phase:   "readiness",
+					Message: "check: starting " + candidate.ID,
+				}))
 			}
 			emit("pre_claim_intake.start", map[string]any{
 				"bead_id": candidate.ID,
@@ -902,7 +903,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				warning := trimDiagnosticPrefix(intakeErr.Error(), "pre-claim intake")
 				classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, warning)
 				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "readiness check unavailable: %s (continuing with %s)\n", warning, candidate.ID)
+					_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
+						Phase:   "readiness",
+						Message: fmt.Sprintf("check unavailable: %s (continuing with %s)", warning, candidate.ID),
+					}))
 				}
 				emit("pre_claim_intake.warn", map[string]any{
 					"bead_id":       candidate.ID,
@@ -947,7 +951,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					systemReason = classified.SystemReason
 				}
 				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "readiness check unavailable: %s (continuing with %s)\n", warning, candidate.ID)
+					_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
+						Phase:   "readiness",
+						Message: fmt.Sprintf("check unavailable: %s (continuing with %s)", warning, candidate.ID),
+					}))
 				}
 				emit("pre_claim_intake.warn", map[string]any{
 					"bead_id":       candidate.ID,
@@ -994,9 +1001,15 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				if runtime.Log != nil {
 					var lhe *LintHookError
 					if errors.As(lintErr, &lhe) && lhe.Kind == LintHookErrorKindMissingHarness {
-						_, _ = fmt.Fprintf(runtime.Log, "readiness check unavailable: no harness configured; continuing with %s\n", candidate.ID)
+						_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
+							Phase:   "readiness",
+							Message: "check unavailable: no harness configured; continuing with " + candidate.ID,
+						}))
 					} else {
-						_, _ = fmt.Fprintf(runtime.Log, "readiness check unavailable: %v (continuing with %s)\n", lintErr, candidate.ID)
+						_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
+							Phase:   "readiness",
+							Message: fmt.Sprintf("check unavailable: %v (continuing with %s)", lintErr, candidate.ID),
+						}))
 					}
 				}
 				emit("pre_dispatch_lint.warn", map[string]any{
