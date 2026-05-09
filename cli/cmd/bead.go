@@ -673,6 +673,9 @@ func isProtectedBeadExtraKey(key string) bool {
 	}
 }
 
+// beadHasLegacyLifecycleInputs detects beads that require lifecycle migration
+// before they can be executed. Migration-only: these status values and labels
+// are legacy; new rows use canonical statuses and the lifecycle state machine.
 func beadHasLegacyLifecycleInputs(b bead.Bead) bool {
 	if b.Status == "needs_investigation" || b.Status == "needs_human" {
 		return true
@@ -1038,7 +1041,7 @@ func (f *CommandFactory) newBeadNeedsHumanCommand() *cobra.Command {
 		Short: "Deprecated alias: list proposed operator-attention beads",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			beads, err := f.beadStore().NeedsHuman()
+			beads, err := f.beadStore().ProposedOperatorAttention()
 			if err != nil {
 				return err
 			}
@@ -1120,6 +1123,8 @@ func (f *CommandFactory) resolveNeedsHumanBead(id, action, note string, children
 			Actor:  resolveClaimAssignee(),
 			Source: "ddx bead human resolve",
 		}, func(b *bead.Bead) error {
+			// Migration-only cleanup: removes LabelNeedsHuman from legacy rows;
+			// new rows carry status=proposed rather than this label.
 			removeBeadLabel(b, bead.LabelNeedsHuman)
 			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
 			return nil
@@ -1147,6 +1152,8 @@ func (f *CommandFactory) resolveNeedsHumanBead(id, action, note string, children
 			Actor:  resolveClaimAssignee(),
 			Source: "ddx bead human resolve",
 		}, func(b *bead.Bead) error {
+			// Migration-only cleanup: removes LabelNeedsHuman from legacy rows;
+			// new rows carry status=proposed rather than this label.
 			removeBeadLabel(b, bead.LabelNeedsHuman)
 			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
 			return nil

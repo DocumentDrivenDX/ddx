@@ -1562,10 +1562,10 @@ func (s *Store) ReadyExecution() ([]Bead, error) {
 	return s.readyFiltered(true)
 }
 
-// NeedsHuman returns operator-attention beads, sorted by queue order. The
-// persisted lifecycle state for that lane is status=proposed; the legacy
-// needs_human label is explanatory metadata only.
-func (s *Store) NeedsHuman() ([]Bead, error) {
+// ProposedOperatorAttention returns operator-attention beads (status=proposed),
+// sorted by queue order. The legacy needs_human label is explanatory metadata
+// only and does not affect selection.
+func (s *Store) ProposedOperatorAttention() ([]Bead, error) {
 	beads, err := s.ReadAll()
 	if err != nil {
 		return nil, err
@@ -1578,6 +1578,12 @@ func (s *Store) NeedsHuman() ([]Bead, error) {
 	}
 	sortBeadsForQueue(result)
 	return result, nil
+}
+
+// NeedsHuman is a deprecated alias for ProposedOperatorAttention.
+// Deprecated: use ProposedOperatorAttention instead.
+func (s *Store) NeedsHuman() ([]Bead, error) {
+	return s.ProposedOperatorAttention()
 }
 
 // ReadyExecutionBreakdown is the lifecycle-derived queue snapshot used by the
@@ -1989,7 +1995,7 @@ func (s *Store) Status() (*StatusCounts, error) {
 	if err != nil {
 		return nil, err
 	}
-	needsHuman, err := s.NeedsHuman()
+	needsHuman, err := s.ProposedOperatorAttention()
 	if err != nil {
 		return nil, err
 	}

@@ -76,68 +76,6 @@ func TestBeadReconcile_VerifiedNoChangesCanCloseAlreadySatisfied(t *testing.T) {
 	assert.NotEmpty(t, events)
 }
 
-func TestBeadReconcile_NonRetryableNeedsInvestigationClearsCooldown(t *testing.T) {
-	s := newTestStore(t)
-	b := &Bead{
-		ID:     "ddx-needs-investigation",
-		Title:  "needs investigation",
-		Labels: []string{LabelNeedsInvestigation},
-		Extra: map[string]any{
-			ExtraRetryAfter: "2026-01-01T00:00:00Z",
-			ExtraLastStatus: "no_changes",
-			ExtraLastDetail: "operator input required",
-		},
-	}
-	require.NoError(t, s.Create(b))
-
-	plans, err := s.ReconcileLifecycleMetadata(ReconcileOptions{Apply: true})
-	require.NoError(t, err)
-	require.Len(t, plans, 1)
-	assert.Equal(t, "needs_investigation is non-retryable; clear cooldown metadata", plans[0].Reason)
-
-	got, err := s.Get(b.ID)
-	require.NoError(t, err)
-	assert.Equal(t, StatusOpen, got.Status)
-	assert.Contains(t, got.Labels, LabelNeedsInvestigation)
-	assert.NotContains(t, got.Extra, ExtraRetryAfter)
-}
-
-func TestReconcile_NoViableProviderClearsStaleNeedsInvestigation(t *testing.T) {
-	s := newTestStore(t)
-	retryAfter := time.Now().UTC().Add(15 * time.Minute).Format(time.RFC3339)
-	b := &Bead{
-		ID:     "ddx-no-provider",
-		Title:  "provider outage",
-		Labels: []string{LabelNeedsInvestigation, LabelNoChangesUnverified},
-		Extra: map[string]any{
-			ExtraRetryAfter: retryAfter,
-			ExtraLastStatus: "execution_failed",
-			ExtraLastDetail: "execute-loop: all tiers exhausted - no viable provider found",
-			"events": []any{
-				map[string]any{
-					"kind":       "execute-bead",
-					"summary":    "execution_failed",
-					"body":       "execute-loop: all tiers exhausted - no viable provider found",
-					"created_at": "2026-01-01T00:00:00Z",
-				},
-			},
-		},
-	}
-	require.NoError(t, s.Create(b))
-
-	plans, err := s.ReconcileLifecycleMetadata(ReconcileOptions{Apply: true})
-	require.NoError(t, err)
-	require.Len(t, plans, 1)
-	assert.Equal(t, "no_viable_provider is retryable transport state; clear stale needs-investigation label", plans[0].Reason)
-	assert.Equal(t, []string{LabelNeedsInvestigation}, plans[0].RemoveLabels)
-
-	got, err := s.Get(b.ID)
-	require.NoError(t, err)
-	assert.NotContains(t, got.Labels, LabelNeedsInvestigation)
-	assert.Contains(t, got.Labels, LabelNoChangesUnverified)
-	assert.Equal(t, retryAfter, got.Extra[ExtraRetryAfter])
-}
-
 func TestBeadReconcile_ParentEpicMarksNotExecutableOnlyWithChildEvidence(t *testing.T) {
 	s := newTestStore(t)
 	parent := &Bead{
@@ -190,34 +128,6 @@ func TestLifecycle_NoChangesVerified_ClosesAndLeavesQueue(t *testing.T) {
 	ready, err := s.ReadyExecution()
 	require.NoError(t, err)
 	assert.Empty(t, ready)
-}
-
-func TestLifecycle_NeedsInvestigation_NoCooldownAndExplainedSkip(t *testing.T) {
-	s := newTestStore(t)
-	b := &Bead{
-		ID:     "ddx-needs-skip",
-		Title:  "needs investigation skip",
-		Labels: []string{LabelNeedsInvestigation},
-		Extra: map[string]any{
-			ExtraRetryAfter: time.Now().UTC().Add(2 * time.Hour).Format(time.RFC3339),
-			ExtraLastStatus: "no_changes",
-		},
-	}
-	require.NoError(t, s.Create(b))
-	_, err := s.ReconcileLifecycleMetadata(ReconcileOptions{Apply: true})
-	require.NoError(t, err)
-
-	ready, err := s.ReadyExecution()
-	require.NoError(t, err)
-	require.Len(t, ready, 1)
-	assert.Equal(t, b.ID, ready[0].ID)
-
-	blocked, err := s.BlockedAll()
-	require.NoError(t, err)
-	assert.Empty(t, blocked)
-	got, err := s.Get(b.ID)
-	require.NoError(t, err)
-	assert.NotContains(t, got.Extra, ExtraRetryAfter)
 }
 
 func TestLifecycle_UnjustifiedNoChanges_BadAttemptNotLongCooldown(t *testing.T) {

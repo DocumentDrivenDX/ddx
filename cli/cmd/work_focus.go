@@ -57,7 +57,7 @@ func workerReadyDepthLabel(count int) string {
 // buildWorkFocusReport queries the store and returns a WorkFocusReport.
 func buildWorkFocusReport(store *bead.Store) (WorkFocusReport, error) {
 	// Collect operator-attention beads (status=proposed, any dep state).
-	operatorAttentionBeads, err := store.NeedsHuman()
+	operatorAttentionBeads, err := store.ProposedOperatorAttention()
 	if err != nil {
 		return WorkFocusReport{}, fmt.Errorf("work focus: operator attention query: %w", err)
 	}

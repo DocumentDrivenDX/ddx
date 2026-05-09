@@ -182,23 +182,6 @@ func planLifecycleReconcile(b Bead, events []BeadEvent, childCount int, now time
 		return p, true
 	}
 
-	if isNoViableProviderEvent(latest) && hasLabel(b, LabelNeedsInvestigation) {
-		p.Reason = "no_viable_provider is retryable transport state; clear stale needs-investigation label"
-		p.RemoveLabels = []string{LabelNeedsInvestigation}
-		return p, true
-	}
-
-	if hasLabel(b, LabelNeedsInvestigation) || latest.Kind == "no_changes_needs_investigation" {
-		if hasRetryAfter(b) || hasAnyExtra(b, ExtraLastStatus, ExtraLastDetail) {
-			p.Reason = "needs_investigation is non-retryable; clear cooldown metadata"
-			p.ClearFields = noChangesFieldsPresent(b)
-			if !hasLabel(b, LabelNeedsInvestigation) {
-				p.AddLabels = append(p.AddLabels, LabelNeedsInvestigation)
-			}
-			return p, len(p.ClearFields) > 0 || len(p.AddLabels) > 0
-		}
-	}
-
 	if isExpiredRetryAfter(b, now) {
 		p.Reason = "expired retry-after metadata no longer blocks execution"
 		p.ClearFields = []string{ExtraRetryAfter}
