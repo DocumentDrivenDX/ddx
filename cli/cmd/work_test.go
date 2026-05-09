@@ -59,6 +59,7 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 	setFlag("review-model", "gpt-5.4")
 	setFlag("max-cost", "12.5")
 	setFlag("request-timeout", "2m")
+	setFlag("rate-limit-max-wait", "90s")
 	setFlag("min-power", "7")
 	setFlag("max-power", "8")
 
@@ -81,11 +82,61 @@ func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
 	assert.True(t, spec.OpaquePassthrough)
 	assert.Equal(t, 12.5, spec.MaxCostUSD)
 	assert.Equal(t, 2*time.Minute, spec.RequestTimeout.Duration)
+	assert.Equal(t, 90*time.Second, spec.RateLimitMaxWait.Duration)
 	assert.Equal(t, 7, spec.MinPower)
 	assert.Equal(t, 8, spec.MaxPower)
 	assert.Equal(t, executeloop.SpecCurrentVersion, spec.SpecVersion)
 	assert.Equal(t, "true", dispatch.JSON)
 	assert.True(t, dispatch.Local)
+}
+
+func TestParseExecuteLoopSpec_RateLimitMaxWait(t *testing.T) {
+	tests := []struct {
+		name string
+		set  string
+		want time.Duration
+	}{
+		{name: "default", want: agent.RateLimitRetryDefaultBudget},
+		{name: "explicit positive", set: "90s", want: 90 * time.Second},
+		{name: "zero uses runtime default", set: "0", want: 0},
+		{name: "negative disables retry", set: "-1s", want: -1 * time.Second},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			root := NewCommandFactory(dir).NewRootCommand()
+			workCmd, _, err := root.Find([]string{"work"})
+			require.NoError(t, err)
+			if tt.set != "" {
+				require.NoError(t, workCmd.Flags().Set("rate-limit-max-wait", tt.set))
+			}
+
+			spec, _, err := parseExecuteLoopSpec(workCmd, true)
+			require.NoError(t, err)
+			assert.Equal(t, tt.want, spec.RateLimitMaxWait.Duration)
+		})
+	}
+}
+
+func TestRunAgentExecuteLoopImpl_PassesRateLimitMaxWait(t *testing.T) {
+	var out bytes.Buffer
+	budget := 42 * time.Second
+
+	runtime := executeLoopAttemptRuntime(
+		executeloop.ExecuteLoopSpec{
+			FromRev:          "HEAD~1",
+			RateLimitMaxWait: executeloop.Duration{Duration: budget},
+		},
+		&out,
+		nil,
+		nil,
+		nil,
+	)
+
+	assert.Equal(t, "HEAD~1", runtime.FromRev)
+	assert.Same(t, &out, runtime.Output)
+	assert.Equal(t, budget, runtime.RateLimitMaxWait)
 }
 
 func TestParseExecuteLoopFlags_OnceFlag(t *testing.T) {

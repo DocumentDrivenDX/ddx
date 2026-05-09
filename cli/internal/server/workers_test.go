@@ -233,6 +233,7 @@ func TestWorkers_UnifiedSpec_PersistsToSpecJson(t *testing.T) {
 		OpaquePassthrough: true,
 		MaxCostUSD:        1.25,
 		RequestTimeout:    executeloop.Duration{Duration: 2 * time.Minute},
+		RateLimitMaxWait:  executeloop.Duration{Duration: 90 * time.Second},
 		MinPower:          7,
 		MaxPower:          8,
 		FromRev:           "HEAD~1",
@@ -267,6 +268,7 @@ func TestWorkers_UnifiedSpec_PersistsToSpecJson(t *testing.T) {
 	assert.True(t, persisted.OpaquePassthrough)
 	assert.Equal(t, 1.25, persisted.MaxCostUSD)
 	assert.Equal(t, 2*time.Minute, persisted.RequestTimeout.Duration)
+	assert.Equal(t, 90*time.Second, persisted.RateLimitMaxWait.Duration)
 	assert.Equal(t, 7, persisted.MinPower)
 	assert.Equal(t, 8, persisted.MaxPower)
 	assert.Equal(t, "HEAD~1", persisted.FromRev)
@@ -1179,27 +1181,28 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 	installFastSuccessWorker(srv.workers)
 
 	body, _ := json.Marshal(map[string]any{
-		"project_root":       projectB,
-		"harness":            "fiz",
-		"model":              "qwen/qwen3.6",
-		"profile":            "default",
-		"provider":           "openrouter",
-		"model_ref":          "openrouter/qwen/qwen3.6",
-		"effort":             "high",
-		"label_filter":       "phase:reliability",
-		"mode":               "watch",
-		"idle_interval":      "17s",
-		"no_review":          true,
-		"review_harness":     "review-harness",
-		"review_model":       "review-model",
-		"opaque_passthrough": true,
-		"max_cost_usd":       0.75,
-		"request_timeout":    "47s",
-		"min_power":          7,
-		"max_power":          8,
-		"from_rev":           "HEAD~1",
-		"spec_version":       executeloop.SpecCurrentVersion,
-		"future_server_hint": "ignored",
+		"project_root":        projectB,
+		"harness":             "fiz",
+		"model":               "qwen/qwen3.6",
+		"profile":             "default",
+		"provider":            "openrouter",
+		"model_ref":           "openrouter/qwen/qwen3.6",
+		"effort":              "high",
+		"label_filter":        "phase:reliability",
+		"mode":                "watch",
+		"idle_interval":       "17s",
+		"no_review":           true,
+		"review_harness":      "review-harness",
+		"review_model":        "review-model",
+		"opaque_passthrough":  true,
+		"max_cost_usd":        0.75,
+		"request_timeout":     "47s",
+		"rate_limit_max_wait": "91s",
+		"min_power":           7,
+		"max_power":           8,
+		"from_rev":            "HEAD~1",
+		"spec_version":        executeloop.SpecCurrentVersion,
+		"future_server_hint":  "ignored",
 	})
 	req := httptest.NewRequest(http.MethodPost, "/api/agent/workers/execute-loop", strings.NewReader(string(body)))
 	req.Header.Set("Content-Type", "application/json")
@@ -1242,6 +1245,7 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 	assert.True(t, persisted.OpaquePassthrough)
 	assert.Equal(t, 0.75, persisted.MaxCostUSD)
 	assert.Equal(t, 47*time.Second, persisted.RequestTimeout.Duration)
+	assert.Equal(t, 91*time.Second, persisted.RateLimitMaxWait.Duration)
 	assert.Equal(t, 7, persisted.MinPower)
 	assert.Equal(t, 8, persisted.MaxPower)
 	assert.Equal(t, "HEAD~1", persisted.FromRev)

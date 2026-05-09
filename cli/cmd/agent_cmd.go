@@ -1414,6 +1414,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	reviewModel, _ := cmd.Flags().GetString("review-model")
 	maxCostUSD, _ := cmd.Flags().GetFloat64("max-cost")
 	requestTimeout, _ := cmd.Flags().GetDuration("request-timeout")
+	rateLimitMaxWait, _ := cmd.Flags().GetDuration("rate-limit-max-wait")
 	minPower, _ := cmd.Flags().GetInt("min-power")
 	maxPower, _ := cmd.Flags().GetInt("max-power")
 
@@ -1446,6 +1447,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 		OpaquePassthrough: treatPassthroughAsOpaque,
 		MaxCostUSD:        maxCostUSD,
 		RequestTimeout:    executeloop.Duration{Duration: requestTimeout},
+		RateLimitMaxWait:  executeloop.Duration{Duration: rateLimitMaxWait},
 		MinPower:          minPower,
 		MaxPower:          maxPower,
 		FromRev:           fromRev,
@@ -1456,6 +1458,17 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	}
 
 	return spec, executeloop.DispatchOptions{Local: local, JSON: dispatchJSON}, nil
+}
+
+func executeLoopAttemptRuntime(spec executeloop.ExecuteLoopSpec, output io.Writer, events agent.BeadEventAppender, runner agent.AgentRunner, checker agent.ExecutionResourceChecker) agent.ExecuteBeadRuntime {
+	return agent.ExecuteBeadRuntime{
+		FromRev:          spec.FromRev,
+		Output:           output,
+		BeadEvents:       events,
+		AgentRunner:      runner,
+		ResourceChecker:  checker,
+		RateLimitMaxWait: spec.RateLimitMaxWait.Duration,
+	}
 }
 
 // runAgentExecuteLoopImpl is the implementation for runWork. When
@@ -1668,13 +1681,13 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			loopOverrides.ProviderRequestTimeout = &requestTimeout
 		}
 		attemptRcfg, _ := config.LoadAndResolve(projectRoot, loopOverrides)
-		res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, agent.ExecuteBeadRuntime{
-			FromRev:         spec.FromRev,
-			Output:          cmd.OutOrStdout(),
-			BeadEvents:      bead.NewStore(filepath.Join(projectRoot, ".ddx")),
-			AgentRunner:     f.AgentRunnerOverride,
-			ResourceChecker: resourceChecker,
-		}, gitOps)
+		res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, executeLoopAttemptRuntime(
+			spec,
+			cmd.OutOrStdout(),
+			bead.NewStore(filepath.Join(projectRoot, ".ddx")),
+			f.AgentRunnerOverride,
+			resourceChecker,
+		), gitOps)
 		if execErr != nil && res == nil {
 			return agent.ExecuteBeadReport{}, execErr
 		}

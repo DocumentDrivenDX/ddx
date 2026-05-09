@@ -781,9 +781,10 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			attemptRcfg, _ := config.LoadAndResolve(projectRoot, loopOverrides)
 			beadStore := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
 			res, err := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, agent.ExecuteBeadRuntime{
-				FromRev:    spec.FromRev,
-				BeadEvents: beadStore,
-				BeadCancel: beadStore,
+				FromRev:          spec.FromRev,
+				BeadEvents:       beadStore,
+				BeadCancel:       beadStore,
+				RateLimitMaxWait: spec.RateLimitMaxWait.Duration,
 			}, gitOps)
 			if err != nil && res == nil {
 				return agent.ExecuteBeadReport{}, err

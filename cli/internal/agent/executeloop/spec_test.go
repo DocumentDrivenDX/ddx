@@ -26,6 +26,7 @@ func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 		OpaquePassthrough: true,
 		MaxCostUSD:        12.50,
 		RequestTimeout:    executeloop.Duration{Duration: 2 * time.Minute},
+		RateLimitMaxWait:  executeloop.Duration{Duration: 90 * time.Second},
 		MinPower:          2,
 		MaxPower:          5,
 		FromRev:           "abc123def456",
@@ -90,6 +91,9 @@ func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 	if got.RequestTimeout != original.RequestTimeout {
 		t.Errorf("RequestTimeout: got %v, want %v", got.RequestTimeout, original.RequestTimeout)
 	}
+	if got.RateLimitMaxWait != original.RateLimitMaxWait {
+		t.Errorf("RateLimitMaxWait: got %v, want %v", got.RateLimitMaxWait, original.RateLimitMaxWait)
+	}
 	if got.MinPower != original.MinPower {
 		t.Errorf("MinPower: got %d, want %d", got.MinPower, original.MinPower)
 	}
@@ -106,7 +110,7 @@ func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 
 func TestExecuteLoopSpec_RoundTrip_NumericNanoseconds(t *testing.T) {
 	// Verify Duration unmarshals numeric nanoseconds produced by older clients.
-	raw := `{"idle_interval":30000000000,"request_timeout":120000000000}`
+	raw := `{"idle_interval":30000000000,"request_timeout":120000000000,"rate_limit_max_wait":90000000000}`
 	var s executeloop.ExecuteLoopSpec
 	if err := json.Unmarshal([]byte(raw), &s); err != nil {
 		t.Fatalf("unmarshal numeric nanoseconds: %v", err)
@@ -116,6 +120,9 @@ func TestExecuteLoopSpec_RoundTrip_NumericNanoseconds(t *testing.T) {
 	}
 	if s.RequestTimeout.Duration != 2*time.Minute {
 		t.Errorf("RequestTimeout: got %v, want 2m0s", s.RequestTimeout.Duration)
+	}
+	if s.RateLimitMaxWait.Duration != 90*time.Second {
+		t.Errorf("RateLimitMaxWait: got %v, want 90s", s.RateLimitMaxWait.Duration)
 	}
 }
 

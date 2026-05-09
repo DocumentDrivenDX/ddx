@@ -160,26 +160,27 @@ func TestGraphQL_WorkerDispatch_UsesExecuteLoopSpec(t *testing.T) {
 	installFastSuccessWorker(m)
 
 	rawBytes, _ := json.Marshal(map[string]any{
-		"harness":            "fiz",
-		"model":              "qwen/qwen3.6",
-		"profile":            "default",
-		"provider":           "openrouter",
-		"model_ref":          "openrouter/qwen/qwen3.6",
-		"effort":             "high",
-		"label_filter":       "phase:reliability",
-		"mode":               "watch",
-		"idle_interval":      "19s",
-		"no_review":          true,
-		"review_harness":     "review-harness",
-		"review_model":       "review-model",
-		"opaque_passthrough": true,
-		"max_cost_usd":       0.95,
-		"request_timeout":    "53s",
-		"min_power":          7,
-		"max_power":          8,
-		"from_rev":           "HEAD~1",
-		"spec_version":       executeloop.SpecCurrentVersion,
-		"future_graphql_key": "ignored",
+		"harness":             "fiz",
+		"model":               "qwen/qwen3.6",
+		"profile":             "default",
+		"provider":            "openrouter",
+		"model_ref":           "openrouter/qwen/qwen3.6",
+		"effort":              "high",
+		"label_filter":        "phase:reliability",
+		"mode":                "watch",
+		"idle_interval":       "19s",
+		"no_review":           true,
+		"review_harness":      "review-harness",
+		"review_model":        "review-model",
+		"opaque_passthrough":  true,
+		"max_cost_usd":        0.95,
+		"request_timeout":     "53s",
+		"rate_limit_max_wait": "92s",
+		"min_power":           7,
+		"max_power":           8,
+		"from_rev":            "HEAD~1",
+		"spec_version":        executeloop.SpecCurrentVersion,
+		"future_graphql_key":  "ignored",
 	})
 	raw := string(rawBytes)
 
@@ -248,6 +249,9 @@ func TestGraphQL_WorkerDispatch_UsesExecuteLoopSpec(t *testing.T) {
 	}
 	if spec.RequestTimeout.Duration != 53*time.Second {
 		t.Errorf("RequestTimeout: got %v", spec.RequestTimeout.Duration)
+	}
+	if spec.RateLimitMaxWait.Duration != 92*time.Second {
+		t.Errorf("RateLimitMaxWait: got %v", spec.RateLimitMaxWait.Duration)
 	}
 	if spec.MinPower != 7 {
 		t.Errorf("MinPower: got %d", spec.MinPower)

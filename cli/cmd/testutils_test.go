@@ -31,7 +31,34 @@ func TestMain(m *testing.M) {
 			}
 		}
 	}
-	os.Exit(m.Run())
+	cleanupTemp := isolateCmdTestTempRoot()
+	code := m.Run()
+	cleanupTemp()
+	os.Exit(code)
+}
+
+func isolateCmdTestTempRoot() func() {
+	tempRoot, err := os.MkdirTemp("", "ddx-cmd-tests-*")
+	if err != nil {
+		return func() {}
+	}
+	oldTmpDir, hadTmpDir := os.LookupEnv("TMPDIR")
+	oldTmp, hadTmp := os.LookupEnv("TMP")
+	_ = os.Setenv("TMPDIR", tempRoot)
+	_ = os.Setenv("TMP", tempRoot)
+	return func() {
+		if hadTmpDir {
+			_ = os.Setenv("TMPDIR", oldTmpDir)
+		} else {
+			_ = os.Unsetenv("TMPDIR")
+		}
+		if hadTmp {
+			_ = os.Setenv("TMP", oldTmp)
+		} else {
+			_ = os.Unsetenv("TMP")
+		}
+		_ = os.RemoveAll(tempRoot)
+	}
 }
 
 var (
