@@ -638,6 +638,55 @@ func TestUnclaimDoesNotReopenClosedBead(t *testing.T) {
 	assert.Equal(t, StatusClosed, got.Status, "unclaim must not reopen a closed bead")
 }
 
+func TestClaimMetadataKeys_SharedByReopenAndUnclaim(t *testing.T) {
+	s := newTestStore(t)
+	b := &Bead{ID: "ddx-ckmeta-001", Title: "Claim metadata key test", IssueType: "task", Status: StatusOpen}
+	require.NoError(t, s.Create(b))
+
+	// Helper: populate all ClaimMetadataExtraKeys plus heartbeat and a survivor key.
+	populateClaimMeta := func(id string) {
+		require.NoError(t, s.Update(id, func(b *Bead) {
+			if b.Extra == nil {
+				b.Extra = make(map[string]any)
+			}
+			for _, k := range ClaimMetadataExtraKeys {
+				b.Extra[k] = "test-value"
+			}
+			b.Extra[ClaimHeartbeatExtraKey] = "test-heartbeat"
+			b.Extra["claim-test-extra"] = "should-survive"
+		}))
+	}
+
+	// --- AC4.a + AC4.b: Unclaim clears all ClaimMetadataExtraKeys ---
+	require.NoError(t, s.Claim(b.ID, "worker"))
+	populateClaimMeta(b.ID)
+	require.NoError(t, s.Unclaim(b.ID))
+
+	got, err := s.Get(b.ID)
+	require.NoError(t, err)
+	for _, k := range ClaimMetadataExtraKeys {
+		assert.NotContains(t, got.Extra, k, "Unclaim must clear %q", k)
+	}
+	// AC4.d: unrelated key survives Unclaim
+	assert.Equal(t, "should-survive", got.Extra["claim-test-extra"], "Unclaim must not clear unrelated Extra keys")
+
+	// --- AC4.a + AC4.c: Reopen clears all ClaimMetadataExtraKeys ---
+	// Close the bead so Reopen has something to reopen.
+	require.NoError(t, s.Claim(b.ID, "worker"))
+	populateClaimMeta(b.ID)
+	require.NoError(t, s.Close(b.ID))
+
+	require.NoError(t, s.Reopen(b.ID, "test reopen", ""))
+
+	got, err = s.Get(b.ID)
+	require.NoError(t, err)
+	for _, k := range ClaimMetadataExtraKeys {
+		assert.NotContains(t, got.Extra, k, "Reopen must clear %q", k)
+	}
+	// AC4.d: unrelated key survives Reopen
+	assert.Equal(t, "should-survive", got.Extra["claim-test-extra"], "Reopen must not clear unrelated Extra keys")
+}
+
 // withHeartbeat temporarily overrides HeartbeatInterval and HeartbeatTTL for
 // the duration of a test.
 func withHeartbeat(t *testing.T, interval, ttl time.Duration) {

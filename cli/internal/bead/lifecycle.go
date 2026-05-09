@@ -283,3 +283,20 @@ func hasNoChangesTriageLabelValue(label string) bool {
 	}
 	return false
 }
+
+// ClaimMetadataExtraKeys is the canonical list of claim-metadata keys stored in
+// Bead.Extra. Unclaim and Reopen both iterate this list to avoid drift when new
+// claim keys are added.
+var ClaimMetadataExtraKeys = []string{
+	"claimed-at",
+	"claimed-pid",
+	"claimed-machine",
+	"claimed-session",
+	"claimed-worktree",
+}
+
+// ClaimHeartbeatExtraKey is the Extra key for the execute-loop heartbeat
+// timestamp. It is cleared by both Unclaim and Reopen but is kept separate
+// from ClaimMetadataExtraKeys because its cleanup semantics differ in some
+// call sites (e.g. SetExecutionCooldown does not touch it).
+const ClaimHeartbeatExtraKey = "execute-loop-heartbeat-at"
