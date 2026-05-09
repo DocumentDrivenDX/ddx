@@ -161,8 +161,8 @@ func TestExecuteBeadInstructionsContainsBeadExecutionMode(t *testing.T) {
 			rendered := renderInstructionsForGuardrails(t, c.harness, "")
 			for _, sub := range []string{
 				"DDX_MODE=bead_execution",
-				"Worker prompts may edit code/docs to satisfy the bead AC",
-				"Only the broad interactive queue-steward default is overridden",
+				"edit code/docs for bead AC",
+				"Only the broad queue-steward default is overridden",
 				"tracker, merge-policy, verification, and safety rules remain active",
 			} {
 				if !strings.Contains(rendered, sub) {
