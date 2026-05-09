@@ -563,6 +563,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		heartbeatInterval = bead.HeartbeatInterval
 	}
 	harness := rcfg.Harness()
+	provider := rcfg.Provider()
 	model := rcfg.Model()
 	profile := rcfg.Profile()
 	loopMode, idleInterval := runtime.loopIntent()
@@ -892,8 +893,12 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		if runtime.PreClaimIntakeHook != nil {
 			if runtime.Log != nil {
 				_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
-					Phase:   "readiness",
-					Message: "check: starting " + candidate.ID,
+					Phase:    "readiness",
+					BeadID:   candidate.ID,
+					Message:  "check: starting",
+					Harness:  harness,
+					Provider: provider,
+					Model:    model,
 				}))
 			}
 			emit("pre_claim_intake.start", map[string]any{
@@ -917,8 +922,12 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, warning)
 				if runtime.Log != nil {
 					_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
-						Phase:   "readiness",
-						Message: fmt.Sprintf("check unavailable: %s (continuing with %s)", warning, candidate.ID),
+						Phase:    "readiness",
+						BeadID:   candidate.ID,
+						Message:  fmt.Sprintf("check unavailable: %s (continuing)", warning),
+						Harness:  harness,
+						Provider: provider,
+						Model:    model,
 					}))
 				}
 				emit("pre_claim_intake.warn", map[string]any{
@@ -965,8 +974,12 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				if runtime.Log != nil {
 					_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
-						Phase:   "readiness",
-						Message: fmt.Sprintf("check unavailable: %s (continuing with %s)", warning, candidate.ID),
+						Phase:    "readiness",
+						BeadID:   candidate.ID,
+						Message:  fmt.Sprintf("check unavailable: %s (continuing)", warning),
+						Harness:  harness,
+						Provider: provider,
+						Model:    model,
 					}))
 				}
 				emit("pre_claim_intake.warn", map[string]any{
@@ -1015,13 +1028,21 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					var lhe *LintHookError
 					if errors.As(lintErr, &lhe) && lhe.Kind == LintHookErrorKindMissingHarness {
 						_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
-							Phase:   "readiness",
-							Message: "check unavailable: no harness configured; continuing with " + candidate.ID,
+							Phase:    "readiness",
+							BeadID:   candidate.ID,
+							Message:  "check unavailable: no harness configured; continuing",
+							Harness:  harness,
+							Provider: provider,
+							Model:    model,
 						}))
 					} else {
 						_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
-							Phase:   "readiness",
-							Message: fmt.Sprintf("check unavailable: %v (continuing with %s)", lintErr, candidate.ID),
+							Phase:    "readiness",
+							BeadID:   candidate.ID,
+							Message:  fmt.Sprintf("check unavailable: %v (continuing)", lintErr),
+							Harness:  harness,
+							Provider: provider,
+							Model:    model,
 						}))
 					}
 				}

@@ -231,8 +231,8 @@ func TestIntake_ErrorContinuesToClaimWithoutParkingCandidate(t *testing.T) {
 
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "intake errors must not block claim")
 	assert.Equal(t, 1, result.Attempts)
-	assert.Contains(t, log.String(), "readiness check: starting "+candidate.ID)
-	assert.Contains(t, log.String(), "readiness check unavailable: empty output (continuing with "+candidate.ID+")")
+	assert.Contains(t, log.String(), "readiness check: starting")
+	assert.Contains(t, log.String(), "readiness check unavailable: empty output (continuing)")
 	assert.NotContains(t, log.String(), "pre-claim intake: pre-claim intake:")
 
 	got, err := inner.Get(candidate.ID)
@@ -244,7 +244,7 @@ func TestIntake_ErrorContinuesToClaimWithoutParkingCandidate(t *testing.T) {
 }
 
 func TestIntake_LogsStartBeforeHookReturns(t *testing.T) {
-	inner, candidate, _ := newExecuteLoopTestStore(t)
+	inner, _, _ := newExecuteLoopTestStore(t)
 	store := &claimCountingStore{Store: inner}
 
 	worker := &ExecuteBeadWorker{
@@ -287,12 +287,92 @@ func TestIntake_LogsStartBeforeHookReturns(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("intake hook did not start")
 	}
-	assert.Contains(t, log.String(), "readiness check: starting "+candidate.ID)
+	assert.Contains(t, log.String(), "readiness check: starting")
 	assert.Contains(t, eventSink.String(), "pre_claim_intake.start")
 
 	close(release)
 	require.NoError(t, <-done)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls))
+}
+
+func TestExecuteBeadWorkerStdout_ReadinessUsesScopedWorkLog(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-readiness-scoped",
+				ResultRev: "abc789",
+			}, nil
+		}),
+		Now: func() time.Time {
+			return time.Date(2026, 5, 9, 12, 34, 56, 789000000, time.UTC)
+		},
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	var log bytes.Buffer
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		Log:  &log,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	out := log.String()
+	assert.Contains(t, out, "▶ "+candidate.ID+": "+candidate.Title)
+	line := renderedLineContaining(t, out, "readiness check: starting")
+	assert.Equal(t, "12:34:56 readiness check: starting", line)
+	assert.NotContains(t, line, candidate.ID)
+	assert.NotContains(t, out, "pre-claim intake")
+}
+
+func TestExecuteBeadWorkerStdout_ReadinessResultLine(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-readiness-result",
+				ResultRev: "abc790",
+			}, nil
+		}),
+		Now: func() time.Time {
+			return time.Date(2026, 5, 9, 12, 34, 56, 789000000, time.UTC)
+		},
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker", Harness: "agent", Model: "gpt-5.4-mini"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	var log bytes.Buffer
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		Log:  &log,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{}, errors.New("pre-claim intake: empty output")
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	line := renderedLineContaining(t, log.String(), "readiness check unavailable")
+	assert.Contains(t, line, "12:34:56 readiness check unavailable: empty output (continuing)")
+	assert.Contains(t, line, "route: harness=agent model=gpt-5.4-mini")
+	assert.NotContains(t, line, candidate.ID)
 }
 
 func TestIntake_ActionableButRewritten_UpdatesAfterClaim(t *testing.T) {
@@ -563,7 +643,7 @@ func TestIntake_DescriptionPreservationFailureParksForHuman(t *testing.T) {
 // log renders a single user-facing prefix and never contains the doubled form
 // "pre-claim intake: pre-claim intake:".
 func TestReadinessHookEmptyOutput_DeduplicatesPrefix(t *testing.T) {
-	inner, candidate, _ := newExecuteLoopTestStore(t)
+	inner, _, _ := newExecuteLoopTestStore(t)
 	store := &claimCountingStore{Store: inner}
 
 	worker := &ExecuteBeadWorker{
@@ -595,7 +675,7 @@ func TestReadinessHookEmptyOutput_DeduplicatesPrefix(t *testing.T) {
 
 	logOut := log.String()
 	assert.NotContains(t, logOut, "pre-claim intake: pre-claim intake:", "doubled prefix must not appear")
-	assert.Contains(t, logOut, "readiness check unavailable: empty output (continuing with "+candidate.ID+")")
+	assert.Contains(t, logOut, "readiness check unavailable: empty output (continuing)")
 	// Execution must still proceed (fail-open semantics).
 	assert.Equal(t, 1, result.Successes)
 }
@@ -604,7 +684,7 @@ func TestReadinessHookEmptyOutput_DeduplicatesPrefix(t *testing.T) {
 // lint hook failure renders as an actionable readiness-check warning in the
 // operator log rather than exposing the raw "lint hook: missing-harness" error.
 func TestReadinessUnavailableOutputIsActionable(t *testing.T) {
-	inner, candidate, _ := newExecuteLoopTestStore(t)
+	inner, _, _ := newExecuteLoopTestStore(t)
 	store := &claimCountingStore{Store: inner}
 
 	worker := &ExecuteBeadWorker{
@@ -636,7 +716,7 @@ func TestReadinessUnavailableOutputIsActionable(t *testing.T) {
 	logOut := logBuf.String()
 	assert.NotContains(t, logOut, "lint hook: missing-harness", "raw lint hook error must not appear in operator log")
 	assert.NotContains(t, logOut, "pre-dispatch lint:", "pre-dispatch lint prefix must not appear in operator log")
-	assert.Contains(t, logOut, "readiness check unavailable: no harness configured; continuing with "+candidate.ID)
+	assert.Contains(t, logOut, "readiness check unavailable: no harness configured; continuing")
 	// Fail-open: execution must proceed.
 	assert.Equal(t, 1, result.Successes)
 }
