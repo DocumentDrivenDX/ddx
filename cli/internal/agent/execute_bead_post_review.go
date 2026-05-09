@@ -564,13 +564,7 @@ func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now tim
 			b.Extra[TriageTierHintKey] = string(nextTier)
 		})
 	case triage.ActionOperatorRequired:
-		reason := "review BLOCK triage reached operator-required rung"
-		if err := store.UpdateWithLifecycleStatus(beadID, bead.StatusProposed, bead.LifecycleTransitionOptions{
-			OperatorRequired: true,
-			Reason:           reason,
-			Actor:            actor,
-			Source:           "ddx agent execute-loop",
-		}, func(b *bead.Bead) error {
+		if err := store.ParkToProposed(beadID, bead.ParkPostReviewMalfunction, func(b *bead.Bead) {
 			if b.Extra == nil {
 				b.Extra = make(map[string]any)
 			}
@@ -580,13 +574,12 @@ func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now tim
 			b.Labels = removeBeadLabels(b.Labels, TriageNeedsHumanLabel, bead.LabelNeedsHuman, bead.LabelNeedsInvestigation)
 			clearReviewTriageClaimMetadata(b)
 			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
-				Reason:          reason,
+				Reason:          "review BLOCK triage reached operator-required rung",
 				Since:           now.UTC().Format(time.RFC3339),
 				Source:          "ddx agent execute-loop",
 				SuggestedAction: "review the blocked attempt and accept, split, block, or cancel",
 				Summary:         "review BLOCK triage requires operator decision",
 			})
-			return nil
 		}); err != nil {
 			return err
 		}
