@@ -51,6 +51,8 @@ Examples:
 	cmd.AddCommand(f.newBeadReopenCommand())
 	cmd.AddCommand(f.newBeadListCommand())
 	cmd.AddCommand(f.newBeadReadyCommand())
+	cmd.AddCommand(f.newBeadNeedsHumanCommand())
+	cmd.AddCommand(f.newBeadHumanCommand())
 	cmd.AddCommand(f.newBeadBlockedCommand())
 	cmd.AddCommand(f.newBeadStatusCommand())
 	cmd.AddCommand(f.newBeadDepCommand())
@@ -909,6 +911,7 @@ beads with execution-eligible=false, and superseded beads.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
 			execution, _ := cmd.Flags().GetBool("execution")
+			includeHuman, _ := cmd.Flags().GetBool("include-human")
 
 			var beads []bead.Bead
 			var err error
@@ -922,6 +925,9 @@ beads with execution-eligible=false, and superseded beads.`,
 			}
 			if beads == nil {
 				beads = []bead.Bead{}
+			}
+			if !execution && !includeHuman {
+				beads = filterNeedsHumanBeads(beads)
 			}
 
 			asJSON, _ := cmd.Flags().GetBool("json")
@@ -944,7 +950,249 @@ beads with execution-eligible=false, and superseded beads.`,
 	}
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	cmd.Flags().Bool("execution", false, "Filter to the execution-ready subset (what ddx work picks from): open, deps-closed, not an epic, execution-eligible, not superseded, not on retry cooldown")
+	cmd.Flags().Bool("include-human", false, "Include needs_human beads in the dependency-ready output")
 	return cmd
+}
+
+type beadNeedsHumanRow struct {
+	ID              string   `json:"id"`
+	Priority        int      `json:"priority"`
+	Title           string   `json:"title"`
+	Reason          string   `json:"reason,omitempty"`
+	Since           string   `json:"since,omitempty"`
+	Source          string   `json:"source,omitempty"`
+	SuggestedAction string   `json:"suggested_action,omitempty"`
+	Summary         string   `json:"summary,omitempty"`
+	Labels          []string `json:"labels,omitempty"`
+}
+
+func (f *CommandFactory) newBeadNeedsHumanCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "needs-human",
+		Short: "List beads requiring operator attention",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			beads, err := f.beadStore().NeedsHuman()
+			if err != nil {
+				return err
+			}
+			rows := make([]beadNeedsHumanRow, 0, len(beads))
+			for _, b := range beads {
+				rows = append(rows, needsHumanRow(b))
+			}
+
+			asJSON, _ := cmd.Flags().GetBool("json")
+			if asJSON {
+				enc := json.NewEncoder(cmd.OutOrStdout())
+				enc.SetIndent("", "  ")
+				return enc.Encode(rows)
+			}
+			if len(rows) == 0 {
+				fmt.Fprintln(cmd.OutOrStdout(), "No needs-human beads.")
+				return nil
+			}
+			for _, row := range rows {
+				detail := row.Summary
+				if detail == "" {
+					detail = row.Reason
+				}
+				if detail == "" {
+					detail = row.SuggestedAction
+				}
+				if detail != "" {
+					fmt.Fprintf(cmd.OutOrStdout(), "%s  P%d  %s  %s\n", row.ID, row.Priority, row.Title, detail)
+				} else {
+					fmt.Fprintf(cmd.OutOrStdout(), "%s  P%d  %s\n", row.ID, row.Priority, row.Title)
+				}
+			}
+			return nil
+		},
+	}
+	cmd.Flags().Bool("json", false, "Output as JSON")
+	return cmd
+}
+
+func (f *CommandFactory) newBeadHumanCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:   "human",
+		Short: "Resolve human-attention bead lanes",
+		Run: func(cmd *cobra.Command, args []string) {
+			_ = cmd.Help()
+		},
+	}
+
+	resolveCmd := &cobra.Command{
+		Use:   "resolve <id>",
+		Short: "Resolve a needs-human bead",
+		Args:  cobra.ExactArgs(1),
+		RunE: func(cmd *cobra.Command, args []string) error {
+			action, _ := cmd.Flags().GetString("action")
+			note, _ := cmd.Flags().GetString("note")
+			children, _ := cmd.Flags().GetStringSlice("children")
+			return f.resolveNeedsHumanBead(args[0], action, note, children)
+		},
+	}
+	resolveCmd.Flags().String("action", "", "Resolution action: retry, split, obsolete, defer")
+	resolveCmd.Flags().String("note", "", "Required operator note")
+	resolveCmd.Flags().StringSlice("children", nil, "Existing child bead IDs for split resolution (comma-separated or repeated)")
+	_ = resolveCmd.MarkFlagRequired("action")
+	cmd.AddCommand(resolveCmd)
+	return cmd
+}
+
+func (f *CommandFactory) resolveNeedsHumanBead(id, action, note string, children []string) error {
+	action = strings.TrimSpace(action)
+	note = strings.TrimSpace(note)
+	if note == "" {
+		return fmt.Errorf("--note is required")
+	}
+	s := f.beadStore()
+	switch action {
+	case "retry":
+		if err := s.Update(id, func(b *bead.Bead) {
+			b.Status = bead.StatusOpen
+			removeBeadLabel(b, bead.LabelNeedsHuman)
+			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
+		}); err != nil {
+			return err
+		}
+		if err := appendNeedsHumanResolutionEvent(s, id, action, note, nil); err != nil {
+			return err
+		}
+	case "split":
+		children = normalizeChildIDs(children)
+		if len(children) == 0 {
+			return fmt.Errorf("--children is required when --action split")
+		}
+		if err := validateSplitChildren(s, id, children); err != nil {
+			return err
+		}
+		for _, childID := range children {
+			if err := s.DepAdd(id, childID); err != nil {
+				return err
+			}
+		}
+		if err := s.Update(id, func(b *bead.Bead) {
+			b.Status = bead.StatusOpen
+			removeBeadLabel(b, bead.LabelNeedsHuman)
+			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
+		}); err != nil {
+			return err
+		}
+		if err := appendNeedsHumanResolutionEvent(s, id, action, note, children); err != nil {
+			return err
+		}
+	case "obsolete":
+		if err := appendNeedsHumanResolutionEvent(s, id, action, note, nil); err != nil {
+			return err
+		}
+		if err := s.Close(id); err != nil {
+			return err
+		}
+	case "defer":
+		if err := appendNeedsHumanResolutionEvent(s, id, action, note, nil); err != nil {
+			return err
+		}
+	default:
+		return fmt.Errorf("unknown --action %q (valid: retry, split, obsolete, defer)", action)
+	}
+	if _, err := f.beadAutoCommit("human resolve " + id); err != nil {
+		return err
+	}
+	return nil
+}
+
+func needsHumanRow(b bead.Bead) beadNeedsHumanRow {
+	meta := bead.GetNeedsHumanMeta(b)
+	return beadNeedsHumanRow{
+		ID:              b.ID,
+		Priority:        b.Priority,
+		Title:           b.Title,
+		Reason:          meta.Reason,
+		Since:           meta.Since,
+		Source:          meta.Source,
+		SuggestedAction: meta.SuggestedAction,
+		Summary:         meta.Summary,
+		Labels:          append([]string(nil), b.Labels...),
+	}
+}
+
+func filterNeedsHumanBeads(beads []bead.Bead) []bead.Bead {
+	filtered := make([]bead.Bead, 0, len(beads))
+	for _, b := range beads {
+		if hasBeadLabel(b, bead.LabelNeedsHuman) {
+			continue
+		}
+		filtered = append(filtered, b)
+	}
+	return filtered
+}
+
+func hasBeadLabel(b bead.Bead, label string) bool {
+	for _, existing := range b.Labels {
+		if existing == label {
+			return true
+		}
+	}
+	return false
+}
+
+func removeBeadLabel(b *bead.Bead, label string) {
+	if b == nil {
+		return
+	}
+	labels := b.Labels[:0]
+	for _, existing := range b.Labels {
+		if existing != label {
+			labels = append(labels, existing)
+		}
+	}
+	b.Labels = labels
+}
+
+func appendNeedsHumanResolutionEvent(s *bead.Store, id, action, note string, children []string) error {
+	body := note
+	if len(children) > 0 {
+		body = fmt.Sprintf("%s\nchildren: %s", note, strings.Join(children, ", "))
+	}
+	return s.AppendEvent(id, bead.BeadEvent{
+		Kind:    "needs_human_resolved",
+		Summary: "action=" + action,
+		Body:    body,
+		Actor:   resolveClaimAssignee(),
+		Source:  "ddx bead human resolve",
+	})
+}
+
+func normalizeChildIDs(children []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, raw := range children {
+		for _, part := range strings.Split(raw, ",") {
+			child := strings.TrimSpace(part)
+			if child == "" || seen[child] {
+				continue
+			}
+			seen[child] = true
+			out = append(out, child)
+		}
+	}
+	return out
+}
+
+func validateSplitChildren(s *bead.Store, parentID string, children []string) error {
+	if _, err := s.Get(parentID); err != nil {
+		return err
+	}
+	for _, childID := range children {
+		if childID == parentID {
+			return fmt.Errorf("split child cannot be the parent bead: %s", childID)
+		}
+		if _, err := s.Get(childID); err != nil {
+			return fmt.Errorf("split child %s: %w", childID, err)
+		}
+	}
+	return nil
 }
 
 func (f *CommandFactory) newBeadBlockedCommand() *cobra.Command {
@@ -1078,6 +1326,8 @@ func (f *CommandFactory) newBeadStatusCommand() *cobra.Command {
 			fmt.Fprintf(out, "Closed:  %d\n", counts.Closed)
 			fmt.Fprintf(out, "Ready:   %d\n", counts.Ready)
 			fmt.Fprintf(out, "Blocked: %d\n", counts.Blocked)
+			fmt.Fprintf(out, "Needs human:  %d\n", counts.NeedsHuman)
+			fmt.Fprintf(out, "Worker ready: %d\n", counts.WorkerReady)
 			return nil
 		},
 	}
