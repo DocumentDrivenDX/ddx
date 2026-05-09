@@ -49,6 +49,33 @@ func TestRetryPolicy_ReviewFixableGapRaisesMinPowerAndPreservesPins(t *testing.T
 		"ladder must be consulted with implementer actual power")
 }
 
+func TestRepairRouting_FixableGapCanRaiseMinPower(t *testing.T) {
+	ladder := &ladderSpy{responses: []ladderResponse{{next: 90}}}
+	repairCtx := &agent.RepairContextFromReviewGroup{
+		ImplementerActualPower: 70,
+		ResultRev:              "abc123",
+		ReviewRationale:        "missing regression test",
+	}
+
+	args := reviewFixableGapRepairArgs(
+		repairCtx,
+		"claude",
+		"claude-opus-4-6",
+		"anthropic",
+		"smart",
+		100,
+		ladder,
+	)
+
+	assert.Equal(t, 90, args.MinPower)
+	assert.Greater(t, args.MinPower, repairCtx.ImplementerActualPower)
+	assert.Equal(t, "claude", args.Harness)
+	assert.Equal(t, "claude-opus-4-6", args.Model)
+	assert.Equal(t, "anthropic", args.Provider)
+	assert.Equal(t, "smart", args.Profile)
+	assert.Equal(t, 100, args.MaxPower)
+}
+
 // TestRetryPolicy_ReviewFixableGapRaisesMinPower_LadderExhausted verifies
 // that when the escalation ladder has no higher floor, reviewFixableGapRepairMinPower
 // returns the implementer's actual power rather than zero so the repair attempt
