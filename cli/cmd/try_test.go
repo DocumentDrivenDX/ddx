@@ -408,9 +408,6 @@ func TestTry_HooksWired(t *testing.T) {
 		factory.NewRootCommand(),
 		"try",
 		"hook-bead-001",
-		"--harness=codex",
-		"--no-review",
-		"--no-review-i-know-what-im-doing",
 	)
 	require.Error(t, err)
 	assert.Contains(t, out, "bead:", "try command should still render the terminal report")

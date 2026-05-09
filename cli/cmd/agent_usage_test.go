@@ -160,6 +160,7 @@ agent:
 	out, err := executeCommand(
 		NewCommandFactory(dir).NewRootCommand(),
 		"agent", "usage",
+		"--since=2026-04-01",
 	)
 	require.NoError(t, err)
 	assert.Contains(t, out, "codex")
