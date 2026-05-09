@@ -47,8 +47,7 @@ func runExecutionCleanupPass(ctx context.Context, projectRoot string, runner exe
 	defer release()
 
 	summary, runErr := runner.Cleanup(ctx)
-	meaningful := len(summary.Issues) > 0 || summary.BytesReclaimed > 0 || summary.InodesReclaimed > 0 ||
-		summary.RemovedUnregisteredTempDirs > 0 || summary.RemovedRegisteredWorktrees > 0 || summary.RemovedRunStateFiles > 0
+	meaningful := executionCleanupSummaryMeaningful(summary)
 
 	if emit != nil && meaningful {
 		emit("cleanup.pass", map[string]any{
@@ -58,26 +57,45 @@ func runExecutionCleanupPass(ctx context.Context, projectRoot string, runner exe
 			"scanned_temp_dirs":           summary.ScannedTempDirs,
 			"scanned_evidence_dirs":       summary.ScannedEvidenceDirs,
 			"complete_evidence_dirs":      summary.CompleteEvidenceDirs,
+			"scanned_scratch_dirs":        summary.ScannedScratchDirs,
 			"removed_unregistered":        summary.RemovedUnregisteredTempDirs,
 			"removed_registered_worktree": summary.RemovedRegisteredWorktrees,
 			"removed_run_state":           summary.RemovedRunStateFiles,
+			"removed_scratch_dirs":        summary.RemovedScratchDirs,
+			"preserved_scratch_dirs":      summary.PreservedActiveScratchDirs,
 			"bytes_reclaimed":             summary.BytesReclaimed,
 			"inodes_reclaimed":            summary.InodesReclaimed,
+			"scratch_bytes_reclaimed":     summary.ScratchBytesReclaimed,
+			"scratch_inodes_reclaimed":    summary.ScratchInodesReclaimed,
 			"warnings":                    len(summary.Warnings),
 			"issues":                      len(summary.Issues),
 		})
 	}
 	if meaningful && log != nil {
-		fmt.Fprintf(log, "cleanup: %s %d temp dir(s), %d worktree(s), %d run-state file(s), %d byte(s), %d inode(s)\n",
+		fmt.Fprintf(log, "cleanup: %s %d temp dir(s), %d worktree(s), %d run-state file(s), %d scratch dir(s), %d byte(s), %d inode(s)\n",
 			reason,
 			summary.RemovedUnregisteredTempDirs,
 			summary.RemovedRegisteredWorktrees,
 			summary.RemovedRunStateFiles,
-			summary.BytesReclaimed,
-			summary.InodesReclaimed,
+			summary.RemovedScratchDirs,
+			summary.BytesReclaimed+summary.ScratchBytesReclaimed,
+			summary.InodesReclaimed+summary.ScratchInodesReclaimed,
 		)
 	}
 	return summary, false, runErr
+}
+
+func executionCleanupSummaryMeaningful(summary ExecutionCleanupSummary) bool {
+	return len(summary.Issues) > 0 ||
+		summary.BytesReclaimed > 0 ||
+		summary.InodesReclaimed > 0 ||
+		summary.ScratchBytesReclaimed > 0 ||
+		summary.ScratchInodesReclaimed > 0 ||
+		summary.RemovedUnregisteredTempDirs > 0 ||
+		summary.RemovedRegisteredWorktrees > 0 ||
+		summary.RemovedRunStateFiles > 0 ||
+		summary.RemovedScratchDirs > 0 ||
+		summary.PreservedActiveScratchDirs > 0
 }
 
 func tryAcquireExecutionCleanupLock(projectRoot string) (func(), bool, error) {

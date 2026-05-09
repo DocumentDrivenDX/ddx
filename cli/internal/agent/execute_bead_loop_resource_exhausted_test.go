@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -13,6 +14,18 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type staticLoopResourceChecker struct {
+	calls  int32
+	result ExecutionResourceCheckResult
+	err    error
+}
+
+func (c *staticLoopResourceChecker) Check(ctx context.Context) (ExecutionResourceCheckResult, error) {
+	_ = ctx
+	atomic.AddInt32(&c.calls, 1)
+	return c.result, c.err
+}
 
 func resourceExhaustedTestReport(beadID string) ExecuteBeadReport {
 	return ExecuteBeadReport{
@@ -180,4 +193,238 @@ func TestExecuteBeadWorkerResourceExhaustedLoopEndEvent(t *testing.T) {
 	assert.Equal(t, first.ID, data["bead_id"])
 	assert.NotEmpty(t, data["cleanup_summary"], "cleanup summary must be included in resource.exhausted event")
 	assert.Equal(t, ResourceExhaustedStopMessage, result.Results[0].Detail)
+}
+
+func TestWorkResourcePreflight_ContinuesAfterCleanupRestoresBudget(t *testing.T) {
+	projectRoot := t.TempDir()
+	tempRoot := filepath.Join(t.TempDir(), "ddx-exec-wt")
+	inner, first, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	healthy := false
+	runner := &fakeExecutionCleanupRunner{}
+	checker := &ExecutionResourcePreflight{
+		ProjectRoot: projectRoot,
+		TempRoot:    tempRoot,
+		EvidenceRoots: []string{
+			filepath.Join(projectRoot, ".ddx", "executions"),
+		},
+		SoftMinFreeBytes:  100,
+		SoftMinFreeInodes: 100,
+		HardMinFreeBytes:  10,
+		HardMinFreeInodes: 10,
+		CleanupRunner: &cleanupTogglingRunner{
+			inner: runner,
+			onCleanup: func() {
+				healthy = true
+			},
+		},
+		RootProbe: func(path string) (ExecutionResourceRootCheck, error) {
+			check := ExecutionResourceRootCheck{
+				Path:       path,
+				Writable:   true,
+				BytesFree:  50,
+				InodesFree: 50,
+			}
+			if healthy {
+				check.BytesFree = 150
+				check.InodesFree = 150
+			}
+			return check, nil
+		},
+	}
+
+	var execCalls int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&execCalls, 1)
+			return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, SessionID: "sess-resource-ok", ResultRev: "abc123"}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:            true,
+		ProjectRoot:     projectRoot,
+		ResourceChecker: checker,
+		SessionID:       "sess-resource-restored",
+		WorkerID:        "worker-resource",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, 1, runner.calls)
+	assert.Equal(t, int32(1), atomic.LoadInt32(&execCalls))
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls))
+
+	got, err := inner.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "closed", got.Status)
+}
+
+func TestWorkResourcePreflight_StopsBelowHardFloorAfterCleanup(t *testing.T) {
+	projectRoot := t.TempDir()
+	tempRoot := filepath.Join(t.TempDir(), "ddx-exec-wt")
+	inner, first, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	runner := &fakeExecutionCleanupRunner{}
+	checker := &ExecutionResourcePreflight{
+		ProjectRoot: projectRoot,
+		TempRoot:    tempRoot,
+		EvidenceRoots: []string{
+			filepath.Join(projectRoot, ".ddx", "executions"),
+		},
+		SoftMinFreeBytes:  100,
+		SoftMinFreeInodes: 100,
+		HardMinFreeBytes:  10,
+		HardMinFreeInodes: 10,
+		CleanupRunner:     runner,
+		RootProbe: func(path string) (ExecutionResourceRootCheck, error) {
+			return ExecutionResourceRootCheck{
+				Path:       path,
+				Writable:   true,
+				BytesFree:  1,
+				InodesFree: 1,
+			}, nil
+		},
+	}
+
+	var execCalls int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
+			atomic.AddInt32(&execCalls, 1)
+			t.Fatalf("executor must not run when pre-claim resource preflight fails for %s", beadID)
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	var logBuf bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Log:             &logBuf,
+		Once:            false,
+		ProjectRoot:     projectRoot,
+		ResourceChecker: checker,
+		SessionID:       "sess-resource-hard-stop",
+		WorkerID:        "worker-resource",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	require.Len(t, result.Results, 1)
+
+	assert.Equal(t, 1, runner.calls)
+	assert.Equal(t, 0, result.Attempts)
+	assert.Equal(t, 1, result.Failures)
+	assert.Equal(t, ExecuteBeadStatusResourceExhausted, result.LastFailureStatus)
+	assert.Equal(t, ExecuteBeadStatusResourceExhausted, result.Results[0].Status)
+	assert.Equal(t, ResourceExhaustedStopMessage, result.Results[0].Detail)
+	assert.Equal(t, int32(0), atomic.LoadInt32(&execCalls))
+	assert.Equal(t, int32(0), atomic.LoadInt32(&store.claimCalls))
+	assert.Contains(t, logBuf.String(), ResourceExhaustedStopMessage)
+
+	got, err := inner.Get(first.ID)
+	require.NoError(t, err)
+	assert.Equal(t, "open", got.Status)
+	assert.Empty(t, got.Owner)
+}
+
+func TestWorkResourcePreflight_ReportsBeforeAfterCapacity(t *testing.T) {
+	projectRoot := t.TempDir()
+	tempRoot := filepath.Join(projectRoot, ".ddx", "tmp")
+	inner, _, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	checkResult := ExecutionResourceCheckResult{
+		ProjectRoot: projectRoot,
+		TempRoot:    tempRoot,
+		EvidenceRoots: []string{
+			filepath.Join(projectRoot, ".ddx", "executions"),
+		},
+		BeforeRootChecks: []ExecutionResourceRootCheck{
+			{Path: tempRoot, Writable: true, BytesFree: 1, InodesFree: 2},
+		},
+		RootChecks: []ExecutionResourceRootCheck{
+			{Path: tempRoot, Writable: true, BytesFree: 3, InodesFree: 4, Notes: []string{"free bytes 3 < required 10"}},
+		},
+		CleanupSummary: ExecutionCleanupSummary{
+			ProjectRoot:                 projectRoot,
+			TempRoot:                    tempRoot,
+			RemovedUnregisteredTempDirs: 1,
+			BytesReclaimed:              5,
+			InodesReclaimed:             6,
+		},
+	}
+	checker := &staticLoopResourceChecker{
+		result: checkResult,
+		err: &ResourceExhaustedError{
+			Detail: "temp root still below hard floor",
+			Result: checkResult,
+		},
+	}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatalf("executor must not run after pre-claim resource exhaustion: %s", beadID)
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	var eventSink bytes.Buffer
+	var logSink bytes.Buffer
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Log:             &logSink,
+		EventSink:       &eventSink,
+		Once:            false,
+		ProjectRoot:     projectRoot,
+		ResourceChecker: checker,
+		SessionID:       "sess-resource-capacity",
+		WorkerID:        "worker-resource",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Contains(t, logSink.String(), "before=["+tempRoot+" bytes_free=1 inodes_free=2")
+	assert.Contains(t, logSink.String(), "after=["+tempRoot+" bytes_free=3 inodes_free=4")
+	assert.Contains(t, logSink.String(), "cleanup_reclaimed_bytes=5")
+	assert.Contains(t, logSink.String(), "cleanup_reclaimed_inodes=6")
+
+	lines := strings.Split(strings.TrimSpace(eventSink.String()), "\n")
+	var preflight, exhausted map[string]any
+	for _, line := range lines {
+		var entry map[string]any
+		require.NoError(t, json.Unmarshal([]byte(line), &entry))
+		data, _ := entry["data"].(map[string]any)
+		switch entry["type"] {
+		case "resource.preflight":
+			preflight = data
+		case "resource.exhausted":
+			exhausted = data
+		}
+	}
+
+	require.NotNil(t, preflight)
+	assert.Equal(t, ExecuteBeadStatusResourceExhausted, preflight["status"])
+	assert.Equal(t, float64(5), preflight["cleanup_bytes_reclaimed"])
+	assert.Equal(t, float64(6), preflight["cleanup_inodes_reclaimed"])
+	assert.NotEmpty(t, preflight["root_checks_before"])
+	assert.NotEmpty(t, preflight["root_checks_after"])
+
+	require.NotNil(t, exhausted)
+	assert.Equal(t, ExecuteBeadStatusResourceExhausted, exhausted["status"])
+	assert.Equal(t, float64(5), exhausted["cleanup_bytes_reclaimed"])
+	assert.Equal(t, float64(6), exhausted["cleanup_inodes_reclaimed"])
+	assert.NotEmpty(t, exhausted["root_checks_before"])
+	assert.NotEmpty(t, exhausted["root_checks_after"])
+	assert.Equal(t, int32(0), atomic.LoadInt32(&store.claimCalls))
 }

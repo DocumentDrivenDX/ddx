@@ -28,6 +28,7 @@ type ExecuteBeadLoopRuntime struct {
 	Log             io.Writer
 	CleanupLog      io.Writer
 	CleanupRunner   executionCleanupRunner
+	ResourceChecker ExecutionResourceChecker
 	CleanupInterval time.Duration
 	CleanupTickCh   <-chan time.Time
 	EventSink       io.Writer
@@ -610,6 +611,44 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				result.LastFailureStatus = budgetReport.Status
 				result.Results = append(result.Results, budgetReport)
 				return result, nil
+			}
+		}
+		if runtime.ResourceChecker != nil {
+			checkResult, checkErr := runtime.ResourceChecker.Check(ctx)
+			emitResourcePreflight(emit, "pre-claim", checkResult, checkErr)
+			logResourcePreflight(runtime.Log, "pre-claim", checkResult, checkErr)
+			if checkErr != nil {
+				var resourceErr *ResourceExhaustedError
+				if errors.As(checkErr, &resourceErr) {
+					resourceResult := resourceErr.Result
+					if resourceResult.ProjectRoot == "" && len(resourceResult.RootChecks) == 0 {
+						resourceResult = checkResult
+					}
+					report := ExecuteBeadReport{
+						WorkerID:          runtime.WorkerID,
+						Harness:           harness,
+						Model:             model,
+						Status:            ExecuteBeadStatusResourceExhausted,
+						Detail:            ResourceExhaustedStopMessage,
+						Error:             resourceErr.Error(),
+						SessionID:         runtime.SessionID,
+						ResourceExhausted: &resourceResult,
+						Disrupted:         true,
+						DisruptionReason:  ReadinessSystemReasonResourceExhausted,
+						OutcomeReason:     ReadinessSystemReasonResourceExhausted,
+					}
+					result.Failures++
+					result.LastFailureStatus = report.Status
+					result.Results = append(result.Results, report)
+					exitReason = "resource_exhausted"
+					emitResourceExhausted(emit, nil, "", report, assignee, now().UTC())
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintln(runtime.Log, ResourceExhaustedStopMessage)
+					}
+					return result, nil
+				}
+				exitReason = "preflight_failed"
+				return result, checkErr
 			}
 		}
 
@@ -1908,18 +1947,105 @@ func resourceExhaustedCheckResult(report ExecuteBeadReport) (ExecutionResourceCh
 	return ExecutionResourceCheckResult{}, false
 }
 
+func emitResourcePreflight(emit func(string, map[string]any), phase string, result ExecutionResourceCheckResult, checkErr error) {
+	if emit == nil {
+		return
+	}
+	status := "ok"
+	if checkErr != nil {
+		status = "error"
+		var resourceErr *ResourceExhaustedError
+		if errors.As(checkErr, &resourceErr) {
+			status = ExecuteBeadStatusResourceExhausted
+		}
+	}
+	summary := result.CleanupSummary
+	emit("resource.preflight", map[string]any{
+		"phase":                     phase,
+		"status":                    status,
+		"project_root":              result.ProjectRoot,
+		"temp_root":                 result.TempRoot,
+		"evidence_roots":            result.EvidenceRoots,
+		"root_checks_before":        result.BeforeRootChecks,
+		"root_checks_after":         result.RootChecks,
+		"cleanup_summary":           summary,
+		"cleanup_bytes_reclaimed":   summary.BytesReclaimed + summary.ScratchBytesReclaimed,
+		"cleanup_inodes_reclaimed":  summary.InodesReclaimed + summary.ScratchInodesReclaimed,
+		"cleanup_scratch_dirs":      summary.RemovedScratchDirs,
+		"cleanup_temp_dirs":         summary.RemovedUnregisteredTempDirs,
+		"cleanup_registered_trees":  summary.RemovedRegisteredWorktrees,
+		"cleanup_run_state_files":   summary.RemovedRunStateFiles,
+		"cleanup_preserved_scratch": summary.PreservedActiveScratchDirs,
+	})
+}
+
+func logResourcePreflight(log io.Writer, phase string, result ExecutionResourceCheckResult, checkErr error) {
+	if log == nil {
+		return
+	}
+	if checkErr == nil && len(result.BeforeRootChecks) == 0 && !executionCleanupSummaryMeaningful(result.CleanupSummary) {
+		return
+	}
+	status := "ok"
+	if checkErr != nil {
+		status = "error"
+		var resourceErr *ResourceExhaustedError
+		if errors.As(checkErr, &resourceErr) {
+			status = ExecuteBeadStatusResourceExhausted
+		}
+	}
+	before := result.BeforeRootChecks
+	if len(before) == 0 {
+		before = result.RootChecks
+	}
+	_, _ = fmt.Fprintf(
+		log,
+		"resource preflight (%s): status=%s before=[%s] after=[%s] cleanup_reclaimed_bytes=%d cleanup_reclaimed_inodes=%d\n",
+		phase,
+		status,
+		formatResourceRootChecks(before),
+		formatResourceRootChecks(result.RootChecks),
+		result.CleanupSummary.BytesReclaimed+result.CleanupSummary.ScratchBytesReclaimed,
+		result.CleanupSummary.InodesReclaimed+result.CleanupSummary.ScratchInodesReclaimed,
+	)
+}
+
+func formatResourceRootChecks(checks []ExecutionResourceRootCheck) string {
+	if len(checks) == 0 {
+		return ""
+	}
+	parts := make([]string, 0, len(checks))
+	for _, check := range checks {
+		part := fmt.Sprintf("%s bytes_free=%d inodes_free=%d", check.Path, check.BytesFree, check.InodesFree)
+		if len(check.Notes) > 0 {
+			part += " notes=" + strings.Join(check.Notes, ",")
+		}
+		parts = append(parts, part)
+	}
+	return strings.Join(parts, "; ")
+}
+
 func emitResourceExhausted(emit func(string, map[string]any), store ExecuteBeadLoopStore, beadID string, report ExecuteBeadReport, actor string, createdAt time.Time) {
 	var detail map[string]any
 	if result, ok := resourceExhaustedCheckResult(report); ok {
 		detail = map[string]any{
-			"bead_id":         beadID,
-			"project_root":    result.ProjectRoot,
-			"temp_root":       result.TempRoot,
-			"evidence_roots":  result.EvidenceRoots,
-			"root_checks":     result.RootChecks,
-			"cleanup_summary": result.CleanupSummary,
-			"detail":          report.Detail,
-			"status":          report.Status,
+			"bead_id":                   beadID,
+			"project_root":              result.ProjectRoot,
+			"temp_root":                 result.TempRoot,
+			"evidence_roots":            result.EvidenceRoots,
+			"root_checks_before":        result.BeforeRootChecks,
+			"root_checks_after":         result.RootChecks,
+			"root_checks":               result.RootChecks,
+			"cleanup_summary":           result.CleanupSummary,
+			"cleanup_bytes_reclaimed":   result.CleanupSummary.BytesReclaimed + result.CleanupSummary.ScratchBytesReclaimed,
+			"cleanup_inodes_reclaimed":  result.CleanupSummary.InodesReclaimed + result.CleanupSummary.ScratchInodesReclaimed,
+			"cleanup_scratch_dirs":      result.CleanupSummary.RemovedScratchDirs,
+			"cleanup_temp_dirs":         result.CleanupSummary.RemovedUnregisteredTempDirs,
+			"cleanup_registered_trees":  result.CleanupSummary.RemovedRegisteredWorktrees,
+			"cleanup_run_state_files":   result.CleanupSummary.RemovedRunStateFiles,
+			"cleanup_preserved_scratch": result.CleanupSummary.PreservedActiveScratchDirs,
+			"detail":                    report.Detail,
+			"status":                    report.Status,
 		}
 		body, err := json.Marshal(detail)
 		if err != nil {

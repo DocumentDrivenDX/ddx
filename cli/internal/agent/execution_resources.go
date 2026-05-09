@@ -13,6 +13,9 @@ import (
 const (
 	executionResourceMinFreeBytes  uint64 = 64 << 20
 	executionResourceMinFreeInodes uint64 = 1024
+
+	executionResourceSoftMinFreeBytes  uint64 = 512 << 20
+	executionResourceSoftMinFreeInodes uint64 = 4096
 )
 
 // ExecutionResourceRootCheck captures the health of one execution root.
@@ -28,11 +31,12 @@ type ExecutionResourceRootCheck struct {
 // ExecutionResourceCheckResult captures the roots and cleanup summary observed
 // during one resource preflight.
 type ExecutionResourceCheckResult struct {
-	ProjectRoot    string                       `json:"project_root"`
-	TempRoot       string                       `json:"temp_root"`
-	EvidenceRoots  []string                     `json:"evidence_roots,omitempty"`
-	RootChecks     []ExecutionResourceRootCheck `json:"root_checks,omitempty"`
-	CleanupSummary ExecutionCleanupSummary      `json:"cleanup_summary,omitempty"`
+	ProjectRoot      string                       `json:"project_root"`
+	TempRoot         string                       `json:"temp_root"`
+	EvidenceRoots    []string                     `json:"evidence_roots,omitempty"`
+	BeforeRootChecks []ExecutionResourceRootCheck `json:"before_root_checks,omitempty"`
+	RootChecks       []ExecutionResourceRootCheck `json:"root_checks,omitempty"`
+	CleanupSummary   ExecutionCleanupSummary      `json:"cleanup_summary,omitempty"`
 }
 
 // ResourceExhaustedError signals that execution roots remained unhealthy after
@@ -70,6 +74,13 @@ type ExecutionResourcePreflight struct {
 	EvidenceRoots []string
 	GitOps        GitOps
 
+	// SoftMin* triggers a cleanup pass before claims when free capacity drops
+	// below the soft floor. HardMin* is the stop floor after cleanup.
+	SoftMinFreeBytes  uint64
+	SoftMinFreeInodes uint64
+	HardMinFreeBytes  uint64
+	HardMinFreeInodes uint64
+
 	CleanupRunner executionCleanupRunner
 	RootProbe     func(path string) (ExecutionResourceRootCheck, error)
 }
@@ -103,11 +114,15 @@ func (p *ExecutionResourcePreflight) Check(ctx context.Context) (ExecutionResour
 		EvidenceRoots: p.evidenceRoots(),
 	}
 
-	checks, detail, healthy := p.checkRoots()
+	checks, detail, healthy, softDetail, softHealthy := p.checkRoots()
 	result.RootChecks = checks
-	if healthy {
+	if healthy && softHealthy {
 		return result, nil
 	}
+	if detail == "" {
+		detail = softDetail
+	}
+	result.BeforeRootChecks = append([]ExecutionResourceRootCheck(nil), checks...)
 
 	if p.CleanupRunner != nil {
 		summary, cleanupErr := p.CleanupRunner.Cleanup(ctx)
@@ -120,7 +135,7 @@ func (p *ExecutionResourcePreflight) Check(ctx context.Context) (ExecutionResour
 		}
 	}
 
-	checks, recheckDetail, recheckHealthy := p.checkRoots()
+	checks, recheckDetail, recheckHealthy, _, _ := p.checkRoots()
 	result.RootChecks = checks
 	if recheckHealthy {
 		return result, nil
@@ -161,20 +176,27 @@ func (p *ExecutionResourcePreflight) allRoots() []string {
 	return roots
 }
 
-func (p *ExecutionResourcePreflight) checkRoots() ([]ExecutionResourceRootCheck, string, bool) {
+func (p *ExecutionResourcePreflight) checkRoots() ([]ExecutionResourceRootCheck, string, bool, string, bool) {
 	roots := p.allRoots()
 	checks := make([]ExecutionResourceRootCheck, 0, len(roots))
-	var details []string
+	var details, softDetails []string
 	healthy := true
+	softHealthy := true
 	for _, root := range roots {
 		check, err := p.checkRoot(root)
-		checks = append(checks, check)
 		if err != nil {
 			healthy = false
 			details = append(details, err.Error())
+		} else if softNotes := p.softPressureNotes(check); len(softNotes) > 0 {
+			softHealthy = false
+			check.Notes = append(check.Notes, softNotes...)
+			for _, note := range softNotes {
+				softDetails = append(softDetails, fmt.Sprintf("resource preflight: %s: %s", root, note))
+			}
 		}
+		checks = append(checks, check)
 	}
-	return checks, strings.Join(details, "; "), healthy
+	return checks, strings.Join(details, "; "), healthy, strings.Join(softDetails, "; "), softHealthy
 }
 
 func (p *ExecutionResourcePreflight) checkRoot(root string) (ExecutionResourceRootCheck, error) {
@@ -213,13 +235,13 @@ func (p *ExecutionResourcePreflight) checkRoot(root string) (ExecutionResourceRo
 			check.Notes = append(check.Notes, msg)
 			return check, fmt.Errorf("resource preflight: %s: %s", root, msg)
 		}
-		if probed.BytesFree > 0 && probed.BytesFree < executionResourceMinFreeBytes {
-			msg := fmt.Sprintf("free bytes %d < required %d", probed.BytesFree, executionResourceMinFreeBytes)
+		if probed.BytesFree > 0 && probed.BytesFree < p.hardMinFreeBytes() {
+			msg := fmt.Sprintf("free bytes %d < required %d", probed.BytesFree, p.hardMinFreeBytes())
 			check.Notes = append(check.Notes, msg)
 			return check, fmt.Errorf("resource preflight: %s: %s", root, msg)
 		}
-		if probed.InodesFree > 0 && probed.InodesFree < executionResourceMinFreeInodes {
-			msg := fmt.Sprintf("free inodes %d < required %d", probed.InodesFree, executionResourceMinFreeInodes)
+		if probed.InodesFree > 0 && probed.InodesFree < p.hardMinFreeInodes() {
+			msg := fmt.Sprintf("free inodes %d < required %d", probed.InodesFree, p.hardMinFreeInodes())
 			check.Notes = append(check.Notes, msg)
 			return check, fmt.Errorf("resource preflight: %s: %s", root, msg)
 		}
@@ -233,17 +255,56 @@ func (p *ExecutionResourcePreflight) checkRoot(root string) (ExecutionResourceRo
 	}
 	check.BytesFree = bytesFree
 	check.InodesFree = inodesFree
-	if bytesFree > 0 && bytesFree < executionResourceMinFreeBytes {
-		msg := fmt.Sprintf("free bytes %d < required %d", bytesFree, executionResourceMinFreeBytes)
+	if bytesFree > 0 && bytesFree < p.hardMinFreeBytes() {
+		msg := fmt.Sprintf("free bytes %d < required %d", bytesFree, p.hardMinFreeBytes())
 		check.Notes = append(check.Notes, msg)
 		return check, fmt.Errorf("resource preflight: %s: %s", root, msg)
 	}
-	if inodesFree > 0 && inodesFree < executionResourceMinFreeInodes {
-		msg := fmt.Sprintf("free inodes %d < required %d", inodesFree, executionResourceMinFreeInodes)
+	if inodesFree > 0 && inodesFree < p.hardMinFreeInodes() {
+		msg := fmt.Sprintf("free inodes %d < required %d", inodesFree, p.hardMinFreeInodes())
 		check.Notes = append(check.Notes, msg)
 		return check, fmt.Errorf("resource preflight: %s: %s", root, msg)
 	}
 	return check, nil
+}
+
+func (p *ExecutionResourcePreflight) softPressureNotes(check ExecutionResourceRootCheck) []string {
+	var notes []string
+	if min := p.softMinFreeBytes(); min > 0 && check.BytesFree > 0 && check.BytesFree < min {
+		notes = append(notes, fmt.Sprintf("free bytes %d < soft cleanup threshold %d", check.BytesFree, min))
+	}
+	if min := p.softMinFreeInodes(); min > 0 && check.InodesFree > 0 && check.InodesFree < min {
+		notes = append(notes, fmt.Sprintf("free inodes %d < soft cleanup threshold %d", check.InodesFree, min))
+	}
+	return notes
+}
+
+func (p *ExecutionResourcePreflight) softMinFreeBytes() uint64 {
+	if p != nil && p.SoftMinFreeBytes > 0 {
+		return p.SoftMinFreeBytes
+	}
+	return executionResourceSoftMinFreeBytes
+}
+
+func (p *ExecutionResourcePreflight) softMinFreeInodes() uint64 {
+	if p != nil && p.SoftMinFreeInodes > 0 {
+		return p.SoftMinFreeInodes
+	}
+	return executionResourceSoftMinFreeInodes
+}
+
+func (p *ExecutionResourcePreflight) hardMinFreeBytes() uint64 {
+	if p != nil && p.HardMinFreeBytes > 0 {
+		return p.HardMinFreeBytes
+	}
+	return executionResourceMinFreeBytes
+}
+
+func (p *ExecutionResourcePreflight) hardMinFreeInodes() uint64 {
+	if p != nil && p.HardMinFreeInodes > 0 {
+		return p.HardMinFreeInodes
+	}
+	return executionResourceMinFreeInodes
 }
 
 func probeWritableRoot(root string) (bool, string) {

@@ -86,6 +86,42 @@ func TestTryResourcePreflight_RechecksAfterCleanup(t *testing.T) {
 	assert.Equal(t, 1, runner.calls)
 }
 
+func TestWorkResourcePreflight_RunsCleanupBelowSoftFloor(t *testing.T) {
+	projectRoot := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
+	tempRoot := filepath.Join(t.TempDir(), "ddx-exec-wt")
+
+	runner := &fakeExecutionCleanupRunner{}
+	checker := &ExecutionResourcePreflight{
+		ProjectRoot: projectRoot,
+		TempRoot:    tempRoot,
+		EvidenceRoots: []string{
+			filepath.Join(projectRoot, ExecuteBeadArtifactDir),
+		},
+		SoftMinFreeBytes:  100,
+		SoftMinFreeInodes: 100,
+		HardMinFreeBytes:  10,
+		HardMinFreeInodes: 10,
+		CleanupRunner:     runner,
+		RootProbe: func(path string) (ExecutionResourceRootCheck, error) {
+			return ExecutionResourceRootCheck{
+				Path:       path,
+				Writable:   true,
+				BytesFree:  50,
+				InodesFree: 50,
+			}, nil
+		},
+	}
+
+	result, err := checker.Check(context.Background())
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 1, runner.calls)
+	require.NotEmpty(t, result.BeforeRootChecks)
+	require.NotEmpty(t, result.RootChecks)
+	assert.Contains(t, result.BeforeRootChecks[0].Notes, "free bytes 50 < soft cleanup threshold 100")
+}
+
 type cleanupTogglingRunner struct {
 	inner     *fakeExecutionCleanupRunner
 	onCleanup func()
