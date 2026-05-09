@@ -100,6 +100,10 @@ Exit codes:
 
 // runTry is the RunE for "ddx try <bead-id>".
 func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
+	if err := f.checkLifecycleMigrationGate(cmd); err != nil {
+		return err
+	}
+
 	beadID := args[0]
 
 	projectFlag, _ := cmd.Flags().GetString("project")

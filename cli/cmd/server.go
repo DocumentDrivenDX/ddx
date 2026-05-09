@@ -96,6 +96,9 @@ MCP (POST /mcp):
   ddx_doc_deps                 Upstream dependencies
   ddx_agent_sessions           List agent sessions`,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := f.checkLifecycleMigrationGate(cmd); err != nil {
+				return err
+			}
 			if federationAllowPlainHTTP && !hubMode {
 				return fmt.Errorf("--federation-allow-plain-http requires --hub-mode")
 			}

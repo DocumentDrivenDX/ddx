@@ -285,6 +285,9 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 		Short: "Create a new bead",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := f.checkLifecycleMigrationGate(cmd); err != nil {
+				return err
+			}
 			s := f.beadStore()
 			b := &bead.Bead{Title: args[0]}
 
@@ -329,7 +332,12 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 			if err := s.Create(b); err != nil {
 				return err
 			}
-			if _, err := f.beadAutoCommit("create " + b.ID); err != nil {
+			if markerPresent, _ := s.HasLifecycleSchemaMarker(); !markerPresent && !beadHasLegacyLifecycleInputs(*b) {
+				if err := s.WriteLifecycleSchemaMarker(time.Now().UTC()); err != nil {
+					return err
+				}
+			}
+			if _, err := f.beadAutoCommitPaths("create "+b.ID, []string{s.File, s.LifecycleSchemaMarkerPath()}); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "%s\n", b.ID)
@@ -479,6 +487,9 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 		Short: "Update a bead",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := f.checkLifecycleMigrationGate(cmd); err != nil {
+				return err
+			}
 			s := f.beadStore()
 
 			// --claim and --unclaim use dedicated store methods
@@ -662,6 +673,18 @@ func isProtectedBeadExtraKey(key string) bool {
 	}
 }
 
+func beadHasLegacyLifecycleInputs(b bead.Bead) bool {
+	if b.Status == "needs_investigation" || b.Status == "needs_human" {
+		return true
+	}
+	for _, label := range b.Labels {
+		if label == bead.LabelNeedsHuman || label == bead.LabelNeedsInvestigation {
+			return true
+		}
+	}
+	return false
+}
+
 func beadTransitionOptionsFromSetFlags(status string, setFlags []string, source string) bead.LifecycleTransitionOptions {
 	opts := bead.LifecycleTransitionOptions{
 		Reason: "set lifecycle status",
@@ -758,6 +781,9 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 		Short: "Close a bead",
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := f.checkLifecycleMigrationGate(cmd); err != nil {
+				return err
+			}
 			s := f.beadStore()
 			sessionID, _ := cmd.Flags().GetString("session")
 			commitSHA, _ := cmd.Flags().GetString("commit")
@@ -851,9 +877,12 @@ func (f *CommandFactory) newBeadReopenCommand() *cobra.Command {
 		Long: `Reopen a closed or stalled bead.
 
 Atomically sets status to open, clears claim fields, optionally appends
-notes, and records a reopen event in the bead's event log.`,
+		notes, and records a reopen event in the bead's event log.`,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := f.checkLifecycleMigrationGate(cmd); err != nil {
+				return err
+			}
 			s := f.beadStore()
 			reason, _ := cmd.Flags().GetString("reason")
 			appendNotes, _ := cmd.Flags().GetString("append-notes")
@@ -947,6 +976,9 @@ external blocker, supersession, ineligible marker, or epic-container exclusion.
 Use --execution to include stale in_progress claims that ddx work can reclaim.`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := f.checkLifecycleMigrationGate(cmd); err != nil {
+				return err
+			}
 			s := f.beadStore()
 			execution, _ := cmd.Flags().GetBool("execution")
 
@@ -1223,6 +1255,9 @@ func (f *CommandFactory) newBeadBlockedCommand() *cobra.Command {
 		Short: "List beads blocked by deps or retry cooldowns",
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			if err := f.checkLifecycleMigrationGate(cmd); err != nil {
+				return err
+			}
 			s := f.beadStore()
 			entries, err := s.BlockedAll()
 			if err != nil {
