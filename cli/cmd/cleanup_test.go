@@ -3,7 +3,9 @@ package cmd
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -37,9 +39,11 @@ type cleanupCommandJSON struct {
 func setupCleanupCommandProject(t *testing.T) (string, string) {
 	t.Helper()
 	projectRoot := t.TempDir()
-	tempRoot := t.TempDir()
+	tempParent := t.TempDir()
+	tempRoot := filepath.Join(tempParent, "ddx-exec-wt")
 	t.Setenv("DDX_EXEC_WT_DIR", tempRoot)
 	require.NoError(t, os.MkdirAll(filepath.Join(projectRoot, ".ddx"), 0o755))
+	require.NoError(t, os.MkdirAll(tempRoot, 0o755))
 	return projectRoot, tempRoot
 }
 
@@ -55,6 +59,15 @@ func writeCleanupCommandCandidate(t *testing.T, root, name, projectRoot, attempt
 	}))
 	require.NoError(t, os.WriteFile(filepath.Join(path, "scratch.txt"), []byte("stale\n"), 0o644))
 	return path
+}
+
+func runCleanupCommandGit(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	require.NoError(t, err, "git %s\n%s", strings.Join(args, " "), string(out))
+	return strings.TrimSpace(string(out))
 }
 
 func TestCleanupCommand_DryRunReportsWithoutDeleting(t *testing.T) {
@@ -190,6 +203,54 @@ func TestCleanupEndToEnd_PreservesPublishedEvidence(t *testing.T) {
 	assert.FileExists(t, filepath.Join(runsDir, "record.json"))
 	assert.FileExists(t, refPath)
 	assert.Contains(t, out, "cleanup: preserved 2 complete evidence bundle(s)")
+}
+
+func TestWorkCleanupEndToEnd_PrunesStaleRegisteredAndUnregisteredWorktrees(t *testing.T) {
+	projectRoot, tempRoot := setupCleanupCommandProject(t)
+	runCleanupCommandGit(t, projectRoot, "init", "-b", "main")
+	runCleanupCommandGit(t, projectRoot, "config", "user.email", "test@ddx.test")
+	runCleanupCommandGit(t, projectRoot, "config", "user.name", "DDx Test")
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "seed.txt"), []byte("seed\n"), 0o644))
+	runCleanupCommandGit(t, projectRoot, "add", "seed.txt")
+	runCleanupCommandGit(t, projectRoot, "commit", "-m", "chore: seed cleanup repo")
+
+	staleRegistered := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"ddx-cleanup-registered-20260508T120000-deadbeef")
+	activeRegistered := filepath.Join(tempRoot, agent.ExecuteBeadWtPrefix+"ddx-cleanup-active-20260508T120000-feedface")
+	staleUnregistered := writeCleanupCommandCandidate(t, tempRoot, agent.ExecuteBeadWtPrefix+"ddx-cleanup-unregistered-20260508T120000-cafebabe", projectRoot, "20260508T120000-cafebabe")
+	nonDDXPath := filepath.Join(tempRoot, "plain-worktree-looking-dir")
+	require.NoError(t, os.MkdirAll(nonDDXPath, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(nonDDXPath, "keep.txt"), []byte("keep\n"), 0o644))
+
+	runCleanupCommandGit(t, projectRoot, "worktree", "add", "--detach", staleRegistered, "HEAD")
+	runCleanupCommandGit(t, projectRoot, "worktree", "add", "--detach", activeRegistered, "HEAD")
+	require.NoError(t, agent.WriteExecutionCleanupMetadata(staleRegistered, agent.ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-cleanup-registered",
+		AttemptID:    "20260508T120000-deadbeef",
+		WorktreePath: staleRegistered,
+		Registered:   true,
+	}))
+	require.NoError(t, agent.WriteExecutionCleanupMetadata(activeRegistered, agent.ExecutionCleanupMetadata{
+		ProjectRoot:  projectRoot,
+		BeadID:       "ddx-cleanup-active",
+		AttemptID:    "20260508T120000-feedface",
+		WorktreePath: activeRegistered,
+		Registered:   true,
+		Preserved:    true,
+	}))
+
+	root := NewCommandFactory(projectRoot).NewRootCommand()
+	out, err := executeCommand(root, "cleanup", "--apply")
+	require.NoError(t, err)
+
+	assert.Contains(t, out, "cleanup: removed 1 stale temp dir(s), 1 registered worktree(s), 0 run-state file(s), 0 scratch dir(s)")
+	assert.NoFileExists(t, staleRegistered)
+	assert.NoFileExists(t, staleUnregistered)
+	assert.DirExists(t, activeRegistered)
+	assert.DirExists(t, nonDDXPath)
+	wtList := runCleanupCommandGit(t, projectRoot, "worktree", "list", "--porcelain")
+	assert.NotContains(t, wtList, staleRegistered)
+	assert.Contains(t, wtList, activeRegistered)
 }
 
 func TestCleanupCommand_ReportsScratchReclamation(t *testing.T) {
