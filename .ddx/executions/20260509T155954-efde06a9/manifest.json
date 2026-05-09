@@ -1,0 +1,59 @@
+{
+  "attempt_id": "20260509T155954-efde06a9",
+  "bead_id": "ddx-15a51f8c",
+  "base_rev": "cc8f4e5977e2a6f1998d3dede52dd2c4cbb38aad",
+  "created_at": "2026-05-09T16:00:01.354940021Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-15a51f8c",
+    "title": "bead/reconcile: align with amended TD-031 reconcile-close invariant",
+    "description": "PROBLEM\n  After TD-031 §5 declares reconcile-close a distinct meta-close that\n  intentionally bypasses ClosureGate (sister bead, doc-only), the production\n  code at the two relevant call sites must reference the amended invariant\n  inline so the spec/code linkage is observable to future readers and to\n  alignment-review tooling. Today both sites are silent about why one\n  transition path uses the gate and the other does not.\n\nROOT CAUSE\n  - cli/internal/bead/store.go:471 in Create assigns b.Status = DefaultStatus\n    directly without going through transitionLifecycleInPlace. This is the\n    single legitimate exception to the \"all status writes go through the\n    transition gate\" rule and is not documented at the assignment.\n  - cli/internal/bead/reconcile.go:236-242 calls UpdateWithLifecycleStatus\n    (StatusClosed, ManualClose=true, ...) without referencing TD-031 or\n    explaining why ClosureGate is skipped.\n  - cli/internal/bead/store.go:1245 invokes ClosureGate inside closeWithEvidence\n    but does not state that reconcile-close is the documented bypass.\n\nPROPOSED FIX\n  - Add a one-line comment at cli/internal/bead/store.go:471 noting that\n    Create is the lone status write that does not go through\n    transitionLifecycleInPlace (creation is not a transition; reference TD-031\n    §3 transition matrix).\n  - Add a 2-3 line comment at cli/internal/bead/reconcile.go:236 quoting the\n    amended TD-031 §5 invariant: reconcile-close is a meta-close that\n    intentionally bypasses ClosureGate because the bead has no execution\n    session; dependency closures supply transitive evidence.\n  - Add a 1-2 line comment at cli/internal/bead/store.go:1245 stating that\n    ClosureGate guards the evidence-close path only; reconcile-close skips it\n    by design (per TD-031 §5).\n  - Add a regression test TestReconcileCloseSkipsClosureGate in\n    cli/internal/bead/reconcile_test.go that constructs a bead with no\n    session_id / closing_commit_sha, all deps closed, runs reconcile, and\n    asserts the bead lands in StatusClosed (proving the gate is bypassed\n    by design, not by accident). If a near-equivalent test already exists\n    in reconcile_test.go, retrofit its name and assertion instead of adding\n    a duplicate.\n\nNON-SCOPE\n  - Changing reconcile.go runtime behavior. The TD-031 amendment declared\n    current behavior correct; this bead only documents and locks it down\n    with a regression test.\n  - Adding ClosureGate variants for reconcile.\n  - Refactoring the broader reconcile control flow.\n\nINTERSECTIONS\n  - ddx-ca1c66ee (epic parent).\n  - Depends on the TD-031 amendment bead landing first (the comments quote\n    the amended spec text).",
+    "acceptance": "1. cli/internal/bead/reconcile.go:236 has a 2-3 line comment quoting the amended TD-031 §5 reconcile-close invariant and citing TD-031 by section.\n2. cli/internal/bead/store.go:471 has a one-line comment noting Create is the lone status write outside transitionLifecycleInPlace.\n3. cli/internal/bead/store.go:1245 has a 1-2 line comment stating ClosureGate guards the evidence-close path only.\n4. TestReconcileCloseSkipsClosureGate (or equivalently named existing test) in cli/internal/bead/reconcile_test.go asserts a bead with no session_id and no closing_commit_sha but all deps closed reaches StatusClosed via reconcile.\n5. cd cli \u0026\u0026 go test ./internal/bead/... green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-ca1c66ee",
+    "labels": [
+      "phase:6",
+      "area:bead",
+      "area:lifecycle",
+      "kind:refactor",
+      "spec:TD-031"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-09T15:58:50Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "1865997",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-09T15:59:54.58286301Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-09T15:58:50.326241404Z",
+      "spec-id": "TD-031"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-031",
+      "path": "docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md",
+      "title": "Technical Design: Bead State Machine and Naming-Role Decisions"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260509T155954-efde06a9",
+    "prompt": ".ddx/executions/20260509T155954-efde06a9/prompt.md",
+    "manifest": ".ddx/executions/20260509T155954-efde06a9/manifest.json",
+    "result": ".ddx/executions/20260509T155954-efde06a9/result.json",
+    "checks": ".ddx/executions/20260509T155954-efde06a9/checks.json",
+    "usage": ".ddx/executions/20260509T155954-efde06a9/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-15a51f8c-20260509T155954-efde06a9"
+  },
+  "prompt_sha": "da2662f91cda1a228e054a6606277da122f5388da0d6a14e57a8339c508c787d"
+}

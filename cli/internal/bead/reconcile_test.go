@@ -195,3 +195,42 @@ func TestLifecycle_ParentEpicNotOrdinaryExecutionReady(t *testing.T) {
 	assert.Equal(t, parent.ID, blocked[0].ID)
 	assert.Equal(t, BlockerKindEpicOnly, blocked[0].Blocker.Kind)
 }
+
+func TestReconcileCloseSkipsClosureGate(t *testing.T) {
+	// TD-031 §5: reconcile-close intentionally bypasses ClosureGate — the bead
+	// has no execution session and no closing_commit_sha; transitive deps supply evidence.
+	s := newTestStore(t)
+
+	// ClosureGate rejects beads with no execution evidence (the axon-c5cc071a shape).
+	require.ErrorIs(t, ClosureGate(&Bead{ID: "ddx-empty", Extra: map[string]any{}}), ErrClosureGateRejected)
+
+	// A bead with no session_id, no closing_commit_sha, and a no_changes_verified event
+	// is the canonical reconcile-close shape (all deps closed per TD-031 §5).
+	b := &Bead{
+		ID:    "ddx-reconcile-bypass",
+		Title: "dependency-satisfied bead with no session",
+		Extra: map[string]any{
+			ExtraLastStatus: "no_changes",
+			"events": []any{
+				map[string]any{
+					"kind":       "no_changes_verified",
+					"summary":    "no_changes_verified",
+					"body":       "verification_command=true\nexit_code=0",
+					"created_at": "2026-01-01T00:00:00Z",
+				},
+			},
+		},
+	}
+	require.NoError(t, s.Create(b))
+
+	plans, err := s.ReconcileLifecycleMetadata(ReconcileOptions{Apply: true})
+	require.NoError(t, err)
+	require.Len(t, plans, 1)
+	assert.True(t, plans[0].CloseSatisfied)
+
+	got, err := s.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusClosed, got.Status)
+	assert.Empty(t, got.Extra["session_id"])
+	assert.Empty(t, got.Extra["closing_commit_sha"])
+}
