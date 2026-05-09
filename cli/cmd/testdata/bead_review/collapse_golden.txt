@@ -57,6 +57,9 @@ Respond with EXACTLY one JSON object as your final response, fenced as a single 
   "schema_version": 1,
   "verdict": "APPROVE",
   "summary": "≤300 char human-readable verdict justification",
+  "per_ac": [
+    { "number": 1, "item": "acceptance criterion text", "grade": "pass", "evidence": "file:line or test evidence" }
+  ],
   "findings": [
     { "severity": "info", "summary": "what is wrong or notable", "location": "path/to/file.go:42" }
   ]
