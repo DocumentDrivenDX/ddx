@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -29,6 +30,77 @@ func TestWorkCommandHasPassthroughFlags(t *testing.T) {
 		f := workCmd.Flags().Lookup(name)
 		assert.NotNil(t, f, "ddx work must have --%s passthrough flag", name)
 	}
+}
+
+func TestParseExecuteLoopFlags_AllFlagsPopulateSpec(t *testing.T) {
+	dir := t.TempDir()
+	root := NewCommandFactory(dir).NewRootCommand()
+	workCmd, _, err := root.Find([]string{"work"})
+	require.NoError(t, err)
+
+	setFlag := func(name, value string) {
+		t.Helper()
+		require.NoError(t, workCmd.Flags().Set(name, value))
+	}
+	setFlag("project", dir)
+	setFlag("from", "HEAD~1")
+	setFlag("harness", "claude")
+	setFlag("model", "sonnet")
+	setFlag("profile", "smart")
+	setFlag("provider", "anthropic")
+	setFlag("model-ref", "code-medium")
+	setFlag("effort", "high")
+	setFlag("poll-interval", "45s")
+	setFlag("json", "true")
+	setFlag("local", "true")
+	setFlag("no-review", "true")
+	setFlag("no-review-i-know-what-im-doing", "true")
+	setFlag("review-harness", "codex")
+	setFlag("review-model", "gpt-5.4")
+	setFlag("max-cost", "12.5")
+	setFlag("request-timeout", "2m")
+	setFlag("min-power", "7")
+	setFlag("max-power", "8")
+
+	spec, dispatch, err := parseExecuteLoopSpec(workCmd, true)
+	require.NoError(t, err)
+
+	assert.Equal(t, dir, spec.ProjectRoot)
+	assert.Equal(t, "HEAD~1", spec.FromRev)
+	assert.Equal(t, "claude", spec.Harness)
+	assert.Equal(t, "sonnet", spec.Model)
+	assert.Equal(t, "smart", spec.Profile)
+	assert.Equal(t, "anthropic", spec.Provider)
+	assert.Equal(t, "code-medium", spec.ModelRef)
+	assert.Equal(t, "high", spec.Effort)
+	assert.Equal(t, executeloop.ModeWatch, spec.Mode)
+	assert.Equal(t, 45*time.Second, spec.IdleInterval.Duration)
+	assert.True(t, spec.NoReview)
+	assert.Equal(t, "codex", spec.ReviewHarness)
+	assert.Equal(t, "gpt-5.4", spec.ReviewModel)
+	assert.True(t, spec.OpaquePassthrough)
+	assert.Equal(t, 12.5, spec.MaxCostUSD)
+	assert.Equal(t, 2*time.Minute, spec.RequestTimeout.Duration)
+	assert.Equal(t, 7, spec.MinPower)
+	assert.Equal(t, 8, spec.MaxPower)
+	assert.Equal(t, executeloop.SpecCurrentVersion, spec.SpecVersion)
+	assert.Equal(t, "true", dispatch.JSON)
+	assert.True(t, dispatch.Local)
+}
+
+func TestParseExecuteLoopFlags_OnceFlag(t *testing.T) {
+	dir := t.TempDir()
+	root := NewCommandFactory(dir).NewRootCommand()
+	workCmd, _, err := root.Find([]string{"work"})
+	require.NoError(t, err)
+	require.NoError(t, workCmd.Flags().Set("once", "true"))
+	require.NoError(t, workCmd.Flags().Set("poll-interval", "45s"))
+
+	spec, _, err := parseExecuteLoopSpec(workCmd, true)
+	require.NoError(t, err)
+
+	assert.Equal(t, executeloop.ModeOnce, spec.Mode)
+	assert.Zero(t, spec.IdleInterval.Duration)
 }
 
 // TestAgentExecuteLoopCommandRemoved verifies that the old nested command name

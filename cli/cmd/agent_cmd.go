@@ -18,6 +18,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	tierescalation "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -1390,13 +1391,8 @@ func hostnameOrEmpty() string {
 	return h
 }
 
-// runAgentExecuteLoopImpl is the implementation for runWork. When
-// treatPassthroughAsOpaque is true, harness/provider/model are passed to Execute
-// unchanged and ValidateForExecuteLoopViaService is not called; DDx does not
-// inspect or branch on their values.
-func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassthroughAsOpaque bool, tryTargetBeadID string) error {
-	projectFlag, _ := cmd.Flags().GetString("project")
-	projectRoot := resolveProjectRoot(projectFlag, f.WorkingDir)
+func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (executeloop.ExecuteLoopSpec, executeloop.DispatchOptions, error) {
+	projectRoot, _ := cmd.Flags().GetString("project")
 	fromRev, _ := cmd.Flags().GetString("from")
 	harness, _ := cmd.Flags().GetString("harness")
 	model, _ := cmd.Flags().GetString("model")
@@ -1406,12 +1402,12 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	effort, _ := cmd.Flags().GetString("effort")
 	once, _ := cmd.Flags().GetBool("once")
 	pollInterval, _ := cmd.Flags().GetDuration("poll-interval")
-	if tryTargetBeadID != "" {
-		// `ddx try <bead-id>` is a single-bead one-shot: target one bead and
-		// exit after one attempt regardless of CLI flag state.
-		once = true
-	}
 	asJSON, _ := cmd.Flags().GetBool("json")
+	dispatchJSON := ""
+	if asJSON {
+		dispatchJSON = "true"
+	}
+	local, _ := cmd.Flags().GetBool("local")
 	noReview, _ := cmd.Flags().GetBool("no-review")
 	noReviewAck, _ := cmd.Flags().GetBool("no-review-i-know-what-im-doing")
 	reviewHarness, _ := cmd.Flags().GetString("review-harness")
@@ -1422,7 +1418,62 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	maxPower, _ := cmd.Flags().GetInt("max-power")
 
 	if noReview && !noReviewAck {
-		return fmt.Errorf("--no-review requires --no-review-i-know-what-im-doing (break-glass acknowledgement)")
+		return executeloop.ExecuteLoopSpec{}, executeloop.DispatchOptions{}, fmt.Errorf("--no-review requires --no-review-i-know-what-im-doing (break-glass acknowledgement)")
+	}
+
+	mode := executeloop.ModeDrain
+	var idleInterval executeloop.Duration
+	if once {
+		mode = executeloop.ModeOnce
+	} else if pollInterval > 0 {
+		mode = executeloop.ModeWatch
+		idleInterval = executeloop.Duration{Duration: pollInterval}
+	}
+
+	spec := executeloop.ExecuteLoopSpec{
+		ProjectRoot:       projectRoot,
+		Harness:           harness,
+		Model:             model,
+		Profile:           profile,
+		Provider:          provider,
+		ModelRef:          modelRef,
+		Effort:            effort,
+		Mode:              mode,
+		IdleInterval:      idleInterval,
+		NoReview:          noReview,
+		ReviewHarness:     reviewHarness,
+		ReviewModel:       reviewModel,
+		OpaquePassthrough: treatPassthroughAsOpaque,
+		MaxCostUSD:        maxCostUSD,
+		RequestTimeout:    executeloop.Duration{Duration: requestTimeout},
+		MinPower:          minPower,
+		MaxPower:          maxPower,
+		FromRev:           fromRev,
+	}
+	spec.ApplyDefaults()
+	if err := spec.Validate(); err != nil {
+		return executeloop.ExecuteLoopSpec{}, executeloop.DispatchOptions{}, err
+	}
+
+	return spec, executeloop.DispatchOptions{Local: local, JSON: dispatchJSON}, nil
+}
+
+// runAgentExecuteLoopImpl is the implementation for runWork. When
+// treatPassthroughAsOpaque is true, harness/provider/model are passed to Execute
+// unchanged and ValidateForExecuteLoopViaService is not called; DDx does not
+// inspect or branch on their values.
+func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassthroughAsOpaque bool, tryTargetBeadID string) error {
+	spec, dispatch, err := parseExecuteLoopSpec(cmd, treatPassthroughAsOpaque)
+	if err != nil {
+		return err
+	}
+	projectRoot := resolveProjectRoot(spec.ProjectRoot, f.WorkingDir)
+	spec.ProjectRoot = projectRoot
+	if tryTargetBeadID != "" {
+		// `ddx try <bead-id>` is a single-bead one-shot: target one bead and
+		// exit after one attempt regardless of CLI flag state.
+		spec.Mode = executeloop.ModeOnce
+		spec.IdleInterval = executeloop.Duration{}
 	}
 
 	// Zero-config auto-route: when the operator passes no routing flags and
@@ -1440,8 +1491,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	// any bead status changes hands.
 	// Skipped for ddx work (treatPassthroughAsOpaque=true): harness/provider/model
 	// are opaque passthrough constraints there; DDx does not validate them.
-	if !treatPassthroughAsOpaque {
-		if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, harness, model, provider, modelRef); err != nil {
+	if !spec.OpaquePassthrough {
+		if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, spec.Harness, spec.Model, spec.Provider, spec.ModelRef); err != nil {
 			return fmt.Errorf("execute-loop: %w", err)
 		}
 	}
@@ -1470,8 +1521,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	// state, so this code never blocks the loop on network I/O.
 	probeIdent := workerprobe.Identity{
 		ProjectRoot:  projectRoot,
-		Harness:      harness,
-		Model:        model,
+		Harness:      spec.Harness,
+		Model:        spec.Model,
 		ExecutorPID:  os.Getpid(),
 		ExecutorHost: hostnameOrEmpty(),
 		StartedAt:    time.Now().UTC(),
@@ -1499,17 +1550,17 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	// Build post-merge reviewer unless --no-review is set.
 	// Reviewer is on-by-default: runs at smart tier after every successful merge.
 	var reviewer agent.BeadReviewer
-	if !noReview {
+	if !spec.NoReview {
 		reviewer = &agent.DefaultBeadReviewer{
 			ProjectRoot: projectRoot,
 			BeadStore:   bead.NewStore(filepath.Join(projectRoot, ".ddx")),
 			BeadEvents:  bead.NewStore(filepath.Join(projectRoot, ".ddx")),
-			Harness:     reviewHarness,
-			Model:       reviewModel,
+			Harness:     spec.ReviewHarness,
+			Model:       spec.ReviewModel,
 		}
 	}
 
-	profile = agent.NormalizeRoutingProfile(profile)
+	spec.Profile = agent.NormalizeRoutingProfile(spec.Profile)
 
 	// SD-024 Stage 1: dispatch flows through LoadAndResolve + RunWithConfig
 	// so .ddx/config.yaml's durable knobs (review_max_retries,
@@ -1519,15 +1570,15 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	// over the on-disk config when set.
 	overrides := config.CLIOverrides{
 		Assignee:          resolveClaimAssignee(),
-		Harness:           harness,
-		Model:             model,
-		Provider:          provider,
-		ModelRef:          modelRef,
-		Profile:           profile,
-		Effort:            effort,
-		MinPower:          minPower,
-		MaxPower:          maxPower,
-		OpaquePassthrough: treatPassthroughAsOpaque,
+		Harness:           spec.Harness,
+		Model:             spec.Model,
+		Provider:          spec.Provider,
+		ModelRef:          spec.ModelRef,
+		Profile:           spec.Profile,
+		Effort:            spec.Effort,
+		MinPower:          spec.MinPower,
+		MaxPower:          spec.MaxPower,
+		OpaquePassthrough: spec.OpaquePassthrough,
 	}
 	rcfg, err := config.LoadAndResolve(projectRoot, overrides)
 	if err != nil {
@@ -1559,7 +1610,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	// paths. Accumulated billed spend (excluding local and subscription
 	// providers) above --max-cost trips the cap and halts further bead
 	// claiming. See escalation.DefaultMaxCostUSD / CountsTowardCostCap.
-	costCap := escalation.NewCostCapTracker(maxCostUSD, func(harnessName string) bool {
+	costCap := escalation.NewCostCapTracker(spec.MaxCostUSD, func(harnessName string) bool {
 		// Resolve the harness's billing class via the service. Treat any
 		// resolution error as "count by default" (safe — we'd rather cap
 		// early than silently overshoot).
@@ -1588,7 +1639,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		spent := costCap.Spent()
 		return agent.ExecuteBeadReport{
 			Status: agent.ExecuteBeadStatusExecutionFailed,
-			Detail: fmt.Sprintf("cost cap reached: $%.2f billed >= $%.2f cap; raise the cap or set 0 to disable. Subscription and local providers do not count.", spent, maxCostUSD),
+			Detail: fmt.Sprintf("cost cap reached: $%.2f billed >= $%.2f cap; raise the cap or set 0 to disable. Subscription and local providers do not count.", spent, spec.MaxCostUSD),
 		}, true
 	}
 
@@ -1597,7 +1648,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	// profile stable and only advances the power floor.
 	singleTierAttempt := func(ctx context.Context, beadID string, requestedMinPower int, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
 		gitOps := &agent.RealGitOps{}
-		attemptProvider := provider
+		attemptProvider := spec.Provider
 		if resolvedProvider != "" {
 			attemptProvider = resolvedProvider
 		}
@@ -1605,19 +1656,20 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			Harness:           resolvedHarness,
 			Model:             resolvedModel,
 			Provider:          attemptProvider,
-			ModelRef:          modelRef,
-			Profile:           profile,
-			Effort:            effort,
+			ModelRef:          spec.ModelRef,
+			Profile:           spec.Profile,
+			Effort:            spec.Effort,
 			MinPower:          requestedMinPower,
-			MaxPower:          maxPower,
-			OpaquePassthrough: treatPassthroughAsOpaque,
+			MaxPower:          spec.MaxPower,
+			OpaquePassthrough: spec.OpaquePassthrough,
 		}
+		requestTimeout := spec.RequestTimeout.Duration
 		if requestTimeout > 0 {
 			loopOverrides.ProviderRequestTimeout = &requestTimeout
 		}
 		attemptRcfg, _ := config.LoadAndResolve(projectRoot, loopOverrides)
 		res, execErr := agent.ExecuteBeadWithConfig(ctx, projectRoot, beadID, attemptRcfg, agent.ExecuteBeadRuntime{
-			FromRev:         fromRev,
+			FromRev:         spec.FromRev,
 			Output:          cmd.OutOrStdout(),
 			BeadEvents:      bead.NewStore(filepath.Join(projectRoot, ".ddx")),
 			AgentRunner:     f.AgentRunnerOverride,
@@ -1672,8 +1724,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				return
 			}
 			modelFilter := agentlib.ModelFilter{}
-			if harness != "" {
-				modelFilter.Harness = harness
+			if spec.Harness != "" {
+				modelFilter.Harness = spec.Harness
 			}
 			modelCtx, cancel := context.WithTimeout(cmd.Context(), 2*time.Second)
 			defer cancel()
@@ -1695,7 +1747,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				rcfg.MinPower(),
 				loadLadder(),
 				func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
-					return singleTierAttempt(ctx, beadID, requestedMinPower, harness, provider, model)
+					return singleTierAttempt(ctx, beadID, requestedMinPower, spec.Harness, spec.Provider, spec.Model)
 				},
 				nil,
 			)
@@ -1709,9 +1761,15 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	cliLandingOps := agent.RealLandingGitOps{}
 	progressLog := cmd.OutOrStdout()
 	cleanupLog := cmd.ErrOrStderr()
-	if asJSON {
+	jsonOutput := dispatch.JSON == "true"
+	if jsonOutput {
 		progressLog = io.Discard
 		cleanupLog = io.Discard
+	}
+	once := spec.Mode == executeloop.ModeOnce
+	pollInterval := time.Duration(0)
+	if spec.Mode == executeloop.ModeWatch {
+		pollInterval = spec.IdleInterval.Duration
 	}
 	result, err := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
 		Once:                  once,
@@ -1729,17 +1787,17 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		PreDispatchLintHook:   lintHook,
 		PostAttemptTriageHook: triageHook,
 		BudgetStop:            costCapTripped,
-		NoReview:              noReview,
+		NoReview:              spec.NoReview,
 		TargetBeadID:          tryTargetBeadID,
 		ReviewCostCap:         costCap,
 	})
 	if err != nil && result != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
-		_ = writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, asJSON)
+		_ = writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, jsonOutput)
 	}
 	if err != nil {
 		return err
 	}
-	return writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, asJSON)
+	return writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, jsonOutput)
 }
 
 func formatAttemptRouteEconomics(attempt agent.ExecuteBeadReport) string {
