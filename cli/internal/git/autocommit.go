@@ -27,13 +27,23 @@ type AutoCommitConfig struct {
 // Returns an empty SHA and nil if auto_commit is "never" (or unset) or if
 // not in a git repo.
 func AutoCommit(filePath string, artifactID string, operation string, cfg AutoCommitConfig) (string, error) {
+	return AutoCommitFiles([]string{filePath}, artifactID, operation, cfg)
+}
+
+// AutoCommitFiles stages and commits a bounded set of files with a structured
+// message. All files must live in the same directory; unrelated staged work is
+// preserved unless IncludeStaged is true.
+func AutoCommitFiles(filePaths []string, artifactID string, operation string, cfg AutoCommitConfig) (string, error) {
 	// Default to "never"
 	if cfg.AutoCommit == "" || cfg.AutoCommit == "never" {
 		return "", nil
 	}
+	if len(filePaths) == 0 {
+		return "", nil
+	}
 
 	if cfg.AutoCommit == "prompt" {
-		fmt.Fprintf(os.Stderr, "Auto-commit %s? [y/N] ", filePath)
+		fmt.Fprintf(os.Stderr, "Auto-commit %s? [y/N] ", strings.Join(filePaths, ", "))
 		reader := bufio.NewReader(os.Stdin)
 		answer, _ := reader.ReadString('\n')
 		if strings.TrimSpace(strings.ToLower(answer)) != "y" {
@@ -44,9 +54,14 @@ func AutoCommit(filePath string, artifactID string, operation string, cfg AutoCo
 		return "", nil
 	}
 
-	repoDir := filepath.Dir(filePath)
+	repoDir := filepath.Dir(filePaths[0])
 	if repoDir == "" {
 		repoDir = "."
+	}
+	for _, path := range filePaths[1:] {
+		if filepath.Dir(path) != repoDir {
+			return "", fmt.Errorf("auto-commit files must share one directory: %s and %s", filePaths[0], path)
+		}
 	}
 
 	// Check we are inside a git repo (silently skip if not).
@@ -64,11 +79,13 @@ func AutoCommit(filePath string, artifactID string, operation string, cfg AutoCo
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// Stage the file.
-	// Stage only the file name after switching into the file's parent
-	// directory. This keeps relative callers working when filePath itself is
-	// a nested relative path such as cli/cmd/doc.go.
-	addCmd := Command(ctx, repoDir, "add", filepath.Base(filePath))
+	// Stage only file names after switching into the files' parent directory.
+	// This keeps relative callers working when paths are nested under a repo.
+	addArgs := []string{"add"}
+	for _, path := range filePaths {
+		addArgs = append(addArgs, filepath.Base(path))
+	}
+	addCmd := Command(ctx, repoDir, addArgs...)
 	if out, err := addCmd.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("git add failed: %w\n%s", err, string(out))
 	}
@@ -78,7 +95,10 @@ func AutoCommit(filePath string, artifactID string, operation string, cfg AutoCo
 	if !cfg.IncludeStaged {
 		// Limit the commit to the target path so unrelated staged work stays
 		// staged for its intended commit.
-		commitArgs = append(commitArgs, "--only", "--", filepath.Base(filePath))
+		commitArgs = append(commitArgs, "--only", "--")
+		for _, path := range filePaths {
+			commitArgs = append(commitArgs, filepath.Base(path))
+		}
 	}
 	commitCmd := Command(ctx, repoDir, commitArgs...)
 	if out, err := commitCmd.CombinedOutput(); err != nil {

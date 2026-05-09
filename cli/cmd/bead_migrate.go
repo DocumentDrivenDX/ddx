@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/spf13/cobra"
 )
 
@@ -31,10 +32,21 @@ the migration via 'ddx bead export | diff'.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
 			dryRun, _ := cmd.Flags().GetBool("dry-run")
+			applyLifecycle, _ := cmd.Flags().GetBool("apply")
 			asJSON, _ := cmd.Flags().GetBool("json")
+			lifecycle, _ := cmd.Flags().GetBool("lifecycle")
 			target, _ := cmd.Flags().GetString("to")
+			if applyLifecycle && !lifecycle {
+				return fmt.Errorf("bead: --apply is only supported with --lifecycle")
+			}
+			if applyLifecycle && dryRun {
+				return fmt.Errorf("bead: --apply and --dry-run are mutually exclusive")
+			}
 
 			if target != "" {
+				if lifecycle {
+					return fmt.Errorf("bead: --lifecycle cannot be combined with --to")
+				}
 				if target != "axon" {
 					return fmt.Errorf("bead: unknown migration target %q (supported: axon)", target)
 				}
@@ -58,6 +70,55 @@ the migration via 'ddx bead export | diff'.`,
 				out := cmd.OutOrStdout()
 				fmt.Fprintf(out, "Migrated %d bead(s) (%d inline event(s)) to axon backend at .ddx/axon/\n", view.BeadsMigrated, view.EventsMigrated)
 				fmt.Fprintln(out, "Source files left intact — remove .ddx/beads.jsonl and .ddx/beads-archive.jsonl after verifying.")
+				return nil
+			}
+
+			if lifecycle {
+				var st bead.LifecycleMigrationStats
+				var err error
+				if applyLifecycle {
+					st, err = s.MigrateLifecycle()
+				} else {
+					st, err = s.MigrateLifecycleDryRun()
+				}
+				if err != nil {
+					return err
+				}
+				if applyLifecycle && st.Changed() {
+					paths := []string{s.File}
+					if st.MarkerWritten {
+						paths = append(paths, s.LifecycleSchemaMarkerPath())
+					}
+					if _, err := f.beadAutoCommitPaths("migrate lifecycle", paths); err != nil {
+						return err
+					}
+				}
+				if asJSON {
+					enc := json.NewEncoder(cmd.OutOrStdout())
+					enc.SetIndent("", "  ")
+					return enc.Encode(st)
+				}
+				out := cmd.OutOrStdout()
+				if !applyLifecycle {
+					fmt.Fprintln(out, "Dry run — no files were modified.")
+				}
+				fmt.Fprintf(out, "needs_human labels:                  %d\n", st.LegacyNeedsHumanLabels)
+				fmt.Fprintf(out, "triage:needs-investigation labels:   %d\n", st.LegacyNeedsInvestigationLabels)
+				fmt.Fprintf(out, "needs_investigation pseudo-statuses: %d\n", st.LegacyNeedsInvestigationPseudoStatuses)
+				fmt.Fprintf(out, "legacy no_changes metadata rows:     %d\n", st.LegacyNoChangesMetadataRows)
+				fmt.Fprintf(out, "to proposed:                         %d\n", st.ToProposed)
+				fmt.Fprintf(out, "to open:                             %d\n", st.ToOpen)
+				fmt.Fprintf(out, "to blocked:                          %d\n", st.ToBlocked)
+				fmt.Fprintf(out, "to closed:                           %d\n", st.ToClosed)
+				fmt.Fprintf(out, "to cancelled:                        %d\n", st.ToCancelled)
+				fmt.Fprintf(out, "schema marker missing:               %t\n", st.SchemaMarkerMissing)
+				if applyLifecycle {
+					fmt.Fprintf(out, "rows changed:                        %d\n", st.RowsChanged)
+					fmt.Fprintf(out, "marker written:                      %t\n", st.MarkerWritten)
+					if !st.Changed() {
+						fmt.Fprintln(out, "No changes — lifecycle migration already applied.")
+					}
+				}
 				return nil
 			}
 
@@ -104,6 +165,8 @@ the migration via 'ddx bead export | diff'.`,
 	}
 	cmd.Flags().Bool("json", false, "Output as JSON")
 	cmd.Flags().Bool("dry-run", false, "Report what would change without writing")
+	cmd.Flags().Bool("lifecycle", false, "Migrate legacy lifecycle labels and pseudo-statuses to status-owned state")
+	cmd.Flags().Bool("apply", false, "Apply --lifecycle migration (default with --lifecycle is dry-run)")
 	cmd.Flags().String("to", "", "Migrate corpus to a different backend (supported: axon)")
 	return cmd
 }

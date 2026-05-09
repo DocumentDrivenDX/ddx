@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -186,4 +187,99 @@ func TestMigrateCommandDryRun(t *testing.T) {
 	assert.True(t, os.IsNotExist(statErr), "dry-run must not create archive file")
 	_, statErr = os.Stat(filepath.Join(workingDir, ".ddx", "attachments", "ddx-c1", "events.jsonl"))
 	assert.True(t, os.IsNotExist(statErr), "dry-run must not create attachments")
+}
+
+func TestBeadMigrateLifecycleDryRunReportsLegacyCounts(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ".ddx"), 0o755))
+	old := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	rows := strings.Join([]string{
+		`{"id":"ddx-human","title":"human","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","labels":["needs_human"]}`,
+		`{"id":"ddx-investigate","title":"investigate","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","labels":["triage:needs-investigation"],"execute-loop-last-detail":"rerun with smart agent"}`,
+		`{"id":"ddx-pseudo","title":"pseudo","status":"needs_investigation","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","execute-loop-last-detail":"rerun with stronger model"}`,
+	}, "\n") + "\n"
+	beadsPath := filepath.Join(workingDir, ".ddx", "beads.jsonl")
+	require.NoError(t, os.WriteFile(beadsPath, []byte(rows), 0o644))
+	before, err := os.ReadFile(beadsPath)
+	require.NoError(t, err)
+
+	out, err := executeCommand(factory.NewRootCommand(), "bead", "migrate", "--lifecycle", "--dry-run", "--json")
+	require.NoError(t, err)
+	var stats bead.LifecycleMigrationStats
+	require.NoError(t, json.Unmarshal([]byte(out), &stats))
+	assert.True(t, stats.DryRun)
+	assert.True(t, stats.SchemaMarkerMissing)
+	assert.Equal(t, 1, stats.LegacyNeedsHumanLabels)
+	assert.Equal(t, 1, stats.LegacyNeedsInvestigationLabels)
+	assert.Equal(t, 1, stats.LegacyNeedsInvestigationPseudoStatuses)
+	assert.Equal(t, 1, stats.ToProposed)
+	assert.Equal(t, 2, stats.ToOpen)
+
+	after, err := os.ReadFile(beadsPath)
+	require.NoError(t, err)
+	assert.Equal(t, string(before), string(after), "lifecycle dry-run must not touch beads.jsonl")
+	assert.NoFileExists(t, filepath.Join(workingDir, ".ddx", bead.LifecycleSchemaMarkerFile))
+}
+
+func TestBeadMigrateLifecycleApplyWritesSchemaMarker(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ".ddx"), 0o755))
+	old := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	rows := strings.Join([]string{
+		`{"id":"ddx-human","title":"human","status":"open","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","labels":["needs_human"],"needs-human-reason":"manual approval required"}`,
+	}, "\n") + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ".ddx", "beads.jsonl"), []byte(rows), 0o644))
+
+	out, err := executeCommand(factory.NewRootCommand(), "bead", "migrate", "--lifecycle", "--apply", "--json")
+	require.NoError(t, err)
+	var stats bead.LifecycleMigrationStats
+	require.NoError(t, json.Unmarshal([]byte(out), &stats))
+	assert.False(t, stats.DryRun)
+	assert.True(t, stats.SchemaMarkerMissing)
+	assert.True(t, stats.MarkerWritten)
+	assert.Equal(t, 1, stats.RowsChanged)
+
+	showOut, err := executeCommand(factory.NewRootCommand(), "bead", "show", "ddx-human", "--json")
+	require.NoError(t, err)
+	var got map[string]any
+	require.NoError(t, json.Unmarshal([]byte(showOut), &got))
+	assert.Equal(t, bead.StatusProposed, got["status"])
+	assert.FileExists(t, filepath.Join(workingDir, ".ddx", bead.LifecycleSchemaMarkerFile))
+}
+
+func TestBeadMigrateLifecycleIsIdempotent(t *testing.T) {
+	workingDir := t.TempDir()
+	factory := newBeadTestRoot(t, workingDir)
+	require.NoError(t, os.MkdirAll(filepath.Join(workingDir, ".ddx"), 0o755))
+	old := time.Now().UTC().Add(-time.Hour).Format(time.RFC3339)
+	rows := strings.Join([]string{
+		`{"id":"ddx-pseudo","title":"pseudo","status":"needs_investigation","priority":2,"issue_type":"task","created_at":"` + old + `","updated_at":"` + old + `","execute-loop-last-detail":"rerun with smart agent"}`,
+	}, "\n") + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(workingDir, ".ddx", "beads.jsonl"), []byte(rows), 0o644))
+
+	_, err := executeCommand(factory.NewRootCommand(), "bead", "migrate", "--lifecycle", "--apply", "--json")
+	require.NoError(t, err)
+	markerPath := filepath.Join(workingDir, ".ddx", bead.LifecycleSchemaMarkerFile)
+	beforeMarker, err := os.ReadFile(markerPath)
+	require.NoError(t, err)
+	beforeRows, err := os.ReadFile(filepath.Join(workingDir, ".ddx", "beads.jsonl"))
+	require.NoError(t, err)
+
+	out, err := executeCommand(factory.NewRootCommand(), "bead", "migrate", "--lifecycle", "--apply", "--json")
+	require.NoError(t, err)
+	var stats bead.LifecycleMigrationStats
+	require.NoError(t, json.Unmarshal([]byte(out), &stats))
+	assert.False(t, stats.Changed())
+	assert.False(t, stats.SchemaMarkerMissing)
+	assert.False(t, stats.MarkerWritten)
+	assert.Equal(t, 0, stats.RowsChanged)
+
+	afterMarker, err := os.ReadFile(markerPath)
+	require.NoError(t, err)
+	afterRows, err := os.ReadFile(filepath.Join(workingDir, ".ddx", "beads.jsonl"))
+	require.NoError(t, err)
+	assert.Equal(t, string(beforeMarker), string(afterMarker))
+	assert.Equal(t, string(beforeRows), string(afterRows))
 }

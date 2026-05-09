@@ -80,11 +80,24 @@ func (f *CommandFactory) beadAutoCommit(operation string) (string, error) {
 	return f.beadAutoCommitWithMode(operation, false)
 }
 
+func (f *CommandFactory) beadAutoCommitPaths(operation string, paths []string) (string, error) {
+	return f.beadAutoCommitPathsWithMode(operation, paths, false)
+}
+
 func (f *CommandFactory) beadAutoCommitIncludingStaged(operation string) (string, error) {
 	return f.beadAutoCommitWithMode(operation, true)
 }
 
 func (f *CommandFactory) beadAutoCommitWithMode(operation string, includeStaged bool) (string, error) {
+	workspaceRoot := f.beadWorkspaceRoot()
+	if workspaceRoot == "" {
+		workspaceRoot = f.WorkingDir
+	}
+	beadsFile := filepath.Join(workspaceRoot, ".ddx", "beads.jsonl")
+	return f.beadAutoCommitPathsWithMode(operation, []string{beadsFile}, includeStaged)
+}
+
+func (f *CommandFactory) beadAutoCommitPathsWithMode(operation string, paths []string, includeStaged bool) (string, error) {
 	workspaceRoot := f.beadWorkspaceRoot()
 	if workspaceRoot == "" {
 		workspaceRoot = f.WorkingDir
@@ -102,8 +115,7 @@ func (f *CommandFactory) beadAutoCommitWithMode(operation string, includeStaged 
 		CommitPrefix:  cfg.Git.CommitPrefix,
 		IncludeStaged: includeStaged,
 	}
-	beadsFile := filepath.Join(workspaceRoot, ".ddx", "beads.jsonl")
-	sha, err := gitpkg.AutoCommit(beadsFile, "beads", operation, acCfg)
+	sha, err := gitpkg.AutoCommitFiles(paths, "beads", operation, acCfg)
 	if err != nil {
 		return "", fmt.Errorf("auto-commit beads tracker after %s: %w", operation, err)
 	}
