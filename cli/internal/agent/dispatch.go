@@ -103,6 +103,7 @@ func buildRunArgsFromConfig(ctx context.Context, rcfg config.ResolvedConfig, run
 	opts.Correlation = runtime.Correlation
 	opts.Role = runtime.Role
 	opts.CorrelationID = runtime.CorrelationID
+	opts.Env = runtime.Env
 	opts.Model = model
 	opts.Provider = provider
 	opts.ModelRef = modelRef

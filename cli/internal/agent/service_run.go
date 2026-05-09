@@ -103,6 +103,7 @@ func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.Re
 			WorkDir:       runtime.WorkDir,
 			Permissions:   rcfg.Permissions(),
 			SessionLogDir: sessionLogDir,
+			Env:           runtime.Env,
 		})
 	}
 
@@ -229,7 +230,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		IdleTimeout:     idle,
 		ProviderTimeout: providerTimeout,
 		SessionLogDir:   sessionLogDir,
-		Metadata:        runtime.Correlation,
+		Metadata:        metadataWithEnv(runtime.Correlation, runtime.Env),
 		Role:            runtime.Role,
 		CorrelationID:   runtime.CorrelationID,
 		MinPower:        minPower,
@@ -325,6 +326,20 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	}, result, start, finishedAt)
 	_ = AppendSessionIndex(ResolveLogDir(workDir, ""), entry, finishedAt)
 	return result, nil
+}
+
+func metadataWithEnv(metadata, env map[string]string) map[string]string {
+	if len(metadata) == 0 && len(env) == 0 {
+		return nil
+	}
+	out := make(map[string]string, len(metadata)+len(env))
+	for k, v := range metadata {
+		out[k] = v
+	}
+	for k, v := range env {
+		out[k] = v
+	}
+	return out
 }
 
 func normalizeServiceFinalExitCode(result *Result) {

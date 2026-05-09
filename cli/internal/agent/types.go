@@ -55,6 +55,7 @@ type RunArgs struct {
 	SessionLogDir string // per-run override for session log dir; used by execute-bead to redirect embedded-agent runtime state out of the worktree root
 	Role          string
 	CorrelationID string
+	Env           map[string]string
 }
 
 // AgentRunRuntime is the SD-024 successor to RunArgs for the agent
@@ -92,6 +93,7 @@ type AgentRunRuntime struct {
 	ClearRoutingPins bool
 	Role             string
 	CorrelationID    string
+	Env              map[string]string
 	// MinPowerOverride, when > 0, overrides rcfg.MinPower() for this single
 	// invocation. Used by the post-merge reviewer to pin MinPower above the
 	// implementer's actual selected power, biasing routing toward a stronger
@@ -110,6 +112,11 @@ type AgentRunRuntime struct {
 	// worker attempt's profile.
 	ClearProfile bool
 }
+
+const (
+	DDXModeEnvKey        = "DDX_MODE"
+	DDXModeBeadExecution = "bead_execution"
+)
 
 // Result holds the output of an agent invocation.
 type Result struct {

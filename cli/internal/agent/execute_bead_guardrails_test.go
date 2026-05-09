@@ -150,6 +150,29 @@ func TestExecuteBeadInstructionsHarnessSelector(t *testing.T) {
 	}
 }
 
+func TestExecuteBeadInstructionsContainsBeadExecutionMode(t *testing.T) {
+	cases := []struct{ variant, harness string }{
+		{"claude", "claude"},
+		{"agent", "agent"},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.variant, func(t *testing.T) {
+			rendered := renderInstructionsForGuardrails(t, c.harness, "")
+			for _, sub := range []string{
+				"DDX_MODE=bead_execution",
+				"Worker prompts may edit code/docs to satisfy the bead AC",
+				"Only the broad interactive queue-steward default is overridden",
+				"tracker, merge-policy, verification, and safety rules remain active",
+			} {
+				if !strings.Contains(rendered, sub) {
+					t.Errorf("rendered %s prompt missing execution-mode substring %q", c.variant, sub)
+				}
+			}
+		})
+	}
+}
+
 // TestExecuteBeadInstructionsRenderedInvariants is the AC4 substring-invariant
 // test: rendered prompts MUST contain the named substrings in every (variant,
 // non-minimal contextBudget) pair. These are the operational primitives the

@@ -81,6 +81,9 @@ func TestExecuteBeadRuntimeDelegation(t *testing.T) {
 	if got.Effort != "high" {
 		t.Errorf("Effort = %q, want %q", got.Effort, "high")
 	}
+	if got.Env[DDXModeEnvKey] != DDXModeBeadExecution {
+		t.Errorf("Env[%q] = %q, want %q", DDXModeEnvKey, got.Env[DDXModeEnvKey], DDXModeBeadExecution)
+	}
 }
 
 // TestExecutionsMirrorFromConfig verifies that an ExecutionsConfig.Mirror

@@ -66,7 +66,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		IdleTimeout:     timeout,
 		ProviderTimeout: providerTimeout,
 		SessionLogDir:   logDir,
-		Metadata:        opts.Correlation,
+		Metadata:        metadataWithEnv(opts.Correlation, opts.Env),
 		Role:            opts.Role,
 		CorrelationID:   opts.CorrelationID,
 	}

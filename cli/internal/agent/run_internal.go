@@ -27,6 +27,7 @@ func (r *Runner) runInternal(args RunArgs) (*Result, error) {
 	opts.Correlation = args.Correlation
 	opts.Role = args.Role
 	opts.CorrelationID = args.CorrelationID
+	opts.Env = args.Env
 	opts.Model = args.Model
 	opts.Provider = args.Provider
 	opts.ModelRef = args.ModelRef

@@ -51,6 +51,37 @@ func TestAgentRunRuntimeDelegation(t *testing.T) {
 		"permissions from rcfg must reach harness args")
 }
 
+func TestAgentRunRuntimePropagatesDDXMode(t *testing.T) {
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
+		Harness: "codex",
+		Model:   "gpt-test",
+	}).Resolve(config.CLIOverrides{Harness: "codex"})
+
+	runtime := AgentRunRuntime{
+		Prompt: "do bead work",
+		Env: map[string]string{
+			DDXModeEnvKey: DDXModeBeadExecution,
+		},
+	}
+
+	args := buildRunArgsFromConfig(context.Background(), rcfg, runtime)
+	require.NotNil(t, args.Env)
+	assert.Equal(t, DDXModeBeadExecution, args.Env[DDXModeEnvKey])
+
+	mock := &mockExecutor{output: "ok"}
+	r := newTestRunner(mock)
+	_, err := runnerRunWithConfig(r, context.Background(), rcfg, runtime)
+	require.NoError(t, err)
+	require.NotNil(t, mock.lastEnv)
+	assert.Equal(t, DDXModeBeadExecution, mock.lastEnv[DDXModeEnvKey])
+
+	svc := &passthroughTestService{}
+	_, err = executeOnService(context.Background(), svc, t.TempDir(), rcfg, runtime)
+	require.NoError(t, err)
+	require.NotNil(t, svc.lastReq.Metadata)
+	assert.Equal(t, DDXModeBeadExecution, svc.lastReq.Metadata[DDXModeEnvKey])
+}
+
 // TestAgentRunRuntimeDelegation_ZeroValueRcfgPanics confirms RunWithConfig
 // refuses an unsealed ResolvedConfig — the SD-024 sealed-construction
 // invariant flows through to the run path.

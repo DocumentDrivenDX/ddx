@@ -60,6 +60,7 @@ func runnerRunWithConfig(r *Runner, ctx context.Context, rcfg config.ResolvedCon
 		WorkDir:       runtime.WorkDir,
 		Permissions:   rcfg.Permissions(),
 		SessionLogDir: sessionLogDir,
+		Env:           runtime.Env,
 	}
 	return r.Run(opts)
 }

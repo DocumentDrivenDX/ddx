@@ -6,8 +6,10 @@ import (
 	"context"
 	"errors"
 	"io"
+	"os"
 	"os/exec"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -52,6 +54,7 @@ func executionTimeoutFromContext(ctx context.Context) time.Duration {
 }
 
 type executionWallClockKey struct{}
+type executionEnvKey struct{}
 
 // withExecutionWallClock attaches an absolute wall-clock deadline to ctx.
 // Unlike withExecutionTimeout — which is an idle (inactivity) timer that
@@ -72,6 +75,24 @@ func executionWallClockFromContext(ctx context.Context) time.Duration {
 		return wallClock
 	}
 	return 0
+}
+
+func withExecutionEnv(ctx context.Context, env map[string]string) context.Context {
+	if len(env) == 0 {
+		return ctx
+	}
+	return context.WithValue(ctx, executionEnvKey{}, cloneStringMap(env))
+}
+
+func executionEnvFromContext(ctx context.Context) map[string]string {
+	if ctx == nil {
+		return nil
+	}
+	env, ok := ctx.Value(executionEnvKey{}).(map[string]string)
+	if !ok || len(env) == 0 {
+		return nil
+	}
+	return cloneStringMap(env)
 }
 
 // authCancelPatterns are regexps matched against lowercased stderr lines that indicate
@@ -133,6 +154,18 @@ func (e *OSExecutor) ExecuteInDir(ctx context.Context, binary string, args []str
 	cmd := exec.Command(binary, args...)
 	if dir != "" {
 		cmd.Dir = dir
+	}
+	if extraEnv := executionEnvFromContext(ctx); len(extraEnv) > 0 {
+		env := os.Environ()
+		keys := make([]string, 0, len(extraEnv))
+		for key := range extraEnv {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for _, key := range keys {
+			env = append(env, key+"="+extraEnv[key])
+		}
+		cmd.Env = env
 	}
 
 	stdoutPipe, err := cmd.StdoutPipe()

@@ -176,12 +176,16 @@ func TestAgentExecution_UsesFizeauServicePathOnly(t *testing.T) {
 
 	result, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
 		Prompt: "hello",
+		Env: map[string]string{
+			DDXModeEnvKey: DDXModeBeadExecution,
+		},
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.True(t, stub.executeCalled, "RunWithConfigViaService must use the Fizeau service adapter")
 	assert.Equal(t, "agent", stub.lastReq.Harness)
 	assert.Equal(t, "hello", stub.lastReq.Prompt)
+	assert.Equal(t, DDXModeBeadExecution, stub.lastReq.Metadata[DDXModeEnvKey])
 	assert.Equal(t, "done", result.Output)
 	assert.Equal(t, 0, result.ExitCode)
 }

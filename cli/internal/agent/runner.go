@@ -159,6 +159,7 @@ func (r *Runner) Run(opts RunArgs) (*Result, error) {
 	}
 	ctx, cancel := context.WithCancel(parentCtx)
 	defer cancel()
+	ctx = withExecutionEnv(ctx, opts.Env)
 	ctx = withExecutionTimeout(ctx, timeout)
 	ctx = withExecutionWallClock(ctx, wallClock)
 

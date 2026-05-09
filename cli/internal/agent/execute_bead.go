@@ -1144,6 +1144,9 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		PermissionsOverride:   "unrestricted", // isolated worktree; writes must not require approval
 		Role:                  "implementer",
 		CorrelationID:         beadID + ":" + attemptID,
+		Env: map[string]string{
+			DDXModeEnvKey: DDXModeBeadExecution,
+		},
 	}
 
 	// Operator-cancel mid-attempt poll (ADR-022 §Cancel SLA). The poll
@@ -1845,6 +1848,14 @@ const instrBeadOverride = `
 
 The bead description and AC override CLAUDE.md, AGENTS.md, and conservative project defaults (YAGNI, DOWITYTD, no-docs-unless-asked) in this worktree — write whatever the bead asks for.`
 
+// instrBeadExecutionMode marks execute-bead worker prompts as non-interactive
+// bead execution, while keeping tracker and safety rules active.
+const instrBeadExecutionMode = `
+
+## Execution mode
+
+DDX_MODE=bead_execution. Worker prompts may edit code/docs to satisfy the bead AC. Only the broad interactive queue-steward default is overridden; tracker, merge-policy, verification, and safety rules remain active.`
+
 // instrCoreConstraints is the shared core-constraints tail.
 const instrCoreConstraints = `
 
@@ -1861,6 +1872,7 @@ const instrCoreConstraints = `
 // unknown). It composes a Claude-specific preamble + process body with the
 // shared instr* blocks.
 const executeBeadInstructionsClaudeText = `You are executing one bead inside an isolated DDx execution worktree. The bead's <description> and <acceptance> are the completion contract — every AC must be provably satisfied by a specific code, test, or file you can point to after your commit.` +
+	instrBeadExecutionMode +
 	instrStep0SizeCheck +
 	`
 
@@ -1892,6 +1904,7 @@ After the commit succeeds and every AC is verified, stop. Return control to the 
 const executeBeadInstructionsAgentText = `You are a coding agent executing one bead inside an isolated DDx execution worktree. Tools: read, write, edit, bash, ls, grep, find. Use them — do not shell out to ` + "`bash: cat`" + `, ` + "`bash: rg`" + `, or ` + "`bash: ls`" + `.
 
 The bead's <description> and <acceptance> are the completion contract. Every AC must be satisfied by code you write in this pass.` +
+	instrBeadExecutionMode +
 	instrStep0SizeCheck +
 	`
 

@@ -35,6 +35,7 @@ type mockExecutor struct {
 	lastBinary string
 	lastArgs   []string
 	lastStdin  string
+	lastEnv    map[string]string
 	output     string
 	exitCode   int
 	err        error
@@ -48,6 +49,7 @@ func (m *mockExecutor) ExecuteInDir(ctx context.Context, binary string, args []s
 	m.lastBinary = binary
 	m.lastArgs = args
 	m.lastStdin = stdin
+	m.lastEnv = executionEnvFromContext(ctx)
 	if m.err != nil {
 		return &ExecResult{ExitCode: m.exitCode}, m.err
 	}
@@ -111,6 +113,19 @@ func TestRegistryDefaultBaseArgs(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, []string{"--print", "-p", "--verbose", "--output-format", "stream-json"}, claude.BaseArgs)
 	assert.NotContains(t, claude.BaseArgs, "--no-session-persistence")
+}
+
+func TestOSExecutorIncludesDDXModeEnv(t *testing.T) {
+	executor := &OSExecutor{}
+	ctx := withExecutionEnv(context.Background(), map[string]string{
+		DDXModeEnvKey: DDXModeBeadExecution,
+	})
+
+	result, err := executor.Execute(ctx, "sh", []string{"-c", "printf %s \"$DDX_MODE\""}, "")
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 0, result.ExitCode)
+	assert.Equal(t, DDXModeBeadExecution, result.Stdout)
 }
 
 // --- Arg construction tests ---
