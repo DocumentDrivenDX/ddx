@@ -1,4 +1,0 @@
-{
-  "verdict": "BLOCK",
-  "rationale": "`cli/internal/server/frontend/playwright.config.ts:4` / `package.json:18`: `bun run test:a11y` must verify 0 axe violations, but the command failed before executing axe because `vite preview` could not start. The execution bundle also omits the referenced `.ddx/executions/20260422T094902-ee442f0d/checks.json`, so there is no committed per-route/per-mode axe evidence to evaluate."
-}

@@ -1,4 +1,0 @@
-{
-  "verdict": "BLOCK",
-  "rationale": "**No `cli/go.mod` update**: AC requires bumping to a new agent release with endpoint-first routing. The diff contains zero Go module changes.\n**No `.ddx/config.yaml` migration**: AC requires migrating from named profiles to endpoint blocks. No config file appears in the diff.\n**No routing/endpoint code changes**: No changes to `cli/internal/` or any source files whatsoever — only a metadata JSON file was added.\n**No child bead progress**: AC requires the 32 fake-migration children (ddx-68c372a6 through ddx-27e2b5ce) to begin making progress. The execution evidence is for the parent bead itself, not any children, and contains no drain results.\n**`result.json` claims `task_succeeded`** but the diff does not support that claim — the agent session produced no substantive changes."
-}

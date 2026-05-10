@@ -1,4 +1,0 @@
-{
-  "verdict": "BLOCK",
-  "rationale": "**No `cli/go.mod` change**: AC requires bumping to the new agent release with endpoint-first routing. The diff has no dependency update.\n**No `.ddx/config.yaml` migration**: AC requires removing named provider profiles and replacing them with endpoint blocks. No config file appears in the diff.\n**No routing/resolution code**: AC expects `qwen3.6` to resolve to a live endpoint. No code changes to the agent, routing, or endpoint-discovery packages are present.\n**No drain evidence for the 32 children**: AC requires the fake-migration beads (ddx-68c372a6 through ddx-27e2b5ce) to begin making progress. The diff shows no bead status updates or execution logs for child beads.\n**`result.json` claims `task_succeeded` but the diff contradicts this**: the only artifact is bookkeeping metadata with no substantive implementation behind it. The execution likely ran but produced no mergeable code changes."
-}

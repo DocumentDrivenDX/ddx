@@ -1,4 +1,0 @@
-{
-  "verdict": "BLOCK",
-  "rationale": "`.ddx/executions/20260422T083933-f1906040/result.json` only records a claimed successful run; it does not implement or prove `workerProgress` live streaming, tool cards, reconnect catch-up, terminal state handling, or `e2e/workers.spec.ts` results.\n`e2e/workers.spec.ts` is absent from the reviewed diff, so the required US-086a.a-c green status is not verifiable."
-}

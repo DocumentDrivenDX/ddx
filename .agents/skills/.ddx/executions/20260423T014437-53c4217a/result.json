@@ -1,4 +1,0 @@
-{
-  "verdict": "REQUEST_CHANGES",
-  "rationale": "**AC4 — Playwright e2e test missing.** The acceptance criteria require a Playwright test that navigates to project home, clicks Drain, confirms the worker appears in the Workers tab, and verifies cross-project isolation. No Playwright test was added. File to add: `cli/internal/server/frontend/tests/` (or wherever existing Playwright tests live). The test should cover: (1) Drain → Workers tab shows new row with `state: running`, (2) second project's Workers tab does not show project-1's worker."
-}

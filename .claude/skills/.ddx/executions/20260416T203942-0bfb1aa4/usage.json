@@ -1,8 +1,0 @@
-{
-  "attempt_id": "20260416T203942-0bfb1aa4",
-  "harness": "agent",
-  "model": "qwen/qwen3-coder-next",
-  "tokens": 166068,
-  "input_tokens": 165355,
-  "output_tokens": 713
-}

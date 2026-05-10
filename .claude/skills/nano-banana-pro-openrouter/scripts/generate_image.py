@@ -13,7 +13,6 @@ import argparse
 import base64
 import mimetypes
 import os
-import sys
 from pathlib import Path
 
 from openai import OpenAI
@@ -100,10 +99,7 @@ def resolve_output_path(filename: str, image_index: int, total_count: int, mime:
     # Validate/correct suffix matches MIME type
     expected_suffix = MIME_TO_EXT.get(mime, ".png")
     if suffix and suffix.lower() != expected_suffix.lower():
-        sys.stdout.write(
-            f"Warning: filename extension '{suffix}' doesn't match returned MIME type '{mime}'. "
-            f"Using '{expected_suffix}' instead.\n"
-        )
+        print(f"Warning: filename extension '{suffix}' doesn't match returned MIME type '{mime}'. Using '{expected_suffix}' instead.")
         suffix = expected_suffix
     elif not suffix:
         suffix = expected_suffix
@@ -193,8 +189,8 @@ def main():
         saved_paths.append(output_path.resolve())
 
     for path in saved_paths:
-        sys.stdout.write(f"Saved image to: {path}\n")
-        sys.stdout.write(f"MEDIA: {path}\n")
+        print(f"Saved image to: {path}")
+        print(f"MEDIA: {path}")
 
 
 if __name__ == "__main__":

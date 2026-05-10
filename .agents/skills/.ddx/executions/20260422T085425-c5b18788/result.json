@@ -1,4 +1,0 @@
-{
-  "verdict": "REQUEST_CHANGES",
-  "rationale": "`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/efficacy/+page.ts`, `EFFICACY_ROWS_QUERY`: add `tier`, `labels`, and `specId` to the query or otherwise pass them from the backend. `+page.svelte` filters on `row.labels` and `row.specId`, but missing fields are treated as matches, so label/spec-id filters will not actually narrow real rows."
-}

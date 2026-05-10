@@ -1,8 +1,0 @@
-{
-  "attempt_id": "20260415T103422-bb3a45fa",
-  "harness": "claude",
-  "model": "claude-sonnet-4-6",
-  "tokens": 9,
-  "input_tokens": 1,
-  "output_tokens": 8
-}

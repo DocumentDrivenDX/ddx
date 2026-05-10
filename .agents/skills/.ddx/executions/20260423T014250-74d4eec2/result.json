@@ -1,4 +1,0 @@
-{
-  "verdict": "REQUEST_CHANGES",
-  "rationale": "`cli/internal/server/frontend/e2e/efficacy.spec.ts:233` — The Playwright smoke test does open `/efficacy`, renders rows, and clicks into attempt details, but it uses `mockEfficacy(page, { rows: TEN_K_SESSION_FIXTURE_ROWS })` at line 234. That is only 12 pre-aggregated mocked rows, not a seeded 10k session-index fixture, so it does not validate page behavior or navigation budget against the real backend fixture required by AC8."
-}
