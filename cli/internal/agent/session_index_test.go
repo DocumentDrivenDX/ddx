@@ -317,8 +317,8 @@ func TestRunViaServiceWithAppendsOneSessionIndexRow(t *testing.T) {
 	if len(entries) != 1 {
 		t.Fatalf("session index rows=%d, want 1", len(entries))
 	}
-	if entries[0].Harness != "agent" {
-		t.Fatalf("harness=%q, want agent", entries[0].Harness)
+	if entries[0].Harness != "fiz" {
+		t.Fatalf("harness=%q, want fiz", entries[0].Harness)
 	}
 	embeddedEntries, err := ReadSessionIndex(embeddedLogDir, SessionIndexQuery{})
 	if err != nil {
