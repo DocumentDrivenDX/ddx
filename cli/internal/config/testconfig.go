@@ -20,6 +20,9 @@ type TestLoopConfigOpts struct {
 	MaxTier                            string
 	BeadQualityLintBlockThresholdScore int
 	EvidenceCaps                       EvidenceCapsConfig
+	// MaxDecompositionDepth, when non-zero, sets agent.triage.max_decomposition_depth
+	// in the resolved config. Zero uses the binary default (3).
+	MaxDecompositionDepth int
 }
 
 // NewTestConfigForLoop returns a *Config that, when Resolve()d with the
@@ -38,6 +41,13 @@ func NewTestConfigForLoop(opts TestLoopConfigOpts) *Config {
 
 	caps := opts.EvidenceCaps
 
+	agentCfg := &AgentConfig{
+		Model: opts.Model,
+	}
+	if opts.MaxDecompositionDepth > 0 {
+		agentCfg.Triage = &TriageConfig{MaxDecompositionDepth: &opts.MaxDecompositionDepth}
+	}
+
 	return &Config{
 		Version: "1.0",
 		BeadQuality: &BeadQualityConfig{
@@ -45,9 +55,7 @@ func NewTestConfigForLoop(opts TestLoopConfigOpts) *Config {
 				BlockThresholdScore: &lintBlockThreshold,
 			},
 		},
-		Agent: &AgentConfig{
-			Model: opts.Model,
-		},
+		Agent: agentCfg,
 		Workers: &WorkersConfig{
 			NoProgressCooldown:      opts.NoProgressCooldown.String(),
 			MaxNoChangesBeforeClose: &maxNoChanges,

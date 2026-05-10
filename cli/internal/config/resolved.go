@@ -126,6 +126,7 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	}
 
 	r.triagePolicy = c.ResolveTriagePolicy()
+	r.maxDecompositionDepth = c.ResolveMaxDecompositionDepth()
 
 	return r
 }
@@ -190,6 +191,7 @@ type ResolvedConfig struct {
 	providerRequestTimeout             time.Duration
 	beadQualityLintBlockThresholdScore int
 	triagePolicy                       triage.TriagePolicy
+	maxDecompositionDepth              int
 }
 
 // requireSealed panics if r was not produced by Resolve / LoadAndResolve.
@@ -342,6 +344,15 @@ func (r ResolvedConfig) ReasoningLevels() map[string][]string {
 func (r ResolvedConfig) TriagePolicy() triage.TriagePolicy {
 	r.requireSealed()
 	return r.triagePolicy
+}
+
+// MaxDecompositionDepth returns the queue-level recursion cap for the triage
+// gate. The default is 3. When a bead's parent-chain depth reaches this value
+// the gate emits a triage-overflow event and parks to status=proposed instead
+// of invoking the classifier or splitter.
+func (r ResolvedConfig) MaxDecompositionDepth() int {
+	r.requireSealed()
+	return r.maxDecompositionDepth
 }
 
 // BeadQualityLintBlockThresholdScore returns the lint threshold used by the
