@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 )
 
 // ExecutionCleanupMetadataFileName is the filename used to describe ownership
@@ -18,6 +19,7 @@ import (
 const ExecutionCleanupMetadataFileName = "cleanup.json"
 
 const defaultExecutionCleanupScratchMinAge = 24 * time.Hour
+const defaultEvidenceRetainDays = 7
 
 var defaultExecutionCleanupScratchPrefixes = []string{
 	"ddx-test-",
@@ -116,6 +118,7 @@ type ExecutionCleanupSummary struct {
 	RemovedScratchDirs          int64 `json:"removed_scratch_dirs"`
 	PreservedActiveScratchDirs  int64 `json:"preserved_active_scratch_dirs"`
 	PrunedCandidateRefs         int64 `json:"pruned_candidate_refs"`
+	RemovedEvidenceDirs         int64 `json:"removed_evidence_dirs"`
 
 	BytesReclaimed         int64 `json:"bytes_reclaimed"`
 	InodesReclaimed        int64 `json:"inodes_reclaimed"`
@@ -186,6 +189,9 @@ type ExecutionCleanupManager struct {
 	DryRun          bool
 	Now             func() time.Time
 	Probe           ExecutionCleanupLivenessProbe
+	// RetainDays controls how many days of evidence dirs under
+	// .ddx/executions/ to retain. 0 disables the prune; default is 7.
+	RetainDays int
 }
 
 // NewExecutionCleanupManager constructs a cleanup manager with the default
@@ -194,10 +200,24 @@ func NewExecutionCleanupManager(projectRoot string, gitOps GitOps) *ExecutionCle
 	return &ExecutionCleanupManager{
 		ProjectRoot: projectRoot,
 		TempRoot:    executionCleanupTempRoot(projectRoot),
+		RetainDays:  executionCleanupRetainDays(projectRoot),
 		GitOps:      gitOps,
 		Now:         time.Now,
 		Probe:       defaultExecutionCleanupLivenessProbe{},
 	}
+}
+
+// executionCleanupRetainDays returns the configured retain_days for evidence
+// dirs, defaulting to defaultEvidenceRetainDays when not set in config.
+func executionCleanupRetainDays(projectRoot string) int {
+	if projectRoot != "" {
+		projectConfig := filepath.Join(projectRoot, ".ddx", "config.yaml")
+		cfg, err := config.LoadFromFile(projectConfig)
+		if err == nil && cfg != nil && cfg.Executions != nil && cfg.Executions.RetainDays > 0 {
+			return cfg.Executions.RetainDays
+		}
+	}
+	return defaultEvidenceRetainDays
 }
 
 // Cleanup scans the configured DDx temp worktree root, consults the project
@@ -451,6 +471,7 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 	}
 
 	summary.ScannedEvidenceDirs += scanCompleteEvidenceDirs(m.ProjectRoot, ExecuteBeadArtifactDir, "manifest.json", "result.json", &summary)
+	m.pruneEvidenceDirs(ctx, &summary, runStates, now())
 	summary.ScannedEvidenceDirs += scanCompleteEvidenceDirs(m.ProjectRoot, ".ddx/runs", "record.json", "", &summary)
 	m.cleanupDurableLandedCandidateRefs(&summary)
 
@@ -1021,6 +1042,116 @@ func measureTree(path string) (bytes int64, inodes int64, err error) {
 		return nil
 	})
 	return bytes, inodes, err
+}
+
+// pruneEvidenceDirs deletes .ddx/executions/<attempt-id>/ dirs whose mtime
+// is older than m.RetainDays. Dirs referenced by active run-states or lacking
+// a result.json are preserved. No-op when RetainDays == 0 (disabled).
+func (m *ExecutionCleanupManager) pruneEvidenceDirs(ctx context.Context, summary *ExecutionCleanupSummary, runStates []RunState, now time.Time) {
+	if m.RetainDays == 0 {
+		return
+	}
+	cutoff := now.AddDate(0, 0, -m.RetainDays)
+
+	activeAttempts := map[string]struct{}{}
+	for _, rs := range runStates {
+		if rs.AttemptID != "" {
+			activeAttempts[rs.AttemptID] = struct{}{}
+		}
+	}
+
+	root := filepath.Join(m.ProjectRoot, filepath.FromSlash(ExecuteBeadArtifactDir))
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+				Path:    root,
+				Class:   "evidence_dir_read",
+				Message: err.Error(),
+			})
+		}
+		return
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		dirName := entry.Name()
+		dirPath := filepath.Join(root, dirName)
+		relPath := filepath.ToSlash(filepath.Join(ExecuteBeadArtifactDir, dirName))
+
+		if _, ok := activeAttempts[dirName]; ok {
+			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+				Path:    relPath,
+				Class:   "preserved_active_evidence_dir",
+				Message: "active run-state reference",
+			})
+			continue
+		}
+
+		// Defensive: skip dirs with no result.json (may be in-flight).
+		if _, statErr := os.Stat(filepath.Join(dirPath, "result.json")); statErr != nil {
+			continue
+		}
+
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+				Path:    dirPath,
+				Class:   "evidence_dir_stat",
+				Message: infoErr.Error(),
+			})
+			continue
+		}
+		if !info.ModTime().Before(cutoff) {
+			continue
+		}
+
+		if !m.DryRun {
+			m.removeEvidenceDir(ctx, dirPath, summary)
+		}
+		summary.RemovedEvidenceDirs++
+		class := "removed_evidence_dir"
+		if m.DryRun {
+			class = "would_remove_evidence_dir"
+		}
+		summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+			Path:    relPath,
+			Class:   class,
+			Message: fmt.Sprintf("evidence dir older than %d days", m.RetainDays),
+		})
+	}
+}
+
+// removeEvidenceDir stages tracked files for deletion via git rm, then
+// removes any remaining files with os.RemoveAll.
+func (m *ExecutionCleanupManager) removeEvidenceDir(ctx context.Context, dirPath string, summary *ExecutionCleanupSummary) {
+	if m.ProjectRoot == "" {
+		_ = os.RemoveAll(dirPath)
+		return
+	}
+	rel, err := filepath.Rel(m.ProjectRoot, dirPath)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		_ = os.RemoveAll(dirPath)
+		return
+	}
+	relSlash := filepath.ToSlash(rel)
+
+	// Check for tracked files; if any, stage their deletion via git rm.
+	lsOut, lsErr := internalgit.Command(ctx, m.ProjectRoot, "ls-files", relSlash).Output()
+	if lsErr == nil && len(strings.TrimSpace(string(lsOut))) > 0 {
+		rmOut, rmErr := internalgit.Command(ctx, m.ProjectRoot, "rm", "-rf", relSlash).CombinedOutput()
+		if rmErr != nil {
+			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+				Path:    dirPath,
+				Class:   "evidence_dir_git_rm",
+				Message: fmt.Sprintf("git rm: %s: %v", strings.TrimSpace(string(rmOut)), rmErr),
+			})
+		}
+	}
+	// Remove remaining untracked files.
+	_ = os.RemoveAll(dirPath)
 }
 
 func scanCompleteEvidenceDirs(projectRoot, rootRel string, primaryFile, secondaryFile string, summary *ExecutionCleanupSummary) int {
