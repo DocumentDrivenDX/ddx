@@ -16,7 +16,7 @@ type Guard interface {
 
 // cooldownStore is the minimal store surface PreClaimGuard needs.
 type cooldownStore interface {
-	SetExecutionCooldown(id string, until time.Time, status, detail string) error
+	SetExecutionCooldown(id string, until time.Time, status, detail, baseRev string) error
 }
 
 // PreClaimHook matches the execute-loop pre-claim hook signature.
@@ -68,7 +68,7 @@ func (g *PreClaimGuard) Allow(ctx context.Context, beadID string) (bool, string)
 		if g.failCounts[beadID] >= 2 {
 			if g.store != nil {
 				until := g.now().UTC().Add(g.cooldown)
-				_ = g.store.SetExecutionCooldown(beadID, until, "preclaim-hook-failed", err.Error())
+				_ = g.store.SetExecutionCooldown(beadID, until, "preclaim-hook-failed", err.Error(), "")
 			}
 		}
 		if g.log != nil {

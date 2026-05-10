@@ -200,7 +200,7 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 		return out
 	}
 	parkUntil := now().UTC().Add(in.Cooldown)
-	if err := in.Store.SetExecutionCooldown(in.Bead.ID, parkUntil, report.Status, report.Detail); err != nil {
+	if err := in.Store.SetExecutionCooldown(in.Bead.ID, parkUntil, report.Status, report.Detail, report.BaseRev); err != nil {
 		out.StoreErrOp = "SetExecutionCooldown"
 		out.StoreErr = err
 		out.Report = report

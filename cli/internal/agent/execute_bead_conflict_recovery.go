@@ -43,7 +43,7 @@ type ConflictRecoveryStore interface {
 	AppendEvent(beadID string, ev bead.BeadEvent) error
 	CloseWithEvidence(beadID, sessionID, sha string) error
 	Unclaim(beadID string) error
-	SetExecutionCooldown(beadID string, until time.Time, status, detail string) error
+	SetExecutionCooldown(beadID string, until time.Time, status, detail, baseRev string) error
 	UpdateWithLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions, mutate func(*bead.Bead) error) error
 	ParkToProposed(id string, reason bead.ParkReason, mutate func(*bead.Bead)) error
 }
@@ -255,7 +255,7 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 		return out
 	}
 	parkUntil := now().UTC().Add(in.Cooldown)
-	if err := in.Store.SetExecutionCooldown(in.Bead.ID, parkUntil, report.Status, report.Detail); err != nil {
+	if err := in.Store.SetExecutionCooldown(in.Bead.ID, parkUntil, report.Status, report.Detail, in.Report.BaseRev); err != nil {
 		out.StoreErrOp = "SetExecutionCooldown"
 		out.StoreErr = err
 		out.Report = report

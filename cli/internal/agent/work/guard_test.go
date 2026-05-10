@@ -13,7 +13,7 @@ type stubCooldownStore struct {
 	calls int
 }
 
-func (s *stubCooldownStore) SetExecutionCooldown(id string, until time.Time, status, detail string) error {
+func (s *stubCooldownStore) SetExecutionCooldown(id string, until time.Time, status, detail, baseRev string) error {
 	s.calls++
 	return nil
 }

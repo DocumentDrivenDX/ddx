@@ -220,9 +220,9 @@ func TestLoop_TriageHook_FiresPostOutcome(t *testing.T) {
 	realStore, candidate, _ := newExecuteLoopTestStore(t)
 	triageCalled := false
 	store := &errorInjectingStore{ExecuteBeadLoopStore: realStore}
-	store.onSetCooldown = func(id string, until time.Time, status, detail string) error {
+	store.onSetCooldown = func(id string, until time.Time, status, detail, baseRev string) error {
 		require.True(t, triageCalled, "triage hook must fire before SetExecutionCooldown")
-		return realStore.SetExecutionCooldown(id, until, status, detail)
+		return realStore.SetExecutionCooldown(id, until, status, detail, baseRev)
 	}
 
 	worker := &ExecuteBeadWorker{

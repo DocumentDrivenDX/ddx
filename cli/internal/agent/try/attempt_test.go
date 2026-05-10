@@ -542,7 +542,7 @@ func (s *attemptStore) Unclaim(beadID string) error {
 	return nil
 }
 
-func (s *attemptStore) SetExecutionCooldown(beadID string, until time.Time, status, detail string) error {
+func (s *attemptStore) SetExecutionCooldown(beadID string, until time.Time, status, detail, baseRev string) error {
 	s.cooldownStatus = status
 	return nil
 }

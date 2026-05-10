@@ -63,8 +63,8 @@ func (s *cleanupAwareStore) Events(id string) ([]bead.BeadEvent, error) {
 	return s.Store.Events(id)
 }
 
-func (s *cleanupAwareStore) SetExecutionCooldown(id string, until time.Time, status, detail string) error {
-	return s.Store.SetExecutionCooldown(id, until, status, detail)
+func (s *cleanupAwareStore) SetExecutionCooldown(id string, until time.Time, status, detail, baseRev string) error {
+	return s.Store.SetExecutionCooldown(id, until, status, detail, baseRev)
 }
 
 func (s *cleanupAwareStore) IncrNoChangesCount(id string) (int, error) {
@@ -114,8 +114,8 @@ func (s *cleanupAdvanceAwareStore) Events(id string) ([]bead.BeadEvent, error) {
 	return s.ExecuteBeadLoopStore.Events(id)
 }
 
-func (s *cleanupAdvanceAwareStore) SetExecutionCooldown(id string, until time.Time, status, detail string) error {
-	return s.ExecuteBeadLoopStore.SetExecutionCooldown(id, until, status, detail)
+func (s *cleanupAdvanceAwareStore) SetExecutionCooldown(id string, until time.Time, status, detail, baseRev string) error {
+	return s.ExecuteBeadLoopStore.SetExecutionCooldown(id, until, status, detail, baseRev)
 }
 
 func (s *cleanupAdvanceAwareStore) IncrNoChangesCount(id string) (int, error) {

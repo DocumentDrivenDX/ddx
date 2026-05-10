@@ -1012,7 +1012,7 @@ func TestExecuteBeadLoopResult_IncludesQueueSnapshotAfterSuccessfulDrain(t *test
 	}, nil))
 	require.NoError(t, store.Create(dependencyWaiting))
 	require.NoError(t, store.Create(cooldown))
-	require.NoError(t, store.SetExecutionCooldown(cooldown.ID, time.Now().UTC().Add(time.Hour), ExecuteBeadStatusNoChanges, "retry later"))
+	require.NoError(t, store.SetExecutionCooldown(cooldown.ID, time.Now().UTC().Add(time.Hour), ExecuteBeadStatusNoChanges, "retry later", ""))
 
 	var executed []string
 	worker := &ExecuteBeadWorker{
@@ -2103,7 +2103,7 @@ type errorInjectingStore struct {
 	onIncrNoChanges     func(id string) (int, error)
 	onCloseWithEvidence func(id, sessionID, commitSHA string) error
 	onReopen            func(id, reason, notes string) error
-	onSetCooldown       func(id string, until time.Time, status, detail string) error
+	onSetCooldown       func(id string, until time.Time, status, detail, baseRev string) error
 	onAppendEvent       func(id string, event bead.BeadEvent) error
 }
 
@@ -2135,11 +2135,11 @@ func (s *errorInjectingStore) Reopen(id, reason, notes string) error {
 	return s.ExecuteBeadLoopStore.Reopen(id, reason, notes)
 }
 
-func (s *errorInjectingStore) SetExecutionCooldown(id string, until time.Time, status, detail string) error {
+func (s *errorInjectingStore) SetExecutionCooldown(id string, until time.Time, status, detail, baseRev string) error {
 	if s.onSetCooldown != nil {
-		return s.onSetCooldown(id, until, status, detail)
+		return s.onSetCooldown(id, until, status, detail, baseRev)
 	}
-	return s.ExecuteBeadLoopStore.SetExecutionCooldown(id, until, status, detail)
+	return s.ExecuteBeadLoopStore.SetExecutionCooldown(id, until, status, detail, baseRev)
 }
 
 func (s *errorInjectingStore) AppendEvent(id string, event bead.BeadEvent) error {

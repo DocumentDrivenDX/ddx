@@ -450,7 +450,7 @@ type ExecuteBeadLoopStore interface {
 	CloseWithEvidence(id, sessionID, commitSHA string) error
 	AppendEvent(id string, event bead.BeadEvent) error
 	Events(id string) ([]bead.BeadEvent, error)
-	SetExecutionCooldown(id string, until time.Time, status, detail string) error
+	SetExecutionCooldown(id string, until time.Time, status, detail, baseRev string) error
 	AppendNotes(id string, notes string) error
 	IncrNoChangesCount(id string) (int, error)
 	// Reopen sets a closed bead back to open, appending notes to the bead's
@@ -1495,7 +1495,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				})
 			}
 			if !parking.RetryAfter.IsZero() {
-				if err := w.Store.SetExecutionCooldown(candidate.ID, parking.RetryAfter, report.Status, report.Detail); err != nil {
+				if err := w.Store.SetExecutionCooldown(candidate.ID, parking.RetryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
 					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 						return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
 					})
@@ -1693,7 +1693,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
 				if noChanges.CooldownEligible && shouldSuppressNoProgress(report) {
 					retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
-					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); err != nil {
+					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
 						_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 							return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
 						})
@@ -1739,7 +1739,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				if isNoViableProviderReport(report) {
 					report.OutcomeReason = FailureModeNoViableProvider
 					retryAfter := now().UTC().Add(CapLoopCooldown(ProviderUnavailableCooldown))
-					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); err != nil {
+					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
 						_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 							return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
 						})
@@ -1753,7 +1753,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
 					if shouldSuppressNoProgress(report) {
 						retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
-						if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail); err != nil {
+						if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
 							_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 								return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
 							})
@@ -1788,7 +1788,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					_, _ = fmt.Fprintf(runtime.Log, "outcome store error (AppendEvent %s): %v (continuing)\n", candidate.ID, err)
 				}
 				if ctx.Err() == nil {
-					_ = w.Store.SetExecutionCooldown(candidate.ID, now().UTC().Add(StoreErrorCooldown), "loop-error", "AppendEvent: "+err.Error())
+					_ = w.Store.SetExecutionCooldown(candidate.ID, now().UTC().Add(StoreErrorCooldown), "loop-error", "AppendEvent: "+err.Error(), "")
 				}
 				if ctx.Err() != nil {
 					return result, ctx.Err()
@@ -2849,6 +2849,7 @@ func clearExecuteLoopNoChangesMetadata(store ExecuteBeadLoopStore, beadID string
 			return
 		}
 		delete(b.Extra, "execute-loop-retry-after")
+		delete(b.Extra, bead.ExtraCooldownBaseRev)
 		delete(b.Extra, "execute-loop-last-status")
 		delete(b.Extra, "execute-loop-last-detail")
 		delete(b.Extra, executeLoopSuggestedActionKey)

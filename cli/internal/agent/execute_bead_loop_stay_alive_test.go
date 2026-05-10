@@ -478,7 +478,7 @@ func seedWatchIdleQueue(t *testing.T, store *bead.Store) {
 	require.NoError(t, store.Create(cooldown))
 	// Use time.Now().Add so the cooldown is always in the future regardless of when
 	// the test runs relative to fixedWatchStdoutTime (which is a fixed past date).
-	require.NoError(t, store.SetExecutionCooldown(cooldown.ID, time.Now().Add(24*time.Hour), ExecuteBeadStatusNoChanges, "retry later"))
+	require.NoError(t, store.SetExecutionCooldown(cooldown.ID, time.Now().Add(24*time.Hour), ExecuteBeadStatusNoChanges, "retry later", ""))
 
 	ordinaryEpic := &bead.Bead{ID: "ddx-epic-open", Title: "Open epic", IssueType: "epic", Priority: 4}
 	ordinaryEpicChild := &bead.Bead{ID: "ddx-epic-open-child", Title: "Open epic child", Parent: ordinaryEpic.ID, Priority: 4}
