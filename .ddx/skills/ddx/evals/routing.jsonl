@@ -22,3 +22,4 @@
 {"phrase":"use a persona for this review","mode":"direct_user_implementation","references":["reference/agents.md"],"queue_commands":["ddx run --persona"],"tracker_mutation_allowed":false,"code_edits_allowed":false,"expected_next_action":"dispatch"}
 {"phrase":"is the project healthy","mode":"interactive-steward","references":["reference/interactive.md","reference/status.md"],"queue_commands":["ddx doctor"],"tracker_mutation_allowed":false,"code_edits_allowed":false,"expected_next_action":"orient"}
 {"phrase":"check ddx doctor","mode":"interactive-steward","references":["reference/interactive.md","reference/status.md"],"queue_commands":["ddx doctor"],"tracker_mutation_allowed":false,"code_edits_allowed":false,"expected_next_action":"orient"}
+{"phrase":"work the queue","mode":"bead_execution","references":["reference/work.md"],"queue_commands":["ddx work"],"tracker_mutation_allowed":false,"code_edits_allowed":true,"expected_next_action":"execute"}
