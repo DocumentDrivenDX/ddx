@@ -1790,6 +1790,18 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				result.Failures++
 				result.LastFailureStatus = report.Status
+			} else if report.Status == ExecuteBeadStatusRepairCycleExhausted {
+				if err := applyRepairCycleExhaustedEscalation(w.Store, candidate.ID, assignee, report.ActualPower, now(), w.EscalationNextFloor); err != nil {
+					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+						return commitOutcomeError("applyRepairCycleExhaustedEscalation", assignee, result, err)
+					})
+					if ctx.Err() != nil {
+						return result, ctx.Err()
+					}
+					continue
+				}
+				result.Failures++
+				result.LastFailureStatus = report.Status
 			} else {
 				if isNoViableProviderReport(report) {
 					report.OutcomeReason = FailureModeNoViableProvider
@@ -2812,6 +2824,36 @@ func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, 
 		b.Extra[executeLoopSmartRetryReasonKey] = reason
 		b.Extra[executeLoopSmartRetrySuggestedActionKey] = suggestedAction
 		return nil
+	})
+}
+
+// applyRepairCycleExhaustedEscalation bumps the implementer MinPower to the
+// next tier when repair cycles are exhausted. If the ladder is already at the
+// top tier, the bead is parked to proposed for operator review.
+func applyRepairCycleExhaustedEscalation(store ExecuteBeadLoopStore, beadID, actor string, actualPower int, at time.Time, nextFloorFn func(int) (int, error)) error {
+	if nextFloorFn != nil {
+		nextFloor, err := nextFloorFn(actualPower)
+		if err == nil {
+			return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
+				Reason: "repair cycle exhausted: escalating implementer to higher tier",
+				Actor:  actor,
+				Source: "ddx agent execute-loop",
+			}, func(b *bead.Bead) error {
+				ensureBeadExtra(b)
+				b.Extra[TriageTierHintKey] = nextFloor
+				return nil
+			})
+		}
+	}
+	return store.ParkToProposed(beadID, bead.ParkPostReviewMalfunction, func(b *bead.Bead) {
+		ensureBeadExtra(b)
+		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
+			Reason:          "repair cycle exhausted at top tier: operator decision required",
+			Since:           at.UTC().Format(time.RFC3339),
+			Source:          "ddx agent execute-loop",
+			SuggestedAction: "review the blocked attempt and accept, split, or retry with a stronger model",
+			Summary:         "repair cycle exhausted: operator attention required",
+		})
 	})
 }
 
