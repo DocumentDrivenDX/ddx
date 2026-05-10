@@ -680,6 +680,154 @@ func TestReadinessHookEmptyOutput_DeduplicatesPrefix(t *testing.T) {
 	assert.Equal(t, 1, result.Successes)
 }
 
+// TestIntake_OutcomeReasonsPersist verifies that each intake decision outcome
+// is stored in durable bead event records or the session event sink so the
+// execution history remains traceable without operator hand-inspection of logs.
+func TestIntake_OutcomeReasonsPersist(t *testing.T) {
+	t.Run("actionable_but_rewritten_stores_intake_rewritten_event", func(t *testing.T) {
+		inner, candidate, _ := newExecuteLoopTestStore(t)
+		require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+			b.Description = "PROBLEM\nsome issue\n\nROOT CAUSE\nroot cause\n\nPROPOSED FIX\nfix it\n\nNON-SCOPE\nno regressions\n"
+		}))
+		worker := &ExecuteBeadWorker{
+			Store: inner,
+			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+				return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, SessionID: "s1", ResultRev: "r1"}, nil
+			}),
+		}
+		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+		_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once: true,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				return PreClaimIntakeResult{
+					Outcome: PreClaimIntakeActionableButRewritten,
+					Detail:  "clarified scope",
+					Rewrite: PreClaimIntakeRewrite{
+						Description:   "PROBLEM\nsome issue\n\nROOT CAUSE\nroot cause\n\nPROPOSED FIX\nfix it\n\nNON-SCOPE\nno regressions\n\nClarified.",
+						Acceptance:    "1. verify the fix\n2. cd cli && go test\n3. lefthook run pre-commit",
+						ChangedFields: []string{"description", "acceptance"},
+					},
+				}, nil
+			},
+		})
+		require.NoError(t, err)
+		events, err := inner.Events(candidate.ID)
+		require.NoError(t, err)
+		var found bool
+		for _, ev := range events {
+			if ev.Kind == "intake-rewritten" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "actionable_but_rewritten outcome must store an intake-rewritten event for traceability")
+	})
+
+	t.Run("too_large_decomposed_stores_triage_decomposed_event", func(t *testing.T) {
+		inner, candidate, _ := newExecuteLoopTestStore(t)
+		decomp := &PreClaimDecomposition{
+			Children: []PreClaimDecompositionChild{
+				{Title: "child one", Description: "do part A", Acceptance: "1. part A done"},
+				{Title: "child two", Description: "do part B", Acceptance: "1. part B done"},
+			},
+			ACMap: []ACMapEntry{
+				{ParentAC: "1. part A", Coverage: "child one AC 1"},
+				{ParentAC: "2. part B", Coverage: "child two AC 1"},
+			},
+			Rationale: "bead is too large",
+		}
+		worker := &ExecuteBeadWorker{
+			Store: inner,
+			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+				t.Fatal("executor must not run when bead is decomposed")
+				return ExecuteBeadReport{}, nil
+			}),
+		}
+		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+		_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once: true,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				return PreClaimIntakeResult{
+					Outcome:       PreClaimIntakeTooLargeDecomposed,
+					Decomposition: decomp,
+				}, nil
+			},
+		})
+		require.NoError(t, err)
+		events, err := inner.Events(candidate.ID)
+		require.NoError(t, err)
+		var found bool
+		for _, ev := range events {
+			if ev.Kind == "triage-decomposed" {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "too_large_decomposed outcome must store a triage-decomposed event for traceability")
+	})
+
+	t.Run("operator_required_stores_intake_blocked_event_with_outcome", func(t *testing.T) {
+		inner, candidate, _ := newExecuteLoopTestStore(t)
+		worker := &ExecuteBeadWorker{
+			Store: inner,
+			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+				t.Fatal("executor must not run when operator review is required")
+				return ExecuteBeadReport{}, nil
+			}),
+		}
+		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+		_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once: true,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				return PreClaimIntakeResult{
+					Outcome: PreClaimIntakeOperatorRequired,
+					Detail:  "ambiguous scope requires human review",
+				}, nil
+			},
+		})
+		require.NoError(t, err)
+		events, err := inner.Events(candidate.ID)
+		require.NoError(t, err)
+		var found bool
+		for _, ev := range events {
+			if ev.Kind != "intake.blocked" {
+				continue
+			}
+			if strings.Contains(ev.Summary, string(PreClaimIntakeOperatorRequired)) ||
+				strings.Contains(ev.Body, string(PreClaimIntakeOperatorRequired)) {
+				found = true
+				break
+			}
+		}
+		assert.True(t, found, "operator_required outcome must store an intake.blocked event with the outcome reason for traceability")
+	})
+
+	t.Run("intake_error_recorded_in_event_sink", func(t *testing.T) {
+		inner, _, _ := newExecuteLoopTestStore(t)
+		var eventSink bytes.Buffer
+		worker := &ExecuteBeadWorker{
+			Store: inner,
+			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+				return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, SessionID: "s2", ResultRev: "r2"}, nil
+			}),
+		}
+		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+		_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+			Once:      true,
+			EventSink: &eventSink,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				return PreClaimIntakeResult{}, fmt.Errorf("intake check failed")
+			},
+		})
+		require.NoError(t, err)
+		assert.Contains(t, eventSink.String(), "intake_error", "intake_error outcome must appear in event sink for traceability")
+	})
+}
+
 // TestReadinessUnavailableOutputIsActionable asserts that a missing-harness
 // lint hook failure renders as an actionable readiness-check warning in the
 // operator log rather than exposing the raw "lint hook: missing-harness" error.

@@ -175,6 +175,90 @@ func TestStopCondition_NoProgress_CountsRealImplementationNoCommit(t *testing.T)
 		"shouldSuppressNoProgress must return true for genuine implementation no-commit with same revisions")
 }
 
+// TestIntake_OutcomesDoNotConsumeNoProgress verifies that intake outcomes—
+// rewrite, decomposition, ambiguity, intake infrastructure error, and claim
+// race—do not trigger no-progress accounting. isValidImplementationAttempt
+// and shouldSuppressNoProgress must both return false for these outcome
+// reasons even when base_rev == result_rev (the condition that would normally
+// fire the cooldown).
+func TestIntake_OutcomesDoNotConsumeNoProgress(t *testing.T) {
+	cases := []struct {
+		name   string
+		report ExecuteBeadReport
+	}{
+		{
+			name: "actionable_but_rewritten",
+			report: ExecuteBeadReport{
+				Status:        ExecuteBeadStatusNoChanges,
+				OutcomeReason: "actionable_but_rewritten",
+				BaseRev:       "abc123",
+				ResultRev:     "abc123",
+			},
+		},
+		{
+			name: "too_large_decomposed",
+			report: ExecuteBeadReport{
+				Status:        ExecuteBeadStatusNoChanges,
+				OutcomeReason: "too_large_decomposed",
+				BaseRev:       "abc123",
+				ResultRev:     "abc123",
+			},
+		},
+		{
+			name: "ambiguous_needs_human",
+			report: ExecuteBeadReport{
+				Status:        ExecuteBeadStatusNoChanges,
+				OutcomeReason: "ambiguous_needs_human",
+				BaseRev:       "abc123",
+				ResultRev:     "abc123",
+			},
+		},
+		{
+			name: "intake_error",
+			report: ExecuteBeadReport{
+				Status:        ExecuteBeadStatusNoChanges,
+				OutcomeReason: "intake_error",
+				BaseRev:       "abc123",
+				ResultRev:     "abc123",
+			},
+		},
+		{
+			name: "claim_race",
+			report: ExecuteBeadReport{
+				Status:        ExecuteBeadStatusExecutionFailed,
+				OutcomeReason: "claim_race",
+				BaseRev:       "abc123",
+				ResultRev:     "abc123",
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.False(t, isValidImplementationAttempt(tc.report),
+				"isValidImplementationAttempt must return false for intake outcome %s", tc.name)
+			assert.False(t, shouldSuppressNoProgress(tc.report),
+				"shouldSuppressNoProgress must not fire for intake outcome %s", tc.name)
+		})
+	}
+}
+
+// TestNoProgress_ValidImplementationAttemptStillCounts verifies that a genuine
+// implementation attempt that produced no commit (base_rev == result_rev,
+// no system/operator/intake classifier) is correctly identified as a valid
+// no-progress case so the cooldown fires.
+func TestNoProgress_ValidImplementationAttemptStillCounts(t *testing.T) {
+	report := ExecuteBeadReport{
+		BeadID:    "ddx-test-impl",
+		Status:    ExecuteBeadStatusNoChanges,
+		BaseRev:   "deadbeef00112233",
+		ResultRev: "deadbeef00112233",
+	}
+	assert.True(t, isValidImplementationAttempt(report),
+		"isValidImplementationAttempt must return true for a genuine implementation no-commit")
+	assert.True(t, shouldSuppressNoProgress(report),
+		"shouldSuppressNoProgress must return true for a genuine implementation no-commit")
+}
+
 func TestSuppressNoProgress_HonorsTransientReasons(t *testing.T) {
 	for _, reason := range []string{"transport", "quota", "routing", "timeout", "merge_conflict", FailureModeLockContention, FailureModeNoViableProvider, FailureModeWorktreeLost} {
 		t.Run(reason, func(t *testing.T) {
