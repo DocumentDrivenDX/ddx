@@ -1647,20 +1647,120 @@ func (s *Server) handleBeadRouting(w http.ResponseWriter, r *http.Request) {
 
 // --- Bead Mutation Endpoints ---
 
+// BeadCreateRequest is the canonical payload for bead creation across REST and MCP callers.
+type BeadCreateRequest struct {
+	Title       string   `json:"title"`
+	Type        string   `json:"type"`
+	Priority    *int     `json:"priority"`
+	Labels      []string `json:"labels"`
+	Description string   `json:"description"`
+	Acceptance  string   `json:"acceptance"`
+	Parent      string   `json:"parent"`
+	Set         []string `json:"set"` // "key=value" pairs stored in Extra
+}
+
+// BeadUpdateRequest is the canonical payload for bead updates across REST and MCP callers.
+// Pointer fields use nil-means-unchanged semantics. Labels nil = unchanged; empty slice = clear.
+type BeadUpdateRequest struct {
+	Status      *string  `json:"status"`
+	Title       *string  `json:"title"`
+	Priority    *int     `json:"priority"`
+	Labels      []string `json:"labels"`
+	Description *string  `json:"description"`
+	Acceptance  *string  `json:"acceptance"`
+	Notes       *string  `json:"notes"`
+	Assignee    *string  `json:"assignee"`
+	Parent      *string  `json:"parent"`
+	Set         []string `json:"set"`   // "key=value" pairs stored in Extra
+	Unset       []string `json:"unset"` // keys to remove from Extra
+}
+
+func applyBeadCreateRequest(b *bead.Bead, req BeadCreateRequest) error {
+	b.Title = req.Title
+	b.IssueType = req.Type
+	b.Labels = req.Labels
+	b.Description = req.Description
+	b.Acceptance = req.Acceptance
+	b.Parent = req.Parent
+	if req.Priority != nil {
+		b.Priority = *req.Priority
+	}
+	for _, kv := range req.Set {
+		k, v, ok := strings.Cut(kv, "=")
+		if !ok {
+			return fmt.Errorf("set requires key=value format, got: %s", kv)
+		}
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		switch v {
+		case "true":
+			b.Extra[k] = true
+		case "false":
+			b.Extra[k] = false
+		default:
+			b.Extra[k] = v
+		}
+	}
+	return nil
+}
+
+func applyBeadUpdateRequest(b *bead.Bead, req BeadUpdateRequest) error {
+	if req.Title != nil {
+		b.Title = *req.Title
+	}
+	if req.Priority != nil {
+		b.Priority = *req.Priority
+	}
+	if req.Labels != nil {
+		b.Labels = req.Labels
+	}
+	if req.Description != nil {
+		b.Description = *req.Description
+	}
+	if req.Acceptance != nil {
+		b.Acceptance = *req.Acceptance
+	}
+	if req.Notes != nil {
+		b.Notes = *req.Notes
+	}
+	if req.Assignee != nil {
+		b.Owner = *req.Assignee
+	}
+	if req.Parent != nil {
+		b.Parent = *req.Parent
+	}
+	for _, kv := range req.Set {
+		k, v, ok := strings.Cut(kv, "=")
+		if !ok {
+			return fmt.Errorf("set requires key=value format, got: %s", kv)
+		}
+		if b.Extra == nil {
+			b.Extra = make(map[string]any)
+		}
+		switch v {
+		case "true":
+			b.Extra[k] = true
+		case "false":
+			b.Extra[k] = false
+		default:
+			b.Extra[k] = v
+		}
+	}
+	for _, key := range req.Unset {
+		if b.Extra != nil {
+			delete(b.Extra, key)
+		}
+	}
+	return nil
+}
+
 func (s *Server) handleCreateBead(w http.ResponseWriter, r *http.Request) {
 	if !isTrusted(r) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "write endpoints are localhost-only"})
 		return
 	}
-	var req struct {
-		Title       string   `json:"title"`
-		Type        string   `json:"type"`
-		Priority    *int     `json:"priority"`
-		Labels      []string `json:"labels"`
-		Description string   `json:"description"`
-		Acceptance  string   `json:"acceptance"`
-		Parent      string   `json:"parent"`
-	}
+	var req BeadCreateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
@@ -1671,16 +1771,10 @@ func (s *Server) handleCreateBead(w http.ResponseWriter, r *http.Request) {
 	}
 
 	store := s.beadStoreForRequest(r)
-	b := &bead.Bead{
-		Title:       req.Title,
-		IssueType:   req.Type,
-		Labels:      req.Labels,
-		Description: req.Description,
-		Acceptance:  req.Acceptance,
-		Parent:      req.Parent,
-	}
-	if req.Priority != nil {
-		b.Priority = *req.Priority
+	b := &bead.Bead{}
+	if err := applyBeadCreateRequest(b, req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+		return
 	}
 	if err := store.Create(b); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
@@ -1700,14 +1794,7 @@ func (s *Server) handleUpdateBead(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req struct {
-		Status      *string  `json:"status"`
-		Labels      []string `json:"labels"`
-		Description *string  `json:"description"`
-		Acceptance  *string  `json:"acceptance"`
-		Priority    *int     `json:"priority"`
-		Notes       *string  `json:"notes"`
-	}
+	var req BeadUpdateRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
 		return
@@ -1715,22 +1802,7 @@ func (s *Server) handleUpdateBead(w http.ResponseWriter, r *http.Request) {
 
 	store := s.beadStoreForRequest(r)
 	mutate := func(b *bead.Bead) error {
-		if req.Labels != nil {
-			b.Labels = req.Labels
-		}
-		if req.Description != nil {
-			b.Description = *req.Description
-		}
-		if req.Acceptance != nil {
-			b.Acceptance = *req.Acceptance
-		}
-		if req.Priority != nil {
-			b.Priority = *req.Priority
-		}
-		if req.Notes != nil {
-			b.Notes = *req.Notes
-		}
-		return nil
+		return applyBeadUpdateRequest(b, req)
 	}
 	var err error
 	if req.Status != nil {
@@ -3405,6 +3477,8 @@ func (s *Server) mcpTools() []mcpTool {
 					"labels":      map[string]any{"type": "string", "description": "Comma-separated labels"},
 					"description": map[string]any{"type": "string", "description": "Description"},
 					"acceptance":  map[string]any{"type": "string", "description": "Acceptance criteria"},
+					"parent":      map[string]any{"type": "string", "description": "Parent bead ID"},
+					"set":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Custom fields as key=value strings"},
 					"project":     projectProp,
 				},
 				"required": []string{"title"},
@@ -3418,9 +3492,16 @@ func (s *Server) mcpTools() []mcpTool {
 				"properties": map[string]any{
 					"id":          map[string]any{"type": "string", "description": "Bead ID"},
 					"status":      map[string]any{"type": "string", "description": "New status: open, in_progress, closed, blocked, proposed, cancelled"},
+					"title":       map[string]any{"type": "string", "description": "New title"},
+					"priority":    map[string]any{"type": "integer", "description": "New priority (0=highest, 4=lowest)"},
 					"labels":      map[string]any{"type": "string", "description": "Comma-separated labels (replaces existing)"},
 					"description": map[string]any{"type": "string", "description": "New description"},
 					"acceptance":  map[string]any{"type": "string", "description": "New acceptance criteria"},
+					"notes":       map[string]any{"type": "string", "description": "New notes"},
+					"assignee":    map[string]any{"type": "string", "description": "New assignee (owner)"},
+					"parent":      map[string]any{"type": "string", "description": "New parent bead ID"},
+					"set":         map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Custom fields as key=value strings"},
+					"unset":       map[string]any{"type": "array", "items": map[string]any{"type": "string"}, "description": "Custom field keys to remove"},
 					"project":     projectProp,
 				},
 				"required": []string{"id"},
@@ -3832,26 +3913,61 @@ func (s *Server) mcpCallTool(params json.RawMessage, r *http.Request) mcpToolRes
 		if !isTrusted(r) {
 			return mcpToolResult{Content: []mcpContent{mcpText("forbidden: write tools require trusted origin")}, IsError: true}
 		}
-		title, _ := call.Arguments["title"].(string)
-		issueType, _ := call.Arguments["type"].(string)
-		labelsStr, _ := call.Arguments["labels"].(string)
-		description, _ := call.Arguments["description"].(string)
-		acceptance, _ := call.Arguments["acceptance"].(string)
-		var priority int
-		if p, ok := call.Arguments["priority"].(float64); ok {
-			priority = int(p)
+		createReq := BeadCreateRequest{
+			Title:       stringArg(call.Arguments, "title"),
+			Type:        stringArg(call.Arguments, "type"),
+			Description: stringArg(call.Arguments, "description"),
+			Acceptance:  stringArg(call.Arguments, "acceptance"),
+			Parent:      stringArg(call.Arguments, "parent"),
+			Set:         stringSliceArg(call.Arguments, "set"),
 		}
-		return s.mcpBeadCreate(workingDir, title, issueType, priority, labelsStr, description, acceptance)
+		if labelsStr := stringArg(call.Arguments, "labels"); labelsStr != "" {
+			createReq.Labels = strings.Split(labelsStr, ",")
+		}
+		if p, ok := call.Arguments["priority"].(float64); ok {
+			pInt := int(p)
+			createReq.Priority = &pInt
+		}
+		return s.mcpBeadCreate(workingDir, createReq)
 	case "ddx_bead_update":
 		if !isTrusted(r) {
 			return mcpToolResult{Content: []mcpContent{mcpText("forbidden: write tools require trusted origin")}, IsError: true}
 		}
 		id, _ := call.Arguments["id"].(string)
-		status, _ := call.Arguments["status"].(string)
-		labelsStr, _ := call.Arguments["labels"].(string)
-		description, _ := call.Arguments["description"].(string)
-		acceptance, _ := call.Arguments["acceptance"].(string)
-		return s.mcpBeadUpdate(workingDir, id, status, labelsStr, description, acceptance)
+		updateReq := BeadUpdateRequest{
+			Set:   stringSliceArg(call.Arguments, "set"),
+			Unset: stringSliceArg(call.Arguments, "unset"),
+		}
+		if v, ok := call.Arguments["status"].(string); ok && v != "" {
+			updateReq.Status = &v
+		}
+		if v, ok := call.Arguments["title"].(string); ok {
+			updateReq.Title = &v
+		}
+		if v, ok := call.Arguments["description"].(string); ok {
+			updateReq.Description = &v
+		}
+		if v, ok := call.Arguments["acceptance"].(string); ok {
+			updateReq.Acceptance = &v
+		}
+		if v, ok := call.Arguments["notes"].(string); ok {
+			updateReq.Notes = &v
+		}
+		if v, ok := call.Arguments["assignee"].(string); ok {
+			updateReq.Assignee = &v
+		}
+		if v, ok := call.Arguments["parent"].(string); ok {
+			updateReq.Parent = &v
+		}
+		if p, ok := call.Arguments["priority"].(float64); ok {
+			pInt := int(p)
+			updateReq.Priority = &pInt
+		}
+		if labelsStr := stringArg(call.Arguments, "labels"); labelsStr != "" {
+			ls := strings.Split(labelsStr, ",")
+			updateReq.Labels = ls
+		}
+		return s.mcpBeadUpdate(workingDir, id, updateReq)
 	case "ddx_bead_claim":
 		if !isTrusted(r) {
 			return mcpToolResult{Content: []mcpContent{mcpText("forbidden: write tools require trusted origin")}, IsError: true}
@@ -4413,23 +4529,41 @@ func (s *Server) mcpAgentSessions(workingDir, harness string) mcpToolResult {
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
-func (s *Server) mcpBeadCreate(workingDir, title, issueType string, priority int, labelsStr, description, acceptance string) mcpToolResult {
-	if title == "" {
+// stringArg extracts a string from MCP call arguments, returning "" if absent or wrong type.
+func stringArg(args map[string]any, key string) string {
+	v, _ := args[key].(string)
+	return v
+}
+
+// stringSliceArg extracts a []string from MCP call arguments (JSON array of strings).
+func stringSliceArg(args map[string]any, key string) []string {
+	raw, ok := args[key].([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(raw))
+	for _, v := range raw {
+		if s, ok := v.(string); ok {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+func (s *Server) mcpBeadCreate(workingDir string, req BeadCreateRequest) mcpToolResult {
+	if req.Title == "" {
 		return mcpToolResult{
 			Content: []mcpContent{mcpText("title is required")},
 			IsError: true,
 		}
 	}
 	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
-	b := &bead.Bead{
-		Title:       title,
-		IssueType:   issueType,
-		Priority:    priority,
-		Description: description,
-		Acceptance:  acceptance,
-	}
-	if labelsStr != "" {
-		b.Labels = strings.Split(labelsStr, ",")
+	b := &bead.Bead{}
+	if err := applyBeadCreateRequest(b, req); err != nil {
+		return mcpToolResult{
+			Content: []mcpContent{mcpText(err.Error())},
+			IsError: true,
+		}
 	}
 	if err := store.Create(b); err != nil {
 		return mcpToolResult{
@@ -4441,7 +4575,7 @@ func (s *Server) mcpBeadCreate(workingDir, title, issueType string, priority int
 	return mcpToolResult{Content: []mcpContent{mcpText(string(data))}}
 }
 
-func (s *Server) mcpBeadUpdate(workingDir, id, status, labelsStr, description, acceptance string) mcpToolResult {
+func (s *Server) mcpBeadUpdate(workingDir, id string, req BeadUpdateRequest) mcpToolResult {
 	if id == "" {
 		return mcpToolResult{
 			Content: []mcpContent{mcpText("id is required")},
@@ -4450,20 +4584,11 @@ func (s *Server) mcpBeadUpdate(workingDir, id, status, labelsStr, description, a
 	}
 	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
 	mutate := func(b *bead.Bead) error {
-		if labelsStr != "" {
-			b.Labels = strings.Split(labelsStr, ",")
-		}
-		if description != "" {
-			b.Description = description
-		}
-		if acceptance != "" {
-			b.Acceptance = acceptance
-		}
-		return nil
+		return applyBeadUpdateRequest(b, req)
 	}
 	var err error
-	if status != "" {
-		err = store.UpdateWithLifecycleStatus(id, status, bead.LifecycleTransitionOptions{
+	if req.Status != nil {
+		err = store.UpdateWithLifecycleStatus(id, *req.Status, bead.LifecycleTransitionOptions{
 			Reason: "MCP bead update",
 			Source: "mcp:ddx_bead_update",
 		}, mutate)
