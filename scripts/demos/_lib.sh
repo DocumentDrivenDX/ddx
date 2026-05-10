@@ -21,6 +21,10 @@ cleanup_demo_dir() {
   rm -rf "$DEMO_DIR"
 }
 
+register_demo_cleanup() {
+  trap cleanup_demo_dir EXIT INT TERM
+}
+
 # Simulate typing with delay for readability
 type_command() {
   echo ""
