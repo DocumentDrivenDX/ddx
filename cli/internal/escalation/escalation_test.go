@@ -23,6 +23,8 @@ const (
 	statusStructuralValidationFailed = "structural_validation_failed"
 	statusAlreadySatisfied           = "already_satisfied"
 	statusSuccess                    = "success"
+	statusReviewRequestChanges       = "review_request_changes"
+	statusReviewBlock                = "review_block"
 )
 
 // --- EscalationSummary ---
@@ -164,4 +166,12 @@ func TestFormatTierAttemptBodyNoProbeNoDetail(t *testing.T) {
 	body := FormatTierAttemptBody("standard", "codex", "gpt-5.4", "", "")
 	assert.Contains(t, body, "tier=standard")
 	assert.NotContains(t, body, "probe=")
+}
+
+func TestShouldEscalateReviewRequestChanges(t *testing.T) {
+	assert.True(t, ShouldEscalate(statusReviewRequestChanges))
+}
+
+func TestShouldEscalateReviewBlock(t *testing.T) {
+	assert.True(t, ShouldEscalate(statusReviewBlock))
 }
