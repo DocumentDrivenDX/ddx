@@ -87,6 +87,11 @@ type ExecuteBeadLoopRuntime struct {
 	// non-blocking (server-side helpers do); the loop only waits for a
 	// receive on WakeCh during the idle sleep, never elsewhere.
 	WakeCh <-chan struct{}
+
+	// OnAttemptFinalized, when non-nil, is called once per finalized attempt
+	// immediately after the report is appended to loop results. Best-effort:
+	// the hook must not block and its errors are silently discarded.
+	OnAttemptFinalized func(report ExecuteBeadReport)
 }
 
 func (r ExecuteBeadLoopRuntime) loopIntent() (executeloop.Mode, time.Duration) {
@@ -1329,6 +1334,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 			emitResourceExhausted(emit, w.Store, candidate.ID, report, assignee, now().UTC())
 			result.Results = append(result.Results, report)
+			callAttemptFinalized(runtime.OnAttemptFinalized, report)
 			result.Failures++
 			result.LastFailureStatus = report.Status
 			if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
@@ -1395,6 +1401,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				report.DisruptionReason, report.Detail, report.Harness, report.Model, assignee, now().UTC())
 			appendExecutionRoutingIntentEvidence(w.Store, candidate, report, now().UTC())
 			result.Results = append(result.Results, report)
+			callAttemptFinalized(runtime.OnAttemptFinalized, report)
 			result.Failures++
 			result.LastFailureStatus = report.Status
 			if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
@@ -1475,6 +1482,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 			}
 			result.Results = append(result.Results, report)
+			callAttemptFinalized(runtime.OnAttemptFinalized, report)
 			result.Failures++
 			result.LastFailureStatus = report.Status
 			emit("bead.result", map[string]any{
@@ -1838,6 +1846,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 
 		result.Results = append(result.Results, report)
+		callAttemptFinalized(runtime.OnAttemptFinalized, report)
 
 		// Skip the late execute-bead append for already-satisfied beads —
 		// the satisfied path appends its own terminal event before
@@ -2266,6 +2275,14 @@ func appendPreDispatchLintEvent(store BeadEventAppender, beadID string, result L
 		Source:    "ddx agent execute-loop",
 		CreatedAt: createdAt,
 	})
+}
+
+// callAttemptFinalized invokes hook when non-nil. Best-effort: panics inside
+// the hook are not recovered; callers should ensure hooks are non-blocking.
+func callAttemptFinalized(hook func(ExecuteBeadReport), report ExecuteBeadReport) {
+	if hook != nil {
+		hook(report)
+	}
 }
 
 func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time.Time) bead.BeadEvent {
