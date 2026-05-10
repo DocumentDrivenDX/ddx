@@ -1,3 +1,0 @@
-verification_command: cd cli && go test ./internal/bead/axon/... && lefthook run pre-commit
-
-The requested Axon subscription smoke test already exists as TestAxonSubscription_ReceivesBeadMutations in cli/internal/bead/axon/subscription_smoke_test.go. I verified the Axon package suite passes and lefthook run pre-commit passes from this worktree without any code edits.

@@ -1,4 +1,0 @@
-This bead's acceptance criteria are already satisfied in the current HEAD.
-The guard abstraction, loop wiring, and tests are present without any additional edits in this worktree, so no code changes were required.
-
-verification_command: cd cli && go test ./internal/agent/... ./internal/agent/work/... && cd .. && lefthook run pre-commit

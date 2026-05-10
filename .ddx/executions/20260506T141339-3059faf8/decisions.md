@@ -1,5 +1,0 @@
-internal/server/graphql/resolver.go:21 NewResolver - DELETE: no definition exists in the current tree and the GraphQL server constructs resolvers directly in cli/internal/server/server.go.
-internal/server/graphql/resolver_meta.go:90 personaConnectionFrom - DELETE: no definition exists in the current tree; persona resolvers are wired through Personas/Persona/PersonaByRole in cli/internal/server/graphql/resolver_meta.go.
-internal/server/graphql/resolver_provider_models.go:292 resetProviderModelsCacheForTest - DELETE: test-only cache reset helper is absent from the current tree, and the provider-model cache is already exercised through live query tests.
-internal/server/graphql/resolver_providers.go:35 RecordHarnessRateLimit - DELETE: no definition exists in the current tree; harness quota lookup now uses LookupHarnessRateLimit/quotaFromHarnessInfo without a recorder in this package.
-internal/server/graphql/resolver_providers.go:55 resetHarnessRateLimitCache - DELETE: no definition exists in the current tree; the package only exposes the lookup path now.

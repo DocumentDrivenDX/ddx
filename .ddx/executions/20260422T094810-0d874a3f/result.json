@@ -1,4 +1,0 @@
-{
-  "verdict": "BLOCK",
-  "rationale": "`.ddx/executions/20260422T094035-6369cd19/manifest.json` and `result.json` are the only files added; no changes are shown for `cli/internal/server/graphql/resolver_feat008.go`, so `queueSummary`, `pluginsList`, `pluginDetail`, `personaBind`, `paletteSearch`, `efficacyRows`, `efficacyAttempts`, or `workerDispatch` cannot be evaluated.\nNo test changes are present, including `cli/internal/server/graphql/feat008_test.go`, so the required manual smoke behavior for each action is not demonstrated in this diff."
-}

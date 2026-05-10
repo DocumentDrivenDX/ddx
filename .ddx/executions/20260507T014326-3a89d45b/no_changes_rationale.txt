@@ -1,2 +1,0 @@
-verification_command: ddx doc validate && git diff --exit-code HEAD 62b878fd9 -- docs/helix/01-frame/features/FEAT-014-token-awareness.md docs/helix/01-frame/features/FEAT-016-process-metrics.md
-rationale: The current tree already matches the MET cross-reference state captured by commit 62b878fd9, and the document graph validates cleanly. No additional file edits are needed for this bead.

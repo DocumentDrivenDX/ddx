@@ -1,1 +1,0 @@
-WIRE NewMetaPromptInjectorWithPaths (reported as NewMetaPromptInjector in the initial violations) - rooted from cli/cmd/command_factory.go:178 via metaprompt.KeepReachabilityForDeadcode(), with runtime callers in cli/cmd/config.go:522 and cli/cmd/init.go:715.

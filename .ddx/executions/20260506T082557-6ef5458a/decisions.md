@@ -1,1 +1,0 @@
-WIRE internal/metaprompt/injector.go:44 NewMetaPromptInjectorWithPaths — reachable from production CLI paths via cli/cmd/init.go:715-723 and cli/cmd/doctor.go:930-943; the package is also rooted for deadcode RTA by cli/cmd/command_factory.go:174-178.

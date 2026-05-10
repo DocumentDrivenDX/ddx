@@ -1,2 +1,0 @@
-verification_command: cd cli && go test ./... && go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./... && lefthook run pre-commit
-reason: The initial deadcode snapshot in .ddx/executions/20260503T124553-282667f7/initial-violations.json is stale relative to the current tree. The five reported internal/server/graphql symbols are already absent or replaced by direct resolver/cached-state wiring, and the live deadcode scan for cli reports no remaining unreachable symbols in internal/server/graphql.

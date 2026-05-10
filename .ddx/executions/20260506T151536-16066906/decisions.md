@@ -1,2 +1,0 @@
-DELETE internal/update/cache.go:87 Cache.Invalidate — symbol is absent from the current tree; invalidation was removed in commit 47fa605bb ("refactor: remove unused update cache invalidation [ddx-7f4cdb7a]").
-DELETE internal/update/cache.go:93 InvalidateCache — symbol is absent from the current tree; invalidation was removed in commit 47fa605bb ("refactor: remove unused update cache invalidation [ddx-7f4cdb7a]").

@@ -1,2 +1,0 @@
-verification_command: cd cli && go test ./internal/metric ./cmd -run 'TestMetricCommandsValidateRunHistoryAndCompare|TestMetricCommandsRefuseMixedUnitsAndGroupHistoryByUnit|TestValidateRunAndHistory|TestCompareAndTrendRejectMixedUnitsAndGroupHistoryByUnit'
-rationale: The metric round-trip and mixed-unit refusal behavior described by bead ddx-296019fe is already implemented and covered by existing tests in cli/cmd/metric_acceptance_test.go and cli/internal/metric/store_test.go. No code changes were required.

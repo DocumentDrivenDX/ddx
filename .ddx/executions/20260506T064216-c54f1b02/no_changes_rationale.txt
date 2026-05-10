@@ -1,2 +1,0 @@
-verification_command: cd cli && go test ./cmd/... ./internal/agent/... && lefthook run pre-commit
-notes: The current tree already wires PreDispatchLintHook and PostAttemptTriageHook in cli/cmd/try.go, and TestTry_HooksWired covers the default try runtime path.

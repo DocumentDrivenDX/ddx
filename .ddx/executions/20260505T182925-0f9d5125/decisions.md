@@ -1,6 +1,0 @@
-WIRE `internal/escalation/escalation.go:30` `ShouldEscalate` - used by `cli/internal/server/workers.go:655` and `cli/cmd/agent_cmd.go:1902` to gate tier escalation in the production execute-loop.
-WIRE `internal/escalation/escalation.go:44` `FormatTierAttemptBody` - used by `cli/internal/server/workers.go:674` to emit tier-attempt bead events from the server execute-loop.
-WIRE `internal/escalation/escalation.go:89` `BuildEscalationSummary` - used by `internal/escalation/escalation.go:122` inside `AppendEscalationSummaryEvent`, which is called from `cli/internal/server/workers.go:882` and `cli/cmd/agent_cmd.go`'s execute-loop path.
-WIRE `internal/escalation/escalation.go:118` `AppendEscalationSummaryEvent` - called from `cli/internal/server/workers.go:882` to append the production escalation-summary event.
-WIRE `internal/escalation/infrastructure.go:58` `IsInfrastructureFailure` - used by `cli/internal/server/workers.go:655` and `cli/cmd/agent_cmd.go:1902` to defer infrastructure failures instead of escalating them.
-WIRE `internal/escalation/infrastructure.go:185` `CostCapTracker.Spent` - used by `cli/internal/server/workers.go:836` and `cli/cmd/agent_cmd.go:1776` as part of the production cost-cap stop condition.

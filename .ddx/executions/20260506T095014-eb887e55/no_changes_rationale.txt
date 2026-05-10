@@ -1,2 +1,0 @@
-verification_command: cd cli && go test ./internal/agent/... ./internal/bead/... ./internal/server/... -run "Heartbeat|Liveness|Watchdog|Claim" -count=1 && ! git grep -n "Store\\.Heartbeat\\|\\.Heartbeat(candidate.ID)\\|\\.Heartbeat(beadID)" -- cli/internal/agent cli/internal/server
-reason: The worktree already routes claim liveness through the external lease helper in cli/internal/bead/claim_liveness.go, and the work-loop no longer calls Store.Heartbeat through cli/internal/agent/execute_bead_loop.go. The targeted tests pass without code changes.

@@ -435,14 +435,7 @@ cli/internal/agent/.ddx/
 .ddx/tsnet/
 .helix-logs/
 
-# DDx tracked execution evidence — explicitly un-ignored
-!.ddx/executions/
-!.ddx/executions/*/
-!.ddx/executions/*/prompt.md
-!.ddx/executions/*/manifest.json
-!.ddx/executions/*/result.json
-!.ddx/executions/*/checks.json
-!.ddx/executions/*/usage.json
+.ddx/executions/
 
 # Temporary demo home (created by run-docker-demos.sh)
 .demo-home/

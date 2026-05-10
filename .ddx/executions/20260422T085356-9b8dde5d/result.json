@@ -1,4 +1,0 @@
-{
-  "verdict": "BLOCK",
-  "rationale": "`.ddx/executions/20260422T083901-a06a5e1a/result.json` is the only changed file; no implementation files under the documents SPA are present to verify US-081a or US-083a behavior.\n`e2e/documents.spec.ts` is not changed or shown in the diff, so the required green coverage for US-081a.a-c and US-083a.a-d is not evidenced.\nNo `/documents` screenshots are added in the diff, so the screenshot acceptance item is missing."
-}

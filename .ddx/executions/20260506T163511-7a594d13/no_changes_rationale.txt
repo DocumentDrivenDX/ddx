@@ -1,2 +1,0 @@
-verification_command: cd cli && go test ./cmd/... ./internal/agent/... ./internal/bead/... -run "TestWorkInterrupt|TestTryInterrupt|TestInterrupted|TestCancel|TestClaim" -count=1
-reason: The interruption cleanup, claim release, liveness removal, and operator_cancel-vs-signal classification paths already exist and the focused regression slice passed without source edits in this worktree.

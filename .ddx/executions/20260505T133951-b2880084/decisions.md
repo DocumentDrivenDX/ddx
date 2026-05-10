@@ -1,1 +1,0 @@
-WIRE internal/metaprompt/injector.go:44 NewMetaPromptInjectorWithPaths — referenced by cmd/init.go:715 and cmd/doctor.go:930, both reachable from cmd.Execute/main.go through NewRootCommand() command registration.

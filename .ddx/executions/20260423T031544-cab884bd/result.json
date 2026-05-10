@@ -1,4 +1,0 @@
-{
-  "verdict": "BLOCK",
-  "rationale": "`cli/internal/server/graphql/resolver_feat008.go`, `PluginDispatch`: this resolver calls `dispatchPluginAction` synchronously at line 122 and creates a `.ddx/plugin-dispatches` record id at line 126. It does not start a `WorkerManager` worker or emit `workerProgress`, so `+page.svelte:225` subscribes to an id that will never produce terminal events.\n`cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/plugins/+page.svelte`, failure handling: the per-card failure badge at lines 391-403 depends on receiving a `failed`/`error` worker phase, but plugin install/update failures currently return as synchronous GraphQL errors from `resolver_feat008.go:123`, leaving only the global `dispatchError` path."
-}

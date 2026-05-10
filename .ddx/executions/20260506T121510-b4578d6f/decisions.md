@@ -1,1 +1,0 @@
-WIRE internal/metaprompt/injector.go:44 NewMetaPromptInjector - rooted through cli/cmd/command_factory.go -> metaprompt.KeepReachabilityForDeadcode() -> NewMetaPromptInjectorWithPaths; deadcode no longer reports internal/metaprompt.

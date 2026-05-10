@@ -1,4 +1,0 @@
-{
-  "verdict": "BLOCK",
-  "rationale": "**AC 1–3**: No `sessions.index.jsonl` schema, writer in `service.Execute`, or updated GraphQL resolver in `cli/internal/server/state_graphql.go`.\n**AC 4**: No `session(id: ID!)` resolver for lazy-loading prompt/response/stderr from execution bundles.\n**AC 5**: No `ddx agent log reindex` command or migration logic.\n**AC 6**: `cli/cmd/agent_usage.go` and `cli/cmd/status.go` are untouched.\n**AC 7**: No benchmark captured.\n**AC 8–9**: No frontend changes or Playwright tests."
-}

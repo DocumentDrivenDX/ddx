@@ -1,1 +1,0 @@
-verification_command: cd cli && out=$(go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./...) && ! printf '%s\n' "$out" | grep -q '^internal/update/'

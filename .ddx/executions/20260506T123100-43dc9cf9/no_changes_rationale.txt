@@ -1,2 +1,0 @@
-verification_command: cd cli && go test ./cmd ./internal/agent/... ./internal/docprose/... -run "Prose|Review" && lefthook run pre-commit
-reason: The prose-review integration required by TD-036 is already implemented in the current worktree, so no source changes were needed. The verification command above passed locally and demonstrates the bead's acceptance gates.

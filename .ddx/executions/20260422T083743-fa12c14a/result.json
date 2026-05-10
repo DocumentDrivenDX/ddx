@@ -1,4 +1,0 @@
-{
-  "verdict": "BLOCK",
-  "rationale": "GraphQL schema/resolver implementation is missing: no diff adds required operations such as `beadClose`, `workerDispatch`, `pluginDispatch`, `queueSummary`, `paletteSearch`, `worker(id).recentEvents`, or the flat `data.personas` shape.\nClient query updates are missing: no application/spec-facing query files are changed to match the mocked operation names required by the bead.\nStub fixture data is missing: the diff contains no resolver fixture data capable of satisfying the new specs."
-}

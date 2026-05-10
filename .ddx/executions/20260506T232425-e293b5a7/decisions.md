@@ -1,2 +1,0 @@
-- Cache.Invalidate: DELETE - symbol is absent from the current `cli/internal/update/cache.go`, and `go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./...` did not report any `internal/update` dead symbols.
-- InvalidateCache: DELETE - same evidence as above; the current production tree contains no reachable implementation to wire.

@@ -1,4 +1,0 @@
-{
-  "verdict": "BLOCK",
-  "rationale": "`e2e/plugins.spec.ts` evidence is missing from the diff; no test file changes or test run output showing 4/4 passing is included.\n`plugins/[name]/+page.svelte` evidence is missing from the diff; no implementation proves the manifest renders as literal YAML.\nScreenshot artifacts are missing from the diff; no committed screenshots are present."
-}

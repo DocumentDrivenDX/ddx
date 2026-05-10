@@ -1,6 +1,0 @@
-WIRE internal/escalation/escalation.go:30 ShouldEscalate — reachable from production execute-loop gating in cli/internal/server/workers.go:655 and cli/cmd/agent_execute_loop_escalation.go:56.
-WIRE internal/escalation/escalation.go:44 FormatTierAttemptBody — reachable from production event emission in cli/internal/server/workers.go:674 and cli/internal/server/workers.go:872.
-WIRE internal/escalation/escalation.go:89 BuildEscalationSummary — reachable from production summary emission in cli/internal/server/workers.go:877-882 and cli/internal/server/workers.go:882.
-WIRE internal/escalation/escalation.go:118 AppendEscalationSummaryEvent — reachable from production summary emission in cli/internal/server/workers.go:882 and exercised by cli/internal/agent/zero_config_escalation_integration_test.go:122.
-WIRE internal/escalation/infrastructure.go:58 IsInfrastructureFailure — reachable from production execute-loop gating in cli/internal/server/workers.go:655 and cli/cmd/agent_execute_loop_escalation.go:56.
-WIRE internal/escalation/infrastructure.go:185 CostCapTracker.Spent — reachable from production cost-cap handling in cli/internal/server/workers.go:836 and cli/internal/server/workers.go:839.

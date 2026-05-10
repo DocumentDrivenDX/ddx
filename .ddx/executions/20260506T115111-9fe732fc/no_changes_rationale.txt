@@ -1,1 +1,0 @@
-verification_command: rg -n "not an AI detector|detector bypass|advisory|vocabulary|technical|planning|public|human-writing-support" docs README.md CHANGELOG.md && lefthook run pre-commit

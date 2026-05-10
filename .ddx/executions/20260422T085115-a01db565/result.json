@@ -1,4 +1,0 @@
-{
-  "verdict": "BLOCK",
-  "rationale": "Missing bead detail UI implementation: no diff adds a Delete button, `TypedConfirmDialog`, typed bead-id confirmation, cancel focus restoration, or parent cascade checkbox.\nMissing mutation wiring: no diff shows `beadClose(id, reason: 'deleted via UI')` being called from the delete confirmation submit path.\nMissing redirect behavior: no diff shows success navigation to `/nodes/{nodeId}/projects/{projectId}/beads`.\nMissing e2e coverage: no diff updates `e2e/beads.spec.ts` for US-085c, beadClose mutation exercise, or cancel focus return."
-}

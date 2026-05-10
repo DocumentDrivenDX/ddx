@@ -1,3 +1,0 @@
-verification_command: cd cli && go test ./internal/agent/... && lefthook run pre-commit
-status: already_satisfied
-reason: The requested lint-hook implementation is already present in the worktree at cli/internal/agent/lint_hook.go, with coverage in cli/internal/agent/lint_hook_test.go. I verified the acceptance surface by running the command above; go test ./internal/agent/... passed and lefthook run pre-commit passed.

@@ -1,4 +1,0 @@
-{
-  "verdict": "REQUEST_CHANGES",
-  "rationale": "`ddx-23978824` bead notes are missing the required reference to `ddx-6904a90b`; `ddx bead show ddx-23978824` contains no `ddx-6904a90b`, and the implementation diff has no `.ddx/beads.jsonl` tracker update for that cross-reference."
-}

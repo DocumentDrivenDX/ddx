@@ -1,3 +1,0 @@
-status: needs_investigation
-reason: The bead contract is already covered by existing tests and implementation in the current tree, so there is no scoped code change to make without inventing behavior. The command-level round-trip is covered by cli/cmd/metric_acceptance_test.go: TestMetricCommandsValidateRunHistoryAndCompare and TestMetricCommandsRefuseMixedUnitsAndGroupHistoryByUnit, while the store-level behavior is covered by cli/internal/metric/store_test.go: TestCompareAndTrendRejectMixedUnitsAndGroupHistoryByUnit.
-verification_command: cd cli && go test ./internal/metric/... && go test ./cmd -run 'TestMetricCommandsValidateRunHistoryAndCompare|TestMetricCommandsRefuseMixedUnitsAndGroupHistoryByUnit'

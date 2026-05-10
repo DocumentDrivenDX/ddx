@@ -1,1 +1,0 @@
-WIRE internal/metaprompt/injector.go:44 NewMetaPromptInjectorWithPaths is reachable from production through cmd/command_factory.go:178 -> metaprompt.KeepReachabilityForDeadcode, and deadcode no longer reports any internal/metaprompt symbols.

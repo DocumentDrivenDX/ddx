@@ -1,2 +1,0 @@
-DELETE internal/update/cache.go:87 Cache.Invalidate - stale deadcode evidence; this symbol is not present in the current tree and `go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./...` reports no remaining internal/update dead symbols.
-DELETE internal/update/cache.go:93 InvalidateCache - stale deadcode evidence; this symbol is not present in the current tree and `go run golang.org/x/tools/cmd/deadcode@v0.42.0 ./...` reports no remaining internal/update dead symbols.

@@ -1,8 +1,0 @@
-verification_command: cd cli && go test ./internal/agent -run 'TestPromptSizeReport|TestPromptSHA_DeterministicAcrossRenders' -count=1 && go test ./internal/server/graphql -run 'TestEfficacyRowsCanFilterByPromptSHA' -count=1 && lefthook run pre-commit
-
-The requested contracts are already present in the tree:
-- `cli/internal/agent/execute_bead.go:213-217` and `cli/internal/agent/execute_bead.go:1325-1330` already write `prompt_sha` into execute-bead `manifest.json`.
-- `cli/internal/agent/execute_bead_artifacts_test.go:171-299` already asserts the manifest shape and checks `manifest.prompt_sha` matches the rendered prompt bytes.
-- `cli/internal/agent/execute_bead_promptsize_test.go:64-185` already enforces the prompt-size budget and emits the CI report artifact.
-- `cli/internal/server/graphql/resolver_feat008.go:805-833` and `cli/internal/server/graphql/efficacy_sessions_test.go:304-353` already support slicing efficacy rows and attempts by `promptSha`.
-- `.github/workflows/ci.yml:201-214` already runs the prompt-size fixture in CI and uploads the report artifacts.

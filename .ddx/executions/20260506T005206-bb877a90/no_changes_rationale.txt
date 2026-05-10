@@ -1,6 +1,0 @@
-status: completed
-summary: The requested try wiring is already present in the current tree, so no code edits were required.
-evidence:
-- `cli/cmd/try.go` wires `PreDispatchLintHook` and `PostAttemptTriageHook` into `ExecuteBeadLoopRuntime`.
-- `cli/cmd/try_test.go` contains `TestTry_HooksWired`, which exercises both hooks through the shared runner override seam.
-verification_command: cd cli && go test ./cmd/... ./internal/agent/... && lefthook run pre-commit
