@@ -21,7 +21,7 @@ func TestDrainServiceEvents_CapturesRouteEconomics(t *testing.T) {
 	events := make(chan agentlib.ServiceEvent, 4)
 
 	routingPayload, err := json.Marshal(map[string]any{
-		"harness":  "agent",
+		"harness":  "fiz",
 		"provider": "anthropic",
 		"model":    "claude-3-5-sonnet",
 		"candidates": []map[string]any{
@@ -128,7 +128,7 @@ func TestDrainServiceEventsWithWriter_LabelsRoutesByPhase(t *testing.T) {
 	events <- agentlib.ServiceEvent{
 		Type: "routing_decision",
 		Time: time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
-		Data: json.RawMessage(`{"harness":"agent","provider":"openrouter","model":"gpt-5.4-mini","reason":"profile"}`),
+		Data: json.RawMessage(`{"harness":"fiz","provider":"openrouter","model":"gpt-5.4-mini","reason":"profile"}`),
 	}
 	events <- agentlib.ServiceEvent{
 		Type: "progress",
@@ -141,9 +141,84 @@ func TestDrainServiceEventsWithWriter_LabelsRoutesByPhase(t *testing.T) {
 	_, routing, progress := drainServiceEventsWithWriter(events, &out)
 	require.NotNil(t, routing)
 	require.Len(t, progress, 1)
-	assert.Contains(t, out.String(), "12:00:00 do route agent/gpt-5.4-mini provider=openrouter reason=profile")
+	assert.Contains(t, out.String(), "12:00:00 do route fiz/gpt-5.4-mini provider=openrouter reason=profile")
 	assert.Contains(t, out.String(), "12:00:01 do ok ddx-live 2 run tests to cli/internal/bead < out=42B 3 lines")
 	assert.NotContains(t, out.String(), "route: harness=agent")
+}
+
+// TestFizeauPassthrough_RawModelUnchanged proves DDx passes the operator-supplied
+// model string directly into ServiceExecuteRequest.Model without normalizing,
+// fuzzy-matching, or aliasing it. Model resolution is Fizeau-owned per CONTRACT-003.
+func TestFizeauPassthrough_RawModelUnchanged(t *testing.T) {
+	stub := &passthroughTestService{}
+	SetServiceRunFactory(func(string) (agentlib.FizeauService, error) {
+		return stub, nil
+	})
+	t.Cleanup(func() { SetServiceRunFactory(nil) })
+
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
+		Model: "qwen36",
+	}).Resolve(config.CLIOverrides{Harness: "agent"})
+
+	_, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "test",
+	})
+	require.NoError(t, err)
+	require.True(t, stub.executeCalled)
+	assert.Equal(t, "qwen36", stub.lastReq.Model,
+		"DDx must not normalize or transform the raw model string before passing to Fizeau")
+}
+
+// TestFizeauPassthrough_RecordsActualModelFromRouting proves DDx records the
+// canonical model/provider/harness that Fizeau returns via routing events, not
+// the raw requested model string. This validates Fizeau owns resolution.
+func TestFizeauPassthrough_RecordsActualModelFromRouting(t *testing.T) {
+	routingPayload, err := json.Marshal(map[string]any{
+		"harness":  "fiz",
+		"provider": "openai-compat",
+		"model":    "Qwen-3.6-27b-MLX-8bit",
+		"candidates": []map[string]any{
+			{"model": "Qwen-3.6-27b-MLX-8bit", "eligible": true, "components": map[string]any{"power": 45}},
+		},
+	})
+	require.NoError(t, err)
+	finalPayload, err := json.Marshal(map[string]any{
+		"status":    "success",
+		"exit_code": 0,
+		"final_text": "done",
+		"routing_actual": map[string]any{
+			"harness":  "fiz",
+			"provider": "openai-compat",
+			"model":    "Qwen-3.6-27b-MLX-8bit",
+			"power":    45,
+		},
+	})
+	require.NoError(t, err)
+
+	stub := &passthroughTestService{
+		executeEvents: []agentlib.ServiceEvent{
+			{Type: "routing_decision", Data: routingPayload},
+			{Type: "final", Data: finalPayload},
+		},
+	}
+	SetServiceRunFactory(func(string) (agentlib.FizeauService, error) {
+		return stub, nil
+	})
+	t.Cleanup(func() { SetServiceRunFactory(nil) })
+
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
+		Model: "qwen36",
+	}).Resolve(config.CLIOverrides{Harness: "agent"})
+
+	result, err := RunWithConfigViaService(context.Background(), t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "test",
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, "Qwen-3.6-27b-MLX-8bit", result.Model,
+		"DDx must record the canonical model returned by Fizeau routing, not the raw requested string")
+	assert.Equal(t, "openai-compat", result.Provider)
+	assert.Equal(t, "fiz", result.Harness)
 }
 
 // TestAgentExecution_UsesFizeauServicePathOnly proves transcript-producing
@@ -184,7 +259,7 @@ func TestAgentExecution_UsesFizeauServicePathOnly(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 	assert.True(t, stub.executeCalled, "RunWithConfigViaService must use the Fizeau service adapter")
-	assert.Equal(t, "agent", stub.lastReq.Harness)
+	assert.Equal(t, "fiz", stub.lastReq.Harness)
 	assert.Equal(t, "hello", stub.lastReq.Prompt)
 	assert.Equal(t, DDXModeBeadExecution, stub.lastReq.Metadata[DDXModeEnvKey])
 	assert.Equal(t, "done", result.Output)

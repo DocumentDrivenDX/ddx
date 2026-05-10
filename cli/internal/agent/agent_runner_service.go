@@ -57,7 +57,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		Prompt:          promptText,
 		Model:           model,
 		Provider:        opts.Provider,
-		Harness:         "agent",
+		Harness:         "fiz",
 		ModelRef:        opts.ModelRef,
 		Reasoning:       agentlib.Reasoning(opts.Effort),
 		Permissions:     opts.Permissions,
@@ -88,7 +88,7 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 	elapsed := time.Since(start)
 
 	result := &Result{
-		Harness:    "agent",
+		Harness:    "fiz",
 		Model:      model,
 		DurationMS: int(elapsed.Milliseconds()),
 	}

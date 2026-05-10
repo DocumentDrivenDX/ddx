@@ -21,6 +21,16 @@ import (
 // observe ServiceExecuteRequest fields without a real agent server.
 var serviceRunFactory func(workDir string) (agentlib.FizeauService, error)
 
+// fizeauHarness maps DDx internal harness names to the Fizeau wire contract.
+// "agent" is DDx's internal name for the embedded native harness; Fizeau
+// v0.10.12+ uses "fiz" as the native harness identity on its wire API.
+func fizeauHarness(name string) string {
+	if name == "agent" {
+		return "fiz"
+	}
+	return name
+}
+
 // SetServiceRunFactory installs a service factory for RunWithConfigViaService.
 // Pass nil to restore production behavior. Exported for cmd/ integration tests.
 //
@@ -221,7 +231,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		Model:           model,
 		Profile:         profile,
 		Provider:        provider,
-		Harness:         harness,
+		Harness:         fizeauHarness(harness),
 		ModelRef:        modelRef,
 		Reasoning:       agentlib.Reasoning(rcfg.Effort()),
 		Permissions:     permissions,
@@ -260,7 +270,7 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	elapsed := finishedAt.Sub(start)
 
 	result := &Result{
-		Harness:    harness,
+		Harness:    fizeauHarness(harness),
 		Model:      model,
 		DurationMS: int(elapsed.Milliseconds()),
 	}
@@ -488,7 +498,7 @@ func ValidateForExecuteLoopViaService(ctx context.Context, workDir, harnessName,
 	if model != "" && provider == "" && modelRef == "" && harnessName == "agent" {
 		if _, err := svc.ResolveRoute(ctx, agentlib.RouteRequest{
 			Model:    model,
-			Harness:  harnessName,
+			Harness:  fizeauHarness(harnessName),
 			ModelRef: modelRef,
 			Provider: provider,
 		}); err != nil {
