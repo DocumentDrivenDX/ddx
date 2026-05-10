@@ -851,6 +851,58 @@ func (s *Store) SetExecutionCooldown(id string, until time.Time, status, detail 
 	})
 }
 
+// ClearCooldowns clears execute-loop cooldown fields for all beads matched by
+// filter. If filter is nil, every bead with execute-loop-retry-after set is
+// cleared. Returns the count of beads whose cooldowns were cleared. A
+// "cooldown-cleared" event with reason="operator-bulk-clear" is appended for
+// each cleared bead in the same pass.
+func (s *Store) ClearCooldowns(filter func(Bead) bool) (int, error) {
+	var count int
+	err := s.WithLock(func() error {
+		beads, _, err := s.readAllLatestRaw()
+		if err != nil {
+			return err
+		}
+		now := time.Now().UTC()
+		for i := range beads {
+			b := &beads[i]
+			if extraStringVal(b.Extra, ExtraRetryAfter) == "" {
+				continue
+			}
+			if filter != nil && !filter(*b) {
+				continue
+			}
+			if b.Extra == nil {
+				b.Extra = make(map[string]any)
+			}
+			delete(b.Extra, ExtraRetryAfter)
+			delete(b.Extra, ExtraLastStatus)
+			delete(b.Extra, ExtraLastDetail)
+			b.UpdatedAt = now
+			var events []BeadEvent
+			if raw, ok := b.Extra["events"]; ok {
+				events = decodeBeadEvents(raw)
+			}
+			events = append(events, BeadEvent{
+				Kind:      "cooldown-cleared",
+				Summary:   "operator-bulk-clear",
+				Source:    "ddx work clear-cooldowns",
+				CreatedAt: now,
+			})
+			b.Extra["events"] = encodeEventsForExtra(events)
+			if err := s.validateBead(b); err != nil {
+				return err
+			}
+			count++
+		}
+		if count == 0 {
+			return nil
+		}
+		return s.WriteAll(beads)
+	})
+	return count, err
+}
+
 // IncrNoChangesCount increments the execute-loop no-changes counter for a bead
 // and returns the new count. Used by the execute-bead worker to detect when a
 // bead should be auto-closed after repeated no-change attempts.

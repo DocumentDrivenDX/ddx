@@ -96,9 +96,10 @@ work runs inline in the current process; per ADR-022 there is no separate
 	cmd.Flags().Int("min-power", 0, "Minimum model power required (0 = unconstrained); passed to agent routing unchanged")
 	cmd.Flags().Int("max-power", 0, "Maximum model power allowed (0 = unconstrained); passed to agent routing unchanged")
 
-	// Register "ddx work plan" and "ddx work focus" as subcommands of "ddx work".
+	// Register "ddx work plan", "ddx work focus", and "ddx work clear-cooldowns" as subcommands.
 	cmd.AddCommand(f.newWorkPlanCommand())
 	cmd.AddCommand(f.newWorkFocusCommand())
+	cmd.AddCommand(f.newWorkClearCooldownsCommand())
 
 	return cmd
 }
