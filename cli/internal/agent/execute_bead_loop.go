@@ -3091,7 +3091,9 @@ func ClassifyReviewError(reviewErr error, reviewRes *ReviewResult) string {
 		case evidence.OutcomeReviewContextOverflow,
 			evidence.OutcomeReviewProviderEmpty,
 			evidence.OutcomeReviewUnparseable,
-			evidence.OutcomeReviewTransport:
+			evidence.OutcomeReviewTransport,
+			evidence.OutcomeReviewCostCapExceeded,
+			evidence.OutcomeReviewReviewerUnavailable:
 			return reviewRes.Error
 		}
 	}
@@ -3102,6 +3104,10 @@ func ClassifyReviewError(reviewErr error, reviewRes *ReviewResult) string {
 	switch {
 	case strings.Contains(msg, evidence.OutcomeReviewContextOverflow):
 		return evidence.OutcomeReviewContextOverflow
+	case strings.Contains(msg, evidence.OutcomeReviewCostCapExceeded):
+		return evidence.OutcomeReviewCostCapExceeded
+	case strings.Contains(msg, evidence.OutcomeReviewReviewerUnavailable):
+		return evidence.OutcomeReviewReviewerUnavailable
 	case strings.Contains(msg, evidence.OutcomeReviewProviderEmpty):
 		return evidence.OutcomeReviewProviderEmpty
 	case strings.Contains(msg, evidence.OutcomeReviewUnparseable):

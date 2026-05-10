@@ -299,6 +299,68 @@ func TestReviewRouting_MissingActualPowerUsesSmartFloor(t *testing.T) {
 	assert.Empty(t, svc.lastReq.ModelRef)
 }
 
+// TestReviewPairingDegraded_IsTelemetryOnly verifies AC 4: when the reviewer
+// resolves to the same provider as the implementer, only a
+// kind:review-pairing-degraded event is appended. Harness/model/profile pins
+// are not mutated, no downgrade re-dispatch occurs, and the review verdict is
+// still returned normally.
+func TestReviewPairingDegraded_IsTelemetryOnly(t *testing.T) {
+	projectRoot, head, store := reviewPairingTestSetup(t)
+	events := &stubBeadEventAppender{}
+
+	runner := &reviewRunnerStub{result: &Result{
+		Harness:     "claude",
+		Provider:    "anthropic", // same as implementer below — degraded pairing
+		Model:       "claude-opus-4-7",
+		ActualPower: 95,
+		Output:      reviewerOutputApprove,
+	}}
+
+	reviewer := &DefaultBeadReviewer{
+		ProjectRoot: projectRoot,
+		BeadStore:   store,
+		BeadEvents:  events,
+		Harness:     "claude",
+		Runner:      runner,
+	}
+
+	impl := ImplementerRouting{
+		Harness:     "claude",
+		Provider:    "anthropic", // SAME provider as reviewer → degraded
+		Model:       "claude-sonnet-4-6",
+		ActualPower: 70,
+	}
+	res, err := reviewer.ReviewBead(context.Background(), "ddx-pairing", head, impl)
+	require.NoError(t, err)
+	require.NotNil(t, res)
+
+	// The reviewer result must be a normal verdict — degraded pairing must not
+	// block, error, or change the review outcome.
+	assert.Equal(t, VerdictApprove, res.Verdict,
+		"review verdict must not be affected by pairing degradation")
+
+	// The runner must have been called exactly once — no downgrade re-dispatch
+	// should have changed the Harness or Model in lastOpts beyond what
+	// BuildReviewExecuteRequest would set.
+	assert.Equal(t, "claude", runner.lastOpts.Harness,
+		"dispatch harness must not be downgraded when pairing is degraded")
+
+	// Exactly one review-pairing-degraded event.
+	var degradedCount int
+	for _, ev := range events.events {
+		if ev.Event.Kind == ReviewPairingDegradedEventKind {
+			degradedCount++
+			// Body must NOT carry any downgrade_* mutation fields.
+			assert.NotContains(t, ev.Event.Body, "downgraded_harness=",
+				"pairing-degraded event body must not carry downgrade mutation fields")
+			assert.NotContains(t, ev.Event.Body, "downgraded_model=",
+				"pairing-degraded event body must not carry downgrade mutation fields")
+		}
+	}
+	assert.Equal(t, 1, degradedCount,
+		"degraded pairing must emit exactly one review-pairing-degraded event")
+}
+
 func TestReviewRouting_KnownActualPowerUsesNextFloor(t *testing.T) {
 	projectRoot, head, store := reviewPairingTestSetup(t)
 	svc := &passthroughTestService{

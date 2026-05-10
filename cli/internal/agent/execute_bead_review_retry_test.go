@@ -11,6 +11,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -350,4 +351,72 @@ func TestTwoSlotReview_PerSlotRetryBudget(t *testing.T) {
 	assert.Contains(t, slot1Error.Body, "attempt_count=1")
 	assert.Contains(t, slot1Error.Body, "reviewer_index=1")
 	assert.Equal(t, 0, manualForSlot1, "slot 0 retry history must not exhaust slot 1")
+}
+
+// TestPreCloseReview_CostCapFeedsReviewError verifies AC 1 + AC 3: when the
+// drain-level cost cap is already exhausted before the pre-close review is
+// dispatched, RunPostMergeReview must:
+//   - NOT close the bead (Approved=false)
+//   - append a review-error event with failure_class=cost_cap_exceeded
+//   - classify it through the review_max_retries retry/exhaustion path
+func TestPreCloseReview_CostCapFeedsReviewError(t *testing.T) {
+	store, first, _ := newExecuteLoopTestStore(t)
+	const resultRev = "costcap-rev"
+
+	// Build a cost cap tracker already past its limit so Tripped() is true.
+	capTracker := escalation.NewCostCapTracker(0.50, nil)
+	capTracker.Add("claude", 1.00) // spent $1.00 > max $0.50 → tripped
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	// The reviewer should NOT be called — the cap check must short-circuit.
+	var reviewerCalled bool
+	reviewer := beadReviewerFunc(func(_ context.Context, _, _ string, _ ImplementerRouting) (*ReviewResult, error) {
+		reviewerCalled = true
+		return nil, errors.New("reviewer must not be called when cap is tripped")
+	})
+
+	out := RunPostMergeReview(context.Background(), PostMergeReviewInput{
+		Bead: *first,
+		Report: ExecuteBeadReport{
+			BeadID:    first.ID,
+			Status:    ExecuteBeadStatusSuccess,
+			SessionID: "sess-costcap",
+			ResultRev: resultRev,
+		},
+		Reviewer:      reviewer,
+		Store:         store,
+		ProjectRoot:   t.TempDir(),
+		Rcfg:          rcfg,
+		ReviewCostCap: capTracker,
+		Assignee:      "worker",
+		Now:           time.Now,
+	})
+
+	require.False(t, out.Approved, "bead must not be closed when cost cap is exceeded")
+	assert.False(t, reviewerCalled, "reviewer must not be dispatched when cost cap is already tripped")
+
+	events, err := store.Events(first.ID)
+	require.NoError(t, err)
+
+	var reviewErrEvent *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "review-error" {
+			reviewErrEvent = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, reviewErrEvent,
+		"cost cap exceeded before dispatch must append a review-error event")
+	assert.Contains(t, reviewErrEvent.Body, "failure_class="+evidence.OutcomeReviewCostCapExceeded,
+		"review-error body must carry failure_class=cost_cap_exceeded")
+	assert.Contains(t, reviewErrEvent.Body, "result_rev="+resultRev,
+		"review-error body must carry the blocked result_rev")
+
+	// AC 3: the bead must remain open (not closed by the cap refusal).
+	got, err := store.Get(first.ID)
+	require.NoError(t, err)
+	assert.NotEqual(t, bead.StatusClosed, got.Status,
+		"cost cap exceeded must not close the bead")
 }
