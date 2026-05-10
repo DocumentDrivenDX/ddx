@@ -386,6 +386,75 @@ func TestDDxWork_WiresPreClaimIntakeHook(t *testing.T) {
 	assert.GreaterOrEqual(t, len(got), 2, "work must continue past intake to later execution stages")
 }
 
+// TestDDxWork_ReadinessUnavailableOutput (AC1, AC6 / ddx-30bc30ed): when the
+// intake service is unreachable, ddx work must print actionable
+// readiness-unavailable output rather than exposing internal error prefixes.
+// The test fails if that output is dropped.
+func TestDDxWork_ReadinessUnavailableOutput(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	stub := installExecuteCapturingStub(t)
+	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		if strings.Contains(req.Prompt, "MODE: intake") {
+			return nil, fmt.Errorf("readiness service unavailable: connection refused")
+		}
+		ch := make(chan agentlib.ServiceEvent, 1)
+		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok"}`)}
+		close(ch)
+		return ch, nil
+	}
+
+	dir := setupWorkIntakeFixture(t)
+	root := NewCommandFactory(dir).NewRootCommand()
+	out, _ := executeCommand(root, "work", "--once", "--no-review", "--no-review-i-know-what-im-doing")
+
+	// AC1: actionable readiness-unavailable line must appear in operator output.
+	assert.Contains(t, out, "readiness check unavailable",
+		"ddx work must print actionable readiness-unavailable output; got: %s", out)
+	// AC6: doubled prefix must not appear in operator output.
+	assert.NotContains(t, out, "pre-claim intake: pre-claim intake:",
+		"pre-claim intake prefix must not be doubled in operator output")
+}
+
+// TestDDxWork_ReadinessTooLargeSkipsClaim (AC3, AC6 / ddx-30bc30ed): when
+// intake classifies a bead as too_large, ddx work must not dispatch the
+// implementer and must move the bead to operator-attention status.
+func TestDDxWork_ReadinessTooLargeSkipsClaim(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	stub := installExecuteCapturingStub(t)
+	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		if strings.Contains(req.Prompt, "MODE: intake") {
+			ch := make(chan agentlib.ServiceEvent, 1)
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"needs_split\",\"rationale\":\"too large\",\"readiness_checks\":[{\"reason\":\"too_large\",\"verdict\":\"fail\",\"evidence\":\"AC spans three subsystems\"}]}"}`)}
+			close(ch)
+			return ch, nil
+		}
+		ch := make(chan agentlib.ServiceEvent, 1)
+		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok"}`)}
+		close(ch)
+		return ch, nil
+	}
+
+	dir := setupWorkIntakeFixture(t)
+	root := NewCommandFactory(dir).NewRootCommand()
+	_, _ = executeCommand(root, "work", "--once", "--no-review", "--no-review-i-know-what-im-doing")
+
+	// AC3: implementer must not be dispatched when intake classifies bead as too_large.
+	stub.mu.Lock()
+	executionSeen := stub.executionSeen
+	stub.mu.Unlock()
+	assert.False(t, executionSeen,
+		"implementer must not be dispatched when intake classifies bead as too_large (needs_split)")
+
+	// Bead must be moved to proposed (operator attention) after too_large classification.
+	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	b, err := store.Get("ddx-intake-test")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, b.Status,
+		"too_large bead must be parked to proposed status after intake rejection")
+}
+
 // TestExecuteBeadDoesNotCallResolveRoute (AC4 / ddx-6036e1bc): ddx agent
 // execute-bead must not call ResolveRoute in the execution path. The stub
 // installed by installExecuteCapturingStub returns an error from ResolveRoute,

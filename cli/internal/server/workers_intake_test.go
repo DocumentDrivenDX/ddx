@@ -23,6 +23,7 @@ type workerIntakeServiceStub struct {
 	modes      []string
 	listModels []agentlib.ModelInfo
 	executeErr error
+	intakeErr  error // when set, returned from Execute for intake-mode calls
 }
 
 func (s *workerIntakeServiceStub) Execute(_ context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
@@ -41,6 +42,9 @@ func (s *workerIntakeServiceStub) Execute(_ context.Context, req agentlib.Servic
 
 	if s.executeErr != nil && mode == "execute" {
 		return nil, s.executeErr
+	}
+	if s.intakeErr != nil && mode == "intake" {
+		return nil, s.intakeErr
 	}
 
 	finalText := `ok`
@@ -178,4 +182,32 @@ func TestServerWorker_WiresPreClaimIntakeHook(t *testing.T) {
 	require.GreaterOrEqual(t, len(got), 2, "server worker must invoke intake and lint hooks")
 	assert.Equal(t, "intake", got[0], "server-managed workers must run intake before claim")
 	assert.Equal(t, "lint", got[1], "server-managed workers must wire lint after intake")
+}
+
+// TestServerWorker_ReadinessUnavailableEvidence (AC2, AC6 / ddx-30bc30ed):
+// when a server-managed worker encounters an intake service failure, it must
+// record readiness-unavailable evidence in the worker log. The test fails if
+// that evidence is dropped.
+func TestServerWorker_ReadinessUnavailableEvidence(t *testing.T) {
+	root := setupWorkerIntakeFixture(t)
+	stub := &workerIntakeServiceStub{
+		intakeErr: fmt.Errorf("readiness service unavailable: connection refused"),
+	}
+	installWorkerIntakeStub(t, stub)
+
+	m := NewWorkerManager(root)
+	record, err := m.StartExecuteLoop(ExecuteLoopWorkerSpec{
+		ProjectRoot: root,
+		Harness:     "claude",
+		Mode:        "once",
+		NoReview:    true,
+	})
+	require.NoError(t, err)
+	_ = waitForWorkerExit(t, m, record.ID, 10*time.Second)
+
+	// AC2: worker log must contain actionable readiness-unavailable evidence.
+	logContent, _, err := m.Logs(record.ID)
+	require.NoError(t, err)
+	assert.Contains(t, logContent, "readiness check unavailable",
+		"server worker must record readiness-unavailable evidence in worker log; got: %s", logContent)
 }
