@@ -11,62 +11,68 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// loadLefthookFullTestsSection reads lefthook.yml and returns the run content
-// of the pre-push full-tests command (a window from "full-tests:" forward).
-func loadLefthookFullTestsSection(t *testing.T) string {
+// loadLefthookPrePushSection reads lefthook.yml and returns the content
+// of the pre-push block.
+func loadLefthookPrePushSection(t *testing.T) string {
 	t.Helper()
 	data, err := os.ReadFile(filepath.Join("..", "..", "lefthook.yml"))
 	require.NoError(t, err)
 	content := string(data)
 
-	idx := strings.Index(content, "full-tests:")
-	require.True(t, idx >= 0, "lefthook.yml: full-tests command not found under pre-push")
-	end := idx + 2048
+	idx := strings.Index(content, "pre-push:")
+	require.True(t, idx >= 0, "lefthook.yml: pre-push block not found")
+	return content[idx:]
+}
+
+// loadMakefileTestFullSection reads cli/Makefile and returns the content
+// of the test-full target.
+func loadMakefileTestFullSection(t *testing.T) string {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join("..", "Makefile"))
+	require.NoError(t, err)
+	content := string(data)
+
+	idx := strings.Index(content, "test-full:")
+	require.True(t, idx >= 0, "Makefile: test-full target not found")
+	end := idx + 512
 	if end > len(content) {
 		end = len(content)
 	}
 	return content[idx:end]
 }
 
-// TestLefthookPrePushFullTestsSetsCGOForRace verifies the pre-push full-tests
-// command explicitly sets CGO_ENABLED=1 so environments that inherit
-// CGO_ENABLED=0 do not fail before any test runs.
-func TestLefthookPrePushFullTestsSetsCGOForRace(t *testing.T) {
-	section := loadLefthookFullTestsSection(t)
+// TestLefthookPrePushNoFullTests verifies the pre-push hook no longer runs
+// the full test suite — CI on origin provides that gate instead.
+func TestLefthookPrePushNoFullTests(t *testing.T) {
+	section := loadLefthookPrePushSection(t)
+	assert.NotContains(t, section, "full-tests:",
+		"pre-push hook must not run the full test suite; CI on origin handles that gate")
+	assert.NotContains(t, section, "go test -race -cover",
+		"pre-push hook must not run go test -race -cover; that belongs in CI or make test-full")
+}
+
+// TestMakefileTestFullSetsCGOForRace verifies the Makefile test-full target
+// sets CGO_ENABLED=1 so the race detector works in environments that inherit
+// CGO_ENABLED=0.
+func TestMakefileTestFullSetsCGOForRace(t *testing.T) {
+	section := loadMakefileTestFullSection(t)
 	assert.Contains(t, section, "CGO_ENABLED=1",
-		"full-tests must set CGO_ENABLED=1 so -race works when env has CGO_ENABLED=0")
+		"test-full must set CGO_ENABLED=1 so -race works when env has CGO_ENABLED=0")
 	assert.Contains(t, section, "go test -race",
-		"full-tests must still invoke go test -race")
+		"test-full must invoke go test -race")
 }
 
-// TestLefthookPrePushFullTestsHasActionableCGOUnavailablePath verifies the
-// full-tests hook has an explicit path for when cgo is genuinely unavailable,
-// so operators receive an actionable error rather than a cryptic Go toolchain
-// message.
-func TestLefthookPrePushFullTestsHasActionableCGOUnavailablePath(t *testing.T) {
-	section := loadLefthookFullTestsSection(t)
-	hasCCompilerCheck := strings.Contains(section, "gcc") ||
-		strings.Contains(section, "clang") ||
-		strings.Contains(section, "command -v cc")
-	assert.True(t, hasCCompilerCheck,
-		"full-tests hook must check for a C compiler (gcc/clang/cc) before running -race")
-	assert.Contains(t, section, "C compiler",
-		"full-tests hook must emit an actionable 'C compiler' message when cgo is unavailable")
-}
-
-// TestLefthookPrePushFullTestsScrubsGitLocalEnv verifies the pre-push
-// full-tests command removes hook-exported Git-local environment before tests
-// create fixture repositories.
-func TestLefthookPrePushFullTestsScrubsGitLocalEnv(t *testing.T) {
-	section := loadLefthookFullTestsSection(t)
+// TestMakefileTestFullScrubsGitLocalEnv verifies the Makefile test-full target
+// removes hook-exported Git-local environment variables before tests create
+// fixture repositories.
+func TestMakefileTestFullScrubsGitLocalEnv(t *testing.T) {
+	section := loadMakefileTestFullSection(t)
 	scrubIdx := strings.Index(section, "git rev-parse --local-env-vars")
 	testIdx := strings.Index(section, "go test -race")
 
-	require.NotEqual(t, -1, scrubIdx, "full-tests must enumerate Git-local environment variables")
-	require.NotEqual(t, -1, testIdx, "full-tests must still invoke go test -race")
+	require.NotEqual(t, -1, scrubIdx, "test-full must enumerate Git-local environment variables")
+	require.NotEqual(t, -1, testIdx, "test-full must invoke go test -race")
 	assert.Less(t, scrubIdx, testIdx, "Git-local environment must be scrubbed before go test runs")
-	assert.Contains(t, section, "unset \"$var\"",
-		"full-tests must unset each Git-local environment variable")
 }
 
 func runGitConfigHealthScript(t *testing.T, config string) (string, error) {

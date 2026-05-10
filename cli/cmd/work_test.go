@@ -241,7 +241,11 @@ func TestWorkPassthroughNotValidated(t *testing.T) {
 func TestWorkDefaultDrainModeExitsOnEmptyQueue(t *testing.T) {
 	env := NewTestEnvironment(t)
 	root := NewCommandFactory(env.Dir).NewRootCommand()
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	// Use a generous safety-net timeout so the race detector's overhead
+	// under parallel test runs does not fire this cancel before the command
+	// can respond. The actual performance assertion is the elapsed < 5s
+	// check below, which catches the bug (ddx work hanging on empty queue).
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 	root.SetContext(ctx)
 
