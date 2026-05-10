@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260510T160603-2192ced2",
+  "bead_id": "ddx-72cf3b8d",
+  "base_rev": "7a710a8cf90e72ac173bcaf06889ddc069950051",
+  "created_at": "2026-05-10T16:06:07.630328023Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-72cf3b8d",
+    "title": "docs(TD-031): codify push_failed/push_conflict outcome rows + cooldown invariant",
+    "description": "PROBLEM\n  TD-031 §5 outcome→Extra mapping table is missing rows for\n  push_failed and push_conflict. Today's implementation parks\n  push_failed at 24h cooldown (cli/internal/agent/try/attempt.go:272-283),\n  which violates the §5 invariant: \"execute-loop-retry-after may be\n  set only when retrying the same bead after time passes could\n  plausibly succeed without human/spec/dependency changes.\"\n\n  push_failed is caused by branch protection, auth-token expiry,\n  pre-push test failures (which require code fixes), or a data race\n  in executor.go (also a code fix). NONE of these are recheckable\n  by time elapsed alone. Without the spec row, implementers add\n  cooldowns that survive long after their cause is resolved. Today's\n  drain idled ~10h because of stale push_failed cooldowns set during\n  a data-race incident that was fixed within the hour.\n\n  This is a doc-only bead. It lands the spec row + the invariant\n  before the implementation fixes (sister beads handle code).\n\nCURRENT STATE\n  - docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md\n    §5 has rows for review_pass, already_satisfied, review_fixable_gap,\n    review_spec_gap, review_too_large, review_error, execution_failed,\n    no_changes (multiple variants), parent/epic, external blocker,\n    superseded, transient infra/quota/transport, stale no_changes\n    metadata.\n  - No row for push_failed.\n  - No row for push_conflict.\n  - The §5 preamble invariant about execute-loop-retry-after is\n    correctly stated but lacks a concrete enumeration of which\n    outcomes may set the field vs which must not.\n\nPROPOSED FIX\n  Edit docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md\n  §5:\n\n  1. Add row for push_failed:\n     - Status transition: in_progress → open (claim released).\n     - Label changes: optional explanatory label (e.g.,\n       blocked-on-branch-protection if applicable).\n     - Events: push-failed with stderr detail and base-rev.\n     - Extra updates: Extra[\"last-run\"] only; DO NOT set\n       execute-loop-retry-after. Operator action OR a code fix on\n       origin clears the implicit block.\n\n  2. Add row for push_conflict (remote diverged, fast-forward\n     rejected by non-FF):\n     - Status transition: in_progress → open (claim released).\n     - Label changes: (none).\n     - Events: push-conflict.\n     - Extra updates: may set execute-loop-retry-after at 15min\n       (recheckable — remote advanced; a brief wait + re-fetch\n       resolves naturally).\n\n  3. Strengthen the §5 invariant prose:\n     - Add an explicit list of outcomes that MUST NOT set\n       execute-loop-retry-after: push_failed,\n       declined_needs_decomposition, review_spec_gap,\n       review_missing_acceptance, review_too_large at depth cap.\n     - Note: push_conflict, no_viable_provider, land_conflict,\n       transient infra/quota/transport ARE recheckable and may\n       use cooldowns.\n     - Reinforce: cooldown lifetime should match the recheckable\n       window (15min for transient, NOT 24h).\n\nNON-SCOPE\n  - Implementation fixes (sister beads).\n  - Bulk operator clear command (sister bead).\n  - Rev-bound auto-invalidation logic (sister bead).\n  - Other sections of TD-031.\n\nINTERSECTIONS\n  - Sister bead \"fix(try): push_failed must not set cooldown\" (R1)\n    depends on this row landing first.\n  - Sister bead \"fix(try): declined_needs_decomposition use\n    execution-eligible=false\" (R4) is referenced by the new\n    invariant prose.",
+    "acceptance": "1. docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md §5 contains a new row for push_failed declaring \"in_progress → open\" transition, no execute-loop-retry-after, and event push-failed.\n2. The same §5 contains a new row for push_conflict declaring \"in_progress → open\", optional 15min execute-loop-retry-after (recheckable cooldown), and event push-conflict.\n3. The §5 preamble invariant prose explicitly enumerates outcomes that MUST NOT set execute-loop-retry-after, and outcomes that MAY (with the recheckable-window rationale).\n4. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "area:docs",
+      "area:agent",
+      "kind:doc",
+      "spec:TD-031",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T16:04:57Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T16:06:03.470897854Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T16:04:57.27469304Z",
+      "queue-rank": "14",
+      "spec-id": "TD-031"
+    }
+  },
+  "governing": [
+    {
+      "id": "TD-031",
+      "path": "docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md",
+      "title": "Technical Design: Bead State Machine and Naming-Role Decisions"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260510T160603-2192ced2",
+    "prompt": ".ddx/executions/20260510T160603-2192ced2/prompt.md",
+    "manifest": ".ddx/executions/20260510T160603-2192ced2/manifest.json",
+    "result": ".ddx/executions/20260510T160603-2192ced2/result.json",
+    "checks": ".ddx/executions/20260510T160603-2192ced2/checks.json",
+    "usage": ".ddx/executions/20260510T160603-2192ced2/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-72cf3b8d-20260510T160603-2192ced2"
+  },
+  "prompt_sha": "4cfbc56ede613a012d0991d51b9621e6135a4886e68602e114c3d5dae765d3f0"
+}
