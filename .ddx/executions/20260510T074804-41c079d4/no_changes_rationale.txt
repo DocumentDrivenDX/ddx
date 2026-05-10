@@ -1,0 +1,17 @@
+status: blocked
+reason: ddx-ddacd4ff (C14) is still open. AC 13 of this bead states that the
+lifts of agent.RecoverOrphans (cli/cmd/agent_execute_bead.go:168),
+agent.BuildLandingGateContext (cli/cmd/agent_execute_bead.go:206), and
+agent.ValidateForExecuteLoopViaService (cli/cmd/agent_execute_bead.go:161)
+into try.Attempt or ExecuteBeadWithConfig are prerequisites for deletion.
+Neither function appears in cli/cmd/try.go. Deleting agent_execute_bead.go
+now would remove the only CLI callers of RecoverOrphans and
+BuildLandingGateContext, breaking orphan recovery and gate context on the try
+path. The AC 10 tests TestTry_RecoversOrphanedWorktreesBeforeSpawn and
+TestTry_AppliesGateContextToLanding depend on those lifts and cannot be
+written to pass without them.
+
+AC 12 (ddx-424fdac4 closed): satisfied — ddx-424fdac4 is closed.
+AC 11 (test migration audit): satisfied — see agent-cmd-test-migration.md.
+
+verification_command: ddx bead show ddx-ddacd4ff | grep -q "Status:.*closed" && grep -q "RecoverOrphans" cli/cmd/try.go
