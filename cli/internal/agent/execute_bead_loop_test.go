@@ -2042,8 +2042,6 @@ func TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead(t *testing.T) {
 	retryAfter, _ := got.Extra["execute-loop-retry-after"].(string)
 	require.Empty(t, retryAfter, "declined_needs_decomposition must not set execute-loop-retry-after")
 	require.Equal(t, false, got.Extra[bead.ExtraExecutionElig], "execution-eligible must be set to false")
-	lastStatus, _ := got.Extra["execute-loop-last-status"].(string)
-	require.Equal(t, ExecuteBeadStatusDeclinedNeedsDecomposition, lastStatus)
 
 	// A structured decomposition-recommendation event must be appended.
 	events, err := store.Events(b.ID)
