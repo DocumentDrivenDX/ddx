@@ -881,6 +881,105 @@ func TestExecutionCleanup_PrunesTemporaryCandidateRefs(t *testing.T) {
 	assert.True(t, hasObservationClass(summary.Observations, "pruned_candidate_ref"))
 }
 
+func setupEvidenceDir(t *testing.T, projectRoot, attemptID string, mtime time.Time) string {
+	t.Helper()
+	dir := filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "result.json"), []byte(`{"status":"success"}`), 0o644))
+	require.NoError(t, os.Chtimes(dir, mtime, mtime))
+	return dir
+}
+
+func TestExecutionCleanup_DeletesOldDirs(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+
+	oldTime := time.Now().AddDate(0, 0, -10)
+	oldDir := setupEvidenceDir(t, projectRoot, "20260101T000000-deadbeef", oldTime)
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.RetainDays = 7
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoDirExists(t, oldDir)
+	assert.Equal(t, int64(1), summary.RemovedEvidenceDirs)
+	assert.True(t, hasObservationClass(summary.Observations, "removed_evidence_dir"))
+}
+
+func TestExecutionCleanup_PreservesActiveDirs(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+
+	oldTime := time.Now().AddDate(0, 0, -10)
+	activeAttemptID := "20260101T000000-aabbccdd"
+	activeDir := setupEvidenceDir(t, projectRoot, activeAttemptID, oldTime)
+
+	require.NoError(t, WriteRunState(projectRoot, RunState{
+		BeadID:    "ddx-active",
+		AttemptID: activeAttemptID,
+		StartedAt: time.Now().UTC(),
+	}))
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.RetainDays = 7
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, activeDir)
+	assert.Equal(t, int64(0), summary.RemovedEvidenceDirs)
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_active_evidence_dir"))
+}
+
+func TestExecutionCleanup_RetainDaysDefault7(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	assert.Equal(t, defaultEvidenceRetainDays, mgr.RetainDays)
+	assert.Equal(t, 7, mgr.RetainDays)
+}
+
+func TestExecutionCleanup_RetainDaysZero_DisablesRetention(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+
+	oldTime := time.Now().AddDate(0, 0, -10)
+	oldDir := setupEvidenceDir(t, projectRoot, "20260101T000000-eeff0011", oldTime)
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.RetainDays = 0 // disabled
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, oldDir)
+	assert.Equal(t, int64(0), summary.RemovedEvidenceDirs)
+}
+
+func TestExecutionCleanup_RecordsCount(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+
+	oldTime := time.Now().AddDate(0, 0, -10)
+	for _, id := range []string{"20260101T000000-aaaa1111", "20260101T000001-bbbb2222", "20260101T000002-cccc3333"} {
+		setupEvidenceDir(t, projectRoot, id, oldTime)
+	}
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.RetainDays = 7
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(3), summary.RemovedEvidenceDirs)
+}
+
 func hasObservationClass(observations []ExecutionCleanupObservation, class string) bool {
 	for _, obs := range observations {
 		if obs.Class == class {

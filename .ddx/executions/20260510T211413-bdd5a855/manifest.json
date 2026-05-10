@@ -1,0 +1,50 @@
+{
+  "attempt_id": "20260510T211413-bdd5a855",
+  "bead_id": "ddx-d22293ba",
+  "base_rev": "630d43d318af3ea0f164656b5dbc47db2205a749",
+  "created_at": "2026-05-10T21:14:18.400480773Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d22293ba",
+    "title": "feat(executions): wire RetainDays config to ExecutionCleanupManager prune",
+    "description": "PROBLEM\n  cli/internal/config/types.go:245 defines a RetainDays field on\n  ExecutionsConfig, but no code reads or acts on it. The cleanup\n  manager (cli/internal/agent/execution_cleanup.go) scans\n  .ddx/executions/ via scanCompleteEvidenceDirs (line 453) but the\n  function is observation-only — it counts dirs, emits telemetry,\n  and never deletes.\n\n  Result: every execute-bead attempt creates a subdir under\n  .ddx/executions/\u003cattempt-id\u003e/ that is tracked by git\n  (.gitignore lines 438-445 explicitly un-ignore the 5 evidence\n  file types). Today's 3,427 dirs × ~3.5 files = 12,096 tracked\n  files, 52% of the entire repo's tracked file count.\n\n  No retention. No bound. Repo bloats forever. The schema field\n  was clearly intended to gate this exact behavior; it just was\n  never wired up.\n\nCURRENT STATE\n  - cli/internal/config/types.go:245 ExecutionsConfig.RetainDays\n    declared but never read.\n  - cli/internal/agent/execution_cleanup.go ExecutionCleanupManager.Cleanup\n    runs every ~10 minutes during drain (per\n    cli/internal/agent/execution_cleanup_loop.go:13) and on\n    drain startup (loop line 688).\n  - scanCompleteEvidenceDirs (line 453) reads the directory,\n    counts dirs, emits complete_evidence observations, but\n    contains no os.Remove or os.RemoveAll.\n  - 3,427 execution dirs accumulated.\n\nPROPOSED FIX\n  - cli/internal/agent/execution_cleanup.go: extend the existing\n    cleanup pass to delete .ddx/executions/\u003cattempt-id\u003e/ dirs\n    whose mtime is older than ExecutionsConfig.RetainDays days.\n  - Skip dirs whose attempt-id is referenced by any active\n    run-state file (cli/internal/agent/run_state*.go) — these\n    are in-flight attempts whose evidence may still be written.\n  - Skip dirs that contain a result.json with status indicating\n    the attempt is still active (to be safe; defensive).\n  - Default RetainDays in cli/internal/config/loader.go (or\n    similar): 7 days. Operators can override via .ddx.yml.\n  - Add structured ExecutionCleanupSummary.RemovedEvidenceDirs\n    counter; emit it in the existing cleanup log line.\n  - Ensure the bulk delete uses git rm (not just os.RemoveAll)\n    so the deletions are reflected in git state. Use\n    `git ls-files .ddx/executions/\u003cattempt-id\u003e` to find tracked\n    files, then `git rm -rf` the dir.\n\n  Tests:\n    - TestExecutionCleanup_DeletesOldDirs: assert dirs older than\n      RetainDays are removed.\n    - TestExecutionCleanup_PreservesActiveDirs: assert dirs with\n      live run-state references are NOT deleted.\n    - TestExecutionCleanup_RetainDaysDefault7: assert default\n      retention is 7 days when not configured.\n    - TestExecutionCleanup_RetainDaysZero_DisablesRetention:\n      assert RetainDays=0 disables the prune.\n    - TestExecutionCleanup_RecordsCount: assert\n      RemovedEvidenceDirs counter accurate.\n\nNON-SCOPE\n  - The mirror backend (sister bead).\n  - Removing .gitignore un-ignores (sister bead).\n  - Manual one-shot cleanup of existing 3,427 dirs (operator\n    can run this before this bead lands).\n\nINTERSECTIONS\n  - Sister bead \"chore(gitignore): stop tracking .ddx/executions/\"\n    — after this bead lands and reduces in-tree dirs, that bead\n    completes the cleanup by removing the un-ignore lines.\n  - Sister bead \"feat(mirror): wire executions.mirror\" — optional;\n    not required for this bead to function.",
+    "acceptance": "1. cli/internal/agent/execution_cleanup.go ExecutionCleanupManager.Cleanup deletes execution dirs older than ExecutionsConfig.RetainDays days.\n2. Active dirs (referenced by run-state) are skipped.\n3. Default RetainDays is 7 (configurable via .ddx.yml).\n4. RetainDays=0 disables the prune.\n5. ExecutionCleanupSummary.RemovedEvidenceDirs counter is incremented per delete and surfaced in the cleanup log.\n6. TestExecutionCleanup_DeletesOldDirs, TestExecutionCleanup_PreservesActiveDirs, TestExecutionCleanup_RetainDaysDefault7, TestExecutionCleanup_RetainDaysZero_DisablesRetention, TestExecutionCleanup_RecordsCount all pass.\n7. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/config/... green.\n8. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "area:agent",
+      "kind:feature",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T21:13:08Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T21:14:13.108544875Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T21:13:08.901885951Z",
+      "queue-rank": "29"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260510T211413-bdd5a855",
+    "prompt": ".ddx/executions/20260510T211413-bdd5a855/prompt.md",
+    "manifest": ".ddx/executions/20260510T211413-bdd5a855/manifest.json",
+    "result": ".ddx/executions/20260510T211413-bdd5a855/result.json",
+    "checks": ".ddx/executions/20260510T211413-bdd5a855/checks.json",
+    "usage": ".ddx/executions/20260510T211413-bdd5a855/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-d22293ba-20260510T211413-bdd5a855"
+  },
+  "prompt_sha": "4ebf11971e957067a122b107e209fe4d451ad7ca457e3e53059454062594d611"
+}

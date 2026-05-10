@@ -504,4 +504,9 @@ func (c *NewConfig) ApplyDefaults() {
 			c.UpdateCheck.Frequency = "24h"
 		}
 	}
+	if c.Executions == nil {
+		c.Executions = &ExecutionsConfig{RetainDays: 7}
+	} else if c.Executions.RetainDays == 0 {
+		c.Executions.RetainDays = 7
+	}
 }
