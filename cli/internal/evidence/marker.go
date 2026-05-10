@@ -22,4 +22,10 @@ const (
 	OutcomeReviewProviderEmpty = "review-error: provider_empty"
 	OutcomeReviewUnparseable   = "review-error: unparseable"
 	OutcomeReviewTransport     = "review-error: transport"
+	// OutcomeReviewCostCapExceeded is returned when a review turn is blocked
+	// because the session or drain-level max_billable_usd cap would be exceeded.
+	OutcomeReviewCostCapExceeded = "review-error: cost_cap_exceeded"
+	// OutcomeReviewReviewerUnavailable is returned when a review turn cannot be
+	// dispatched because no reviewer is available for the session.
+	OutcomeReviewReviewerUnavailable = "review-error: reviewer_unavailable"
 )
