@@ -1,1 +1,0 @@
-DELETE internal/metaprompt/injector.go:44 NewMetaPromptInjector — the current tree no longer defines this legacy constructor; production entrypoints use NewMetaPromptInjectorWithPaths from cli/cmd/init.go and cli/cmd/doctor.go, and deadcode no longer reports any internal/metaprompt symbols.

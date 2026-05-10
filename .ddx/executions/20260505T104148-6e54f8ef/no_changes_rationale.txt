@@ -1,7 +1,0 @@
-status: needs_investigation
-reason: decomposed the parent bead into child slices; no source changes were made in this attempt.
-
-children:
-- .execute-bead-wt-ddx-c8f79963-20260505T104148-6e54f8ef-8083652e: relocate no_changes adjudication and labels into try.Attempt
-- .execute-bead-wt-ddx-c8f79963-20260505T104148-6e54f8ef-16072585: relocate rate-limit retry policy into try.Attempt
-- .execute-bead-wt-ddx-c8f79963-20260505T104148-6e54f8ef-e209db79: relocate decomposition and push outcome routing into try.Attempt

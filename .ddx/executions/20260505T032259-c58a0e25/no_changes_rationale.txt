@@ -1,9 +1,0 @@
-verification_command: cd cli && go test ./internal/server/graphql -run 'TestIntegration_Query_Runs|TestRunFilter_LayerFilter' -count=1 && cd internal/server/frontend && bunx playwright test e2e/runs.spec.ts e2e/runs-evidence.spec.ts
-
-The requested run-detail surface work is already present in this worktree:
-- FEAT-008 includes the run detail, Evidence tab, artifact link, and run_detail_view audit criteria in docs/helix/01-frame/features/FEAT-008-web-ui.md.
-- FEAT-010 includes the run-detail access audit event contract in docs/helix/01-frame/features/FEAT-010-executions.md.
-- TP-019 includes the matching run-detail / evidence / audit coverage in docs/helix/03-test/test-plans/TP-019-agent-evaluation.md.
-- The GraphQL resolver test and the two targeted Playwright specs both pass in this worktree.
-
-No source edits were required for this bead.

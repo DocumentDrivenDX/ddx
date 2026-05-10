@@ -1,5 +1,0 @@
-WIRE internal/exec/store.go:66 Store.Init - covered by the current exec-package keepalive/rooting path in cli/internal/exec/reachability.go and the production exec command entrypoint in cli/cmd/exec.go; deadcode no longer reports internal/exec symbols.
-WIRE internal/exec/store.go:369 Store.SaveRunRecord - same exec-package production rooting applies; the current tree already reaches run persistence through cli/internal/exec/reachability.go and cli/cmd/exec.go.
-WIRE internal/exec/store.go:417 Store.writeRunBundle - same exec-package production rooting applies; the current tree already reaches bundle persistence through cli/internal/exec/reachability.go and cli/cmd/exec.go.
-WIRE internal/exec/store.go:477 withPathLock - same exec-package production rooting applies; the current tree already reaches the store's filesystem helpers through cli/internal/exec/reachability.go and cli/cmd/exec.go.
-WIRE internal/exec/store.go:493 atomicWriteFile - same exec-package production rooting applies; the current tree already reaches the store's filesystem helpers through cli/internal/exec/reachability.go and cli/cmd/exec.go.

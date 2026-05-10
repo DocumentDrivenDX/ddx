@@ -1,1 +1,0 @@
-verification_command: cd cli/internal/server/frontend && bun run test:e2e -- e2e/operator-prompts.spec.ts

@@ -1,2 +1,0 @@
-ddx-58566cbf  P2  Test evidence path: write hello.md with go version
-ddx-2f453147  P2  Generalize bead store to named-collection abstraction (ADR-004 step 1)

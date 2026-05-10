@@ -1,3 +1,0 @@
-status: no_changes
-reason: The current tree already satisfies the bead contract. `cli/cmd/agent_cmd.go` and `cli/internal/server/workers.go` both wire `PreClaimIntakeHook`, `PreDispatchLintHook`, and `PostAttemptTriageHook` by default, and `cli/internal/agent/preclaim_intake_hook.go` already applies `AgentRunRuntime.MinPowerOverride` with strong-power unsatisfied handling. The targeted acceptance tests and pre-commit gate passed without requiring code changes.
-verification_command: cd cli && go test ./cmd/... ./internal/server/... ./internal/agent/... -run "TestDDxWork_WiresPreClaimIntakeHook|TestServerWorker_WiresPreClaimIntakeHook|TestDecompositionHook" -count=1 && cd .. && lefthook run pre-commit

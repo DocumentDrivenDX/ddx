@@ -1,1 +1,0 @@
-verification_command: cd cli && go test ./cmd/... -run 'TestBeadQueue' -count=1 && go test ./cmd/... ./internal/bead/... && lefthook run pre-commit

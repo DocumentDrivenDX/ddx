@@ -1,3 +1,0 @@
-verification_command: cd cli && go test ./internal/bead/axon/... && lefthook run pre-commit
-status: complete
-reason: The requested Axon websocket subscription transport, helper wiring, and TestAxonSubscription_ChangeEventsStream already exist in the worktree. Verified green with the command above; no code changes were required.

@@ -1,4 +1,0 @@
-{
-  "verdict": "BLOCK",
-  "rationale": "Missing `docs/helix/02-design/` design note capturing D1/D2 policy and UI scope.\nMissing project-local persona support in `cli/internal/persona`, including `.ddx/personas/*.md` discovery, source tagging, override precedence, and unit coverage.\nMissing GraphQL schema and resolver additions for `personaCreate`, `personaUpdate`, and `personaDelete`.\nMissing CLI commands `ddx persona new`, `ddx persona edit`, `ddx persona fork`, and `ddx persona delete`, plus shared operation plumbing with GraphQL.\nMissing UI implementation for personas explainer copy, source badges, project persona lifecycle actions, library fork action, and empty project-local hint.\nMissing Playwright and integration tests for the required UI, GraphQL, CLI, binding regression, and empty-state behavior."
-}

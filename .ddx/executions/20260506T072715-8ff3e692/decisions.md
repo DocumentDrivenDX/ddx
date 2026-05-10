@@ -1,5 +1,0 @@
-`internal/exec/store.go:66 Store.Init` - DELETE: no such symbol exists in the current `cli/internal/exec` package, and `deadcode` no longer reports an unreachable `Init`; store initialization is handled indirectly through `NewStore` plus bead-backed persistence.
-`internal/exec/store.go:369 Store.SaveRunRecord` - DELETE: no such symbol exists in the current `cli/internal/exec` package, and run persistence is implemented by `saveRunRecord` in `cli/internal/exec/bead_runtime.go`.
-`internal/exec/store.go:417 Store.writeRunBundle` - DELETE: no such symbol exists in the current `cli/internal/exec` package, and bundle writing is handled by `saveRunRecord` in `cli/internal/exec/bead_runtime.go`.
-`internal/exec/store.go:477 withPathLock` - DELETE: no such symbol exists in the current `cli/internal/exec` package, and the current implementation uses bead-store locking instead of a local path-lock helper.
-`internal/exec/store.go:493 atomicWriteFile` - DELETE: no such symbol exists in the current `cli/internal/exec` package, and the current implementation writes run artifacts via staged bundle files plus `bead.Store.WriteAll`.

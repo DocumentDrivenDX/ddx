@@ -1,2 +1,0 @@
-LoadState — DELETE: the current tree no longer defines a federation wrapper at `cli/internal/federation/persistence.go:41`; production code uses `LoadStateFrom` in `cli/internal/server/federation_hub.go:57`.
-SaveState — DELETE: the current tree no longer defines a federation wrapper at `cli/internal/federation/persistence.go:50`; production code uses `SaveStateTo` in `cli/internal/server/federation_hub.go:342`.

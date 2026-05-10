@@ -1,3 +1,0 @@
-verification_command: cd cli && go test ./internal/docgraph/... -run "TestBuildGraph_ExcludesConfiguredHiddenRoots|TestBuildGraph_ExcludesDDxPluginsTree|TestBuildGraph_ExcludesClaudeWorktreesAndStoresRelativePaths|TestHasHiddenPathSegment" -count=1 && go run . doc audit --json
-status: completed
-reason: The current source tree already satisfies the bead contract. The targeted docgraph tests pass, and running the local cli module's `ddx doc audit --json` returns `[]`, showing no duplicate_id issues from hidden roots in this checkout.

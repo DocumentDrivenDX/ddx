@@ -1,8 +1,0 @@
-verification_command: cd cli/internal/server/frontend && bunx playwright test e2e/runs.spec.ts --grep "node runs page uses shared chips, virtualizes after 1000 rows, and keeps live worker phases updating|runs work→try→run drill-down with breadcrumb back-navigation and artifact link"
-
-The current worktree already contains the requested Runs implementation:
-- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/runs/+page.svelte` imports the shared `FilterChip`, sets `VIRTUALIZE_THRESHOLD = 1000`, derives `virtualized` from `edges.length > VIRTUALIZE_THRESHOLD`, applies `data-virtualized`, subscribes to `subscribeWorkerProgress(runId, ...)`, and renders `RunRowDetail` for expanded rows.
-- `cli/internal/server/frontend/src/routes/nodes/[nodeId]/projects/[projectId]/artifacts/+page.svelte` imports the same shared `FilterChip`, confirming the chip primitive was extracted and reused.
-- `cli/internal/server/frontend/e2e/runs.spec.ts` contains the regression coverage for both the shared chips / virtualization / live phase updates and the drill-down navigation.
-
-The verification command passed locally after installing frontend dependencies in this worktree.

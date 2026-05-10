@@ -1,4 +1,0 @@
-{
-  "verdict": "BLOCK",
-  "rationale": "`cli/internal/server/graphql/resolver_feat008.go` is not changed; `EfficacyRows` is not shown reading `.ddx/agent-logs/sessions/sessions-YYYY-MM.jsonl`, and the old `efficacyFingerprint`, `buildEfficacySnapshot` event loop, `attemptsFromEvidence`, and `efficacyMemo` removals are absent.\nGraphQL schema/resolver argument changes for nullable `since`, `until`, and `projectId` are absent from the diff.\nNo fixture or benchmark changes seed 10k+ session rows across 2+ shards or record baseline/perf results in bead notes.\nNo tests are added or changed for non-bead sessions, freshness after session index writes, or old-path superset comparison.\nNo Playwright smoke test for `/efficacy` is added or changed.\nNo tracker or bead-note evidence records dependency on `ddx-2ceb02fa` or a DB-decision proposal."
-}

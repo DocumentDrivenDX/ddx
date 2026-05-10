@@ -1,7 +1,0 @@
-verification_command: test -f cli/internal/agent/triage_hook.go && test -f cli/internal/agent/triage_hook_test.go && git grep -n "PostAttemptTriageHook" cli/internal/agent/execute_bead_loop.go cli/internal/agent/triage_hook.go cli/internal/agent/triage_hook_test.go
-
-Verification already performed in this attempt:
-- `cd cli && go test ./internal/agent/...`
-- `lefthook run pre-commit`
-
-The current worktree already contains the requested triage hook, loop wiring, and tests. No code changes were necessary in this attempt.

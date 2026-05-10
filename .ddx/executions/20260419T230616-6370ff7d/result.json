@@ -1,4 +1,0 @@
-{
-  "verdict": "BLOCK",
-  "rationale": "**`cli/cmd/doctor_plugins_test.go`**: Needs a combined test (e.g., `TestDoctorPluginsFlagReportsBothManifestSchemaAndStructuralIssues`) that sets up a plugin with both a schema defect (missing `description`) and structural defects (missing SKILL.md, broken symlink), then asserts all three issues appear in `doctor --plugins` output. The two existing split tests should be removed or consolidated."
-}

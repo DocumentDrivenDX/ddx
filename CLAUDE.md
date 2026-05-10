@@ -226,7 +226,9 @@ See docs/helix/06-iterate/reliability-principles.md for the 7 reliability princi
 
 ## Execution Evidence Convention
 
-When a bead's acceptance criteria asks for an investigation report, findings document, or any other freestanding non-source artifact, the agent must write that artifact under the per-attempt evidence directory `.ddx/executions/<run-id>/` (the `{{.AttemptDir}}` slot in execute-bead prompts). **Never write reports to `/tmp` or other paths outside the repository** — out-of-repo paths are invisible to the post-merge reviewer, do not survive between machines, and cause the reviewer to BLOCK on missing evidence. If the bead names a specific in-repo path for the report, use that path; otherwise default to `.ddx/executions/<run-id>/<short-name>.md` and stage/commit the file with the rest of the change.
+`.ddx/executions/` is **per-machine working state** — it is listed in `.gitignore` and is NOT committed to git. Files written there by agents (prompt.md, result.json, manifest.json, etc.) exist only on the local machine. The durable audit trail is the events stream in `.ddx/attachments/`, not the execution dirs.
+
+When a bead's acceptance criteria asks for an investigation report, findings document, or any other freestanding non-source artifact, the agent must write that artifact under the per-attempt evidence directory `.ddx/executions/<run-id>/` (the `{{.AttemptDir}}` slot in execute-bead prompts). **Never write reports to `/tmp` or any path outside the repository working directory** — such paths are invisible to the post-execution reviewer and do not survive between machines. If the bead names a specific tracked in-repo path for the report, use that path; otherwise default to `.ddx/executions/<run-id>/<short-name>.md` (which will be on-disk but untracked).
 
 ## When filing beads
 

@@ -1,3 +1,0 @@
-status: complete
-reason: The requested websocket subscription transport and TestAxonSubscription_ChangeEventsStream are already present in cli/internal/bead/axon/subscription.go and cli/internal/bead/axon/subscription_test.go. I verified the bead contract by running the required package tests and pre-commit gate successfully.
-verification_command: cd cli && go test ./internal/bead/axon/... && lefthook run pre-commit

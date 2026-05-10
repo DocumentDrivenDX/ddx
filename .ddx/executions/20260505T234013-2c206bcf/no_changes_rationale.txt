@@ -1,6 +1,0 @@
-verification_command: git grep -n "PreDispatchLintHook\\|PostAttemptTriageHook" cli/cmd/try.go && git grep -n "TestTry_HooksWired" cli/cmd/try_test.go
-
-Rationale:
-- `cli/cmd/try.go` already wires both `agent.NewPreDispatchLintHook(...)` and `agent.NewPostAttemptTriageHook(...)` into `ExecuteBeadLoopRuntime`.
-- `cli/cmd/try_test.go` already contains `TestTry_HooksWired`, which verifies both hooks are present and emit the expected quality events.
-- I manually ran `cd cli && go test ./cmd/... ./internal/agent/...` and `lefthook run pre-commit`; both passed in this worktree.

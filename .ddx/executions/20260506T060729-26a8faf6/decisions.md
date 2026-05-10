@@ -1,1 +1,0 @@
-WIRE NewMetaPromptInjector is represented by the production path-aware constructor `NewMetaPromptInjectorWithPaths`, which is invoked from `cli/cmd/init.go:715`, `cli/cmd/doctor.go:930`, and retained in the CLI reachability hook at `cli/cmd/command_factory.go:178`; `deadcode` no longer reports `internal/metaprompt`.

@@ -1,3 +1,0 @@
-status: verified
-reason: The progress corpus and renderer assertions required by ddx-38f694b2 are already present in the current worktree. No implementation files needed changes.
-verification_command: cd cli && go test ./internal/agent -run "Test.*Progress|TestFormatSessionLogLines|Test.*Corpus" -count=1 && lefthook run pre-commit

@@ -1,2 +1,0 @@
-DELETE internal/update/cache.go:87 Cache.Invalidate - removed by commit 47fa605b (refactor: remove unused update cache invalidation [ddx-7f4cdb7a]); current cli deadcode run reports no internal/update findings.
-DELETE internal/update/cache.go:93 InvalidateCache - removed by commit 47fa605b (refactor: remove unused update cache invalidation [ddx-7f4cdb7a]); current cli deadcode run reports no internal/update findings.

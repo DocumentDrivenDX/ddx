@@ -1,2 +1,0 @@
-
-▶ ddx-c860f82b: Run migration on this repo's beads.jsonl and verify queue operates normally

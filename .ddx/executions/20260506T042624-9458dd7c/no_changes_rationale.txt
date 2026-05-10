@@ -1,3 +1,0 @@
-status: already_satisfied
-reason: The stale-binary warning path for `ddx version` is already implemented in `cli/cmd/command_factory.go` via `warnIfInstalledBinaryBehindSource`, and the bead-specific tests in `cli/cmd/version_staleness_test.go` already pass without any local edits. The worktree is clean, so no code change was required in this attempt.
-verification_command: cd /tmp/ddx-exec-wt/.execute-bead-wt-ddx-633b16eb-20260506T042624-9458dd7c/cli && go test ./cmd/... && lefthook run pre-commit

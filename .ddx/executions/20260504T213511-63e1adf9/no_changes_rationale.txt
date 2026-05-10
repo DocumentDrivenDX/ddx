@@ -1,2 +1,0 @@
-status: needs_investigation
-reason: The parent bead exceeds the execution size gate and is already decomposed into open child beads ddx-1a9cc01f, ddx-76cf71f4, ddx-da9e9491, ddx-ce1d6309, and ddx-89a9c305. Those children cover the canonical spec package, cobra parsing, REST decode/validation, GraphQL dispatch, and workers/runtime migration slices independently, so this parent should not be implemented as a single pass in this worktree.

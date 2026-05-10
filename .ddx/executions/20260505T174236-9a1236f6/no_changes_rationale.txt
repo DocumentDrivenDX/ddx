@@ -1,2 +1,0 @@
-verification_command: cd cli && go test ./internal/bead/... && lefthook run pre-commit && go run . bead migrate --help >/dev/null
-reason: The repository already contains the axon migration command, the --help documentation, the representative migrate_axon_active.jsonl and migrate_axon_archive.jsonl fixtures, and passing TestMigrate_AxonBackend_RoundTrip / TestMigrate_AxonBackend_Idempotent coverage. No code changes were required in this execution worktree.

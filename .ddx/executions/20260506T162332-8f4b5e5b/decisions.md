@@ -1,5 +1,0 @@
-NewResolver | DELETE | no constructor exists in the current package; `cli/internal/server/server.go:4869` instantiates `&ddxgraphql.Resolver{...}` directly.
-personaConnectionFrom | DELETE | the current personas resolver returns `[]*Persona` in `cli/internal/server/graphql/resolver_meta.go:10-21`; there is no connection-builder helper in the production path.
-resetProviderModelsCacheForTest | DELETE | tests reset `providerModelsCache` directly in `cli/internal/server/graphql/resolver_provider_models_test.go:35-43` and related cases, so the helper is obsolete.
-RecordHarnessRateLimit | DELETE | the package now uses `LookupHarnessRateLimit` plus direct test cache manipulation in `cli/internal/server/graphql/providers_unified_test.go:394-426`; no production writer helper remains.
-resetHarnessRateLimitCache | DELETE | the test suite clears `harnessRateLimitCache.byName` directly in `cli/internal/server/graphql/providers_unified_test.go:394-400`, so a dedicated reset helper is no longer needed.

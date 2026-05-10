@@ -1,5 +1,0 @@
-Total:   1172
-Open:    8
-Closed:  1163
-Ready:   2
-Blocked: 6

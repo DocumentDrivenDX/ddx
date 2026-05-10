@@ -1,2 +1,0 @@
-verification_command: lefthook run pre-commit
-reason: The requested route-economics plumbing is already present in the current tree. Verified manually with `cd cli && go test ./internal/agent/... ./cmd/...` and `lefthook run pre-commit`, so no source edits were required for this bead.

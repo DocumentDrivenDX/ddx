@@ -1,2 +1,0 @@
-LoadStateFrom: WIRE - `cli/main.go:15` enters `cmd.Execute`, `cli/cmd/server.go:106` enables hub mode from the production server command, and `cli/internal/server/federation_hub.go:47-57` loads the federation registry from disk on startup.
-SaveStateTo: WIRE - the same hub-mode production path persists registry updates through `cli/internal/server/federation_hub.go:342`, so the atomic save helper is part of the runtime call graph reachable from `main()`.

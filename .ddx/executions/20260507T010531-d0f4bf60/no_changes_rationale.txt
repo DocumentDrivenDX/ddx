@@ -1,2 +1,0 @@
-verification_command: ddx doc audit
-reason: The requested FEAT-006, FEAT-008, FEAT-022, TD-033, and AGENTS.md wording is already present in the current worktree; see docs/helix/01-frame/features/FEAT-006-agent-service.md:51-60, docs/helix/01-frame/features/FEAT-008-web-ui.md:243-260, docs/helix/01-frame/features/FEAT-022-prompt-evidence-assembly.md:257-267, docs/helix/02-design/technical-designs/TD-033-multi-turn-structured-evidence-assembly.md:14-18, and AGENTS.md:114-116. `ddx doc audit` is clean in this checkout.

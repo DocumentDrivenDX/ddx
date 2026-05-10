@@ -1,2 +1,0 @@
-verification_command: cd cli && go test ./internal/bead/... -run 'TestAxonBackend_CreateAndGet|TestAxonBackend_UpdateMutatesAndPersists|TestAxonBackend_ClaimAndUnclaim|TestAxonBackend_DepAddRemoveAndTree|TestAxonBackend_AppendEventSplitsIntoEventsCollection' -count=1 && lefthook run pre-commit
-summary: The requested Axon GraphQL-backed CRUD/deps/events behavior is already present in the current worktree, and the targeted Axon tests plus pre-commit gate pass without source changes.

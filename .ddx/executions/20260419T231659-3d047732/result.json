@@ -1,4 +1,0 @@
-{
-  "verdict": "APPROVE",
-  "rationale": "All three acceptance criteria are fully satisfied. The migration replaced four `(r *Runner)` method shims with three new free functions (`RunCompareWithAgent`, `RunQuorumWithAgent`, `RunBenchmarkWithAgent`) taking `agentlib.DdxAgent`, plus a new `RunViaServiceWith` helper. Tests pass cleanly."
-}
