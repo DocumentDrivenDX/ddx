@@ -1763,34 +1763,33 @@ func createArtifactBundle(rootDir, wtPath, attemptID string) (*executeBeadArtifa
 	}, nil
 }
 
-// Load-bearing guardrails. Every static execute-bead prompt string below MUST
-// preserve every item on this list (FEAT-022 static-prompt minimum-prompt
-// rule). Each bullet is the failure mode the guardrail prevents.
-// TestExecuteBeadInstructionsLoadBearingGuardrails enforces this list against
-// the rendered prompt for each (harness, variant). Add a new guardrail here
-// AND to the test when you introduce one.
+// Load-bearing guardrails (FEAT-022 static-prompt minimum-prompt rule).
+// Every static execute-bead prompt string below MUST preserve each item.
+// TestExecuteBeadInstructionsLoadBearingGuardrails and
+// TestPromptGuardrails_AllPresent enforce this list; add a guardrail here
+// AND to both tests when you introduce one.
 //
-//   - AC checkbox satisfied by a specific code/test/file (anti-handwave)
-//   - Read named files / referenced specs first, before editing
-//   - Missing-governing fallback note (non-minimal renders only — see
-//     executeBeadMissingGoverningText and contextBudget="minimal" branch in
-//     buildPrompt)
-//   - Commit subject ends with [<bead-id>]
-//   - Commit exactly once, when green
-//   - git add <specific-paths>, never git add -A
-//   - Do not commit red code
-//   - Do not modify files outside bead scope
-//   - Never run `ddx init`
-//   - Keep .ddx/executions/ intact
-//   - Do not rewrite CLAUDE.md / AGENTS.md unless asked
-//   - Bead description overrides CLAUDE.md / YAGNI defaults
-//   - Reports go under {{.AttemptDir}}/, never /tmp, committed alongside code
-//   - Write no_changes_rationale.txt before exiting empty
-//   - Step 0 size-check + decomposition (ddx bead create / dep add / update)
-//   - Address every BLOCKING <review-findings> item; never declare
-//     no_changes with blocking findings open
-//   - Stop after the commit (Agent post-commit runaway guard)
-//   - Agent variant only: use tool calls, not `bash: cat`/`rg`/`ls`
+// 19 guardrails (FEAT-022 cross-reference):
+//  1. AC checkbox: every AC satisfied by a specific code/test/file (anti-handwave)
+//  2. Read named files / referenced specs first, before editing
+//  3. Missing-governing fallback note (non-minimal renders only — see
+//     executeBeadMissingGoverningText and contextBudget="minimal" branch)
+//  4. Commit subject ends with [<bead-id>]
+//  5. Commit exactly once, when green
+//  6. git add <specific-paths> (prefer explicit staging over globs)
+//  7. Never git add -A (worktree may have unrelated WIP)
+//  8. Do not commit red code
+//  9. Do not modify files outside bead scope
+// 10. Never run `ddx init`
+// 11. Keep .ddx/executions/ intact
+// 12. Do not rewrite CLAUDE.md / AGENTS.md unless asked
+// 13. Bead description overrides CLAUDE.md / YAGNI defaults
+// 14. Reports go under {{.AttemptDir}}/, never /tmp, committed alongside code
+// 15. Write no_changes_rationale.txt before exiting empty
+// 16. Step 0 size-check + decomposition (ddx bead create / dep add / update)
+// 17. Address every BLOCKING <review-findings> item; no no_changes with blocking findings open
+// 18. Stop after the commit (Agent post-commit runaway guard)
+// 19. Agent variant only: use tool calls, not `bash: cat`/`rg`/`ls`
 
 // instrStep0SizeCheck is the shared Step 0 size-check + decomposition recipe.
 // Both variants emit it verbatim; per-variant preamble runs before it.
@@ -1798,23 +1797,23 @@ const instrStep0SizeCheck = `
 
 ## Step 0: size check
 
-The bead is too big when any of these holds:
+Too big if any holds:
 
 - More than ~6 ACs spanning unrelated subsystems.
-- AC mixes design, implementation, integration tests, and docs as separate top-level deliverables.
+- AC mixes design, implementation, integration tests, and docs as separate deliverables.
 - Description names multiple feature-sized sub-pieces.
-- More than ~500 lines across more than ~5 files in unrelated packages.
-- If the bead description exceeds 8000 bytes, treat Step 0 as a split-first pass and favor child-bead scoping before implementation.
-- Auto-decomposition is capped at depth 2 (implementation-level; queue-level orchestrator uses agent.triage.max_decomposition_depth, default 3): root beads may split once, decomposed children may split once more, and third-level splits must be rejected with an explanation.
+- More than ~500 lines across ~5+ files in unrelated packages.
+- If the bead description exceeds 8000 bytes, treat Step 0 as a split-first pass.
+- Auto-decomposition is capped at depth 2: root beads may split once, decomposed children once more; third-level splits must be rejected with an explanation.
 
 If too big, decompose — do not attempt the work:
 
-1. ` + "`ddx bead create`" + ` for each child slice (focused title, description, AC; copy parent's labels and spec-id).
+1. ` + "`ddx bead create`" + ` for each child slice (copy parent's labels and spec-id).
 2. ` + "`ddx bead dep add <child-id> <parent-id>`" + ` to record edges.
-3. ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + ` so the decomposition is visible.
-4. Write ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` listing each child ID and slice, then stop.
+3. ` + "`ddx bead update <parent-id> --notes 'decomposed into <child-ids>'`" + `.
+4. Write ` + "`{{.AttemptDir}}/no_changes_rationale.txt`" + ` listing child IDs, then stop.
 
-A clean decomposition is a successful attempt. Do not mix partial implementation with decomposition.`
+A clean decomposition is a success. Do not mix implementation with decomposition.`
 
 // instrNoChangesContract is the shared NoChangesContract (TD-031 §8.1) rule.
 const instrNoChangesContract = `
@@ -1830,7 +1829,7 @@ const instrNoChangesContract = `
 
 No pseudo-statuses. Bare rationales and ` + "`status: needs_investigation`" + ` reject.
 
-To request orchestrator-level decomposition (e.g. because this worktree's depth cap prevents splitting), add ` + "`orchestrator_action: decompose`" + ` alongside ` + "`status: open`" + `. The orchestrator will invoke the queue-level splitter on its next dispatch cycle if the queue-level depth cap allows it.`
+To request orchestrator decomposition, add ` + "`orchestrator_action: decompose`" + ` alongside ` + "`status: open`" + `.`
 
 // instrInvestigationReports is the shared report-output rule.
 const instrInvestigationReports = `
