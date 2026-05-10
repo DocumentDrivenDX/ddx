@@ -1,0 +1,51 @@
+{
+  "attempt_id": "20260510T165103-46344a65",
+  "bead_id": "ddx-7fa94949",
+  "base_rev": "7382fb2817f92c3bc803f2cd05bf694735ab0a7e",
+  "created_at": "2026-05-10T16:51:10.372735962Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7fa94949",
+    "title": "fix(try): declined_needs_decomposition uses execution-eligible=false not time-park",
+    "description": "PROBLEM\n  cli/internal/agent/try/attempt.go:256-269 sets a 24h cooldown on\n  declined_needs_decomposition outcomes. This violates TD-031 §5\n  invariant: \"execute-loop-retry-after may be set only when\n  retrying the same bead after time passes could plausibly succeed\n  without human/spec/dependency changes.\"\n\n  Decomposition requires operator action: filing sub-beads, wiring\n  dependency edges, possibly amending the parent's AC. Time elapsed\n  alone changes nothing. After 24h, the drain re-attempts, fails\n  again with the same \"needs decomposition\", and re-parks for\n  another 24h. Infinite cycle until operator acts.\n\n  Per TD-031 §5 row \"parent/epic/decomposed container\": the correct\n  signal is execution-eligible=false (which excludes the bead from\n  ordinary drain claim) plus optional decomposed label, NOT a\n  time-based cooldown.\n\nROOT CAUSE\n  - cli/internal/agent/try/attempt.go:256-269: returns OutcomePark\n    with maxAttemptCooldown (24h) for declined_needs_decomposition.\n  - The bead exits ready queue for 24h based on wall-clock, then\n    re-enters and fails again with the same outcome.\n\nPROPOSED FIX\n  - cli/internal/agent/try/attempt.go:256-269: change the\n    declined_needs_decomposition branch:\n      - Set Extra[\"execution-eligible\"] = false (matches TD-031 §5\n        parent/epic container row).\n      - Optionally add label \"needs-decomposition\" or\n        \"triage:decomposition-required\" for operator visibility.\n      - Status transition: in_progress → open (claim released)\n        with execution-eligible=false flag.\n      - DO NOT set execute-loop-retry-after.\n  - The bead drops out of ordinary drain claim (execution-eligible\n    filter excludes it) but is visible in `ddx work focus` for\n    operator triage.\n  - When the operator decomposes the bead (files children, wires\n    deps), they unset execution-eligible=false; bead re-enters the\n    queue.\n\n  Tests:\n     - TestDeclinedNeedsDecomposition_NoCooldown: assert no\n       execute-loop-retry-after is set.\n     - TestDeclinedNeedsDecomposition_NotEligible: assert\n       execution-eligible=false is set.\n     - TestDeclinedNeedsDecomposition_NotInReady: assert the bead\n       is excluded from Store.Ready() output.\n\nNON-SCOPE\n  - Implementing the operator decomposition workflow (separate\n    concern; assume operators already do this).\n  - Auto-decomposition (separate beads, e.g., ddx-008d288f).\n\nINTERSECTIONS\n  - Sister bead \"docs(TD-031): codify push_failed/push_conflict\n    outcome rows\" — the same spec invariant motivates this fix.\n  - Sister bead R1 (push_failed no cooldown) — same pattern.",
+    "acceptance": "1. cli/internal/agent/try/attempt.go declined_needs_decomposition branch (around line 256-269) sets execution-eligible=false instead of cooldown; no execute-loop-retry-after is written.\n2. TestDeclinedNeedsDecomposition_NoCooldown asserts no execute-loop-retry-after.\n3. TestDeclinedNeedsDecomposition_NotEligible asserts execution-eligible=false is set.\n4. TestDeclinedNeedsDecomposition_NotInReady asserts the bead is excluded from Store.Ready() output (because of the eligibility flag, not a wall-clock cooldown).\n5. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... green.\n6. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "area:agent",
+      "kind:fix",
+      "spec:TD-031",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T16:49:55Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T16:51:03.007846214Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T16:49:55.308632839Z",
+      "queue-rank": "18"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260510T165103-46344a65",
+    "prompt": ".ddx/executions/20260510T165103-46344a65/prompt.md",
+    "manifest": ".ddx/executions/20260510T165103-46344a65/manifest.json",
+    "result": ".ddx/executions/20260510T165103-46344a65/result.json",
+    "checks": ".ddx/executions/20260510T165103-46344a65/checks.json",
+    "usage": ".ddx/executions/20260510T165103-46344a65/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-7fa94949-20260510T165103-46344a65"
+  },
+  "prompt_sha": "cd61970ddb37abb5b0917df489ccd0db45466828077a3d0cf561be892989b0ad"
+}
