@@ -108,7 +108,7 @@ func TestE2ESmokeJourney(t *testing.T) {
 
 	// TC-001: Init
 	t.Run("TC-001-Init", func(t *testing.T) {
-		testLibraryURL := "file://" + pkgTestLibraryPath
+		testLibraryURL := "file://" + GetTestLibraryPath()
 		out, code := runInDir(t, binary, workDir,
 			"init",
 			"--repository", testLibraryURL,
