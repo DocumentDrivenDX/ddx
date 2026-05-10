@@ -18,7 +18,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -34,7 +34,7 @@ type executeCapturingStub struct {
 	executionSeen bool
 	executeFn     func(agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
 	listModels    []agentlib.ModelInfo
-	listProfiles  []agentlib.ProfileInfo
+	listPolicies  []agentlib.PolicyInfo
 }
 
 func (s *executeCapturingStub) Execute(_ context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
@@ -73,14 +73,8 @@ func (s *executeCapturingStub) ListProviders(_ context.Context) ([]agentlib.Prov
 func (s *executeCapturingStub) ListModels(_ context.Context, _ agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
 	return append([]agentlib.ModelInfo(nil), s.listModels...), nil
 }
-func (s *executeCapturingStub) ListProfiles(_ context.Context) ([]agentlib.ProfileInfo, error) {
-	return append([]agentlib.ProfileInfo(nil), s.listProfiles...), nil
-}
-func (s *executeCapturingStub) ResolveProfile(_ context.Context, _ string) (*agentlib.ResolvedProfile, error) {
-	return nil, nil
-}
-func (s *executeCapturingStub) ProfileAliases(_ context.Context) (map[string]string, error) {
-	return nil, nil
+func (s *executeCapturingStub) ListPolicies(_ context.Context) ([]agentlib.PolicyInfo, error) {
+	return append([]agentlib.PolicyInfo(nil), s.listPolicies...), nil
 }
 func (s *executeCapturingStub) HealthCheck(_ context.Context, _ agentlib.HealthTarget) error {
 	return nil
@@ -283,7 +277,7 @@ func TestZeroConfigWork_DispatchesWithEmptyProfile(t *testing.T) {
 	stub.mu.Unlock()
 
 	require.True(t, executionSeen, "ddx work must reach the implementation dispatch")
-	assert.Empty(t, executionReq.Profile)
+	assert.Empty(t, executionReq.Policy)
 	assert.Zero(t, executionReq.MinPower)
 	assert.Zero(t, executionReq.MaxPower)
 }
@@ -305,7 +299,7 @@ func TestZeroConfigTry_DispatchesWithEmptyProfile(t *testing.T) {
 	stub.mu.Unlock()
 
 	require.True(t, executionSeen, "ddx try must reach the implementation dispatch")
-	assert.Empty(t, executionReq.Profile)
+	assert.Empty(t, executionReq.Policy)
 	assert.Zero(t, executionReq.MinPower)
 	assert.Zero(t, executionReq.MaxPower)
 }
@@ -317,7 +311,7 @@ func TestDDxWork_WiresPreClaimIntakeHook(t *testing.T) {
 	modes := make([]string, 0, 4)
 	var intakeReq agentlib.ServiceExecuteRequest
 	stub := installExecuteCapturingStub(t)
-	stub.listProfiles = []agentlib.ProfileInfo{
+	stub.listPolicies = []agentlib.PolicyInfo{
 		{Name: "cheap", MinPower: 5, MaxPower: 5},
 		{Name: "smart", MinPower: 9, MaxPower: 10},
 	}
@@ -376,11 +370,10 @@ func TestDDxWork_WiresPreClaimIntakeHook(t *testing.T) {
 	mu.Unlock()
 	require.GreaterOrEqual(t, len(got), 1, "work must invoke the intake hook")
 	assert.Equal(t, "intake", got[0], "plain ddx work must run pre-claim intake before claim")
-	assert.Equal(t, "smart", gotIntakeReq.Profile)
+	assert.Equal(t, "smart", gotIntakeReq.Policy)
 	assert.Empty(t, gotIntakeReq.Harness)
 	assert.Empty(t, gotIntakeReq.Provider)
 	assert.Empty(t, gotIntakeReq.Model)
-	assert.Empty(t, gotIntakeReq.ModelRef)
 	assert.Zero(t, gotIntakeReq.MinPower)
 	assert.Zero(t, gotIntakeReq.MaxPower, "intake dispatch must not inherit implementation power bounds")
 	assert.GreaterOrEqual(t, len(got), 2, "work must continue past intake to later execution stages")

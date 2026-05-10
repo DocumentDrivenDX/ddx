@@ -26,7 +26,7 @@ import (
 	gitpkg "github.com/DocumentDrivenDX/ddx/internal/git"
 	serverpkg "github.com/DocumentDrivenDX/ddx/internal/server"
 	"github.com/DocumentDrivenDX/ddx/internal/serverreg"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/spf13/cobra"
 )
 
@@ -1644,7 +1644,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		}
 		for _, h := range infos {
 			if h.Name == harnessName {
-				return escalation.CountsTowardCostCap(h.IsLocal, h.IsSubscription, h.CostClass)
+				return escalation.CountsTowardCostCap(h.CostClass == "local", h.Billing == agentlib.BillingModelSubscription, h.CostClass)
 			}
 		}
 		return true

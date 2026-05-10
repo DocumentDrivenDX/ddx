@@ -7,7 +7,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	tierescalation "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
