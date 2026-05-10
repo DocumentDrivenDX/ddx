@@ -229,17 +229,16 @@ func TestExecuteBeadInstructionsMissingGoverningGate(t *testing.T) {
 	}
 }
 
-// TestExecuteBeadInstructionsSizeFloor is AC2: the rendered prompt for the
-// representative bead is at least 30% shorter (word count) than the pre-B2
-// baseline for both variants. Hard-coded baselines come from the size
-// report at HEAD before this bead landed.
+// TestExecuteBeadInstructionsSizeFloor is AC1 for ddx-fcdbc731: both
+// prompt variants must be at least 30% shorter (word count) than the
+// pre-tightening baseline. Hard-coded baselines from TestPromptSizeReport
+// at HEAD before the shared-block extraction dep landed.
 func TestExecuteBeadInstructionsSizeFloor(t *testing.T) {
-	// Pre-B2 baselines from TestPromptSizeReport on the parent commit
-	// (63bb619 — tracked by metadata.base-rev on this bead).
+	// Pre-tightening baselines from TestPromptSizeReport before ddx-fcdbc731.
 	const (
 		baselineClaude = 1048
 		baselineAgent  = 968
-		floor          = 0.78 // updated for AC8 prompt additions; words ≤ 0.78 * baseline
+		floor          = 0.70 // ≥30% reduction; words ≤ 0.70 * baseline
 	)
 	cases := []struct {
 		variant, harness string
@@ -260,6 +259,122 @@ func TestExecuteBeadInstructionsSizeFloor(t *testing.T) {
 			}
 			t.Logf("%s variant rendered %d words (baseline %d, limit %d)",
 				c.variant, words, c.baseline, limit)
+		})
+	}
+}
+
+// TestPromptGuardrails_AllPresent is AC2 for ddx-fcdbc731: enumerates the
+// 19 load-bearing guardrails from the FEAT-022 comment block above the
+// instr* constants and asserts each is present in the rendered full prompt
+// for both variants. Adding or removing a guardrail must update both the
+// comment block and this test.
+func TestPromptGuardrails_AllPresent(t *testing.T) {
+	// 18 instruction-level guardrails. Probes are XML-safe (no angle brackets)
+	// so they can be checked against the full XML-wrapped rendered prompt.
+	instrGuardrails := []struct{ name, probe string }{
+		{"ac_checkbox_anti_handwave", "AC must be"},
+		{"read_first", "Read first"},
+		{"commit_subject_bead_id", "bead-id"},
+		{"commit_exactly_once", "Commit exactly once"},
+		{"git_add_specific_paths", "specific-paths"},
+		{"never_git_add_dash_a", "git add -A"},
+		{"no_red_code", "Do not commit red code"},
+		{"no_modify_outside_scope", "outside the bead"},
+		{"never_ddx_init", "ddx init"},
+		{"executions_intact", ".ddx/executions/"},
+		{"no_rewrite_claude_md", "CLAUDE.md, AGENTS.md"},
+		{"bead_overrides_defaults", "override CLAUDE.md"},
+		{"reports_not_tmp", "/tmp"},
+		{"no_changes_rationale", "no_changes_rationale.txt"},
+		{"step0_size_check", "Step 0: size check"},
+		{"decompose_recipe", "ddx bead create"},
+		{"review_is_a_gate", "review is a gate"},
+		{"no_no_changes_with_blocking", "blocking findings open"},
+	}
+	// Guardrail 3 (missing-governing fallback) lives in the governing section,
+	// not the instructions block; it is checked via the full rendered prompt.
+	const missingGoverningProbe = "No governing references"
+
+	cases := []struct{ variant, harness string }{
+		{"claude", "claude"},
+		{"agent", "agent"},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.variant, func(t *testing.T) {
+			full := renderFullPromptForGuardrails(t, c.harness, "")
+			for _, g := range instrGuardrails {
+				if !strings.Contains(full, g.probe) {
+					t.Errorf("guardrail %q missing from %s variant (probe: %q)",
+						g.name, c.variant, g.probe)
+				}
+			}
+			// Guardrail 3: missing-governing fallback
+			if !strings.Contains(full, missingGoverningProbe) {
+				t.Errorf("guardrail \"missing_governing_fallback\" missing from %s full-budget prompt",
+					c.variant)
+			}
+		})
+	}
+}
+
+// TestPromptSelector_CorrectBlock is AC4 for ddx-fcdbc731: the
+// executeBeadInstructionsText selector must route each harness to its
+// designated variant. agent/fiz/embedded route to the Agent variant;
+// claude/codex/opencode/unknown/empty route to the Claude variant.
+func TestPromptSelector_CorrectBlock(t *testing.T) {
+	cases := []struct {
+		harness   string
+		wantAgent bool
+	}{
+		{"agent", true},
+		{"fiz", true},
+		{"embedded", true},
+		{"AGENT", true},
+		{"claude", false},
+		{"codex", false},
+		{"opencode", false},
+		{"unknown", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.harness+"_to_agent="+func() string {
+			if c.wantAgent {
+				return "true"
+			}
+			return "false"
+		}(), func(t *testing.T) {
+			got := executeBeadInstructionsText(c.harness)
+			if c.wantAgent && got != executeBeadInstructionsAgentText {
+				t.Errorf("harness %q: want Agent variant, got Claude", c.harness)
+			}
+			if !c.wantAgent && got != executeBeadInstructionsClaudeText {
+				t.Errorf("harness %q: want Claude variant, got Agent", c.harness)
+			}
+		})
+	}
+}
+
+// TestPromptSelector_MissingGoverning is AC5 for ddx-fcdbc731: when no
+// governing refs are provided (refs == nil), buildPrompt must include
+// executeBeadMissingGoverningText in the full-budget render and must NOT
+// include it in the minimal-budget render.
+func TestPromptSelector_MissingGoverning(t *testing.T) {
+	for _, harness := range []string{"claude", "agent"} {
+		harness := harness
+		t.Run(harness, func(t *testing.T) {
+			full := renderFullPromptForGuardrails(t, harness, "")
+			if !strings.Contains(full, executeBeadMissingGoverningText) {
+				t.Errorf("%s full-budget with nil refs must include executeBeadMissingGoverningText", harness)
+			}
+			minimal := renderFullPromptForGuardrails(t, harness, "minimal")
+			if strings.Contains(minimal, executeBeadMissingGoverningText) {
+				t.Errorf("%s minimal-budget must NOT include executeBeadMissingGoverningText", harness)
+			}
+			if !strings.Contains(minimal, "No governing references") {
+				t.Errorf("%s minimal-budget must include short fallback note", harness)
+			}
 		})
 	}
 }
