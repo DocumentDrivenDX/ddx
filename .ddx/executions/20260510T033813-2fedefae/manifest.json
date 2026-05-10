@@ -1,0 +1,109 @@
+{
+  "attempt_id": "20260510T033813-2fedefae",
+  "bead_id": "ddx-f1e12904",
+  "base_rev": "6b5903f26fcef474c69f1ac9d7217decd1f6d495",
+  "created_at": "2026-05-10T03:38:20.959593129Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f1e12904",
+    "title": "review: enforce budget/refusal contracts for review turns",
+    "description": "PROBLEM\nThis bead was scoped around preferred_reviewer, downgrade routing, and Story 10 ladder fallback, but ADR-024 removed that configuration-heavy behavior from the default path. The still-valid gap is narrower: review turns, including adversarial pre-close review and server review sessions, need bounded budget/refusal behavior and structured errors that do not silently skip review or accidentally close work.\n\nROOT CAUSE WITH FILE:LINE\n- cli/internal/server/review_session.go:22 stores review session state but does not define a per-turn refusal/error contract for budget or prompt overflow.\n- cli/internal/agent/execute_bead_review.go:474 builds reviewer dispatch runtime but does not carry review_group_id/reviewer_index budget/refusal context.\n- cli/internal/agent/execute_bead_review.go:780 classifies parse/provider-empty errors in the reviewer path, but server review-session refusal codes remain separate and incomplete.\n- The previous bead text required preferred_reviewer and downgrade behavior that is no longer part of the default adversarial review policy.\n\nPROPOSED FIX\n- Remove preferred_reviewer/downgrade routing from this bead's implementation scope.\n- Enforce max_billable_usd for server review sessions and adversarial review turns with structured refusal body when a new turn would exceed the cap.\n- Return stable refusal codes PROMPT_BUDGET_EXCEEDED, COST_CAP_EXCEEDED, and REVIEWER_UNAVAILABLE where those conditions are truly terminal for a review turn.\n- For the pre-close gate, budget/refusal outcomes must feed the review_error retry/exhaustion path rather than being treated as successful review or silently skipped.\n- Emit review-pairing-degraded only as telemetry when pairing is weaker than intended; do not use it to downgrade or mutate route pins.\n\nNON-SCOPE\n- Implementing the pre-close two-reviewer coordinator; tracked by ddx-c851c3dd.\n- GraphQL display of refusal bodies.\n- Preferred reviewer policy or configurable reviewer downgrade ladder.",
+    "acceptance": "1. max_billable_usd is enforced before each server review turn and before each adversarial reviewer invocation; exceeding it returns COST_CAP_EXCEEDED with structured JSON body and does not close a bead.\n2. PROMPT_BUDGET_EXCEEDED, COST_CAP_EXCEEDED, and REVIEWER_UNAVAILABLE return stable structured refusal bodies with code, message, retryable, and operator_action fields.\n3. Pre-close review budget/refusal outcomes are classified as review_error and flow through the review_max_retries / review-manual-required path from ADR-024.\n4. review-pairing-degraded remains telemetry only; no preferred_reviewer or downgrade ladder behavior is implemented by this bead.\n5. TestReview_CostCap_ReturnsCostCapExceeded verifies session cap enforcement.\n6. TestPreCloseReview_CostCapFeedsReviewError verifies adversarial review cap exhaustion prevents close and records review_error.\n7. TestReview_RefusalCodes_HaveStructuredBody verifies all three refusal codes return JSON bodies.\n8. TestReviewPairingDegraded_IsTelemetryOnly verifies degraded pairing does not mutate harness/model/profile pins or downgrade route.\n9. cd cli \u0026\u0026 go test ./internal/server/... ./internal/agent/... green.\n10. lefthook run pre-commit passes.",
+    "parent": "ddx-42b917fe",
+    "labels": [
+      "phase:2",
+      "story:18",
+      "area:server",
+      "area:agent",
+      "kind:feature",
+      "reliability",
+      "adr:024",
+      "reconciled:no-changes-state"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T03:37:06Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3533406",
+      "events": [
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"actual_power\":8}",
+          "created_at": "2026-05-05T19:34:41.983506531Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260505T193318-22288952\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":775027,\"output_tokens\":6079,\"total_tokens\":781106,\"cost_usd\":0,\"duration_ms\":80609,\"exit_code\":0}",
+          "created_at": "2026-05-05T19:34:42.21126903Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=781106 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "This bead is over-scoped for the current server worktree. The server review code only has session persistence and prompt assembly in cli/internal/server/review_session.go:22-239, while the actual reviewer routing, downgrade telemetry, and prompt-refusal handling live in cli/internal/agent/execute_bead_review.go:474-780. Cost-cap enforcement for the worker loop already exists in cli/internal/server/workers.go:790-855, but there is no server-side turn dispatcher to hook the requested \"before each turn\" max_billable_usd check into. Satisfying all acceptance criteria would require crossing into the non-scope dispatcher/routing path and depending on the ddx-0e5c3005 / ddx-f7c3d512 follow-on work, so I am stopping here rather than partially implementing an incomplete contract.",
+          "created_at": "2026-05-05T19:34:42.951584329Z",
+          "kind": "no_changes_needs_investigation",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes_needs_investigation"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: needs_investigation\nreason: This bead is over-scoped for the current server worktree. The server review code only has session persistence and prompt assembly in cli/internal/server/review_session.go:22-239, while the actual reviewer routing, downgrade telemetry, and prompt-refusal handling live in cli/internal/agent/execute_bead_review.go:474-780. Cost-cap enforcement for the worker loop already exists in cli/internal/server/workers.go:790-855, but there is no server-side turn dispatcher to hook the requested \"before each turn\" max_billable_usd check into. Satisfying all acceptance criteria would require crossing into the non-scope dispatcher/routing path and depending on the ddx-0e5c3005 / ddx-f7c3d512 follow-on work, so I am stopping here rather than partially implementing an incomplete contract.\nresult_rev=a8b2f4f630f0636d0645d1c50d8f2d4053a93ca3\nbase_rev=a8b2f4f630f0636d0645d1c50d8f2d4053a93ca3\nretry_after=2026-05-06T01:34:43Z",
+          "created_at": "2026-05-05T19:34:43.649415902Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "ddx",
+          "body": "",
+          "created_at": "2026-05-07T05:58:28.887111369Z",
+          "kind": "lifecycle_reconciled",
+          "source": "ddx bead reconcile",
+          "summary": "expired retry-after metadata no longer blocks execution"
+        },
+        {
+          "actor": "ddx",
+          "body": "from_status=open\nto_status=proposed\ncleared_fields=execute-loop-last-status,execute-loop-last-detail,execute-loop-no-changes-count",
+          "created_at": "2026-05-09T13:09:06.1826767Z",
+          "kind": "lifecycle_migrated",
+          "source": "ddx bead migrate --lifecycle",
+          "summary": "legacy lifecycle metadata required operator attention"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T03:38:12.970393713Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T03:37:06.704071993Z",
+      "lifecycle-migrated-at": "2026-05-09T13:09:06Z",
+      "lifecycle-migrated-from-status": "open",
+      "lifecycle-migrated-to-status": "proposed",
+      "needs-human-reason": "legacy lifecycle metadata required operator attention",
+      "needs-human-since": "2026-05-09T13:09:06Z",
+      "needs-human-source": "ddx bead migrate --lifecycle",
+      "needs-human-suggested-action": "review and accept, split, block, or cancel this proposed work"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260510T033813-2fedefae",
+    "prompt": ".ddx/executions/20260510T033813-2fedefae/prompt.md",
+    "manifest": ".ddx/executions/20260510T033813-2fedefae/manifest.json",
+    "result": ".ddx/executions/20260510T033813-2fedefae/result.json",
+    "checks": ".ddx/executions/20260510T033813-2fedefae/checks.json",
+    "usage": ".ddx/executions/20260510T033813-2fedefae/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-f1e12904-20260510T033813-2fedefae"
+  },
+  "prompt_sha": "97d8ce1b5bae1d137d829cc02cc06f5ec6ff2562ea82981d97cf64f923c1bcd2"
+}
