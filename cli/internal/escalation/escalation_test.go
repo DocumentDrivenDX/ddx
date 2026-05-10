@@ -141,8 +141,8 @@ func TestShouldEscalateSuccessIsFalse(t *testing.T) {
 	assert.False(t, ShouldEscalate(statusSuccess))
 }
 
-func TestShouldEscalateStructuralValidationIsTrue(t *testing.T) {
-	assert.True(t, ShouldEscalate(statusStructuralValidationFailed))
+func TestStructuralValidationFailed_DoesNotEscalate(t *testing.T) {
+	assert.False(t, ShouldEscalate(statusStructuralValidationFailed))
 }
 
 func TestShouldEscalateAlreadySatisfiedIsFalse(t *testing.T) {

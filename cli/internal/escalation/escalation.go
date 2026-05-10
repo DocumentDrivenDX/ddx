@@ -18,10 +18,9 @@ const SuccessStatus = "success"
 // strings; the agent package has a TestEscalatableStatusesMatchAgentVocab
 // guard (see agent/tier_escalation_alignment_test.go) to catch drift.
 var EscalatableStatuses = map[string]bool{
-	"execution_failed":             true,
-	"post_run_check_failed":        true,
-	"land_conflict":                true,
-	"structural_validation_failed": true,
+	"execution_failed":      true,
+	"post_run_check_failed": true,
+	"land_conflict":         true,
 }
 
 // ShouldEscalate reports whether status warrants escalating to the next tier.
