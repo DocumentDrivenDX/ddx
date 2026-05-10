@@ -15,9 +15,9 @@ import (
 )
 
 // Helper function to create a fresh root command for status tests
-func getStatusTestRootCommand(workingDir string) *cobra.Command {
+func getStatusTestRootCommand(t *testing.T, workingDir string) *cobra.Command {
 	if workingDir == "" {
-		workingDir = "/tmp"
+		workingDir = t.TempDir()
 	}
 	factory := NewCommandFactory(workingDir)
 	return factory.NewRootCommand()
@@ -292,7 +292,7 @@ func TestStatusIncludesAgentUsage(t *testing.T) {
 func TestStatusCommand_Contract(t *testing.T) {
 	t.Run("command_exists", func(t *testing.T) {
 		// Status command should exist
-		rootCmd := getStatusTestRootCommand("")
+		rootCmd := getStatusTestRootCommand(t, "")
 		output, err := executeStatusCommand(rootCmd, "--help")
 
 		assert.NoError(t, err)
@@ -318,7 +318,7 @@ func TestStatusCommand_Contract(t *testing.T) {
 
 		for _, tc := range testCases {
 			t.Run(tc.flag, func(t *testing.T) {
-				rootCmd := getStatusTestRootCommand("")
+				rootCmd := getStatusTestRootCommand(t, "")
 				output, err := executeStatusCommand(rootCmd, "status", "--help")
 
 				assert.NoError(t, err)
@@ -362,7 +362,7 @@ func TestStatusCommand_Contract(t *testing.T) {
 func TestLogCommand_Contract(t *testing.T) {
 	t.Run("command_exists", func(t *testing.T) {
 		// Log command should exist
-		rootCmd := getStatusTestRootCommand("")
+		rootCmd := getStatusTestRootCommand(t, "")
 		output, err := executeStatusCommand(rootCmd, "--help")
 
 		assert.NoError(t, err)

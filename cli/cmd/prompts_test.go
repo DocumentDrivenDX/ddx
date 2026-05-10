@@ -11,9 +11,9 @@ import (
 )
 
 // getPromptsTestRootCommand creates a root command for testing
-func getPromptsTestRootCommand(workingDir string) *cobra.Command {
+func getPromptsTestRootCommand(t *testing.T, workingDir string) *cobra.Command {
 	if workingDir == "" {
-		workingDir = "/tmp"
+		workingDir = t.TempDir()
 	}
 	factory := NewCommandFactory(workingDir)
 	return factory.NewRootCommand()
@@ -285,7 +285,7 @@ persona_bindings: {}`
 			// Execute the command with an isolated working directory to
 			// prevent test pollution from concurrent tests that may
 			// create .ddx/ directories in shared temp paths.
-			rootCmd := getPromptsTestRootCommand(t.TempDir())
+			rootCmd := getPromptsTestRootCommand(t, t.TempDir())
 			output, err := executeCommand(rootCmd, tt.args...)
 
 			// Validate results
@@ -305,7 +305,7 @@ persona_bindings: {}`
 func TestPromptsCommand_Help(t *testing.T) {
 	// This test specifies that prompts command should have help text
 	// with list and show subcommands
-	rootCmd := getPromptsTestRootCommand("")
+	rootCmd := getPromptsTestRootCommand(t, "")
 	output, err := executeCommand(rootCmd, "prompts", "--help")
 
 	assert.NoError(t, err)
