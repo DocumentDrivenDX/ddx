@@ -1763,6 +1763,9 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	worker := &agent.ExecuteBeadWorker{
 		Store:    store,
 		Reviewer: reviewer,
+		EscalationNextFloor: func(actualPower int) (int, error) {
+			return nextEscalationFloor(loadLadder(), actualPower)
+		},
 		Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
 			targetBead, err := store.Get(beadID)
 			if err != nil {
