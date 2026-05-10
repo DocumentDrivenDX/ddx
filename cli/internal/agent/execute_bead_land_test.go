@@ -1770,6 +1770,103 @@ func TestSyncWorkTreeToHead_DoesNotClobberBeadsJSONL(t *testing.T) {
 	}
 }
 
+// TestStageDirForcesGitIgnored verifies that StageDir uses --force so that
+// files under a gitignored directory are staged successfully. Regression for
+// ddx-723bd318: projects whose .gitignore covers .ddx/executions/ had every
+// bead silently preserved because StageDir staged nothing.
+func TestStageDirForcesGitIgnored(t *testing.T) {
+	dir := t.TempDir()
+	runGit := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", append([]string{"-C", dir}, args...)...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %s: %v", strings.Join(args, " "), string(out), err)
+		}
+	}
+	runGit("init", "-b", "main")
+	runGit("config", "user.name", "Test")
+	runGit("config", "user.email", "test@test.local")
+
+	// Commit .gitignore covering .ddx/executions/ before staging evidence.
+	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte(".ddx/executions/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runGit("add", ".gitignore")
+	runGit("commit", "-m", "init")
+
+	// Create evidence file under the gitignored directory.
+	attemptID := "20260510T000000-gitignore-stagetest"
+	evidenceDir := filepath.Join(".ddx", "executions", attemptID)
+	fullDir := filepath.Join(dir, evidenceDir)
+	if err := os.MkdirAll(fullDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fullDir, "manifest.json"), []byte(`{"attempt_id":"`+attemptID+`"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	ops := RealLandingGitOps{}
+	if err := ops.StageDir(dir, filepath.ToSlash(evidenceDir)); err != nil {
+		t.Fatalf("StageDir on gitignored path: %v", err)
+	}
+
+	cmd := exec.Command("git", "-C", dir, "diff", "--cached", "--name-only")
+	out, err := cmd.Output()
+	if err != nil {
+		t.Fatalf("git diff --cached: %v", err)
+	}
+	staged := strings.TrimSpace(string(out))
+	wantFile := filepath.ToSlash(filepath.Join(evidenceDir, "manifest.json"))
+	if !strings.Contains(staged, wantFile) {
+		t.Fatalf("gitignored manifest.json not in staged index; staged=%q want %q", staged, wantFile)
+	}
+}
+
+// TestEvidenceCommitSucceedsWhenGitignored verifies end-to-end that Land()
+// produces status="landed" with an evidence commit even when the project
+// .gitignore covers .ddx/executions/. Regression for ddx-723bd318.
+func TestEvidenceCommitSucceedsWhenGitignored(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := RealLandingGitOps{}
+
+	// Commit .gitignore covering .ddx/executions/ on top of the initial commit.
+	r.writeFile(".gitignore", ".ddx/executions/\n")
+	r.runGit("add", ".gitignore")
+	r.runGit("commit", "-m", "chore: gitignore executions dir")
+	baseSHA := r.resolveRef("refs/heads/main")
+
+	attemptID := "20260510T000000-gitignore-e2e"
+	evidenceDir := filepath.Join(".ddx", "executions", attemptID)
+	fullDir := filepath.Join(r.dir, evidenceDir)
+	if err := os.MkdirAll(fullDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(fullDir, "manifest.json"), []byte(`{"attempt_id":"`+attemptID+`"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	workerSHA := r.commitOn(baseSHA, "feature.txt", "feature\n", "feat: feature")
+	req := LandRequest{
+		WorktreeDir:  r.dir,
+		BaseRev:      baseSHA,
+		ResultRev:    workerSHA,
+		BeadID:       "ddx-gitignore-evidence-e2e",
+		AttemptID:    attemptID,
+		TargetBranch: "main",
+		EvidenceDir:  filepath.ToSlash(evidenceDir),
+	}
+	land, err := Land(r.dir, req, ops)
+	if err != nil {
+		t.Fatalf("Land: %v", err)
+	}
+	if land.Status != "landed" {
+		t.Fatalf("expected status=landed when .ddx/executions/ is gitignored, got %q (reason=%q)", land.Status, land.Reason)
+	}
+	if land.EvidenceCommitSHA == "" {
+		t.Fatalf("expected evidence commit SHA; evidence commit was skipped or failed")
+	}
+}
+
 // TestSyncWorkTreeToHead_DoesNotClobberBeadsArchiveJSONL verifies that
 // RealLandingGitOps.SyncWorkTreeToHead never overwrites .ddx/beads-archive.jsonl.
 func TestSyncWorkTreeToHead_DoesNotClobberBeadsArchiveJSONL(t *testing.T) {

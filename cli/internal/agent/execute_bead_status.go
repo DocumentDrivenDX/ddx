@@ -430,6 +430,7 @@ func IsResourceExhaustedStatus(status string) bool {
 
 func isPreservedNeedsReviewReason(reason string) bool {
 	for _, prefix := range []string{
+		"evidence commit failed:",
 		"large-deletion gate:",
 		"syntax sanity gate:",
 		"post-land gate failed:",
