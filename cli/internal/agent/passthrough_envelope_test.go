@@ -16,7 +16,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -28,7 +28,7 @@ type passthroughTestService struct {
 	lastReq             agentlib.ServiceExecuteRequest
 	listHarnessesCalled bool
 	listModels          []agentlib.ModelInfo
-	listProfiles        []agentlib.ProfileInfo
+	listPolicies        []agentlib.PolicyInfo
 	executeEvents       []agentlib.ServiceEvent
 }
 
@@ -66,17 +66,11 @@ func (s *passthroughTestService) ListModels(ctx context.Context, filter agentlib
 	return append([]agentlib.ModelInfo(nil), s.listModels...), nil
 }
 
-func (s *passthroughTestService) ListProfiles(ctx context.Context) ([]agentlib.ProfileInfo, error) {
-	return append([]agentlib.ProfileInfo(nil), s.listProfiles...), nil
+func (s *passthroughTestService) ListPolicies(ctx context.Context) ([]agentlib.PolicyInfo, error) {
+	return append([]agentlib.PolicyInfo(nil), s.listPolicies...), nil
 }
 
-func (s *passthroughTestService) ResolveProfile(ctx context.Context, name string) (*agentlib.ResolvedProfile, error) {
-	return nil, nil
-}
 
-func (s *passthroughTestService) ProfileAliases(ctx context.Context) (map[string]string, error) {
-	return nil, nil
-}
 
 func (s *passthroughTestService) HealthCheck(ctx context.Context, target agentlib.HealthTarget) error {
 	return nil

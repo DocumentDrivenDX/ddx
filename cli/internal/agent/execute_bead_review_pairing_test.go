@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -223,7 +223,7 @@ func TestReviewBead_DoesNotInheritImplementerHarness(t *testing.T) {
 func TestPostMergeReviewer_DispatchesWithStrongestAboveImplPowerAndNoModelPin(t *testing.T) {
 	projectRoot, head, store := reviewPairingTestSetup(t)
 	svc := &passthroughTestService{
-		listProfiles: []agentlib.ProfileInfo{
+		listPolicies: []agentlib.PolicyInfo{
 			{Name: "standard", MinPower: 7, MaxPower: 8},
 			{Name: "smart", MinPower: 9, MaxPower: 10},
 			{Name: "frontier", MinPower: 71, MaxPower: 80},
@@ -254,10 +254,9 @@ func TestPostMergeReviewer_DispatchesWithStrongestAboveImplPowerAndNoModelPin(t 
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	assert.Equal(t, "frontier", svc.lastReq.Profile)
+	assert.Equal(t, "frontier", svc.lastReq.Policy)
 	assert.Equal(t, 71, svc.lastReq.MinPower)
 	assert.Empty(t, svc.lastReq.Model)
-	assert.Empty(t, svc.lastReq.ModelRef)
 	assert.Empty(t, svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
 }
@@ -265,7 +264,7 @@ func TestPostMergeReviewer_DispatchesWithStrongestAboveImplPowerAndNoModelPin(t 
 func TestReviewRouting_MissingActualPowerUsesSmartFloor(t *testing.T) {
 	projectRoot, head, store := reviewPairingTestSetup(t)
 	svc := &passthroughTestService{
-		listProfiles: []agentlib.ProfileInfo{
+		listPolicies: []agentlib.PolicyInfo{
 			{Name: "smart", MinPower: 9, MaxPower: 10},
 			{Name: "frontier", MinPower: 71, MaxPower: 80},
 		},
@@ -293,16 +292,15 @@ func TestReviewRouting_MissingActualPowerUsesSmartFloor(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	assert.Equal(t, "smart", svc.lastReq.Profile)
+	assert.Equal(t, "smart", svc.lastReq.Policy)
 	assert.Equal(t, 9, svc.lastReq.MinPower)
 	assert.Empty(t, svc.lastReq.Model)
-	assert.Empty(t, svc.lastReq.ModelRef)
 }
 
 func TestReviewRouting_KnownActualPowerUsesNextFloor(t *testing.T) {
 	projectRoot, head, store := reviewPairingTestSetup(t)
 	svc := &passthroughTestService{
-		listProfiles: []agentlib.ProfileInfo{
+		listPolicies: []agentlib.PolicyInfo{
 			{Name: "smart", MinPower: 9, MaxPower: 10},
 			{Name: "frontier", MinPower: 71, MaxPower: 80},
 		},
@@ -331,8 +329,7 @@ func TestReviewRouting_KnownActualPowerUsesNextFloor(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, res)
-	assert.Equal(t, "frontier", svc.lastReq.Profile)
+	assert.Equal(t, "frontier", svc.lastReq.Policy)
 	assert.Equal(t, 71, svc.lastReq.MinPower)
 	assert.Empty(t, svc.lastReq.Model)
-	assert.Empty(t, svc.lastReq.ModelRef)
 }

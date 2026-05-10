@@ -4,7 +4,7 @@ import (
 	"errors"
 	"testing"
 
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 )
 
 func mkModel(power int, available, autoRoutable bool) agentlib.ModelInfo {

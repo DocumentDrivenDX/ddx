@@ -17,7 +17,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 )
 
 // ReviewPairingDegradedEventKind is the kind:review-pairing-degraded event
@@ -737,7 +737,7 @@ func (r *DefaultBeadReviewer) reviewerDispatchProfile(ctx context.Context, impl 
 
 func selectSmartReviewerProfile(snap ProfileSnapshot) string {
 	for _, profile := range snap.Profiles {
-		if profile.Name == "smart" && !profile.Deprecated && profileHasAvailableModel(profile, snap.Models) {
+		if profile.Name == "smart" && profileHasAvailableModel(profile, snap.Models) {
 			return profile.Name
 		}
 	}

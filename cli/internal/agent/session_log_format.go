@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 )
 
 // FormatServiceProgressEntries formats canonical Fizeau progress payloads

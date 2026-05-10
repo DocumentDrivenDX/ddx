@@ -2,7 +2,7 @@ package agent
 
 // harnessConfig is the private compatibility shape used by DDx's legacy
 // Runner path for fixture harnesses and subprocess argument tests. Production
-// harness inventory comes from github.com/DocumentDrivenDX/fizeau ListHarnesses.
+// harness inventory comes from github.com/easel/fizeau ListHarnesses.
 type harnessConfig struct {
 	Name            string
 	Binary          string

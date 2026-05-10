@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSelectCheapestProfile_LowestBandWithAvailableModel(t *testing.T) {
 	snap := ProfileSnapshot{
-		Profiles: []agentlib.ProfileInfo{
+		Profiles: []agentlib.PolicyInfo{
 			{Name: "standard", MinPower: 7, MaxPower: 8},
 			{Name: "cheap", MinPower: 5, MaxPower: 5},
 			{Name: "too-low", MinPower: 1, MaxPower: 2},
@@ -30,7 +30,7 @@ func TestSelectCheapestProfile_LowestBandWithAvailableModel(t *testing.T) {
 
 func TestSelectStrongestProfile_HighestBandWithAvailableModel(t *testing.T) {
 	snap := ProfileSnapshot{
-		Profiles: []agentlib.ProfileInfo{
+		Profiles: []agentlib.PolicyInfo{
 			{Name: "cheap", MinPower: 5, MaxPower: 5},
 			{Name: "standard", MinPower: 7, MaxPower: 8},
 			{Name: "smart", MinPower: 9, MaxPower: 10},
@@ -47,7 +47,7 @@ func TestSelectStrongestProfile_HighestBandWithAvailableModel(t *testing.T) {
 
 func TestSelectStrongestProfileAbove_RespectsFloor(t *testing.T) {
 	snap := ProfileSnapshot{
-		Profiles: []agentlib.ProfileInfo{
+		Profiles: []agentlib.PolicyInfo{
 			{Name: "standard", MinPower: 7, MaxPower: 8},
 			{Name: "smart", MinPower: 9, MaxPower: 10},
 		},
@@ -63,7 +63,7 @@ func TestSelectStrongestProfileAbove_RespectsFloor(t *testing.T) {
 
 func TestSelectProfile_ReturnsEmptyWhenNothingSatisfies(t *testing.T) {
 	snap := ProfileSnapshot{
-		Profiles: []agentlib.ProfileInfo{
+		Profiles: []agentlib.PolicyInfo{
 			{Name: "cheap", MinPower: 5, MaxPower: 5},
 			{Name: "smart", MinPower: 9, MaxPower: 10},
 		},
@@ -86,7 +86,7 @@ func TestLoadProfileSnapshot_MemoizesAndStaleOnError(t *testing.T) {
 	t.Cleanup(func() { profileSnapshotNow = oldNow })
 
 	svc := &profileSnapshotServiceStub{
-		profiles: []agentlib.ProfileInfo{{Name: "cheap", MinPower: 5, MaxPower: 5}},
+		profiles: []agentlib.PolicyInfo{{Name: "cheap", MinPower: 5, MaxPower: 5}},
 		models:   []agentlib.ModelInfo{{ID: "cheap-model", Power: 5, Available: true, AutoRoutable: true}},
 	}
 
@@ -123,7 +123,7 @@ func resetProfileSnapshotCacheForTest(t *testing.T) {
 }
 
 type profileSnapshotServiceStub struct {
-	profiles     []agentlib.ProfileInfo
+	profiles     []agentlib.PolicyInfo
 	models       []agentlib.ModelInfo
 	err          error
 	profileCalls int
@@ -162,21 +162,15 @@ func (s *profileSnapshotServiceStub) ListModels(context.Context, agentlib.ModelF
 	return append([]agentlib.ModelInfo(nil), s.models...), nil
 }
 
-func (s *profileSnapshotServiceStub) ListProfiles(context.Context) ([]agentlib.ProfileInfo, error) {
+func (s *profileSnapshotServiceStub) ListPolicies(context.Context) ([]agentlib.PolicyInfo, error) {
 	s.profileCalls++
 	if s.err != nil {
 		return nil, s.err
 	}
-	return append([]agentlib.ProfileInfo(nil), s.profiles...), nil
+	return append([]agentlib.PolicyInfo(nil), s.profiles...), nil
 }
 
-func (s *profileSnapshotServiceStub) ResolveProfile(context.Context, string) (*agentlib.ResolvedProfile, error) {
-	return nil, nil
-}
 
-func (s *profileSnapshotServiceStub) ProfileAliases(context.Context) (map[string]string, error) {
-	return nil, nil
-}
 
 func (s *profileSnapshotServiceStub) HealthCheck(context.Context, agentlib.HealthTarget) error {
 	return nil
