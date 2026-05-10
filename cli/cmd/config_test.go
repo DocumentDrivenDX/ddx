@@ -177,7 +177,7 @@ repository:
 			if workDir != "" {
 				factory = NewCommandFactory(workDir)
 			} else {
-				factory = NewCommandFactory("/tmp")
+				factory = NewCommandFactory(t.TempDir())
 			}
 			rootCmd := factory.NewRootCommand()
 
