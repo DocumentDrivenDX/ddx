@@ -13,6 +13,16 @@ ddx:
 **Date:** 2026-05-06
 **Authors:** bead `ddx-5f1eac4f`
 
+## Principles
+
+The escalation and auto-recovery design is anchored by five explicit principles:
+
+- **P1 — Cheapest first:** DDx always dispatches the lowest-power model that can plausibly handle the work. Power escalation is a recovery step, not a default operating mode.
+- **P2 — Escalate on failure:** When a capability-sensitive failure class is detected, DDx raises `MinPower` for the next attempt. It does not alter harness, provider, or model values; Fizeau resolves the concrete route.
+- **P3 — Reviewer always stronger:** The adversarial pre-close reviewer's `MinPower` floor is always set higher than the implementer's actual reported power. A reviewer may not run at a weaker power than the implementer it is reviewing.
+- **P4 — Reframe then decompose on persistent failure:** When a bead's escalation ladder is exhausted on consecutive drain cycles, DDx first attempts a strong-tier reframer pass. If reframing fails or produces no change, DDx attempts a strong-tier decomposer pass. Only after both fail does DDx park the bead at `status=proposed`.
+- **P5 — No human in the loop for routing or budget:** DDx stops at `status=proposed` or at a configured budget cap; it never silently retries indefinitely or makes content-aware routing decisions. Operator action is a terminal state reached only after automated escalation and auto-recovery have been exhausted.
+
 ## Context
 
 DDx now has three overlapping concerns in the bead execution path:
@@ -196,6 +206,34 @@ repair attempt creates a new cycle record linked to the prior review group
 `result_rev`, implementer run ids, verification output, reviewer run ids,
 aggregate verdict, retry/decomposition/block decision, and cost summary. No
 cycle overwrites prior evidence.
+
+### Escalation Sequencing
+
+DDx applies escalation in a strict priority order within and across drain cycles:
+
+1. **Within-cycle (ladder climb):** For a single bead execution, DDx escalates `MinPower` across successive retries until the configured power ceiling is reached or a stop condition fires. Each retry is a new layer-1 invocation in the same layer-2 attempt record.
+2. **Cross-cycle (reframe):** When the escalation ladder is exhausted on `consecutive_ladder_exhaustions >= 2` drain cycles, DDx dispatches a strong-tier reframer agent (per P3, `MinPower` set to the strong-tier floor). The reframer rewrites the bead description and/or acceptance criteria in-place; the bead re-enters the execution-ready queue with `status=open` and a reset ladder.
+3. **Cross-cycle (decompose):** If the reframe attempt fails or produces no change, DDx dispatches a strong-tier decomposer agent to split the bead into 2–5 children. The parent is left `status=open` with `execution-eligible=false` pending child completion.
+4. **Final escape (`status=proposed`):** If the decomposer also fails or the decomposition would be lossy and require operator judgment, DDx parks the bead at `status=proposed` with `auto-recovery-failed` evidence and clears the active claim.
+
+No step may be skipped or reordered. DDx must not move a bead directly to `status=proposed` from within-cycle escalation while cross-cycle options remain available and the per-bead budget has not been exhausted.
+
+### Per-Bead Budget
+
+Every bead's escalation and auto-recovery attempts are bounded by a configurable per-bead cost cap. The cap applies to the sum of all implementation, review, reframer, and decomposer invocation costs for that bead.
+
+- When cumulative per-bead cost exceeds the configured limit, DDx records outcome `per_bead_budget_exhausted` (TD-031 §5), appends the total cost to the event body, releases the claim without cooldown, and leaves the bead `status=open` and re-claimable. The budget exhaustion is a recheckable signal, not a terminal state: an operator may raise the cap or the bead may be retried in a later drain when conditions change.
+- The per-bead cost cap is configured in `.ddx/config.yaml` under `escalation.per_bead_budget_usd`. The default is project-specific; missing config means no per-bead cap is enforced beyond the drain-level cap in FEAT-014.
+- Per-bead budget exhaustion MUST NOT set `execute-loop-retry-after`; the cause is not time-resolvable without explicit operator action or config change.
+
+### Operator Escape Hatches
+
+Two bead labels modify the default escalation and auto-recovery behavior:
+
+- **`recovery:manual`** — skip all automatic cross-cycle recovery steps (reframe, decompose). When this label is present, exhausting the within-cycle ladder moves the bead directly to `status=proposed` without attempting reframe or decompose. This is the operator's signal that they want to review the bead before any structural changes are made.
+- **`budget:<USD>`** — override the default per-bead cost cap for this specific bead. Example: `budget:5.00` sets a $5.00 per-bead limit. The label value must be a decimal USD amount. Invalid or non-parseable values are ignored; DDx emits a `malformed-budget-label` warning but does not stop the drain.
+
+These labels are read at claim time, before each retry decision, and before each auto-recovery dispatch. Operators may add or remove them between drain cycles.
 
 ### Cost Accounting
 

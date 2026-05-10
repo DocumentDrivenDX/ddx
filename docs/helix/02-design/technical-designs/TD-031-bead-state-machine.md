@@ -256,6 +256,13 @@ Candidate-cycle events (FEAT-010 candidate-cycle pipeline):
 - `final-result-landed` — the approved candidate has been merged to the base
   branch; immediately precedes the `closed-merged` lifecycle event
 
+Auto-recovery events (ADR-024 P4; SD-025 Layer 3.5):
+
+- `reframe-applied` — reframer rewrote bead description/AC; body carries `from_rev`, `to_rev`, and `reframer_cost`
+- `decompose-applied` — decomposer filed child beads; body carries `child_ids` and `reframer_cost`
+- `auto-recovery-failed` — both reframe and decompose attempts failed; body carries `reframe_attempt_cost` and `decompose_attempt_cost`
+- `per-bead-budget-exhausted` — cumulative per-bead cost cap exceeded; body carries `total_cost`
+
 Push-outcome events:
 
 - `push-failed` — the commit was created but the push to the remote was rejected
@@ -349,6 +356,10 @@ Lifecycle reliability invariants:
 | `push_conflict` (remote advanced; fast-forward rejected) | `in_progress → open` (claim released) | (none) | `push-conflict` with current remote head | may set `execute-loop-retry-after` at 15 min (recheckable — remote advanced; re-fetch and re-attempt resolves naturally) |
 | stale no_changes tracker metadata | no status change unless latest terminal evidence closes the bead | remove stale no_changes triage labels only when contradicted by terminal evidence | preserve historical events; append reconciliation event if performed | clear stale `execute-loop-*` management fields when latest terminal event or close evidence proves they are obsolete |
 | dependency-satisfied reconcile close (`ddx bead reconcile`, `CloseSatisfied=true`; see reconcile.go:208-254) | `open → closed` via `UpdateWithLifecycleStatus`, `ManualClose=true`; `ClosureGate` is **not** invoked on this path (see store.go:1245 and the invariant above) | remove stale `execute-loop-*` labels if present; add `reconciled-nochanges-state` label | `lifecycle_reconciled` | `Extra["execute-loop-*"]` management fields cleared per `ReconcilePlan.ClearFields`; `externalizeEvents` called at reconcile.go:252 after close |
+| `reframe_applied` — bead description and/or acceptance criteria were rewritten by the reframer agent; bead re-enters the execution-ready lane | `in_progress → open` (claim released; bead is immediately re-claimable) | add `reframed` label | `reframe-applied` with `from_rev`, `to_rev`, and `reframer_cost` in body | `Extra["consecutive_ladder_exhaustions"]` reset to 0; `Extra["last-recovery"]` updated with reframer run id and cost |
+| `decompose_applied` — the decomposer agent filed 2–5 child beads; parent is left open but not execution-eligible until children are closed | `in_progress → open` with dependency edges to children filed; parent `execution-eligible=false` | add `decomposed` label | `decompose-applied` with `child_ids` list and `reframer_cost` in body | `Extra["children"]` lists child IDs and AC mapping; `Extra["execution-eligible"]=false`; `Extra["last-recovery"]` updated |
+| `auto_recovery_failed` — both reframe and decompose attempts failed or the operator label `recovery:manual` was set; bead requires operator action | `in_progress → proposed` | add `triage:auto-recovery-failed` label | `auto-recovery-failed` with `reframe_attempt_cost` and `decompose_attempt_cost` (0 if not attempted) in body; `review-manual-required` is NOT fired here — this is a recovery, not a review | `Extra["last-recovery"]` records both attempt costs and failure reasons; DO NOT set `execute-loop-retry-after` |
+| `per_bead_budget_exhausted` — cumulative per-bead cost for this bead exceeded the configured cap (`escalation.per_bead_budget_usd`) | `in_progress → open` (claim released; bead is re-claimable — budget exhaustion is recheckable, not terminal) | (none) | `per-bead-budget-exhausted` with `total_cost` in body | `Extra["last-run"]` only; DO NOT set `execute-loop-retry-after` — budget exhaustion requires operator action or config change, not time elapsed; see ADR-024 Per-Bead Budget |
 
 Legacy/backcompat `needs_human` and `triage:needs-investigation` labels are not
 lifecycle controls. New routing uses `status=proposed` for operator decisions;
@@ -411,6 +422,26 @@ Stale claim handling (TriageContract owns the policy):
   again.
 - Auto-triage MUST NOT delete prior claim metadata; it appends an event
   recording the release.
+
+### Auto-Recovery Role Catalogue
+
+Two agent roles support the cross-cycle recovery path (ADR-024 P4; SD-025 Layer 3.5). These roles are dispatched by the drain proxy, not by an operator or agent tool directly.
+
+| Role | `MinPower` floor | Claim held by | Output contract | Dispatch condition |
+|---|---|---|---|---|
+| `reframer` | Strong-tier per ADR-024 P3 — `MinPower` set above the current cycle's implementer actual power | Drain proxy (not the reframer agent); the reframer runs read-only against the bead record, then returns structured edits | Structured edits to bead description and/or acceptance criteria. Edits must preserve all explicit commitments (AC, non-scope, named files/tests, deps, governing artifact refs). A no-op result (no change) is valid and triggers the decomposer path. | `consecutive_ladder_exhaustions >= 2` and bead does not carry `recovery:manual` label |
+| `decomposer` | Strong-tier per ADR-024 P3 — same floor as reframer | Drain proxy; the decomposer runs read-only against the bead record, then returns a list of child bead specs | List of 2–5 child bead specs for `Store.Create`. Each spec must include title, description, numbered AC, labels (inheriting parent's labels and `spec-id`), and a parent/dep edge to the parent bead. A no-op result triggers `auto_recovery_failed`. | Reframe attempt returned no change, or reframer invocation failed |
+
+Both roles are dispatched with the same `role`, `bead_id`, `attempt_id`, `session_id`, and `review_group_id` correlation fields used by the reviewer role (ADR-024 Default Adversarial Pre-Close Review Gate). Operator-supplied passthrough constraints (`--harness`, `--provider`, `--model`) are forwarded unchanged. If those constraints prevent satisfying the strong-tier `MinPower` floor, the dispatch returns `readiness_error` and the outcome maps to `auto_recovery_failed`.
+
+### `consecutive_ladder_exhaustions` Extra Field
+
+`Extra["consecutive_ladder_exhaustions"]` is an integer counter maintained by the drain loop on each bead record.
+
+- **Incremented** at the end of each drain cycle in which the bead's within-cycle escalation ladder was fully exhausted (all power levels tried, none produced a close or forward progress).
+- **Reset to 0** when the bead is successfully closed, when a reframe or decompose pass fires (the bead's prompt has changed; start fresh), or when an operator explicitly clears the counter via `ddx bead update`.
+- **Threshold:** when `consecutive_ladder_exhaustions >= 2` (default; configurable in `.ddx/config.yaml` as `escalation.auto_recovery_threshold`), the drain loop triggers the auto-recovery sequence described in ADR-024 Escalation Sequencing and SD-025 Layer 3.5.
+- **Category:** Extra metadata field (section 1). This field explains and drives the auto-recovery trigger; it does not control persisted lifecycle status. The auto-recovery decision itself fires the `reframe_applied` or `decompose_applied` outcome, which changes status per section 5.
 
 ## 7. Naming-Role Decision Matrix
 

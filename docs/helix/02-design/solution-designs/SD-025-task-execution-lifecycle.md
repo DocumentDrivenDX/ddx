@@ -176,6 +176,32 @@ Migration rules:
 The migration must preserve git-tracked execute-bead evidence. It must not
 rewrite historical bead attempt commits or `closing_commit_sha` pointers.
 
+## Layer 3.5: Auto-Recovery
+
+Auto-recovery is a distinct stage that runs **between** Layer 3 (queue drain) and the `status=proposed` operator-review escape. It is triggered when a bead's within-cycle escalation ladder has been exhausted on two or more consecutive drain cycles (`Extra["consecutive_ladder_exhaustions"] >= 2`; see TD-031 §6 `consecutive_ladder_exhaustions` field). The bead must be `status=open` and not carry the `recovery:manual` label.
+
+### Trigger
+
+The drain loop evaluates the auto-recovery trigger after each drain cycle before selecting the next candidate. If the trigger condition is met for any `status=open`, execution-eligible bead, the loop claims the bead (or waits for the existing claim to release) and enters the auto-recovery sequence. The trigger does not fire during a running attempt; it fires only between attempts.
+
+### Sequence
+
+1. **Reframe attempt** — dispatch a strong-tier reframer agent (ADR-024 P3; TD-031 §6 Role Catalogue) with `MinPower` set above the exhausted escalation ceiling. The reframer receives the bead record (description, AC, governing artifact refs) and returns structured edits. If the reframer returns edits, DDx applies them via `ddx bead update` paths, records `reframe-applied` (TD-031 §4), resets `consecutive_ladder_exhaustions` to 0, releases the claim, and returns the bead to `status=open` execution-ready. The bead re-enters the standard drain cycle with a fresh ladder.
+2. **Decompose attempt** (only when reframe returned no change or the reframer invocation failed) — dispatch a strong-tier decomposer agent with the same `MinPower` floor. The decomposer returns 2–5 child bead specs. If child specs are returned, DDx calls `Store.Create` for each child, wires dependency edges from each child to the parent, sets `Extra["execution-eligible"]=false` on the parent, and records `decompose-applied` (TD-031 §4). The parent remains `status=open` but is now dependency-waiting on its children.
+3. **Final escape** (only when the decomposer returned no children or failed) — DDx records `auto-recovery-failed` (TD-031 §4), moves the bead to `status=proposed`, clears the active claim, and does not schedule another attempt. The operator must resolve the bead via `ddx bead update --status open` (after fixing it) or `ddx bead update --status cancelled`.
+
+### Layer-3 record
+
+The auto-recovery sequence runs within the layer-3 run record as an additional stop-condition evaluation entry. The entry names the bead, the trigger condition (`consecutive_ladder_exhaustions` value), which recovery step was attempted, the outcome, and the cost of any reframer/decomposer invocations. These costs contribute to the drain-level budget cap (FEAT-014).
+
+### Cross-references
+
+- **TD-031 §5** — `reframe_applied`, `decompose_applied`, `auto_recovery_failed`, and `per_bead_budget_exhausted` outcome rows define the status transitions and Extra mutations.
+- **ADR-024 P4** — the principle authorizing this stage.
+- **ADR-024 Escalation Sequencing** — the strict ordering of within-cycle, cross-cycle, and `status=proposed` escapes.
+- **TD-031 §6 Role Catalogue** — reframer and decomposer dispatch contracts.
+- **TD-031 §6 `consecutive_ladder_exhaustions`** — the counter that drives the trigger.
+
 ## Stop Conditions
 
 `ddx work` evaluates stop conditions only between `ddx try` attempts:

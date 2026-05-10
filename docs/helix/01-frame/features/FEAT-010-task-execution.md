@@ -1057,6 +1057,17 @@ new workflow cannot be expressed as a composition over `run` / `try` /
     (`git push`) are separate operations, operator-driven or
     background-deferred, and are never invoked from `Land()` or from the
     drain loop. See FEAT-023 for the designated origin-sync command.
+17. **Automatic recovery from persistent failure** — when a bead's within-cycle
+    escalation ladder is exhausted on `N` consecutive drain cycles (default
+    `N = 2`, configurable in `.ddx/config.yaml` as
+    `escalation.auto_recovery_threshold`), `ddx work` attempts
+    (a) reframe via a strong-tier reframer agent, then (b) decomposition via
+    a strong-tier decomposer agent, before parking the bead at
+    `status=proposed`. Each recovery step follows ADR-024 P4 and P3 (strong
+    `MinPower` floor, passthrough constraints forwarded unchanged). Outcomes
+    and status transitions are defined in TD-031 §5 (`reframe_applied`,
+    `decompose_applied`, `auto_recovery_failed`) and the sequence in
+    SD-025 Layer 3.5.
 
 Expected implementation tests include `TestExecutionCleanup_RemovesStaleDDXScratchDirs`,
 `TestWorkResourcePreflight_RunsCleanupBelowSoftFloor`, and
@@ -1064,6 +1075,14 @@ Expected implementation tests include `TestExecutionCleanup_RemovesStaleDDXScrat
 
 ### Non-Functional
 
+- **Per-bead cost budget:** every bead's escalation attempts (implementation,
+  review, reframer, and decomposer invocations) are bounded by a configurable
+  per-bead cost cap (`escalation.per_bead_budget_usd` in `.ddx/config.yaml`).
+  When the cap is exceeded, DDx records `per_bead_budget_exhausted` (TD-031 §5),
+  releases the claim without cooldown, and leaves the bead `status=open` and
+  re-claimable. Budget exhaustion is a recheckable signal, not a terminal state;
+  an operator may raise the cap or the bead may be retried in a later drain.
+  See ADR-024 Per-Bead Budget.
 - **Determinism:** the persisted record reflects the exact prompt,
   response, logs, and structured result of one invocation.
 - **Durability:** record writes are atomic or serialized so concurrent
