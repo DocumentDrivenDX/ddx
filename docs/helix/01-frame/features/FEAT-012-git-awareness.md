@@ -429,7 +429,9 @@ capabilities as HTTP and MCP endpoints. The dependency runs FEAT-002 → FEAT-01
 ## Out of Scope
 
 - Branch management (creating, switching, merging branches)
-- Remote operations (push, pull, fetch)
+- Remote operations (push, pull, fetch) — DDx does not invoke `git push` at all
+  in single-node drain mode; see FEAT-010 §"Network-free drain boundary" for the
+  governing requirement and FEAT-023 for the designated origin-sync command.
 - Merge conflict resolution (report conflicts, don't resolve them)
 - Git configuration management
 - Submodule or subtree operations (handled by existing `ddx update/contribute`)

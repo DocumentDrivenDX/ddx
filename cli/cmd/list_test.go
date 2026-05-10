@@ -181,7 +181,7 @@ func TestListCommand_Help(t *testing.T) {
 	}
 
 	// Create fresh list command
-	factory := NewCommandFactory("/tmp")
+	factory := NewCommandFactory(t.TempDir())
 	freshListCmd := &cobra.Command{
 		Use:   "list",
 		Short: "List available DDx resources",

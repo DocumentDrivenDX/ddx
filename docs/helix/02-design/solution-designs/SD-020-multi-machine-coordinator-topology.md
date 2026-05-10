@@ -16,6 +16,14 @@ machines against the same project. Each machine runs its own land coordinator;
 a shared git remote is the serialization point that prevents conflicting
 landings without any machine-to-machine coordination protocol.
 
+> **Single-node vs multi-machine:** By default, `ddx try` / `ddx work` operate
+> in single-node mode (FEAT-010 default): `Land()` performs only a local
+> worktree-merge and holds no network I/O. The fetch → merge → push lifecycle
+> described throughout this design is specific to multi-machine coordinator mode
+> and applies only when multiple machines share a git remote as a serialization
+> point. Single-node drain never calls `git fetch` or `git push` as part of
+> `Land()` or the queue loop.
+
 ## Scope
 
 - One land coordinator per machine × project

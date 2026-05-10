@@ -1051,6 +1051,12 @@ new workflow cannot be expressed as a composition over `run` / `try` /
     whenever temp free space drops below a soft high-water threshold. If the
     temp roots remain below the hard floor after cleanup, the loop returns
     `resource_exhausted` without claiming.
+16. **Network-free drain boundary** — `Land()` performs only the
+    worktree-merge into local main, under a brief local lock. Origin-sync
+    (`git fetch` + merging `origin/main` into local main) and origin-push
+    (`git push`) are separate operations, operator-driven or
+    background-deferred, and are never invoked from `Land()` or from the
+    drain loop. See FEAT-023 for the designated origin-sync command.
 
 Expected implementation tests include `TestExecutionCleanup_RemovesStaleDDXScratchDirs`,
 `TestWorkResourcePreflight_RunsCleanupBelowSoftFloor`, and
@@ -1071,6 +1077,9 @@ Expected implementation tests include `TestExecutionCleanup_RemovesStaleDDXScrat
 - **Payload resilience:** large prompt, response, log, and bundle
   bodies are stored as attachments and never require rewriting a shared
   history file to persist one run safely.
+- **Network isolation:** single-developer/single-node drain does not block
+  on remote I/O; origin-sync and origin-push are decoupled and may run in
+  parallel or in the background without holding the drain or land lock.
 
 ## CLI Commands
 

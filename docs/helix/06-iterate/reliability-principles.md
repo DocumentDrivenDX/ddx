@@ -66,3 +66,22 @@ handling`. Implementation beads must reference those sections rather than
 guessing at values. Test/e2e scratch roots under DDx prefixes (`ddx-test-`,
 `ddx-e2e-`) are explicitly in scope for cleanup; treating them as out of scope
 is a correctness bug under this principle.
+
+## P9: Network-Free Drain
+
+The single-node drain loop must never block on network I/O. `Land()` performs
+only a local worktree-merge into the local target branch under a brief local
+lock. `git fetch` and `git push` are never called from `Land()` or from the
+`ddx work` queue loop.
+
+This invariant prevents the 30-120 s lock holds that caused ddx-08e90869 (work
+landed only on a preserved iteration ref due to tracker lock contention) and
+ddx-15a51f8c (push-race remediation). Network operations are operator-driven
+(see FEAT-023 `ddx sync`) or future background-deferred, never coupled to the
+drain.
+
+Governing requirement: FEAT-010 §"Network-free drain boundary" (functional
+requirement 16) and §"Network isolation" (non-functional). Implementation
+target: `cli/internal/agent/execute_bead_land.go` `Land()` and
+`cli/internal/agent/execute_bead_loop.go` drain loop — neither must call
+`git fetch` or `git push`.

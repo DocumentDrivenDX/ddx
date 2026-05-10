@@ -1,0 +1,50 @@
+{
+  "attempt_id": "20260510T050123-e082ee58",
+  "bead_id": "ddx-f7c3d512",
+  "base_rev": "6cbe2424b3cea41fdcbeae31292acbb2cfae40c4",
+  "created_at": "2026-05-10T05:01:27.655678495Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f7c3d512",
+    "title": "review: turn dispatcher / harness integration",
+    "description": "PROBLEM\nNo turn dispatcher exists for review sessions. The review mutations (reviewSessionStart, reviewSessionRespond) have no mechanism to take a ReviewSession + user turn, assemble the review prompt, invoke the reviewer harness, and record the resulting turn. Without this, review sessions produce no AI response.\n\nROOT CAUSE\n- cli/internal/server/ contains no ReviewSessionDispatcher or equivalent struct/function.\n- Prompt assembly for review turns does not exist (Step B1b in the review plan: assemble system rubric + artifact content + turn history into a reviewer prompt).\n- The existing dispatch path (execute_bead_loop.go / cli/internal/agent/) invokes harnesses for bead execution, not review; review needs a parallel no-tool dispatch path.\n- ddx-f1e12904 (cost cap + routing, a dep) must land first.\n- No-tool mode: reviewers must not write files. Enforcement varies per harness (claude: disable tool use flag; codex: best-effort; document where not enforceable).\n\nPROPOSED FIX\n- Add cli/internal/server/review_dispatcher.go with DispatchReviewTurn(ctx, session, userTurn):\n  1. Assemble review prompt: system rubric + artifact content + prior turns.\n  2. Invoke reviewer harness via existing dispatch path (no-tool mode).\n  3. Record resulting turn in turns.jsonl.\n- Audit no-tool mode for claude harness (disable tool use) and codex harness (best-effort; document).\n\nNON-SCOPE\n- GraphQL schema and mutations (ddx-de278b8d, a dep).\n- Cost cap enforcement (ddx-f1e12904, a dep).",
+    "acceptance": "1. DispatchReviewTurn(ctx, session, userTurn) exists in cli/internal/server/review_dispatcher.go.\n2. Turn recorded in .ddx/reviews/\u003csession-id\u003e/turns.jsonl after each dispatch.\n3. No-tool mode confirmed for claude harness (tool use disabled in request).\n4. No-tool mode for codex harness documented as best-effort in source comment.\n5. TestReviewDispatcher_DispatchTurn_RecordsTurn verifies turn appended to turns.jsonl.\n6. TestReviewDispatcher_NoToolMode_ClaudeHarness verifies tool use disabled in claude dispatch.\n7. Integration test: TestReview_FullTurnLifecycle exercises dispatch through recording.\n8. cd cli \u0026\u0026 go test ./internal/server/... green.\n9. lefthook run pre-commit passes.",
+    "parent": "ddx-42b917fe",
+    "labels": [
+      "phase:2",
+      "story:18",
+      "area:server",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T05:00:19Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T05:01:23.422313658Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T05:00:19.170634221Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260510T050123-e082ee58",
+    "prompt": ".ddx/executions/20260510T050123-e082ee58/prompt.md",
+    "manifest": ".ddx/executions/20260510T050123-e082ee58/manifest.json",
+    "result": ".ddx/executions/20260510T050123-e082ee58/result.json",
+    "checks": ".ddx/executions/20260510T050123-e082ee58/checks.json",
+    "usage": ".ddx/executions/20260510T050123-e082ee58/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-f7c3d512-20260510T050123-e082ee58"
+  },
+  "prompt_sha": "39dbd02251656a8d720fb80168793ef50a16ec9ad78ecf5dc3dbc11e9af469c6"
+}
