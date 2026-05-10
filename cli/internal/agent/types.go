@@ -439,7 +439,14 @@ const (
 	// complete while genuinely hung workers free themselves. See
 	// RC2 of ddx-0a651925 for the incident that motivated this bound.
 	DefaultWallClockMS = 10800000 // 3 hours
-	DefaultLogDir      = ".ddx/agent-logs"
+	// ToolCallTimeout is a per-tool-call sanity cap: if a single tool_call
+	// event has no matching tool_result within this window, the drain cancels
+	// the execution. This is NOT for loop detection (see loopDetector in
+	// agent_runner_service.go) — it catches individually hung subprocesses
+	// (e.g., network deadlock in git push) that would otherwise absorb
+	// unlimited wall-clock without surfacing.
+	ToolCallTimeout = 1800000 // 30 minutes
+	DefaultLogDir   = ".ddx/agent-logs"
 )
 
 // ResolveLogDir returns an absolute session-log directory path anchored at

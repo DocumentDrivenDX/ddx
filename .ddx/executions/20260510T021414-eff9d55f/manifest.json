@@ -1,0 +1,86 @@
+{
+  "attempt_id": "20260510T021414-eff9d55f",
+  "bead_id": "ddx-1c3cad6f",
+  "base_rev": "f79abf989e45077fb43440c54c7fc06a8f07046a",
+  "created_at": "2026-05-10T02:14:18.009346702Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-1c3cad6f",
+    "title": "feat(agent): wedge prevention via loop-detection + meaningful-event idle reset",
+    "description": "PROBLEM\n  The 2026-05-09 drain wedge investigation found:\n    - DefaultWallClockMS = 3h (cli/internal/agent/types.go:441) is the\n      ONLY bound that fires on wedged workers. It is unconditional —\n      kills active and inactive work alike.\n    - DefaultTimeoutMS = 2h (idle, line 434) resets on every\n      stdout/stderr byte. Stream-json tool_result events are bytes,\n      so a model in a tight loop (e.g., 168s test rerun × 6\n      iterations) never trips the idle timer even though no real\n      progress is being made.\n\n  The policy we WANT:\n    - True wedge (no token exchange AND no running subprocess for an\n      extended period) → kill.\n    - Loop (repeated tool calls without real diff/test/state progress)\n      → kill.\n    - Hard work in progress (active tokens, real subprocess work, real\n      file diffs / test outcomes evolving) → DO NOT kill, no matter\n      how long it takes.\n\n  An absolute wall-clock cap kills hard work alongside wedges. The\n  sister bead that proposed reducing wall-clock from 3h to 1h has\n  been cancelled as wrong policy. This bead is the structural\n  prevention.\n\nROOT CAUSE\n  - cli/internal/agent/types.go:434 DefaultTimeoutMS = 2h, resets on\n    byte stream — not on meaningful events. A loop that produces\n    regular tool_result events keeps the timer alive without\n    meaningful progress.\n  - cli/internal/agent/agent_runner_service.go:179-207\n    drainServiceEventsWithRenderer parses stream-json events but does\n    not track event type for idle-reset purposes (treats all events\n    equally) and does not track repeated-command patterns.\n  - There is no per-tool-call timeout, so a single hung subprocess\n    can absorb arbitrary wall-clock without surfacing.\n\nPROPOSED FIX\n  Three layered prevention mechanisms (compose, don't replace):\n\n  1. Meaningful-event idle reset:\n     Define a \"meaningful event\" set: tool_use start, tool_result with\n     distinct content from prior, file_edit, test_pass/test_fail with\n     changed outcome, response_complete. Reset the idle timer ONLY on\n     these — not on all stream-json events. Keep the byte-stream as a\n     liveness check separate from idle.\n     Land: cli/internal/agent/agent_runner_service.go:179-207 +\n     cli/internal/agent/executor.go idle-tracking path.\n\n  2. Loop detection (repeated-command guard):\n     Maintain a recent-tool-call window (last 8 tool calls). Track:\n       - canonicalized Bash command string\n       - tool_result outcome (exit code + first 256B of output)\n     If the same (command, outcome) pair appears N≥4 times in the\n     window, surface a structured loop_detected event and request\n     early cancel via the existing EarlyCancel mechanism\n     (cli/internal/agent/executor.go:102-125 has authCancelPatterns\n     as a precedent for triggering EarlyCancel from a stream watcher).\n     Land: cli/internal/agent/agent_runner_service.go new\n     loopDetector helper.\n\n  3. Per-tool-call sanity cap:\n     Set a generous per-tool-call wall-clock (default 30 min, much\n     larger than typical) so a genuinely hung subprocess (e.g.,\n     network deadlock in `git push`) cannot indefinitely starve the\n     drain. NOT for catching loops — that's mechanism 2's job. Just\n     for catching individual stuck tool calls.\n     Land: cli/internal/agent/types.go new ToolCallTimeout constant +\n     cli/internal/agent/agent_runner_service.go enforces it via the\n     stream-json watcher.\n\n  Critically:\n    - DO NOT reduce DefaultWallClockMS (3h backstop is fine — it\n      fires only when all three new mechanisms have somehow been\n      bypassed).\n    - DO NOT change behavior for legitimately-hard-but-active work.\n      All three mechanisms target real failure modes: byte-only\n      activity, repeated unproductive commands, and hung individual\n      subprocesses.\n\n  Tests:\n    - TestIdleTimer_ResetsOnlyOnMeaningfulEvents\n    - TestLoopDetector_FiresAfterRepeatedIdenticalCommands\n    - TestToolCallTimeout_KillsLongHungSubprocess\n    - TestWedgeImmune_HardWorkRunsToCompletion (negative test:\n      simulate 4h of regularly-progressing tool calls; assert it does\n      NOT get killed)\n\nNON-SCOPE\n  - Heuristic about file-diff progress beyond what mechanism 1\n    captures (defer; could be a follow-up bead).\n  - Surface the loop_detected event to the operator UI (logging\n    suffices for now; UI is a separate concern).\n  - Tuning the canonicalization rules for what counts as the \"same\n    command\" in mechanism 2 (start with simple string-equality after\n    trimming whitespace; refine if needed).\n\nINTERSECTIONS\n  - Sister bead ddx-85b544f3 (CANCELLED): proposed reducing\n    wall-clock 3h→1h. Wrong policy; this bead supersedes.\n  - Sister beads ddx-1f774edf + ddx-f1c476c3 + ddx-1fda33d2 +\n    ddx-150758e7 reduce the SOURCE of long-running Bash calls (test\n    cost on every push). Once those land, wedge frequency drops by\n    starvation. This bead provides the safety net for whatever\n    long-running patterns remain.",
+    "acceptance": "1. cli/internal/agent/types.go contains a new ToolCallTimeout constant (default 1800000 ms = 30 min) alongside DefaultWallClockMS and DefaultTimeoutMS, with a comment explaining its sanity-cap role (NOT loop detection).\n2. cli/internal/agent/agent_runner_service.go drainServiceEventsWithRenderer (or equivalent) parses stream-json events and identifies meaningful-event types: tool_use, distinct tool_result, response_complete. Idle timer resets ONLY on these.\n3. cli/internal/agent/agent_runner_service.go contains a loopDetector helper that tracks the last 8 tool calls and triggers EarlyCancel via the existing mechanism when ≥4 identical (canonicalized command, exit-code + first-256B-output) pairs are seen.\n4. TestIdleTimer_ResetsOnlyOnMeaningfulEvents asserts the idle timer does NOT reset on a stream-json line that is neither tool_use nor distinct tool_result.\n5. TestLoopDetector_FiresAfterRepeatedIdenticalCommands asserts EarlyCancel fires after 4 identical command/result pairs in the last 8.\n6. TestToolCallTimeout_KillsLongHungSubprocess asserts a single tool_use that exceeds ToolCallTimeout without a tool_result triggers a structured tool_timeout cancel.\n7. TestWedgeImmune_HardWorkRunsToCompletion: simulate a 4-hour stream of regularly-progressing tool_use → distinct tool_result events; assert the harness completes naturally without being cancelled.\n8. cd cli \u0026\u0026 go test ./internal/agent/... green.\n9. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "area:agent",
+      "kind:feature",
+      "prevention",
+      "observability"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T02:13:08Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-09T23:21:42.79569868Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\\n\\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"lock_contention\"}",
+          "created_at": "2026-05-09T23:21:42.952357935Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "lock_contention"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-1c3cad6f\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-09T23:21:43.018485676Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "staging tracker: fatal: Unable to create '/home/erik/Projects/ddx/.git/index.lock': File exists.\n\nAnother git process seems to be running in this repository, or the lock file may be stale: exit status 128\noutcome_reason=lock_contention",
+          "created_at": "2026-05-09T23:21:43.140695416Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T02:14:14.257453428Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T02:13:08.046547557Z",
+      "execute-loop-last-detail": "tracker lock timeout (max elapsed, owner pid: 3533406)",
+      "execute-loop-last-status": "preclaim-hook-failed",
+      "execute-loop-retry-after": "2026-05-09T23:11:23Z",
+      "queue-rank": "13"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260510T021414-eff9d55f",
+    "prompt": ".ddx/executions/20260510T021414-eff9d55f/prompt.md",
+    "manifest": ".ddx/executions/20260510T021414-eff9d55f/manifest.json",
+    "result": ".ddx/executions/20260510T021414-eff9d55f/result.json",
+    "checks": ".ddx/executions/20260510T021414-eff9d55f/checks.json",
+    "usage": ".ddx/executions/20260510T021414-eff9d55f/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-1c3cad6f-20260510T021414-eff9d55f"
+  },
+  "prompt_sha": "1d6daac2498f250ea1eb438ce3ce2f1339fca753c6597a7db0425fde0ce20824"
+}
