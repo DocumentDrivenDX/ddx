@@ -255,7 +255,12 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		CurrentBeadID: runtime.Correlation["bead_id"],
 		WorkPhase:     "do",
 	})
-	final, routing, _ := drainServiceEventsWithRenderer(events, runtime.Output, renderer)
+	watchdog := &drainWatchdog{
+		cancel:          cancel,
+		idleTimeout:     idle,
+		toolCallTimeout: time.Duration(ToolCallTimeout) * time.Millisecond,
+	}
+	final, routing, _ := drainServiceEventsWithRenderer(events, runtime.Output, renderer, watchdog)
 	finishedAt := time.Now().UTC()
 	elapsed := finishedAt.Sub(start)
 
