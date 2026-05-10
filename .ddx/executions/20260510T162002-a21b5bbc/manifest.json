@@ -1,0 +1,52 @@
+{
+  "attempt_id": "20260510T162002-a21b5bbc",
+  "bead_id": "ddx-ded6a1b8",
+  "base_rev": "7f0070ffaa331f41394aa88abb63f7d497d2936c",
+  "created_at": "2026-05-10T16:20:09.422174027Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ded6a1b8",
+    "title": "fix(try): push_failed must not set cooldown — route to execution_failed path",
+    "description": "PROBLEM\n  cli/internal/agent/try/attempt.go:272-283 sets a 24h cooldown\n  (maxAttemptCooldown) on push_failed outcomes via OutcomePark.\n  This violates TD-031 §5 invariant (sister bead amends spec to\n  state this explicitly): \"execute-loop-retry-after may be set only\n  when retrying the same bead after time passes could plausibly\n  succeed without human/spec/dependency changes.\"\n\n  push_failed causes are NOT time-recheckable:\n    - Pre-push test failure (e.g., a data race in executor.go)\n      requires a code fix.\n    - Branch protection rule violation requires operator action.\n    - Auth token expiry requires operator action.\n    - Pre-push hook misconfiguration requires operator action.\n\n  Observed impact: 5+ beads sat in ~24h cooldown after a 1-hour\n  data-race incident. Drain idled ~10h after the fix landed\n  because cooldowns survived their cause. Operator manually\n  cleared cooldowns to restart progress.\n\nROOT CAUSE\n  - cli/internal/agent/try/attempt.go:272-283 (push_failed branch):\n    returns OutcomePark with maxAttemptCooldown (24h).\n  - This routes through SetExecutionCooldown, which sets\n    execute-loop-retry-after to now+24h.\n  - The bead drops out of ready queue for ~24h regardless of\n    whether the underlying cause has been fixed.\n\nPROPOSED FIX\n  Replace the OutcomePark branch with the same OutcomeReported path\n  used by execution_failed:\n    - Status transition: in_progress → open (claim released).\n    - Event: push-failed with stderr detail.\n    - DO NOT set execute-loop-retry-after.\n    - Bead becomes immediately eligible for next-pass claim.\n    - If the underlying cause persists (test still fails), next\n      attempt fails the same way and the post-attempt triage hook\n      can route to status=proposed when retry budget is exhausted.\n\n  Concretely:\n    - cli/internal/agent/try/attempt.go:272-283: change the\n      push_failed branch to construct OutcomeReported (not\n      OutcomePark) with the same report.\n    - Verify no callers depend on the cooldown side effect of\n      OutcomePark for push_failed (grep for \"push_failed\" + \"park\"\n      across cli/internal/agent/).\n    - Update test cli/internal/agent/try/attempt_test.go (or\n      sibling): assert push_failed produces no\n      execute-loop-retry-after.\n    - Add positive test: TestPushFailed_NoCooldown asserts\n      after a push_failed, the next ddx bead ready returns the\n      bead immediately.\n\nNON-SCOPE\n  - declined_needs_decomposition cooldown (sister bead R4 fix).\n  - Bulk clear-cooldowns command (sister bead R2).\n  - Rev-bound auto-invalidation (sister bead R3).\n  - Triage routing for genuine operator-required cases (post-attempt\n    hook can already route to proposed; that path is unchanged).\n\nINTERSECTIONS\n  - Sister bead \"docs(TD-031): codify push_failed/push_conflict\n    outcome rows\" must land first; this fix aligns with that spec\n    row.\n  - Sister bead R3 (rev-bound auto-invalidation) becomes simpler\n    after this lands (one fewer bogus cooldown class).",
+    "acceptance": "1. cli/internal/agent/try/attempt.go push_failed branch (around line 272-283) returns OutcomeReported (or equivalent) instead of OutcomePark; no maxAttemptCooldown is applied.\n2. After a push_failed outcome, the bead's Extra contains NO execute-loop-retry-after key.\n3. TestPushFailed_NoCooldown in cli/internal/agent/try/attempt_test.go asserts the bead is immediately re-claimable (appears in Store.Ready() output) after a push_failed.\n4. Existing push_failed tests are updated to reflect the new no-cooldown semantics.\n5. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/... green.\n6. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "area:agent",
+      "kind:fix",
+      "observed-failure",
+      "spec:TD-031",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T16:18:56Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T16:20:02.536091791Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T16:18:56.344111441Z",
+      "queue-rank": "16"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260510T162002-a21b5bbc",
+    "prompt": ".ddx/executions/20260510T162002-a21b5bbc/prompt.md",
+    "manifest": ".ddx/executions/20260510T162002-a21b5bbc/manifest.json",
+    "result": ".ddx/executions/20260510T162002-a21b5bbc/result.json",
+    "checks": ".ddx/executions/20260510T162002-a21b5bbc/checks.json",
+    "usage": ".ddx/executions/20260510T162002-a21b5bbc/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-ded6a1b8-20260510T162002-a21b5bbc"
+  },
+  "prompt_sha": "a8ef6cddd17954cb7212ba40261c4cc94b64208662c9b3417644717064690062"
+}
