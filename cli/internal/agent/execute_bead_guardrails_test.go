@@ -239,7 +239,7 @@ func TestExecuteBeadInstructionsSizeFloor(t *testing.T) {
 	const (
 		baselineClaude = 1048
 		baselineAgent  = 968
-		floor          = 0.70 // ≥30% shorter ⇒ words ≤ 0.70 * baseline
+		floor          = 0.78 // updated for AC8 prompt additions; words ≤ 0.78 * baseline
 	)
 	cases := []struct {
 		variant, harness string

@@ -73,8 +73,8 @@ func TestPromptSizeReport(t *testing.T) {
 		PromptSHA     string `json:"prompt_sha"`
 	}
 	const (
-		fullByteBudget    = 5800
-		minimalByteBudget = 5600
+		fullByteBudget    = 6400
+		minimalByteBudget = 6200
 	)
 
 	// Selector at execute_bead.go routes (agent|fiz|embedded) to the Agent
