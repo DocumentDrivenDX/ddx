@@ -88,6 +88,7 @@ type ExecuteLoopSpec struct {
 	OpaquePassthrough bool `json:"opaque_passthrough,omitempty"`
 
 	MaxCostUSD       float64  `json:"max_cost_usd,omitempty"`
+	MaxBeadCostUSD   float64  `json:"max_bead_cost_usd,omitempty"`
 	RequestTimeout   Duration `json:"request_timeout,omitempty"`
 	RateLimitMaxWait Duration `json:"rate_limit_max_wait,omitempty"`
 	MinPower         int      `json:"min_power,omitempty"`

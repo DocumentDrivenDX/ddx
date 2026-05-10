@@ -1444,6 +1444,55 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			setExit("RoutingUnavailable", "routing_unavailable")
 			return result, nil
 		}
+		// Per-bead cost budget exhausted: unclaim the bead (immediately
+		// re-claimable), emit the TD-031 §5 per-bead-budget-exhausted event,
+		// and increment the consecutive_ladder_exhaustions counter so the
+		// auto-recovery hook (sister bead ddx-63155d5c) can fire when the
+		// threshold is exceeded. No cooldown is set per ADR-024 Per-Bead Budget.
+		if isPerBeadBudgetExhaustedReport(report) {
+			result.Attempts++
+			if err := w.Store.Unclaim(candidate.ID); err != nil {
+				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+					return commitOutcomeError("Unclaim", assignee, result, err)
+				})
+				if ctx.Err() != nil {
+					return result, ctx.Err()
+				}
+				return result, err
+			}
+			_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
+				Kind:      "per-bead-budget-exhausted",
+				Summary:   "per-bead cost budget exhausted; bead returned to open without cooldown",
+				Body:      fmt.Sprintf("total_cost=%.4f\n%s", report.CostUSD, report.Detail),
+				Actor:     assignee,
+				Source:    "ddx agent execute-loop",
+				CreatedAt: now().UTC(),
+			})
+			_ = incrementConsecutiveLadderExhaustions(w.Store, candidate.ID)
+			if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "outcome store error (AppendEvent %s): %v (continuing)\n", candidate.ID, err)
+				}
+			}
+			result.Results = append(result.Results, report)
+			result.Failures++
+			result.LastFailureStatus = report.Status
+			emit("bead.result", map[string]any{
+				"bead_id":              candidate.ID,
+				"status":               report.Status,
+				"detail":               report.Detail,
+				"session_id":           report.SessionID,
+				"result_rev":           report.ResultRev,
+				"base_rev":             report.BaseRev,
+				"preserve_ref":         report.PreserveRef,
+				"no_changes_rationale": report.NoChangesRationale,
+				"duration_ms":          now().Sub(runStart).Milliseconds(),
+			})
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
+			}
+			continue
+		}
 		// ddx-5b3e57f4: distinguish worker-disrupted from model-gave-up.
 		// A failed attempt where the loop ctx was cancelled, or the executor
 		// surfaced a transport-class error, is not evidence the model could
@@ -3235,6 +3284,45 @@ func ReviewErrorEventBodyForSlot(class string, attemptCount int, resultRev strin
 // loop accumulator.
 func ReviewCostDeferredEventBody(resultRev string, reviewCostUSD, spentUSD, maxCostUSD float64) string {
 	return fmt.Sprintf("result_rev=%s\nreview_cost_usd=%.4f\nspent_usd=%.4f\nmax_cost_usd=%.4f", resultRev, reviewCostUSD, spentUSD, maxCostUSD)
+}
+
+// consecutiveLadderExhaustionsKey is the Extra field key that tracks how many
+// consecutive times a bead has exhausted the escalation ladder or the per-bead
+// budget without producing a success. The auto-recovery hook (sister bead
+// ddx-63155d5c) fires when this counter reaches the configured threshold.
+const consecutiveLadderExhaustionsKey = "consecutive_ladder_exhaustions"
+
+// isPerBeadBudgetExhaustedReport reports whether the given report signals that
+// the per-bead cost budget was exhausted. The marker is set by
+// runEscalatingSingleTierAttempts (cmd package) when the PerBeadCostTracker
+// trips. Using the escalation constant avoids string duplication.
+func isPerBeadBudgetExhaustedReport(report ExecuteBeadReport) bool {
+	return strings.Contains(report.Detail, escalation.PerBeadBudgetExhaustedReason)
+}
+
+// incrementConsecutiveLadderExhaustions increments the
+// consecutive_ladder_exhaustions counter stored in the bead's Extra map.
+// The counter is read by the auto-recovery hook to trigger reframe/decompose
+// once the threshold is exceeded. The value is stored as int but may be read
+// back as float64 after a JSON round-trip through the bead store.
+func incrementConsecutiveLadderExhaustions(store ExecuteBeadLoopStore, beadID string) error {
+	return store.Update(beadID, func(b *bead.Bead) {
+		ensureBeadExtra(b)
+		current := consecutiveLadderExhaustionsValue(b.Extra[consecutiveLadderExhaustionsKey])
+		b.Extra[consecutiveLadderExhaustionsKey] = current + 1
+	})
+}
+
+func consecutiveLadderExhaustionsValue(v any) int {
+	switch val := v.(type) {
+	case int:
+		return val
+	case int64:
+		return int(val)
+	case float64:
+		return int(val)
+	}
+	return 0
 }
 
 func trimDiagnosticPrefix(message, prefix string) string {
