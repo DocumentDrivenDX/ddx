@@ -215,6 +215,11 @@ prior attempt.
 
 ## Land And Preserve Semantics
 
+> **Scope note:** These semantics describe the multi-machine coordinator
+> topology (SD-020). For single-node mode (the FEAT-010 default), `Land()` is
+> local-only; the fetch+push lifecycle described below applies only when
+> multi-machine coordination is active.
+
 Success is only complete after the result is landed by rebase plus
 fast-forward.
 

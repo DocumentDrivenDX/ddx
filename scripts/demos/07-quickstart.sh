@@ -21,6 +21,7 @@ type_command ddx version
 
 # Set up a demo project
 DEMO_DIR=$(mktemp -d)
+register_demo_cleanup
 cd "$DEMO_DIR"
 GIT_TEMPLATE_DIR="" git init -q
 git config user.email "demo@ddx.dev"

@@ -14,9 +14,9 @@ import (
 // Security tests validate that the CLI handles security concerns properly
 
 // Helper function to create a fresh root command for tests
-func getSecurityTestRootCommand(workingDir string) *cobra.Command {
+func getSecurityTestRootCommand(t *testing.T, workingDir string) *cobra.Command {
 	if workingDir == "" {
-		workingDir = "/tmp"
+		workingDir = t.TempDir()
 	}
 	factory := NewCommandFactory(workingDir)
 	return factory.NewRootCommand()
@@ -119,7 +119,7 @@ persona_bindings:
 			},
 			validate: func(t *testing.T, workDir string) {
 				// Check that sensitive data is not logged or exposed
-				rootCmd := getSecurityTestRootCommand("")
+				rootCmd := getSecurityTestRootCommand(t, "")
 				// Commands already registered
 
 				output, _ := executeCommand(rootCmd, "config")
@@ -190,7 +190,7 @@ func TestSecurity_FilePermissions(t *testing.T) {
 			setup: func(t *testing.T) string {
 				workDir := t.TempDir()
 
-				rootCmd := getSecurityTestRootCommand("")
+				rootCmd := getSecurityTestRootCommand(t, "")
 				// Commands already registered
 
 				// Try to initialize (may fail if DDx not installed)
