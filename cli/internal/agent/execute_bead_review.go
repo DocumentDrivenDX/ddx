@@ -28,6 +28,12 @@ import (
 // can see when reviewer diversity collapsed.
 const ReviewPairingDegradedEventKind = "review-pairing-degraded"
 
+// ReviewerEscalatedEventKind is the kind:reviewer-escalated event kind
+// appended when the reviewer's MinPower is bumped above the baseline
+// impl.ActualPower+1 due to prior review-error or review-pairing-degraded
+// events for the same result_rev.
+const ReviewerEscalatedEventKind = "reviewer-escalated"
+
 // ImplementerRouting captures the implementer's resolved routing details so
 // the post-merge reviewer can build a paired ExecuteRequest with Role=reviewer,
 // the same correlation, and MinPower bumped one above the implementer's
@@ -182,6 +188,13 @@ func HasBeadLabelPrefix(labels []string, prefix string) bool {
 // BeadReader can fetch a bead by ID. Implemented by *bead.Store.
 type BeadReader interface {
 	Get(id string) (*bead.Bead, error)
+}
+
+// BeadEventReader reads the event history recorded against a bead.
+// Implemented by *bead.Store. Used by DefaultBeadReviewer to count prior
+// review escalation triggers for the same result_rev.
+type BeadEventReader interface {
+	Events(id string) ([]bead.BeadEvent, error)
 }
 
 // BeadReviewer runs a post-merge review for a completed bead.
@@ -631,6 +644,10 @@ type DefaultBeadReviewer struct {
 	// provider matches the implementer's. Optional: nil disables the
 	// telemetry emission while preserving the rest of the review flow.
 	BeadEvents BeadEventAppender
+	// EventReader, when non-nil, is used to count prior review escalation
+	// triggers (review-error and review-pairing-degraded events) for the
+	// same result_rev so the reviewer MinPower is bumped on retry.
+	EventReader BeadEventReader
 }
 
 // BuildReviewExecuteRequest constructs the AgentRunRuntime used for the
@@ -691,16 +708,28 @@ func BuildReviewGroupExecuteRequest(impl ImplementerRouting, reviewerHarness, re
 }
 
 func (r *DefaultBeadReviewer) reviewerProfileForDispatch(ctx context.Context, impl ImplementerRouting) string {
-	return r.reviewerDispatchProfile(ctx, impl).Name
+	return r.reviewerDispatchProfile(ctx, impl, 0).Name
 }
 
-func (r *DefaultBeadReviewer) reviewerDispatchProfile(ctx context.Context, impl ImplementerRouting) reviewerDispatchProfile {
+// reviewerDispatchProfile returns the fizeau profile name and MinPower to use
+// for the reviewer dispatch. priorErrors is the number of prior review-error
+// and review-pairing-degraded events for the same result_rev; each adds one
+// ladder step to MinPower:
+//   - 0 prior errors: impl.ActualPower+1 (baseline R4 pairing)
+//   - 1 prior error:  impl.ActualPower+2 (one step above baseline)
+//   - 2+ prior errors: top-of-ladder (SelectStrongestProfile, no floor)
+func (r *DefaultBeadReviewer) reviewerDispatchProfile(ctx context.Context, impl ImplementerRouting, priorErrors int) reviewerDispatchProfile {
 	floor := 0
 	if impl.ActualPower > 0 {
 		floor = impl.ActualPower + 1
 	}
+	// Escalated floor: each prior error adds one ladder step.
+	escalatedFloor := floor
+	if priorErrors > 0 && floor > 0 {
+		escalatedFloor = floor + priorErrors
+	}
 	if r.Runner != nil {
-		return reviewerDispatchProfile{MinPower: floor}
+		return reviewerDispatchProfile{MinPower: escalatedFloor}
 	}
 	selectedSvc := r.Service
 	if selectedSvc == nil {
@@ -710,29 +739,41 @@ func (r *DefaultBeadReviewer) reviewerDispatchProfile(ctx context.Context, impl 
 		}
 		built, err := factory(r.ProjectRoot)
 		if err != nil {
-			return reviewerDispatchProfile{MinPower: floor}
+			return reviewerDispatchProfile{MinPower: escalatedFloor}
 		}
 		selectedSvc = built
 	}
 	snap, err := LoadProfileSnapshot(ctx, selectedSvc)
 	if err != nil {
-		return reviewerDispatchProfile{MinPower: floor}
+		return reviewerDispatchProfile{MinPower: escalatedFloor}
 	}
+	// On 2+ prior errors (or 1+ error with unknown impl power), use the
+	// strongest available profile without a floor restriction (top-of-ladder).
+	topOfLadder := priorErrors >= 2 || (priorErrors >= 1 && floor == 0)
 	name := ""
-	if floor > 0 {
-		name = SelectStrongestProfileAbove(snap, floor)
+	if topOfLadder {
+		name = SelectStrongestProfile(snap)
+	} else if escalatedFloor > 0 {
+		name = SelectStrongestProfileAbove(snap, escalatedFloor)
 	} else {
 		name = selectSmartReviewerProfile(snap)
 	}
 	if name == "" {
-		return reviewerDispatchProfile{MinPower: floor}
+		return reviewerDispatchProfile{MinPower: escalatedFloor}
 	}
 	for _, profile := range snap.Profiles {
 		if profile.Name == name {
-			return reviewerDispatchProfile{Name: name, MinPower: profile.MinPower}
+			// Use the higher of the profile's own MinPower and the escalated floor
+			// so top-of-ladder selection never yields a MinPower below the floor
+			// we computed from the error count.
+			mp := profile.MinPower
+			if escalatedFloor > mp {
+				mp = escalatedFloor
+			}
+			return reviewerDispatchProfile{Name: name, MinPower: mp}
 		}
 	}
-	return reviewerDispatchProfile{Name: name, MinPower: floor}
+	return reviewerDispatchProfile{Name: name, MinPower: escalatedFloor}
 }
 
 func selectSmartReviewerProfile(snap ProfileSnapshot) string {
@@ -783,8 +824,10 @@ func reviewCorrelationID(correlation map[string]string) string {
 
 // reviewPairingDegradedBody renders the kind:review-pairing-degraded event
 // body. The body carries both implementer and reviewer routing details so
-// operators can see exactly which routes converged.
-func reviewPairingDegradedBody(impl ImplementerRouting, reviewerHarness, reviewerProvider, reviewerModel string, reviewerPower int) string {
+// operators can see exactly which routes converged. resultRev is included so
+// the event can be scoped to a specific commit when counting escalation
+// triggers.
+func reviewPairingDegradedBody(impl ImplementerRouting, reviewerHarness, reviewerProvider, reviewerModel string, reviewerPower int, resultRev string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "impl_harness=%s\n", impl.Harness)
 	fmt.Fprintf(&b, "impl_provider=%s\n", impl.Provider)
@@ -795,6 +838,45 @@ func reviewPairingDegradedBody(impl ImplementerRouting, reviewerHarness, reviewe
 	fmt.Fprintf(&b, "reviewer_model=%s\n", reviewerModel)
 	fmt.Fprintf(&b, "reviewer_actual_power=%d\n", reviewerPower)
 	fmt.Fprintf(&b, "min_power_requested=%d\n", impl.ActualPower+1)
+	if resultRev != "" {
+		fmt.Fprintf(&b, "result_rev=%s\n", resultRev)
+	}
+	return b.String()
+}
+
+// countPriorEscalationTriggers counts review-error and review-pairing-degraded
+// events recorded against the bead whose body cites the given result_rev. Each
+// counts as one escalation step — review-error events from transport/overflow/
+// parse failures and pairing-degraded events from routing collisions both
+// signal that the current reviewer tier is insufficient.
+func countPriorEscalationTriggers(reader BeadEventReader, beadID, resultRev string) int {
+	if reader == nil || resultRev == "" {
+		return 0
+	}
+	events, err := reader.Events(beadID)
+	if err != nil {
+		return 0
+	}
+	n := 0
+	for _, ev := range events {
+		if ev.Kind != "review-error" && ev.Kind != ReviewPairingDegradedEventKind {
+			continue
+		}
+		m := reResultRevField.FindStringSubmatch(ev.Body)
+		if m == nil || m[1] != resultRev {
+			continue
+		}
+		n++
+	}
+	return n
+}
+
+// reviewerEscalatedEventBody renders the kind:reviewer-escalated event body.
+func reviewerEscalatedEventBody(newMinPower, errorCount int, resultRev string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "new_min_power=%d\n", newMinPower)
+	fmt.Fprintf(&b, "error_count=%d\n", errorCount)
+	fmt.Fprintf(&b, "result_rev=%s\n", resultRev)
 	return b.String()
 }
 
@@ -878,6 +960,10 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 	// Determine iteration number from bead events.
 	iter := 1
 
+	// Count prior escalation triggers so reviewerDispatchProfile can bump
+	// MinPower on retries.
+	priorErrors := countPriorEscalationTriggers(r.EventReader, beadID, resultRev)
+
 	// Build the review prompt under evidence caps.
 	caps := r.Caps
 	if caps.MaxPromptBytes == 0 {
@@ -901,7 +987,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 	// records the failure and leaves the bead open for retry.
 	if built.Overflow {
 		baseRev := resolveReviewBaseRev(r.ProjectRoot, resultRev)
-		reviewProfile := r.reviewerDispatchProfile(ctx, impl)
+		reviewProfile := r.reviewerDispatchProfile(ctx, impl, priorErrors)
 		reviewRouteLabel := reviewProfile.Name
 		if r.Model != "" {
 			reviewRouteLabel = r.Model
@@ -950,11 +1036,23 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 	// operator override; otherwise DDx sends only a fizeau profile hint plus
 	// the reviewer MinPower floor.
 	reviewHarness := r.Harness
-	reviewProfile := r.reviewerDispatchProfile(ctx, impl)
+	reviewProfile := r.reviewerDispatchProfile(ctx, impl, priorErrors)
+	// Emit reviewer-escalated event when MinPower is bumped above baseline.
+	if priorErrors > 0 && r.BeadEvents != nil {
+		_ = r.BeadEvents.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      ReviewerEscalatedEventKind,
+			Summary:   fmt.Sprintf("reviewer escalated to min_power=%d after %d prior error(s)", reviewProfile.MinPower, priorErrors),
+			Body:      reviewerEscalatedEventBody(reviewProfile.MinPower, priorErrors, resultRev),
+			Source:    "ddx agent execute-loop",
+			CreatedAt: time.Now().UTC(),
+		})
+	}
 
 	start := time.Now()
 	runRuntime := BuildReviewExecuteRequest(impl, reviewHarness, reviewProfile.Name)
-	if runRuntime.MinPowerOverride == 0 && reviewProfile.MinPower > 0 {
+	// Apply escalated MinPower: use the higher of the base R4 floor and the
+	// escalated profile floor so retries reach a stronger reviewer tier.
+	if reviewProfile.MinPower > runRuntime.MinPowerOverride {
 		runRuntime.MinPowerOverride = reviewProfile.MinPower
 	}
 	reviewRouteLabel := r.applyExplicitReviewerPins(&runRuntime)
@@ -1089,13 +1187,14 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 	// R4 pairing-degradation telemetry: when MinPower=actualPower+1 fails
 	// to push the reviewer onto a different provider than the implementer,
 	// surface a kind:review-pairing-degraded event so operators can see the
-	// regression. Best-effort only — emission failures never affect the
-	// review outcome itself.
+	// regression. The result_rev is included in the body so the event can be
+	// counted as an escalation trigger for subsequent dispatches.
+	// Best-effort only — emission failures never affect the review outcome.
 	if r.BeadEvents != nil && actualProvider != "" && impl.Provider != "" && actualProvider == impl.Provider {
 		_ = r.BeadEvents.AppendEvent(beadID, bead.BeadEvent{
 			Kind:      ReviewPairingDegradedEventKind,
 			Summary:   fmt.Sprintf("reviewer pinned to same provider as implementer (%s)", impl.Provider),
-			Body:      reviewPairingDegradedBody(impl, actualHarness, actualProvider, actualModel, actualPower),
+			Body:      reviewPairingDegradedBody(impl, actualHarness, actualProvider, actualModel, actualPower, resultRev),
 			Source:    "ddx agent execute-loop",
 			CreatedAt: time.Now().UTC(),
 		})

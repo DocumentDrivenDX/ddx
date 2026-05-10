@@ -50,7 +50,18 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 	}
 
 	reviewHarness := r.Harness
-	reviewProfile := r.reviewerDispatchProfile(ctx, impl)
+	priorErrors := countPriorEscalationTriggers(r.EventReader, beadID, resultRev)
+	reviewProfile := r.reviewerDispatchProfile(ctx, impl, priorErrors)
+	// Emit reviewer-escalated event when MinPower is bumped above baseline.
+	if priorErrors > 0 && r.BeadEvents != nil {
+		_ = r.BeadEvents.AppendEvent(beadID, bead.BeadEvent{
+			Kind:      ReviewerEscalatedEventKind,
+			Summary:   fmt.Sprintf("reviewer escalated to min_power=%d after %d prior error(s)", reviewProfile.MinPower, priorErrors),
+			Body:      reviewerEscalatedEventBody(reviewProfile.MinPower, priorErrors, resultRev),
+			Source:    "ddx agent execute-loop",
+			CreatedAt: time.Now().UTC(),
+		})
+	}
 
 	out := &ReviewGroupResult{
 		BeadID:    beadID,
@@ -71,7 +82,9 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 			GroupID:       groupID,
 			ReviewerIndex: reviewerIndex,
 		})
-		if slotRuntime.MinPowerOverride == 0 && reviewProfile.MinPower > 0 {
+		// Apply escalated MinPower: use the higher of the base R4 floor and the
+		// escalated profile floor so retries reach a stronger reviewer tier.
+		if reviewProfile.MinPower > slotRuntime.MinPowerOverride {
 			slotRuntime.MinPowerOverride = reviewProfile.MinPower
 		}
 		reviewRouteLabel := r.applyExplicitReviewerPins(&slotRuntime)
@@ -218,7 +231,7 @@ func (r *DefaultBeadReviewer) reviewGroupSlot(ctx context.Context, b *bead.Bead,
 		_ = r.BeadEvents.AppendEvent(b.ID, bead.BeadEvent{
 			Kind:      ReviewPairingDegradedEventKind,
 			Summary:   fmt.Sprintf("reviewer pinned to same provider as implementer (%s)", impl.Provider),
-			Body:      reviewPairingDegradedBody(impl, actualHarness, actualProvider, actualModel, actualPower),
+			Body:      reviewPairingDegradedBody(impl, actualHarness, actualProvider, actualModel, actualPower, resultRev),
 			Source:    "ddx agent execute-loop",
 			CreatedAt: time.Now().UTC(),
 		})
