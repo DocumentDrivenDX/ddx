@@ -581,6 +581,12 @@ type ExecuteBeadWorker struct {
 	// (escalating to land_conflict_operator_required); false means failed-but-retriable.
 	ConflictResolver func(ctx context.Context, beadID, preserveRef, projectRoot string) (newTip string, isBlocking bool, err error)
 
+	// EscalationNextFloor, when non-nil, is called by the no-changes smart-retry
+	// path to advance the MinPower floor by exactly one ladder step above
+	// actualPower. Returns an error (e.g. ErrLadderExhausted) when already at the
+	// top tier, causing the bead to be parked to status=proposed.
+	EscalationNextFloor func(actualPower int) (int, error)
+
 	// conflictAutoRecoverFn replaces the default landConflictAutoRecover. Set
 	// in tests to inject controlled recovery results without a real git repo.
 	conflictAutoRecoverFn func(wd, preserveRef string, gitOps LandingGitOps) (string, error)
@@ -1652,7 +1658,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				result.Successes++
 				result.LastSuccessAt = now().UTC()
 			case agenttry.NoChangesActionKeepOpenSmartRetry:
-				if err := applyNoChangesSmartRetry(w.Store, candidate.ID, assignee, noChanges); err != nil {
+				if err := applyNoChangesSmartRetry(w.Store, candidate.ID, assignee, noChanges, report.ActualPower, w.EscalationNextFloor); err != nil {
 					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 						return commitOutcomeError("applyNoChangesSmartRetry", assignee, result, err)
 					})
@@ -2709,7 +2715,7 @@ const (
 	executeLoopSuggestedActionKey           = "execute-loop-suggested-action"
 )
 
-func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, noChanges *agenttry.NoChangesOutcome) error {
+func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, noChanges *agenttry.NoChangesOutcome, actualPower int, nextFloorFn func(int) (int, error)) error {
 	reason := strings.TrimSpace(noChanges.Reason)
 	if reason == "" {
 		reason = "autonomous work remains possible"
@@ -2718,6 +2724,31 @@ func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, 
 	if suggestedAction == "" {
 		suggestedAction = "retry with a smart agent"
 	}
+
+	// When a ladder is available, advance by one step. If the ladder is
+	// exhausted (already at top tier), the work requires human input.
+	if nextFloorFn != nil {
+		nextFloor, err := nextFloorFn(actualPower)
+		if err != nil {
+			return applyNoChangesOperatorRequired(store, beadID, actor, noChanges, time.Now().UTC())
+		}
+		return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
+			Reason: reason,
+			Actor:  actor,
+			Source: "ddx agent execute-loop",
+		}, func(b *bead.Bead) error {
+			ensureBeadExtra(b)
+			clearNoChangesLifecycleLabels(b)
+			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{})
+			setNoChangesLifecycleMetadata(b, noChanges.EventKind, reason, suggestedAction)
+			b.Extra[TriageTierHintKey] = nextFloor
+			b.Extra[executeLoopSmartRetryKey] = true
+			b.Extra[executeLoopSmartRetryReasonKey] = reason
+			b.Extra[executeLoopSmartRetrySuggestedActionKey] = suggestedAction
+			return nil
+		})
+	}
+
 	return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
 		Reason: reason,
 		Actor:  actor,

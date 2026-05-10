@@ -1787,6 +1787,109 @@ func TestNoChangesAutonomousInvestigationRemainsOpen(t *testing.T) {
 	assert.True(t, sawAutonomous, "no_changes_autonomous_retry event must be emitted")
 }
 
+// TestNoChangesSmartRetry_StepwiseClimb asserts that each no_changes failure
+// with a wired EscalationNextFloor advances the tier hint by exactly one ladder
+// step, not by jumping directly to the top of the ladder.
+func TestNoChangesSmartRetry_StepwiseClimb(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{ID: "ddx-stepclimb", Title: "Stepwise climb bead"}
+	require.NoError(t, store.Create(b))
+
+	// Three-rung ladder: 50 → 70 → 90.
+	nextFloor := func(actualPower int) (int, error) {
+		switch {
+		case actualPower < 50:
+			return 50, nil
+		case actualPower < 70:
+			return 70, nil
+		case actualPower < 90:
+			return 90, nil
+		default:
+			return 0, fmt.Errorf("ladder exhausted")
+		}
+	}
+
+	var callCount int
+	worker := &ExecuteBeadWorker{
+		Store:               store,
+		EscalationNextFloor: nextFloor,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			callCount++
+			power := 50
+			if callCount > 1 {
+				power = 70
+			}
+			return ExecuteBeadReport{
+				BeadID:             beadID,
+				Status:             ExecuteBeadStatusNoChanges,
+				ActualPower:        power,
+				NoChangesRationale: "status: open\nreason: needs stronger model",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	// First run: no_changes at actualPower=50 → hint must advance by one step to 70.
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	// After JSON round-trip, int values in Extra come back as float64.
+	assert.Equal(t, float64(70), got.Extra[TriageTierHintKey], "first no_changes at power 50 must set hint to next step (70), not top of ladder (90)")
+
+	// Second run: no_changes at actualPower=70 → hint must advance by one more step to 90.
+	_, err = worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+	got, err = store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusOpen, got.Status)
+	assert.Equal(t, float64(90), got.Extra[TriageTierHintKey], "second no_changes at power 70 must set hint to next step (90)")
+}
+
+// TestNoChangesSmartRetry_TopTierExhausted_GoesToProposed asserts that when
+// no_changes happens at the top tier (EscalationNextFloor returns an error),
+// the bead is parked to status=proposed rather than retried.
+func TestNoChangesSmartRetry_TopTierExhausted_GoesToProposed(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{ID: "ddx-toptier", Title: "Top tier exhausted bead"}
+	require.NoError(t, store.Create(b))
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		// Ladder exhausted: top-tier model already used, nothing higher.
+		EscalationNextFloor: func(actualPower int) (int, error) {
+			return 0, fmt.Errorf("ladder exhausted")
+		},
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:             beadID,
+				Status:             ExecuteBeadStatusNoChanges,
+				ActualPower:        90,
+				NoChangesRationale: "status: open\nreason: top-tier model still could not complete the work",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status, "no_changes at top tier must park bead to proposed (genuine spec gap)")
+	assert.Empty(t, got.Owner, "proposed bead must not be owned")
+	assert.NotContains(t, got.Extra, TriageTierHintKey, "tier hint must be cleared when parked to proposed")
+}
+
 func TestNoChangesOperatorRequiredBecomesProposed(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
