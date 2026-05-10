@@ -1,0 +1,102 @@
+{
+  "attempt_id": "20260510T054040-ee0798dc",
+  "bead_id": "ddx-9d7ef3a6",
+  "base_rev": "7a00ab9e758ccc3d2eb002a7029e1b60ae5ffb84",
+  "created_at": "2026-05-10T05:40:46.855254729Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-9d7ef3a6",
+    "title": "docprose: add corpus harness for normalized findings",
+    "description": "PROBLEM\nDDx needs a labeled evaluation corpus before prose rules can be trusted. Without positive and negative fixtures, rule changes can claim success while producing structural false positives or missing AI-slop constructions.\n\nROOT CAUSE\ndocs/helix/02-design/plan-2026-05-06-prose-quality-integration.md:132-191 defines corpus groups, metrics, and gates, but no corpus harness or golden normalized findings exist.\n\nSMART JUSTIFICATION: Corpus design is high-judgment work. It decides which prose findings count as useful, which technical density must stay quiet, and how DDx avoids optimizing for detector-like noise instead of actionable documentation quality.\n\nPROPOSED FIX\n- Add `cli/internal/docprose/testdata/corpus/` with positive, negative, and real DDx excerpt groups.\n- Add a corpus loader and expected normalized-finding JSON schema.\n- Add tests that compare normalized DDx findings, not raw Vale output.\n- Include negative samples for paths, commands, tables, frontmatter, IDs, API names, and acceptance criteria.\n\nNON-SCOPE\n- Do not tune every Vale rule in this bead.\n- Do not switch the public command to Vale.\n- Do not run a full-doc cleanup.\n\nDEPS\nDepends on the style-pack skeleton so the corpus harness can target packaged DDx rules.",
+    "acceptance": "1. `TestDocProseCorpus_LoadsGroups` covers all required corpus groups.\n2. `TestDocProseCorpus_ExpectedFindingSchema` validates golden normalized finding JSON.\n3. `TestDocProseCorpus_NegativeStructureCasesStayQuiet` covers paths, commands, IDs, tables, code spans, and frontmatter.\n4. `TestDocProseCorpus_PositiveCasesCanAssertRuleIDs` proves positives can require a specific DDx rule id.\n5. cd cli \u0026\u0026 go test ./internal/docprose/... green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-ccda7a32",
+    "labels": [
+      "phase:2",
+      "area:docprose",
+      "area:tests",
+      "kind:implementation",
+      "prose-quality",
+      "adr:025",
+      "spec:PLAN-2026-05-06-prose-quality-integration",
+      "tier:smart"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T05:40:06Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"bead uses tier:smart but has no SMART JUSTIFICATION section\",\"score\":0,\"suggested_fixes\":[\"bead uses tier:smart but has no SMART JUSTIFICATION section\"],\"waivers_applied\":null}",
+          "created_at": "2026-05-10T04:41:54.604648752Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[],\"requested_harness\":\"claude\",\"requested_model\":\"claude-sonnet-4-6\"}",
+          "created_at": "2026-05-10T04:58:53.396533915Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260510T044154-4ce64774\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":68,\"output_tokens\":50483,\"total_tokens\":50551,\"cost_usd\":1.9152554500000005,\"duration_ms\":1012588,\"exit_code\":0}",
+          "created_at": "2026-05-10T04:58:53.542731685Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=50551 cost_usd=1.9153 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-9d7ef3a6\",\"rejected_route_pins\":null,\"requested_tier\":\"smart\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"missing SMART JUSTIFICATION\",\"routing_intent_source\":\"bead_hint\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-10T04:59:55.944865297Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=bead_hint tier=smart note=missing SMART JUSTIFICATION"
+        },
+        {
+          "actor": "erik",
+          "body": "tracker lock timeout (max elapsed, owner pid: 3534627)\noutcome_reason=timeout",
+          "created_at": "2026-05-10T05:00:30.358746598Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"bead uses tier:smart but has no SMART JUSTIFICATION section\",\"score\":0,\"suggested_fixes\":[\"bead uses tier:smart but has no SMART JUSTIFICATION section\"],\"waivers_applied\":null}",
+          "created_at": "2026-05-10T05:40:40.783663371Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T05:40:06.5843005Z",
+      "spec-id": "PLAN-2026-05-06-prose-quality-integration"
+    }
+  },
+  "governing": [
+    {
+      "id": "PLAN-2026-05-06-prose-quality-integration",
+      "path": "docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md",
+      "title": "Plan: Prose Quality Integration with Vale"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260510T054040-ee0798dc",
+    "prompt": ".ddx/executions/20260510T054040-ee0798dc/prompt.md",
+    "manifest": ".ddx/executions/20260510T054040-ee0798dc/manifest.json",
+    "result": ".ddx/executions/20260510T054040-ee0798dc/result.json",
+    "checks": ".ddx/executions/20260510T054040-ee0798dc/checks.json",
+    "usage": ".ddx/executions/20260510T054040-ee0798dc/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-9d7ef3a6-20260510T054040-ee0798dc"
+  },
+  "prompt_sha": "06073fcccfb58b51f2999747ca706cb3e54dac07a051cedc6a4d09fdeb65427a"
+}
