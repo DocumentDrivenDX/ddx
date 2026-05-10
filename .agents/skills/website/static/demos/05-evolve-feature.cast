@@ -1,8 +1,0 @@
-{"version": 2, "width": 80, "height": 24, "timestamp": 1776827665, "env": {"SHELL": null, "TERM": null}}
-[0.3932, "o", "\r\n$ ddx bead create \"Add task priorities\" --type task --labels \"helix,phase:build\"\r\ntmp.pwOTzk3aMo-1faabcd9\r\n"]
-[1.398349, "o", "\r\n"]
-[1.39842, "o", "$ ddx bead dep add tmp.pwOTzk3aMo-1faabcd9 tmp.pwOTzk3aMo-8342921b\r\n"]
-[2.938111, "o", "\r\n$ ddx bead dep tree tmp.pwOTzk3aMo-8342921b\r\n"]
-[3.644217, "o", "tmp.pwOTzk3aMo-8342921b [open] Build task tracker\r\n  └── tmp.pwOTzk3aMo-1faabcd9 [open] Add task priorities\r\n"]
-[4.649382, "o", "\r\n$ ddx bead list\r\n"]
-[5.179859, "o", "tmp.pwOTzk3aMo-1faabcd9  open          P0  Add task priorities [helix,phase:build]\r\ntmp.pwOTzk3aMo-8342921b  open          P0  Build task tracker [helix,phase:build]\r\ntmp.pwOTzk3aMo-88cdbbcd  open          P0  Add task CRUD [helix,phase:build]\r\n"]
