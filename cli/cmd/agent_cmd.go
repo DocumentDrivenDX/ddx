@@ -20,6 +20,7 @@ import (
 	tierescalation "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe"
+	"github.com/DocumentDrivenDX/ddx/internal/attemptmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
@@ -1833,6 +1834,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		NoReview:              spec.NoReview,
 		TargetBeadID:          tryTargetBeadID,
 		ReviewCostCap:         costCap,
+		OnAttemptFinalized:    buildAttemptMetricsHook(projectRoot, store, spec.Profile),
 	})
 	if err != nil && result != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 		_ = writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, jsonOutput)
@@ -1841,6 +1843,48 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		return err
 	}
 	return writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, jsonOutput)
+}
+
+// buildAttemptMetricsHook returns the OnAttemptFinalized hook that appends a
+// row to .ddx/metrics/attempts.jsonl for each finalized attempt. Best-effort:
+// store lookups and file I/O errors are silently ignored so a metrics failure
+// never disrupts the drain loop.
+func buildAttemptMetricsHook(projectRoot string, store *bead.Store, profile string) func(agent.ExecuteBeadReport) {
+	return func(report agent.ExecuteBeadReport) {
+		if report.AttemptID == "" {
+			return
+		}
+		specID := ""
+		if report.BeadID != "" && store != nil {
+			if b, err := store.Get(report.BeadID); err == nil {
+				specID, _ = b.Extra["spec-id"].(string)
+			}
+		}
+		tsEnd := attemptmetrics.Rfc3339(time.Now().UTC())
+		tsStart := ""
+		if report.DurationMS > 0 {
+			start := time.Now().UTC().Add(-time.Duration(report.DurationMS) * time.Millisecond)
+			tsStart = attemptmetrics.Rfc3339(start)
+		}
+		row := attemptmetrics.AttemptRow{
+			SchemaVersion: attemptmetrics.SchemaVersion,
+			AttemptID:     report.AttemptID,
+			BeadID:        report.BeadID,
+			SessionID:     report.SessionID,
+			TSStart:       tsStart,
+			TSEnd:         tsEnd,
+			Model:         report.Model,
+			Harness:       report.Harness,
+			Profile:       profile,
+			Provider:      report.Provider,
+			SpecID:        specID,
+			Outcome:       report.Status,
+			CostUSD:       report.CostUSD,
+			DurationMS:    int(report.DurationMS),
+			ReviewVerdict: report.ReviewVerdict,
+		}
+		_ = attemptmetrics.AppendRow(projectRoot, row)
+	}
 }
 
 func formatAttemptRouteEconomics(attempt agent.ExecuteBeadReport) string {
