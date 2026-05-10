@@ -36,12 +36,12 @@ func TestClassifyExecuteBeadStatusPreservedNeedsReview(t *testing.T) {
 	}
 }
 
-// TestExecuteBeadWorkerPushFailedStaysOpenAndParks asserts the AC for
-// ddx-af54ebf3:
-//   - bead is NOT closed (status remains open)
-//   - last_status=push_failed and the push stderr are stored as cooldown metadata
-//   - the bead's events surface the push stderr so an operator can see it
-func TestExecuteBeadWorkerPushFailedStaysOpenAndParks(t *testing.T) {
+// TestExecuteBeadWorkerPushFailedStaysOpen asserts that push_failed:
+//   - does NOT close the bead (status remains open)
+//   - releases the claim (owner is empty)
+//   - does NOT set execute-loop-retry-after (no cooldown)
+//   - surfaces the push stderr in a bead event
+func TestExecuteBeadWorkerPushFailedStaysOpen(t *testing.T) {
 	store, first, _ := newExecuteLoopTestStore(t)
 	pushStderr := "remote: error: GH001: large files detected; aborting"
 	worker := &ExecuteBeadWorker{
@@ -71,14 +71,8 @@ func TestExecuteBeadWorkerPushFailedStaysOpenAndParks(t *testing.T) {
 	assert.Equal(t, bead.StatusOpen, got.Status, "push_failed must NOT close the bead")
 	assert.Empty(t, got.Owner, "push_failed must release the claim")
 
-	require.NotNil(t, got.Extra)
-	assert.Equal(t, "push_failed", got.Extra["execute-loop-last-status"],
-		"loop must record last_status=push_failed so subsequent claim attempts can refuse")
-	detail, _ := got.Extra["execute-loop-last-detail"].(string)
-	assert.Contains(t, detail, pushStderr,
-		"loop must record the push stderr in last_detail so operators can see why")
-	assert.NotEmpty(t, got.Extra["execute-loop-retry-after"],
-		"push_failed must park the bead via execute-loop-retry-after")
+	assert.Empty(t, got.Extra["execute-loop-retry-after"],
+		"push_failed must NOT park the bead — no cooldown should be set")
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
@@ -92,44 +86,6 @@ func TestExecuteBeadWorkerPushFailedStaysOpenAndParks(t *testing.T) {
 	}
 	assert.True(t, sawPushStderr,
 		"push stderr must appear in a bead event so operators can see why the push failed")
-}
-
-// TestExecuteBeadWorkerPushFailedCooldownCappedAt24h pins AC #2 + #7 of
-// ddx-a458af7c: push_failed (and every other loop-set cooldown) caps at
-// MaxLoopCooldown (24h). Year-scale parks are an operator decision via
-// `ddx bead update --set execute-loop-retry-after=...`, never an automatic
-// loop output.
-func TestExecuteBeadWorkerPushFailedCooldownCappedAt24h(t *testing.T) {
-	store, first, _ := newExecuteLoopTestStore(t)
-	worker := &ExecuteBeadWorker{
-		Store: store,
-		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			return ExecuteBeadReport{
-				BeadID:    beadID,
-				Status:    ExecuteBeadStatusPushFailed,
-				Detail:    PushFailedReasonPrefix + " remote rejected",
-				SessionID: "sess-cap",
-				BaseRev:   "aaaa",
-				ResultRev: "bbbb",
-			}, nil
-		}),
-	}
-
-	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
-	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
-	startedAt := time.Now().UTC()
-	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
-	require.NoError(t, err)
-
-	got, err := store.Get(first.ID)
-	require.NoError(t, err)
-	retryAfter, _ := got.Extra["execute-loop-retry-after"].(string)
-	require.NotEmpty(t, retryAfter, "push_failed must park the bead")
-	parsed, perr := time.Parse(time.RFC3339, retryAfter)
-	require.NoError(t, perr, "execute-loop-retry-after must parse as RFC3339")
-	delta := parsed.Sub(startedAt)
-	assert.LessOrEqual(t, delta, MaxLoopCooldown+time.Minute,
-		"push_failed cooldown must cap at MaxLoopCooldown (24h), got %s", delta)
 }
 
 // TestExecuteBeadWorkerPushConflictParksAndEmitsEvent pins AC #3 + #5 of
@@ -192,35 +148,3 @@ func TestExecuteBeadWorkerPushConflictParksAndEmitsEvent(t *testing.T) {
 		"loop must emit a kind:push-conflict event so operators can see the conflict context")
 }
 
-// TestClaimRefusesPushFailedBead pins the AC that subsequent claim attempts
-// on a push-failed bead fail loudly until the operator clears
-// execute-loop-last-status.
-func TestClaimRefusesPushFailedBead(t *testing.T) {
-	store := bead.NewStore(t.TempDir())
-	require.NoError(t, store.Init())
-
-	b := &bead.Bead{ID: "ddx-pf01", Title: "push-failed", Priority: 0}
-	require.NoError(t, store.Create(b))
-
-	require.NoError(t, store.Update(b.ID, func(bb *bead.Bead) {
-		if bb.Extra == nil {
-			bb.Extra = map[string]any{}
-		}
-		bb.Extra["execute-loop-last-status"] = "push_failed"
-		bb.Extra["execute-loop-last-detail"] = PushFailedReasonPrefix + " remote: GH001: large files detected"
-	}))
-
-	err := store.Claim(b.ID, "worker")
-	require.Error(t, err, "Claim must refuse a bead whose last_status=push_failed")
-	assert.Contains(t, err.Error(), "push failed")
-	assert.Contains(t, err.Error(), "GH001",
-		"the previous push stderr must surface in the claim error so it fails loudly")
-
-	// Clearing the last_status restores claimability.
-	require.NoError(t, store.Update(b.ID, func(bb *bead.Bead) {
-		delete(bb.Extra, "execute-loop-last-status")
-		delete(bb.Extra, "execute-loop-last-detail")
-	}))
-	require.NoError(t, store.Claim(b.ID, "worker"),
-		"Claim must succeed after operator clears execute-loop-last-status")
-}

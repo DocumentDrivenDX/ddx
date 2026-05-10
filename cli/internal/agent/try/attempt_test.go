@@ -326,9 +326,8 @@ func TestAttempt_DeclinedNeedsDecomposition_ParksWithStructuredEvent(t *testing.
 	assert.Equal(t, recommended, body.RecommendedSubbeads)
 }
 
-func TestAttempt_PushFailed_ParksWithCooldown(t *testing.T) {
+func TestAttempt_PushFailed_NoPark_NoRetryAfter(t *testing.T) {
 	store := &attemptStore{}
-	now := time.Date(2026, 5, 5, 10, 11, 12, 0, time.UTC)
 
 	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
 		Store: store,
@@ -339,23 +338,18 @@ func TestAttempt_PushFailed_ParksWithCooldown(t *testing.T) {
 				Detail: PushFailedReasonPrefix + " remote rejected",
 			}, nil
 		}),
-		Now: func() time.Time { return now },
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, OutcomePark, out.Disposition)
-	require.NotNil(t, out.Parking)
-	assert.True(t, out.Parking.Unclaim)
-	assert.True(t, out.Parking.RunPostAttemptTriage)
-	assert.Nil(t, out.Parking.Event)
-	assert.Equal(t, now.Add(maxAttemptCooldown), out.Parking.RetryAfter)
-	assert.Equal(t, now.Add(maxAttemptCooldown).Format(time.RFC3339), out.Report.RetryAfter)
+	assert.Equal(t, OutcomeReported, out.Disposition)
+	assert.Nil(t, out.Parking)
+	assert.Empty(t, out.Report.RetryAfter)
+	assert.Empty(t, store.cooldownStatus)
 	require.Empty(t, store.events)
 }
 
-func TestAttempt_TransportOrRateLimit_ReturnsRetryLaterCooldown(t *testing.T) {
+func TestAttempt_PushFailed_TransportUnavailable_NoCooldown(t *testing.T) {
 	store := &attemptStore{}
-	now := time.Date(2026, 5, 5, 10, 11, 12, 0, time.UTC)
 
 	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
 		Store: store,
@@ -366,17 +360,39 @@ func TestAttempt_TransportOrRateLimit_ReturnsRetryLaterCooldown(t *testing.T) {
 				Detail: PushFailedReasonPrefix + " transport unavailable",
 			}, nil
 		}),
-		Now: func() time.Time { return now },
 	})
 	require.NoError(t, err)
 
-	assert.Equal(t, OutcomePark, out.Disposition)
-	require.NotNil(t, out.Parking)
-	assert.True(t, out.Parking.Unclaim)
-	assert.Equal(t, now.Add(maxAttemptCooldown), out.Parking.RetryAfter)
-	assert.Equal(t, now.Add(maxAttemptCooldown).Format(time.RFC3339), out.Report.RetryAfter)
+	assert.Equal(t, OutcomeReported, out.Disposition)
+	assert.Nil(t, out.Parking)
+	assert.Empty(t, out.Report.RetryAfter)
 	assert.Equal(t, StatusPushFailed, out.Report.Status)
 	assert.Nil(t, out.NoChanges)
+	assert.Empty(t, store.cooldownStatus)
+}
+
+func TestPushFailed_NoCooldown(t *testing.T) {
+	store := &attemptStore{}
+
+	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
+		Store: store,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{
+				BeadID: beadID,
+				Status: StatusPushFailed,
+				Detail: PushFailedReasonPrefix + " pre-receive hook declined",
+			}, nil
+		}),
+		Now: func() time.Time { return time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC) },
+	})
+	require.NoError(t, err)
+
+	// push_failed must not park — the outcome is reported so the execute loop
+	// unclaims the bead, making it immediately re-claimable.
+	assert.Equal(t, OutcomeReported, out.Disposition)
+	assert.Nil(t, out.Parking, "push_failed must not carry parking instructions")
+	assert.Empty(t, out.Report.RetryAfter, "push_failed must not set execute-loop-retry-after")
+	assert.Empty(t, store.cooldownStatus, "push_failed must not call SetExecutionCooldown")
 }
 
 func TestAttempt_PushConflict_ParksWithCooldown(t *testing.T) {

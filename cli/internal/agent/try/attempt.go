@@ -269,20 +269,6 @@ func Attempt(ctx context.Context, store Store, beadID string, opts AttemptOpts) 
 		}, nil
 	}
 
-	if report.Status == StatusPushFailed {
-		parkUntil := nowFn(opts.Now).UTC().Add(maxAttemptCooldown)
-		report.RetryAfter = parkUntil.Format(time.RFC3339)
-		return Outcome{
-			Report:      report,
-			Disposition: OutcomePark,
-			Parking: &ParkingOutcome{
-				Unclaim:              true,
-				RetryAfter:           parkUntil,
-				RunPostAttemptTriage: true,
-			},
-		}, nil
-	}
-
 	if report.Status == StatusPushConflict {
 		parkUntil := nowFn(opts.Now).UTC().Add(maxAttemptCooldown)
 		report.RetryAfter = parkUntil.Format(time.RFC3339)
