@@ -1,4 +1,4 @@
-# Intake Gate — Pre-Claim Actionability And Complexity Evaluator
+# Bead Readiness Gate — Pre-Claim Actionability Evaluator
 
 The intake gate is a pre-Claim phase in `ddx work` that evaluates each
 candidate bead before an agent worker claims it. Its purpose is to improve beads
@@ -50,7 +50,7 @@ move the bead to `status=proposed`.
 
 ## Bypassing the gate per-bead
 
-Add the label `triage:skip` to a bead to bypass the complexity gate entirely:
+Add the label `triage:skip` to a bead to bypass the bead readiness gate entirely:
 
 ```
 ddx bead update <id> --labels triage:skip

@@ -60,7 +60,7 @@ See `docs/helix/00-discover/research/RSCH-010-inspect-and-adapt.md`.
 
 ## DDx response
 
-- **Generate-then-review for every bead.** The execute-bead pass
+- **Generate-then-review for every bead.** The implementation attempt
   produces a commit; the review pass re-checks against the same
   `<acceptance>` items the executor saw, with each AC item needing a
   specific, addressable piece of evidence.

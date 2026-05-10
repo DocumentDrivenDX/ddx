@@ -54,8 +54,8 @@ See `docs/helix/00-discover/research/RSCH-004-context-is-king.md`.
   artifacts (specs, personas, templates, patterns), addressable IDs,
   and explicit `depends_on` edges so a bead can be assembled with
   exactly the context it needs and no more.
-- **Beads carry only their description and AC** into the execute-bead
-  prompt; governing references are pulled by ID, not inlined wholesale.
+- **Beads carry only their description and AC** into the bead prompt;
+  governing references are pulled by ID, not inlined wholesale.
 - **Personas** keep system prompts short and role-specific rather than
   catch-all, so the per-call context budget is spent on the task, not
   on instructions about being an assistant.

@@ -52,7 +52,7 @@ See `docs/helix/00-discover/research/RSCH-006-right-size-the-model.md`.
 - **Harness configs declare capability tiers.** `ddx agent run
   --harness=<name>` selects by capability, not by hardwired model;
   harnesses can themselves cascade or quorum across models.
-- **Execute-loop escalates on review failure.** Cheap models run
+- **The drain loop escalates on review failure.** Cheap models run
   first; failed reviews reopen the bead and route the retry to a
   stronger model, mirroring FrugalGPT's cascade directly.
 - **Deterministic checks gate merge before any model gets a vote.**
