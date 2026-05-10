@@ -1,0 +1,48 @@
+{
+  "attempt_id": "20260510T023250-da87c8c9",
+  "bead_id": "ddx-7dc6a1d0",
+  "base_rev": "8f0513a20995fdbb82680a7c31d011902e45bacb",
+  "created_at": "2026-05-10T02:32:57.107546472Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-7dc6a1d0",
+    "title": "investigate why pre-merge checks blocked all 4 attempts on fizeau-bd5193ca",
+    "description": "Context:\nOn 2026-05-08, bead `fizeau-bd5193ca` (\"Fix fiz version JSON output\") in the fizeau repo went through 4 successive `ddx work` execute-bead attempts:\n- 20260508T175640-b12741e5 (15m, $2.59, sonnet) → task_succeeded → result preserved at refs/ddx/iterations/fizeau-bd5193ca/…/2c3f896a\n- 20260508T181204-20d01e6d (18m, $2.68, sonnet) → task_succeeded → preserved as b673f48a\n- 20260508T183001-483c8a6e (15m, $1.74, sonnet) → task_succeeded → preserved as ee719835\n- 20260508T184500-34ccc16f (~10m, sonnet) → task_succeeded → preserved as ebbeb0ad\n\nNone merged onto master; only `chore: update tracker (execute-bead …)` commits landed. Bead stayed in_progress until the loop was killed manually.\n\nOperator manually cherry-picked attempt 3 (ee719835) onto fizeau master as 44d85287 and verified all acceptance criteria pass:\n- `go test ./cmd/fiz ./agentcli` → both packages OK\n- `fiz --version` → human-readable with non-empty commit\n- `fiz version --json` → valid JSON with non-empty version, non-empty commit, boolean dirty\n\nSo the implementations themselves were correct. Some pre-merge check blocked them anyway. We don't yet know which check or why — see ddx-62edcb10 for the orthogonal observability bug that hid the rejection.\n\nInvestigation goals:\n1. Read `RunPreMergeChecks` (cli/internal/agent/execute_bead_loop.go:148-area) and enumerate every check it runs by default for a fizeau-style repo.\n2. Replay one of the preserved iteration refs (e.g. `refs/ddx/iterations/fizeau-bd5193ca/20260508T183001-483c8a6e-e9e33bba16bb`) through the pre-merge check pipeline against the matching base_rev to reproduce the block locally.\n3. Identify which check returned Blocked=true and why. Determine whether it was a real defect in the implementation (and the cherry-pick happened to skip the check) or a false positive in the check itself.\n4. If false positive, file a follow-up bead to fix the check; if real defect, document why the cherry-pick still passed go test.\n\nUseful artifacts (in /Users/erik/Projects/fizeau):\n- `.ddx/executions/20260508T17{5640,1204},18{3001,4500}-*/result.json` — worker outputs\n- `refs/ddx/iterations/fizeau-bd5193ca/*` — preserved result trees\n- `.ddx/agent-logs/sessions/sessions-2026-05.jsonl` — session metadata\n- `.ddx/attachments/fizeau-bd5193ca/events.jsonl` — overflow events\n\nDepends on: ddx-62edcb10 only insofar as fixing that bug would have made this investigation a one-line lookup instead of a code dive. They can be tackled independently.",
+    "acceptance": "1. Investigation report identifies the specific pre-merge check (by name/file:line) that returned Blocked for at least one of the four attempts on fizeau-bd5193ca.\n2. Report explains the failure (real defect vs false-positive in the check itself).\n3. If false positive: a follow-up bead is filed against the offending check.\n4. If real defect: report explains why the operator's manual cherry-pick of ee719835 still passes `go test ./cmd/fiz ./agentcli`.",
+    "labels": [
+      "area:execute-bead",
+      "area:pre-merge-checks",
+      "kind:investigation"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T02:31:44Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T02:32:50.708807077Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T02:31:44.492003068Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260510T023250-da87c8c9",
+    "prompt": ".ddx/executions/20260510T023250-da87c8c9/prompt.md",
+    "manifest": ".ddx/executions/20260510T023250-da87c8c9/manifest.json",
+    "result": ".ddx/executions/20260510T023250-da87c8c9/result.json",
+    "checks": ".ddx/executions/20260510T023250-da87c8c9/checks.json",
+    "usage": ".ddx/executions/20260510T023250-da87c8c9/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-7dc6a1d0-20260510T023250-da87c8c9"
+  },
+  "prompt_sha": "7e5d9894792dcb3831096f1c469ab6c4d35fd059dcea7dcf8cfda69b27067803"
+}
