@@ -87,6 +87,7 @@ work runs inline in the current process; per ADR-022 there is no separate
 	cmd.Flags().String("review-harness", "", "Harness for the post-merge reviewer (default: same as implementation harness)")
 	cmd.Flags().String("review-model", "", "Model override for the post-merge reviewer (default: smart tier)")
 	cmd.Flags().Float64("max-cost", escalation.DefaultMaxCostUSD, "Stop when accumulated billed cost exceeds USD; 0 = unlimited")
+	cmd.Flags().Float64("max-bead-cost", escalation.DefaultMaxBeadCostUSD, "Per-bead cost budget in USD; stop escalating when this bead's billed cost exceeds this amount (0 = unlimited); overridden per-bead by a budget:<USD> label")
 	cmd.Flags().Duration("request-timeout", 0, "Per-request provider wall-clock timeout; overrides project config and model-class defaults")
 	// Per-bead rate-limit retry budget (ddx-c6e3db02 / TD-031 §8.4).
 	cmd.Flags().Duration("rate-limit-max-wait", agent.RateLimitRetryDefaultBudget,

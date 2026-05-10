@@ -2,6 +2,7 @@ package escalation
 
 import (
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 )
@@ -86,6 +87,22 @@ func IsInfrastructureFailure(status, detail string) bool {
 // (where billed cost stays at $0) and small enough to surface a clear stop
 // signal before runaway openrouter usage.
 const DefaultMaxCostUSD = 100.0
+
+// DefaultMaxBeadCostUSD is the default per-bead budget. When a single bead
+// exhausts this amount across all escalation tiers, escalation stops and the
+// bead is returned to open without a cooldown. Operators can override
+// per-bead with a budget:<USD> label (e.g. budget:25.0).
+//
+// $5 is a conservative default — enough to attempt two or three smart-tier
+// runs before halting, but low enough to protect against runaway escalation
+// on a pathologically difficult bead.
+const DefaultMaxBeadCostUSD = 5.0
+
+// PerBeadBudgetExhaustedReason is the detail-string prefix written into a
+// report when the per-bead budget is exceeded. The execute-loop detects this
+// marker to handle the outcome correctly (unclaim, event, counter increment,
+// no cooldown).
+const PerBeadBudgetExhaustedReason = "per-bead budget exhausted"
 
 // CostClassBilled is the HarnessInfo.CostClass value the agent uses for
 // pay-per-token providers. Free local providers report "free" and
@@ -208,4 +225,65 @@ func (t *CostCapTracker) Tripped() (string, bool) {
 		return "", false
 	}
 	return fmt.Sprintf("cost cap reached: $%.2f billed >= $%.2f cap; raise the cap or set 0 to disable. Subscription and local providers do not count.", spent, t.MaxUSD), true
+}
+
+// PerBeadCostTracker accumulates billed cost for a single bead across all
+// escalation tiers and reports when the per-bead budget is exceeded.
+// When the budget is exceeded, the caller should stop escalating, unclaim
+// the bead, and emit a per_bead_budget_exhausted event (see TD-031 §5).
+//
+// MaxUSD == 0 disables the cap (unlimited). A nil Lookup counts all harnesses.
+// Use ParseBeadBudgetLabel to read a bead-level override from its label set.
+type PerBeadCostTracker struct {
+	inner *CostCapTracker
+}
+
+// NewPerBeadCostTracker constructs a per-bead tracker. Pass maxUSD <= 0 for
+// unlimited. Lookup follows the same billing-class convention as CostCapTracker.
+func NewPerBeadCostTracker(maxUSD float64, lookup HarnessBilledLookup) *PerBeadCostTracker {
+	return &PerBeadCostTracker{inner: NewCostCapTracker(maxUSD, lookup)}
+}
+
+// Add accumulates costUSD when the harness counts toward the cap.
+func (t *PerBeadCostTracker) Add(harnessName string, costUSD float64) {
+	t.inner.Add(harnessName, costUSD)
+}
+
+// Spent returns the current accumulated billed total for this bead.
+func (t *PerBeadCostTracker) Spent() float64 {
+	return t.inner.Spent()
+}
+
+// Tripped reports whether the per-bead budget is exceeded. Returns a detail
+// string containing PerBeadBudgetExhaustedReason when tripped so the execute-
+// loop can detect and handle the outcome.
+func (t *PerBeadCostTracker) Tripped() (string, bool) {
+	if t.inner.MaxUSD <= 0 {
+		return "", false
+	}
+	spent := t.inner.Spent()
+	if spent < t.inner.MaxUSD {
+		return "", false
+	}
+	return fmt.Sprintf("%s: $%.2f billed >= $%.2f per-bead budget; set --max-bead-cost=0 to disable or add a budget:<USD> label to override", PerBeadBudgetExhaustedReason, spent, t.inner.MaxUSD), true
+}
+
+// ParseBeadBudgetLabel scans a bead's label slice for a "budget:<float>" entry
+// and returns the parsed value and true when found. An entry with an invalid
+// numeric suffix is ignored (returns 0, false) so the caller falls back to the
+// default per-bead budget rather than disabling the budget entirely.
+func ParseBeadBudgetLabel(labels []string) (float64, bool) {
+	const prefix = "budget:"
+	for _, l := range labels {
+		if !strings.HasPrefix(l, prefix) {
+			continue
+		}
+		raw := strings.TrimPrefix(l, prefix)
+		v, err := strconv.ParseFloat(raw, 64)
+		if err != nil || v < 0 {
+			return 0, false
+		}
+		return v, true
+	}
+	return 0, false
 }

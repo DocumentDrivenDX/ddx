@@ -12,6 +12,7 @@ import (
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"strings"
 )
 
 type ladderResponse struct {
@@ -78,6 +79,7 @@ func TestEscalationLadder_WiredIntoExecutor(t *testing.T) {
 			}
 		},
 		nil,
+		nil,
 	)
 
 	require.NoError(t, err)
@@ -121,6 +123,7 @@ func TestEscalationLadder_StopsAtFinalRung(t *testing.T) {
 				return agent.ExecuteBeadReport{}, nil
 			}
 		},
+		nil,
 		nil,
 	)
 
@@ -171,6 +174,7 @@ func TestZeroConfigEscalationIntegration_RealLadderAdvancesMinPower(t *testing.T
 			return r, nil
 		},
 		nil,
+		nil,
 	)
 
 	require.NoError(t, err)
@@ -211,8 +215,99 @@ func TestInvestigationRetry_RequestsSmartRoute(t *testing.T) {
 			}, nil
 		},
 		nil,
+		nil,
 	)
 	require.NoError(t, err)
 	assert.Equal(t, agent.ExecuteBeadStatusSuccess, report.Status)
 	assert.Equal(t, []int{90}, requested, "the next attempt should receive only the raised MinPower floor")
+}
+
+// TestPerBeadCostTracker_StopsEscalationAtLimit asserts that when the
+// accumulated per-bead billed cost reaches the configured budget, escalation
+// stops and the returned report signals per-bead budget exhaustion.
+func TestPerBeadCostTracker_StopsEscalationAtLimit(t *testing.T) {
+	ladder := &ladderSpy{responses: []ladderResponse{
+		{next: 70},
+		{next: 90},
+	}}
+	attempts := 0
+
+	// Budget is $3. First attempt costs $2 (below), second costs $2 (total $4 ≥ $3).
+	tracker := policyescalation.NewPerBeadCostTracker(3.0, nil)
+
+	report, err := runEscalatingSingleTierAttempts(
+		context.Background(),
+		0,
+		ladder,
+		func(_ context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+			attempts++
+			switch attempts {
+			case 1:
+				return agent.ExecuteBeadReport{
+					BeadID:      "ddx-per-bead-001",
+					ActualPower: 50,
+					Harness:     "openrouter",
+					CostUSD:     2.0,
+					Status:      agent.ExecuteBeadStatusExecutionFailed,
+					Detail:      "TestFoo failed",
+				}, nil
+			case 2:
+				return agent.ExecuteBeadReport{
+					BeadID:      "ddx-per-bead-001",
+					ActualPower: 70,
+					Harness:     "openrouter",
+					CostUSD:     2.0,
+					Status:      agent.ExecuteBeadStatusExecutionFailed,
+					Detail:      "TestFoo failed again",
+				}, nil
+			default:
+				t.Fatalf("unexpected attempt %d", attempts)
+				return agent.ExecuteBeadReport{}, nil
+			}
+		},
+		nil,
+		tracker,
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, attempts, "should stop after two attempts (second trips the budget)")
+	assert.Equal(t, agent.ExecuteBeadStatusExecutionFailed, report.Status)
+	assert.True(t, strings.Contains(report.Detail, policyescalation.PerBeadBudgetExhaustedReason),
+		"detail must contain per-bead budget exhausted marker, got: %q", report.Detail)
+	assert.Equal(t, 4.0, report.CostUSD, "CostUSD on the report should be the total bead spend")
+}
+
+// TestPerBeadCostTracker_NoLimit_RunsToLadderExhaustion asserts that a
+// nil PerBeadCostTracker (unlimited) does not interrupt escalation — the loop
+// runs all the way through ladder exhaustion.
+func TestPerBeadCostTracker_NoLimit_RunsToLadderExhaustion(t *testing.T) {
+	ladder := &ladderSpy{responses: []ladderResponse{
+		{next: 70},
+		// No more responses: second NextFloor call returns ErrLadderExhausted.
+	}}
+	attempts := 0
+
+	report, err := runEscalatingSingleTierAttempts(
+		context.Background(),
+		0,
+		ladder,
+		func(_ context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
+			attempts++
+			return agent.ExecuteBeadReport{
+				BeadID:      "ddx-per-bead-002",
+				ActualPower: requestedMinPower,
+				Harness:     "openrouter",
+				CostUSD:     50.0, // high cost per attempt — should not stop with nil tracker
+				Status:      agent.ExecuteBeadStatusExecutionFailed,
+				Detail:      "TestFoo failed",
+			}, nil
+		},
+		nil,
+		nil, // no per-bead tracker = unlimited
+	)
+
+	require.NoError(t, err)
+	assert.Equal(t, 2, attempts, "should run through all available rungs (ladder exhaustion, not budget)")
+	assert.False(t, strings.Contains(report.Detail, policyescalation.PerBeadBudgetExhaustedReason),
+		"detail must not contain per-bead budget exhausted marker when tracker is nil")
 }
