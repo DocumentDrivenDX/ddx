@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -313,8 +314,8 @@ func TestAttempt_DeclinedNeedsDecomposition_ParksWithStructuredEvent(t *testing.
 	assert.True(t, out.Parking.RunPostAttemptTriage)
 	require.NotNil(t, out.Parking.Event)
 	assert.Equal(t, "decomposition-recommendation", out.Parking.Event.Kind)
-	assert.Equal(t, now.Add(maxAttemptCooldown), out.Parking.RetryAfter)
-	assert.Equal(t, now.Add(maxAttemptCooldown).Format(time.RFC3339), out.Report.RetryAfter)
+	assert.True(t, out.Parking.RetryAfter.IsZero(), "declined_needs_decomposition must not park with cooldown")
+	assert.Empty(t, out.Report.RetryAfter, "declined_needs_decomposition must not set execute-loop-retry-after")
 	require.Len(t, store.events, 0)
 
 	var body struct {
@@ -324,6 +325,58 @@ func TestAttempt_DeclinedNeedsDecomposition_ParksWithStructuredEvent(t *testing.
 	require.NoError(t, json.Unmarshal([]byte(out.Parking.Event.Body), &body))
 	assert.Equal(t, rationale, body.Rationale)
 	assert.Equal(t, recommended, body.RecommendedSubbeads)
+}
+
+func TestDeclinedNeedsDecomposition_NoCooldown(t *testing.T) {
+	store := &attemptStore{}
+	out, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
+		Store: store,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{BeadID: beadID, Status: StatusDeclinedNeedsDecomposition}, nil
+		}),
+	})
+	require.NoError(t, err)
+	assert.Empty(t, out.Report.RetryAfter, "declined_needs_decomposition must not set execute-loop-retry-after")
+	require.NotNil(t, out.Parking)
+	assert.True(t, out.Parking.RetryAfter.IsZero(), "declined_needs_decomposition must not park with a time-based cooldown")
+	assert.Empty(t, store.cooldownStatus, "declined_needs_decomposition must not call SetExecutionCooldown")
+}
+
+func TestDeclinedNeedsDecomposition_NotEligible(t *testing.T) {
+	store := &attemptStore{}
+	_, err := Attempt(context.Background(), store, "ddx-test", AttemptOpts{
+		Store: store,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{BeadID: beadID, Status: StatusDeclinedNeedsDecomposition}, nil
+		}),
+	})
+	require.NoError(t, err)
+	assert.Equal(t, false, store.mutatedBead.Extra[bead.ExtraExecutionElig], "execution-eligible must be set to false")
+	assert.Equal(t, bead.StatusOpen, store.lifecycleStatus, "status must transition to open")
+}
+
+func TestDeclinedNeedsDecomposition_NotInReady(t *testing.T) {
+	dir := t.TempDir()
+	s := bead.NewStore(filepath.Join(dir, ".ddx"))
+	require.NoError(t, s.Init())
+
+	b := &bead.Bead{Title: "too-big bead", IssueType: "task", Priority: 1}
+	require.NoError(t, s.Create(b))
+
+	adapter := &beadStoreAdapter{s: s}
+	_, err := Attempt(context.Background(), adapter, b.ID, AttemptOpts{
+		Store: adapter,
+		Executor: ExecutorFunc(func(ctx context.Context, beadID string) (Report, error) {
+			return Report{BeadID: beadID, Status: StatusDeclinedNeedsDecomposition}, nil
+		}),
+	})
+	require.NoError(t, err)
+
+	ready, readyErr := s.Ready()
+	require.NoError(t, readyErr)
+	for _, rb := range ready {
+		assert.NotEqual(t, b.ID, rb.ID, "bead should be excluded from Ready() due to execution-eligible=false, not a cooldown")
+	}
 }
 
 func TestAttempt_PushFailed_NoPark_NoRetryAfter(t *testing.T) {
@@ -524,6 +577,7 @@ type attemptStore struct {
 	unclaimed           bool
 	cooldownStatus      string
 	lifecycleStatus     string
+	mutatedBead         bead.Bead
 	noChangesCountCalls int
 }
 
@@ -549,13 +603,34 @@ func (s *attemptStore) SetExecutionCooldown(beadID string, until time.Time, stat
 
 func (s *attemptStore) UpdateWithLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions, mutate func(*bead.Bead) error) error {
 	s.lifecycleStatus = status
+	b := &bead.Bead{ID: id, Status: bead.StatusOpen}
 	if mutate != nil {
-		return mutate(&bead.Bead{ID: id, Status: bead.StatusOpen})
+		if err := mutate(b); err != nil {
+			return err
+		}
 	}
+	s.mutatedBead = *b
 	return nil
 }
 
 func (s *attemptStore) IncrNoChangesCount(beadID string) (int, error) {
 	s.noChangesCountCalls++
 	return s.noChangesCountCalls, nil
+}
+
+// beadStoreAdapter wraps *bead.Store to satisfy the try.Store interface,
+// delegating UpdateWithLifecycleStatus to the real store and stubbing unused methods.
+type beadStoreAdapter struct {
+	s *bead.Store
+}
+
+func (a *beadStoreAdapter) AppendEvent(_ string, _ bead.BeadEvent) error          { return nil }
+func (a *beadStoreAdapter) CloseWithEvidence(_, _, _ string) error                { return nil }
+func (a *beadStoreAdapter) Unclaim(_ string) error                                { return nil }
+func (a *beadStoreAdapter) SetExecutionCooldown(_ string, _ time.Time, _, _, _ string) error {
+	return nil
+}
+func (a *beadStoreAdapter) IncrNoChangesCount(_ string) (int, error) { return 0, nil }
+func (a *beadStoreAdapter) UpdateWithLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions, mutate func(*bead.Bead) error) error {
+	return a.s.UpdateWithLifecycleStatus(id, status, opts, mutate)
 }

@@ -254,15 +254,30 @@ func Attempt(ctx context.Context, store Store, beadID string, opts AttemptOpts) 
 	}
 
 	if report.Status == StatusDeclinedNeedsDecomposition {
-		parkUntil := nowFn(opts.Now).UTC().Add(maxAttemptCooldown)
-		report.RetryAfter = parkUntil.Format(time.RFC3339)
+		effectiveStore := opts.Store
+		if effectiveStore == nil {
+			effectiveStore = store
+		}
+		if effectiveStore != nil {
+			if err := effectiveStore.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
+				Reason: "declined: bead requires decomposition before execution",
+				Source: "ddx agent try",
+			}, func(b *bead.Bead) error {
+				if b.Extra == nil {
+					b.Extra = make(map[string]any)
+				}
+				b.Extra[bead.ExtraExecutionElig] = false
+				return nil
+			}); err != nil {
+				return Outcome{Report: report, StoreErrOp: "UpdateWithLifecycleStatus", StoreErr: err}, nil
+			}
+		}
 		event := buildDecompositionParkingEvent(report)
 		return Outcome{
 			Report:      report,
 			Disposition: OutcomePark,
 			Parking: &ParkingOutcome{
 				Unclaim:              true,
-				RetryAfter:           parkUntil,
 				RunPostAttemptTriage: true,
 				Event:                event,
 			},
