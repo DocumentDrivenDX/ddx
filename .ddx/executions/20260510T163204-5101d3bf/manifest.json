@@ -1,0 +1,51 @@
+{
+  "attempt_id": "20260510T163204-5101d3bf",
+  "bead_id": "ddx-d0be829d",
+  "base_rev": "2f3d6eb648aacd8f60ac9a530cd689a9e9766959",
+  "created_at": "2026-05-10T16:32:11.823133339Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-d0be829d",
+    "title": "feat(bead): rev-bound auto-invalidation for push_failed cooldowns",
+    "description": "PROBLEM\n  Cooldowns survive their cause. When a code fix lands on origin\n  that resolves the cause of a cooldown (e.g., a data race fix that\n  was blocking pre-push tests), affected cooldowns remain active\n  until wall-clock expiry — typically hours after the fix is\n  available. Drain idles even though the world has moved on.\n\n  Sister bead R1 removes push_failed cooldowns entirely (the most\n  egregious case). This bead handles the GENERAL pattern: when\n  origin/main advances past the rev at which a cooldown was set,\n  the cooldown's \"world-state\" is stale and should auto-clear.\n\nCURRENT STATE\n  - cli/internal/bead/store.go:1524-1533 activeRetryCooldown is\n    purely wall-clock: parses execute-loop-retry-after, returns\n    retryAfter.After(now).\n  - SetExecutionCooldown does not record the base-rev at which the\n    cooldown was set.\n  - There is no auto-invalidation hook anywhere.\n\nPROPOSED FIX\n  1. Extend SetExecutionCooldown to record the base-rev:\n     - cli/internal/bead/store.go: SetExecutionCooldown gains a\n       baseRev parameter; writes execute-loop-cooldown-base-rev to\n       Extra alongside execute-loop-retry-after.\n     - All callers updated to pass current main HEAD or attempt\n       base-rev.\n\n  2. Extend activeRetryCooldown to check rev advance:\n     - If execute-loop-cooldown-base-rev is set AND current\n       origin/main HEAD has advanced past that rev, return\n       active=false (cooldown auto-cleared).\n     - \"Advanced past\" means: current HEAD is a descendant of the\n       cooldown base-rev OR current HEAD != cooldown base-rev (use\n       git merge-base or simple rev equality, depending on\n       implementation cost).\n     - Cache the current origin HEAD per ready-queue evaluation pass\n       to avoid one git read per bead.\n\n  3. Document the contract:\n     - Add comment at activeRetryCooldown explaining the rev-bound\n       semantics.\n     - Reference TD-031 §5 invariant.\n\n  Tests:\n     - TestActiveRetryCooldown_RevBoundAutoClears: set cooldown at\n       rev A, advance HEAD to rev B (descendant), assert\n       activeRetryCooldown returns false.\n     - TestActiveRetryCooldown_SameRevStillActive: set cooldown at\n       rev A, leave HEAD at rev A, assert active=true.\n     - TestActiveRetryCooldown_NoBaseRevFallsBackToWallClock:\n       legacy cooldowns without base-rev still work via wall-clock\n       only (backward-compat).\n\nNON-SCOPE\n  - Hooks for arbitrary \"cause resolved\" detection beyond rev-advance\n    (e.g., specific test now passing). Out of scope; rev-advance is\n    the simple proxy.\n  - Migrating existing cooldowns to record base-rev (they expire on\n    wall-clock; new ones get the new field).\n\nINTERSECTIONS\n  - Sister bead R1 (push_failed no cooldown) reduces the impact of\n    this bead but does not eliminate the need: other cooldowns\n    (no_changes, no_viable_provider, etc.) still benefit from\n    rev-bound auto-clear when applicable.\n  - Sister bead R2 (bulk clear-cooldowns) is the manual escape\n    valve; this is the automatic version.",
+    "acceptance": "1. cli/internal/bead/store.go SetExecutionCooldown writes execute-loop-cooldown-base-rev alongside execute-loop-retry-after.\n2. cli/internal/bead/store.go activeRetryCooldown checks the base-rev: if origin/main HEAD has advanced past the recorded base-rev, returns active=false even if wall-clock has not expired.\n3. The current origin HEAD is read once per ready-queue evaluation pass (cached, not per-bead).\n4. TestActiveRetryCooldown_RevBoundAutoClears asserts cooldown clears when HEAD advances.\n5. TestActiveRetryCooldown_SameRevStillActive asserts cooldown stays active when HEAD has not advanced.\n6. TestActiveRetryCooldown_NoBaseRevFallsBackToWallClock asserts legacy cooldowns without base-rev still work.\n7. cd cli \u0026\u0026 go test ./internal/bead/... ./internal/agent/... green.\n8. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "area:bead",
+      "area:agent",
+      "kind:feature",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T16:31:00Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T16:32:04.884611194Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T16:31:00.687044839Z",
+      "queue-rank": "17"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260510T163204-5101d3bf",
+    "prompt": ".ddx/executions/20260510T163204-5101d3bf/prompt.md",
+    "manifest": ".ddx/executions/20260510T163204-5101d3bf/manifest.json",
+    "result": ".ddx/executions/20260510T163204-5101d3bf/result.json",
+    "checks": ".ddx/executions/20260510T163204-5101d3bf/checks.json",
+    "usage": ".ddx/executions/20260510T163204-5101d3bf/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-d0be829d-20260510T163204-5101d3bf"
+  },
+  "prompt_sha": "ab83b7d0bcc9f5fa1966919baf1261d3a9c6feb2c7cc1ac95c633bc35e027d8b"
+}
