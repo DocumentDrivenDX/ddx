@@ -22,6 +22,11 @@ in a single canonical flow. It exists in both one-shot and watch (daemon)
 modes and is constrained to never touch any path outside the DDx-managed
 allowlist.
 
+FEAT-023 is the designated home for origin-sync semantics that complement
+FEAT-010's network-free drain boundary: `Land()` deliberately performs no
+network I/O, and `ddx sync` is the operator-facing command that closes the
+gap by fetching and pushing DDx-managed state on demand or on a watch interval.
+
 Sync solves the multi-machine drift problem operators see when DDx is checked
 out on more than one machine: workers churn `beads.jsonl` every few minutes
 during execute-loop drains, the working tree is constantly dirty in tracked

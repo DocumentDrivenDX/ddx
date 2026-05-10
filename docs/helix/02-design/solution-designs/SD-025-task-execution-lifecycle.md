@@ -115,6 +115,8 @@ Layer 2 stores DDx-owned attempt orchestration:
 Layer 2 owns success classification for a bead attempt because DDx owns commits,
 merge/preserve state, no-change rationale, post-run gates, and review evidence.
 The agent's exit status and actual power are inputs, not the full decision.
+Per FEAT-010's network-free drain boundary, this layer performs no network I/O;
+origin-sync and push are out-of-band per FEAT-023.
 
 ### Layer 3: queue drain
 
@@ -131,6 +133,8 @@ Layer 3 stores the mechanical queue loop:
 
 Layer 3 does not file new content-aware work or decide workflow policy.
 Supervisory behavior belongs to skills or plugins layered on top.
+Per FEAT-010's network-free drain boundary, this layer performs no network I/O;
+origin-sync and push are out-of-band per FEAT-023.
 
 ## On-Disk Layout
 
