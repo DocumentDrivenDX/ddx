@@ -1,0 +1,69 @@
+{
+  "attempt_id": "20260510T024702-f555a440",
+  "bead_id": "ddx-08c9d6a7",
+  "base_rev": "5cf934f6b83cc281649cfb7646332e621a78da56",
+  "created_at": "2026-05-10T02:47:09.459388397Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-08c9d6a7",
+    "title": "agent-mode tests: prove workers ignore stewardship defaults",
+    "description": "PROBLEM\nThe guidance change is risky in two directions: it must stop broad interactive sessions from opportunistically editing ready beads, and it must not suppress non-interactive ddx work execution. The project needs deterministic regression coverage for both sides.\n\nROOT CAUSE\ncli/internal/agent/execute_bead_guardrails_test.go contains load-bearing prompt invariant tests, but it does not assert a DDX mode boundary. Existing work-loop tests exercise no-ready-work and execution behavior, but they do not prove the new interactive queue-steward guidance is read-only or that ddx work --once still executes a ready bead after the guidance lands. The combined interactive-steward skill bead owns the fixture-backed route table and reference guidance that separate broad interactive prompts from worker prompts.\n\nPROPOSED FIX\nAdd a focused regression layer that tests representative prompt routes and the worker carve-out. Use deterministic fixtures/static assertions rather than requiring an LLM call: broad interactive prompts should produce queue-steward guidance with no code-edit instruction, while ddx work/try worker prompts should produce bead_execution guidance and remain implementation-capable.\n\nNON-SCOPE\n- Benchmarking model quality.\n- Running external harnesses or networked agents in unit tests.\n- Replacing existing execute-bead integration tests.\n\nPARENT AND DEPS\nParent: ddx-09d7d787. Dependencies: ddx-f65f1394, ddx-3c6ca63f, ddx-c2a66f45-wt-6bee7238, and ddx-c2a66f45-wt-53f8c8b8.",
+    "acceptance": "1. Add a deterministic routing fixture or table covering at least \"what's blocking the queue now\", \"what should I work on next\", \"work the queue\", \"ddx work --once\", and an explicit direct implementation request.\n2. TestDDxQueueStewardGuidance_InteractiveBlockingQuestionIsReadOnly asserts broad blocking/queue prompts route to queue_steward, prefer focus/status inspection, and do not instruct the agent to edit code or execute a ready bead manually.\n3. TestDDxModeRoutingPrompts_DoWorkPrefersWorkerCommand asserts ambiguous \"work the queue\" guidance recommends ddx work/worker dispatch instead of local manual execution.\n4. TestDDxWorkOnce_BeadExecutionIgnoresQueueStewardDefault asserts ddx work --once prompt/runtime path carries bead_execution and still permits implementing bead AC.\n5. TestDDxDirectImplementationMode_AllowsExplicitUserEdits asserts explicit human requests to modify code/docs are not blocked by queue-steward guidance.\n6. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -run \"TestDDxQueueStewardGuidance_InteractiveBlockingQuestionIsReadOnly|TestDDxModeRoutingPrompts_DoWorkPrefersWorkerCommand|TestDDxWorkOnce_BeadExecutionIgnoresQueueStewardDefault|TestDDxDirectImplementationMode_AllowsExplicitUserEdits\" -count=1 passes.\n7. cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... passes.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-09d7d787",
+    "labels": [
+      "phase:2",
+      "area:test",
+      "area:agent",
+      "area:skills",
+      "area:cli",
+      "kind:test",
+      "operator-ux",
+      "queue-steward",
+      "spec:FEAT-010",
+      "spec:FEAT-011"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T02:45:58Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3533406",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T02:47:02.836960483Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T02:45:58.479114044Z",
+      "spec-id": "FEAT-010,FEAT-011"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    },
+    {
+      "id": "FEAT-011",
+      "path": "docs/helix/01-frame/features/FEAT-011-skills.md",
+      "title": "Feature: DDx Agent Skills"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260510T024702-f555a440",
+    "prompt": ".ddx/executions/20260510T024702-f555a440/prompt.md",
+    "manifest": ".ddx/executions/20260510T024702-f555a440/manifest.json",
+    "result": ".ddx/executions/20260510T024702-f555a440/result.json",
+    "checks": ".ddx/executions/20260510T024702-f555a440/checks.json",
+    "usage": ".ddx/executions/20260510T024702-f555a440/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-08c9d6a7-20260510T024702-f555a440"
+  },
+  "prompt_sha": "21824113be11cc58926d466b1e9bb5218e7d93c727ed4b373f3a698df67ebc90"
+}
