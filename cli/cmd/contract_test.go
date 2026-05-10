@@ -17,8 +17,8 @@ import (
 // as defined in docs/02-design/contracts/CLI-001-core-commands.md
 
 // Helper function to create a fresh root command for tests
-func getContractTestRootCommand() *cobra.Command {
-	factory := NewCommandFactory("/tmp")
+func getContractTestRootCommand(t *testing.T) *cobra.Command {
+	factory := NewCommandFactory(t.TempDir())
 	return factory.NewRootCommand()
 }
 
@@ -146,7 +146,7 @@ func TestInitCommand_Contract(t *testing.T) {
 				factory := NewCommandFactory(workDir)
 				rootCmd = factory.NewRootCommand()
 			} else {
-				rootCmd = getContractTestRootCommand()
+				rootCmd = getContractTestRootCommand(t)
 			}
 
 			output, err := executeContractCommand(rootCmd, tt.args...)
@@ -265,7 +265,7 @@ func TestListCommand_Contract(t *testing.T) {
 			if workDir != "" {
 				factory = NewCommandFactory(workDir)
 			} else {
-				factory = NewCommandFactory("/tmp")
+				factory = NewCommandFactory(t.TempDir())
 			}
 			freshListCmd := &cobra.Command{
 				Use:   "list",
@@ -363,7 +363,7 @@ persona_bindings:
 			if workDir != "" {
 				factory = NewCommandFactory(workDir)
 			} else {
-				factory = NewCommandFactory("/tmp")
+				factory = NewCommandFactory(t.TempDir())
 			}
 			rootCmd := factory.NewRootCommand()
 

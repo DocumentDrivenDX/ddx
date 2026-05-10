@@ -1,0 +1,4 @@
+{
+  "mode": "planning",
+  "expect_rule_ids": ["prose.planning.vagueness"]
+}

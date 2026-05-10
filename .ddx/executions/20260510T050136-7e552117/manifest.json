@@ -1,0 +1,62 @@
+{
+  "attempt_id": "20260510T050136-7e552117",
+  "bead_id": "ddx-ee0af7b8",
+  "base_rev": "1168d20e49dcaa6d073af56bb76e59d2c7cd1107",
+  "created_at": "2026-05-10T05:01:44.244266801Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ee0af7b8",
+    "title": "docprose: generate temporary Vale config",
+    "description": "PROBLEM\n`ddx doc prose` must run with DDx defaults even when a project has no `.vale.ini`. DDx needs temporary Vale config generation so the public command stays `ddx doc prose` instead of making users manage Vale config.\n\nROOT CAUSE\ndocs/helix/02-design/plan-2026-05-06-prose-quality-integration.md:109-130 specifies temporary `.vale.ini` generation, packaged `StylesPath`, explicit paths, JSON output, and `--no-global`, but no config generator exists.\n\nPROPOSED FIX\n- Generate a temporary `.vale.ini` from DDx defaults and project config.\n- Point `StylesPath` at packaged DDx Vale styles.\n- Render project vocabulary into Vale vocab/config.\n- Keep temp files scoped to the command invocation and clean them up.\n\nNON-SCOPE\n- Do not invoke Vale in this bead.\n- Do not parse Vale JSON.\n- Do not change user-facing findings.\n\nDEPS\nDepends on the style-pack skeleton because config generation needs packaged style paths.",
+    "acceptance": "1. `TestDocProseValeConfig_NoProjectValeINI` generates a valid config from DDx defaults.\n2. `TestDocProseValeConfig_StylesPathUsesPackagedRules` verifies the generated `StylesPath`.\n3. `TestDocProseValeConfig_ProjectVocabularyRendered` verifies vocabulary metadata is included.\n4. `TestDocProseValeConfig_CleansTemporaryFiles` verifies cleanup behavior.\n5. cd cli \u0026\u0026 go test ./internal/docprose/... green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-ccda7a32",
+    "labels": [
+      "phase:2",
+      "area:docprose",
+      "area:config",
+      "kind:implementation",
+      "prose-quality",
+      "adr:025",
+      "spec:PLAN-2026-05-06-prose-quality-integration",
+      "tier:standard"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T05:00:30Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3533406",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T05:01:36.561686826Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T05:00:30.98217686Z",
+      "spec-id": "PLAN-2026-05-06-prose-quality-integration"
+    }
+  },
+  "governing": [
+    {
+      "id": "PLAN-2026-05-06-prose-quality-integration",
+      "path": "docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md",
+      "title": "Plan: Prose Quality Integration with Vale"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260510T050136-7e552117",
+    "prompt": ".ddx/executions/20260510T050136-7e552117/prompt.md",
+    "manifest": ".ddx/executions/20260510T050136-7e552117/manifest.json",
+    "result": ".ddx/executions/20260510T050136-7e552117/result.json",
+    "checks": ".ddx/executions/20260510T050136-7e552117/checks.json",
+    "usage": ".ddx/executions/20260510T050136-7e552117/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-ee0af7b8-20260510T050136-7e552117"
+  },
+  "prompt_sha": "341145b86f0d12daddc738f98bce239a5bc26393052b9e4fd5bd1d7abe1f6416"
+}

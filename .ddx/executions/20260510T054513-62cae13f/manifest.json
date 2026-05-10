@@ -1,0 +1,53 @@
+{
+  "attempt_id": "20260510T054513-62cae13f",
+  "bead_id": "ddx-ee78af59",
+  "base_rev": "2cc72db17622839e0ab8451a5208d00f6d281464",
+  "created_at": "2026-05-10T05:45:17.814084662Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ee78af59",
+    "title": "artifacts: frontend snippet render + highlight + e2e",
+    "description": "Render snippet + highlight matched terms in artifact list. e2e covers snippet display.",
+    "acceptance": "1. Frontend renders snippet under each artifact list row. 2. Matched terms highlighted. 3. e2e passes.",
+    "parent": "ddx-4728ae0f",
+    "labels": [
+      "phase:2",
+      "story:6",
+      "area:web",
+      "kind:feature"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T05:44:06Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3533406",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T05:45:13.082185716Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T05:44:06.843726212Z",
+      "execute-loop-last-detail": "tracker lock timeout (max elapsed, owner pid: 3534627)",
+      "execute-loop-last-status": "preclaim-hook-failed",
+      "execute-loop-retry-after": "2026-05-10T05:40:24Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260510T054513-62cae13f",
+    "prompt": ".ddx/executions/20260510T054513-62cae13f/prompt.md",
+    "manifest": ".ddx/executions/20260510T054513-62cae13f/manifest.json",
+    "result": ".ddx/executions/20260510T054513-62cae13f/result.json",
+    "checks": ".ddx/executions/20260510T054513-62cae13f/checks.json",
+    "usage": ".ddx/executions/20260510T054513-62cae13f/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-ee78af59-20260510T054513-62cae13f"
+  },
+  "prompt_sha": "ca5927b6c6d96ef7e56ca0ecb72b41a435c7517d2ac6ea9131d36d5dcea84831"
+}

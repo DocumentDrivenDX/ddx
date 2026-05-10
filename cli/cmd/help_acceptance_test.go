@@ -10,9 +10,9 @@ import (
 )
 
 // Helper function to create a fresh root command for tests
-func getHelpTestRootCommand(workingDir string) *cobra.Command {
+func getHelpTestRootCommand(t *testing.T, workingDir string) *cobra.Command {
 	if workingDir == "" {
-		workingDir = "/tmp"
+		workingDir = t.TempDir()
 	}
 	factory := NewCommandFactory(workingDir)
 	return factory.NewRootCommand()
@@ -23,7 +23,7 @@ func TestAcceptance_US006_GetCommandHelp(t *testing.T) {
 
 	t.Run("general_help_overview", func(t *testing.T) {
 		// AC: Given I need general help, when I run `ddx help`, then I see an overview of all available commands with brief descriptions
-		rootCmd := getHelpTestRootCommand("")
+		rootCmd := getHelpTestRootCommand(t, "")
 		output, err := executeCommand(rootCmd, "help")
 
 		require.NoError(t, err, "Help command should execute successfully")
@@ -57,7 +57,7 @@ func TestAcceptance_US006_GetCommandHelp(t *testing.T) {
 
 	t.Run("command_specific_help", func(t *testing.T) {
 		// AC: Given I need command-specific help, when I run `ddx help <command>`, then detailed help for that command is displayed
-		rootCmd := getHelpTestRootCommand("")
+		rootCmd := getHelpTestRootCommand(t, "")
 		output, err := executeCommand(rootCmd, "help", "init")
 
 		require.NoError(t, err, "Help for specific command should work")
@@ -74,8 +74,8 @@ func TestAcceptance_US006_GetCommandHelp(t *testing.T) {
 
 	t.Run("help_flag_syntax", func(t *testing.T) {
 		// AC: Given I prefer flag syntax, when I run `ddx <command> --help`, then the same help information is shown
-		rootCmd1 := getHelpTestRootCommand("")
-		rootCmd2 := getHelpTestRootCommand("")
+		rootCmd1 := getHelpTestRootCommand(t, "")
+		rootCmd2 := getHelpTestRootCommand(t, "")
 
 		output1, err1 := executeCommand(rootCmd1, "help", "init")
 		output2, err2 := executeCommand(rootCmd2, "init", "--help")
@@ -89,7 +89,7 @@ func TestAcceptance_US006_GetCommandHelp(t *testing.T) {
 
 	t.Run("practical_examples_included", func(t *testing.T) {
 		// AC: Given I'm viewing help, when I read the output, then I see practical examples for common use cases
-		rootCmd := getHelpTestRootCommand("")
+		rootCmd := getHelpTestRootCommand(t, "")
 		output, err := executeCommand(rootCmd, "help", "init")
 
 		require.NoError(t, err, "Help command should work")
@@ -108,7 +108,7 @@ func TestAcceptance_US006_GetCommandHelp(t *testing.T) {
 
 	t.Run("flags_listed_with_defaults", func(t *testing.T) {
 		// AC: Given a command has flags, when I view its help, then all available flags are listed with their defaults
-		rootCmd := getHelpTestRootCommand("")
+		rootCmd := getHelpTestRootCommand(t, "")
 		output, err := executeCommand(rootCmd, "help", "init")
 
 		require.NoError(t, err, "Help command should work")
@@ -138,7 +138,7 @@ func TestAcceptance_US006_GetCommandHelp(t *testing.T) {
 
 	t.Run("online_documentation_links", func(t *testing.T) {
 		// AC: Given I need more information, when I view help, then links to online documentation are provided
-		rootCmd := getHelpTestRootCommand("")
+		rootCmd := getHelpTestRootCommand(t, "")
 		output, err := executeCommand(rootCmd, "help")
 
 		require.NoError(t, err, "Help command should work")
@@ -151,7 +151,7 @@ func TestAcceptance_US006_GetCommandHelp(t *testing.T) {
 
 	t.Run("required_vs_optional_arguments", func(t *testing.T) {
 		// AC: Given arguments are required, when I view help, then required vs optional arguments are clearly indicated
-		rootCmd := getHelpTestRootCommand("")
+		rootCmd := getHelpTestRootCommand(t, "")
 		output, err := executeCommand(rootCmd, "help", "list")
 
 		require.NoError(t, err, "Help command should work")
@@ -179,7 +179,7 @@ func TestAcceptance_US006_GetCommandHelp(t *testing.T) {
 
 	t.Run("command_aliases_shown", func(t *testing.T) {
 		// AC: Given commands have aliases, when I view help, then available aliases are shown
-		rootCmd := getHelpTestRootCommand("")
+		rootCmd := getHelpTestRootCommand(t, "")
 
 		// First check if any commands have aliases
 		output, err := executeCommand(rootCmd, "help")
@@ -198,7 +198,7 @@ func TestAcceptance_US006_GetCommandHelp(t *testing.T) {
 
 	t.Run("invalid_command_help", func(t *testing.T) {
 		// Error scenario: Invalid command name provided to help
-		rootCmd := getHelpTestRootCommand("")
+		rootCmd := getHelpTestRootCommand(t, "")
 		output, err := executeCommand(rootCmd, "help", "invalid-command")
 
 		// Cobra doesn't return error for invalid help topics, just shows message
@@ -212,7 +212,7 @@ func TestAcceptance_US006_GetCommandHelp(t *testing.T) {
 
 	t.Run("nested_command_help", func(t *testing.T) {
 		// Validation scenario: Help for nested commands
-		rootCmd := getHelpTestRootCommand("")
+		rootCmd := getHelpTestRootCommand(t, "")
 		output, err := executeCommand(rootCmd, "help", "list", "templates")
 
 		if err == nil {
@@ -228,7 +228,7 @@ func TestAcceptance_US006_GetCommandHelp(t *testing.T) {
 
 	t.Run("help_formatting_quality", func(t *testing.T) {
 		// Additional quality checks for help output
-		rootCmd := getHelpTestRootCommand("")
+		rootCmd := getHelpTestRootCommand(t, "")
 		output, err := executeCommand(rootCmd, "help", "init")
 
 		require.NoError(t, err, "Help command should work")
