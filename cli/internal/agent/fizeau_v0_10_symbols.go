@@ -1,6 +1,6 @@
 package agent
 
-import agentlib "github.com/DocumentDrivenDX/fizeau"
+import agentlib "github.com/easel/fizeau"
 
 // Compile-time references to fizeau v0.10.0 fields added by the Role +
 // CorrelationID + RoutingActual.Power epic (agent-3bb96bf5). Ensures the

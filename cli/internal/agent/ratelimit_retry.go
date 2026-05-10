@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 )
 
 // RateLimitRetryDefaultBudget is the default per-bead total wait budget for

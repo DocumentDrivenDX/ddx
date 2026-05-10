@@ -11,7 +11,7 @@ import (
 	"fmt"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 )
 
 // dispatchViaResolvedConfig is the internal SD-024 dispatch seam shared by

@@ -22,7 +22,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	policyescalation "github.com/DocumentDrivenDX/ddx/internal/escalation"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 )
 
 type ExecuteLoopWorkerSpec = executeloop.ExecuteLoopSpec
@@ -868,7 +868,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 			}
 			for _, h := range infos {
 				if h.Name == harnessName {
-					return policyescalation.CountsTowardCostCap(h.IsLocal, h.IsSubscription, h.CostClass)
+					return policyescalation.CountsTowardCostCap(h.CostClass == "local", h.Billing == agentlib.BillingModelSubscription, h.CostClass)
 				}
 			}
 			return true

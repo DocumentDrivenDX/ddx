@@ -11,7 +11,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/spf13/cobra"
 )
 
@@ -284,7 +284,6 @@ func routeStatusModelsJSON(models []agentlib.ModelInfo) []routeStatusModelJSON {
 			InputCostPerMTokUSD:  m.Cost.InputPerMTok,
 			OutputCostPerMTokUSD: m.Cost.OutputPerMTok,
 			SpeedTokensPerSec:    m.PerfSignal.SpeedTokensPerSec,
-			CatalogRef:           m.CatalogRef,
 			RankPosition:         m.RankPosition,
 		})
 	}

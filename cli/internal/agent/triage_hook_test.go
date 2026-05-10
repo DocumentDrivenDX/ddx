@@ -15,7 +15,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -507,7 +507,7 @@ func TestPostAttemptTriageHook_DispatchesWithCheapestProfile(t *testing.T) {
 	store, b := newTriageHookTestStore(t, root)
 
 	svc := &passthroughTestService{
-		listProfiles: []agentlib.ProfileInfo{
+		listPolicies: []agentlib.PolicyInfo{
 			{Name: "standard", MinPower: 7, MaxPower: 8},
 			{Name: "cheap", MinPower: 5, MaxPower: 5},
 		},
@@ -535,11 +535,10 @@ func TestPostAttemptTriageHook_DispatchesWithCheapestProfile(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "transport", got.Classification)
-	assert.Equal(t, "cheap", svc.lastReq.Profile)
+	assert.Equal(t, "cheap", svc.lastReq.Policy)
 	assert.Empty(t, svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
 	assert.Empty(t, svc.lastReq.Model)
-	assert.Empty(t, svc.lastReq.ModelRef)
 	assert.Zero(t, svc.lastReq.MinPower, "triage dispatch must not inherit implementation min_power pins")
 	assert.Zero(t, svc.lastReq.MaxPower, "triage dispatch must not inherit implementation max_power pins")
 }

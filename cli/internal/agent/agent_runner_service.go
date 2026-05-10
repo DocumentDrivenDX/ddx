@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 )
 
 // drainWatchdog carries the three wedge-prevention mechanisms threaded into
@@ -117,7 +117,6 @@ func runAgentViaService(r *Runner, opts RunArgs) (*Result, error) {
 		Model:           model,
 		Provider:        opts.Provider,
 		Harness:         "fiz",
-		ModelRef:        opts.ModelRef,
 		Reasoning:       agentlib.Reasoning(opts.Effort),
 		Permissions:     opts.Permissions,
 		WorkDir:         wd,

@@ -11,7 +11,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/spf13/cobra"
 )
 
@@ -282,7 +282,7 @@ func enrichUsageRowsWithRoutingSignals(workDir string, rows []usageRow) []usageR
 			continue
 		}
 		signal := harnessInfoToRoutingSignal(info, now)
-		applyUsageCostBasis(&rows[i], info.IsSubscription)
+		applyUsageCostBasis(&rows[i], info.Billing == agentlib.BillingModelSubscription)
 		rows[i].QuotaState = signal.CurrentQuota.State
 		if signal.Provider == "" && signal.Source.Kind == "" {
 			continue
