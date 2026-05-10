@@ -828,6 +828,117 @@ func TestIntake_OutcomeReasonsPersist(t *testing.T) {
 	})
 }
 
+// TestIntake_ActionableButRewritten_UpdatesBeforeClaim verifies that when the
+// intake hook returns actionable_but_rewritten, the bead description and AC are
+// applied to the store before the executor is dispatched, so the implementer
+// works against the improved content. (The claim transaction runs before intake
+// for concurrency safety; the rewrite is applied between claim and dispatch.)
+func TestIntake_ActionableButRewritten_UpdatesBeforeClaim(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+		b.Description = "PROBLEM\noriginal vague bead\n\nROOT CAUSE\nunknown\n\nPROPOSED FIX\nfix it\n"
+		b.Acceptance = "1. something passes"
+	}))
+
+	store := &claimCountingStore{Store: inner}
+
+	var executorSawDescription string
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			got, err := inner.Get(beadID)
+			require.NoError(t, err)
+			executorSawDescription = got.Description
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-rewrite-before-dispatch",
+				ResultRev: "rev001",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome: PreClaimIntakeActionableButRewritten,
+				Detail:  "clarified root cause with file:line reference",
+				Rewrite: PreClaimIntakeRewrite{
+					Description:   "PROBLEM\noriginal vague bead\n\nROOT CAUSE\nmissing file:line anchor\n\nPROPOSED FIX\nfix it\n",
+					Acceptance:    "1. something passes\n2. cd cli && go test ./...",
+					ChangedFields: []string{"description", "acceptance"},
+				},
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "rewritten intake must proceed to Claim")
+	assert.Equal(t, 1, result.Successes, "execution must succeed after rewrite")
+	assert.Contains(t, executorSawDescription, "missing file:line anchor",
+		"executor must see the rewritten description before dispatch")
+
+	got, err := inner.Get(candidate.ID)
+	require.NoError(t, err)
+	assert.Contains(t, got.Acceptance, "cd cli && go test", "rewrite must be persisted in bead store")
+}
+
+// TestIntake_AmbiguousNeedsHuman_BlocksWithoutClaim verifies that an
+// ambiguous_needs_human intake outcome (operator_required) moves the bead to
+// operator attention and does not dispatch an implementer. The implementation
+// claims before intake for concurrency safety; a non-actionable outcome unclaims
+// and parks the bead so result.Attempts is zero.
+func TestIntake_AmbiguousNeedsHuman_BlocksWithoutClaim(t *testing.T) {
+	inner, _, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatal("executor must not run for ambiguous_needs_human intake")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome: PreClaimIntakeOperatorRequired,
+				Detail:  "AC conflicts with non-scope section; scope is ambiguous",
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, 0, result.Attempts, "ambiguous_needs_human must not dispatch an implementer")
+
+	got, err := inner.Get("ddx-0001")
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status, "bead must be moved to operator attention")
+	assert.Contains(t, bead.GetNeedsHumanMeta(*got).Reason, "AC conflicts with non-scope")
+
+	events, err := inner.Events("ddx-0001")
+	require.NoError(t, err)
+	var found bool
+	for _, ev := range events {
+		if ev.Kind == "intake.blocked" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "ambiguous_needs_human outcome must record intake.blocked event")
+}
+
 // TestReadinessUnavailableOutputIsActionable asserts that a missing-harness
 // lint hook failure renders as an actionable readiness-check warning in the
 // operator log rather than exposing the raw "lint hook: missing-harness" error.
