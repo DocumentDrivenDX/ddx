@@ -11,7 +11,6 @@ package accheck
 
 import (
 	"bufio"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os/exec"
@@ -378,12 +377,6 @@ func Aggregate(beadID, attemptID string, entries []Entry) Output {
 		}
 	}
 	return out
-}
-
-// MarshalJSON writes the Output as indented JSON.
-func (o Output) MarshalJSON() ([]byte, error) {
-	type alias Output
-	return json.MarshalIndent(alias(o), "", "  ")
 }
 
 // WriteHuman writes a human-readable table of the per-AC results.

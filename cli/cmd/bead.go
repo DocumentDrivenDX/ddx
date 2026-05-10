@@ -69,6 +69,7 @@ Examples:
 	cmd.AddCommand(f.newBeadReconcileCommand())
 	cmd.AddCommand(f.newBeadMigrateCommand())
 	cmd.AddCommand(f.newBeadArchiveCommand())
+	cmd.AddCommand(f.newBeadAcCheckCommand())
 
 	return cmd
 }
