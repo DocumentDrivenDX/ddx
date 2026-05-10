@@ -164,7 +164,7 @@ func TestToolCallTimeout_KillsLongHungSubprocess(t *testing.T) {
 
 	wd := &drainWatchdog{
 		cancel:          cancel,
-		idleTimeout:     30 * time.Second,   // won't fire during test
+		idleTimeout:     30 * time.Second,      // won't fire during test
 		toolCallTimeout: 60 * time.Millisecond, // short for test
 	}
 

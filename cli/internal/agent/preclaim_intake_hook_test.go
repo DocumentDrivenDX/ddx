@@ -72,8 +72,6 @@ func (s *preClaimIntakeHookServiceStub) HealthCheck(_ context.Context, _ agentli
 	return nil
 }
 
-
-
 func (s *preClaimIntakeHookServiceStub) ListPolicies(_ context.Context) ([]agentlib.PolicyInfo, error) {
 	return append([]agentlib.PolicyInfo(nil), s.listPolicies...), nil
 }

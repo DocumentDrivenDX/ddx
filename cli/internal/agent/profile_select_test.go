@@ -170,8 +170,6 @@ func (s *profileSnapshotServiceStub) ListPolicies(context.Context) ([]agentlib.P
 	return append([]agentlib.PolicyInfo(nil), s.profiles...), nil
 }
 
-
-
 func (s *profileSnapshotServiceStub) HealthCheck(context.Context, agentlib.HealthTarget) error {
 	return nil
 }

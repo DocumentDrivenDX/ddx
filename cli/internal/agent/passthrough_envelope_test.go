@@ -70,8 +70,6 @@ func (s *passthroughTestService) ListPolicies(ctx context.Context) ([]agentlib.P
 	return append([]agentlib.PolicyInfo(nil), s.listPolicies...), nil
 }
 
-
-
 func (s *passthroughTestService) HealthCheck(ctx context.Context, target agentlib.HealthTarget) error {
 	return nil
 }
