@@ -714,7 +714,7 @@ func (RealLandingGitOps) StageDir(dir, relPath string) error {
 	// (ddx-39e27896). manifest.json, result.json, prompt.md, and
 	// usage.json remain tracked for audit; the raw session log lives on
 	// disk, not in git history.
-	args := append([]string{"add", "--", relPath}, EvidenceLandExcludePathspecs()...)
+	args := append([]string{"add", "--force", "--", relPath}, EvidenceLandExcludePathspecs()...)
 	out, err := internalgit.Command(context.Background(), dir, args...).CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("git add %s: %s: %w", relPath, strings.TrimSpace(string(out)), err)
@@ -1725,7 +1725,8 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 	if land.Status == "preserved" {
 		// Route preserve reasons through the land-conflict classifier so the
 		// loop sees land_conflict (not generic success).
-		if strings.HasPrefix(res.Reason, PreMergeChecksReason) {
+		if strings.HasPrefix(res.Reason, PreMergeChecksReason) ||
+			strings.HasPrefix(res.Reason, "evidence commit failed:") {
 			reasonForStatus = res.Reason
 		} else {
 			reasonForStatus = "merge conflict"
