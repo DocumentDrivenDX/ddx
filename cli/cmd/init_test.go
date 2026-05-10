@@ -149,6 +149,39 @@ func TestInitSkillsNoOverwrite(t *testing.T) {
 	assert.Equal(t, existingContent, string(data), "existing skill file should not be overwritten")
 }
 
+// TestGenerateAgentsMD_IncludesInteractiveStewardGuidance verifies that the
+// generated AGENTS.md block includes interactive-steward mode, DDX_MODE
+// precedence, mutation policy, and the tracker/merge/safety carve-out.
+func TestGenerateAgentsMD_IncludesInteractiveStewardGuidance(t *testing.T) {
+	workingDir := t.TempDir()
+
+	generateAgentsMD(workingDir)
+
+	agentsPath := filepath.Join(workingDir, "AGENTS.md")
+	data, err := os.ReadFile(agentsPath)
+	require.NoError(t, err)
+	content := string(data)
+
+	// AC1: Default Interactive Mode section naming all four modes
+	assert.Contains(t, content, "interactive-steward", "interactive-steward mode missing")
+	assert.Contains(t, content, "queue_steward", "queue_steward mode missing")
+	assert.Contains(t, content, "bead_execution", "bead_execution mode missing")
+	assert.Contains(t, content, "direct_user_implementation", "direct_user_implementation mode missing")
+	assert.Contains(t, content, "review", "review mode missing")
+
+	// AC2: DDX_MODE=bead_execution overrides only interactive default; never overrides policy
+	assert.Contains(t, content, "DDX_MODE=bead_execution", "DDX_MODE=bead_execution precedence statement missing")
+	assert.Contains(t, content, "never", "bead_execution override carve-out missing")
+	assert.Contains(t, content, "tracker", "tracker carve-out missing")
+	assert.Contains(t, content, "merge", "merge policy carve-out missing")
+	assert.Contains(t, content, "safety", "safety carve-out missing")
+
+	// AC3: mutation policy — non-mutating phases and explicit-verb requirement
+	assert.Contains(t, content, "non-mutating", "non-mutating policy statement missing")
+	assert.Contains(t, content, "Tracker mutation", "tracker mutation explicit-verb requirement missing")
+	assert.Contains(t, content, "Code edits", "code edits explicit-intent requirement missing")
+}
+
 // TestGenerateAgentsMD_MergesWithMarkers verifies AGENTS.md injection preserves
 // user content outside the DDx markers and updates content between them.
 func TestGenerateAgentsMD_MergesWithMarkers(t *testing.T) {
