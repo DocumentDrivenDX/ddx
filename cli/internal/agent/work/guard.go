@@ -83,10 +83,10 @@ func (g *PreClaimGuard) Allow(ctx context.Context, beadID string) (bool, string)
 	return true, ""
 }
 
-// ComplexityGuard delegates to an injected complexity gate. When no gate is
-// configured it allows the bead to proceed. The model-backed pre-claim intake
-// hook is now the canonical readiness gate; this compatibility wrapper remains
-// only for older callers that still inject a Guard directly.
+// ComplexityGuard is a compatibility wrapper that delegates to a configured
+// bead readiness gate. When no gate is configured it allows the bead to
+// proceed. The model-backed readiness hook is now the canonical pre-claim
+// gate; this wrapper remains only for callers that still inject a Guard directly.
 type ComplexityGuard struct {
 	Gate Guard
 	Log  io.Writer

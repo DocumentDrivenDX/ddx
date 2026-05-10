@@ -144,7 +144,7 @@ reference file; do not violate them.
   branches.
 - **Work in worktrees for parallel agents.** Use `wt switch -c
   <branch>` (worktrunk) or equivalent to give each concurrent agent
-  its own isolated checkout. Execute-bead does this automatically;
+  its own isolated checkout. `ddx try` does this automatically;
   manual parallel work should too.
 - **Power-first execution dispatch.** Default to `ddx run`/`ddx try`/`ddx work`
   with power bounds. `--harness`, `--provider`, and `--model` are passthrough

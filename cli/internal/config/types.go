@@ -305,7 +305,7 @@ type AgentConfig struct {
 	Triage          *TriageConfig       `yaml:"triage,omitempty" json:"triage,omitempty"`
 }
 
-// TriageConfig controls the bead readiness decomposition gate.
+// TriageConfig controls the bead readiness gate decomposition depth.
 type TriageConfig struct {
 	// MaxDecompositionDepth caps recursive bead splitting. Children re-enter
 	// the gate; at cap the parent is blocked with label=needs-human-decomposition.
