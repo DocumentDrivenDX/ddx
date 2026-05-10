@@ -406,7 +406,7 @@ func TestExecuteBead_ReportIncludesRouteEconomics(t *testing.T) {
 		AgentRunner: &artifactTestAgentRunner{
 			result: &Result{
 				ExitCode:                    0,
-				Harness:                     "agent",
+				Harness:                     "fiz",
 				Provider:                    "openai",
 				Model:                       "gpt-5.2",
 				ActualPower:                 78,
@@ -441,8 +441,8 @@ func TestExecuteBead_ReportIncludesRouteEconomics(t *testing.T) {
 		t.Fatalf("parsing result.json: %v", err)
 	}
 
-	if r.Harness != "agent" {
-		t.Errorf("result.harness = %q, want %q", r.Harness, "agent")
+	if r.Harness != "fiz" {
+		t.Errorf("result.harness = %q, want %q", r.Harness, "fiz")
 	}
 	if r.Provider != "openai" {
 		t.Errorf("result.provider = %q, want %q", r.Provider, "openai")

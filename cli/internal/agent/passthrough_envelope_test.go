@@ -324,7 +324,7 @@ func TestServiceRun_ForwardsOpaqueFizeauEvents(t *testing.T) {
 // only the final projection fields needed for DDx Result and run indexing.
 func TestServiceRun_FinalResultProjectionOnly(t *testing.T) {
 	routingPayload, err := json.Marshal(map[string]any{
-		"harness":  "agent",
+		"harness":  "fiz",
 		"provider": "anthropic",
 		"model":    "claude-3-5-sonnet",
 		"candidates": []map[string]any{
@@ -350,7 +350,7 @@ func TestServiceRun_FinalResultProjectionOnly(t *testing.T) {
 		"cost_usd":         0.25,
 		"session_log_path": "/tmp/session.jsonl",
 		"routing_actual": map[string]any{
-			"harness":  "agent",
+			"harness":  "fiz",
 			"provider": "anthropic",
 			"model":    "claude-3-5-sonnet",
 			"power":    65,
@@ -387,7 +387,7 @@ func TestServiceRun_FinalResultProjectionOnly(t *testing.T) {
 	if result.AgentSessionID != "/tmp/session.jsonl" {
 		t.Fatalf("Result.AgentSessionID = %q, want /tmp/session.jsonl", result.AgentSessionID)
 	}
-	if result.Provider != "anthropic" || result.Model != "claude-3-5-sonnet" || result.Harness != "agent" {
+	if result.Provider != "anthropic" || result.Model != "claude-3-5-sonnet" || result.Harness != "fiz" {
 		t.Fatalf("route projection mismatch: %+v", result)
 	}
 	if result.ActualPower != 65 || result.PredictedPower != 65 {
