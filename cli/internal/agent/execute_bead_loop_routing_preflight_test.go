@@ -47,8 +47,8 @@ func (s *claimCountingStore) AppendEvent(id string, ev bead.BeadEvent) error {
 func (s *claimCountingStore) Events(id string) ([]bead.BeadEvent, error) {
 	return s.Store.Events(id)
 }
-func (s *claimCountingStore) SetExecutionCooldown(id string, until time.Time, status, detail string) error {
-	return s.Store.SetExecutionCooldown(id, until, status, detail)
+func (s *claimCountingStore) SetExecutionCooldown(id string, until time.Time, status, detail, baseRev string) error {
+	return s.Store.SetExecutionCooldown(id, until, status, detail, baseRev)
 }
 func (s *claimCountingStore) IncrNoChangesCount(id string) (int, error) {
 	return s.Store.IncrNoChangesCount(id)

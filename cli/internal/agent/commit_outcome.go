@@ -51,10 +51,10 @@ func commitOutcome(ctx context.Context, store ExecuteBeadLoopStore, beadID strin
 				Source:    "ddx agent execute-loop",
 				CreatedAt: time.Now().UTC(),
 			})
-			_ = store.SetExecutionCooldown(beadID, time.Now().UTC().Add(StoreErrorCooldown), "loop-error", failure.operation+": "+failure.err.Error())
+			_ = store.SetExecutionCooldown(beadID, time.Now().UTC().Add(StoreErrorCooldown), "loop-error", failure.operation+": "+failure.err.Error(), "")
 			return nil
 		}
-		_ = store.SetExecutionCooldown(beadID, time.Now().UTC().Add(StoreErrorCooldown), "loop-error", err.Error())
+		_ = store.SetExecutionCooldown(beadID, time.Now().UTC().Add(StoreErrorCooldown), "loop-error", err.Error(), "")
 		return nil
 	}
 	return nil

@@ -823,7 +823,11 @@ func (s *Store) Unclaim(id string) error {
 	return s.RemoveClaimHeartbeat(id)
 }
 
-func (s *Store) SetExecutionCooldown(id string, until time.Time, status, detail string) error {
+// SetExecutionCooldown parks bead id until the given wall-clock time.
+// baseRev is the origin/main HEAD at cooldown time; when non-empty it enables
+// rev-bound auto-invalidation: if origin/main advances past baseRev the
+// cooldown clears automatically on the next ready-queue pass.
+func (s *Store) SetExecutionCooldown(id string, until time.Time, status, detail, baseRev string) error {
 	return s.Update(id, func(b *Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
@@ -834,6 +838,11 @@ func (s *Store) SetExecutionCooldown(id string, until time.Time, status, detail 
 		}
 		if detail != "" {
 			b.Extra["execute-loop-last-detail"] = detail
+		}
+		if baseRev != "" {
+			b.Extra[ExtraCooldownBaseRev] = baseRev
+		} else {
+			delete(b.Extra, ExtraCooldownBaseRev)
 		}
 	})
 }
@@ -863,6 +872,7 @@ func (s *Store) ClearCooldowns(filter func(Bead) bool) (int, error) {
 				b.Extra = make(map[string]any)
 			}
 			delete(b.Extra, ExtraRetryAfter)
+			delete(b.Extra, ExtraCooldownBaseRev)
 			delete(b.Extra, ExtraLastStatus)
 			delete(b.Extra, ExtraLastDetail)
 			b.UpdatedAt = now
@@ -1505,10 +1515,13 @@ func (s *Store) classifyLifecycleQueue(beads []Bead, now time.Time) []lifecycleQ
 		}
 	}
 
+	// Read origin HEAD once per pass for rev-bound cooldown auto-invalidation.
+	originHead := originMainHead(s.workingDir())
+
 	entries := make([]lifecycleQueueEntry, 0, len(beads))
 	for _, b := range beads {
 		unclosed := unclosedDependencyIDs(b, statusMap)
-		retryAfter, retryActive := activeRetryCooldown(b, now)
+		retryAfter, retryActive := activeRetryCooldown(b, now, originHead)
 		executionEligible, executionEligibleKnown := lifecycleExecutionEligible(b)
 		supersededBy := lifecycleSupersededBy(b)
 		entry := lifecycleQueueEntry{
@@ -1560,13 +1573,26 @@ func unclosedDependencyIDs(b Bead, statusMap map[string]string) []string {
 	return unclosed
 }
 
-func activeRetryCooldown(b Bead, now time.Time) (time.Time, bool) {
+// activeRetryCooldown returns the retry-after time and whether the cooldown is
+// still active for bead b. When execute-loop-cooldown-base-rev is set and
+// originHead has advanced past that rev (i.e., originHead != baseRev and both
+// are non-empty), the cooldown auto-clears regardless of wall-clock expiry —
+// the world-state that caused the cooldown has changed. See TD-031 §5 invariant.
+// originHead should be the current origin/main HEAD, read once per
+// ready-queue evaluation pass (not per bead).
+func activeRetryCooldown(b Bead, now time.Time, originHead string) (time.Time, bool) {
 	retryAfterStr := extraStringVal(b.Extra, ExtraRetryAfter)
 	if retryAfterStr == "" {
 		return time.Time{}, false
 	}
 	retryAfter, err := time.Parse(time.RFC3339, retryAfterStr)
 	if err != nil {
+		return time.Time{}, false
+	}
+	// Rev-bound auto-invalidation: if origin/main has advanced since this
+	// cooldown was set, the fix may already be in and the cooldown should clear.
+	baseRev := extraStringVal(b.Extra, ExtraCooldownBaseRev)
+	if baseRev != "" && originHead != "" && originHead != baseRev {
 		return time.Time{}, false
 	}
 	return retryAfter, retryAfter.After(now)
@@ -2320,6 +2346,30 @@ func detectPrefix(workingDir string) string {
 		return filepath.Base(wd)
 	}
 	return DefaultPrefix
+}
+
+// workingDir returns the project root for git operations. When Dir is the
+// standard .ddx directory, the parent is the project root; otherwise Dir is
+// used directly.
+func (s *Store) workingDir() string {
+	if filepath.Base(s.Dir) == ".ddx" {
+		return filepath.Dir(s.Dir)
+	}
+	return s.Dir
+}
+
+// originMainHead returns the current origin/main HEAD SHA, or "" if the git
+// command fails (e.g., no remote, detached, offline). Used once per
+// ready-queue evaluation pass for rev-bound cooldown auto-invalidation.
+func originMainHead(workingDir string) string {
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+	cmd := gitpkg.Command(ctx, workingDir, "rev-parse", "origin/main")
+	out, err := cmd.Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
 }
 
 func parseDurationOr(envKey string, fallback time.Duration) time.Duration {
