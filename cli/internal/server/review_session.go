@@ -12,6 +12,88 @@ import (
 	"time"
 )
 
+// Stable refusal codes returned when a review turn cannot proceed. These are
+// part of the external contract — operators triage on these literal strings.
+const (
+	RefusalCodePromptBudgetExceeded = "PROMPT_BUDGET_EXCEEDED"
+	RefusalCodeCostCapExceeded      = "COST_CAP_EXCEEDED"
+	RefusalCodeReviewerUnavailable  = "REVIEWER_UNAVAILABLE"
+)
+
+// ReviewRefusalBody is the structured JSON body attached to all review turn
+// refusals. Code is one of the RefusalCode* constants above.
+type ReviewRefusalBody struct {
+	Code           string `json:"code"`
+	Message        string `json:"message"`
+	Retryable      bool   `json:"retryable"`
+	OperatorAction string `json:"operator_action"`
+}
+
+// MarshalRefusalJSON returns the JSON encoding of a ReviewRefusalBody.
+func MarshalRefusalJSON(code, message, operatorAction string, retryable bool) (string, error) {
+	b := ReviewRefusalBody{
+		Code:           code,
+		Message:        message,
+		Retryable:      retryable,
+		OperatorAction: operatorAction,
+	}
+	data, err := json.Marshal(b)
+	if err != nil {
+		return "", err
+	}
+	return string(data), nil
+}
+
+// ReviewCostCapExceededError is returned by AppendTurn when adding the turn's
+// cost to the session's accumulated cost would exceed MaxBillableUSD.
+type ReviewCostCapExceededError struct {
+	SessionID   string
+	CurrentCost float64
+	TurnCost    float64
+	MaxUSD      float64
+}
+
+func (e *ReviewCostCapExceededError) Error() string {
+	return fmt.Sprintf(
+		"COST_CAP_EXCEEDED: session %s current cost $%.4f + turn cost $%.4f exceeds max_billable_usd $%.4f",
+		e.SessionID, e.CurrentCost, e.TurnCost, e.MaxUSD,
+	)
+}
+
+// RefusalBody returns the structured JSON refusal body for this error.
+func (e *ReviewCostCapExceededError) RefusalBody() ReviewRefusalBody {
+	return ReviewRefusalBody{
+		Code:           RefusalCodeCostCapExceeded,
+		Message:        e.Error(),
+		Retryable:      false,
+		OperatorAction: "raise max_billable_usd for the review session or create a new session",
+	}
+}
+
+// ReviewerUnavailableError is returned when a review turn is attempted on a
+// session that is in a terminal state and cannot accept new reviewer turns.
+type ReviewerUnavailableError struct {
+	SessionID string
+	Status    string
+}
+
+func (e *ReviewerUnavailableError) Error() string {
+	return fmt.Sprintf(
+		"REVIEWER_UNAVAILABLE: session %s has status %q and cannot accept new review turns",
+		e.SessionID, e.Status,
+	)
+}
+
+// RefusalBody returns the structured JSON refusal body for this error.
+func (e *ReviewerUnavailableError) RefusalBody() ReviewRefusalBody {
+	return ReviewRefusalBody{
+		Code:           RefusalCodeReviewerUnavailable,
+		Message:        e.Error(),
+		Retryable:      false,
+		OperatorAction: "open a new review session to continue",
+	}
+}
+
 const (
 	reviewSessionsDirName = "reviews"
 	reviewManifestName    = "manifest.json"
@@ -104,7 +186,11 @@ func (s *ReviewSessionStore) Create(session ReviewSession) error {
 	return nil
 }
 
-// AppendTurn appends a single transcript entry to turns.jsonl.
+// AppendTurn appends a single transcript entry to turns.jsonl. It enforces
+// MaxBillableUSD: if the session has a non-zero budget cap and the accumulated
+// cost plus this turn's cost would exceed it, AppendTurn returns a
+// *ReviewCostCapExceededError without writing the turn. On success the
+// manifest's CostUSD accumulator is updated to reflect the new total.
 func (s *ReviewSessionStore) AppendTurn(sessionID string, turn ReviewTurn) error {
 	if s == nil {
 		return errors.New("review session store: nil store")
@@ -120,6 +206,30 @@ func (s *ReviewSessionStore) AppendTurn(sessionID string, turn ReviewTurn) error
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return fmt.Errorf("review session: mkdir session: %w", err)
 	}
+
+	// Load the manifest to check the cost cap and read the current accumulated
+	// cost. If the manifest does not exist yet (session created without Create),
+	// proceed without enforcement.
+	manifestPath := filepath.Join(root, reviewManifestName)
+	var manifest *reviewSessionManifest
+	if data, readErr := os.ReadFile(manifestPath); readErr == nil {
+		var m reviewSessionManifest
+		if jsonErr := json.Unmarshal(data, &m); jsonErr == nil {
+			manifest = &m
+		}
+	}
+
+	if manifest != nil && manifest.MaxBillableUSD > 0 {
+		if manifest.CostUSD+turn.CostUSD > manifest.MaxBillableUSD {
+			return &ReviewCostCapExceededError{
+				SessionID:   sessionID,
+				CurrentCost: manifest.CostUSD,
+				TurnCost:    turn.CostUSD,
+				MaxUSD:      manifest.MaxBillableUSD,
+			}
+		}
+	}
+
 	if turn.CreatedAt.IsZero() {
 		turn.CreatedAt = time.Now().UTC()
 	}
@@ -132,6 +242,14 @@ func (s *ReviewSessionStore) AppendTurn(sessionID string, turn ReviewTurn) error
 	if err := json.NewEncoder(f).Encode(turn); err != nil {
 		return fmt.Errorf("review session: encode turn: %w", err)
 	}
+
+	// Update the manifest's CostUSD accumulator so the next AppendTurn sees
+	// the correct running total.
+	if manifest != nil {
+		manifest.CostUSD += turn.CostUSD
+		_ = writeJSONFile(manifestPath, *manifest)
+	}
+
 	return nil
 }
 

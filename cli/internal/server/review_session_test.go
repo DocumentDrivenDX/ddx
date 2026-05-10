@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -121,6 +122,10 @@ func TestReviewSession_RoundTrip(t *testing.T) {
 		}
 	}
 	want.Turns = turns
+	// AppendTurn accumulates each turn's cost into the manifest's CostUSD so
+	// that subsequent cap-enforcement checks see the correct running total.
+	// After appending 0.50 + 0.75 the manifest reflects 2.50 + 0.50 + 0.75.
+	want.CostUSD = 3.75
 
 	got, err := store.Load(sessionID)
 	if err != nil {
@@ -129,6 +134,148 @@ func TestReviewSession_RoundTrip(t *testing.T) {
 	if !reflect.DeepEqual(got, &want) {
 		t.Fatalf("round-trip session = %+v, want %+v", got, want)
 	}
+}
+
+// TestReview_CostCap_ReturnsCostCapExceeded verifies that AppendTurn returns a
+// *ReviewCostCapExceededError (not nil, not a different error) when the turn's
+// cost would push the session past MaxBillableUSD, and that the turn was NOT
+// written to turns.jsonl.
+func TestReview_CostCap_ReturnsCostCapExceeded(t *testing.T) {
+	workDir := t.TempDir()
+	store := NewReviewSessionStore(workDir)
+	sessionID := "review-cap-001"
+	// Session with a tight $0.50 cap; seed with $0.40 already spent.
+	if err := store.Create(ReviewSession{
+		ID:             sessionID,
+		Status:         "open",
+		CostUSD:        0.40,
+		MaxBillableUSD: 0.50,
+	}); err != nil {
+		t.Fatalf("Create() error = %v", err)
+	}
+
+	// A turn that would cost $0.20 — pushing total to $0.60, over the $0.50 cap.
+	turn := ReviewTurn{
+		Actor:   "reviewer",
+		Content: "review output",
+		CostUSD: 0.20,
+	}
+	err := store.AppendTurn(sessionID, turn)
+	if err == nil {
+		t.Fatal("AppendTurn() should have returned an error, got nil")
+	}
+	var capErr *ReviewCostCapExceededError
+	if !errors.As(err, &capErr) {
+		t.Fatalf("AppendTurn() error type = %T, want *ReviewCostCapExceededError", err)
+	}
+	if capErr.SessionID != sessionID {
+		t.Errorf("ReviewCostCapExceededError.SessionID = %q, want %q", capErr.SessionID, sessionID)
+	}
+	if capErr.MaxUSD != 0.50 {
+		t.Errorf("ReviewCostCapExceededError.MaxUSD = %v, want 0.50", capErr.MaxUSD)
+	}
+
+	// The turn must NOT have been written.
+	turnsPath := filepath.Join(workDir, ".ddx", reviewSessionsDirName, sessionID, reviewTurnsName)
+	data, err := os.ReadFile(turnsPath)
+	if err != nil {
+		t.Fatalf("reading turns.jsonl: %v", err)
+	}
+	if lines := splitNonEmptyLines(string(data)); len(lines) != 0 {
+		t.Fatalf("turns.jsonl should be empty after cap refusal, got %d line(s)", len(lines))
+	}
+}
+
+// TestReview_RefusalCodes_HaveStructuredBody verifies that all three stable
+// refusal codes produce ReviewRefusalBody values with the required fields.
+func TestReview_RefusalCodes_HaveStructuredBody(t *testing.T) {
+	t.Run("PROMPT_BUDGET_EXCEEDED", func(t *testing.T) {
+		body := ReviewRefusalBody{
+			Code:           RefusalCodePromptBudgetExceeded,
+			Message:        "PROMPT_BUDGET_EXCEEDED: pinned floor observed 512 bytes exceeds cap 256 bytes",
+			Retryable:      false,
+			OperatorAction: "reduce prompt size or raise max_prompt_bytes",
+		}
+		data, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("json.Marshal(ReviewRefusalBody) error = %v", err)
+		}
+		var got ReviewRefusalBody
+		if err := json.Unmarshal(data, &got); err != nil {
+			t.Fatalf("json.Unmarshal error = %v", err)
+		}
+		if got.Code != RefusalCodePromptBudgetExceeded {
+			t.Errorf("code = %q, want %q", got.Code, RefusalCodePromptBudgetExceeded)
+		}
+		if got.Message == "" {
+			t.Error("message must not be empty")
+		}
+		if got.OperatorAction == "" {
+			t.Error("operator_action must not be empty")
+		}
+	})
+
+	t.Run("COST_CAP_EXCEEDED", func(t *testing.T) {
+		capErr := &ReviewCostCapExceededError{
+			SessionID:   "sess-1",
+			CurrentCost: 0.40,
+			TurnCost:    0.20,
+			MaxUSD:      0.50,
+		}
+		body := capErr.RefusalBody()
+		if body.Code != RefusalCodeCostCapExceeded {
+			t.Errorf("code = %q, want %q", body.Code, RefusalCodeCostCapExceeded)
+		}
+		if body.Message == "" {
+			t.Error("message must not be empty")
+		}
+		if body.OperatorAction == "" {
+			t.Error("operator_action must not be empty")
+		}
+		data, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("json.Marshal error = %v", err)
+		}
+		var got map[string]any
+		if err := json.Unmarshal(data, &got); err != nil {
+			t.Fatalf("json.Unmarshal error = %v", err)
+		}
+		for _, field := range []string{"code", "message", "retryable", "operator_action"} {
+			if _, ok := got[field]; !ok {
+				t.Errorf("refusal body missing field %q", field)
+			}
+		}
+	})
+
+	t.Run("REVIEWER_UNAVAILABLE", func(t *testing.T) {
+		unavailErr := &ReviewerUnavailableError{
+			SessionID: "sess-2",
+			Status:    "closed",
+		}
+		body := unavailErr.RefusalBody()
+		if body.Code != RefusalCodeReviewerUnavailable {
+			t.Errorf("code = %q, want %q", body.Code, RefusalCodeReviewerUnavailable)
+		}
+		if body.Message == "" {
+			t.Error("message must not be empty")
+		}
+		if body.OperatorAction == "" {
+			t.Error("operator_action must not be empty")
+		}
+		data, err := json.Marshal(body)
+		if err != nil {
+			t.Fatalf("json.Marshal error = %v", err)
+		}
+		var got map[string]any
+		if err := json.Unmarshal(data, &got); err != nil {
+			t.Fatalf("json.Unmarshal error = %v", err)
+		}
+		for _, field := range []string{"code", "message", "retryable", "operator_action"} {
+			if _, ok := got[field]; !ok {
+				t.Errorf("refusal body missing field %q", field)
+			}
+		}
+	})
 }
 
 func splitNonEmptyLines(s string) []string {
