@@ -59,6 +59,17 @@ func highestViableEscalationFloor(l escalationFloorFinder) (int, error) {
 }
 
 func investigationRetryInitialMinPower(b *bead.Bead, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, agent.ExecuteBeadReport, bool) {
+	// Numeric hint: written by the no-changes smart-retry path one step at a time.
+	if floor, ok := numericTierFloorHint(b); ok {
+		if baseMinPower > floor {
+			return baseMinPower, smartRouteUnavailableReport(b, baseMinPower, maxPower, nil), true
+		}
+		if maxPower > 0 && floor >= maxPower {
+			return baseMinPower, smartRouteUnavailableReport(b, floor, maxPower, nil), true
+		}
+		return floor, agent.ExecuteBeadReport{}, false
+	}
+	// Tier-name hint: written by the review-triage path; jump to highest viable.
 	if tier, ok := triageTierHint(b); !ok || tier != policyescalation.TierSmart {
 		return baseMinPower, agent.ExecuteBeadReport{}, false
 	}
@@ -73,6 +84,29 @@ func investigationRetryInitialMinPower(b *bead.Bead, baseMinPower, maxPower int,
 		return baseMinPower, smartRouteUnavailableReport(b, floor, maxPower, nil), true
 	}
 	return floor, agent.ExecuteBeadReport{}, false
+}
+
+// numericTierFloorHint returns the numeric MinPower floor stored by the
+// no-changes smart-retry path, which advances one ladder step at a time.
+// Tier-name string hints (from the review-triage path) are not matched here.
+func numericTierFloorHint(b *bead.Bead) (int, bool) {
+	if b == nil || b.Extra == nil {
+		return 0, false
+	}
+	raw, ok := b.Extra[agent.TriageTierHintKey]
+	if !ok {
+		return 0, false
+	}
+	switch v := raw.(type) {
+	case int:
+		return v, v > 0
+	case int64:
+		return int(v), int(v) > 0
+	case float64:
+		return int(v), int(v) > 0
+	default:
+		return 0, false
+	}
 }
 
 func triageTierHint(b *bead.Bead) (policyescalation.ModelTier, bool) {
