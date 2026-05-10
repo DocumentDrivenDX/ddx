@@ -83,7 +83,7 @@ func (f *CommandFactory) newAgentWorkersCommand() *cobra.Command {
 
 Server-spawned workers are fetched from the running ddx server. Inline
 workers (started by running 'ddx work' directly)
-are detected by scanning active execute-bead worktrees in the project.
+are detected by scanning active bead attempt worktrees in the project.
 
 Examples:
   ddx agent workers

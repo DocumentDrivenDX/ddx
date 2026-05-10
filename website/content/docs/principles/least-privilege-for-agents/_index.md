@@ -24,7 +24,7 @@ scope it to the artifact at hand, and audit what was actually used.
 For DDx, this resolves into two concrete surfaces: **file scope** and
 **tool permissions**.
 
-**File scope.** Each execute-bead run takes place in an isolated git
+**File scope.** Each `ddx try` run takes place in an isolated git
 worktree, named after the bead and timestamp, branched from a known
 base revision. The agent edits files inside that worktree only — it
 cannot reach across worktrees, mutate the bare repo directly, or touch
@@ -74,7 +74,7 @@ See `docs/helix/00-discover/research/RSCH-009-least-privilege-for-agents.md`.
 
 ## DDx response
 
-- **Isolated git worktrees** for `execute-bead` runs (under
+- **Isolated git worktrees** for `ddx try` runs (under
   `.execute-bead-wt-*`) scope every file edit to the bead's branch.
   The agent cannot mutate the bare repo or other worktrees.
 - **Per-harness tool declarations** restrict which tools each agent

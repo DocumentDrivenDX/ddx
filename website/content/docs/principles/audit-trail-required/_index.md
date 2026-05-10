@@ -61,7 +61,7 @@ See `docs/helix/00-discover/research/RSCH-003-audit-trail-required.md`.
   ready, closed) durably and replayably; the bead tracker is itself an
   event-sourced store.
 - **Commits reference the bead id** in the subject (`[ddx-XXXX]`), and
-  execute-bead worktrees are merged with `--no-ff` so the history
+  bead attempt worktrees are merged with `--no-ff` so the history
   contains a tamper-evident record of which agent did which work.
 - **Agent-run logs** capture model, harness, prompt, and cost so routing
   decisions can be evaluated empirically rather than asserted.

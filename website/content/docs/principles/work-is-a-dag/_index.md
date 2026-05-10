@@ -56,7 +56,7 @@ See `docs/helix/00-discover/research/RSCH-005-work-is-a-dag.md`.
 - **The queue partitions ready and blocked.** `ddx bead ready` walks
   the graph to surface beads whose dependencies are satisfied;
   `ddx bead blocked` shows the rest with the edges that hold them.
-- **Execute-loop respects topological order.** It drains the ready set
+- **`ddx work` respects topological order.** It drains the ready set
   and can fan out parallel agents on independent branches, the same
   way Dask and Bazel schedulers do, because the graph is explicit and
   the scheduler does not have to guess.

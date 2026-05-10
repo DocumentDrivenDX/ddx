@@ -494,7 +494,7 @@
     },
     "executions": {
       "type": "object",
-      "description": "Configuration for the execute-bead execution bundle archive (mirror).",
+      "description": "Configuration for the bead execution bundle archive (mirror).",
       "properties": {
         "mirror": {
           "type": "object",
@@ -523,7 +523,7 @@
             },
             "async": {
               "type": "boolean",
-              "description": "Upload in a background goroutine (default true) so execute-bead never blocks on the mirror."
+              "description": "Upload in a background goroutine (default true) so ddx try never blocks on the mirror."
             }
           },
           "additionalProperties": false
@@ -535,7 +535,7 @@
         },
         "temp_worktree_root": {
           "type": "string",
-          "description": "Base directory for isolated execute-bead worktrees. Relative paths in project config resolve against the project root; relative paths in global config resolve against the user's home directory. DDX_EXEC_WT_DIR overrides this value.",
+          "description": "Base directory for isolated bead attempt worktrees. Relative paths in project config resolve against the project root; relative paths in global config resolve against the user's home directory. DDX_EXEC_WT_DIR overrides this value.",
           "examples": [
             "~/.cache/ddx/exec-wt",
             ".ddx/worktrees",
@@ -588,7 +588,7 @@
         "max_no_changes_before_close": {
           "type": "integer",
           "minimum": 0,
-          "description": "Number of consecutive no_changes attempts the execute-loop tolerates before closing the bead as already_satisfied. Unset or non-positive falls back to the built-in default (3)."
+          "description": "Number of consecutive no_changes attempts the drain loop tolerates before closing the bead as already_satisfied. Unset or non-positive falls back to the built-in default (3)."
         },
         "heartbeat_interval": {
           "type": "string",
@@ -637,14 +637,14 @@
         },
         "context_budget": {
           "type": "string",
-          "description": "Prompt budget label that execute-bead consults when assembling the bead prompt. Empty string means full budget; \"minimal\" omits large governing documents (cheap-tier path). See SD-024 §Stage 3."
+          "description": "Prompt budget label that ddx try consults when assembling the bead prompt. Empty string means full budget; \"minimal\" omits large governing documents (cheap-tier path). See SD-024 §Stage 3."
         }
       },
       "additionalProperties": false
     },
     "triage": {
       "type": "object",
-      "description": "Post-attempt triage decision policy used by the drain loop after each terminal event. Distinct from agent.triage (the bead readiness decomposition gate).",
+      "description": "Post-attempt triage decision policy used by the drain loop after each terminal event. Distinct from agent.triage (the bead readiness gate).",
       "properties": {
         "policies": {
           "type": "object",
@@ -677,7 +677,7 @@
     "review_max_retries": {
       "type": "integer",
       "minimum": 0,
-      "description": "Cap on reviewer attempts per committed result_rev before the execute-loop emits a terminal `review-manual-required` event and parks the bead (FEAT-022 §14). Defaults to 3 when unset; non-positive values fall back to the default."
+      "description": "Cap on reviewer attempts per committed result_rev before the drain loop emits a terminal `review-manual-required` event and parks the bead (FEAT-022 §14). Defaults to 3 when unset; non-positive values fall back to the default."
     }
   },
   "additionalProperties": false,

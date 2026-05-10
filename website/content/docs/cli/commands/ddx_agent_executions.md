@@ -5,13 +5,13 @@ generated: true
 
 ## ddx agent executions
 
-Manage execute-bead execution bundles (.ddx/executions/)
+Manage bead execution bundles (.ddx/executions/)
 
 ### Synopsis
 
-Inspect and retrieve execute-bead execution bundles.
+Inspect and retrieve bead execution bundles.
 
-Bundles are written by execute-bead under .ddx/executions/<attempt-id>/. When
+Bundles are written by ddx try under .ddx/executions/<attempt-id>/. When
 an out-of-band mirror is configured under executions.mirror in .ddx/config.yaml,
 each finalized bundle is uploaded to the mirror and indexed in
 .ddx/executions/mirror-index.jsonl.
