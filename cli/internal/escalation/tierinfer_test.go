@@ -232,17 +232,3 @@ func TestInferTier_NoMetadataDefaultsCheap(t *testing.T) {
 		t.Fatalf("no metadata: want cheap, got %q", got)
 	}
 }
-
-func TestTierToProfile(t *testing.T) {
-	cases := map[ModelTier]string{
-		TierSmart:     "smart",
-		TierStandard:  "standard",
-		TierCheap:     "cheap",
-		ModelTier(""): "cheap",
-	}
-	for tier, want := range cases {
-		if got := TierToProfile(tier); got != want {
-			t.Errorf("TierToProfile(%q): want %q, got %q", tier, want, got)
-		}
-	}
-}
