@@ -377,6 +377,24 @@ pre-commit:
         exit 0
       fail_text: "NewCommandFactory(\"/tmp\") found in cli/cmd/*_test.go — use t.TempDir() instead"
 
+    skill-dir-anchor:
+      name: "Skill dirs must have SKILL.md"
+      run: |
+        failed=0
+        for base in .agents/skills .claude/skills; do
+          [ -d "$base" ] || continue
+          for d in $(ls -A "$base"); do
+            full="$base/$d"
+            [ -d "$full" ] || continue
+            if [ ! -f "$full/SKILL.md" ]; then
+              echo "ERROR: skill-dir $full has no SKILL.md; skill directories must be real skills with a SKILL.md anchor. If this is contamination, remove the directory. If this is a new skill, add a SKILL.md."
+              failed=1
+            fi
+          done
+        done
+        exit $failed
+      fail_text: "Skill directory missing SKILL.md. Either add SKILL.md (new skill) or remove the directory (contamination)."
+
 # ====================
 # CI/CD - Full validation (all files)
 # ====================
