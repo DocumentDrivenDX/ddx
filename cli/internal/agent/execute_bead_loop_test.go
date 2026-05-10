@@ -1987,10 +1987,11 @@ func TestExecuteBeadWorkerSuccessClearsStaleNoChangesMetadata(t *testing.T) {
 // the executor returns the structured `declined_needs_decomposition` outcome
 // the loop:
 //
-//  1. parks the bead so subsequent loop iterations do not re-attempt it,
+//  1. sets execution-eligible=false so subsequent loop iterations do not re-attempt it
+//     (TD-031 §5: operator action required, not a time-based cooldown),
 //  2. records the recommended sub-beads as a structured
 //     `decomposition-recommendation` event (JSON body, not free-form text),
-//  3. does not pick the bead up on a second `Run` while the cooldown holds.
+//  3. does not pick the bead up on a second `Run` because it is not execution-eligible.
 //
 // Regression coverage for ddx-fba752b9.
 func TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead(t *testing.T) {
@@ -2033,21 +2034,14 @@ func TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead(t *testing.T) {
 	require.Equal(t, 1, r1.Failures)
 	require.Equal(t, ExecuteBeadStatusDeclinedNeedsDecomposition, r1.LastFailureStatus)
 
-	// Cooldown must be set so the bead is no longer execution-ready.
+	// execution-eligible must be false so the bead is no longer execution-ready
+	// (TD-031 §5: operator action is required, not a time-based cooldown).
 	got, err := store.Get(b.ID)
 	require.NoError(t, err)
-	require.Equal(t, bead.StatusOpen, got.Status, "bead stays open; cooldown removes it from queue")
+	require.Equal(t, bead.StatusOpen, got.Status, "bead stays open; execution-eligible=false removes it from queue")
 	retryAfter, _ := got.Extra["execute-loop-retry-after"].(string)
-	require.NotEmpty(t, retryAfter, "execute-loop-retry-after must be set")
-	parkedUntil, perr := time.Parse(time.RFC3339, retryAfter)
-	require.NoError(t, perr)
-	// ddx-a458af7c: all loop-set cooldowns cap at MaxLoopCooldown (24h).
-	// Year-scale parks are operator-only (`ddx bead update --set
-	// execute-loop-retry-after=...`), never an automatic loop output.
-	require.True(t, parkedUntil.After(time.Now().Add(MaxLoopCooldown-time.Hour)),
-		"cooldown must park near the cap (~24h), got %s", retryAfter)
-	require.True(t, parkedUntil.Before(time.Now().Add(MaxLoopCooldown+time.Hour)),
-		"cooldown must NOT exceed MaxLoopCooldown (24h), got %s", retryAfter)
+	require.Empty(t, retryAfter, "declined_needs_decomposition must not set execute-loop-retry-after")
+	require.Equal(t, false, got.Extra[bead.ExtraExecutionElig], "execution-eligible must be set to false")
 	lastStatus, _ := got.Extra["execute-loop-last-status"].(string)
 	require.Equal(t, ExecuteBeadStatusDeclinedNeedsDecomposition, lastStatus)
 
@@ -2073,10 +2067,10 @@ func TestExecuteBeadWorkerDeclinedNeedsDecompositionParksBead(t *testing.T) {
 	require.Equal(t, rationale, payload.Rationale)
 	require.Equal(t, recommended, payload.RecommendedSubbeads)
 
-	// Second run: the bead must not be re-attempted while the cooldown holds.
+	// Second run: the bead must not be re-attempted because execution-eligible=false.
 	r2, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
 	require.NoError(t, err)
-	require.Equal(t, 0, r2.Attempts, "parked bead must not be re-attempted")
+	require.Equal(t, 0, r2.Attempts, "ineligible bead must not be re-attempted")
 	require.Equal(t, int32(1), atomic.LoadInt32(&execCount), "executor must run exactly once")
 }
 
