@@ -164,6 +164,10 @@ Pre-commit checks include:
 - DDx configuration validation
 - Go linting, formatting, building, and testing
 
+### Pre-push / CI / Local Verification Split
+
+Pre-push hooks run cheap safety checks only (build, lint, secrets, git-config-health, merge-policy, no-debug) and return fast operator feedback. The full test suite (`go test -race -cover ./...`) is **not** run on pre-push — CI on origin runs the full suite for every push to the remote, making a local duplicate redundant. Operators who want to verify before pushing can run `make test` (verbose, no race detector) or `make test-full` (mirrors CI exactly: race detector + coverage) from the `cli/` directory.
+
 ## CLI Command Overview
 
 The CLI follows a noun-verb command structure for clarity and consistency:

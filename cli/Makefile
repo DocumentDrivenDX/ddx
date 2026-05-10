@@ -17,7 +17,7 @@ PLATFORMS = \
 	linux/arm64 \
 	windows/amd64
 
-.PHONY: all build clean test test-perf lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build frontend-rebuild frontend-verify copy-skills eval-skill bench-graphql
+.PHONY: all build clean test test-full test-perf lint deps help obsidian-migrate obsidian-validate obsidian-test obsidian-dry-run obsidian-nav obsidian-revert bead-schema skill-schema gendocs frontend-build frontend-rebuild frontend-verify copy-skills eval-skill bench-graphql
 
 # Default target
 all: clean deps test build
@@ -112,6 +112,12 @@ deps:
 test: copy-skills
 	@echo "Running tests..."
 	go test -v ./...
+
+# Run full test suite with race detector and coverage (mirrors CI; opt-in for local pre-push verification)
+test-full: copy-skills
+	@echo "Running full test suite (race + coverage)..."
+	for var in $$(git rev-parse --local-env-vars 2>/dev/null); do unset "$$var"; done; \
+	CGO_ENABLED=1 go test -race -cover ./...
 
 # Run the GraphQL perf harness (ddx-9ce6842a). Seeds a 10 × 500 bead fixture
 # and records baseline numbers under docs/helix/06-iterate/perf/. Override
@@ -241,6 +247,7 @@ help:
 	@echo "  build-all   - Build for all platforms"
 	@echo "  deps        - Install dependencies"
 	@echo "  test        - Run tests"
+	@echo "  test-full   - Run full test suite with race detector + coverage (mirrors CI)"
 	@echo "  lint        - Run linter"
 	@echo "  bead-schema - Validate the shared bead record schema"
 	@echo "  skill-schema - Validate bundled SKILL.md metadata"
