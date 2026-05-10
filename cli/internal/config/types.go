@@ -505,8 +505,8 @@ func (c *NewConfig) ApplyDefaults() {
 		}
 	}
 	if c.Executions == nil {
-		c.Executions = &ExecutionsConfig{RetainDays: 7}
+		c.Executions = &ExecutionsConfig{RetainDays: 90}
 	} else if c.Executions.RetainDays == 0 {
-		c.Executions.RetainDays = 7
+		c.Executions.RetainDays = 90
 	}
 }
