@@ -183,8 +183,8 @@ func TestFizeauPassthrough_RecordsActualModelFromRouting(t *testing.T) {
 	})
 	require.NoError(t, err)
 	finalPayload, err := json.Marshal(map[string]any{
-		"status":    "success",
-		"exit_code": 0,
+		"status":     "success",
+		"exit_code":  0,
 		"final_text": "done",
 		"routing_actual": map[string]any{
 			"harness":  "fiz",
