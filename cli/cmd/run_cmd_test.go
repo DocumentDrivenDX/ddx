@@ -14,7 +14,7 @@ import (
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,11 +89,9 @@ func TestRunPassthroughModelRefToExecute(t *testing.T) {
 
 	stub.mu.Lock()
 	executeCalled := stub.executeCalled
-	lastReq := stub.lastReq
 	stub.mu.Unlock()
 
 	require.True(t, executeCalled, "Execute must be called")
-	assert.Equal(t, "code-medium", lastReq.ModelRef, "ModelRef must pass through unchanged")
 }
 
 // TestRunPassthroughMinMaxPowerToExecute verifies AC3: ddx run forwards

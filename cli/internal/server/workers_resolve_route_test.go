@@ -16,7 +16,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -78,15 +78,7 @@ func (s *resolveRouteFailingService) ListModels(_ context.Context, _ agentlib.Mo
 	return nil, nil
 }
 
-func (s *resolveRouteFailingService) ListProfiles(_ context.Context) ([]agentlib.ProfileInfo, error) {
-	return nil, nil
-}
-
-func (s *resolveRouteFailingService) ResolveProfile(_ context.Context, _ string) (*agentlib.ResolvedProfile, error) {
-	return nil, nil
-}
-
-func (s *resolveRouteFailingService) ProfileAliases(_ context.Context) (map[string]string, error) {
+func (s *resolveRouteFailingService) ListPolicies(_ context.Context) ([]agentlib.PolicyInfo, error) {
 	return nil, nil
 }
 

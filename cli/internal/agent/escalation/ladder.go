@@ -11,7 +11,7 @@ import (
 	"fmt"
 	"sort"
 
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 )
 
 // ErrLadderExhausted is returned by Ladder.Next when no power tier above

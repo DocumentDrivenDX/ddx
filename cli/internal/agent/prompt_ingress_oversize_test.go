@@ -19,7 +19,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 )
 
 // promptIngressTestCap is the cap installed during oversize-fixture tests
@@ -158,13 +158,7 @@ func (s *promptIngressStubAgent) ListProviders(ctx context.Context) ([]agentlib.
 func (s *promptIngressStubAgent) ListModels(ctx context.Context, filter agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
 	return nil, nil
 }
-func (s *promptIngressStubAgent) ListProfiles(ctx context.Context) ([]agentlib.ProfileInfo, error) {
-	return nil, nil
-}
-func (s *promptIngressStubAgent) ResolveProfile(ctx context.Context, name string) (*agentlib.ResolvedProfile, error) {
-	return nil, nil
-}
-func (s *promptIngressStubAgent) ProfileAliases(ctx context.Context) (map[string]string, error) {
+func (s *promptIngressStubAgent) ListPolicies(ctx context.Context) ([]agentlib.PolicyInfo, error) {
 	return nil, nil
 }
 func (s *promptIngressStubAgent) HealthCheck(ctx context.Context, target agentlib.HealthTarget) error {

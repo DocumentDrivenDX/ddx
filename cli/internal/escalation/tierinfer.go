@@ -141,18 +141,3 @@ func isStandardKind(s string) bool {
 	}
 	return false
 }
-
-// TierToProfile maps a ModelTier to the routing profile string consumed by
-// agent.NormalizeRoutingProfile / LoadAndResolve. Tier names align with
-// profile names in the built-in catalog (smart/standard/cheap).
-func TierToProfile(t ModelTier) string {
-	switch t {
-	case TierSmart:
-		return "smart"
-	case TierStandard:
-		return "standard"
-	case TierCheap:
-		return "cheap"
-	}
-	return "cheap"
-}

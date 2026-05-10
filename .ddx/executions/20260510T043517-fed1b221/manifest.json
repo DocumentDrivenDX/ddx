@@ -1,0 +1,104 @@
+{
+  "attempt_id": "20260510T043517-fed1b221",
+  "bead_id": "ddx-0b8780db",
+  "base_rev": "90bf96f2a3588e95fae12aa8ae3bafa822b00ece",
+  "created_at": "2026-05-10T04:35:31.056372204Z",
+  "requested": {
+    "harness": "claude",
+    "model": "claude-sonnet-4-6",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-0b8780db",
+    "title": "C11: heartbeat extracted to withHeartbeat helper",
+    "description": "PROBLEM\n  The heartbeat goroutine in the drain loop is inlined, coupling ticker lifecycle management with candidate execution and blocking unit tests from verifying heartbeat behavior without a real ticker.\n\nROOT CAUSE\n  cli/internal/agent/execute_bead_loop.go:732-753 inlines a goroutine + sync.WaitGroup + time.NewTicker(heartbeatInterval) directly in the loop body. hbCtx and hbWG are declared locally; the goroutine calls w.Store.Heartbeat(beadID) on every tick. There is no injection seam, so tests cannot stub the ticker to verify heartbeat cadence or cancellation without real wall-clock delays.\n\nPROPOSED FIX\n  - Extract to withHeartbeat(ctx context.Context, beadID string, interval time.Duration, store interface{ Heartbeat(string) error }, fn func() (ExecuteBeadReport, error)) error in a new file cli/internal/agent/work/heartbeat.go.\n  - withHeartbeat starts the internal goroutine + WaitGroup, calls fn(), cancels the ticker goroutine on fn return, and returns fn's result.\n  - Drain loop body (execute_bead_loop.go:732) replaces the inline goroutine block with a single withHeartbeat call.\n  - Add TestWithHeartbeat_TickerFiredBeforeReturn and TestWithHeartbeat_CancelPropagates to cli/internal/agent/work/heartbeat_test.go using a stub ticker channel injection.\n\nNON-SCOPE\n  - File renames (C13, ddx-387a0178).\n  - Changes to heartbeatInterval policy or the Store.Heartbeat call itself.\n  - Any behavior change to the drain loop; this is a pure extraction.\n\nINTERSECTIONS\n- P2: heartbeat timing and lifecycle belong in one helper, not inline with candidate execution.\n- P4: one bead heartbeat bug must not leak into the rest of the drain loop.\n- P5: extracted heartbeat behavior supports always-visible worker state.",
+    "acceptance": "1. cli/internal/agent/work/heartbeat.go exports withHeartbeat(ctx, beadID, interval, store, fn) with the signature defined above.\n2. execute_bead_loop.go:732-753 replaced with a single withHeartbeat call; no inline goroutine + WaitGroup remains in the loop body.\n3. Drain loop caller of withHeartbeat is the production site (execute_bead_loop.go or its successor after C13 rename).\n4. TestWithHeartbeat_TickerFiredBeforeReturn in cli/internal/agent/work/heartbeat_test.go: injects a stub ticker; verifies Heartbeat called at least once before fn returns.\n5. TestWithHeartbeat_CancelPropagates: cancels ctx before fn returns; verifies goroutine exits without blocking.\n6. cd cli \u0026\u0026 go test ./internal/agent/... ./internal/agent/work/... green.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-5cb6e6cd",
+    "labels": [
+      "phase:2",
+      "refactor",
+      "kind:refactor"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-10T04:34:10Z",
+      "claimed-machine": "eitri",
+      "claimed-pid": "3534627",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"pre-claim intake requires a smart/frontier route but no viable model was available\",\"intake_outcome\":\"ambiguous_needs_human\"}",
+          "created_at": "2026-05-08T02:57:49.069290937Z",
+          "kind": "intake.blocked",
+          "source": "ddx agent execute-loop",
+          "summary": "ambiguous_needs_human"
+        },
+        {
+          "actor": "ddx",
+          "body": "from_status=open\nto_status=proposed\nremoved_labels=needs_human",
+          "created_at": "2026-05-09T13:09:06.1826767Z",
+          "kind": "lifecycle_migrated",
+          "source": "ddx bead migrate --lifecycle",
+          "summary": "legacy lifecycle metadata required operator attention"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T04:14:11.572941112Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"creating isolated worktree: git worktree add: Preparing worktree (detached HEAD ab7ccd228)\\nfatal: cannot create directory at '.agents/skills/cli/internal/server/frontend/e2e/screenshots.spec.ts-snapshots': No such file or directory: exit status 128\",\"harness\":\"\",\"model\":\"\",\"reason\":\"resource_exhausted\"}",
+          "created_at": "2026-05-10T04:14:16.049392224Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "resource_exhausted"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"\",\"bead_id\":\"ddx-0b8780db\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-10T04:14:16.111450998Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "creating isolated worktree: git worktree add: Preparing worktree (detached HEAD ab7ccd228)\nfatal: cannot create directory at '.agents/skills/cli/internal/server/frontend/e2e/screenshots.spec.ts-snapshots': No such file or directory: exit status 128\noutcome_reason=resource_exhausted",
+          "created_at": "2026-05-10T04:14:16.233525756Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T04:35:17.236608706Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-10T04:34:10.880526877Z",
+      "lifecycle-migrated-at": "2026-05-09T13:09:06Z",
+      "lifecycle-migrated-from-status": "open",
+      "lifecycle-migrated-to-status": "proposed",
+      "needs-human-reason": "legacy lifecycle metadata required operator attention",
+      "needs-human-since": "2026-05-09T13:09:06Z",
+      "needs-human-source": "ddx bead migrate --lifecycle",
+      "needs-human-suggested-action": "review and accept, split, block, or cancel this proposed work"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260510T043517-fed1b221",
+    "prompt": ".ddx/executions/20260510T043517-fed1b221/prompt.md",
+    "manifest": ".ddx/executions/20260510T043517-fed1b221/manifest.json",
+    "result": ".ddx/executions/20260510T043517-fed1b221/result.json",
+    "checks": ".ddx/executions/20260510T043517-fed1b221/checks.json",
+    "usage": ".ddx/executions/20260510T043517-fed1b221/usage.json",
+    "worktree": "var/tmp/ddx-exec-wt/.execute-bead-wt-ddx-0b8780db-20260510T043517-fed1b221"
+  },
+  "prompt_sha": "4d0cfaf9b67ea09f8f81c81ddbe6b9cf78286c4c1ac379d71ec31dfe76d05d87"
+}

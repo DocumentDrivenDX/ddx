@@ -10,7 +10,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/require"
 )
 
@@ -245,7 +245,7 @@ func TestProviderFieldsComeFromHarnessInfoDirectly(t *testing.T) {
 		AutoRoutingEligible: true,
 		DefaultModel:        "gpt-5.4-custom",
 		CostClass:           "expensive",
-		IsSubscription:      true,
+		Billing:             agentlib.BillingModelSubscription,
 		Account: &agentlib.AccountStatus{
 			Authenticated: true,
 			Source:        "account-source",
@@ -369,9 +369,9 @@ func TestCollectHarnessSignalSourcesFiltersStaleCacheLabels(t *testing.T) {
 func TestProviderDetailSuppressesStaleQuotaAndUsageSources(t *testing.T) {
 	now := time.Date(2026, 4, 21, 1, 0, 0, 0, time.UTC)
 	info := agentlib.HarnessInfo{
-		Name:           "codex",
-		DefaultModel:   "gpt-5.4-custom",
-		IsSubscription: true,
+		Name:         "codex",
+		DefaultModel: "gpt-5.4-custom",
+		Billing:      agentlib.BillingModelSubscription,
 		Account: &agentlib.AccountStatus{
 			Authenticated: true,
 			Source:        "account-source",

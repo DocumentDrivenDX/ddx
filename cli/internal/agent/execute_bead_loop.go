@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
@@ -1280,42 +1279,25 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 		nextPhase("queueing", false)
 
-		hbCtx, hbCancel := context.WithCancel(ctx)
-		var hbWG sync.WaitGroup
-		hbWG.Add(1)
-		go func(beadID string) {
-			defer hbWG.Done()
-			ticker := time.NewTicker(heartbeatInterval)
-			defer ticker.Stop()
-			for {
-				select {
-				case <-hbCtx.Done():
-					return
-				case <-ticker.C:
-					_ = w.Store.TouchClaimHeartbeat(beadID)
-				}
-			}
-		}(candidate.ID)
-
 		nextPhase("running", false)
 
 		// tryExecutor preserves the legacy w.Executor.Execute(ctx, candidate.ID)
 		// invocation while letting try.Attempt own conflict recovery.
-		attemptOut, err := agenttry.Attempt(ctx, w.Store, candidate.ID, agenttry.AttemptOpts{
-			Bead:                candidate,
-			Executor:            tryExecutor(w.Executor),
-			Store:               w.Store,
-			ProjectRoot:         runtime.ProjectRoot,
-			SatisfactionChecker: w.SatisfactionChecker,
-			VerificationRunner:  w.VerificationRunner,
-			AutoRecover:         tryAutoRecover(w.conflictAutoRecoverFn),
-			ConflictResolver:    w.ConflictResolver,
-			Assignee:            assignee,
-			Now:                 now,
-			Cooldown:            LandConflictCooldown,
+		attemptOut, err := work.WithHeartbeat(ctx, candidate.ID, heartbeatInterval, w.Store, func() (agenttry.Outcome, error) {
+			return agenttry.Attempt(ctx, w.Store, candidate.ID, agenttry.AttemptOpts{
+				Bead:                candidate,
+				Executor:            tryExecutor(w.Executor),
+				Store:               w.Store,
+				ProjectRoot:         runtime.ProjectRoot,
+				SatisfactionChecker: w.SatisfactionChecker,
+				VerificationRunner:  w.VerificationRunner,
+				AutoRecover:         tryAutoRecover(w.conflictAutoRecoverFn),
+				ConflictResolver:    w.ConflictResolver,
+				Assignee:            assignee,
+				Now:                 now,
+				Cooldown:            LandConflictCooldown,
+			})
 		})
-		hbCancel()
-		hbWG.Wait()
 		report := fromTryReport(attemptOut.Report)
 		if report.BeadID == "" {
 			report.BeadID = candidate.ID

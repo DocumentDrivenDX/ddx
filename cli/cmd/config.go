@@ -433,7 +433,7 @@ func handleProfileSubcommand(cmd *cobra.Command, args []string) error {
 		}
 		return createProfile(cmd, args[1])
 	case "list":
-		return listProfiles(cmd)
+		return listPolicies(cmd)
 	case "activate":
 		if len(args) < 2 {
 			return fmt.Errorf("profile activate requires a profile name")
@@ -513,8 +513,8 @@ func createProfile(cmd *cobra.Command, profileName string) error {
 	return nil
 }
 
-// listProfiles lists all available environment profiles
-func listProfiles(cmd *cobra.Command) error {
+// listPolicies lists all available environment profiles
+func listPolicies(cmd *cobra.Command) error {
 	_, _ = fmt.Fprintln(cmd.OutOrStdout(), "📋 Available Environment Profiles:")
 	_, _ = fmt.Fprintln(cmd.OutOrStdout())
 
