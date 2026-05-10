@@ -30,8 +30,8 @@ func TestClearCooldowns_All(t *testing.T) {
 	env, store := setupCooldownEnv(t, b1, b2, b3)
 
 	until := time.Now().Add(24 * time.Hour)
-	require.NoError(t, store.SetExecutionCooldown(b1.ID, until, "push_failed", "push rejected"))
-	require.NoError(t, store.SetExecutionCooldown(b2.ID, until, "no_changes_unjustified", "no changes"))
+	require.NoError(t, store.SetExecutionCooldown(b1.ID, until, "push_failed", "push rejected", ""))
+	require.NoError(t, store.SetExecutionCooldown(b2.ID, until, "no_changes_unjustified", "no changes", ""))
 
 	root := NewCommandFactory(env.Dir).NewRootCommand()
 	out, err := executeCommand(root, "work", "clear-cooldowns", "--all")
@@ -61,9 +61,9 @@ func TestClearCooldowns_ByStatus(t *testing.T) {
 	env, store := setupCooldownEnv(t, b1, b2, b3)
 
 	until := time.Now().Add(24 * time.Hour)
-	require.NoError(t, store.SetExecutionCooldown(b1.ID, until, "push_failed", "detail a"))
-	require.NoError(t, store.SetExecutionCooldown(b2.ID, until, "no_changes_unjustified", "detail b"))
-	require.NoError(t, store.SetExecutionCooldown(b3.ID, until, "push_failed", "detail c"))
+	require.NoError(t, store.SetExecutionCooldown(b1.ID, until, "push_failed", "detail a", ""))
+	require.NoError(t, store.SetExecutionCooldown(b2.ID, until, "no_changes_unjustified", "detail b", ""))
+	require.NoError(t, store.SetExecutionCooldown(b3.ID, until, "push_failed", "detail c", ""))
 
 	root := NewCommandFactory(env.Dir).NewRootCommand()
 	out, err := executeCommand(root, "work", "clear-cooldowns", "--status", "push_failed")
@@ -90,8 +90,8 @@ func TestClearCooldowns_DryRun(t *testing.T) {
 	env, store := setupCooldownEnv(t, b1, b2)
 
 	until := time.Now().Add(24 * time.Hour)
-	require.NoError(t, store.SetExecutionCooldown(b1.ID, until, "push_failed", "detail"))
-	require.NoError(t, store.SetExecutionCooldown(b2.ID, until, "push_failed", "detail"))
+	require.NoError(t, store.SetExecutionCooldown(b1.ID, until, "push_failed", "detail", ""))
+	require.NoError(t, store.SetExecutionCooldown(b2.ID, until, "push_failed", "detail", ""))
 
 	root := NewCommandFactory(env.Dir).NewRootCommand()
 	out, err := executeCommand(root, "work", "clear-cooldowns", "--all", "--dry-run")

@@ -179,7 +179,7 @@ func TestReadyExecutionSkipsRetrySuppressedBeads(t *testing.T) {
 	b := &Bead{Title: "Eligible", Priority: 1}
 	require.NoError(t, s.Create(a))
 	require.NoError(t, s.Create(b))
-	require.NoError(t, s.SetExecutionCooldown(a.ID, time.Now().UTC().Add(6*time.Hour), "no_changes", "agent made no commits"))
+	require.NoError(t, s.SetExecutionCooldown(a.ID, time.Now().UTC().Add(6*time.Hour), "no_changes", "agent made no commits", ""))
 
 	exec, err := s.ReadyExecution()
 	require.NoError(t, err)
@@ -199,7 +199,7 @@ func TestReadyExecutionBreakdown_SeparatesCooldownFromNonExecutable(t *testing.T
 	}
 	require.NoError(t, s.Create(cooldown))
 	require.NoError(t, s.Create(notEligible))
-	require.NoError(t, s.SetExecutionCooldown(cooldown.ID, time.Now().UTC().Add(time.Hour), "no_changes", "retry later"))
+	require.NoError(t, s.SetExecutionCooldown(cooldown.ID, time.Now().UTC().Add(time.Hour), "no_changes", "retry later", ""))
 
 	breakdown, err := s.ReadyExecutionBreakdown()
 	require.NoError(t, err)
@@ -331,7 +331,7 @@ func TestBlockedAllClassifiesDepAndRetryCooldown(t *testing.T) {
 	require.NoError(t, s.DepAdd(blockedByDep.ID, dep.ID))
 
 	until := time.Now().UTC().Add(4 * time.Hour).Truncate(time.Second)
-	require.NoError(t, s.SetExecutionCooldown(parked.ID, until, "no_changes", "agent made no commits"))
+	require.NoError(t, s.SetExecutionCooldown(parked.ID, until, "no_changes", "agent made no commits", ""))
 
 	// ReadyExecution still excludes the parked bead and the dep-blocked bead.
 	exec, err := s.ReadyExecution()
@@ -375,7 +375,7 @@ func TestBlockedAll_ReportsRetryCooldownWithoutHidingDependencyBlockers(t *testi
 	require.NoError(t, s.DepAdd(blockedByDep.ID, dep.ID))
 
 	until := time.Now().UTC().Add(4 * time.Hour).Truncate(time.Second)
-	require.NoError(t, s.SetExecutionCooldown(parked.ID, until, "no_changes", "agent made no commits"))
+	require.NoError(t, s.SetExecutionCooldown(parked.ID, until, "no_changes", "agent made no commits", ""))
 
 	entries, err := s.BlockedAll()
 	require.NoError(t, err)
@@ -396,7 +396,7 @@ func TestBlockedAllOmitsExpiredCooldown(t *testing.T) {
 
 	a := &Bead{Title: "Cooldown expired"}
 	require.NoError(t, s.Create(a))
-	require.NoError(t, s.SetExecutionCooldown(a.ID, time.Now().UTC().Add(-1*time.Hour), "no_changes", "stale"))
+	require.NoError(t, s.SetExecutionCooldown(a.ID, time.Now().UTC().Add(-1*time.Hour), "no_changes", "stale", ""))
 
 	entries, err := s.BlockedAll()
 	require.NoError(t, err)
@@ -411,7 +411,7 @@ func TestBlockedAllPrefersDependencyOverCooldown(t *testing.T) {
 	require.NoError(t, s.Create(dep))
 	require.NoError(t, s.Create(both))
 	require.NoError(t, s.DepAdd(both.ID, dep.ID))
-	require.NoError(t, s.SetExecutionCooldown(both.ID, time.Now().UTC().Add(2*time.Hour), "no_changes", "also parked"))
+	require.NoError(t, s.SetExecutionCooldown(both.ID, time.Now().UTC().Add(2*time.Hour), "no_changes", "also parked", ""))
 
 	entries, err := s.BlockedAll()
 	require.NoError(t, err)

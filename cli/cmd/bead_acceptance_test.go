@@ -1035,7 +1035,7 @@ func TestBeadBlockedExcludesDependencyWaiting(t *testing.T) {
 
 	store := bead.NewStore(filepath.Join(workingDir, ".ddx"))
 	until := time.Now().UTC().Add(3 * time.Hour).Truncate(time.Second)
-	require.NoError(t, store.SetExecutionCooldown(parkedID, until, "no_changes", "agent made no commits"))
+	require.NoError(t, store.SetExecutionCooldown(parkedID, until, "no_changes", "agent made no commits", ""))
 
 	externalOut, err := executeCommand(rootCmd, "bead", "create", "External blocked", "--priority", "3")
 	require.NoError(t, err)

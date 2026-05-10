@@ -163,7 +163,7 @@ func TestLifecycle_TransientTransport_UsesCooldown(t *testing.T) {
 	b := &Bead{ID: "ddx-transient", Title: "transient transport"}
 	require.NoError(t, s.Create(b))
 	until := time.Now().UTC().Add(30 * time.Minute).Truncate(time.Second)
-	require.NoError(t, s.SetExecutionCooldown(b.ID, until, "execution_failed", "transport retryable"))
+	require.NoError(t, s.SetExecutionCooldown(b.ID, until, "execution_failed", "transport retryable", ""))
 
 	ready, err := s.ReadyExecution()
 	require.NoError(t, err)

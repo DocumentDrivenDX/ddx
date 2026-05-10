@@ -10,6 +10,7 @@ const (
 	ExtraLastStatus      = "execute-loop-last-status"
 	ExtraLastDetail      = "execute-loop-last-detail"
 	ExtraNoChangesCount  = "execute-loop-no-changes-count"
+	ExtraCooldownBaseRev = "execute-loop-cooldown-base-rev"
 	ExtraExecutionElig   = "execution-eligible"
 	ExtraExecutionReason = "execution-skip-reason"
 
@@ -79,6 +80,7 @@ func setOrDeleteExtra(m map[string]any, key, val string) {
 
 var noChangesManagementKeys = []string{
 	ExtraRetryAfter,
+	ExtraCooldownBaseRev,
 	ExtraLastStatus,
 	ExtraLastDetail,
 	ExtraNoChangesCount,
