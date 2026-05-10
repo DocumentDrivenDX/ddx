@@ -256,6 +256,17 @@ Candidate-cycle events (FEAT-010 candidate-cycle pipeline):
 - `final-result-landed` — the approved candidate has been merged to the base
   branch; immediately precedes the `closed-merged` lifecycle event
 
+Push-outcome events:
+
+- `push-failed` — the commit was created but the push to the remote was rejected
+  (branch protection, auth-token expiry, pre-push test failure, or similar);
+  body carries stderr detail and base-rev. This outcome MUST NOT trigger
+  `execute-loop-retry-after` — the cause requires operator action or a code fix,
+  not time elapsed (see section 5 invariant).
+- `push-conflict` — the push was rejected because the remote advanced since the
+  claim was acquired (non-fast-forward); body carries the current remote head.
+  A brief recheckable cooldown is appropriate (see section 5).
+
 Each event SHOULD include `kind`, `actor`, `created_at`, and a free-form
 `body` (TD-004 schema). Drain events SHOULD additionally include the
 `run-id` of the execution attempt in `body` or in a structured `extra`
@@ -274,6 +285,19 @@ Lifecycle reliability invariants:
   bead.
 - `execute-loop-retry-after` may be set only when retrying the same bead after
   time passes could plausibly succeed without human/spec/dependency changes.
+  Outcomes that MUST NOT set `execute-loop-retry-after` (cause is not
+  time-resolvable; requires operator action or a code fix):
+  `push_failed`, `declined_needs_decomposition`, `review_spec_gap`,
+  `review_missing_acceptance`, and `review_too_large` at the decomposition depth
+  cap.
+  Outcomes that MAY set `execute-loop-retry-after` (recheckable by waiting):
+  `push_conflict` (15 min — remote advanced; re-fetch and re-attempt resolves
+  naturally), `no_viable_provider` (15 min — provider may become available),
+  `land_conflict` (15 min — base branch may advance to a clean merge point), and
+  transient infra/quota/transport (15 min — transient condition may clear).
+  Cooldown lifetime SHOULD match the recheckable window; 15 min is the ceiling
+  for every current recheckable outcome. A 24 h cooldown is never appropriate
+  for any outcome in this table.
 - Every bead excluded from ordinary `ddx work` execution MUST have an
   explainable durable reason using existing mechanisms: dependency edge,
   `proposed` status, external `blocked` status, `execution-eligible=false`,
@@ -321,6 +345,8 @@ Lifecycle reliability invariants:
 | external blocker | `in_progress → blocked` for hard external recheckable blockers, or `in_progress → open` for visible soft blockers | add `blocked-on-upstream:<id>` as explanatory label when useful | `no_changes_blocked` | `Extra["last-rationale"]` names the external blocker |
 | superseded work | no terminal success; leave open only if visible history is needed | add no triage labels | structured superseded event if appended by caller | `Extra["superseded-by"]` names the replacement and makes ordinary execution ineligible |
 | transient infra/quota/transport | `in_progress → open` (claim released) | (none) | `no_changes_recoverable`, `drain-paused-quota`, `rate-limit-retry`, or structured transport event | may set `execute-loop-retry-after` only for the retryable time-based condition |
+| `push_failed` (branch protection, auth-token expiry, pre-push test failure, or executor data race) | `in_progress → open` (claim released) | optional explanatory label (e.g., `blocked-on-branch-protection`) | `push-failed` with stderr detail and base-rev | `Extra["last-run"]` only; DO NOT set `execute-loop-retry-after` — the cause requires operator action or a code fix, not time elapsed |
+| `push_conflict` (remote advanced; fast-forward rejected) | `in_progress → open` (claim released) | (none) | `push-conflict` with current remote head | may set `execute-loop-retry-after` at 15 min (recheckable — remote advanced; re-fetch and re-attempt resolves naturally) |
 | stale no_changes tracker metadata | no status change unless latest terminal evidence closes the bead | remove stale no_changes triage labels only when contradicted by terminal evidence | preserve historical events; append reconciliation event if performed | clear stale `execute-loop-*` management fields when latest terminal event or close evidence proves they are obsolete |
 | dependency-satisfied reconcile close (`ddx bead reconcile`, `CloseSatisfied=true`; see reconcile.go:208-254) | `open → closed` via `UpdateWithLifecycleStatus`, `ManualClose=true`; `ClosureGate` is **not** invoked on this path (see store.go:1245 and the invariant above) | remove stale `execute-loop-*` labels if present; add `reconciled-nochanges-state` label | `lifecycle_reconciled` | `Extra["execute-loop-*"]` management fields cleared per `ReconcilePlan.ClearFields`; `externalizeEvents` called at reconcile.go:252 after close |
 
