@@ -211,6 +211,28 @@ func TestACCheck_MechanicalAC_NeedsJudgment(t *testing.T) {
 	}
 }
 
+func TestACCheck_MechanicalAC_RenameDetection(t *testing.T) {
+	// Verify that a rename AC is classified as mechanical and that the
+	// evaluator yields needs_judgment (no file-path resolver provided).
+	// This mirrors the real rename-detection path: without a concrete path,
+	// the reviewer adjudicates against git diff --name-status.
+	k, _ := classify("rename execute_bead_land.go to bead_land.go")
+	if k != KindMechanical {
+		t.Errorf("classify: want %s, got %s", KindMechanical, k)
+	}
+	item := Item{AC: 2, Text: "rename execute_bead_land.go to bead_land.go", Kind: KindMechanical}
+	e := evaluateOne(item, Context{})
+	if e.Kind != KindMechanical {
+		t.Errorf("entry kind: want %s, got %s", KindMechanical, e.Kind)
+	}
+	if e.Result != ResultNeedsJudgment {
+		t.Fatalf("rename AC must yield needs_judgment; got %s (%s)", e.Result, e.Evidence)
+	}
+	if e.Evidence == "" {
+		t.Error("expected non-empty evidence string for rename detection AC")
+	}
+}
+
 // ----- output tests -----
 
 func TestACCheck_JSONOutput_SchemaVersion1(t *testing.T) {
