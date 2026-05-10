@@ -119,6 +119,8 @@ type ExecutionCleanupSummary struct {
 	PreservedActiveScratchDirs  int64 `json:"preserved_active_scratch_dirs"`
 	PrunedCandidateRefs         int64 `json:"pruned_candidate_refs"`
 	RemovedEvidenceDirs         int64 `json:"removed_evidence_dirs"`
+	RemovedAgentLogs            int64 `json:"removed_agent_logs"`
+	RemovedWorkerDirs           int64 `json:"removed_worker_dirs"`
 
 	BytesReclaimed         int64 `json:"bytes_reclaimed"`
 	InodesReclaimed        int64 `json:"inodes_reclaimed"`
@@ -472,6 +474,8 @@ func (m *ExecutionCleanupManager) Cleanup(ctx context.Context) (ExecutionCleanup
 
 	summary.ScannedEvidenceDirs += scanCompleteEvidenceDirs(m.ProjectRoot, ExecuteBeadArtifactDir, "manifest.json", "result.json", &summary)
 	m.pruneEvidenceDirs(ctx, &summary, runStates, now())
+	m.pruneAgentLogs(ctx, &summary, runStates, now())
+	m.pruneWorkerDirs(ctx, &summary, now())
 	summary.ScannedEvidenceDirs += scanCompleteEvidenceDirs(m.ProjectRoot, ".ddx/runs", "record.json", "", &summary)
 	m.cleanupDurableLandedCandidateRefs(&summary)
 
@@ -1152,6 +1156,183 @@ func (m *ExecutionCleanupManager) removeEvidenceDir(ctx context.Context, dirPath
 	}
 	// Remove remaining untracked files.
 	_ = os.RemoveAll(dirPath)
+}
+
+// pruneAgentLogs deletes .ddx/agent-logs/agent-*.jsonl and svc-*.jsonl files
+// whose mtime is older than m.RetainDays. Files whose session_id matches an
+// active run-state are skipped. No-op when RetainDays == 0.
+func (m *ExecutionCleanupManager) pruneAgentLogs(_ context.Context, summary *ExecutionCleanupSummary, runStates []RunState, now time.Time) {
+	if m.RetainDays == 0 {
+		return
+	}
+	cutoff := now.AddDate(0, 0, -m.RetainDays)
+
+	activeSessions := map[string]struct{}{}
+	for _, rs := range runStates {
+		if rs.SessionID != "" {
+			activeSessions[rs.SessionID] = struct{}{}
+		}
+	}
+
+	root := filepath.Join(m.ProjectRoot, ".ddx", "agent-logs")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+				Path:    root,
+				Class:   "agent_log_read",
+				Message: err.Error(),
+			})
+		}
+		return
+	}
+
+	for _, entry := range entries {
+		if entry.IsDir() {
+			continue
+		}
+		name := entry.Name()
+		var sessionID string
+		switch {
+		case strings.HasPrefix(name, "agent-") && strings.HasSuffix(name, ".jsonl"):
+			sessionID = strings.TrimSuffix(strings.TrimPrefix(name, "agent-"), ".jsonl")
+		case strings.HasPrefix(name, "svc-") && strings.HasSuffix(name, ".jsonl"):
+			sessionID = strings.TrimSuffix(strings.TrimPrefix(name, "svc-"), ".jsonl")
+		default:
+			continue
+		}
+		if _, ok := activeSessions[sessionID]; ok {
+			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+				Path:    filepath.ToSlash(filepath.Join(".ddx/agent-logs", name)),
+				Class:   "preserved_active_agent_log",
+				Message: "active run-state session reference",
+			})
+			continue
+		}
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+				Path:    filepath.Join(root, name),
+				Class:   "agent_log_stat",
+				Message: infoErr.Error(),
+			})
+			continue
+		}
+		if !info.ModTime().Before(cutoff) {
+			continue
+		}
+		path := filepath.Join(root, name)
+		if !m.DryRun {
+			if err := os.Remove(path); err != nil {
+				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+					Path:    path,
+					Class:   "agent_log_remove",
+					Message: err.Error(),
+				})
+				continue
+			}
+		}
+		summary.RemovedAgentLogs++
+		class := "removed_agent_log"
+		if m.DryRun {
+			class = "would_remove_agent_log"
+		}
+		summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+			Path:    filepath.ToSlash(filepath.Join(".ddx/agent-logs", name)),
+			Class:   class,
+			Message: fmt.Sprintf("agent log older than %d days", m.RetainDays),
+		})
+	}
+}
+
+// workerDirPID reads the PID from .ddx/workers/<id>/status.json. Returns 0
+// if the file cannot be read or has no PID.
+func workerDirPID(dirPath string) int {
+	data, err := os.ReadFile(filepath.Join(dirPath, "status.json"))
+	if err != nil {
+		return 0
+	}
+	var rec struct {
+		PID int `json:"pid"`
+	}
+	if err := json.Unmarshal(data, &rec); err != nil {
+		return 0
+	}
+	return rec.PID
+}
+
+// pruneWorkerDirs deletes .ddx/workers/<id>/ directories whose mtime is older
+// than m.RetainDays. Directories whose status.json PID is still alive are
+// skipped. No-op when RetainDays == 0.
+func (m *ExecutionCleanupManager) pruneWorkerDirs(_ context.Context, summary *ExecutionCleanupSummary, now time.Time) {
+	if m.RetainDays == 0 {
+		return
+	}
+	cutoff := now.AddDate(0, 0, -m.RetainDays)
+
+	root := filepath.Join(m.ProjectRoot, ".ddx", "workers")
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if !errors.Is(err, os.ErrNotExist) {
+			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+				Path:    root,
+				Class:   "worker_dir_read",
+				Message: err.Error(),
+			})
+		}
+		return
+	}
+
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		dirPath := filepath.Join(root, entry.Name())
+		relPath := filepath.ToSlash(filepath.Join(".ddx/workers", entry.Name()))
+
+		if pid := workerDirPID(dirPath); pid > 0 && trackerProcessAlive(pid) {
+			summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+				Path:    relPath,
+				Class:   "preserved_active_worker_dir",
+				Message: fmt.Sprintf("worker pid %d is alive", pid),
+			})
+			continue
+		}
+
+		info, infoErr := entry.Info()
+		if infoErr != nil {
+			summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+				Path:    dirPath,
+				Class:   "worker_dir_stat",
+				Message: infoErr.Error(),
+			})
+			continue
+		}
+		if !info.ModTime().Before(cutoff) {
+			continue
+		}
+
+		if !m.DryRun {
+			if err := os.RemoveAll(dirPath); err != nil {
+				summary.Warnings = append(summary.Warnings, ExecutionCleanupWarning{
+					Path:    dirPath,
+					Class:   "worker_dir_remove",
+					Message: err.Error(),
+				})
+				continue
+			}
+		}
+		summary.RemovedWorkerDirs++
+		class := "removed_worker_dir"
+		if m.DryRun {
+			class = "would_remove_worker_dir"
+		}
+		summary.Observations = append(summary.Observations, ExecutionCleanupObservation{
+			Path:    relPath,
+			Class:   class,
+			Message: fmt.Sprintf("worker dir older than %d days", m.RetainDays),
+		})
+	}
 }
 
 func scanCompleteEvidenceDirs(projectRoot, rootRel string, primaryFile, secondaryFile string, summary *ExecutionCleanupSummary) int {

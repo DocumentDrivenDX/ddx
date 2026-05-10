@@ -980,6 +980,187 @@ func TestExecutionCleanup_RecordsCount(t *testing.T) {
 	assert.Equal(t, int64(3), summary.RemovedEvidenceDirs)
 }
 
+func TestExecutionCleanup_DeletesOldExecutionDirs(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+
+	oldTime := time.Now().AddDate(0, 0, -20)
+	oldDir := setupEvidenceDir(t, projectRoot, "20260101T000000-exec-old", oldTime)
+	recentDir := setupEvidenceDir(t, projectRoot, "20260101T000001-exec-recent", time.Now())
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.RetainDays = 7
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoDirExists(t, oldDir)
+	assert.DirExists(t, recentDir)
+	assert.Equal(t, int64(1), summary.RemovedEvidenceDirs)
+	assert.True(t, hasObservationClass(summary.Observations, "removed_evidence_dir"))
+}
+
+func TestExecutionCleanup_DeletesOldAgentLogs(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	logDir := filepath.Join(projectRoot, ".ddx", "agent-logs")
+	require.NoError(t, os.MkdirAll(logDir, 0o755))
+
+	oldTime := time.Now().AddDate(0, 0, -20)
+	oldAgent := filepath.Join(logDir, "agent-oldsession.jsonl")
+	oldSvc := filepath.Join(logDir, "svc-oldsession.jsonl")
+	recentAgent := filepath.Join(logDir, "agent-recentsession.jsonl")
+	otherFile := filepath.Join(logDir, "mirror.log")
+
+	for _, p := range []string{oldAgent, oldSvc, recentAgent, otherFile} {
+		require.NoError(t, os.WriteFile(p, []byte("data\n"), 0o644))
+	}
+	require.NoError(t, os.Chtimes(oldAgent, oldTime, oldTime))
+	require.NoError(t, os.Chtimes(oldSvc, oldTime, oldTime))
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.RetainDays = 7
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoFileExists(t, oldAgent)
+	assert.NoFileExists(t, oldSvc)
+	assert.FileExists(t, recentAgent)
+	assert.FileExists(t, otherFile)
+	assert.Equal(t, int64(2), summary.RemovedAgentLogs)
+	assert.True(t, hasObservationClass(summary.Observations, "removed_agent_log"))
+}
+
+func TestExecutionCleanup_DeletesOldWorkerDirs(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	workersDir := filepath.Join(projectRoot, ".ddx", "workers")
+	require.NoError(t, os.MkdirAll(workersDir, 0o755))
+
+	oldTime := time.Now().AddDate(0, 0, -20)
+	oldWorker := filepath.Join(workersDir, "worker-old")
+	recentWorker := filepath.Join(workersDir, "worker-recent")
+	require.NoError(t, os.MkdirAll(oldWorker, 0o755))
+	require.NoError(t, os.MkdirAll(recentWorker, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(oldWorker, "status.json"), []byte(`{"id":"worker-old","state":"exited"}`), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(recentWorker, "status.json"), []byte(`{"id":"worker-recent","state":"running"}`), 0o644))
+	require.NoError(t, os.Chtimes(oldWorker, oldTime, oldTime))
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.RetainDays = 7
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.NoDirExists(t, oldWorker)
+	assert.DirExists(t, recentWorker)
+	assert.Equal(t, int64(1), summary.RemovedWorkerDirs)
+	assert.True(t, hasObservationClass(summary.Observations, "removed_worker_dir"))
+}
+
+func TestExecutionCleanup_PreservesActiveItems(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	oldTime := time.Now().AddDate(0, 0, -20)
+	activeSessionID := "activesession123"
+
+	// execution dir: active via run-state
+	activeExecID := "20260101T000000-exec-active"
+	activeExecDir := setupEvidenceDir(t, projectRoot, activeExecID, oldTime)
+	require.NoError(t, WriteRunState(projectRoot, RunState{
+		BeadID:    "ddx-active",
+		AttemptID: activeExecID,
+		SessionID: activeSessionID,
+		StartedAt: time.Now().UTC(),
+	}))
+
+	// agent log: same session ID as active run-state
+	logDir := filepath.Join(projectRoot, ".ddx", "agent-logs")
+	require.NoError(t, os.MkdirAll(logDir, 0o755))
+	activeLog := filepath.Join(logDir, "agent-"+activeSessionID+".jsonl")
+	require.NoError(t, os.WriteFile(activeLog, []byte("data\n"), 0o644))
+	require.NoError(t, os.Chtimes(activeLog, oldTime, oldTime))
+
+	// worker dir: PID 0 but not old enough to be pruned (use recent mtime to preserve)
+	workersDir := filepath.Join(projectRoot, ".ddx", "workers")
+	require.NoError(t, os.MkdirAll(workersDir, 0o755))
+	preservedWorker := filepath.Join(workersDir, "worker-preserved")
+	require.NoError(t, os.MkdirAll(preservedWorker, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(preservedWorker, "status.json"), []byte(`{"id":"worker-preserved","state":"running","pid":0}`), 0o644))
+	// keep recent mtime so it is not pruned by age
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.RetainDays = 7
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.DirExists(t, activeExecDir)
+	assert.FileExists(t, activeLog)
+	assert.DirExists(t, preservedWorker)
+	assert.Equal(t, int64(0), summary.RemovedEvidenceDirs)
+	assert.Equal(t, int64(0), summary.RemovedAgentLogs)
+	assert.Equal(t, int64(0), summary.RemovedWorkerDirs)
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_active_evidence_dir"))
+	assert.True(t, hasObservationClass(summary.Observations, "preserved_active_agent_log"))
+}
+
+func TestExecutionCleanup_DefaultRetainDays90(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	configPath := filepath.Join(projectRoot, ".ddx", "config.yaml")
+	require.NoError(t, os.WriteFile(configPath, []byte("version: \"1.0\"\n"), 0o644))
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	assert.Equal(t, 90, mgr.RetainDays)
+}
+
+func TestExecutionCleanup_RecordsCounts(t *testing.T) {
+	projectRoot := setupExecutionCleanupProjectRoot(t)
+	tempRoot := t.TempDir()
+	oldTime := time.Now().AddDate(0, 0, -20)
+
+	// 2 old execution dirs
+	for _, id := range []string{"20260101T000000-cnt-exec1", "20260101T000001-cnt-exec2"} {
+		setupEvidenceDir(t, projectRoot, id, oldTime)
+	}
+
+	// 3 old agent logs
+	logDir := filepath.Join(projectRoot, ".ddx", "agent-logs")
+	require.NoError(t, os.MkdirAll(logDir, 0o755))
+	for _, name := range []string{"agent-s1.jsonl", "agent-s2.jsonl", "svc-s1.jsonl"} {
+		p := filepath.Join(logDir, name)
+		require.NoError(t, os.WriteFile(p, []byte("data\n"), 0o644))
+		require.NoError(t, os.Chtimes(p, oldTime, oldTime))
+	}
+
+	// 2 old worker dirs
+	workersDir := filepath.Join(projectRoot, ".ddx", "workers")
+	require.NoError(t, os.MkdirAll(workersDir, 0o755))
+	for _, id := range []string{"worker-cnt1", "worker-cnt2"} {
+		d := filepath.Join(workersDir, id)
+		require.NoError(t, os.MkdirAll(d, 0o755))
+		require.NoError(t, os.WriteFile(filepath.Join(d, "status.json"), []byte(`{"id":"`+id+`","state":"exited"}`), 0o644))
+		require.NoError(t, os.Chtimes(d, oldTime, oldTime))
+	}
+
+	mgr := NewExecutionCleanupManager(projectRoot, &executionCleanupTestGitOps{})
+	mgr.TempRoot = tempRoot
+	mgr.RetainDays = 7
+
+	summary, err := mgr.Cleanup(context.Background())
+	require.NoError(t, err)
+
+	assert.Equal(t, int64(2), summary.RemovedEvidenceDirs)
+	assert.Equal(t, int64(3), summary.RemovedAgentLogs)
+	assert.Equal(t, int64(2), summary.RemovedWorkerDirs)
+}
+
 func hasObservationClass(observations []ExecutionCleanupObservation, class string) bool {
 	for _, obs := range observations {
 		if obs.Class == class {
