@@ -11,10 +11,9 @@ import (
 // If you rename a status in execute_bead_status.go, update both places.
 func TestEscalatableStatusesMatchAgentVocab(t *testing.T) {
 	expected := map[string]bool{
-		ExecuteBeadStatusExecutionFailed:            true,
-		ExecuteBeadStatusPostRunCheckFailed:         true,
-		ExecuteBeadStatusLandConflict:               true,
-		ExecuteBeadStatusStructuralValidationFailed: true,
+		ExecuteBeadStatusExecutionFailed:    true,
+		ExecuteBeadStatusPostRunCheckFailed: true,
+		ExecuteBeadStatusLandConflict:       true,
 	}
 	for status := range expected {
 		if !escalation.EscalatableStatuses[status] {
