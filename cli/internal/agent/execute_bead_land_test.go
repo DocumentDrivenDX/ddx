@@ -1733,3 +1733,75 @@ func TestNoChangesRevisionSemantics_PreservesBaseRev(t *testing.T) {
 		t.Errorf("Outcome: want %q, got %q", "no-changes", res.Outcome)
 	}
 }
+
+// TestSyncWorkTreeToHead_DoesNotClobberBeadsJSONL verifies that
+// RealLandingGitOps.SyncWorkTreeToHead never overwrites .ddx/beads.jsonl in
+// the main worktree, even when the landed commit modified it.
+func TestSyncWorkTreeToHead_DoesNotClobberBeadsJSONL(t *testing.T) {
+	r := newLandTestRepo(t)
+
+	// Base commit includes .ddx/beads.jsonl with open state.
+	r.writeFile(".ddx/beads.jsonl", `{"id":"ddx-test","status":"open"}`+"\n")
+	r.runGit("add", ".ddx/beads.jsonl")
+	r.runGit("commit", "-m", "add beads.jsonl")
+	fromRev := r.resolveRef("refs/heads/main")
+
+	// Landing commit: agent snapshot has in_progress, no queue-rank.
+	r.writeFile(".ddx/beads.jsonl", `{"id":"ddx-test","status":"in_progress"}`+"\n")
+	r.writeFile("feature.txt", "feature\n")
+	r.runGit("add", ".ddx/beads.jsonl", "feature.txt")
+	r.runGit("commit", "-m", "feat: add feature [ddx-test]")
+
+	// Operator's live state written after claim: queue-rank preserved.
+	liveContent := `{"id":"ddx-test","status":"open","extra":{"queue-rank":5}}` + "\n"
+	r.writeFile(".ddx/beads.jsonl", liveContent)
+
+	ops := RealLandingGitOps{}
+	if err := ops.SyncWorkTreeToHead(r.dir, fromRev); err != nil {
+		t.Fatalf("SyncWorkTreeToHead: %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(r.dir, ".ddx", "beads.jsonl"))
+	if err != nil {
+		t.Fatalf("reading beads.jsonl: %v", err)
+	}
+	if string(got) != liveContent {
+		t.Errorf("beads.jsonl was clobbered by SyncWorkTreeToHead\ngot:  %q\nwant: %q", string(got), liveContent)
+	}
+}
+
+// TestSyncWorkTreeToHead_DoesNotClobberBeadsArchiveJSONL verifies that
+// RealLandingGitOps.SyncWorkTreeToHead never overwrites .ddx/beads-archive.jsonl.
+func TestSyncWorkTreeToHead_DoesNotClobberBeadsArchiveJSONL(t *testing.T) {
+	r := newLandTestRepo(t)
+
+	// Base commit includes .ddx/beads-archive.jsonl.
+	r.writeFile(".ddx/beads-archive.jsonl", `{"id":"ddx-archived","status":"closed"}`+"\n")
+	r.runGit("add", ".ddx/beads-archive.jsonl")
+	r.runGit("commit", "-m", "add beads-archive.jsonl")
+	fromRev := r.resolveRef("refs/heads/main")
+
+	// Landing commit: agent snapshot writes a stale archive (missing a bead).
+	r.writeFile(".ddx/beads-archive.jsonl", `{"id":"ddx-archived","status":"closed","extra":{"old":"snapshot"}}`+"\n")
+	r.writeFile("feature.txt", "feature\n")
+	r.runGit("add", ".ddx/beads-archive.jsonl", "feature.txt")
+	r.runGit("commit", "-m", "feat: add feature [ddx-test]")
+
+	// Live archive has additional data the operator added after the claim.
+	liveContent := `{"id":"ddx-archived","status":"closed"}` + "\n" +
+		`{"id":"ddx-archived-2","status":"closed"}` + "\n"
+	r.writeFile(".ddx/beads-archive.jsonl", liveContent)
+
+	ops := RealLandingGitOps{}
+	if err := ops.SyncWorkTreeToHead(r.dir, fromRev); err != nil {
+		t.Fatalf("SyncWorkTreeToHead: %v", err)
+	}
+
+	got, err := os.ReadFile(filepath.Join(r.dir, ".ddx", "beads-archive.jsonl"))
+	if err != nil {
+		t.Fatalf("reading beads-archive.jsonl: %v", err)
+	}
+	if string(got) != liveContent {
+		t.Errorf("beads-archive.jsonl was clobbered by SyncWorkTreeToHead\ngot:  %q\nwant: %q", string(got), liveContent)
+	}
+}
