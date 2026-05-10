@@ -11,6 +11,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
+	"github.com/DocumentDrivenDX/ddx/internal/evidence"
 	"github.com/DocumentDrivenDX/ddx/internal/triage"
 )
 
@@ -104,6 +105,57 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 		}
 		out.Report = report
 		return out
+	}
+
+	// AC 1: Pre-dispatch cost cap check — enforce max_billable_usd before each
+	// adversarial reviewer invocation. If the drain-level budget is already
+	// exhausted, classify as review-error: cost_cap_exceeded and feed the
+	// review_max_retries / review-manual-required retry path so the bead is
+	// left open and not silently closed.
+	if capTracker := in.ReviewCostCap; capTracker != nil {
+		if detail, capped := capTracker.Tripped(); capped {
+			class := evidence.OutcomeReviewCostCapExceeded
+			prior := CountPriorReviewErrors(in.Store, in.Bead.ID, report.ResultRev)
+			attemptCount := prior + 1
+			maxRetries := in.Rcfg.ReviewMaxRetries()
+			if maxRetries <= 0 {
+				maxRetries = DefaultReviewMaxRetries
+			}
+			body := ReviewErrorEventBody(class, attemptCount, report.ResultRev, detail)
+			if attemptCount >= maxRetries {
+				_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
+					Kind:      "review-manual-required",
+					Summary:   class,
+					Body:      body,
+					Actor:     in.Assignee,
+					Source:    "ddx agent execute-loop",
+					CreatedAt: now().UTC(),
+				})
+				applyReviewOperatorRequiredParking(
+					in.Store,
+					in.Bead.ID,
+					in.Assignee,
+					now().UTC(),
+					"review cost cap exhausted: "+class,
+					"review cost cap requires operator decision",
+					"raise max_billable_usd or reset the session budget before retrying",
+				)
+			} else {
+				_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
+					Kind:      "review-error",
+					Summary:   class,
+					Body:      body,
+					Actor:     in.Assignee,
+					Source:    "ddx agent execute-loop",
+					CreatedAt: now().UTC(),
+				})
+			}
+			report.Status = ExecuteBeadStatusReviewMalfunction
+			report.Detail = "pre-close review: " + class
+			out.Report = report
+			out.Approved = false
+			return out
+		}
 	}
 
 	implRouting := ImplementerRouting{
