@@ -19,7 +19,7 @@ import (
 //
 // The test drives a simulated tier ladder using the real escalation
 // primitives (InferTier, IsInfrastructureFailure, ShouldEscalate,
-// TierToProfile, BuildEscalationSummary). It does not require a running
+// BuildEscalationSummary). It does not require a running
 // agent service or harness binary.
 func TestZeroConfigRetryEscalationPolicy(t *testing.T) {
 	// 1. Unflagged bead: no tier label, no kind, short description.
@@ -34,7 +34,7 @@ func TestZeroConfigRetryEscalationPolicy(t *testing.T) {
 	startTier := escalation.InferTier(b)
 	require.Equal(t, escalation.TierCheap, startTier,
 		"unflagged bead must infer cheap tier (zero-config default)")
-	require.Equal(t, "cheap", escalation.TierToProfile(startTier),
+	require.Equal(t, "cheap", string(startTier),
 		"cheap tier maps to 'cheap' profile string consumed by LoadAndResolve")
 
 	// 2. Transient infrastructure failure on cheap tier (e.g. 502 from
