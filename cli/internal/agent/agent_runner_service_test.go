@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -84,7 +84,7 @@ func TestDrainServiceEvents_ForwardsCanonicalProgressPayload(t *testing.T) {
 		"turn_index":      7,
 		"tool_name":       "apply_patch",
 		"action":          "add test implementation",
-		"target":          "cli/internal/file.go",
+		"subject":         "cli/internal/file.go",
 		"output_excerpt":  "Success. Updated the following files:",
 		"output_bytes":    312,
 		"output_lines":    12,
@@ -133,7 +133,7 @@ func TestDrainServiceEventsWithWriter_LabelsRoutesByPhase(t *testing.T) {
 	events <- agentlib.ServiceEvent{
 		Type: "progress",
 		Time: time.Date(2026, 4, 30, 12, 0, 1, 0, time.UTC),
-		Data: json.RawMessage(`{"phase":"tool","state":"complete","task_id":"ddx-live","turn_index":2,"action":"run tests","target":"cli/internal/bead","output_bytes":42,"output_lines":3}`),
+		Data: json.RawMessage(`{"phase":"tool","state":"complete","task_id":"ddx-live","turn_index":2,"action":"run tests","subject":"cli/internal/bead","output_bytes":42,"output_lines":3}`),
 	}
 	close(events)
 
@@ -230,7 +230,7 @@ func TestAgentExecution_UsesFizeauServicePathOnly(t *testing.T) {
 			{
 				Type: "progress",
 				Time: time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC),
-				Data: json.RawMessage(`{"task_id":"ddx-1234","turn_index":1,"tool_name":"Bash","action":"run","target":"cli/internal/file.go","output_excerpt":"ok","output_bytes":2,"output_lines":1,"duration_ms":3}`),
+				Data: json.RawMessage(`{"task_id":"ddx-1234","turn_index":1,"tool_name":"Bash","action":"run","subject":"cli/internal/file.go","output_excerpt":"ok","output_bytes":2,"output_lines":1,"duration_ms":3}`),
 			},
 			{
 				Type: "final",

@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/spf13/cobra"
 )
 
@@ -132,9 +132,6 @@ func printModels(cmd *cobra.Command, providerName, providerTyp, configuredModel 
 		annotation := ""
 		if m.Power > 0 {
 			annotation = fmt.Sprintf("  [power: %d]", m.Power)
-		}
-		if m.CatalogRef != "" {
-			annotation += "  [catalog: " + m.CatalogRef + "]"
 		}
 		fmt.Fprintf(out, "%s%s%s\n", marker, m.ID, annotation)
 	}

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 )
 
 // ---- Read-model types ----
@@ -298,10 +298,10 @@ func usageWindowFromLiveWindows(info agentlib.HarnessInfo, windowName string) *P
 			TotalTokens:  w.TotalTokens,
 			CostUSD:      w.CostUSD,
 		}
-		if info.IsSubscription {
+		if info.Billing == agentlib.BillingModelSubscription {
 			result.CostUSD = 0
 			result.CostNote = "subscription plan; per-token cost not billed"
-		} else if info.IsLocal {
+		} else if info.CostClass == "local" {
 			result.CostUSD = 0
 		} else if result.CostUSD == 0 {
 			result.CostUSD = -1
@@ -337,7 +337,7 @@ func computeProviderBurnEstimate(
 	info agentlib.HarnessInfo,
 	usage *ProviderHistoricalUsage,
 ) *ProviderBurnEstimate {
-	if !info.IsSubscription {
+	if info.Billing != agentlib.BillingModelSubscription {
 		return nil
 	}
 

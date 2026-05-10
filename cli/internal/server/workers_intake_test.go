@@ -13,7 +13,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -92,15 +92,7 @@ func (s *workerIntakeServiceStub) HealthCheck(_ context.Context, _ agentlib.Heal
 	return nil
 }
 
-func (s *workerIntakeServiceStub) ResolveProfile(_ context.Context, _ string) (*agentlib.ResolvedProfile, error) {
-	return nil, nil
-}
-
-func (s *workerIntakeServiceStub) ProfileAliases(_ context.Context) (map[string]string, error) {
-	return nil, nil
-}
-
-func (s *workerIntakeServiceStub) ListProfiles(_ context.Context) ([]agentlib.ProfileInfo, error) {
+func (s *workerIntakeServiceStub) ListPolicies(_ context.Context) ([]agentlib.PolicyInfo, error) {
 	return nil, nil
 }
 

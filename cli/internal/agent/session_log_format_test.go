@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
