@@ -1414,6 +1414,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	reviewHarness, _ := cmd.Flags().GetString("review-harness")
 	reviewModel, _ := cmd.Flags().GetString("review-model")
 	maxCostUSD, _ := cmd.Flags().GetFloat64("max-cost")
+	maxBeadCostUSD, _ := cmd.Flags().GetFloat64("max-bead-cost")
 	requestTimeout, _ := cmd.Flags().GetDuration("request-timeout")
 	rateLimitMaxWait, _ := cmd.Flags().GetDuration("rate-limit-max-wait")
 	minPower, _ := cmd.Flags().GetInt("min-power")
@@ -1453,6 +1454,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 		ReviewModel:       reviewModel,
 		OpaquePassthrough: treatPassthroughAsOpaque,
 		MaxCostUSD:        maxCostUSD,
+		MaxBeadCostUSD:    maxBeadCostUSD,
 		RequestTimeout:    executeloop.Duration{Duration: requestTimeout},
 		RateLimitMaxWait:  executeloop.Duration{Duration: rateLimitMaxWait},
 		MinPower:          minPower,
@@ -1626,11 +1628,10 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	intakeHook := agent.NewPreClaimIntakeHook(projectRoot, store, rcfg, nil, qualityRunner)
 	triageHook := agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
 
-	// Cost-cap state shared across attempts for this loop run.
-	// paths. Accumulated billed spend (excluding local and subscription
-	// providers) above --max-cost trips the cap and halts further bead
-	// claiming. See escalation.DefaultMaxCostUSD / CountsTowardCostCap.
-	costCap := escalation.NewCostCapTracker(spec.MaxCostUSD, func(harnessName string) bool {
+	// harnessBilledLookup resolves whether a harness contributes to any cost
+	// cap. Shared between the global CostCapTracker and per-bead trackers so
+	// both use the same billing-class semantics.
+	harnessBilledLookup := func(harnessName string) bool {
 		// Resolve the harness's billing class via the service. Treat any
 		// resolution error as "count by default" (safe — we'd rather cap
 		// early than silently overshoot).
@@ -1648,7 +1649,13 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			}
 		}
 		return true
-	})
+	}
+
+	// Cost-cap state shared across attempts for this loop run.
+	// Accumulated billed spend (excluding local and subscription providers)
+	// above --max-cost trips the cap and halts further bead claiming.
+	// See escalation.DefaultMaxCostUSD / CountsTowardCostCap.
+	costCap := escalation.NewCostCapTracker(spec.MaxCostUSD, harnessBilledLookup)
 	accumulateBilledCost := func(report agent.ExecuteBeadReport) {
 		costCap.Add(report.Harness, report.CostUSD)
 	}
@@ -1775,6 +1782,13 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			if unavailable {
 				return unavailableReport, nil
 			}
+			// Build a per-bead tracker. A budget:<USD> label on the bead
+			// overrides the --max-bead-cost default.
+			perBeadBudget := spec.MaxBeadCostUSD
+			if override, ok := escalation.ParseBeadBudgetLabel(targetBead.Labels); ok {
+				perBeadBudget = override
+			}
+			perBeadTracker := escalation.NewPerBeadCostTracker(perBeadBudget, harnessBilledLookup)
 			report, err := runEscalatingSingleTierAttempts(
 				ctx,
 				initialMinPower,
@@ -1783,6 +1797,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 					return singleTierAttempt(ctx, beadID, requestedMinPower, spec.Harness, spec.Provider, spec.Model)
 				},
 				nil,
+				perBeadTracker,
 			)
 			if err == nil {
 				accumulateBilledCost(report)

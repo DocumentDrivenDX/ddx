@@ -162,3 +162,58 @@ func TestCostCapTracker_ConcurrentSafe(t *testing.T) {
 		t.Fatalf("Spent after concurrent Adds = %.2f, want %.2f", got, want)
 	}
 }
+
+// TestPerBeadCostTracker_BudgetLabelOverridesDefault asserts that a bead
+// carrying the label "budget:25.0" causes ParseBeadBudgetLabel to return 25.0
+// so the executor can override the default per-bead budget.
+func TestPerBeadCostTracker_BudgetLabelOverridesDefault(t *testing.T) {
+	labels := []string{"phase:6", "area:agent", "budget:25.0", "kind:feature"}
+	v, ok := ParseBeadBudgetLabel(labels)
+	if !ok {
+		t.Fatal("ParseBeadBudgetLabel returned ok=false, want true for valid budget label")
+	}
+	if v != 25.0 {
+		t.Fatalf("ParseBeadBudgetLabel = %.2f, want 25.00", v)
+	}
+
+	// Verify that a tracker built with the overridden budget uses that value.
+	tr := NewPerBeadCostTracker(v, nil)
+	tr.Add("openrouter", 20.0)
+	if _, tripped := tr.Tripped(); tripped {
+		t.Fatal("Tripped at $20 with $25 budget should be false")
+	}
+	tr.Add("openrouter", 6.0) // total $26
+	detail, tripped := tr.Tripped()
+	if !tripped {
+		t.Fatal("Tripped at $26 with $25 budget should be true")
+	}
+	if !strings.Contains(detail, PerBeadBudgetExhaustedReason) {
+		t.Fatalf("Tripped detail must contain %q, got %q", PerBeadBudgetExhaustedReason, detail)
+	}
+}
+
+// TestPerBeadCostTracker_InvalidBudgetLabel_FallsBackToDefault asserts that
+// a malformed budget label (non-numeric, negative) is ignored and the caller
+// correctly falls back to the default per-bead budget.
+func TestPerBeadCostTracker_InvalidBudgetLabel_FallsBackToDefault(t *testing.T) {
+	tests := []struct {
+		name   string
+		labels []string
+	}{
+		{"non-numeric suffix", []string{"budget:notanumber"}},
+		{"negative value", []string{"budget:-5.0"}},
+		{"empty suffix", []string{"budget:"}},
+		{"no budget label", []string{"phase:6", "area:agent"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v, ok := ParseBeadBudgetLabel(tt.labels)
+			if ok {
+				t.Fatalf("ParseBeadBudgetLabel returned ok=true for %v (value %.2f), want false", tt.labels, v)
+			}
+			if v != 0 {
+				t.Fatalf("ParseBeadBudgetLabel returned non-zero value %.2f for %v, want 0", v, tt.labels)
+			}
+		})
+	}
+}

@@ -155,6 +155,7 @@ func runEscalatingSingleTierAttempts(
 	ladder escalationFloorFinder,
 	attempt func(context.Context, int) (agent.ExecuteBeadReport, error),
 	recordAttempt func(agent.ExecuteBeadReport),
+	perBeadTracker *policyescalation.PerBeadCostTracker,
 ) (agent.ExecuteBeadReport, error) {
 	minPower := initialMinPower
 	for {
@@ -162,11 +163,23 @@ func runEscalatingSingleTierAttempts(
 		if recordAttempt != nil && report.BeadID != "" {
 			recordAttempt(report)
 		}
+		if perBeadTracker != nil {
+			perBeadTracker.Add(report.Harness, report.CostUSD)
+		}
 		if err != nil {
 			return report, err
 		}
 		if report.Disrupted || isBudgetExhaustedFailure(report) || !policyescalation.ShouldEscalate(report.Status) || policyescalation.IsInfrastructureFailure(report.Status, report.Detail) {
 			return report, nil
+		}
+		// Check per-bead budget before escalating to the next tier.
+		if perBeadTracker != nil {
+			if detail, tripped := perBeadTracker.Tripped(); tripped {
+				report.Status = agent.ExecuteBeadStatusExecutionFailed
+				report.Detail = detail
+				report.CostUSD = perBeadTracker.Spent() // total for this bead
+				return report, nil
+			}
 		}
 		basis := minPower
 		if report.ActualPower > 0 {
