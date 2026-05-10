@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 )
 
 // FormatServiceProgressEntries formats canonical Fizeau progress payloads
@@ -320,7 +320,7 @@ func compactTargetedAction(action string, data map[string]any) string {
 }
 
 func progressTargetFromData(data map[string]any) string {
-	for _, key := range []string{"target", "path", "file"} {
+	for _, key := range []string{"subject", "target", "path", "file"} {
 		if value, ok := data[key].(string); ok && strings.TrimSpace(value) != "" {
 			return strings.TrimSpace(value)
 		}

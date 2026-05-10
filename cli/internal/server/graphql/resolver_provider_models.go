@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 )
 
 // providerModelsCacheTTL is how long cached provider model snapshots live

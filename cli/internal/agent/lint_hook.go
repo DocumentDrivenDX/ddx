@@ -13,7 +13,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/skills"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 )
 
 // LintHookErrorKind classifies infra failures returned by the pre-dispatch

@@ -8,7 +8,7 @@ import (
 	"sync"
 	"time"
 
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 )
 
 const profileSnapshotCacheWindow = 30 * time.Second
@@ -25,10 +25,10 @@ type profileSnapshotCacheEntry struct {
 }
 
 // ProfileSnapshot is the fizeau-owned routing vocabulary DDx uses for hidden
-// lifecycle dispatches. DDx selects profile names from this snapshot; it does
+// lifecycle dispatches. DDx selects policy names from this snapshot; it does
 // not resolve concrete models.
 type ProfileSnapshot struct {
-	Profiles []agentlib.ProfileInfo
+	Profiles []agentlib.PolicyInfo
 	Models   []agentlib.ModelInfo
 }
 
@@ -54,7 +54,7 @@ func LoadProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (Profi
 		profileSnapshotCacheMu.Unlock()
 	}
 
-	profiles, err := svc.ListProfiles(ctx)
+	profiles, err := svc.ListPolicies(ctx)
 	if err != nil {
 		if hadLast {
 			return cloneProfileSnapshot(last.snap), nil
@@ -70,7 +70,7 @@ func LoadProfileSnapshot(ctx context.Context, svc agentlib.FizeauService) (Profi
 	}
 
 	snap := ProfileSnapshot{
-		Profiles: append([]agentlib.ProfileInfo(nil), profiles...),
+		Profiles: append([]agentlib.PolicyInfo(nil), profiles...),
 		Models:   append([]agentlib.ModelInfo(nil), models...),
 	}
 	if cacheable {
@@ -91,7 +91,7 @@ func profileSnapshotCacheKey(svc agentlib.FizeauService) (agentlib.FizeauService
 
 func cloneProfileSnapshot(snap ProfileSnapshot) ProfileSnapshot {
 	return ProfileSnapshot{
-		Profiles: append([]agentlib.ProfileInfo(nil), snap.Profiles...),
+		Profiles: append([]agentlib.PolicyInfo(nil), snap.Profiles...),
 		Models:   append([]agentlib.ModelInfo(nil), snap.Models...),
 	}
 }
@@ -156,10 +156,10 @@ func SelectStrongestProfileAbove(snap ProfileSnapshot, floor int) string {
 	return profiles[0].Name
 }
 
-func satisfiableProfiles(snap ProfileSnapshot, floor int) []agentlib.ProfileInfo {
-	out := make([]agentlib.ProfileInfo, 0, len(snap.Profiles))
+func satisfiableProfiles(snap ProfileSnapshot, floor int) []agentlib.PolicyInfo {
+	out := make([]agentlib.PolicyInfo, 0, len(snap.Profiles))
 	for _, profile := range snap.Profiles {
-		if profile.Name == "" || profile.Deprecated {
+		if profile.Name == "" {
 			continue
 		}
 		if profile.MinPower == 0 && profile.MaxPower == 0 {
@@ -175,7 +175,7 @@ func satisfiableProfiles(snap ProfileSnapshot, floor int) []agentlib.ProfileInfo
 	return out
 }
 
-func profileHasAvailableModel(profile agentlib.ProfileInfo, models []agentlib.ModelInfo) bool {
+func profileHasAvailableModel(profile agentlib.PolicyInfo, models []agentlib.ModelInfo) bool {
 	for _, model := range models {
 		if !model.Available || !model.AutoRoutable || model.ExactPinOnly {
 			continue
@@ -191,16 +191,16 @@ func profileHasAvailableModel(profile agentlib.ProfileInfo, models []agentlib.Mo
 	return false
 }
 
-func profileMaxForSort(profile agentlib.ProfileInfo) int {
+func profileMaxForSort(profile agentlib.PolicyInfo) int {
 	if profile.MaxPower == 0 {
 		return math.MaxInt
 	}
 	return profile.MaxPower
 }
 
-func preferProfile(left, right agentlib.ProfileInfo) bool {
-	leftLocal := left.ProviderPreference == "local-first"
-	rightLocal := right.ProviderPreference == "local-first"
+func preferProfile(left, right agentlib.PolicyInfo) bool {
+	leftLocal := left.AllowLocal
+	rightLocal := right.AllowLocal
 	if leftLocal != rightLocal {
 		return leftLocal
 	}

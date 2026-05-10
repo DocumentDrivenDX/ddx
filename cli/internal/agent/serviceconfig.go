@@ -9,7 +9,7 @@ import (
 	"time"
 	"unicode"
 
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	// Import the configinit package for its init() side-effect: it triggers
 	// agent's internal/config init which registers the config loader into
 	// agentlib so that agentlib.New(ServiceOptions{ConfigPath:…}) can resolve
@@ -17,7 +17,7 @@ import (
 	// public marker package exposed for this purpose after agent v0.5.0
 	// moved internal/config out of the public surface.
 	ddxconfig "github.com/DocumentDrivenDX/ddx/internal/config"
-	_ "github.com/DocumentDrivenDX/fizeau/configinit"
+	_ "github.com/easel/fizeau/configinit"
 )
 
 // DefaultProviderRequestTimeout is the per-request wall-clock cap for

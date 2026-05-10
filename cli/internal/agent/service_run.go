@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 )
 
 // serviceRunFactory, when non-nil, overrides NewServiceFromWorkDir inside
@@ -229,10 +229,9 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 	req := agentlib.ServiceExecuteRequest{
 		Prompt:          promptText,
 		Model:           model,
-		Profile:         profile,
+		Policy:          profile,
 		Provider:        provider,
 		Harness:         fizeauHarness(harness),
-		ModelRef:        modelRef,
 		Reasoning:       agentlib.Reasoning(rcfg.Effort()),
 		Permissions:     permissions,
 		WorkDir:         wd,
@@ -408,7 +407,7 @@ func CapabilitiesViaService(ctx context.Context, workDir, harnessName string) (*
 		Path:                info.Path,
 		Surface:             harness.Surface,
 		CostClass:           info.CostClass,
-		IsLocal:             info.IsLocal,
+		IsLocal:             info.CostClass == "local",
 		ExactPinSupport:     info.ExactPinSupport,
 		SupportsEffort:      len(info.SupportedReasoning) > 0 || harness.EffortFlag != "",
 		SupportsPermissions: len(info.SupportedPermissions) > 0 || len(harness.PermissionArgs) > 0,
@@ -504,7 +503,6 @@ func ValidateForExecuteLoopViaService(ctx context.Context, workDir, harnessName,
 		if _, err := svc.ResolveRoute(ctx, agentlib.RouteRequest{
 			Model:    model,
 			Harness:  fizeauHarness(harnessName),
-			ModelRef: modelRef,
 			Provider: provider,
 		}); err != nil {
 			return fmt.Errorf("agent: model %q is not routable: %w", model, err)

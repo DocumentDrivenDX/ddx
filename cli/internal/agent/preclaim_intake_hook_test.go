@@ -12,7 +12,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
-	agentlib "github.com/DocumentDrivenDX/fizeau"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,7 +20,7 @@ import (
 type preClaimIntakeHookServiceStub struct {
 	executeCalls int32
 	lastReq      agentlib.ServiceExecuteRequest
-	listProfiles []agentlib.ProfileInfo
+	listPolicies []agentlib.PolicyInfo
 	listModels   []agentlib.ModelInfo
 	executeErr   error
 	executeFunc  func(agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
@@ -72,16 +72,8 @@ func (s *preClaimIntakeHookServiceStub) HealthCheck(_ context.Context, _ agentli
 	return nil
 }
 
-func (s *preClaimIntakeHookServiceStub) ResolveProfile(_ context.Context, _ string) (*agentlib.ResolvedProfile, error) {
-	return nil, nil
-}
-
-func (s *preClaimIntakeHookServiceStub) ProfileAliases(_ context.Context) (map[string]string, error) {
-	return nil, nil
-}
-
-func (s *preClaimIntakeHookServiceStub) ListProfiles(_ context.Context) ([]agentlib.ProfileInfo, error) {
-	return append([]agentlib.ProfileInfo(nil), s.listProfiles...), nil
+func (s *preClaimIntakeHookServiceStub) ListPolicies(_ context.Context) ([]agentlib.PolicyInfo, error) {
+	return append([]agentlib.PolicyInfo(nil), s.listPolicies...), nil
 }
 
 func (s *preClaimIntakeHookServiceStub) RecordRouteAttempt(_ context.Context, _ agentlib.RouteAttempt) error {
@@ -145,7 +137,7 @@ func TestPreClaimIntakeHook_DispatchesWithStrongestProfileNoStrongPowerTrick(t *
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
 	svc := &preClaimIntakeHookServiceStub{
-		listProfiles: []agentlib.ProfileInfo{
+		listPolicies: []agentlib.PolicyInfo{
 			{Name: "cheap", MinPower: 5, MaxPower: 5},
 			{Name: "smart", MinPower: 9, MaxPower: 10},
 		},
@@ -166,8 +158,7 @@ func TestPreClaimIntakeHook_DispatchesWithStrongestProfileNoStrongPowerTrick(t *
 	assert.Empty(t, svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
 	assert.Empty(t, svc.lastReq.Model)
-	assert.Empty(t, svc.lastReq.ModelRef)
-	assert.Equal(t, "smart", svc.lastReq.Profile)
+	assert.Equal(t, "smart", svc.lastReq.Policy)
 	assert.Zero(t, svc.lastReq.MinPower)
 	assert.Zero(t, svc.lastReq.MaxPower)
 }
@@ -185,8 +176,7 @@ func TestDecompositionHook_CatalogUnavailableUsesSmartProfileWithoutMagicPower(t
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
-	assert.Empty(t, svc.lastReq.ModelRef)
-	assert.Empty(t, svc.lastReq.Profile)
+	assert.Empty(t, svc.lastReq.Policy)
 	assert.Zero(t, svc.lastReq.MinPower)
 	assert.Zero(t, svc.lastReq.MaxPower)
 }
@@ -213,7 +203,7 @@ func TestDecompositionHook_SmartProfileUnavailableFallsBackToAutoRoute(t *testin
 	svc := &preClaimIntakeHookServiceStub{}
 	svc.executeFunc = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 		ch := make(chan agentlib.ServiceEvent, 1)
-		if req.Profile == "smart" {
+		if req.Policy == "smart" {
 			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":1,"error":"ResolveRoute: no live provider supports profile=smart"}`)}
 			close(ch)
 			return ch, nil
@@ -229,8 +219,7 @@ func TestDecompositionHook_SmartProfileUnavailableFallsBackToAutoRoute(t *testin
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
 	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls))
-	assert.Empty(t, svc.lastReq.ModelRef)
-	assert.Empty(t, svc.lastReq.Profile)
+	assert.Empty(t, svc.lastReq.Policy)
 	assert.Zero(t, svc.lastReq.MinPower)
 	assert.Zero(t, svc.lastReq.MaxPower)
 }
@@ -240,7 +229,7 @@ func TestDecompositionHook_ClearsPassthroughConstraints(t *testing.T) {
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
 	svc := &preClaimIntakeHookServiceStub{
-		listProfiles: []agentlib.ProfileInfo{
+		listPolicies: []agentlib.PolicyInfo{
 			{Name: "smart", MinPower: 9, MaxPower: 10},
 		},
 		listModels: []agentlib.ModelInfo{
@@ -263,8 +252,7 @@ func TestDecompositionHook_ClearsPassthroughConstraints(t *testing.T) {
 	assert.Empty(t, svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
 	assert.Empty(t, svc.lastReq.Model)
-	assert.Empty(t, svc.lastReq.ModelRef)
-	assert.Equal(t, "smart", svc.lastReq.Profile)
+	assert.Equal(t, "smart", svc.lastReq.Policy)
 	assert.Zero(t, svc.lastReq.MinPower)
 }
 
@@ -293,7 +281,7 @@ func TestDecompositionHook_ClearsImplementationPowerBounds(t *testing.T) {
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
 	svc := &preClaimIntakeHookServiceStub{
-		listProfiles: []agentlib.ProfileInfo{
+		listPolicies: []agentlib.PolicyInfo{
 			{Name: "smart", MinPower: 9, MaxPower: 10},
 		},
 		listModels: []agentlib.ModelInfo{
@@ -302,7 +290,7 @@ func TestDecompositionHook_ClearsImplementationPowerBounds(t *testing.T) {
 	}
 	svc.executeFunc = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 		assert.Zero(t, req.MinPower)
-		assert.Equal(t, "smart", req.Profile)
+		assert.Equal(t, "smart", req.Policy)
 		assert.Empty(t, req.Harness)
 		assert.Empty(t, req.Model)
 		assert.Zero(t, req.MaxPower, "pre-claim intake must not inherit implementation max_power pins")
@@ -334,7 +322,7 @@ func TestDecompositionHook_RoutingFailureReturnsIntakeErrorWithoutDDxPins(t *tes
 		executeErr: fmt.Errorf("runner error: ResolveRoute: no viable routing candidate: 3 candidates rejected"),
 	}
 	svc.executeFunc = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
-		assert.Empty(t, req.Profile)
+		assert.Empty(t, req.Policy)
 		assert.Zero(t, req.MinPower)
 		assert.Zero(t, req.MaxPower)
 		return nil, svc.executeErr
