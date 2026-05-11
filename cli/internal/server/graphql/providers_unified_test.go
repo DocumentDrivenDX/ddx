@@ -499,6 +499,9 @@ func TestProviderTrendPerfFixture(t *testing.T) {
 	if testing.Short() {
 		t.Skip("perf fixture skipped in -short")
 	}
+	if raceEnabled {
+		t.Skip("latency budget not meaningful under race detector")
+	}
 	workDir := t.TempDir()
 	writeMinimalConfig(t, workDir)
 	now := time.Now().UTC()

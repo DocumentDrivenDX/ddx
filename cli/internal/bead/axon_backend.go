@@ -229,10 +229,14 @@ func (a *AxonBackend) ReadAll() ([]Bead, error) {
 		}
 		for id, evs := range grouped {
 			b := byID[id]
-			if b.Extra == nil {
-				b.Extra = make(map[string]any)
+			// Always copy b.Extra before writing; two concurrent ReadAll calls
+			// may share the underlying map (shallow-copy race via Bead copy-by-value).
+			fresh := make(map[string]any, len(b.Extra)+1)
+			for k, v := range b.Extra {
+				fresh[k] = v
 			}
-			b.Extra["events"] = encodeEventsForExtra(evs)
+			fresh["events"] = encodeEventsForExtra(evs)
+			b.Extra = fresh
 		}
 		return beads, nil
 	}
@@ -271,16 +275,20 @@ func (a *AxonBackend) ReadAll() ([]Bead, error) {
 	}
 	for id, evs := range grouped {
 		b := byID[id]
-		if b.Extra == nil {
-			b.Extra = make(map[string]any)
-		}
 		// Skip beads whose events have been externalised — the attachment file
 		// is the canonical source post-close and inlining stale events would
 		// duplicate the history.
 		if hasEventsAttachment(b) {
 			continue
 		}
-		b.Extra["events"] = encodeEventsForExtra(evs)
+		// Always copy b.Extra before writing; two concurrent ReadAll calls
+		// may share the underlying map (shallow-copy race via Bead copy-by-value).
+		fresh := make(map[string]any, len(b.Extra)+1)
+		for k, v := range b.Extra {
+			fresh[k] = v
+		}
+		fresh["events"] = encodeEventsForExtra(evs)
+		b.Extra = fresh
 	}
 	return beads, nil
 }
