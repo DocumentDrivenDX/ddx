@@ -624,9 +624,9 @@ type beadStoreAdapter struct {
 	s *bead.Store
 }
 
-func (a *beadStoreAdapter) AppendEvent(_ string, _ bead.BeadEvent) error          { return nil }
-func (a *beadStoreAdapter) CloseWithEvidence(_, _, _ string) error                { return nil }
-func (a *beadStoreAdapter) Unclaim(_ string) error                                { return nil }
+func (a *beadStoreAdapter) AppendEvent(_ string, _ bead.BeadEvent) error { return nil }
+func (a *beadStoreAdapter) CloseWithEvidence(_, _, _ string) error       { return nil }
+func (a *beadStoreAdapter) Unclaim(_ string) error                       { return nil }
 func (a *beadStoreAdapter) SetExecutionCooldown(_ string, _ time.Time, _, _, _ string) error {
 	return nil
 }

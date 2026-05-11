@@ -147,4 +147,3 @@ func TestExecuteBeadWorkerPushConflictParksAndEmitsEvent(t *testing.T) {
 	assert.True(t, sawPushConflict,
 		"loop must emit a kind:push-conflict event so operators can see the conflict context")
 }
-
