@@ -5,7 +5,14 @@ ddx:
 # Website Evolution: Design System, Auto-Generation, Hugo Renderer, GitHub Pages
 
 Date: 2026-05-11
-Status: Draft — user review required before bead breakdown
+Status: Reviewed — direction locked for all four pieces. Detailed auto-generation + templating architecture moved to companion plan `plan-2026-05-11-website-autogen.md`. This document is now the high-level summary; bead breakdown follows the companion plan's sequencing.
+
+## Locked decisions (2026-05-11)
+
+1. **Hextra removed.** Replace with custom layouts (Option A from Piece 1).
+2. **Templates share design tokens via a single CSS file imported by one `baseof.html` chrome.** Tokens never duplicate across layouts. See companion plan §"Templating architecture."
+3. **Auto-generation is the spine.** No hand-authoring, no LLM, no staleness. Deterministic generators produce Hugo data files in CI; generated artifacts are not version-controlled. See companion plan for the full surface and generator architecture.
+4. **Publishing stays at `DocumentDrivenDX.github.io/ddx/`** (subdirectory). No org-pages migration.
 
 ## Purpose
 

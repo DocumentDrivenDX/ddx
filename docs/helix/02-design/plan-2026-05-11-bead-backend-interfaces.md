@@ -5,331 +5,645 @@ ddx:
 # Bead Backend Interface Refinement (Pre-Axon)
 
 Date: 2026-05-11
-Status: Draft — gates the Axon backend rebuild and the broader storage-abstractions work
+Status: Design locked — final version after multi-round review (self-review, opus, operator). Ready for bead breakdown.
 
 ## Why this exists
 
-The current `cli/internal/bead/backend.go` declares two interfaces:
+The current `cli/internal/bead/backend.go` declares two interfaces — `RawBackend` (4 whole-corpus methods) and `Backend` (22 high-level CRUD methods). `*Store` actually exposes **69 public methods**; the other ~47 are concrete-only. The Axon-backend production-readiness work (per `docs/plans/plan-2026-05-10-axon-only-architecture.md`) needs a clean, LSP-clean interface set; today's setup conflates JSONL implementation choices with the bead's contract.
 
-- **`RawBackend`** (4 methods) — whole-corpus `Init/ReadAll/WriteAll/WithLock`.
-- **`Backend`** (22 methods) — high-level CRUD, claim, query, dep ops, events, archive, interchange.
+This design refactors the interface layer to:
 
-Three concrete problems block the Axon production-readiness work captured in `docs/plans/plan-2026-05-10-axon-only-architecture.md`:
+- Separate **storage primitives** from **workflow operations** (per CLAUDE.md's "Platform Services in CLI, Opinions in Workflows").
+- Apply LSP rigorously: interfaces match substitutability classes; the read-only deployment shape becomes expressible.
+- Open optimization paths for non-JSONL backends (Axon, Lakebase Postgres) via typed `Operation` values.
+- Thread `context.Context` through every interface method so authz, cancellation, and tracing don't require a second cross-cutting refactor.
+- Make ID generation pluggable as a separate strategy interface.
+- Preserve `*Store`'s public surface so existing callers don't break.
 
-1. **`Backend` is incomplete.** `*Store` exposes **69 public methods** (verified via `grep -E "^func \(s \*Store\) [A-Z]"`); `Backend` declares 22. The other ~47 are concrete-only on `*Store`. They include real caller surface like `Heartbeat`, `TouchClaimHeartbeat`, `ClaimHeartbeatFresh`, `Status`, `BlockedAll`, `ListWithArchive`, `GetWithArchive`, `ReadAllFiltered`, `EventsByKind`, `ExternalBlocked`, `DependencyWaiting`, `ProposedOperatorAttention`, `NeedsHuman`, `ReadyExecution`, `ReadyExecutionBreakdown`, `CloseWithEvidence`, `AppendNotes`, `Reopen`, `ParkToProposed`, `TransitionLifecycle`, `SetLifecycleStatus`, `UpdateWithLifecycleStatus`, `RequestCancel`, `IsCancelRequested`, `MarkCancelHonored`, `SetExecutionCooldown`, `ClearCooldowns`, `IncrNoChangesCount`, `GenID`, `QueueClear`, `QueueMove`, `QueueTop`, `ArchiveWithEvents`, `ExportToFile`. Plus a migration family (`MigrateLifecycle`, `MigrateFromHelix`, `MigrateToAxon`, `MigrateDryRun`, `MigrateLifecycleDryRun`, `DetectLifecycleMigrationRequired`, `ReconcileLifecycleMetadata`) and lifecycle-schema-marker bootstrap (`HasLifecycleSchemaMarker`, `WriteLifecycleSchemaMarker`, `LifecycleSchemaMarkerPath`) that are intentionally not steady-state. Real callers in `cli/cmd/` and `cli/internal/` reach for the steady-state extras every day. The "any backend can be swapped" promise is unenforceable because the interface doesn't declare what callers use.
-2. **`RawBackend` granularity is wrong for non-JSONL backends.** The whole-corpus `ReadAll → mutate → WriteAll` pattern is fine for a single JSONL file (lock + atomic rename = correctness) and catastrophic for Postgres (no per-row UPSERT, no optimistic concurrency, no indexes used). Today's `AxonBackend.WriteAll` ships the entire corpus on every mutation.
-3. **No interface seam for "Axon implements `Backend` directly."** `*Store` is the only `Backend` implementation. To let an Axon-native implementation slot in alongside (per Option B in the prior turn), `Backend` has to be the contract that callers depend on — not `*Store` concretely.
+## Locked decisions
 
-## Locked decisions (from prior conversation)
+| # | Decision |
+|---|----------|
+| 1 | **No breaking changes to `*Store` callers.** `*Store` retains all 69 concrete public methods. The new interfaces are additive; existing code keeps compiling. |
+| 2 | **Option B**: Axon implements `Backend` directly, alongside `*Store`'s composition path over `RawBackend`. |
+| 3 | **Storage vs. workflow separation.** Storage primitives live on `Backend` sub-interfaces. Workflow operations (heartbeat policy, lifecycle state-machine, cancellation, cooldown, queue ordering) live as helpers in `cli/internal/bead/ops/<concern>/` that invoke `Apply` with typed `Operation` values. |
+| 4 | **LSP-driven splits**: read/write split applied wherever a planned backend class falls on one side but not the other (the read-only deployment per `plan-2026-05-10-read-only-deployment.md`). |
+| 5 | **Typed `Operation` pattern** for mutations: `Apply(ctx, id, op Operation)` is the single mutation entry point on `BeadLifecycle`. Operations carry their own `Apply(*Bead) error` method; storage backends MAY type-switch for native optimization (Axon SQL UPDATE) and fall through to load-mutate-save for unknown ops. CAS semantics (Claim) work because `Operation.Apply` returns an error. |
+| 6 | **Pluggable ID generation**: `IDGenerator` is a separate parallel interface, not on `Backend`. Storage backends validate ids via the package-level `bead.ValidateID` contract; generators produce conforming ids. |
+| 7 | **Subscription is parallel, not on `Backend`.** `*WatcherHub` already implements `SubscribeLifecycle` and `*Store` doesn't; modeling it as a sibling interface matches existing structure and keeps `Backend`'s shape request/response. |
+| 8 | **`context.Context` first param on every interface method**, with a package-level discipline doc enumerating allowed ctx values (cancellation/deadline, `WithIdentity`, `WithTrace`) and rejecting per-call options via ctx. |
+| 9 | **`RawBackend` retained, shape unchanged**, docstring updated to warn new backends off the whole-corpus pattern. |
 
-- **Option B**: Axon implements `Backend` directly, alongside `*Store`'s composition path. Both satisfy the same contract; callers don't notice. `JSONLBackend` keeps `RawBackend` and feeds `*Store` as today.
-- **Promote `*Store` extras onto interface(s)**, driven by what callers actually use. Whether Axon can support every extra is a separate, longer-term question.
-- **Preserve existing direct interfaces.** No breaking changes to `Backend` or `RawBackend` signatures. All work is additive.
-- **BlobStore stays in DDx (FEAT-028).** Axon-as-blob-backend is a future option, not a constraint here.
-- **Apply SOLID, especially Interface Segregation.** Don't make every caller depend on the full `Backend` surface. Split by responsibility into cohesive sub-interfaces.
+## Caller usage evidence (driver of the split)
 
-## Caller usage data
+Counts of `store.<Method>(` references across non-test callers in `cli/cmd/` + `cli/internal/{server,agent,agentmetrics,exec,escalation,processmetrics}/`:
 
-Counts of `store.<Method>(` references across `cli/cmd/` + `cli/internal/{server,agent,agentmetrics,exec,escalation,processmetrics}/` (non-test):
+| Top callers by method | | Verdict |
+|---|---|---|
+| Create (152), Get (145), Init (105), Events (74), AppendEvent (44), Update (18), EventsByKind (12), Claim (11) | high-frequency cluster | Real CRUD + events + claim path |
+| `cli/cmd/work_focus.go`, `cli/internal/agent/preview_queue.go`, `cli/internal/server/graphql/resolver_beads.go` | `BeadQueries` only | Real ISP narrowing candidate |
+| `cli/cmd/ac.go`, `cli/cmd/try.go`, `cli/cmd/agent_route_status.go`, `cli/internal/agentmetrics/loader.go` | `BeadReader` only | Real ISP narrowing candidate |
+| `cli/internal/server/workers.go` | `BeadEventWriter` + claim ops | Multiple narrow interfaces |
+| `cli/cmd/bead.go`, `cli/internal/server/graphql/resolver_mutation_beads.go` | Full Backend | The full-feature callers |
 
-| Method | Internal-pkg usage | Method | Internal-pkg usage |
-|--------|---|--------|---|
-| `Create` | 152 | `WriteAll` | 5 |
-| `Get` | 145 | `SetExecutionCooldown` | 4 |
-| `Init` | 105 | `Status` | 3 |
-| `Events` | 74 | `ReadyExecution` | 3 |
-| `AppendEvent` | 44 | `Ready` | 2 |
-| `Update` | 18 | `MarkCancelHonored` | 2 |
-| `EventsByKind` | 12 | `List` | 2 |
-| `Claim` | 11 | `ExternalBlocked` | 2 |
-| `UpdateWithLifecycleStatus` | 9 | `DepTree` | 2 |
-| `ReadAll` | 8 | `DependencyWaiting` | 2 |
-| `Unclaim` | 6 | `CloseWithEvidence` | 2 |
-| `ClaimWithOptions` | 2 | `RequestCancel`/`Reopen`/`IsCancelRequested`/`DepRemove`/`DepAdd` | 1 each |
+The interface boundaries below match these clusters.
 
-Plus `Close`, which appears 52 times in `cli/cmd/` but is overcounted (other types have `.Close()`); real bead-store `Close` is a substantial caller set.
+## Architecture: storage vs. workflow
 
-Two takeaways:
+```
+┌─ workflow helpers (cli/internal/bead/ops/) ──────────────────────────┐
+│                                                                       │
+│  ops/claim/        ops/cancel/      ops/cooldown/                     │
+│  ops/lifecycle/    ops/queue/       (state-machine validation,        │
+│                                      time defaults, etc.)             │
+│                                                                       │
+│  Each helper: takes BeadLifecycle (or smaller), composes a typed      │
+│  Operation, calls Apply. Plus pure predicates over *Bead.             │
+└───────────────────────────────────────────────────────────────────────┘
+                              │ Apply(ctx, id, op Operation) error
+                              ▼
+┌─ storage primitives (cli/internal/bead/) ─────────────────────────────┐
+│                                                                       │
+│  Backend = BeadInitializer + BeadReader + BeadLifecycle               │
+│          + BeadEventReader + BeadEventWriter                          │
+│          + BeadQueries                                                │
+│          + BeadDependencyReader + BeadDependencyWriter                │
+│          + BeadArchive                                                │
+│          + BeadInterchangeReader + BeadInterchangeWriter              │
+│                                                                       │
+│  Parallel (not on Backend):                                           │
+│    LifecycleSubscriber  (implemented by *WatcherHub)                  │
+│    IDGenerator          (RandomHexIDGenerator, SequentialIDGenerator) │
+└───────────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+┌─ backend implementations ─────────────────────────────────────────────┐
+│                                                                       │
+│  *Store (composes over RawBackend: JSONLBackend, ExternalBackend)     │
+│  *AxonStore (implements Backend directly — per-row Postgres ops)      │
+│  Read-only backends (implement only the Reader sub-interfaces)        │
+└───────────────────────────────────────────────────────────────────────┘
+```
 
-- **CRUD + events dominate** (Get/Create/Init/Events/AppendEvent/Update/EventsByKind = ~560 of ~620 calls). Whatever interface a caller programs against, it almost always needs these.
-- **The "long tail" extras are low-frequency but cohesive in pairs/triples**: cancel methods together, cooldown methods together, lifecycle methods together. These are exactly the cases ISP is designed for — give each cohesive group its own interface, let callers depend on the smallest set they need.
-
-## Proposed sub-interface taxonomy
-
-12 cohesive interfaces, grouped by concern, accounting for **all** of `*Store`'s 69 public methods (with explicit non-interface bucket for the migration/bootstrap family). Names are domain-shaped (`BeadCore`, `BeadEvents`) rather than role-shaped (`BeadReader`, `BeadWriter`) to keep the surface count manageable while still allowing ISP-style narrow dependencies.
+## The `Operation` pattern
 
 ```go
 package bead
 
-// BeadCore is the foundational CRUD + ID generation that nearly every
-// caller needs. ReadAllFiltered + GetWithArchive + ListWithArchive variants
-// are part of the core read surface (callers depend on them widely).
-type BeadCore interface {
-    Init() error
-    GenID() (string, error)
-    ReadAll() ([]Bead, error)
-    ReadAllFiltered(pred func(Bead) bool) ([]Bead, error)
-    Get(id string) (*Bead, error)
-    GetWithArchive(id string) (*Bead, error)
-    Create(b *Bead) error
-    Update(id string, mutate func(*Bead)) error
-    Close(id string) error
-}
-
-// BeadEvents is the event log per bead. High-volume usage; nearly every
-// caller that does a state transition appends an event.
-type BeadEvents interface {
-    AppendEvent(id string, event BeadEvent) error
-    Events(id string) ([]BeadEvent, error)
-    EventsByKind(id, kind string) ([]BeadEvent, error)
-}
-
-// BeadLifecycle is the transition surface that enforces lifecycle gates
-// and writes provenance (closing commit, evidence). Distinct from
-// BeadCore.Update because callers don't always need lifecycle semantics.
-type BeadLifecycle interface {
-    TransitionLifecycle(id, status string, opts LifecycleTransitionOptions, mutate func(*Bead) error) error
-    SetLifecycleStatus(id, status string, opts LifecycleTransitionOptions) error
-    UpdateWithLifecycleStatus(id, status string, opts LifecycleTransitionOptions, mutate func(*Bead) error) error
-    CloseWithEvidence(id, sessionID, commitSHA string) error
-    AppendNotes(id, notes string) error
-    Reopen(id, reason, notes string) error
-    ParkToProposed(id, reason string) error
-}
-
-// BeadClaiming is worker assignment + liveness. Heartbeat freshness primitives
-// (Touch/Remove/Fresh) are bundled here because they're operationally part
-// of the same claim-lifetime concern.
-type BeadClaiming interface {
-    Claim(id, assignee string) error
-    ClaimWithOptions(id, assignee, session, worktree string) error
-    Unclaim(id string) error
-    Heartbeat(id string) error
-    TouchClaimHeartbeat(id string) error
-    RemoveClaimHeartbeat(id string) error
-    ClaimHeartbeatFresh(id string, maxAge time.Duration) (bool, error)
-}
-
-// BeadCancellation is cooperative cancellation signaling.
-type BeadCancellation interface {
-    RequestCancel(id string) (bool, error)
-    IsCancelRequested(id string) (bool, error)
-    MarkCancelHonored(id string) error
-}
-
-// BeadCooldown is retry/backoff state for failed attempts.
-type BeadCooldown interface {
-    SetExecutionCooldown(id string, until time.Time, status, detail, baseRev string) error
-    ClearCooldowns(filter func(Bead) bool) (int, error)
-    IncrNoChangesCount(id string) (int, error)
-}
-
-// BeadQueries is read-only filtering and aggregation. Backends with native
-// query support (Axon/Postgres) implement directly; whole-corpus backends
-// can implement by scanning ReadAll() + filtering in memory.
-type BeadQueries interface {
-    List(status, label string, where map[string]string) ([]Bead, error)
-    ListWithArchive(status, label string, where map[string]string) ([]Bead, error)
-    Ready() ([]Bead, error)
-    ReadyExecution() ([]Bead, error)
-    ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error)
-    ProposedOperatorAttention() ([]Bead, error)
-    NeedsHuman() ([]Bead, error)
-    Blocked() ([]Bead, error)
-    ExternalBlocked() ([]Bead, error)
-    DependencyWaiting() ([]Bead, error)
-    BlockedAll() ([]BlockedBead, error)
-    Status() (*StatusCounts, error)
-}
-
-// BeadDependencies is the dep-graph surface.
-type BeadDependencies interface {
-    DepAdd(id, depID string) error
-    DepRemove(id, depID string) error
-    DepTree(rootID string) (string, error)
-}
-
-// BeadQueue is operator-driven queue manipulation — pinning, reordering,
-// clearing. Distinct from BeadQueries (which derives readiness) because
-// these are explicit operator actions that mutate queue ordering metadata.
-type BeadQueue interface {
-    QueueTop(id string) error
-    QueueMove(id string, position int) error
-    QueueClear() error
-}
-
-// BeadArchive is operational maintenance — splitting closed beads
-// out of the active corpus. ArchiveWithEvents preserves event history.
-type BeadArchive interface {
-    Archive(policy ArchivePolicy) ([]string, error)
-    ArchiveWithEvents(policy ArchivePolicy) ([]string, error)
-    Migrate() (MigrateStats, error)
-}
-
-// BeadInterchange is JSONL import/export. Useful for backups, dev
-// workflows, cross-backend migration.
-type BeadInterchange interface {
-    Import(source, filePath string) (int, error)
-    ExportTo(w io.Writer) error
-    ExportToFile(path string) error
-}
-
-// BeadSubscription is push-based change notification. JSONLBackend
-// satisfies this via the existing polling WatcherHub
-// (cli/internal/bead/watcher.go); Axon will satisfy it natively via
-// GraphQL subscriptions on ddx_beads/ddx_bead_events change events.
+// Operation is a typed mutation applied to a bead. Backends MAY recognize
+// specific operation types and execute them efficiently (e.g. a single
+// SQL UPDATE on Axon); the default path is Get(id) → op.Apply(bead) → Save(bead).
+// op.Apply is the canonical in-memory semantic definition.
 //
-// The signature is derived from WatcherHub.SubscribeLifecycle's existing
-// shape (cli/internal/bead/watcher.go:54). Callers (the GraphQL
-// beadLifecycle subscription resolver in cli/internal/server/) currently
-// depend on WatcherHub concretely; promoting to an interface lets Axon
-// substitute a native push transport without changing the resolver.
-type BeadSubscription interface {
-    SubscribeLifecycle() (events <-chan LifecycleEvent, cancel func())
+// Operation.Apply returns an error: returning non-nil aborts the storage
+// write. This is how compare-and-swap (CAS) semantics work — Claim, for
+// example, returns ErrAlreadyClaimed from Apply if the bead is held by
+// another worker, and the storage rolls back the save.
+type Operation interface {
+    Apply(b *Bead) error
 }
+
+// Named operations are plain value types. Each carries the data it needs.
+
+// CRUD-ish ops
+type SetStatus            struct{ Status string }
+type AppendNotes          struct{ Notes string }
+
+// Claim CAS
+type ClaimOp              struct{ Owner, Session, Worktree string }
+type UnclaimOp            struct{ RequireOwner string }  // empty = unconditional
+
+// Claim liveness — high-frequency, optimization target for Postgres backends
+type SetClaimHeartbeat    struct{ At time.Time }
+type ClearClaimHeartbeat  struct{}
+
+// Cancellation
+type SetCancelRequested   struct{ At time.Time }
+type ClearCancelRequested struct{}
+
+// Cooldown
+type SetCooldown          struct{ Until time.Time; Status, Detail, BaseRev string }
+type ClearCooldownOp      struct{}
+type IncrNoChangesCount   struct{}
+
+// Queue ordering (operator actions)
+type QueueSetTop          struct{}
+type QueueSetPosition     struct{ Position int }
+type QueueClearOp         struct{}
+
+// Workflow-aware lifecycle transitions (validation lives in the helper, not the op)
+type SetLifecycleStatus   struct{ Status string; Options LifecycleTransitionOptions }
+type SetCloseEvidence     struct{ SessionID, CommitSHA string }
+type ReopenOp             struct{ Reason, Notes string }
+type ParkToProposedOp     struct{ Reason string }
+
+// MutateFunc is the ad-hoc escape hatch — any mutation not covered by a
+// named op uses this. Backends always fall through to the generic path
+// for MutateFunc operations.
+type MutateFunc func(*Bead) error
+func (m MutateFunc) Apply(b *Bead) error { return m(b) }
 ```
 
-### Methods intentionally NOT on any sub-interface
-
-The following `*Store` methods stay as concrete `*Store` calls (not on any backend interface), with rationale:
-
-- **Lifecycle-schema-marker bootstrap** (`HasLifecycleSchemaMarker`, `WriteLifecycleSchemaMarker`, `LifecycleSchemaMarkerPath`) — one-time bootstrap probe, not steady-state. Callers either don't need it or are operator-tooling.
-- **Migration family** (`MigrateLifecycle`, `MigrateFromHelix`, `MigrateToAxon`, `MigrateDryRun`, `MigrateLifecycleDryRun`, `DetectLifecycleMigrationRequired`, `ReconcileLifecycleMetadata`) — admin/one-time operations. Cohesive but not needed by application callers; live as concrete `*Store` methods. If multiple backends ever need to expose migration, lift to a `BeadMigration` interface then.
-- **`LoadEventsInline`** — JSONL-internal optimization for re-inlining externalized events on read; not a backend-portable concept.
-- **`WithLock`** — already on `RawBackend`; infrastructure-level locking primitive, not bead-as-entity.
-
-These exclusions are explicit so future contributors aren't ambiguous about whether they should be on the interface.
-
-## The composite `Backend` (backwards-compatible)
-
-`Backend` becomes the union of all 11 sub-interfaces. Existing callers that depend on `Backend` keep compiling unchanged because every method they need is still there — just sourced from a sub-interface.
+Each named op has a method like:
 
 ```go
-// Backend is the full bead-tracker contract. Composition of the
-// sub-interfaces above. Existing callers (and the conformance suite)
-// continue to depend on Backend; new callers should depend on the
-// smallest sub-interface they actually use (ISP).
-type Backend interface {
-    BeadCore
-    BeadEvents
-    BeadLifecycle
-    BeadClaiming
-    BeadCancellation
-    BeadCooldown
-    BeadQueries
-    BeadDependencies
-    BeadQueue
-    BeadArchive
-    BeadInterchange
-    BeadSubscription
+func (op SetClaimHeartbeat) Apply(b *Bead) error {
+    b.Claim.LastHeartbeat = op.At
+    return nil
+}
+
+func (op ClaimOp) Apply(b *Bead) error {
+    if b.Claim.Owner != "" && b.Claim.Owner != op.Owner {
+        return ErrAlreadyClaimed
+    }
+    b.Claim.Owner = op.Owner
+    b.Claim.Session = op.Session
+    b.Claim.Worktree = op.Worktree
+    b.Claim.At = time.Now()
+    return nil
+}
+
+func (op UnclaimOp) Apply(b *Bead) error {
+    if op.RequireOwner != "" && b.Claim.Owner != op.RequireOwner {
+        return ErrNotClaimedByOwner
+    }
+    b.Claim = Claim{}
+    return nil
+}
+
+func (op IncrNoChangesCount) Apply(b *Bead) error {
+    b.NoChangesCount++
+    return nil
 }
 ```
 
-`*Store` already implements every method on these interfaces (it's where they came from). Compile-time check `var _ Backend = (*Store)(nil)` enforces this. Adding the assertion is the entire `*Store`-side change — no logic touched.
+### Generic vs. optimized backend implementations
 
-`RawBackend` is unchanged in shape, but its docstring is updated to warn off new backends:
+JSONL fallback (used for any unknown op):
+
+```go
+func (j *JSONLBackend) Apply(ctx context.Context, id string, op Operation) error {
+    return j.WithLock(func() error {
+        b, err := j.read(ctx, id)
+        if err != nil { return err }
+        if err := op.Apply(b); err != nil { return err }   // refused; skip save
+        return j.write(ctx, b)
+    })
+}
+```
+
+Axon type-switches for hot ops, falls through for the rest:
+
+```go
+func (a *AxonStore) Apply(ctx context.Context, id string, op Operation) error {
+    switch op := op.(type) {
+    case ClaimOp:
+        res, err := a.db.Exec(ctx,
+            `UPDATE beads
+             SET claim_owner=$1, claim_session=$2, claim_worktree=$3, claim_at=NOW()
+             WHERE id=$4 AND (claim_owner IS NULL OR claim_owner=$1)`,
+            op.Owner, op.Session, op.Worktree, id)
+        if rowsAffected, _ := res.RowsAffected(); rowsAffected == 0 {
+            return ErrAlreadyClaimed
+        }
+        return err
+    case SetClaimHeartbeat:
+        _, err := a.db.Exec(ctx, `UPDATE beads SET claim_heartbeat=$1 WHERE id=$2`, op.At, id)
+        return err
+    case IncrNoChangesCount:
+        _, err := a.db.Exec(ctx, `UPDATE beads SET no_changes_count = no_changes_count + 1 WHERE id=$1`, id)
+        return err
+    case SetStatus:
+        _, err := a.db.Exec(ctx, `UPDATE beads SET status=$1 WHERE id=$2`, op.Status, id)
+        return err
+    default:
+        // Generic path: load, op.Apply in-memory, save
+        return a.genericApply(ctx, id, op)
+    }
+}
+```
+
+A read-only HTTP backend rejects all Apply calls (it's read-only).
+
+## Pluggable ID generation
+
+```go
+package bead
+
+// ID format constraints — the contract every backend enforces.
+const (
+    DefaultIDPrefix = "ddx-"
+    MaxIDLength     = 64
+    MinIDLength     = 8
+)
+var idCharsetRe = regexp.MustCompile(`^[a-zA-Z0-9-]+$`)
+
+// ValidateID is the canonical contract check. Every backend's Create
+// calls it; pluggable generators must produce ids that pass it; external
+// importers can pre-check before constructing a *Bead.
+func ValidateID(id string) error {
+    if len(id) < MinIDLength || len(id) > MaxIDLength {
+        return fmt.Errorf("%w: length %d not in [%d, %d]", ErrInvalidID, len(id), MinIDLength, MaxIDLength)
+    }
+    if !idCharsetRe.MatchString(id) {
+        return fmt.Errorf("%w: charset", ErrInvalidID)
+    }
+    return nil
+}
+
+// IDGenerator is the pluggable strategy. Implementations are pure or
+// in-memory; they do not depend on storage state.
+type IDGenerator interface {
+    GenID(ctx context.Context) (string, error)
+}
+
+type RandomHexIDGenerator struct {
+    Prefix string
+    Bytes  int  // hex byte count; 4 → "ddx-12abcdef"
+}
+
+func (g RandomHexIDGenerator) GenID(ctx context.Context) (string, error) {
+    buf := make([]byte, g.Bytes)
+    if _, err := rand.Read(buf); err != nil { return "", err }
+    id := g.Prefix + hex.EncodeToString(buf)
+    if err := ValidateID(id); err != nil { return "", err }  // sanity
+    return id, nil
+}
+
+// SequentialIDGenerator is for tests and fixtures.
+type SequentialIDGenerator struct {
+    Prefix  string
+    counter atomic.Int64
+}
+
+func (g *SequentialIDGenerator) GenID(ctx context.Context) (string, error) {
+    n := g.counter.Add(1)
+    return fmt.Sprintf("%s%08x", g.Prefix, n), nil
+}
+
+// NewIDGenerator returns the package default.
+func NewIDGenerator() IDGenerator {
+    return RandomHexIDGenerator{Prefix: DefaultIDPrefix, Bytes: 4}
+}
+```
+
+## Sub-interface taxonomy
+
+### Storage interfaces composing `Backend` (11)
+
+```go
+package bead
+
+// BeadInitializer prepares a backend to serve subsequent calls.
+// Implementations MAY create local resources (JSONL: mkdir+touch file),
+// open network connections (HTTP-backed), or be no-ops (in-memory test).
+// Callers MUST call Init exactly once before any other method on the
+// returned backend.
+type BeadInitializer interface {
+    Init(ctx context.Context) error
+}
+
+// BeadReader is the foundational read surface — corpus reads and
+// per-bead lookups. Implemented by every backend, including read-only.
+type BeadReader interface {
+    ReadAll(ctx context.Context) ([]Bead, error)
+    ReadAllFiltered(ctx context.Context, pred func(Bead) bool) ([]Bead, error)
+    Get(ctx context.Context, id string) (*Bead, error)
+    GetWithArchive(ctx context.Context, id string) (*Bead, error)
+}
+
+// BeadLifecycle is the mutation primitives — exactly two methods.
+// Create is the new-bead primitive (no prior state to load).
+// Apply is the universal mutation entry point — every mutation flows
+// through it as a typed Operation.
+type BeadLifecycle interface {
+    Create(ctx context.Context, b *Bead) error                       // ErrInvalidID, ErrConflict
+    Apply(ctx context.Context, id string, op Operation) error        // any op error propagates
+}
+
+// BeadEventReader reads the per-bead event log.
+type BeadEventReader interface {
+    Events(ctx context.Context, id string) ([]BeadEvent, error)
+    EventsByKind(ctx context.Context, id, kind string) ([]BeadEvent, error)
+}
+
+// BeadEventWriter appends to the per-bead event log. High-volume — every
+// state transition writes an event.
+type BeadEventWriter interface {
+    AppendEvent(ctx context.Context, id string, event BeadEvent) error
+}
+
+// BeadQueries provides derived views over the corpus. All pure reads.
+type BeadQueries interface {
+    List(ctx context.Context, status, label string, where map[string]string) ([]Bead, error)
+    ListWithArchive(ctx context.Context, status, label string, where map[string]string) ([]Bead, error)
+    Ready(ctx context.Context) ([]Bead, error)
+    ReadyExecution(ctx context.Context) ([]Bead, error)
+    ReadyExecutionBreakdown(ctx context.Context) (ReadyExecutionBreakdown, error)
+    ProposedOperatorAttention(ctx context.Context) ([]Bead, error)
+    NeedsHuman(ctx context.Context) ([]Bead, error)
+    Blocked(ctx context.Context) ([]Bead, error)
+    ExternalBlocked(ctx context.Context) ([]Bead, error)
+    DependencyWaiting(ctx context.Context) ([]Bead, error)
+    BlockedAll(ctx context.Context) ([]BlockedBead, error)
+    Status(ctx context.Context) (*StatusCounts, error)
+}
+
+// BeadDependencyReader reads the dependency graph.
+type BeadDependencyReader interface {
+    DepTree(ctx context.Context, rootID string) (string, error)
+}
+
+// BeadDependencyWriter mutates the dependency graph.
+type BeadDependencyWriter interface {
+    DepAdd(ctx context.Context, id, depID string) error
+    DepRemove(ctx context.Context, id, depID string) error
+}
+
+// BeadArchive is corpus-transition maintenance — splitting closed beads
+// out of the active corpus into an archive collection. Genuine storage
+// transition (rows move between collections); kept as a storage primitive.
+type BeadArchive interface {
+    Archive(ctx context.Context, policy ArchivePolicy) ([]string, error)
+    ArchiveWithEvents(ctx context.Context, policy ArchivePolicy) ([]string, error)
+    Migrate(ctx context.Context) (MigrateStats, error)
+}
+
+// BeadInterchangeReader exports the corpus to JSONL.
+type BeadInterchangeReader interface {
+    ExportTo(ctx context.Context, w io.Writer) error
+    ExportToFile(ctx context.Context, path string) error
+}
+
+// BeadInterchangeWriter imports from JSONL.
+type BeadInterchangeWriter interface {
+    Import(ctx context.Context, source, filePath string) (int, error)
+}
+```
+
+### Composite `Backend`
+
+```go
+// Backend is the full bead-tracker contract — the composition of all 11
+// storage sub-interfaces. Existing callers depending on Backend continue
+// to compile. *Store satisfies Backend via the existing 69 public methods
+// (compile-time check: var _ Backend = (*Store)(nil)).
+//
+// New callers should depend on the smallest sub-interface they use (ISP).
+// New backends should implement Backend directly; *Store's composition
+// over RawBackend is preserved for JSONLBackend and ExternalBackend only.
+type Backend interface {
+    BeadInitializer
+    BeadReader
+    BeadLifecycle
+    BeadEventReader
+    BeadEventWriter
+    BeadQueries
+    BeadDependencyReader
+    BeadDependencyWriter
+    BeadArchive
+    BeadInterchangeReader
+    BeadInterchangeWriter
+}
+
+// ReadOnlyBackend is the capability bundle a multi-tenant read-only
+// deployment requires (per docs/plans/plan-2026-05-10-read-only-deployment.md).
+// A backend implementing this WITHOUT the writer interfaces is a valid
+// read-only backend.
+type ReadOnlyBackend interface {
+    BeadInitializer
+    BeadReader
+    BeadEventReader
+    BeadQueries
+    BeadDependencyReader
+    BeadInterchangeReader
+}
+```
+
+### Parallel interfaces (NOT on Backend)
+
+```go
+// LifecycleSubscriber broadcasts bead lifecycle change events. Distinct
+// from Backend because the operation shape (long-running stream,
+// fire-and-forget delivery, polling/push goroutines) is fundamentally
+// different from request/response storage ops.
+//
+// *WatcherHub (cli/internal/bead/watcher.go) satisfies this today via
+// per-project polling. A future AxonStore could implement it natively
+// via GraphQL subscriptions or Postgres LISTEN/NOTIFY.
+type LifecycleSubscriber interface {
+    SubscribeLifecycle(ctx context.Context, projectID string) (<-chan LifecycleEvent, func(), error)
+}
+
+// IDGenerator is the pluggable id-allocation strategy. Implementations
+// produce ids that satisfy ValidateID. Default: RandomHexIDGenerator with
+// the "ddx-" prefix. SequentialIDGenerator for deterministic tests.
+// Implementations are pure or in-memory; they do not depend on storage.
+type IDGenerator interface {
+    GenID(ctx context.Context) (string, error)
+}
+```
+
+## Methods explicitly NOT on any sub-interface
+
+These stay concrete on `*Store` only — backwards compat — but are NOT part of any interface contract:
+
+- **Workflow wrappers** (~17 methods that delegate to `Apply(op)` in the helpers): `Heartbeat`, `TouchClaimHeartbeat`, `RemoveClaimHeartbeat`, `ClaimHeartbeatFresh`, `Claim`, `ClaimWithOptions`, `Unclaim`, `RequestCancel`, `IsCancelRequested`, `MarkCancelHonored`, `SetExecutionCooldown`, `ClearCooldowns`, `IncrNoChangesCount`, `TransitionLifecycle`, `SetLifecycleStatus`, `UpdateWithLifecycleStatus`, `CloseWithEvidence`, `AppendNotes`, `Reopen`, `ParkToProposed`, `Update`, `Close`, `QueueTop`, `QueueMove`, `QueueClear`, `GenID`.
+- **Migration/admin** (one-time operations): `MigrateLifecycle`, `MigrateFromHelix`, `MigrateToAxon`, `MigrateDryRun`, `MigrateLifecycleDryRun`, `DetectLifecycleMigrationRequired`, `ReconcileLifecycleMetadata`.
+- **Lifecycle schema marker** (bootstrap): `HasLifecycleSchemaMarker`, `WriteLifecycleSchemaMarker`, `LifecycleSchemaMarkerPath`. Axon handles schema versioning out-of-band via Lakebase migrations; these stay JSONL-only.
+- **JSONL-internal**: `LoadEventsInline`.
+- **Infrastructure**: `WithLock` (already on `RawBackend`).
+
+New code uses the helper packages and the new sub-interfaces. Existing code keeps working unchanged via the concrete `*Store` methods.
+
+## Helper packages
+
+```
+cli/internal/bead/ops/
+  claim/
+    liveness.go       // Touch, Clear, IsFresh(*Bead, maxAge), Acquire, Release
+  cancel/
+    cancel.go         // Request, MarkHonored, IsRequested(*Bead)
+  cooldown/
+    cooldown.go       // Set, ClearAll(filter), IncrNoChanges
+  lifecycle/
+    transition.go     // Transition (state-machine validation), Reopen, ParkToProposed, CloseWithEvidence, AppendNotes
+  queue/
+    queue.go          // Top, Move, Clear
+```
+
+Example:
+
+```go
+package claim
+
+func Touch(ctx context.Context, l bead.BeadLifecycle, id string) error {
+    return l.Apply(ctx, id, bead.SetClaimHeartbeat{At: time.Now()})
+}
+
+func IsFresh(b *bead.Bead, maxAge time.Duration) bool {
+    return time.Since(b.Claim.LastHeartbeat) < maxAge
+}
+
+type AcquireOptions struct{ Owner, Session, Worktree string }
+
+func Acquire(ctx context.Context, l bead.BeadLifecycle, id string, opts AcquireOptions) error {
+    return l.Apply(ctx, id, bead.ClaimOp(opts))
+}
+
+func Release(ctx context.Context, l bead.BeadLifecycle, id string) error {
+    return l.Apply(ctx, id, bead.UnclaimOp{})
+}
+```
+
+```go
+package lifecycle
+
+// validTransitions encodes the HELIX state machine
+var validTransitions = map[string][]string{ /* ... */ }
+
+func Transition(ctx context.Context, l bead.BeadLifecycle, r bead.BeadReader, id, newStatus string) error {
+    b, err := r.Get(ctx, id)
+    if err != nil { return err }
+    if !contains(validTransitions[b.Status], newStatus) {
+        return fmt.Errorf("invalid transition %s → %s for %s", b.Status, newStatus, id)
+    }
+    return l.Apply(ctx, id, bead.SetLifecycleStatus{Status: newStatus})
+}
+```
+
+## `context.Context` discipline
+
+```go
+// Package bead defines what is allowed on context.Context values passed
+// to Backend methods. The set is closed:
+//
+//   - context.WithCancel / WithDeadline / WithTimeout from any caller
+//   - bead.WithIdentity(ctx, Identity) — caller's authenticated identity
+//   - bead.WithTrace(ctx, trace.Span) — OpenTelemetry span for the op
+//
+// NOT ALLOWED on ctx (anti-patterns):
+//   - bead.Backend instance (use a function argument)
+//   - per-call options like "include archived", "force refresh" — those
+//     belong on method signatures (see GetWithArchive, ListWithArchive)
+//   - mutable state, logger references, configuration
+//
+// A backend implementation that reads a context value outside this set
+// is using the wrong door. Lint rule: ctx.Value() calls in this package
+// must go through a typed accessor.
+//
+// Typed accessors:
+//   func WithIdentity(ctx context.Context, id Identity) context.Context
+//   func IdentityFromContext(ctx context.Context) (Identity, bool)
+//   func WithTrace(ctx context.Context, span trace.Span) context.Context
+//   func TraceFromContext(ctx context.Context) (trace.Span, bool)
+```
+
+## Sentinel errors
+
+```go
+package bead
+
+var (
+    ErrNotFound            = errors.New("bead: not found")
+    ErrConflict            = errors.New("bead: id already exists")
+    ErrInvalidID           = errors.New("bead: invalid id")
+    ErrAlreadyClaimed      = errors.New("bead: already claimed by another owner")
+    ErrNotClaimedByOwner   = errors.New("bead: not claimed by requesting owner")
+    ErrUnsupported         = errors.New("bead: operation not supported by this backend")
+)
+```
+
+Each `Backend` method documents which sentinels it returns. Callers discriminate via `errors.Is`.
+
+## `RawBackend` retained with warning
 
 ```go
 // RawBackend is the low-level whole-corpus storage contract used by
-// JSONLBackend and ExternalBackend (bd/br). It exists for backends
-// where corpus-shaped read/write is the natural granularity (single
-// file with atomic rename + advisory lock).
+// JSONLBackend and ExternalBackend (bd/br). It exists for backends where
+// corpus-shaped read/write is the natural granularity (single file with
+// atomic rename + advisory lock).
 //
 // NEW BACKENDS SHOULD NOT IMPLEMENT RawBackend. The whole-corpus shape
-// is wrong for any backend that supports per-row operations (Postgres,
-// any structured store). New backends should implement Backend
-// directly — see AxonStore as the reference example. Composition of
-// *Store over RawBackend is preserved only for the existing JSONL/
-// External implementations.
-type RawBackend interface { ... }
-```
-
-This stops the next contributor from copy-pasting `AxonBackend`'s mistake of forcing per-row work through whole-corpus `WriteAll`.
-
-## Axon under Option B
-
-Axon implements `Backend` directly. Concretely:
-
-1. `cli/internal/bead/axon_backend.go` (rename optional) grows to satisfy the full `Backend` interface — not by composing `*Store` over `RawBackend`, but by mapping each sub-interface's methods to per-row Axon GraphQL operations (UPSERT/DELETE per row, queries with filters, event appends as separate entity inserts).
-2. `cli/internal/bead/store.go`'s `NewStore(...)` factory returns either:
-   - `*Store{Raw: JSONLBackend, ...}` (default, today's path) — satisfies `Backend` via the composition layer.
-   - `*AxonStore{...}` (or whatever the type is named) when `bead.backend: axon` — satisfies `Backend` via direct per-row implementation.
-   Both return values are typed as `Backend`. Callers don't notice.
-3. `*AxonStore` declares which sub-interfaces it implements. If Axon long-term cannot support a sub-interface (e.g., `BeadCancellation` because Axon's schema doesn't model cancel-request state), capability negotiation happens **at the factory, against config, at startup** — NOT via runtime type-assertions at call sites. The codebase has zero runtime capability type-asserts today; introducing them would be foreign and would produce surprise errors deep in execution paths.
-
-Concretely, the factory pattern:
-
-```go
-// NewStore returns a Backend impl chosen by config. Required capabilities
-// are validated against the chosen backend; missing ones fail at startup
-// with a clear message rather than at first use.
-func NewStore(opts StoreOptions) (Backend, error) {
-    backend := constructBackend(opts) // *Store or *AxonStore depending on config
-    var missing []string
-    for _, cap := range opts.RequiredCapabilities {
-        if !cap.SatisfiedBy(backend) {
-            missing = append(missing, cap.Name)
-        }
-    }
-    if len(missing) > 0 {
-        return nil, fmt.Errorf("backend %q lacks required capabilities: %v",
-            opts.BackendName, missing)
-    }
-    return backend, nil
+// is wrong for any backend supporting per-row operations (Postgres, any
+// structured store). New backends should implement Backend directly —
+// see AxonStore as the reference example. *Store's composition over
+// RawBackend is preserved only for the existing JSONL / External impls.
+type RawBackend interface {
+    Init() error
+    ReadAll() ([]Bead, error)
+    WriteAll(beads []Bead) error
+    WithLock(fn func() error) error
 }
 ```
 
-`opts.RequiredCapabilities` defaults to "all" for the standard `ddx` CLI (full-feature workstation use). A read-only deployment declares a subset; Axon-backed server declares whatever the production deployment needs. Mismatch fails the server boot with a useful message, not the 47th `ddx bead claim` of the day.
+## Acceptance criteria
 
-This pattern fits the codebase: backend selection is already config-driven at the factory (`cli/internal/bead/store.go:89-129`); we're extending that selection logic with capability assertions, not introducing a new pattern.
+1. New file `cli/internal/bead/interfaces.go` (or sub-interfaces split across files) declares the 11 storage sub-interfaces, the composite `Backend`, `ReadOnlyBackend`, the parallel `LifecycleSubscriber` and `IDGenerator`. All methods take `ctx context.Context` as first param.
+2. New file `cli/internal/bead/operation.go` declares the `Operation` interface and ~20 named operation types, each implementing `Apply(*Bead) error`.
+3. New file `cli/internal/bead/id.go` declares `ValidateID`, `RandomHexIDGenerator`, `SequentialIDGenerator`, `NewIDGenerator`, format constants.
+4. New file `cli/internal/bead/context.go` declares `WithIdentity`/`IdentityFromContext`/`WithTrace`/`TraceFromContext` typed accessors.
+5. New file `cli/internal/bead/errors.go` declares the sentinel errors.
+6. `*Store` keeps all 69 concrete public methods. Each existing concrete method retains its current signature (NO ctx breaking changes to `*Store`). Compile-time assertions:
+   ```go
+   var _ Backend = (*Store)(nil)
+   ```
+   plus per-sub-interface assertions for `*Store`.
+7. `*Store` gains a new ctx-aware `Apply(ctx, id, op Operation) error` method routed through `WithLock + read + op.Apply + write`. Existing concrete methods (`Heartbeat`, `Claim`, etc.) are internally rewritten to call `Apply` with the appropriate `Operation`. Observable behavior unchanged.
+8. `*WatcherHub` satisfies `LifecycleSubscriber`; compile-time assertion added. Signature updated to take `ctx`.
+9. Helper packages under `cli/internal/bead/ops/{claim,cancel,cooldown,lifecycle,queue}/` are created with the helpers and predicates listed above. Each helper has at least one test that exercises it against `*Store`.
+10. `RawBackend` docstring updated with the warning text.
+11. Caller migration: callers in `cli/cmd/`, `cli/internal/server/`, `cli/internal/agent/`, `cli/internal/escalation/`, `cli/internal/agentmetrics/`, `cli/internal/processmetrics/`, `cli/internal/exec/` that currently call `*Store` workflow methods (`Heartbeat`, `Claim`, `TransitionLifecycle`, etc.) are NOT modified — backwards compat. New code added during this work uses helpers + ctx-aware interfaces.
+12. Conformance tests under `cli/internal/bead/` are parameterized to run against any `Backend` implementation. `*Store` (via JSONL and External RawBackends) passes. The suite is structured so AxonStore can join later.
+13. `cd cli && go test ./...` is green.
+14. `lefthook run pre-commit` passes.
 
-The capability question — *can* Axon model heartbeats, cancellation, cooldown? — is deferred. The interface design lets us answer "yes" or "no" per sub-interface as we go, without changing the contract. That's exactly the SOLID/Open-Closed property we want.
-
-## Caller migration — be honest about the scope
-
-No caller has to change *to keep compiling*. Every existing call site holds `*bead.Store` concretely (`cli/cmd/`, `cli/internal/server/`, `cli/internal/agent/` — verified: zero interface-typed bead variables in production code today). The composite `Backend` covers everything `*Store` exposes; the compile-time `var _ Backend = (*Store)(nil)` assertion enforces it.
-
-**But the caller-side ISP payoff is deferred.** Sub-interfaces buy nothing for callers that hold `*Store` concretely. The immediate payoff is **Axon-side**: it lets the new Axon implementation declare exactly which sub-interfaces it satisfies, and lets the factory validate at startup. Caller-side narrowing (e.g. converting `ddx bead list` to depend on `BeadQueries` only) is **its own follow-on work**, not part of this bead.
-
-This is the right scope for the gating bead because:
-
-- The Axon work needs the sub-interfaces to declare against; that's the load-bearing dependency for the downstream bead chain.
-- Caller migration is mechanical and incremental — it can happen file-by-file as callers are touched for other reasons. It's the kind of migration that benefits from being unconstrained by a single bead's scope.
-- Trying to migrate ~27 caller files (the production callers from prior turn's audit) inside one bead would dramatically expand the change surface and review burden, which is exactly the kind of thing the prior plan-review feedback warned against.
-
-**Follow-on work** (file separately, not blocking Axon):
-
-- **Caller-narrowing pass**: convert `cli/cmd/bead_*.go` and the `cli/internal/server/graphql/resolver_*.go` callsites to depend on the narrow sub-interface they actually use. Mechanical, file-by-file.
-- **Test conformance**: the existing `cli/internal/bead/backend_conformance_test.go` and `chaos_test.go` keep testing against `Backend`. Per-sub-interface conformance suites get added when a backend (Axon) declares a partial capability set.
-
-## What this enables (the load-bearing payoff)
-
-- **Axon can be implemented per-row.** No diff-engine inside `WriteAll`. The interface granularity matches the storage shape.
-- **`bead.backend: axon` config selection becomes real.** `NewStore(...)` factory returns the right `Backend` impl from config; existing callers work unchanged. (Closed bead `ddx-29f02cf4`.)
-- **Conformance suites can run against multiple backends** declaring matching capability sets. (Closed bead `ddx-958b8fc3`.)
-- **Read-only deployment shape** (`docs/plans/plan-2026-05-10-read-only-deployment.md`) becomes expressible as a smaller interface: a read-only Backend impl declares only `BeadCore` (Get/ReadAll), `BeadEvents` (Events/EventsByKind), `BeadQueries`, and `BeadDependencies` (DepTree only). The Create/Update/Close/Claim/etc. sub-interfaces are simply not implemented; callers that need them fail at construction.
-- **Future BlobStore-on-Axon** (if Axon exposes a blob interface later) is unrelated — `BlobStore` per FEAT-028 is its own thing in DDx, with `LocalFS` today and `UC Volumes` as a candidate future backend. This design note is purely about bead entity storage.
-
-## Risks / open questions
-
-- **Method placement vs. signatures.** Every method placed on a sub-interface above was verified present on `*Store` via `grep -E "^func \(s \*Store\) [A-Z]"`. Signatures need to be confirmed line-by-line during the implementation bead (the prototypes above are designer's transcription, not extracted from source). Any mismatches surface during compile of the `var _ Backend = (*Store)(nil)` assertion.
-- **Bulk operations are deferred.** `BeadCore` has no `BatchCreate`/`BatchUpdate`. Axon could support these efficiently; today the interface doesn't allow expressing it. Add only when a concrete caller needs it. Documented here so downstream beads don't quietly assume bulk semantics.
-- **Transactions / atomicity across operations are deferred.** No `WithTransaction(fn)` method. Today's `WithLock` (on `RawBackend`) gives JSONL its serialized rewrites; Axon-via-Backend would need its own transactional pattern (per-row UPSERTs are individually atomic, but multi-row consistency is on the caller). Documented here so downstream Axon work makes a deliberate choice rather than inheriting a default.
-- **Pagination on `BeadQueries` is deferred.** `List`/`Ready`/etc. return full slices; that's fine for current scale (per-project bead counts are bounded) but breaks if multi-project federation hits this surface. Add `ListPaged(opts) ([]Bead, cursor, error)` when a concrete caller hits the limit.
-- **Authentication/authorization context propagation is deferred.** No `context.Context` on the interface methods today; this design keeps that. A multi-tenant Databricks-App deployment will need ctx-aware methods to propagate identity. Added as a future-update note rather than a v1 surface change because adding `ctx` to every method is a breaking change that should be evaluated against actual auth requirements, not pre-emptively.
-- **Conformance test matrix complexity.** 12 sub-interfaces × N backends is real cost. Mitigation: parameterize the existing `backend_conformance_test.go` by sub-interface; backends that don't implement a given sub-interface are skipped in that subtest. JSONLBackend implements all 12; AxonBackend will declare its set. Most pairs are present, so the matrix is sparse-but-mostly-full.
+Test names: `TestBackendConformance_*` (parameterized by backend), `TestOperation_*` (per-op semantics), `TestValidateID_*`, `TestRandomHexIDGenerator_*`, `TestSequentialIDGenerator_*`, `TestApply_ClaimCAS_PreventsDoubleClaim`, `TestApply_UnclaimWithOwner_RejectsOtherOwner`.
 
 ## Sequencing
 
-1. **This bead (the interface refinement)**: add the 12 sub-interface declarations + the composite `Backend` redefinition + the updated `RawBackend` docstring warning new backends off + the `var _ Backend = (*Store)(nil)` compile-time check + per-sub-interface `var _ BeadCore = (*Store)(nil)` (etc.) checks + promote `WatcherHub` to satisfy `BeadSubscription` (`SubscribeLifecycle` already has the right shape — just add the interface declaration). Pure declarations + one compile-time satisfies-check on the watcher. Zero runtime behavior change. Conformance suite continues to pass against `*Store`. **No `cli/cmd/` or `cli/internal/` caller changes** (caller-narrowing pass is its own follow-on, see "Caller migration" above).
-2. **Reopen `ddx-9c5bca8f`** rescoped: implement `Backend` directly on Axon (or on `AxonStore`-shaped type), mapping each sub-interface to per-row Axon ops. Per-sub-interface conformance is the AC.
-3. **Reopen `ddx-29f02cf4`** rescoped: `NewStore(...)` factory returns the right `Backend` impl from config; `WithAxonGraphQLTransport` is constructed from config.
-4. **Reopen `ddx-8bf23be0`**: reconcile `schema.graphql` with the per-entity ops the generated client exposes (so the GraphQL surface ddx invokes actually parses against what's published).
-5. **Reopen `ddx-958b8fc3`**: parameterize the conformance suite across backends, with per-sub-interface declared capability matching.
-6. **Reopen `ddx-8dd19492`**: subscription smoke test against the ops AxonBackend actually invokes.
-7. **New beads**:
-   - Schema versioning + v0→v1 migration ladder (audit gap 4).
-   - Real JSONL→Postgres importer to replace today's JSONL-writing `MigrateToAxon` (audit gap 6).
-   - Real-wire integration tests against an actual Axon/Postgres instance (audit gap 7).
+This bead is the gate. It must land before downstream Axon beads can reopen.
 
-The interface refinement bead is the gate. Nothing else can land until the sub-interfaces exist as the contract Axon implements against.
+After this bead:
+
+1. **Reopen `ddx-9c5bca8f`** rescoped: implement `Backend` directly on `AxonStore` using per-row Postgres operations via `Apply`'s type-switch. AC: AxonStore passes the parameterized conformance suite.
+2. **Reopen `ddx-29f02cf4`** rescoped: `NewStore(opts)` factory returns the right `Backend` impl from config; `WithAxonGraphQLTransport` constructed from config; required-capabilities validated at startup.
+3. **Reopen `ddx-8bf23be0`** rescoped: reconcile `schema.graphql` with the per-row ops AxonStore actually invokes.
+4. **Reopen `ddx-958b8fc3`** rescoped: parameterized conformance against an httptest-served Axon-shaped GraphQL endpoint.
+5. **Reopen `ddx-8dd19492`** rescoped: subscription smoke test against `LifecycleSubscriber` natively implemented by Axon (when present); falls back to `*WatcherHub` polling.
+6. **Reopen `ddx-8d747049`** (parent epic) — refresh context, drop `blocked-on-upstream` labels.
+7. **New bead**: schema versioning + v0→v1 migration ladder (audit gap 4).
+8. **New bead**: real JSONL→Postgres importer to replace `MigrateToAxon`'s current JSONL output (audit gap 6).
+9. **New bead**: real-wire integration tests against an actual Axon/Postgres instance (audit gap 7).
+
+## Risks
+
+| Risk | Mitigation |
+|------|------------|
+| `*Store` concrete-method count grows large alongside the new interfaces (69 + new Apply + new helpers) | Acknowledged. The duplication is the cost of backwards compat. New code uses helpers; over time, concrete-method callers can be narrowed (separate, opportunistic work). |
+| `Operation` type-switch in AxonStore drifts from named-op set (forgotten ops fall through to generic path) | A unit test enumerates all `Operation` types in the `bead` package via reflection and asserts AxonStore type-switches on each. New op without optimization = lint warning, not a deploy failure. |
+| Heartbeat sidecar optimization (JSONL writes a separate file today) loses ground under the Apply pattern | `JSONLBackend.Apply` for `SetClaimHeartbeat` detects the op type and writes only the sidecar — same optimization, just driven by the typed op now. Test asserts the sidecar is touched and the main corpus is not. |
+| Caller migration to ctx-aware interfaces is large scope | Out of scope for this bead. New code uses helpers. Existing callers continue with concrete `*Store` methods. A follow-up "caller narrowing" bead can happen incrementally. |
+| Helper packages duplicate logic that should live in HELIX (workflow plugin) | Acknowledged. The helpers in `cli/internal/bead/ops/lifecycle/` encode HELIX state-machine rules. A future architectural improvement is to move lifecycle/ to the HELIX plugin and let `cli/internal/bead/ops/` hold only generic-bead workflow helpers. Out of scope here. |
+| Adding `ctx` to interface methods while `*Store` keeps non-ctx signatures means `*Store` doesn't actually satisfy the new interfaces | Approach: add new ctx-aware methods to `*Store` as parallel wrappers (e.g. `*Store.GetCtx(ctx, id)` calls `*Store.Get(id)`). The new sub-interfaces are satisfied by the ctx-aware variants. Existing concrete methods remain for non-ctx callers. ~50 wrapper methods, mechanical. Alternative: rewrite `*Store` methods to take ctx and migrate the ~27 caller files in same bead. Decision: parallel-wrapper approach (mechanical, no caller breakage). |
+| Operation discoverability — how do contributors know what ops exist? | All ops live in one file `cli/internal/bead/operation.go`. Package doc lists them. `go doc bead` shows the catalog. |
+
+## Open questions
+
+1. **Should `*Store` rewrite the concrete workflow methods to call `Apply(op)` internally, or keep them as-is?** Recommended: rewrite, so the optimization path (sidecar-write-on-heartbeat) lives only in `JSONLBackend.Apply` rather than being duplicated in concrete methods. Saves duplication but is a bigger refactor of `*Store`'s internals.
+2. **`SequentialIDGenerator` — does it belong in production or `testdata`?** Recommended: production code, since it's useful for fixtures and integration tests run from production binaries.
+3. **Subscription failure mode** — when a backend can't subscribe, `SubscribeLifecycle` returns `(nil, nil, ErrUnsupported)`. Confirm callers handle this gracefully (fall back to polling vs. fail).
+4. **Helper package scope** — `cli/internal/bead/ops/lifecycle/` encodes HELIX state-machine rules. Future architectural improvement: move this to the HELIX plugin so generic bead ops stay workflow-agnostic. Acknowledge here; defer.
+
+## Bottom line
+
+This refactor turns the bead backend from a fat 22-method interface (`Backend`) with 47 concrete-only `*Store` methods into a clean separation:
+
+- **11 LSP-clean sub-interfaces** on `Backend`, all ctx-aware, focused on storage primitives.
+- **A typed `Operation` pattern** for mutations that supports CAS via error returns and lets non-JSONL backends optimize via type-switch.
+- **A pluggable `IDGenerator`** strategy with default and test implementations.
+- **A parallel `LifecycleSubscriber`** matching the existing `*WatcherHub` structure.
+- **Workflow helpers** in `cli/internal/bead/ops/<concern>/` for state-machine validation, heartbeat policy, cancellation, cooldown, queue ordering.
+- **Zero breaking changes** to existing `*Store` callers.
+
+This unblocks the Axon production-readiness work (reopen of ~6 closed beads + 3 new ones per `plan-2026-05-10-axon-only-architecture.md`) and gives the read-only deployment shape a clean interface set to declare its capability bundle against.

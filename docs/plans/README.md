@@ -21,4 +21,8 @@ for an existing feature).
 | 2026-05-10 | [Axon as sole backend / GraphQL collapse](plan-2026-05-10-axon-only-architecture.md) | **Rejected** — keep ddx-server GraphQL + BlobStore separate |
 | 2026-05-10 | [MCP architecture: DDx-server-MCP into Databricks Assistant](plan-2026-05-10-mcp-architecture.md) | Verdict reached: ddx-server-MCP only; gap list captured |
 | 2026-05-10 | [Read-only deployment: minimum storage surface](plan-2026-05-10-read-only-deployment.md) | Sequencing identified: BlobStore → Axon EntityStore → `attempts` collection → ConfigStore |
-| 2026-05-11 | [Website evolution: design system, auto-gen, Hugo renderer, Pages](plan-2026-05-11-website-evolution.md) | Draft — user review required before bead breakdown |
+| 2026-05-11 | [Website evolution: design system, auto-gen, Hugo renderer, Pages](plan-2026-05-11-website-evolution.md) | Reviewed — 4 decisions locked; bead breakdown via companion plan |
+| 2026-05-11 | [Website auto-generation + templating architecture](plan-2026-05-11-website-autogen.md) | Draft v2 — restructured around unified generator + artifact graph after self+opus review |
+| 2026-05-11 | [FEAT-005 amendment: `ddx.visibility`](plan-2026-05-11-artifact-visibility.md) | Draft — prerequisite for website autogen Phase C |
+| 2026-05-11 | [`ddx __introspect` primitive](plan-2026-05-11-ddx-introspect.md) | Draft — prerequisite for website CLI generator AND pip Python codegen |
+| 2026-05-11 | [Bead backend interface refinement (pre-Axon)](../helix/02-design/plan-2026-05-11-bead-backend-interfaces.md) | Drafted + opus-reviewed + LSP-revised (16 sub-interfaces); pending commit/file |
