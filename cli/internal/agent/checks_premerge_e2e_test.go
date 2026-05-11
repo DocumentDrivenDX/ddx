@@ -165,12 +165,12 @@ func TestSubmitWithPreMergeChecks_DummyFailAbortsMerge(t *testing.T) {
 	b := r.makeBead("pmc-block-001", nil)
 	resultSHA := r.commitNoOp()
 
-	runID := time.Now().UTC().Format("20060102T150405") + "-pmcblk1"
+	attemptID := time.Now().UTC().Format("20060102T150405") + "-pmcblk1"
 	res := &ExecuteBeadResult{
 		BeadID:       b.ID,
 		BaseRev:      r.baseSHA,
 		ResultRev:    resultSHA,
-		ExecutionDir: filepath.Join(".ddx", "executions", runID),
+		ExecutionDir: filepath.Join(".ddx", "executions", attemptID),
 		Outcome:      ExecuteBeadOutcomeTaskSucceeded,
 		Status:       ExecuteBeadStatusSuccess,
 		ExitCode:     0,
@@ -252,7 +252,7 @@ func TestSubmitWithPreMergeChecks_DummyFailAbortsMerge(t *testing.T) {
 		"check_name=dummy-fail",
 		"status=block",
 		"exit_code=0",
-		"attempt_id=" + runID,
+		"attempt_id=" + attemptID,
 		"base_rev=" + r.baseSHA,
 		"result_rev=" + resultSHA,
 		"message=dummy-fail fixture: always blocks",
@@ -316,12 +316,12 @@ func TestSubmitWithPreMergeChecks_BypassAllowsMerge(t *testing.T) {
 	})
 	resultSHA := r.commitNoOp()
 
-	runID := time.Now().UTC().Format("20060102T150405") + "-pmcbyp1"
+	attemptID := time.Now().UTC().Format("20060102T150405") + "-pmcbyp1"
 	res := &ExecuteBeadResult{
 		BeadID:       b.ID,
 		BaseRev:      r.baseSHA,
 		ResultRev:    resultSHA,
-		ExecutionDir: filepath.Join(".ddx", "executions", runID),
+		ExecutionDir: filepath.Join(".ddx", "executions", attemptID),
 	}
 
 	submitCalled := false
@@ -390,12 +390,12 @@ func TestSubmitWithPreMergeChecks_BypassMissingReasonRejected(t *testing.T) {
 	})
 	resultSHA := r.commitNoOp()
 
-	runID := time.Now().UTC().Format("20060102T150405") + "-pmcbad1"
+	attemptID := time.Now().UTC().Format("20060102T150405") + "-pmcbad1"
 	res := &ExecuteBeadResult{
 		BeadID:       b.ID,
 		BaseRev:      r.baseSHA,
 		ResultRev:    resultSHA,
-		ExecutionDir: filepath.Join(".ddx", "executions", runID),
+		ExecutionDir: filepath.Join(".ddx", "executions", attemptID),
 	}
 
 	submitCalled := false

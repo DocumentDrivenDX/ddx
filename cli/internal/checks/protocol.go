@@ -11,7 +11,7 @@
 //	DIFF_HEAD     — current worktree HEAD
 //	PROJECT_ROOT  — absolute path to the project root
 //	EVIDENCE_DIR  — directory the check must write its result file into
-//	RUN_ID        — unique identifier for this evaluation run
+//	RUN_ID        — unique identifier for this evaluation run (alias: ATTEMPT_ID)
 //
 // The check writes its result to ${EVIDENCE_DIR}/${name}.json with shape:
 //
@@ -107,7 +107,7 @@ type InvocationContext struct {
 	DiffHead     string
 	ProjectRoot  string
 	EvidenceDir  string
-	RunID        string
+	AttemptID    string
 	BeadLabels   []string
 	ChangedPaths []string
 }

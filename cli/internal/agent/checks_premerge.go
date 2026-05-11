@@ -67,7 +67,7 @@ type PreMergeChecksOutcome struct {
 // honouring an invalid bypass.
 //
 // evidenceDir is the absolute path to the per-attempt execution evidence
-// directory (typically <projectRoot>/.ddx/executions/<run-id>/). Check result
+// directory (typically <projectRoot>/.ddx/executions/<attempt-id>/). Check result
 // files are written under evidenceDir/checks/. The directory is created if it
 // does not exist.
 //
@@ -122,7 +122,7 @@ func RunPreMergeChecks(ctx context.Context, projectRoot string, b *bead.Bead, ba
 		DiffHead:     resultRev,
 		ProjectRoot:  projectRoot,
 		EvidenceDir:  checksEvidence,
-		RunID:        newPreMergeRunID(),
+		AttemptID:    newPreMergeAttemptID(),
 		BeadLabels:   b.Labels,
 		ChangedPaths: changed,
 	}
@@ -318,7 +318,7 @@ func preMergeChangedPaths(projectRoot, baseRev, resultRev string) ([]string, err
 	return paths, nil
 }
 
-func newPreMergeRunID() string {
+func newPreMergeAttemptID() string {
 	var b [4]byte
 	_, _ = rand.Read(b[:])
 	return time.Now().UTC().Format("20060102T150405") + "-" + hex.EncodeToString(b[:])

@@ -276,7 +276,7 @@ Push-outcome events:
 
 Each event SHOULD include `kind`, `actor`, `created_at`, and a free-form
 `body` (TD-004 schema). Drain events SHOULD additionally include the
-`run-id` of the execution attempt in `body` or in a structured `extra`
+`attempt-id` of the execution attempt in `body` or in a structured `extra`
 field.
 
 ## 5. Outcome → Label / Event / Extra Mapping

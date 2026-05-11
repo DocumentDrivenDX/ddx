@@ -75,15 +75,15 @@ Exits 1 if any check returns block or error.`,
 				}
 			}
 
-			runID := newRunID()
-			evidenceDir := filepath.Join(projectRoot, ".ddx", "executions", "ac-"+runID)
+			attemptID := newAttemptID()
+			evidenceDir := filepath.Join(projectRoot, ".ddx", "executions", "ac-"+attemptID)
 			ictx := checks.InvocationContext{
 				BeadID:       beadID,
 				DiffBase:     diffBase,
 				DiffHead:     diffHead,
 				ProjectRoot:  projectRoot,
 				EvidenceDir:  evidenceDir,
-				RunID:        runID,
+				AttemptID:    attemptID,
 				BeadLabels:   b.Labels,
 				ChangedPaths: changed,
 			}
@@ -95,7 +95,7 @@ Exits 1 if any check returns block or error.`,
 
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "ac run %s (bead=%s base=%s head=%s checks=%d evidence=%s)\n",
-				runID, beadID, shortSHA(diffBase), shortSHA(diffHead), len(results), evidenceDir)
+				attemptID, beadID, shortSHA(diffBase), shortSHA(diffHead), len(results), evidenceDir)
 			anyBad := false
 			for _, r := range results {
 				marker := "PASS"
@@ -191,7 +191,7 @@ func gitChangedPaths(dir, base, head string) ([]string, error) {
 	return paths, nil
 }
 
-func newRunID() string {
+func newAttemptID() string {
 	var b [4]byte
 	_, _ = rand.Read(b[:])
 	return time.Now().UTC().Format("20060102T150405") + "-" + hex.EncodeToString(b[:])
