@@ -70,6 +70,7 @@ Examples:
 	cmd.AddCommand(f.newBeadMigrateCommand())
 	cmd.AddCommand(f.newBeadArchiveCommand())
 	cmd.AddCommand(f.newBeadAcCheckCommand())
+	cmd.AddCommand(f.newBeadLintCommand())
 
 	return cmd
 }

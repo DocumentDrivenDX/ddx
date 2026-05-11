@@ -127,6 +127,7 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 
 	r.triagePolicy = c.ResolveTriagePolicy()
 	r.maxDecompositionDepth = c.ResolveMaxDecompositionDepth()
+	r.acQualityMinScore = c.ResolveACQualityMinScore()
 
 	return r
 }
@@ -192,6 +193,7 @@ type ResolvedConfig struct {
 	beadQualityLintBlockThresholdScore int
 	triagePolicy                       triage.TriagePolicy
 	maxDecompositionDepth              int
+	acQualityMinScore                  float64
 }
 
 // requireSealed panics if r was not produced by Resolve / LoadAndResolve.
@@ -360,6 +362,13 @@ func (r ResolvedConfig) MaxDecompositionDepth() int {
 func (r ResolvedConfig) BeadQualityLintBlockThresholdScore() int {
 	r.requireSealed()
 	return r.beadQualityLintBlockThresholdScore
+}
+
+// ACQualityMinScore returns the minimum verifiability score required by the
+// pre-claim AC quality gate. Defaults to 0.5 when unset.
+func (r ResolvedConfig) ACQualityMinScore() float64 {
+	r.requireSealed()
+	return r.acQualityMinScore
 }
 
 func cloneStringSliceMap(m map[string][]string) map[string][]string {

@@ -34,6 +34,9 @@ type NewConfig struct {
 	// is used. Distinct from agent.triage, which controls the bead readiness
 	// decomposition gate.
 	Triage *TriagePolicyConfig `yaml:"triage,omitempty" json:"triage,omitempty"`
+	// Intake configures pre-claim intake gates, including the AC quality
+	// verifiability check that runs before any execution attempt.
+	Intake *IntakeConfig `yaml:"intake,omitempty" json:"intake,omitempty"`
 }
 
 // TriagePolicyConfig is the project-config form of triage.TriagePolicy.
@@ -41,6 +44,19 @@ type NewConfig struct {
 // of action names; missing modes inherit the binary default ladder.
 type TriagePolicyConfig struct {
 	Policies map[string][]string `yaml:"policies,omitempty" json:"policies,omitempty"`
+}
+
+// IntakeConfig controls pre-claim intake gates.
+type IntakeConfig struct {
+	ACQuality *IntakeACQualityConfig `yaml:"ac_quality,omitempty" json:"ac_quality,omitempty"`
+}
+
+// IntakeACQualityConfig sets the verifiability threshold for the pre-claim AC
+// quality gate. MinScore is the minimum fraction of mechanically classifiable
+// (non-prose) ACs required before a bead is eligible for execution. Values
+// outside [0, 1] are treated as unset (default 0.5).
+type IntakeACQualityConfig struct {
+	MinScore *float64 `yaml:"min_score,omitempty" json:"min_score,omitempty"`
 }
 
 // BeadQualityConfig controls bead quality gates that run before dispatch.
@@ -101,6 +117,23 @@ func (c *NewConfig) ResolveTriagePolicy() triage.TriagePolicy {
 		policy.Ladders[mode] = ladder
 	}
 	return policy
+}
+
+// defaultACQualityMinScore is the fraction of ACs that must be mechanically
+// classifiable (non-prose) for the pre-claim quality gate to pass.
+const defaultACQualityMinScore = 0.5
+
+// ResolveACQualityMinScore returns the effective AC quality minimum score.
+// Defaults to 0.5 when unset or out of range [0, 1].
+func (c *NewConfig) ResolveACQualityMinScore() float64 {
+	if c == nil || c.Intake == nil || c.Intake.ACQuality == nil || c.Intake.ACQuality.MinScore == nil {
+		return defaultACQualityMinScore
+	}
+	s := *c.Intake.ACQuality.MinScore
+	if s < 0 || s > 1 {
+		return defaultACQualityMinScore
+	}
+	return s
 }
 
 // ResolveBeadQualityLintBlockThresholdScore returns the effective lint block
