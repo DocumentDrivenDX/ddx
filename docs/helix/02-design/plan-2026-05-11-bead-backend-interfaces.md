@@ -177,22 +177,70 @@ func (op IncrNoChangesCount) Apply(b *Bead) error {
 }
 ```
 
-### Generic vs. optimized backend implementations
+### How `Apply` flows through `*Store` over `RawBackend`
 
-JSONL fallback (used for any unknown op):
+`Backend.Apply` is the contract every backend honors. The implementation question is: in the composition path (`*Store` over `RawBackend`), where does the per-op optimization live?
+
+**`*Store.Apply` is the universal entry point.** It does NOT know about backend-specific optimizations directly. Instead, it does a type-assertion on the wrapped `RawBackend` for an optional `OperationApplier` interface, and delegates if present; otherwise it falls back to the generic load-mutate-save path.
 
 ```go
-func (j *JSONLBackend) Apply(ctx context.Context, id string, op Operation) error {
-    return j.WithLock(func() error {
-        b, err := j.read(ctx, id)
+// OperationApplier is an OPTIONAL contract a RawBackend MAY satisfy to
+// provide per-op optimization. JSONLBackend implements it so heartbeat
+// writes go to the sidecar file instead of churning the corpus.
+// ExternalBackend does not implement it and falls through to the generic
+// path in *Store.Apply.
+//
+// This is the only "hidden capability" interface in the design. It is
+// scoped to the composition layer (*Store + RawBackend) and is not
+// exposed on the public Backend contract — callers always go through
+// Backend.Apply, which transparently uses the fast path when available.
+type OperationApplier interface {
+    Apply(ctx context.Context, id string, op Operation) error
+}
+
+// *Store.Apply — the universal mutation entry on the composition path.
+func (s *Store) Apply(ctx context.Context, id string, op Operation) error {
+    if fast, ok := s.raw.(OperationApplier); ok {
+        return fast.Apply(ctx, id, op)
+    }
+    return s.raw.WithLock(func() error {
+        beads, err := s.raw.ReadAll()
         if err != nil { return err }
-        if err := op.Apply(b); err != nil { return err }   // refused; skip save
-        return j.write(ctx, b)
+        b := findByID(beads, id)
+        if b == nil { return ErrNotFound }
+        if err := op.Apply(b); err != nil { return err }     // refused; skip save
+        return s.raw.WriteAll(beads)
     })
 }
 ```
 
-Axon type-switches for hot ops, falls through for the rest:
+JSONLBackend (implements `OperationApplier`, type-switches for hot ops, falls through for the rest):
+
+```go
+func (j *JSONLBackend) Apply(ctx context.Context, id string, op Operation) error {
+    switch op := op.(type) {
+    case SetClaimHeartbeat:
+        // Sidecar optimization: write to claim_liveness.go's separate file,
+        // do NOT touch beads.jsonl. High-frequency heartbeats are decoupled
+        // from corpus churn.
+        return j.writeClaimSidecar(id, op.At)
+    case ClearClaimHeartbeat:
+        return j.removeClaimSidecar(id)
+    default:
+        // Generic path: load corpus, op.Apply in-memory, save corpus.
+        return j.WithLock(func() error {
+            beads, err := j.ReadAll()
+            if err != nil { return err }
+            b := findByID(beads, id)
+            if b == nil { return ErrNotFound }
+            if err := op.Apply(b); err != nil { return err }
+            return j.WriteAll(beads)
+        })
+    }
+}
+```
+
+Axon (implements `Backend` directly — no `*Store` wrapper — type-switches for hot ops, falls through for the rest):
 
 ```go
 func (a *AxonStore) Apply(ctx context.Context, id string, op Operation) error {
@@ -588,8 +636,9 @@ type RawBackend interface {
    ```go
    var _ Backend = (*Store)(nil)
    ```
-   plus per-sub-interface assertions for `*Store`.
-7. `*Store` gains a new ctx-aware `Apply(ctx, id, op Operation) error` method routed through `WithLock + read + op.Apply + write`. Existing concrete methods (`Heartbeat`, `Claim`, etc.) are internally rewritten to call `Apply` with the appropriate `Operation`. Observable behavior unchanged.
+   plus per-sub-interface assertions for `*Store`. **Routing verification test** `TestStore_HeartbeatRoutesThroughApply`: instrument an in-memory `RawBackend` that records every `Apply(...)` call against it; wrap in `*Store`; call `*Store.Heartbeat(ctx, id)`; assert exactly one recorded `Apply(ctx, id, SetClaimHeartbeat{...})` call. Same pattern for `*Store.Claim`/`Unclaim`/`RequestCancel`/`SetExecutionCooldown`/etc. — each concrete method must land on `*Store.Apply` (which delegates per below).
+
+7. `*Store` gains a new ctx-aware `Apply(ctx, id, op Operation) error` method that **type-asserts the wrapped `RawBackend` to `OperationApplier`** (the optional interface defined in §"How Apply flows through *Store over RawBackend") and delegates if available; otherwise falls back to the generic `WithLock + ReadAll + op.Apply + WriteAll` path. Existing concrete methods (`Heartbeat`, `Claim`, `RequestCancel`, `TransitionLifecycle`, etc.) are internally rewritten to call `*Store.Apply` with the appropriate `Operation` value. Observable behavior unchanged. **JSONLBackend implements `OperationApplier`**: for `SetClaimHeartbeat` and `ClearClaimHeartbeat` it writes only the sidecar file (matching today's `claim_liveness.go` behavior); for all other ops it falls through to its generic load-mutate-save path. Test `TestJSONLBackend_Apply_SetClaimHeartbeat_UsesSidecar`: call `JSONLBackend.Apply(ctx, id, SetClaimHeartbeat{At: t})` and assert the sidecar file is touched while `beads.jsonl` is NOT modified (compare mtime). Combined with AC #6's routing test, the full chain `*Store.Heartbeat → *Store.Apply → JSONLBackend.Apply → sidecar` is verified end-to-end.
 8. `*WatcherHub` satisfies `LifecycleSubscriber`; compile-time assertion added. Signature updated to take `ctx`.
 9. Helper packages under `cli/internal/bead/ops/{claim,cancel,cooldown,lifecycle,queue}/` are created with the helpers and predicates listed above. Each helper has at least one test that exercises it against `*Store`.
 10. `RawBackend` docstring updated with the warning text.
@@ -622,7 +671,9 @@ After this bead:
 |------|------------|
 | `*Store` concrete-method count grows large alongside the new interfaces (69 + new Apply + new helpers) | Acknowledged. The duplication is the cost of backwards compat. New code uses helpers; over time, concrete-method callers can be narrowed (separate, opportunistic work). |
 | `Operation` type-switch in AxonStore drifts from named-op set (forgotten ops fall through to generic path) | A unit test enumerates all `Operation` types in the `bead` package via reflection and asserts AxonStore type-switches on each. New op without optimization = lint warning, not a deploy failure. |
-| Heartbeat sidecar optimization (JSONL writes a separate file today) loses ground under the Apply pattern | `JSONLBackend.Apply` for `SetClaimHeartbeat` detects the op type and writes only the sidecar — same optimization, just driven by the typed op now. Test asserts the sidecar is touched and the main corpus is not. |
+| Heartbeat sidecar optimization (JSONL writes a separate file today) loses ground under the Apply pattern | `JSONLBackend.Apply` (via the optional `OperationApplier` interface) detects `SetClaimHeartbeat` and writes only the sidecar — same optimization, just driven by the typed op now. `*Store.Apply` delegates via type-assertion. Combined tests `TestStore_HeartbeatRoutesThroughApply` (routing) + `TestJSONLBackend_Apply_SetClaimHeartbeat_UsesSidecar` (sidecar) verify end-to-end. |
+| Operation type evolution — adding a field to `SetClaimHeartbeat` later breaks backends type-switching on the old struct shape | Additive field changes are safe: backends type-switch on the struct type, not its field set; new fields are zero-valued when ignored. Removing or renaming fields IS breaking — operation types are public API once first shipped. Treat them like database schema: add freely, remove only with care. Documented in package doc on `cli/internal/bead/operation.go`. |
+| New backend contributor doesn't know what operations to optimize | Canonical catalog lives in `cli/internal/bead/operation.go` package doc; `go doc bead` produces it. Conformance test `TestOperationCatalog_AxonStoreSwitchCoverage` (in the AxonStore bead `ddx-9c5bca8f`) enumerates via reflection and fails when AxonStore is missing a case — informative failure message points to the catalog. |
 | Caller migration to ctx-aware interfaces is large scope | Out of scope for this bead. New code uses helpers. Existing callers continue with concrete `*Store` methods. A follow-up "caller narrowing" bead can happen incrementally. |
 | Helper packages duplicate logic that should live in HELIX (workflow plugin) | Acknowledged. The helpers in `cli/internal/bead/ops/lifecycle/` encode HELIX state-machine rules. A future architectural improvement is to move lifecycle/ to the HELIX plugin and let `cli/internal/bead/ops/` hold only generic-bead workflow helpers. Out of scope here. |
 | Adding `ctx` to interface methods while `*Store` keeps non-ctx signatures means `*Store` doesn't actually satisfy the new interfaces | Approach: add new ctx-aware methods to `*Store` as parallel wrappers (e.g. `*Store.GetCtx(ctx, id)` calls `*Store.Get(id)`). The new sub-interfaces are satisfied by the ctx-aware variants. Existing concrete methods remain for non-ctx callers. ~50 wrapper methods, mechanical. Alternative: rewrite `*Store` methods to take ctx and migrate the ~27 caller files in same bead. Decision: parallel-wrapper approach (mechanical, no caller breakage). |
@@ -630,7 +681,7 @@ After this bead:
 
 ## Open questions
 
-1. **Should `*Store` rewrite the concrete workflow methods to call `Apply(op)` internally, or keep them as-is?** Recommended: rewrite, so the optimization path (sidecar-write-on-heartbeat) lives only in `JSONLBackend.Apply` rather than being duplicated in concrete methods. Saves duplication but is a bigger refactor of `*Store`'s internals.
+1. **`*Store` rewrites concrete workflow methods to call `Apply(op)` internally** (resolved): AC #6 requires the rewrite, plus AC #7 + the routing test verify it. Optimization lives only in `JSONLBackend.Apply` (via `OperationApplier`); concrete methods don't duplicate it.
 2. **`SequentialIDGenerator` — does it belong in production or `testdata`?** Recommended: production code, since it's useful for fixtures and integration tests run from production binaries.
 3. **Subscription failure mode** — when a backend can't subscribe, `SubscribeLifecycle` returns `(nil, nil, ErrUnsupported)`. Confirm callers handle this gracefully (fall back to polling vs. fail).
 4. **Helper package scope** — `cli/internal/bead/ops/lifecycle/` encodes HELIX state-machine rules. Future architectural improvement: move this to the HELIX plugin so generic bead ops stay workflow-agnostic. Acknowledge here; defer.

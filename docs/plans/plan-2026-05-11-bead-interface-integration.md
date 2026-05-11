@@ -52,12 +52,14 @@ Identified side-doors, each with detection + closure + ongoing enforcement.
 
 **Closure (in the gating bead `ddx-c6317784`):**
 
-- **Mandatory: `*Store`'s concrete workflow methods are rewritten to delegate to `Apply` with a named `Operation`.** This is AC #6 of the gating bead. After this, the concrete method and the helper take the SAME path; the optimization fires for both.
+- **Mandatory: `*Store`'s concrete workflow methods are rewritten to delegate to `*Store.Apply` with a named `Operation`.** This is AC #6 of the gating bead, verified by `TestStore_HeartbeatRoutesThroughApply` (and equivalent routing tests for `Claim`/`Unclaim`/`RequestCancel`/`SetExecutionCooldown`/etc.). After this, the concrete method and the helper take the SAME path; the optimization fires for both.
+- `*Store.Apply` type-asserts the wrapped `RawBackend` to the optional `OperationApplier` interface and delegates if available; otherwise generic load-mutate-save. `JSONLBackend` implements `OperationApplier` to host the sidecar-write optimization. See design note §"How Apply flows through *Store over RawBackend."
 - Compile-time assertion: `var _ Backend = (*Store)(nil)` + per-sub-interface assertions confirm `*Store` satisfies the new contract.
 
 **Ongoing enforcement:**
 
-- **Lint rule (new):** `cli/tools/lints/concrete-store-methods` — flags new callers in `cli/` that hold `*bead.Store` as a struct field when a narrower sub-interface would suffice. Warning-level for existing code (allow opportunistic narrowing); error-level for NEW callers added after the gating bead lands. List of grandfathered files maintained in the lint config; new additions require explicit waiver.
+- **Lint rule (new):** `cli/tools/lints/concrete-store-methods` — flags new files in `cli/` that hold `*bead.Store` as a struct field. **Allowlist-only model**: every file currently using `*bead.Store` is grandfathered into the allowlist with a one-line rationale. New files outside the allowlist are errors. No warning/error gradient — either allowlisted (pass) or rejected (fail). Allowlist additions are reviewable git changes requiring explicit rationale.
+- **Allowlist scale acknowledgment:** the initial allowlist will have ~60+ entries (every file currently importing `cli/internal/bead` and holding `*Store`). Maintenance overhead is acknowledged; the trade-off is real defense against caller-side regression. Reviewers screen allowlist additions for whether a narrower sub-interface dependency would work.
 - **Documentation:** CLAUDE.md amendment in `cli/internal/bead/CLAUDE.md` (if exists, else create) explaining the architecture and warning against `*Store` concrete deps for new code.
 
 **Severity:** Medium. Behavior-preserving because the concrete method rewrite is mandatory in the gating bead. The lint is about preventing regression.
@@ -145,7 +147,7 @@ Identified side-doors, each with detection + closure + ongoing enforcement.
 
 - After the follow-up bead lands, lint rule extension: `cli/tools/lints/no-internal-store-construction` flags `bead.NewStore(...)` calls outside the test packages and the configured factory.
 
-**Severity:** High after AxonStore ships, but low today (everything is JSONL). Defer to a dedicated follow-up to avoid bloating the gating bead.
+**Severity:** High after AxonStore ships, but low today (everything is JSONL). **`ddx-900a8d38` (S5 follow-up) is a HARD PREREQUISITE for AxonStore production deployment**, not for AxonStore implementation. AxonStore can be implemented and conformance-tested with the existing WatcherHub; but before any production deployment selects `bead.backend: axon`, the WatcherHub must be wired through the configured backend factory. This sequencing is recorded in `ddx-9c5bca8f`'s open questions and rolls up into the AxonStore production-readiness checklist.
 
 ---
 
@@ -358,6 +360,8 @@ Three layers of integrity: compile-time (Go's type system), test-time (CI tests)
 
 ### Process-time (lint rules and review checklists)
 
+**Status note**: the lint suite is a **HARD PREREQUISITE** for "no side-doors remain" — several side-doors (S2 file I/O, S3 RawBackend, S5+S6 internal `NewStore`, S9 ctx values) have lint rules as their PRIMARY closure. Without the lint suite, those side-doors are open and the integration is incomplete. The lint suite is filed as `ddx-e91a45c0` and runs in parallel with the gating bead. The "Layer 3" framing below describes the architecture; it does not imply the layer is optional.
+
 | Lint rule | Location | Catches |
 |---|---|---|
 | `direct-bead-jsonl-io` | `cli/tools/lints/` | New `os.ReadFile`/`WriteFile` against `beads.jsonl` outside allowlist |
@@ -397,7 +401,7 @@ The "bead-lints" tool is a small wrapper around the 5 analyzers above. Built as 
 
 ### G1. Architecture Decision Record (ADR)
 
-File a new ADR at `docs/helix/02-design/decisions/ADR-<NNN>-bead-backend-interface-architecture.md` capturing:
+File a new ADR at `docs/helix/02-design/adr/ADR-027-bead-backend-interface-architecture.md` (next free number per `ls docs/helix/02-design/adr/`) capturing:
 
 - The decision (11 sub-interfaces + Operation pattern + LifecycleSubscriber + IDGenerator).
 - The forces (LSP, SRP, storage-vs-workflow separation, Axon production-readiness, read-only deployment shape).
@@ -452,10 +456,11 @@ Initial classification of bead-importing files. Done as part of the gating bead'
 | `cli/internal/server/graphql/` | 8 | Hold `*Store` concretely; mix of read + write resolvers | Grandfathered. Read-side resolvers (e.g. `resolver_beads.go`) are good candidates for narrowing to `BeadQueries` + `BeadReader`. Write-side resolvers use full Backend. |
 | `cli/internal/server/` | 3 | `server.go` constructs *Store; `workers.go` uses it | Grandfathered. The `*WatcherHub` constructor stays as-is until S5's follow-up bead. |
 | `cli/internal/escalation/` | 3 | Specific lifecycle + cooldown methods | Grandfathered. Future: opportunistic. |
-| `cli/internal/exec/` | 2 | TBD — check the actual usage | Audit during gating bead implementation. |
-| `cli/internal/bead/axon/` | 2 | Axon GraphQL client | Replaced by new AxonStore in `ddx-9c5bca8f`. |
-| `cli/internal/agent/try/` | 2 | TBD | Audit. |
-| Misc internal/* | 4 | TBD | Audit. |
+| `cli/internal/exec/` | 2 | `bead_runtime.go`, `store.go` — hold `*Store` for exec-definition lookup; use `Create`, `Get`, `List` | Grandfathered. Could narrow to `BeadReader + BeadLifecycle` later. |
+| `cli/internal/bead/axon/` | 2 | Axon GraphQL client subscription transport (generated.go + subscription.go) | Stays; the new AxonStore will be built alongside in `ddx-9c5bca8f`. |
+| `cli/internal/agent/try/` | 2 | `attempt.go`, `conflict_recovery.go` — try-attempt path; uses `Create`, `Get`, `Ready`, `Claim`, lifecycle methods | Grandfathered. Mixed read+write; full Backend appropriate. |
+| `cli/internal/processmetrics/`, `cli/internal/attemptmetrics/`, `cli/internal/agentmetrics/` | 3 | metrics loaders; primarily `ReadAll` for scanning | Grandfathered. Strong narrowing candidates → `BeadReader`. |
+| `cli/internal/escalation/` | 3 | escalation flow; uses cooldown + lifecycle | Grandfathered. Could narrow once helpers exist. |
 
 Detailed audit happens as the gating bead implementation reads each file. Any caller that's doing something unexpected (direct file I/O for entity reads, not on the allowlist) gets surfaced and either added to the allowlist (with rationale) or migrated.
 
@@ -521,7 +526,7 @@ Verification that the integration completed cleanly:
 
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
-| Gating bead lands incomplete; *Store concrete-method rewrite is missed | Low | High (optimization path silently bypassed) | AC #6 of gating bead explicitly requires the rewrite; review verifies. |
+| Gating bead lands incomplete; *Store concrete-method rewrite is missed | Low | High (optimization path silently bypassed) | AC #6 of gating bead explicitly requires the rewrite; **`TestStore_HeartbeatRoutesThroughApply`** (and equivalents for `Claim`/`Unclaim`/`RequestCancel`/`SetExecutionCooldown`) use an instrumented `RawBackend` to record `Apply` calls and assert the concrete method routes through `*Store.Apply`. Verifiable, not "review verifies." |
 | Existing callers break due to context being added to interface methods | Medium | Medium (compilation errors) | Approach: parallel-wrapper. `*Store` keeps non-ctx method signatures; new ctx-aware methods are added alongside. Compile-time assertions enforce both sets coexist. |
 | Lint rules are too aggressive and block legitimate code | Medium | Low (developer friction) | Allowlists with explicit waivers; gradual rollout (warnings first, errors after one release cycle); maintainer review for additions. |
 | `WatcherHub` doesn't get its S5 follow-up done; AxonStore deployment finds it polling a stale JSONL file | Low | High (silent stale-data bug) | The S5 follow-up bead is filed and tracked; the AxonStore acceptance criteria require this to be resolved before AxonStore is declared production-default. |
