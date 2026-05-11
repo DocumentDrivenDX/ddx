@@ -144,6 +144,39 @@ func TestRunHarnessFlagPlumbsToExecute(t *testing.T) {
 	assert.Equal(t, "claude", capturedReq.Harness, "--harness must plumb through to ServiceExecuteRequest.Harness")
 }
 
+func TestAgentRunHarnessOnlyUnderSpecifiedFailsFast(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	executeCalled := false
+	installStubService(t, &stubAgentService{
+		execute: func(_ agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+			executeCalled = true
+			return nil, fmt.Errorf("Execute should not be called")
+		},
+	})
+
+	dir := minimalProjectDir(t)
+	root := NewCommandFactory(dir).NewRootCommand()
+	_, err := executeCommand(
+		root,
+		"agent",
+		"run",
+		"--harness",
+		"codex",
+		"--text",
+		"hi",
+		"--timeout",
+		"5s",
+	)
+
+	require.Error(t, err, "codex harness-only agent run should fail fast before routing")
+	assert.Contains(t, err.Error(), "agent run --harness codex is under-specified", "fail message should provide fast, actionable guidance")
+	assert.Contains(t, err.Error(), "--model")
+	assert.Contains(t, err.Error(), "--profile")
+	assert.Contains(t, err.Error(), "ddx run --harness codex --min-power")
+	assert.False(t, executeCalled, "harness-only codex must fail before service dispatch")
+}
+
 // AC #2: ddx agent run --model opus-4.7 forwards Model to Execute.
 func TestRunModelFlagPlumbsToExecute(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")

@@ -53,7 +53,7 @@ Examples:
   ddx agent run --profile smart --prompt task.md
   ddx agent run --profile smart --model gpt-5.4   # explicit override; avoid by default
   ddx agent run --harness agent --prompt task.md
-  ddx agent run --harness codex --prompt task.md
+  ddx run --harness codex --min-power 10 --prompt task.md
   ddx agent run --quorum majority --harnesses codex,claude --prompt task.md
   ddx agent list
   ddx agent capabilities agent
@@ -309,6 +309,9 @@ func (f *CommandFactory) newAgentRunCommand() *cobra.Command {
 				overrides.Timeout = &timeout
 			}
 			rcfg, _ := config.LoadAndResolve(f.WorkingDir, overrides)
+			if strings.EqualFold(strings.TrimSpace(harness), "codex") && rcfg.Model() == "" && rcfg.Profile() == "" {
+				return fmt.Errorf("agent run --harness codex is under-specified: supply --model or --profile, or use `ddx run --harness codex --min-power <n>` for Fizeau power-based routing")
+			}
 			if err := agent.ValidateEffortForRunViaService(cmd.Context(), f.WorkingDir, rcfg.Profile(), rcfg.Effort()); err != nil {
 				return err
 			}
@@ -1507,6 +1510,13 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	// ADR-022: queue work always runs inline. The legacy --local flag is
 	// a deprecated no-op and the server-submit path is removed from this CLI
 	// surface — server-spawned workers exec `ddx work` directly.
+	noRoutingFlags := spec.Harness == "" && spec.Model == "" && spec.Provider == "" &&
+		spec.ModelRef == "" && spec.Profile == "" && spec.MinPower == 0 &&
+		spec.MaxPower == 0 && !cmd.Flags().Changed("harness") &&
+		!cmd.Flags().Changed("model") && !cmd.Flags().Changed("provider") &&
+		!cmd.Flags().Changed("model-ref") && !cmd.Flags().Changed("profile") &&
+		!cmd.Flags().Changed("min-power") && !cmd.Flags().Changed("max-power")
+	autoInferTier := noRoutingFlags && !projectHasRoutingConfig(projectRoot)
 
 	// Pre-flight: validate harness availability and model compatibility
 	// before claiming any beads. This surfaces errors like "claude binary
@@ -1750,7 +1760,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	loadLadder := func() escalationFloorFinder {
 		ladderOnce.Do(func() {
 			ladder = tierescalation.NewLadder(nil)
-			svc, svcErr := agent.NewServiceFromWorkDir(projectRoot)
+			svc, svcErr := agent.ResolveServiceFromWorkDir(projectRoot)
 			if svcErr != nil {
 				return
 			}
@@ -1780,7 +1790,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
 			}
-			initialMinPower, unavailableReport, unavailable := investigationRetryInitialMinPower(targetBead, rcfg.MinPower(), spec.MaxPower, loadLadder())
+			initialMinPower, unavailableReport, unavailable := investigationRetryInitialMinPowerWithInference(targetBead, rcfg.MinPower(), spec.MaxPower, loadLadder(), autoInferTier)
 			if unavailable {
 				return unavailableReport, nil
 			}

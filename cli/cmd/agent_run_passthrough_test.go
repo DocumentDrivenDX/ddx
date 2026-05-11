@@ -122,8 +122,9 @@ func setupWorkIntakeFixture(t *testing.T) string {
 	store := bead.NewStore(filepath.Join(dir, ".ddx"))
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
-		ID:    "ddx-intake-test",
-		Title: "work intake wiring test bead",
+		ID:        "ddx-intake-test",
+		Title:     "work intake wiring test bead",
+		IssueType: "docs",
 	}))
 
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))

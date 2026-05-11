@@ -60,6 +60,10 @@ func highestViableEscalationFloor(l escalationFloorFinder) (int, error) {
 }
 
 func investigationRetryInitialMinPower(b *bead.Bead, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, agent.ExecuteBeadReport, bool) {
+	return investigationRetryInitialMinPowerWithInference(b, baseMinPower, maxPower, ladder, false)
+}
+
+func investigationRetryInitialMinPowerWithInference(b *bead.Bead, baseMinPower, maxPower int, ladder escalationFloorFinder, inferZeroConfig bool) (int, agent.ExecuteBeadReport, bool) {
 	// Numeric hint: written by the no-changes smart-retry path one step at a time.
 	if floor, ok := numericTierFloorHint(b); ok {
 		if baseMinPower > floor {
@@ -89,7 +93,10 @@ func investigationRetryInitialMinPower(b *bead.Bead, baseMinPower, maxPower int,
 	// raise the floor above the label but cannot lower it below.
 	if b != nil {
 		if tier, ok := policyescalation.ParseBeadTierHintLabel(b.Labels); ok {
-			labelFloor := resolveTierFloor(tier, ladder)
+			labelFloor, hasFloor := resolveTierFloor(tier, ladder)
+			if !hasFloor {
+				labelFloor = baseMinPower
+			}
 			floor := labelFloor
 			if baseMinPower > floor {
 				floor = baseMinPower
@@ -102,6 +109,9 @@ func investigationRetryInitialMinPower(b *bead.Bead, baseMinPower, maxPower int,
 			fmt.Fprintf(os.Stderr, "ddx: bead %s has unrecognized tier:hint label; using default MinPower\n", b.ID)
 		}
 	}
+	if inferZeroConfig {
+		return zeroConfigInferredMinPower(b, baseMinPower, maxPower, ladder)
+	}
 	return baseMinPower, agent.ExecuteBeadReport{}, false
 }
 
@@ -110,27 +120,54 @@ func investigationRetryInitialMinPower(b *bead.Bead, baseMinPower, maxPower int,
 //   - TierSmart    → highest viable floor (jump straight to the top tier)
 //   - TierStandard → second viable floor (skip the cheapest tier)
 //   - TierCheap    → 0 (unconstrained; same as having no label)
-func resolveTierFloor(tier policyescalation.ModelTier, ladder escalationFloorFinder) int {
+func resolveTierFloor(tier policyescalation.ModelTier, ladder escalationFloorFinder) (int, bool) {
 	switch tier {
 	case policyescalation.TierSmart:
 		floor, err := highestViableEscalationFloor(ladder)
 		if err != nil {
-			return 0
+			return 0, false
 		}
-		return floor
+		return floor, true
 	case policyescalation.TierStandard:
 		first, err := nextEscalationFloor(ladder, 0)
 		if err != nil {
-			return 0
+			return 0, false
 		}
 		second, err := nextEscalationFloor(ladder, first)
 		if err != nil {
-			return first
+			return first, true
 		}
-		return second
+		return second, true
 	default: // TierCheap or unrecognized
-		return 0
+		return 0, false
 	}
+}
+
+// zeroConfigInferredMinPower applies inferred zero-config tier floors to
+// operator-supplied floor constraints before dispatch.
+//
+//   - For TierCheap the floor remains unconstrained (0), matching the
+//     existing "cheap-by-default" behavior.
+//   - For TierStandard and TierSmart, this maps to the second and last viable
+//     ladder floors respectively via resolveTierFloor.
+//   - A non-zero explicit base floor from a flag or config still wins when it
+//     is above the inferred floor, preserving operator control.
+func zeroConfigInferredMinPower(b *bead.Bead, baseMinPower, maxPower int, ladder escalationFloorFinder) (int, agent.ExecuteBeadReport, bool) {
+	tier := policyescalation.InferTier(b)
+	if tier == "" {
+		return baseMinPower, agent.ExecuteBeadReport{}, false
+	}
+	tierFloor, hasTierFloor := resolveTierFloor(tier, ladder)
+	if !hasTierFloor && tier != policyescalation.TierCheap {
+		return baseMinPower, smartRouteUnavailableReport(b, baseMinPower, maxPower, fmt.Errorf("no viable routing floor for inferred tier %s", tier)), true
+	}
+	if tierFloor > baseMinPower {
+		if maxPower > 0 && tierFloor >= maxPower {
+			return baseMinPower, smartRouteUnavailableReport(b, tierFloor, maxPower, nil), true
+		}
+		return tierFloor, agent.ExecuteBeadReport{}, false
+	}
+	return baseMinPower, agent.ExecuteBeadReport{}, false
 }
 
 // numericTierFloorHint returns the numeric MinPower floor stored by the

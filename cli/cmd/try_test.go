@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -287,6 +289,47 @@ func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 	assert.Equal(t, "anthropic", body["actual_provider"])
 	assert.Equal(t, "claude-sonnet-4-6", body["actual_model"])
 	assert.Equal(t, float64(91), body["actual_power"])
+}
+
+func TestTryZeroConfigInferredTierSetsMinPower(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.listModels = []agentlib.ModelInfo{
+		{ID: "cheap-model", Power: 30, Available: true, AutoRoutable: true},
+		{ID: "standard-model", Power: 70, Available: true, AutoRoutable: true},
+		{ID: "smart-model", Power: 90, Available: true, AutoRoutable: true},
+	}
+
+	dir := setupWorkIntakeFixture(t)
+	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:        "ddx-zero-config-try-tier-standard",
+		Title:     "Try with inferred standard routing tier",
+		IssueType: "bug",
+	}))
+
+	factory := NewCommandFactory(dir)
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
+	root := factory.NewRootCommand()
+	_, _ = executeCommand(
+		root,
+		"try",
+		"ddx-zero-config-try-tier-standard",
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+
+	stub.mu.Lock()
+	executionSeen := stub.executionSeen
+	executionReq := stub.executionReq
+	stub.mu.Unlock()
+	require.True(t, executionSeen, "ddx try must reach the implementation dispatch")
+	assert.Equal(
+		t,
+		70,
+		executionReq.MinPower,
+		"inferred standard tier should map to the second viable ladder floor",
+	)
 }
 
 // TestTryInterrupt_InFlightAttemptUnclaimsTarget verifies that cancelling

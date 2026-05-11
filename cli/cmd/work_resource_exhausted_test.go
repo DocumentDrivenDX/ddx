@@ -108,16 +108,18 @@ library:
 	require.NoError(t, err, string(out))
 
 	seedExecuteBead(t, projectRoot, &bead.Bead{
-		ID:       "resource-bead-1",
-		Title:    "First ready bead",
-		Status:   bead.StatusOpen,
-		Priority: 0,
+		ID:        "resource-bead-1",
+		Title:     "First ready bead",
+		Status:    bead.StatusOpen,
+		Priority:  0,
+		IssueType: "docs",
 	})
 	seedExecuteBead(t, projectRoot, &bead.Bead{
-		ID:       "resource-bead-2",
-		Title:    "Second ready bead",
-		Status:   bead.StatusOpen,
-		Priority: 0,
+		ID:        "resource-bead-2",
+		Title:     "Second ready bead",
+		Status:    bead.StatusOpen,
+		Priority:  0,
+		IssueType: "docs",
 	})
 
 	checker := &workResourceExhaustedChecker{projectRoot: projectRoot}
@@ -180,16 +182,18 @@ library:
 	require.NoError(t, err, string(out))
 
 	seedExecuteBead(t, projectRoot, &bead.Bead{
-		ID:       "resource-e2e-first",
-		Title:    "First ready bead",
-		Status:   bead.StatusOpen,
-		Priority: 0,
+		ID:        "resource-e2e-first",
+		Title:     "First ready bead",
+		Status:    bead.StatusOpen,
+		Priority:  0,
+		IssueType: "docs",
 	})
 	seedExecuteBead(t, projectRoot, &bead.Bead{
-		ID:       "resource-e2e-second",
-		Title:    "Second ready bead",
-		Status:   bead.StatusOpen,
-		Priority: 1,
+		ID:        "resource-e2e-second",
+		Title:     "Second ready bead",
+		Status:    bead.StatusOpen,
+		Priority:  1,
+		IssueType: "docs",
 	})
 
 	checker := &workResourceExhaustedChecker{projectRoot: projectRoot, failOn: 3}

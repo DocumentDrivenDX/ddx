@@ -8,9 +8,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
+	agentlib "github.com/easel/fizeau"
+
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	tierescalation "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -221,8 +225,28 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 
 	// Determine whether zero-config auto-route applies (same logic as runWork).
 	noRoutingFlags := harness == "" && model == "" && provider == "" && modelRef == "" &&
-		!cmd.Flags().Changed("profile")
+		!cmd.Flags().Changed("profile") && !cmd.Flags().Changed("min-power") &&
+		!cmd.Flags().Changed("max-power")
 	autoInferTier := noRoutingFlags && !projectHasRoutingConfig(projectRoot)
+	var ladderOnce sync.Once
+	var ladder escalationFloorFinder
+	loadLadder := func() escalationFloorFinder {
+		ladderOnce.Do(func() {
+			ladder = tierescalation.NewLadder(nil)
+			svc, svcErr := agent.ResolveServiceFromWorkDir(projectRoot)
+			if svcErr != nil {
+				return
+			}
+			modelCtx, cancel := context.WithTimeout(cmd.Context(), 2*time.Second)
+			defer cancel()
+			models, listErr := svc.ListModels(modelCtx, agentlib.ModelFilter{})
+			if listErr != nil {
+				return
+			}
+			ladder = tierescalation.NewLadder(models)
+		})
+		return ladder
+	}
 	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
 
 	// Build the executor: either the test override or the real single-tier executor.
@@ -232,11 +256,20 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	} else {
 		executor = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, execBeadID string) (agent.ExecuteBeadReport, error) {
 			var inferredTier escalation.ModelTier
+			requestMinPower := minPower
 			if autoInferTier {
+				var targetBead *bead.Bead
 				if b, getErr := store.Get(execBeadID); getErr == nil {
-					inferredTier = escalation.InferTier(b)
+					targetBead = b
+					inferredTier = escalation.InferTier(targetBead)
 				} else {
 					inferredTier = escalation.TierCheap
+				}
+				var unavailableReport agent.ExecuteBeadReport
+				var unavailable bool
+				requestMinPower, unavailableReport, unavailable = investigationRetryInitialMinPowerWithInference(targetBead, requestMinPower, maxPower, loadLadder(), true)
+				if unavailable {
+					return unavailableReport, nil
 				}
 			}
 
@@ -247,7 +280,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				ModelRef:          modelRef,
 				Profile:           profile,
 				Effort:            effort,
-				MinPower:          minPower,
+				MinPower:          requestMinPower,
 				MaxPower:          maxPower,
 				OpaquePassthrough: true, // ddx try treats flags as opaque passthrough
 			}
