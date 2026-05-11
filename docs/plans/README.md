@@ -21,3 +21,4 @@ for an existing feature).
 | 2026-05-10 | [Axon as sole backend / GraphQL collapse](plan-2026-05-10-axon-only-architecture.md) | **Rejected** — keep ddx-server GraphQL + BlobStore separate |
 | 2026-05-10 | [MCP architecture: DDx-server-MCP into Databricks Assistant](plan-2026-05-10-mcp-architecture.md) | Verdict reached: ddx-server-MCP only; gap list captured |
 | 2026-05-10 | [Read-only deployment: minimum storage surface](plan-2026-05-10-read-only-deployment.md) | Sequencing identified: BlobStore → Axon EntityStore → `attempts` collection → ConfigStore |
+| 2026-05-11 | [Website evolution: design system, auto-gen, Hugo renderer, Pages](plan-2026-05-11-website-evolution.md) | Draft — user review required before bead breakdown |
