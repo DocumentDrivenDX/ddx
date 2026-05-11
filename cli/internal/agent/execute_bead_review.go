@@ -1050,6 +1050,7 @@ func (r *DefaultBeadReviewer) Review(ctx context.Context, projectRoot string, ca
 	acCheckJSON := ""
 	if candidate.Report.AttemptID != "" && candidate.WorktreePath != "" {
 		acCheckPath := filepath.Join(candidate.WorktreePath, ExecuteBeadArtifactDir, candidate.Report.AttemptID, "ac-check.json")
+		// evidence:allow-unbounded — ac-check.json is a small structured file (~1-2 kB)
 		if data, readErr := os.ReadFile(acCheckPath); readErr == nil {
 			acCheckJSON = string(data)
 		}
