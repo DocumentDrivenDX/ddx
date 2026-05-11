@@ -54,6 +54,11 @@ type AttemptRow struct {
 	LadderMinPowerInitial int `json:"ladder_min_power_initial,omitempty"`
 	LadderMinPowerFinal   int `json:"ladder_min_power_final,omitempty"`
 	LadderStepsTaken      int `json:"ladder_steps_taken,omitempty"`
+
+	// ReplayOf, when non-empty, identifies the original attempt_id this row
+	// was produced from. Set by `ddx bead replay` so the analyze CLI can
+	// group replays with their source attempt.
+	ReplayOf string `json:"replay_of,omitempty"`
 }
 
 // BeadAttemptEvents is the raw input for BackfillFromEvents: a bead ID, its

@@ -71,6 +71,8 @@ Examples:
 	cmd.AddCommand(f.newBeadArchiveCommand())
 	cmd.AddCommand(f.newBeadAcCheckCommand())
 	cmd.AddCommand(f.newBeadLintCommand())
+	cmd.AddCommand(f.newBeadReplayCommand())
+	cmd.AddCommand(f.newBeadReplayBenchCommand())
 
 	return cmd
 }
