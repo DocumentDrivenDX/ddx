@@ -21,7 +21,7 @@ import (
 // worker MUST claim the P0 bead before any P1 or P2 bead.
 //
 // Investigation note (recorded in
-// .ddx/executions/<run-id>/picker-priority-bug.md): the picker code path
+// .ddx/executions/<attempt-id>/picker-priority-bug.md): the picker code path
 // (ExecuteBeadWorker.nextCandidate -> Store.ReadyExecution ->
 // readyFiltered(true) -> sortBeadsForQueue) is correct by construction —
 // sortBeadsForQueue at cli/internal/bead/store.go:1473 sorts by

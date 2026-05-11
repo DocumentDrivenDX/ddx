@@ -8,7 +8,7 @@ import (
 // TestExecuteBeadInstructions_ReportsGoUnderAttemptDir covers ddx-d532992f:
 // both the claude-variant and agent-variant execute-bead prompts must steer
 // investigation/report outputs into the per-attempt evidence directory
-// (.ddx/executions/<run-id>/, surfaced as the {{.AttemptDir}} template slot)
+// (.ddx/executions/<attempt-id>/, surfaced as the {{.AttemptDir}} template slot)
 // and explicitly forbid writing them to /tmp. A previous attempt (B15a)
 // wrote its report to /tmp/feat-011-status.md, which the post-merge reviewer
 // could not see and so flagged BLOCK.
@@ -39,7 +39,7 @@ func TestExecuteBeadInstructions_ReportsGoUnderAttemptDir(t *testing.T) {
 // TestExecuteBeadInstructions_AttemptDirSubstitutionForReports verifies that
 // the {{.AttemptDir}} placeholder used by the new investigation/report
 // guidance is rewritten by executeBeadInstructionsText's caller to the
-// concrete .ddx/executions/<run-id>/ path, so agents see a real in-repo
+// concrete .ddx/executions/<attempt-id>/ path, so agents see a real in-repo
 // path, not the literal template token.
 func TestExecuteBeadInstructions_AttemptDirSubstitutionForReports(t *testing.T) {
 	const fakeAttemptDir = ".ddx/executions/20260502T030443-test/"
