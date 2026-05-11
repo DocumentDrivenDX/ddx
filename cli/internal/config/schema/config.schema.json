@@ -32,7 +32,7 @@
         },
         "repository": {
           "type": "object",
-          "description": "Repository configuration for git subtree synchronization",
+          "description": "Library remote repository (URL + branch) for resource discovery",
           "properties": {
             "url": {
               "type": "string",

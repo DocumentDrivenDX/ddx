@@ -124,7 +124,7 @@ DDx is a toolkit for AI-assisted development that helps you:
 • Share templates, prompts, and patterns across projects
 • Maintain consistent development practices
 • Integrate AI tooling seamlessly
-• Contribute improvements back to the community
+• Install personas, prompts, and templates from the library
 
 Get started:
   ddx init          Initialize DDx in your project

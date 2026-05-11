@@ -815,7 +815,7 @@ Your reviews prioritize performance characteristics and efficient resource utili
 				assert.Contains(t, personaStr, "Performance Principles")
 
 				// TODO: When contribution workflow is implemented, verify:
-				// - ddx contribute command can package the persona
+				// - persona can be packaged for upstream submission
 				// - PR can be created to main repository
 				// - Community can discover and use the persona
 			},

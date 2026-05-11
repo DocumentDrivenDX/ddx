@@ -27,14 +27,13 @@ sanctioned path: they can fork the library file and push it upstream
 Personas can live in two places:
 
 - **Library personas** — `<library>/personas/*.md`. Shipped with DDx, shared
-  across projects, pulled via `ddx update`, contributed upstream via
-  `ddx contribute`. **Read-only in UI and API.** Edits are refused with a
+  across projects, installed via `ddx install`. **Read-only in UI and API.** Edits are refused with a
   typed error; the only mutation affecting library content is `fork`, which
   copies the file into the project.
 
 - **Project-local personas** — `.ddx/personas/*.md` under the project root.
   Live with the project in its VCS. Fully editable via UI, GraphQL, and CLI.
-  Never pushed upstream by `ddx contribute`.
+  Not pushed upstream automatically.
 
 ### Override rule
 
@@ -49,7 +48,7 @@ to the project-local file.
 
 - Multi-project / org-level persona sharing — out of scope.
 - Rich in-browser markdown editor — a plain `<textarea>` is enough for v1.
-- Upstreaming project personas — still happens via `ddx contribute`.
+- Upstreaming project personas — out of scope for this design.
 - Changing how personas get injected into agent prompts — server read path
   is unchanged.
 

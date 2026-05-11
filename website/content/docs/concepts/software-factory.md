@@ -83,7 +83,7 @@ principle is the direct expression of this shift.
 
 ### What DDx specifically adds
 
-On top of that lineage, DDx contributes a concrete operating model:
+On top of that lineage, DDx provides a concrete operating model:
 
 - **Bounded-context execution.** Quality decays as a single context
   window fills, well before the hard token limit. DDx runs every bead

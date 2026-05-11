@@ -19,20 +19,20 @@ ddx:
 
 ## Overview
 
-DDx needs to discover, install, and manage resources from an online library. The library is a git repository (`ddx-library`) containing personas, prompts, templates, patterns, MCP configurations, and **package descriptors** for workflow tools like HELIX. DDx fetches resources on demand — no git subtree, no full repo clone.
+DDx needs to discover, install, and manage resources from an online library. The library is a git repository (`ddx-library`) containing personas, prompts, templates, patterns, MCP configurations, and **package descriptors** for workflow tools like HELIX. DDx fetches resources on demand — no full repo clone needed.
 
-This replaces the current git-subtree-based sync model with a lighter, more practical approach: DDx downloads what you ask for, caches it locally, and keeps track of what's installed.
+This is a lightweight, practical approach: DDx downloads what you ask for, caches it locally, and keeps track of what's installed.
 
 ## Problem Statement
 
 **Current situation:**
 - `ddx-library` exists as a git repo but DDx's sync mechanism (`ddx update`) is a stub
-- Git subtree is complex, fragile, and overkill for distributing personas and templates
+- There is no lightweight way to distribute personas and templates on demand
 - HELIX publishes skills independently (global home paths) with no DDx integration
 - External check runners expect plugins at `~/.cache/ddx/library/plugins/` but nothing populates this path
 - There's no way to discover what's available or install a specific resource
 
-**Desired outcome:** `ddx install helix` fetches and installs HELIX skills. `ddx install persona/strict-code-reviewer` fetches one persona. `ddx search testing` finds testing-related resources. Simple, practical, no git subtree.
+**Desired outcome:** `ddx install helix` fetches and installs HELIX skills. `ddx install persona/strict-code-reviewer` fetches one persona. `ddx search testing` finds testing-related resources. Simple and practical.
 
 ## Architecture
 
@@ -170,7 +170,7 @@ ddx install persona/strict-code-reviewer
 
 ### Non-Functional
 
-- **No git subtree** — fetch individual files or shallow clones, not full repo history
+- **On-demand fetch** — fetch individual files or shallow clones, not full repo history
 - **Offline-safe** — work from cache when offline; warn but don't fail
 - **Idempotent** — running `ddx install helix` twice is safe
 - **Fast** — individual resource install <5s on broadband
@@ -208,15 +208,6 @@ ddx uninstall <name>                # Remove an installed resource
 **Acceptance Criteria:**
 - Given I run `ddx install persona/strict-code-reviewer`, then the persona file is copied to `.ddx/library/personas/`
 - Given I run `ddx installed`, then I see `persona/strict-code-reviewer` with version and install date
-
-## Migration from Git Subtree
-
-The current `ddx init` creates a git subtree for `.ddx/library/`. This should be replaced:
-
-1. **New projects:** `ddx init` creates `.ddx/library/` as a local directory (no subtree)
-2. **Library population:** `ddx install` fetches resources on demand
-3. **Existing projects:** The git subtree continues to work but is no longer the recommended flow
-4. **`ddx contribute`:** Remains as a way to push changes back (creates a PR against ddx-library)
 
 ## Dependencies
 

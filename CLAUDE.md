@@ -86,18 +86,17 @@ Frontend build output is embedded into the Go binary via `//go:embed`.
 
 ### Project Structure Navigation
 
-The CLI uses git subtree for managing the relationship between individual projects and the master DDx repository. The `.ddx.yml` configuration file defines:
+The `.ddx.yml` configuration file defines:
 - Repository URL and branch
 - Included resources (prompts, scripts, templates, patterns)
 - Template variables and overrides
-- Git subtree settings
 
 ### Key Patterns
 
 1. **Command Structure**: Each CLI command is implemented as a separate file in `cli/cmd/`
 2. **Configuration Management**: Uses Viper for config file handling with YAML format
 3. **Template Processing**: Variable substitution system for customizing templates
-4. **Git Integration**: Built on git subtree for reliable version control and contribution workflows
+4. **Library Registry**: Resources are fetched on demand via the library-registry fetch model (FEAT-009)
 5. **Cross-Platform Support**: Makefile supports building for multiple platforms (macOS, Linux, Windows)
 
 ## Architectural Principles
@@ -177,7 +176,6 @@ The CLI follows a noun-verb command structure for clarity and consistency:
 - `ddx doctor` - Check installation health and diagnose issues
 - `ddx upgrade` - Upgrade DDx binary to latest release version
 - `ddx update` - Update toolkit resources from master repository
-- `ddx contribute` - Share improvements back to community
 - `ddx status` - Show version and sync status
 
 **Bead Tracker:**

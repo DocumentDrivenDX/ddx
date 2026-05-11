@@ -23,7 +23,6 @@ ddx init              # Initialize DDx in a project
 ddx doctor            # Check installation health and diagnose issues
 ddx upgrade           # Upgrade DDx binary to latest release version
 ddx update            # Update toolkit resources from master repository
-ddx contribute        # Share improvements back to community
 ddx status            # Show version and sync status
 ```
 
