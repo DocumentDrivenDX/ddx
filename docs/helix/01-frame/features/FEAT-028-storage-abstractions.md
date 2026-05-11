@@ -44,13 +44,15 @@ FEAT-028 defines **five storage abstractions** that cover everything ddx persist
 
 | # | Interface | Owns | Today's call sites | First non-FS backend |
 |---|-----------|------|--------------------|----------------------|
-| 1 | **EntityStore** | beads, bead events, run/attempt records, plugin-dispatches, worker registrations | `cli/internal/bead/` (already abstracted as `Backend`); `cli/internal/agent/` runs+dispatches; `cli/internal/server/` workers | Axon-on-Lakebase |
-| 2 | **BlobStore** | execution evidence, externalized bead attachments, library packages, large agent outputs | `cli/internal/bead/attachments.go`, `cli/internal/agent/executions_mirror.go`, `cli/internal/registry/`, `cli/internal/evidence/` | UC Volumes |
-| 3 | **StreamStore** | agent session logs, metrics streams, server logs | `cli/internal/agentmetrics/`, `cli/internal/processmetrics/`, `cli/internal/attemptmetrics/`, `.ddx/agent-logs/` writers | Databricks Jobs / Volumes append targets |
+| 1 | **EntityStore** | beads, bead events, run/attempt records, plugin-dispatches | `cli/internal/bead/` (already abstracted as `Backend`); `cli/internal/agent/` runs+dispatches | Axon-on-Lakebase |
+| 2 | **BlobStore** | execution evidence (per-attempt files), externalized bead attachments, library packages, large agent outputs | `cli/internal/bead/attachments.go`, `.ddx/executions/<run-id>/` writers in `cli/internal/agent/execute_bead*.go`, `cli/internal/registry/`, `cli/internal/evidence/` | UC Volumes |
+| 3 | **StreamStore** | agent session logs, metrics streams, server logs, **append-only mirror writers** (`executions_mirror.go`, `routing_metrics.go`) | `cli/internal/agentmetrics/`, `cli/internal/processmetrics/`, `cli/internal/attemptmetrics/`, `cli/internal/agent/executions_mirror.go`, `.ddx/agent-logs/` writers | Databricks Jobs / Volumes append targets |
 | 4 | **ConfigStore** | project config, user config, persona bindings, harness routing | `cli/internal/config/` | Workspace settings (per-tenant) |
-| 5 | **(no interface — keep ephemeral)** | worker working trees, execution sandboxes, in-flight git worktrees | `cli/internal/agent/execute_bead*`, server worker spawn | n/a — stays local FS, never persisted to server |
+| 5 | **(no interface — local FS / in-memory only)** | worker working trees, execution sandboxes, in-flight git worktrees, **worker disk projections** (`.ddx/workers/<id>/{spec,status}.json`, `worker.log`, `worker-events.jsonl`) | `cli/internal/agent/execute_bead*`, `cli/internal/server/workers.go` | n/a — authoritative state lives in server-process memory; on-disk projections are diagnostic readback for other clients only |
 
-The fifth row is explicit: ephemeral process state does not get an abstraction. It stays where it is, on local disk, and the server-deployment story handles it by running execution out-of-process (workstation or Databricks Job) rather than inside the server.
+**On row 5 (workers):** the server runs workers as in-process goroutines (`cli/internal/server/workers.go:191`); authoritative worker state lives in `workerHandle` structs in memory. The `.ddx/workers/<id>/` directory is **diagnostic projection** of that in-memory state for other clients to read; the server never reads it back into its own state machine. Worker disk projections therefore stay local-FS — they are ephemeral with the process and meaningless on a different host.
+
+**On row 5 (execution out-of-process):** the spec presumes a future model in which `ddx-server` deployed as a Databricks App dispatches `ExecuteBead` work to a separate Databricks Job rather than running it as an in-process goroutine. **That model does not exist today** — today's server invokes `agent.ExecuteBeadWithConfig` in-process at `cli/internal/server/workers.go:748,783`. Until that out-of-process execution feature lands (tracked separately, blocks Databricks-App deployment of execution), in-process worktrees under `.ddx/executions/<id>/work/` survive into any server deployment. This is acceptable for single-machine `ddx-server` (today's deployment) but is a hard blocker for Databricks-App execution and must be resolved before that ships. FEAT-028 does not introduce or fix this — it only declines to abstract the worktrees, leaving the question for the deployment-model feature.
 
 ## Scope
 
@@ -59,8 +61,8 @@ The fifth row is explicit: ephemeral process state does not get an abstraction. 
 - **Define `BlobStore` interface** in a new `cli/internal/blob/` package. Methods, error semantics, naming/key conventions, content-addressed vs. caller-keyed semantics — all decided in this spec.
 - **Implement `LocalFSBlob`** as the default backend, mirroring current on-disk layouts under `.ddx/attachments/`, `.ddx/executions/`, `.ddx/plugins/`. Behavior-equivalent to today's direct writes.
 - **Migrate two call-site clusters behind `BlobStore`:**
-  - Externalized bead attachments (`cli/internal/bead/attachments.go`).
-  - Execution evidence (`cli/internal/agent/executions_mirror.go` and the `.ddx/executions/<run-id>/` write paths inside `agent_execute_bead.go`).
+  - Externalized bead attachments (`cli/internal/bead/attachments.go`) — write-once sidecars, fits BlobStore.
+  - Per-attempt execution evidence files written under `.ddx/executions/<run-id>/` by `cli/internal/agent/execute_bead*.go` (e.g. `manifest.json`, `result.json`, `prompt.md`, captured agent output) — write-once-per-attempt, fits BlobStore. **`cli/internal/agent/executions_mirror.go` is explicitly NOT in v1**: its primary writes (`mirror.log`, `mirror-index.jsonl`) are append-only and belong to StreamStore (deferred). It stays as direct FS calls until StreamStore lands.
 - **Add a `MemoryBlob` implementation** for tests, replacing the per-test `t.TempDir` blob write/read fixtures where they exist.
 - **Document the five abstractions** in this spec as the canonical taxonomy. Subsequent state-storage features reference this spec rather than inventing their own categorization.
 
@@ -78,6 +80,24 @@ The fifth row is explicit: ephemeral process state does not get an abstraction. 
 
 - This spec does not change runtime behavior for any existing user. Local-FS layouts and lifetimes are preserved bit-for-bit by `LocalFSBlob`.
 - This spec does not introduce new commands or surface area on the CLI.
+
+### Explicit deferred-keys list
+
+`BlobStore` is **not** the storage path for the following keys/paths in v1. They stay as direct FS calls, are written by the existing packages, and migrate later (each behind its own bead, when its call site warrants it):
+
+- `attachments/` and `executions/<run-id>/<file>` (per-attempt evidence files) — **migrating in v1** (above).
+- `agent-logs/` (`*.jsonl` per session) — StreamStore-shaped, deferred.
+- `executions/mirror-index.jsonl`, `executions/<run-id>/mirror.log` — StreamStore-shaped, deferred.
+- `metrics/`, `processmetrics/`, `attemptmetrics/` writers — StreamStore-shaped, deferred.
+- `plugins/`, `skills/`, `library/` (registry-installed content) — needs registry-aware design, deferred.
+- `workers/<id>/` — diagnostic projection, no abstraction (row 5 above).
+- `server/state.json`, `server/tls/`, `lifecycle-schema.json` — server-internal, no abstraction.
+- `backups/`, `beads.backup.jsonl` — bead-store maintenance artifacts, follow EntityStore not BlobStore.
+- `axon/` (Axon snapshot files when JSONL fallback is in effect) — Axon-internal, follows EntityStore.
+- `run-state/`, `run-state.json` — coordination state, EntityStore-shaped, deferred.
+- `plugin-dispatches/` — EntityStore-shaped, deferred.
+
+If a v1 migration appears to require touching any path on this list, that is a sign the migration scope has crept and needs to stop, not that the deferral list is wrong.
 
 ## BlobStore Interface (v1)
 
@@ -104,8 +124,17 @@ type Key string
 // Implementations must be safe for concurrent use.
 type Store interface {
     // Put writes the entire blob at key, overwriting any previous value.
-    // Implementations should make Put atomic-on-success — partial writes
-    // must not be observable to a concurrent Get.
+    // Put MUST be both atomic-on-success and durable-on-return:
+    //   - Atomic: a concurrent Get either sees the full prior value or
+    //     the full new value, never a partial write.
+    //   - Durable: when Put returns nil, the blob has survived a process
+    //     or host crash. For LocalFSBlob this means fsync of the data
+    //     file AND fsync of its parent directory before returning.
+    //
+    // Crash-safety in callers (e.g. bead attachment externalization in
+    // attachments.go) depends on this guarantee — a Put that returns
+    // before durability is established can permanently lose data when
+    // the caller proceeds to clear the in-memory copy.
     Put(ctx context.Context, key Key, r io.Reader) error
 
     // Get returns a reader for the blob at key. The caller must Close.
@@ -143,8 +172,17 @@ var ErrNotFound = errors.New("blob: not found")
 2. **Whole-blob `Put` and reader-returning `Get`, no append, no random access.** Externalized attachments are written once. Execution evidence files are written once per attempt. Where append semantics are actually needed (agent session logs, metrics) the call site belongs in `StreamStore`, not here.
 3. **`io.Reader`/`io.ReadCloser`, not `[]byte`.** Avoid forcing all blobs through memory; UC Volumes and S3 implementations want streaming.
 4. **`context.Context` on every method.** Required for cancellation when backends are network-bound. Local-FS implementation ignores it.
-5. **No transactional grouping of operations.** Deferred. If future work needs "either both blobs are written or neither," wrap at a higher layer.
+5. **No transactional grouping of operations.** Deferred. If future work needs "either both blobs are written or neither," wrap at a higher layer. See "Multi-blob write discipline" below for the pattern callers MUST follow in the meantime.
 6. **No encryption / compression / checksumming inside the interface.** Backends may implement these internally; not part of the contract.
+7. **Permissions are not in the interface.** `LocalFSBlob` writes files at `0o644` and creates directories at `0o755`, matching today's default behavior under `.ddx/` for these collections. Server-internal state (`server/state.json` at `0o600`, TLS material) is **not** a `BlobStore` collection — it stays as direct FS calls in row 5. If a future BlobStore caller needs different file modes per collection, the right fix is per-collection backend configuration, not a `mode` parameter on `Put` (which would leak FS-isms into the interface).
+
+### Multi-blob write discipline (normative for callers)
+
+`BlobStore` provides no transactional grouping. Callers that write multiple blobs as part of one logical operation (e.g. a single attempt writing `prompt.md`, `result.json`, captured agent output, and a `manifest.json`) MUST follow this discipline:
+
+1. **Manifest written last.** The blob that names or references the others (`manifest.json`, or whatever the EntityStore row points at) is written **after** all referenced blobs have returned successful `Put`. This guarantees that any reader that sees the manifest will see all referenced blobs.
+2. **Foreign key stability.** When an EntityStore row references a `BlobStore` key (or key prefix), the row uses the same stable identifier the blob keys are derived from (e.g. `run-id`). The EntityStore row is also written last, after all blobs and after the manifest.
+3. **Orphan blobs are acknowledged.** A crash between blob writes and manifest write leaves orphan blobs at the prefix. On `LocalFSBlob` this is invisible (the prefix is on local disk, not billed). On a remote backend (UC Volumes, S3) orphans accumulate as billable garbage. **A garbage-collection sweep that lists blob prefixes without a corresponding EntityStore row is required for non-FS backends and is explicitly out of scope for v1** — it must be designed when the first non-FS backend lands. v1 ships with the orphan problem present-but-deferred.
 
 ### Key naming conventions (v1, normative)
 
@@ -160,11 +198,12 @@ var ErrNotFound = errors.New("blob: not found")
 2. `cli/internal/blob/localfs.go` implements `blob.Store` against a configurable root directory, defaulting to `.ddx/` resolved from the project root via the existing `config.NewConfig` lookup.
 3. `cli/internal/blob/memory.go` implements `blob.Store` as an in-memory map for tests.
 4. A conformance test suite (`cli/internal/blob/conformance_test.go`) validates that any `blob.Store` implementation passes the same behavioral tests (Put-then-Get round-trip, Stat metadata accuracy, List prefix enumeration, Delete idempotency, ErrNotFound on missing keys, concurrent Put safety). Both `LocalFSBlob` and `MemoryBlob` pass it. Test functions are named `TestBlobStoreConformance_*`.
-5. `cli/internal/bead/attachments.go` writes externalized bead-event attachments through a `blob.Store` injected at construction. The on-disk layout under `.ddx/attachments/<bead-id>/` is preserved exactly when `LocalFSBlob` is the configured backend (verified by a test that asserts file paths match the pre-migration layout).
-6. `cli/internal/agent/executions_mirror.go` and the `.ddx/executions/<run-id>/` writers in `cli/internal/agent/execute_bead*.go` write through a `blob.Store`. On-disk layout preserved when `LocalFSBlob` is configured.
-7. No new top-level `.ddx/` subdirectory is introduced by this work. No existing layout changes.
-8. `cd cli && go test ./...` is green.
-9. `lefthook run pre-commit` passes.
+5. `cli/internal/bead/attachments.go` writes externalized bead-event attachments through a `blob.Store` injected at construction. The on-disk layout under `.ddx/attachments/<bead-id>/` is preserved exactly when `LocalFSBlob` is the configured backend (verified by a test that asserts file paths match the pre-migration layout). The pre-existing crash-safety property (sidecar durably written before inline events are cleared from the bead record) is preserved by the durability guarantee in `BlobStore.Put`.
+6. The per-attempt evidence writers in `cli/internal/agent/execute_bead*.go` (writing `.ddx/executions/<run-id>/<file>` for `manifest.json`, `result.json`, `prompt.md`, captured agent output) write through a `blob.Store`. On-disk layout preserved when `LocalFSBlob` is configured. **`cli/internal/agent/executions_mirror.go` is NOT migrated in v1** — its `mirror.log` and `mirror-index.jsonl` writers are append-only and stay as direct FS calls until StreamStore lands.
+7. The multi-blob write discipline (manifest written last) is enforced in the migrated evidence writers — verified by a test that injects a failing `Put` for a non-manifest blob and asserts the manifest is never written.
+8. No new top-level `.ddx/` subdirectory is introduced by this work. No existing layout changes for migrated paths.
+9. `cd cli && go test ./...` is green.
+10. `lefthook run pre-commit` passes.
 
 ## Sequencing
 
@@ -182,7 +221,10 @@ After all four ship, the `BlobStore` abstraction is in place and the next storag
 | Risk | Likelihood | Impact | Mitigation |
 |------|------------|--------|------------|
 | Migration changes on-disk layout subtly, breaking external tools that read `.ddx/` directly | Medium | High | Bead AC explicitly require pre/post layout assertion; `LocalFSBlob` is byte-for-byte equivalent |
-| Conformance suite under-specifies behavior, two backends diverge silently | Low | Medium | Suite covers the contract methods + concurrency; expand as new backends surface gaps |
-| Streaming semantics for large blobs fail under `LocalFSBlob` due to fsync timing | Low | Low | Local-FS Put writes to a temp file and renames atomically; standard pattern |
+| Conformance suite under-specifies behavior, two backends diverge silently | Low | Medium | Suite covers the contract methods + concurrency + durability; expand as new backends surface gaps |
+| Streaming semantics for large blobs fail under `LocalFSBlob` due to fsync timing | Low | Low | Local-FS Put writes to a temp file, fsyncs file + parent dir, renames atomically; standard pattern |
 | Scope creep into StreamStore or ConfigStore design before BlobStore proves out | Medium | Medium | This spec is explicit about deferral; reviewers reject scope additions |
 | Axon-as-default and BlobStore work entangle | Low | Medium | Sequenced separately: BlobStore lands first, Axon-as-default is its own FEAT-004 update |
+| Axon-on-Lakebase claimed as production-default but not actually viable | Medium | High | `BackendAxon` today is JSONL + optional GraphQL passthrough (`cli/internal/bead/axon_backend.go:37-39,541`), with no JSONL→Postgres migration scripts and no schema-version loader. Production-default requires both, plus identity-passthrough validation against Lakebase. Tracked as a prerequisite in the FEAT-004 update; FEAT-028 does not assume any of this is done. |
+| Orphan blob accumulation on non-FS backends after partial-write crashes | Medium | Medium | v1 ships with the orphan problem present-but-deferred (see "Multi-blob write discipline"); GC sweep is required before the first non-FS backend ships. Documented in the deferred-keys list and called out in scope. |
+| Caller of multi-blob write violates "manifest written last" discipline | Medium | High | Discipline is normative in spec text and verified by an AC #7 test that injects `Put` failures and asserts manifest is not written. Reviewers must check new BlobStore callers for compliance. |
