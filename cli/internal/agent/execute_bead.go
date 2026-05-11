@@ -1499,7 +1499,8 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		}
 	}
 
-	// Optional out-of-band mirror of the bundle. Wired here so the whole
+	// Optional out-of-band mirror of the bundle (and, when configured, the
+	// associated agent-log and worker state). Wired here so the whole
 	// per-attempt directory (manifest, prompt, result, usage, checks,
 	// embedded/) is on disk before the upload starts. Failures never affect
 	// the bead outcome — see executions_mirror.go.
@@ -1509,6 +1510,8 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		BeadID:      beadID,
 		BundleDir:   artifacts.DirAbs,
 		Cfg:         rcfg.MirrorConfig(),
+		SessionID:   sessionID,
+		WorkerID:    runtime.WorkerID,
 	})
 
 	return res, nil
