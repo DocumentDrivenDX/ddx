@@ -118,6 +118,12 @@ func (r ExecuteBeadLoopRuntime) loopIntent() (executeloop.Mode, time.Duration) {
 // `review-manual-required` event and stops re-executing primary. FEAT-022 §14.
 const DefaultReviewMaxRetries = 3
 
+// ReviewerSkippedEmptyDiffEventKind is the event kind emitted when the
+// reviewer dispatch is skipped because the implementer produced no commits
+// (BaseRev == ResultRev). Per ADR-024 P1: cheapest first — paying a reviewer
+// to evaluate an empty diff is unjustified cost.
+const ReviewerSkippedEmptyDiffEventKind = "reviewer-skipped-empty-diff"
+
 // MaxLoopCooldown is the absolute upper bound the execute-loop will set for
 // any execute-loop-retry-after value. Year-scale parks effectively mean
 // "never retry" and that should be a deliberate operator choice via
@@ -322,6 +328,18 @@ func (w *ExecuteBeadWorker) runPostAttemptTriage(ctx context.Context, candidate 
 	}
 	recordPostAttemptTriageEvent(w.Store, candidate.ID, report, triage, assignee, now().UTC())
 	return report
+}
+
+// emitReviewerSkippedEmptyDiff records the structured event that fires when
+// reviewer dispatch is skipped because the implementer produced no commits.
+func emitReviewerSkippedEmptyDiff(store BeadEventAppender, beadID, assignee string, at time.Time) {
+	_ = store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      ReviewerSkippedEmptyDiffEventKind,
+		Summary:   "reviewer skipped: empty diff (no commits produced)",
+		Actor:     assignee,
+		Source:    "ddx agent execute-loop",
+		CreatedAt: at,
+	})
 }
 
 // CapLoopCooldown clamps a loop-set cooldown duration to MaxLoopCooldown.
@@ -1753,7 +1771,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			case agenttry.NoChangesActionRetryLaterCooldown:
 				// Unresolved: suppress immediate retry so the queue can
 				// move on to other beads.
-				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
+				emitReviewerSkippedEmptyDiff(w.Store, candidate.ID, assignee, now().UTC())
 				if noChanges.CooldownEligible && shouldSuppressNoProgress(report) {
 					retryAfter := now().UTC().Add(CapLoopCooldown(noProgressCooldown))
 					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, report.Status, report.Detail, report.BaseRev); err != nil {
@@ -1770,7 +1788,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				result.Failures++
 				result.LastFailureStatus = report.Status
 			default:
-				report = w.runPostAttemptTriage(ctx, candidate, report, runtime, assignee, now)
+				emitReviewerSkippedEmptyDiff(w.Store, candidate.ID, assignee, now().UTC())
 				result.Failures++
 				result.LastFailureStatus = report.Status
 			}

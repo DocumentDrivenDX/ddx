@@ -677,10 +677,11 @@ func TestExecuteBeadWorkerNoChangesStaysOpenAndContinues(t *testing.T) {
 
 	events, err := store.Events(first.ID)
 	require.NoError(t, err)
-	// NoChangesContract emits a triage event (no_changes_unjustified) plus the
-	// terminal executeBeadLoopEvent describing the attempt outcome.
-	require.Len(t, events, 3)
-	var sawTerminal, sawTriage bool
+	// NoChangesContract emits a no_changes_unjustified event, a
+	// reviewer-skipped-empty-diff event (reviewer is bypassed for empty diffs),
+	// plus the terminal executeBeadLoopEvent describing the attempt outcome.
+	require.Len(t, events, 4)
+	var sawTerminal, sawTriage, sawSkipped bool
 	for _, ev := range events {
 		if ev.Kind == "execution-routing-intent" {
 			continue
@@ -692,9 +693,13 @@ func TestExecuteBeadWorkerNoChangesStaysOpenAndContinues(t *testing.T) {
 		if ev.Kind == NoChangesEventUnjustified {
 			sawTriage = true
 		}
+		if ev.Kind == ReviewerSkippedEmptyDiffEventKind {
+			sawSkipped = true
+		}
 	}
 	assert.True(t, sawTerminal, "executeBeadLoopEvent must be appended")
 	assert.True(t, sawTriage, "no_changes_unjustified triage event must be appended")
+	assert.True(t, sawSkipped, "reviewer-skipped-empty-diff event must be appended")
 }
 
 func TestExecuteBeadWorkerNoChangesUnjustifiedRemainsRunnableAcrossRuns(t *testing.T) {
