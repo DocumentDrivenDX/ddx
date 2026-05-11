@@ -17,6 +17,7 @@ import (
 
 	"errors"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/bead/accheck"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/DocumentDrivenDX/ddx/internal/docgraph"
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
@@ -190,6 +191,10 @@ type ExecuteBeadRuntime struct {
 	// RateLimitRetryDefaultBudget (5 min). Negative disables the wrapper —
 	// rate-limit responses fall through to the standard execution_failed path.
 	RateLimitMaxWait time.Duration
+	// ACCheckRunner, when non-nil, runs ddx bead ac-check for the given bead
+	// and attempt after the agent commits, writing ac-check.json to the
+	// attempt dir under wtPath. When nil, ac-check is skipped.
+	ACCheckRunner func(ctx context.Context, beadID, attemptID, wtPath string) (*accheck.Output, error)
 }
 
 // GitOps abstracts the git operations required by the worker.
@@ -2327,4 +2332,27 @@ func WriteExecuteBeadResultArtifact(projectRoot string, res *ExecuteBeadResult) 
 		path = filepath.Join(projectRoot, path)
 	}
 	return writeArtifactJSON(path, res)
+}
+
+// ValidateACCheckFail returns an error when acOut has one or more failed AC
+// items and commitMsg does not carry an AC-Waive: trailer. When acOut is nil
+// or has no failures it returns nil unconditionally. The check is syntactic:
+// any line whose trimmed prefix is "AC-Waive:" satisfies the waive condition.
+func ValidateACCheckFail(acOut *accheck.Output, commitMsg string) error {
+	if acOut == nil || acOut.Summary.Fail == 0 {
+		return nil
+	}
+	if hasACWaiveTrailer(commitMsg) {
+		return nil
+	}
+	return fmt.Errorf("ac-check: %d AC item(s) failed; add AC-Waive: trailer to bypass", acOut.Summary.Fail)
+}
+
+func hasACWaiveTrailer(msg string) bool {
+	for _, line := range strings.Split(msg, "\n") {
+		if strings.HasPrefix(strings.TrimSpace(line), "AC-Waive:") {
+			return true
+		}
+	}
+	return false
 }

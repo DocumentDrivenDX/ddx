@@ -332,6 +332,12 @@ const (
 	ExecuteBeadStatusReviewBlock          = "review_block"
 	ExecuteBeadStatusReviewMalfunction    = "review_malfunction"
 
+	// ExecuteBeadStatusReviewRequestClarification is set when the reviewer
+	// returns REQUEST_CLARIFICATION — it cannot adjudicate one or more
+	// needs-judgment AC items without operator input. The bead moves to
+	// status=proposed (operator lane) without blocking the drain queue.
+	ExecuteBeadStatusReviewRequestClarification = "review_request_clarification"
+
 	// ExecuteBeadStatusLandConflictUnresolvable is set when execute-loop
 	// attempted 3-way ort auto-resolution and (if configured) a focused
 	// conflict-resolve agent run for a preserved iteration, and both failed.

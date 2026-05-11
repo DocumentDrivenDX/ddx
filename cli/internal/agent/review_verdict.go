@@ -81,7 +81,7 @@ func ParseReviewVerdict(raw []byte) (ReviewVerdict, error) {
 		return ReviewVerdict{}, fmt.Errorf("%w: verdict not a string: %v", ErrReviewVerdictUnparseable, err)
 	}
 	switch Verdict(verdictStr) {
-	case VerdictApprove, VerdictRequestChanges, VerdictBlock:
+	case VerdictApprove, VerdictRequestChanges, VerdictBlock, VerdictRequestClarification:
 	default:
 		return ReviewVerdict{}, fmt.Errorf("%w: unknown verdict %q", ErrReviewVerdictUnparseable, verdictStr)
 	}

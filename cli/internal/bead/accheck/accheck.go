@@ -46,11 +46,11 @@ const (
 
 // Item represents one parsed AC line with its classification.
 type Item struct {
-	AC      int    // 1-based AC number
-	Text    string // original AC text (single line)
-	Kind    Kind   // classified kind
-	Name    string // extracted entity (test name, symbol, etc.); empty for prose
-	Alias   string // operator-declared substitution (e.g., TestFoo -> TestFoo/bar)
+	AC    int    // 1-based AC number
+	Text  string // original AC text (single line)
+	Kind  Kind   // classified kind
+	Name  string // extracted entity (test name, symbol, etc.); empty for prose
+	Alias string // operator-declared substitution (e.g., TestFoo -> TestFoo/bar)
 }
 
 // Output is the structured per-AC verification output written to

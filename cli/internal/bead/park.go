@@ -8,11 +8,12 @@ import "fmt"
 type ParkReason string
 
 const (
-	ParkIntakeRejection           ParkReason = "intake_rejection"
-	ParkNoChangesOperatorRequired ParkReason = "no_changes_operator_required"
-	ParkPostReviewMalfunction     ParkReason = "post_review_malfunction"
-	ParkReviewTerminal            ParkReason = "review_terminal"
-	ParkConflictRecovery          ParkReason = "conflict_recovery"
+	ParkIntakeRejection            ParkReason = "intake_rejection"
+	ParkNoChangesOperatorRequired  ParkReason = "no_changes_operator_required"
+	ParkPostReviewMalfunction      ParkReason = "post_review_malfunction"
+	ParkReviewTerminal             ParkReason = "review_terminal"
+	ParkConflictRecovery           ParkReason = "conflict_recovery"
+	ParkReviewRequestClarification ParkReason = "review_request_clarification"
 )
 
 type parkReasonMeta struct {
@@ -21,11 +22,12 @@ type parkReasonMeta struct {
 }
 
 var parkReasonMetaMap = map[ParkReason]parkReasonMeta{
-	ParkIntakeRejection:           {Reason: "pre-claim intake blocked execution", Source: "ddx agent execute-loop"},
-	ParkNoChangesOperatorRequired: {Reason: "operator decision required before another automated attempt", Source: "ddx agent execute-loop"},
-	ParkPostReviewMalfunction:     {Reason: "review BLOCK triage reached operator-required rung", Source: "ddx agent execute-loop"},
-	ParkReviewTerminal:            {Reason: "terminal review block requires operator decision", Source: "ddx agent execute-loop"},
-	ParkConflictRecovery:          {Reason: "land conflict requires operator judgment", Source: "ddx agent execute-loop"},
+	ParkIntakeRejection:            {Reason: "pre-claim intake blocked execution", Source: "ddx agent execute-loop"},
+	ParkNoChangesOperatorRequired:  {Reason: "operator decision required before another automated attempt", Source: "ddx agent execute-loop"},
+	ParkPostReviewMalfunction:      {Reason: "review BLOCK triage reached operator-required rung", Source: "ddx agent execute-loop"},
+	ParkReviewTerminal:             {Reason: "terminal review block requires operator decision", Source: "ddx agent execute-loop"},
+	ParkConflictRecovery:           {Reason: "land conflict requires operator judgment", Source: "ddx agent execute-loop"},
+	ParkReviewRequestClarification: {Reason: "reviewer cannot adjudicate needs-judgment AC without operator input", Source: "ddx agent execute-loop"},
 }
 
 // ParkToProposed transitions the bead to proposed status for operator

@@ -39,14 +39,54 @@ diff --git a/x.go b/x.go
 </untrusted-data>
   </diff>
 
+  <strictness-mode mode="behavior-light">behavior-light — build green plus file/symbol evidence suffices; test-name match required only when an AC explicitly names a Test* function.</strictness-mode>
+
   <instructions>
 You are reviewing a bead implementation against its acceptance criteria.
 
-For each acceptance-criteria (AC) item, decide whether it is implemented correctly, then assign one overall verdict:
+## AC-Check Ratification
+
+When an &lt;ac-check&gt; section is present, ratify the mechanical results rather
+than re-verifying them independently from the diff:
+
+- result="pass": confirm the evidence is credible. Override to fail only if
+  the evidence is fabricated — include judgment_override_reason and a diff
+  citation (file:line) in the per_ac evidence string.
+- result="fail": mechanically verified failure. Grade as fail and BLOCK unless
+  the commit message contains an explicit AC-Waive trailer for this AC.
+- result="needs_judgment": adjudicate from the diff. If you cannot determine
+  pass/fail without additional bead context from the operator, use
+  REQUEST_CLARIFICATION for that AC item.
+- result="error": treat as needs_judgment.
+
+Overriding a mechanical grade (pass→fail or fail→pass) requires an explicit
+judgment_override_reason note and a concrete diff citation in the evidence.
+
+## Strictness Mode
+
+The &lt;strictness-mode&gt; tag specifies per-bead evidence requirements:
+
+- strict (kind:fix, kind:feat): each AC must be anchored to a named Test*
+  function or a diff-touched symbol; file-only evidence is insufficient.
+- behavior-light (kind:refactor, kind:chore): build green plus file/symbol
+  evidence suffices; test-name match required only when an AC explicitly
+  names a Test* function.
+- mechanical (kind:doc, kind:mechanical): file presence, renames, or symbol
+  evidence only; no test-name or runtime evidence required.
+
+## Verdicts
+
+For each acceptance-criteria (AC) item, decide whether it is implemented
+correctly, then assign one overall verdict:
 
 - APPROVE — every AC item is fully and correctly implemented.
 - REQUEST_CHANGES — some AC items are partial or have fixable minor issues.
-- BLOCK — at least one AC item is not implemented or incorrectly implemented; or the diff is insufficient to evaluate.
+- BLOCK — at least one AC item is not implemented or incorrectly implemented;
+  or the diff is insufficient to evaluate.
+- REQUEST_CLARIFICATION — you cannot adjudicate one or more needs_judgment AC
+  items without operator clarification. Use this ONLY when the item is
+  ambiguous even given the full diff. This verdict does NOT block the queue;
+  it routes to the operator lane for input.
 
 ## Required output format (schema_version: 1)
 
@@ -67,9 +107,9 @@ Respond with EXACTLY one JSON object as your final response, fenced as a single 
 ```
 
 Rules:
-- "verdict" must be exactly one of "APPROVE", "REQUEST_CHANGES", "BLOCK".
+- "verdict" must be exactly one of "APPROVE", "REQUEST_CHANGES", "BLOCK", "REQUEST_CLARIFICATION".
 - "severity" must be exactly one of "info", "warn", "block".
 - Output the JSON object inside ONE fenced ```json … ``` block. No additional prose, no extra fences, no markdown headings.
-- Do not echo this template back. Do not write the words APPROVE, REQUEST_CHANGES, or BLOCK anywhere except as the JSON value of the verdict field.
+- Do not echo this template back. Do not write the verdict value anywhere except as the JSON value of the verdict field.
   </instructions>
 </bead-review>
