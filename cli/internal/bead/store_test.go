@@ -1069,6 +1069,7 @@ func TestParkToProposed_TransitionAndMetadata(t *testing.T) {
 			ParkReviewTerminal:             {Reason: "terminal review block requires operator decision", Source: "ddx agent execute-loop"},
 			ParkConflictRecovery:           {Reason: "land conflict requires operator judgment", Source: "ddx agent execute-loop"},
 			ParkReviewRequestClarification: {Reason: "reviewer cannot adjudicate needs-judgment AC without operator input", Source: "ddx agent execute-loop"},
+			ParkLadderExhaustionManual:     {Reason: "recovery:manual label set; operator review required", Source: "ddx agent execute-loop"},
 		}
 		assert.Equal(t, expected, parkReasonMetaMap)
 	})

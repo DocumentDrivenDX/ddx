@@ -14,6 +14,7 @@ const (
 	ParkReviewTerminal             ParkReason = "review_terminal"
 	ParkConflictRecovery           ParkReason = "conflict_recovery"
 	ParkReviewRequestClarification ParkReason = "review_request_clarification"
+	ParkLadderExhaustionManual     ParkReason = "ladder_exhaustion_manual"
 )
 
 type parkReasonMeta struct {
@@ -28,6 +29,7 @@ var parkReasonMetaMap = map[ParkReason]parkReasonMeta{
 	ParkReviewTerminal:             {Reason: "terminal review block requires operator decision", Source: "ddx agent execute-loop"},
 	ParkConflictRecovery:           {Reason: "land conflict requires operator judgment", Source: "ddx agent execute-loop"},
 	ParkReviewRequestClarification: {Reason: "reviewer cannot adjudicate needs-judgment AC without operator input", Source: "ddx agent execute-loop"},
+	ParkLadderExhaustionManual:     {Reason: "recovery:manual label set; operator review required", Source: "ddx agent execute-loop"},
 }
 
 // ParkToProposed transitions the bead to proposed status for operator
