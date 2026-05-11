@@ -1626,7 +1626,8 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		qualityRunner = f.AgentRunnerOverride
 	}
 	lintHook := agent.NewPreDispatchLintHook(projectRoot, store, rcfg, nil, qualityRunner)
-	intakeHook := agent.NewPreClaimIntakeHook(projectRoot, store, rcfg, nil, qualityRunner)
+	innerIntakeHook := agent.NewPreClaimIntakeHook(projectRoot, store, rcfg, nil, qualityRunner)
+	intakeHook := agent.NewACQualityPreClaimGate(store, rcfg.ACQualityMinScore(), innerIntakeHook)
 	triageHook := agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
 
 	// harnessBilledLookup resolves whether a harness contributes to any cost
