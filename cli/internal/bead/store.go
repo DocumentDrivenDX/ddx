@@ -1153,11 +1153,36 @@ func beadEventFromMap(m map[string]any) BeadEvent {
 	return e
 }
 
+// lastReviewVerdictFromEvents returns the verdict string from the last
+// kind:review event in the list. Returns "" when no review event exists.
+func lastReviewVerdictFromEvents(events []BeadEvent) string {
+	verdict := ""
+	for _, e := range events {
+		if e.Kind != "review" {
+			continue
+		}
+		v := strings.ToUpper(strings.TrimSpace(e.Summary))
+		switch v {
+		case "APPROVE", "BLOCK", "REQUEST_CHANGES", "REQUEST_CLARIFICATION":
+			verdict = v
+		}
+	}
+	return verdict
+}
+
 // Close sets a bead's status to closed. When the close succeeds and the bead
 // carries an inline event history, those events are moved to a sidecar
 // attachment under .ddx/attachments/<id>/events.jsonl so the active row stays
 // small (per ADR-004's attachment model and TD-027 §c).
 func (s *Store) Close(id string) error {
+	// Capture last review verdict before closure for reviewer-accuracy tracking.
+	// If the operator manually closes a BLOCK-reviewed bead, that contradicts
+	// the reviewer's verdict (potential false-positive).
+	verdictWas := ""
+	if events, err := s.Events(id); err == nil {
+		verdictWas = lastReviewVerdictFromEvents(events)
+	}
+
 	if err := s.SetLifecycleStatus(id, StatusClosed, LifecycleTransitionOptions{
 		ManualClose: true,
 		Reason:      "manual close",
@@ -1167,6 +1192,17 @@ func (s *Store) Close(id string) error {
 	}
 	if err := s.externalizeEvents(id); err != nil {
 		return err
+	}
+	// Emit accuracy override when operator closes a BLOCK-reviewed bead.
+	// AppendEvent handles sidecar append for already-externalized events.
+	if verdictWas == "BLOCK" {
+		_ = s.AppendEvent(id, BeadEvent{
+			Kind:      "review-accuracy-override",
+			Summary:   "BLOCK verdict contradicted by operator close",
+			Body:      "verdict_was=BLOCK\noperator_action=close\nreason=manual close",
+			Source:    "Store.Close",
+			CreatedAt: time.Now().UTC(),
+		})
 	}
 	_ = s.RemoveClaimHeartbeat(id)
 	s.maybeOpportunisticMaintenance()
@@ -1385,6 +1421,9 @@ func (s *Store) Reopen(id string, reason string, appendNotes string) error {
 			if raw, ok := b.Extra["events"]; ok {
 				events = decodeBeadEvents(raw)
 			}
+			// Detect last review verdict before appending the reopen event so
+			// we can identify APPROVE verdicts contradicted by the operator.
+			verdictWas := lastReviewVerdictFromEvents(events)
 			evt := BeadEvent{
 				Kind:      "reopen",
 				CreatedAt: now,
@@ -1393,6 +1432,21 @@ func (s *Store) Reopen(id string, reason string, appendNotes string) error {
 				evt.Summary = reason
 			}
 			events = append(events, evt)
+			// Emit accuracy override when operator reopens an APPROVE-reviewed
+			// bead (potential false-negative — reviewer approved fake work).
+			if verdictWas == "APPROVE" {
+				body := "verdict_was=APPROVE\noperator_action=reopen"
+				if reason != "" {
+					body += "\nreason=" + reason
+				}
+				events = append(events, BeadEvent{
+					Kind:      "review-accuracy-override",
+					Summary:   "APPROVE verdict contradicted by operator reopen",
+					Body:      body,
+					Source:    "Store.Reopen",
+					CreatedAt: now,
+				})
+			}
 			encoded := make([]map[string]any, 0, len(events))
 			for _, e := range events {
 				encoded = append(encoded, map[string]any{

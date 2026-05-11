@@ -51,6 +51,18 @@ type AttemptRow struct {
 	ReviewVerdict                string         `json:"review_verdict,omitempty"`
 	ReviewFindingCountBySeverity map[string]int `json:"review_finding_count_by_severity,omitempty"`
 
+	// ReviewerModel is the resolved model used for the reviewer dispatch.
+	ReviewerModel string `json:"reviewer_model,omitempty"`
+	// ReviewerACMismatchCount is the number of ACs where the reviewer's grade
+	// disagreed with the ac-check.json mechanical result.
+	ReviewerACMismatchCount int `json:"reviewer_acmismatch_count,omitempty"`
+	// ReviewerOverrideReasons lists each AC where reviewer and ac-check diverged.
+	ReviewerOverrideReasons []string `json:"reviewer_override_reasons,omitempty"`
+	// ReviewerAccuracySignal records the eventual truth after the reviewer's
+	// verdict: confirmed (operator agreed), override (operator contradicted),
+	// contested, or unknown (not yet determined).
+	ReviewerAccuracySignal string `json:"reviewer_accuracy_signal,omitempty"`
+
 	LadderMinPowerInitial int `json:"ladder_min_power_initial,omitempty"`
 	LadderMinPowerFinal   int `json:"ladder_min_power_final,omitempty"`
 	LadderStepsTaken      int `json:"ladder_steps_taken,omitempty"`
