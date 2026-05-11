@@ -494,7 +494,7 @@ via the bead store). The worker honors at the next safe point:
 
 ### Worker shutdown and claim cleanup
 
-Claim cleanup follows TD-031 and stays worker-side because the bead store is the
+Claim cleanup follows TD-027 §12 (storage contract) and TD-031 §6 (operational triage policy) and stays worker-side because the bead store is the
 only claim authority. A graceful worker stop releases any claim whose attempt has
 not already reached a terminal bead mutation. SIGTERM/SIGINT, child-agent
 termination, and operator cancel are recorded as mechanical interruption or

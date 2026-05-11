@@ -66,7 +66,7 @@ load-bearing in every mode and are never overridden by mode selection.
 ### Lifecycle Migration Startup Gate
 
 `ddx work`, `ddx try`, server-managed workers, GraphQL worker starts, REST/MCP
-worker starts, and queue status/readiness commands must run the TD-031 lifecycle
+worker starts, and queue status/readiness commands must run the TD-027 §18 lifecycle
 startup preflight before claiming beads or deriving worker eligibility. When the
 active queue still contains unmigrated legacy lifecycle labels or
 pseudo-statuses, these surfaces fail closed with a configuration/startup error.
@@ -161,9 +161,9 @@ rationale, post-run checks, review verdicts, and cooldown policy. The agent's
 exit status and actual model/power are inputs to that decision, not the whole
 decision.
 
-Layer 2 records raw attempt evidence. Layer 3 applies
-[`TD-031`](../../02-design/technical-designs/TD-031-bead-state-machine.md) when
-that evidence requires durable bead action such as close-as-already-satisfied,
+Layer 2 records raw attempt evidence. Layer 3 applies the outcome → state
+mapping in [`TD-031 §2`](../../02-design/technical-designs/TD-031-bead-state-machine.md)
+when that evidence requires durable bead action such as close-as-already-satisfied,
 human triage, blocked, retry cooldown, or stale no_changes metadata cleanup.
 
 ### Quality hooks
@@ -285,8 +285,8 @@ across ready beads until a stop condition is met. It owns:
 - Queue iteration order
 - Pre-claim readiness, safe bead improvement, decomposition, claim acquisition,
   claim release, and shutdown/interruption cleanup for claimed beads, using the
-  TD-031 claim-state contract
-- Durable bead action after each layer-2 attempt, using TD-031's outcome,
+  TD-027 §12 claim-state contract
+- Durable bead action after each layer-2 attempt, using TD-031 §2 outcome,
   no_changes, cooldown, and stale-metadata rules
 - No-progress / stop-condition evaluation
 - A loop-level record that references its child layer-2 records by
@@ -299,7 +299,7 @@ plugin compositions on top of the task execution layers.
 
 Layer 3 treats raw attempt evidence separately from durable bead action. When a
 worker stops, receives SIGTERM/SIGINT, loses its child agent process, or honors
-operator cancel before a terminal bead mutation, it follows TD-031: preserve
+operator cancel before a terminal bead mutation, it follows TD-027 §12.2: preserve
 evidence, record the interruption/disruption, release the claim, and leave the
 bead re-claimable unless an explicit retryable cooldown or blocker was recorded.
 Shutdown is not itself a reason to park a bead on `execute-loop-retry-after`.
@@ -497,7 +497,7 @@ The layer-3 drain evaluates each ready bead through this mechanical sequence:
    A candidate result records `base_rev`, `result_rev`, implementation run ids,
    route/power facts, verification output, and cost. Already-satisfied
    no-changes may close only after the required verification evidence exists;
-   otherwise no-changes outcomes follow TD-031.
+   otherwise no-changes outcomes follow TD-031 §6.1 NoChangesContract.
 4. **Adversarial pre-close review.** Review is enabled by default. For every
    close-eligible `result_rev`, layer 2 pins a candidate ref and dispatches two
    read-only tool reviewer runs **in the still-live attempt worktree, before
@@ -593,7 +593,7 @@ The migration window, the rewrite tool, and the cutoff signal are
 specified in the implementation epic, not here.
 
 The lifecycle-state migration is separate from this run-substrate migration.
-TD-031 §11 owns that one-way queue migration contract. Unlike legacy run-record
+TD-027 §18 owns that one-way queue migration contract. Unlike legacy run-record
 readers, normal task execution does not read through old lifecycle labels after
 the startup gate is enabled.
 
@@ -935,7 +935,7 @@ the command about to run:
 - project root resolution;
 - `.ddx/config.yaml` parseability;
 - `.ddx/beads.jsonl` parseability for bead-execution commands;
-- TD-031 lifecycle migration status for queue-derived and worker-start
+- TD-027 §18 lifecycle migration status for queue-derived and worker-start
   commands;
 - the root `ddx` project skill under `.agents/skills/ddx/SKILL.md` or
   `.claude/skills/ddx/SKILL.md`;
@@ -945,7 +945,7 @@ the command about to run:
 Passing preflight checks are silent. Failed checks are observable and
 actionable. `ddx work` and `ddx try` fail on missing required project/tracker
 state. Unmigrated lifecycle queues fail closed before worker startup with the
-TD-031 counts, affected bead sample, `ddx bead migrate --lifecycle --dry-run`,
+TD-027 §18 migration counts, affected bead sample, `ddx bead migrate --lifecycle --dry-run`,
 `ddx bead migrate --lifecycle --apply`, and git rollback guidance. Optional
 lifecycle-hook degradation in WARN-ONLY mode still warns once per process and
 continues after the lifecycle migration gate is clean. `ddx server`
@@ -1065,7 +1065,7 @@ new workflow cannot be expressed as a composition over `run` / `try` /
     a strong-tier decomposer agent, before parking the bead at
     `status=proposed`. Each recovery step follows ADR-024 P4 and P3 (strong
     `MinPower` floor, passthrough constraints forwarded unchanged). Outcomes
-    and status transitions are defined in TD-031 §5 (`reframe_applied`,
+    and status transitions are defined in TD-031 §2 (`reframe_applied`,
     `decompose_applied`, `auto_recovery_failed`) and the sequence in
     SD-025 Layer 3.5.
 
@@ -1078,7 +1078,7 @@ Expected implementation tests include `TestExecutionCleanup_RemovesStaleDDXScrat
 - **Per-bead cost budget:** every bead's escalation attempts (implementation,
   review, reframer, and decomposer invocations) are bounded by a configurable
   per-bead cost cap (`escalation.per_bead_budget_usd` in `.ddx/config.yaml`).
-  When the cap is exceeded, DDx records `per_bead_budget_exhausted` (TD-031 §5),
+  When the cap is exceeded, DDx records `per_bead_budget_exhausted` (TD-031 §2),
   releases the claim without cooldown, and leaves the bead `status=open` and
   re-claimable. Budget exhaustion is a recheckable signal, not a terminal state;
   an operator may raise the cap or the bead may be retried in a later drain.

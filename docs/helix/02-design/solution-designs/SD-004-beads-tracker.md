@@ -6,6 +6,7 @@ ddx:
     - ADR-001
     - ADR-003
   related:
+    - TD-027
     - TD-031
 ---
 # Solution Design: Beads Tracker
@@ -17,12 +18,18 @@ tracker used by HELIX and other workflows. The key design constraint is that
 the default active-work collection must remain safe under concurrent access and
 recoverable after partial corruption without requiring a separate database.
 
-The persisted bead `status` enum, the allowed status transitions, the event
-vocabulary appended to `Extra["events"]`, the claim-metadata semantics, and
-the worker-state taxonomy are normatively defined in
-[TD-031: Bead State Machine and Naming-Role Decisions](../technical-designs/TD-031-bead-state-machine.md).
-This design references TD-031 rather than restating those decisions; any
-divergence between this file and TD-031 is a bug in this file.
+The persisted bead `status` enum, the allowed status transitions, the claim
+metadata, the event vocabulary, and the bead data model are normatively defined
+in [TD-027: Bead Storage System and Lifecycle](../technical-designs/TD-027-bead-collection-abstraction.md)
+(§1 status enum, §2 transition matrix, §11 data model, §12 claim semantics,
+§13 event vocabulary).
+
+The drain-loop operational contract (outcome→state mapping, worker-state
+enumeration, auto-recovery role dispatch, per-hygiene-bead contracts) is
+specified in [TD-031: Drain-Loop Operational Contract over Beads](../technical-designs/TD-031-bead-state-machine.md).
+
+This design references TD-027 and TD-031 rather than restating those decisions;
+any divergence between this file and the referenced TDs is a bug in this file.
 
 ## Goals
 
@@ -190,7 +197,7 @@ The tracker queue views are derived from one in-memory snapshot.
 - A bead is ready when every dependency is `closed`.
 - Execution-ready views additionally filter on `execution-eligible` and
   `superseded-by`.
-- Execution-ready diagnostics must expose TD-031's distinct skipped reasons:
+- Execution-ready diagnostics must expose TD-031 §2 (Outcome → State Mapping) distinct skipped reasons:
   active cooldown, not executable, superseded, `status=proposed`,
   dependency-waiting, external blockers, and epic-only/container work. External
   blockers are the only skipped reason represented by `status=blocked`. These
@@ -216,7 +223,7 @@ The tracker queue views are derived from one in-memory snapshot.
   dependency-waiting: consider only `status=open` beads, then report beads with
   at least one dependency that is not `closed`. This does not mutate or imply
   `status=blocked`.
-- `status=blocked` is reserved by TD-031 for accepted work paused by an
+- `status=blocked` is reserved by TD-027 §1 for accepted work paused by an
   external, recheckable blocker.
 
 ### Status

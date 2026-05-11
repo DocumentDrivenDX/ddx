@@ -63,7 +63,7 @@ Git tracks only:
   per bead at steady state.
 - **Closed-bead events** (`.ddx/attachments/<bead-id>/events.jsonl`) — the
   append-only lifecycle event stream for each bead, including outcome
-  classifications and review verdicts. Event vocabulary is defined in TD-031 §5.
+  classifications and review verdicts. Event vocabulary is defined in TD-027 §13 (the controlled list); outcome → event firing mapping is in TD-031 §2.
 - **Aggregate per-attempt metrics** (`.ddx/metrics/attempts.jsonl`) — one
   denormalized row per bead attempt with structured fields for cross-bead
   analytics queries. ~300 bytes per row.
@@ -276,7 +276,7 @@ is merged.
 
 ## References
 
-- `docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md` §5
+- `docs/helix/02-design/technical-designs/TD-027-bead-collection-abstraction.md` §13 + TD-031-bead-state-machine.md §2
   (event vocabulary)
 - `docs/helix/02-design/solution-designs/SD-025-task-execution-lifecycle.md`
   (execution lifecycle layer model and record shapes)

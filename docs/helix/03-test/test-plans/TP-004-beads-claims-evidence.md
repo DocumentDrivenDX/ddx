@@ -5,13 +5,16 @@ ddx:
     - FEAT-004
     - SD-004
     - TD-004
+    - TD-027
 ---
 # Test Plan: Bead Claims and Execution Evidence
 
 ## Scope
 
-Validate the assignee-aware claim contract and the append-only execution
-evidence trail stored in `Extra["events"]` for `ddx bead`.
+Validate the assignee-aware claim contract (specified in TD-027 §12 after the
+2026-05-11 consolidation; previously in TD-004) and the append-only execution
+evidence trail stored in `Extra["events"]` for `ddx bead` (specified in TD-004,
+with the controlled `kind` vocabulary in TD-027 §13).
 
 ## Test Cases
 

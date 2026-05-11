@@ -25,5 +25,5 @@ for an existing feature).
 | 2026-05-11 | [Website auto-generation + templating architecture](plan-2026-05-11-website-autogen.md) | Draft v2 — restructured around unified generator + artifact graph after self+opus review |
 | 2026-05-11 | [FEAT-005 amendment: `ddx.visibility`](plan-2026-05-11-artifact-visibility.md) | Draft — prerequisite for website autogen Phase C |
 | 2026-05-11 | [`ddx __introspect` primitive](plan-2026-05-11-ddx-introspect.md) | Draft — prerequisite for website CLI generator AND pip Python codegen |
-| 2026-05-11 | [Bead backend interface refinement (pre-Axon)](../helix/02-design/plan-2026-05-11-bead-backend-interfaces.md) | **Design locked** — 11 sub-interfaces + Operation pattern + LifecycleSubscriber + pluggable IDGenerator. Filed as `ddx-c6317784` (gating); 6 axon beads reopened with deps; 2 follow-ups filed (`ddx-900a8d38`, `ddx-e91a45c0`). |
-| 2026-05-11 | [Bead interface refactor — integration plan](plan-2026-05-11-bead-interface-integration.md) | Draft — catalogs 9 side-doors + 7 legacy paths + 5 lint rules + 3 integrity layers + 4 governance artifacts. |
+| 2026-05-11 | ~~Bead backend interface refinement~~ → folded into TD-027 | **Superseded** by TD-027 (`docs/helix/02-design/technical-designs/TD-027-bead-collection-abstraction.md`). The plan doc retains a redirect note pointing at TD-027 sections. Gating bead `ddx-c6317784` references TD-027 as canonical AC. |
+| 2026-05-11 | ~~Bead interface refactor integration plan~~ → folded into TD-027 | **Superseded** by TD-027 §21 (Module Boundary). |

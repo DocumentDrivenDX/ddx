@@ -78,7 +78,7 @@ placement, and outcome classification.
 
 Post-attempt triage classifications feed
 [`TD-031`](../technical-designs/TD-031-bead-state-machine.md). ADR-023 does not
-define final queue mutation policy; TD-031 remains the source of truth for
+define final queue mutation policy; TD-027 (state machine, transitions) and TD-031 (operational outcome → mapping) together remain the source of truth for
 whether an attempt closes, stays open, moves to `status=proposed` for operator
 triage, becomes externally blocked, is superseded, or receives a retry cooldown.
 

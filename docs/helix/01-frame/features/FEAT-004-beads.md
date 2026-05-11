@@ -63,7 +63,7 @@ The name follows the `bd` (Dolt-backed) and `br` (SQLite-backed) convention: sho
 | id | string | auto-generated | `bx-` + 8 hex chars | Prefix configurable |
 | title | string | yes | — | Non-empty |
 | type | string | no | `task` | Free-form (task, epic, bug, chore, etc.) |
-| status | string | no | `open` | Enum: open, in_progress, closed, blocked, proposed, cancelled (bd/br canonical set; see TD-031 §2) |
+| status | string | no | `open` | Enum: open, in_progress, closed, blocked, proposed, cancelled (bd/br canonical set; see TD-027 §1) |
 | priority | int | no | 2 | Range 0-4 (0 = highest) |
 | labels | []string | no | [] | Free-form, no enforcement |
 | parent | string | no | "" | ID of parent bead |
@@ -81,9 +81,9 @@ Operator-attention work uses `status=proposed` when a bead needs a human
 decision before autonomous execution. Legacy/backcompat `needs_human` labels
 and legacy/backcompat `needs-human-*` preserved `Extra` fields may be read
 during migration, but they are metadata only; they do not define a queue lane or
-suppress routing after the status-owned lifecycle contract in TD-031 is applied.
+suppress routing after the status-owned lifecycle contract in TD-027 is applied.
 
-TD-031 defines how lifecycle actions use the existing carriers: persisted
+TD-027 §3 (Category Taxonomy) defines how lifecycle actions use the existing carriers: persisted
 bd/br statuses, labels, dependency edges, append-only events, and preserved
 `Extra` fields. FEAT-004 does not introduce additional status vocabulary for
 no_changes, cooldown, superseded, or execution-readiness cases.
@@ -95,7 +95,7 @@ The status-owned lifecycle migration is one-way. Legacy/backcompat
 are input to `ddx bead migrate --lifecycle`; normal runtime does not preserve
 them as compatibility queue lanes.
 
-Before queue commands derive readiness or mutate beads, DDx performs the TD-031
+Before queue commands derive readiness or mutate beads, DDx performs the TD-027
 lifecycle startup preflight. If the active store still contains unmigrated
 legacy lifecycle labels or pseudo-statuses, `ddx bead ready`, `ddx bead
 blocked`, `ddx bead status`, `ddx work`, and worker/API queue-readiness surfaces

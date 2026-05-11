@@ -535,8 +535,11 @@ beads gate which DDx phase.
 - ADR-006: Tailscale tsnet Authentication
 - SD-004: Beads Tracker
 - FEAT-004: Beads
-- TD-027: Bead-Backed Collection Abstraction (defines the
-  `bead_tracker.backend` switch)
+- TD-027: Bead Storage System and Lifecycle (defines the
+  `bead_tracker.backend` switch, Backend interface, Operation pattern,
+  data model, and state machine)
+- TD-031: Drain-Loop Operational Contract over Beads (outcome → state
+  mapping, worker state, hygiene-bead contracts)
 - ADR-007: Federation Topology
 - ADR-021: Operator-Prompt Beads Web Write Path (multi-node story note)
 - FEAT-026 / Story 14: multi-machine federation prerequisite
