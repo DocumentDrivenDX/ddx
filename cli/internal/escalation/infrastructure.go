@@ -287,3 +287,41 @@ func ParseBeadBudgetLabel(labels []string) (float64, bool) {
 	}
 	return 0, false
 }
+
+// ParseBeadTierHintLabel scans a bead's label slice for a "tier:hint=<name>"
+// entry and returns the parsed ModelTier and true when found with a recognized
+// tier name. Returns ("", false) when the label is absent or the name is
+// unrecognized. Recognized names are: cheap, standard, smart.
+func ParseBeadTierHintLabel(labels []string) (ModelTier, bool) {
+	const prefix = "tier:hint="
+	for _, l := range labels {
+		lower := strings.ToLower(strings.TrimSpace(l))
+		name, ok := strings.CutPrefix(lower, prefix)
+		if !ok {
+			continue
+		}
+		switch strings.TrimSpace(name) {
+		case string(TierSmart):
+			return TierSmart, true
+		case string(TierStandard):
+			return TierStandard, true
+		case string(TierCheap):
+			return TierCheap, true
+		default:
+			return "", false
+		}
+	}
+	return "", false
+}
+
+// HasBeadTierHintLabel reports whether labels contains any "tier:hint=..." entry,
+// including entries with unrecognized tier names. Used to detect invalid hints
+// so callers can emit a warning before falling back to the default.
+func HasBeadTierHintLabel(labels []string) bool {
+	for _, l := range labels {
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(l)), "tier:hint=") {
+			return true
+		}
+	}
+	return false
+}

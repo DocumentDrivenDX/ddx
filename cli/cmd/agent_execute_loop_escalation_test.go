@@ -311,3 +311,77 @@ func TestPerBeadCostTracker_NoLimit_RunsToLadderExhaustion(t *testing.T) {
 	assert.False(t, strings.Contains(report.Detail, policyescalation.PerBeadBudgetExhaustedReason),
 		"detail must not contain per-bead budget exhausted marker when tracker is nil")
 }
+
+// TestTierHint_StartsAtLabelFloor verifies that a bead with a tier:hint=<name>
+// label starts at the resolved floor for that tier, not at the default zero.
+func TestTierHint_StartsAtLabelFloor(t *testing.T) {
+	ladder := tierescalation.NewLadder([]agentlib.ModelInfo{
+		{Power: 50, Available: true, AutoRoutable: true},
+		{Power: 70, Available: true, AutoRoutable: true},
+		{Power: 90, Available: true, AutoRoutable: true},
+	})
+
+	tests := []struct {
+		label     string
+		wantFloor int
+	}{
+		// smart → highest viable floor
+		{"tier:hint=smart", 90},
+		// standard → second viable floor (skip cheapest)
+		{"tier:hint=standard", 70},
+	}
+	for _, tc := range tests {
+		t.Run(tc.label, func(t *testing.T) {
+			b := &bead.Bead{ID: "ddx-tier-hint-001", Labels: []string{tc.label}}
+			floor, report, unavailable := investigationRetryInitialMinPower(b, 0, 0, ladder)
+			require.False(t, unavailable, "valid tier hint must not produce unavailable report")
+			assert.Empty(t, report.Status)
+			assert.Equal(t, tc.wantFloor, floor, "initial floor must match the label-derived tier floor")
+		})
+	}
+}
+
+// TestTierHint_NoLabel_UsesDefault verifies that a bead without a tier:hint
+// label uses the configured baseMinPower unchanged.
+func TestTierHint_NoLabel_UsesDefault(t *testing.T) {
+	ladder := tierescalation.NewLadder([]agentlib.ModelInfo{
+		{Power: 50, Available: true, AutoRoutable: true},
+		{Power: 90, Available: true, AutoRoutable: true},
+	})
+	b := &bead.Bead{ID: "ddx-tier-hint-002", Labels: []string{"phase:6", "area:agent"}}
+	floor, report, unavailable := investigationRetryInitialMinPower(b, 0, 0, ladder)
+	require.False(t, unavailable)
+	assert.Empty(t, report.Status)
+	assert.Equal(t, 0, floor, "no tier:hint label must leave the floor at the configured default")
+}
+
+// TestTierHint_InvalidLabel_FallsBackToDefault verifies that an unrecognized
+// tier name in a tier:hint label falls back to the default floor without error.
+func TestTierHint_InvalidLabel_FallsBackToDefault(t *testing.T) {
+	ladder := tierescalation.NewLadder([]agentlib.ModelInfo{
+		{Power: 50, Available: true, AutoRoutable: true},
+		{Power: 90, Available: true, AutoRoutable: true},
+	})
+	b := &bead.Bead{ID: "ddx-tier-hint-003", Labels: []string{"tier:hint=nonexistent"}}
+	floor, report, unavailable := investigationRetryInitialMinPower(b, 0, 0, ladder)
+	require.False(t, unavailable, "invalid tier name must not produce unavailable report")
+	assert.Empty(t, report.Status)
+	assert.Equal(t, 0, floor, "unrecognized tier:hint must fall back to the default floor")
+}
+
+// TestTierHint_FlagRaisesFloorAboveLabel verifies that the --min-power flag
+// (represented as baseMinPower) can raise the initial floor above the label-
+// derived floor but cannot lower it below.
+func TestTierHint_FlagRaisesFloorAboveLabel(t *testing.T) {
+	ladder := tierescalation.NewLadder([]agentlib.ModelInfo{
+		{Power: 50, Available: true, AutoRoutable: true},
+		{Power: 70, Available: true, AutoRoutable: true},
+		{Power: 90, Available: true, AutoRoutable: true},
+	})
+	// tier:hint=standard resolves to floor=70 (second tier); --min-power=90 raises above
+	b := &bead.Bead{ID: "ddx-tier-hint-004", Labels: []string{"tier:hint=standard"}}
+	floor, report, unavailable := investigationRetryInitialMinPower(b, 90, 0, ladder)
+	require.False(t, unavailable)
+	assert.Empty(t, report.Status)
+	assert.Equal(t, 90, floor, "--min-power flag must raise the floor above the label-derived floor")
+}
