@@ -21,7 +21,7 @@ func newCtx(t *testing.T) (string, InvocationContext) {
 		DiffHead:    "HEAD",
 		ProjectRoot: root,
 		EvidenceDir: ev,
-		RunID:       "run-1",
+		AttemptID:   "run-1",
 	}
 }
 
@@ -228,7 +228,7 @@ func TestChecksRun_ShellScriptFixture(t *testing.T) {
 		byName[r.Name] = r
 	}
 
-	if got := byName["envfixture"].Message; got != fmt.Sprintf("BEAD=%s BASE=%s HEAD=%s ROOT=%s RUN=%s", ictx.BeadID, ictx.DiffBase, ictx.DiffHead, ictx.ProjectRoot, ictx.RunID) {
+	if got := byName["envfixture"].Message; got != fmt.Sprintf("BEAD=%s BASE=%s HEAD=%s ROOT=%s RUN=%s", ictx.BeadID, ictx.DiffBase, ictx.DiffHead, ictx.ProjectRoot, ictx.AttemptID) {
 		t.Fatalf("env fixture message = %q", got)
 	}
 	if byName["slow-a"].Status != StatusPass || byName["slow-b"].Status != StatusPass {

@@ -69,7 +69,7 @@ func runOne(ctx context.Context, c Check, ictx InvocationContext) Result {
 		"DIFF_HEAD="+ictx.DiffHead,
 		"PROJECT_ROOT="+ictx.ProjectRoot,
 		"EVIDENCE_DIR="+ictx.EvidenceDir,
-		"RUN_ID="+ictx.RunID,
+		"RUN_ID="+ictx.AttemptID,
 		"CHECK_NAME="+c.Name,
 	)
 	var stderr bytes.Buffer
