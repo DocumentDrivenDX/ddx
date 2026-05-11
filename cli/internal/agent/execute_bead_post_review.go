@@ -404,6 +404,23 @@ func RunPostMergeReview(ctx context.Context, in PostMergeReviewInput) PostMergeR
 		report.Status = ExecuteBeadStatusReviewBlock
 		report.Detail = "pre-close review: BLOCK (flagged for human)"
 		out.Approved = false
+	case VerdictRequestClarification:
+		// Reviewer cannot adjudicate needs-judgment AC without operator input.
+		// Park the bead to proposed (operator lane) without blocking the queue —
+		// unlike BLOCK, this does not trigger the automated repair cycle or triage.
+		rationale := strings.TrimSpace(reviewRes.Rationale)
+		_ = in.Store.AppendEvent(in.Bead.ID, bead.BeadEvent{
+			Kind:      ReviewRequestClarificationEventKind,
+			Summary:   "REQUEST_CLARIFICATION",
+			Body:      AppendEventSummary(ReviewEventBody("REQUEST_CLARIFICATION", rationale, artifactPath), reviewSummary),
+			Actor:     in.Assignee,
+			Source:    "ddx agent execute-loop",
+			CreatedAt: now().UTC(),
+		})
+		_ = in.Store.ParkToProposed(in.Bead.ID, bead.ParkReviewRequestClarification, nil)
+		report.Status = ExecuteBeadStatusReviewRequestClarification
+		report.Detail = "pre-close review: REQUEST_CLARIFICATION"
+		out.Approved = false
 	}
 	if reviewRes.Verdict == VerdictBlock || reviewRes.Verdict == VerdictRequestChanges {
 		_ = applyReviewTriageDecision(in.Store, in.Bead.ID, in.Assignee, now().UTC(), report.Tier)

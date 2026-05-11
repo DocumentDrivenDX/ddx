@@ -25,7 +25,7 @@ func ClassifyReviewFindings(res *ReviewResult) ReviewFindingClassification {
 	}
 
 	switch res.Verdict {
-	case VerdictApprove:
+	case VerdictApprove, VerdictRequestClarification:
 		return ReviewFindingClassification{}
 	case VerdictRequestChanges, VerdictBlock:
 	default:

@@ -20,6 +20,38 @@ import (
 	agentlib "github.com/easel/fizeau"
 )
 
+// beadStrictnessMode returns the strictness mode for review based on bead
+// labels. kind:doc and kind:mechanical → mechanical; kind:refactor and
+// kind:chore → behavior-light; default → strict.
+func beadStrictnessMode(labels []string) string {
+	for _, l := range labels {
+		switch l {
+		case "kind:doc", "kind:mechanical":
+			return StrictnessMechanical
+		case "kind:refactor", "kind:chore":
+			return StrictnessBehavior
+		}
+	}
+	return StrictnessStrict
+}
+
+// strictnessModeInstructions returns the per-mode evidence requirement text
+// injected into the reviewer prompt.
+func strictnessModeInstructions(mode string) string {
+	switch mode {
+	case StrictnessMechanical:
+		return "mechanical — file presence, renames, or symbol evidence only; no test-name or runtime evidence required."
+	case StrictnessBehavior:
+		return "behavior-light — build green plus file/symbol evidence suffices; test-name match required only when an AC explicitly names a Test* function."
+	default:
+		return "strict — each AC must be anchored to a named Test* function or a diff-touched symbol; file-only evidence is insufficient."
+	}
+}
+
+// ReviewRequestClarificationEventKind is the event kind appended to a bead
+// when the reviewer returns REQUEST_CLARIFICATION.
+const ReviewRequestClarificationEventKind = "review-request-clarification"
+
 // ReviewPairingDegradedEventKind is the kind:review-pairing-degraded event
 // kind appended to the bead when the post-merge reviewer was routed to the
 // same provider as the implementer. R4 (different reviewer) is best-effort
@@ -61,6 +93,26 @@ const (
 	// VerdictBlock means escalation should stop; the bead is flagged for human
 	// review while remaining open.
 	VerdictBlock Verdict = "BLOCK"
+	// VerdictRequestClarification means the reviewer cannot adjudicate one or
+	// more needs-judgment AC items without additional operator context. Unlike
+	// BLOCK it does not halt automated retry; it parks the bead to
+	// status=proposed so the operator can supply the missing context.
+	VerdictRequestClarification Verdict = "REQUEST_CLARIFICATION"
+)
+
+// Strictness mode constants drive the per-bead evidence requirements injected
+// into the reviewer prompt. The mode is derived from bead labels.
+const (
+	// StrictnessStrict requires named Test* functions and diff-anchored symbols
+	// per AC. Applied to kind:fix and kind:feat beads.
+	StrictnessStrict = "strict"
+	// StrictnessBehavior requires build-green plus file/symbol evidence.
+	// Test-name match is required only when an AC explicitly names a Test*.
+	// Applied to kind:refactor and kind:chore beads.
+	StrictnessBehavior = "behavior-light"
+	// StrictnessMechanical requires only file presence, renames, or symbol
+	// evidence. Applied to kind:doc and kind:mechanical beads.
+	StrictnessMechanical = "mechanical"
 )
 
 // ReviewResult is the structured outcome of a post-merge bead review.
@@ -216,11 +268,49 @@ type reviewGroupReviewer interface {
 // model echoed the prompt's options header — see review_verdict.go.
 const beadReviewInstructions = `You are reviewing a bead implementation against its acceptance criteria.
 
-For each acceptance-criteria (AC) item, decide whether it is implemented correctly, then assign one overall verdict:
+## AC-Check Ratification
+
+When an <ac-check> section is present, ratify the mechanical results rather
+than re-verifying them independently from the diff:
+
+- result="pass": confirm the evidence is credible. Override to fail only if
+  the evidence is fabricated — include judgment_override_reason and a diff
+  citation (file:line) in the per_ac evidence string.
+- result="fail": mechanically verified failure. Grade as fail and BLOCK unless
+  the commit message contains an explicit AC-Waive trailer for this AC.
+- result="needs_judgment": adjudicate from the diff. If you cannot determine
+  pass/fail without additional bead context from the operator, use
+  REQUEST_CLARIFICATION for that AC item.
+- result="error": treat as needs_judgment.
+
+Overriding a mechanical grade (pass→fail or fail→pass) requires an explicit
+judgment_override_reason note and a concrete diff citation in the evidence.
+
+## Strictness Mode
+
+The <strictness-mode> tag specifies per-bead evidence requirements:
+
+- strict (kind:fix, kind:feat): each AC must be anchored to a named Test*
+  function or a diff-touched symbol; file-only evidence is insufficient.
+- behavior-light (kind:refactor, kind:chore): build green plus file/symbol
+  evidence suffices; test-name match required only when an AC explicitly
+  names a Test* function.
+- mechanical (kind:doc, kind:mechanical): file presence, renames, or symbol
+  evidence only; no test-name or runtime evidence required.
+
+## Verdicts
+
+For each acceptance-criteria (AC) item, decide whether it is implemented
+correctly, then assign one overall verdict:
 
 - APPROVE — every AC item is fully and correctly implemented.
 - REQUEST_CHANGES — some AC items are partial or have fixable minor issues.
-- BLOCK — at least one AC item is not implemented or incorrectly implemented; or the diff is insufficient to evaluate.
+- BLOCK — at least one AC item is not implemented or incorrectly implemented;
+  or the diff is insufficient to evaluate.
+- REQUEST_CLARIFICATION — you cannot adjudicate one or more needs_judgment AC
+  items without operator clarification. Use this ONLY when the item is
+  ambiguous even given the full diff. This verdict does NOT block the queue;
+  it routes to the operator lane for input.
 
 ## Required output format (schema_version: 1)
 
@@ -241,16 +331,21 @@ Respond with EXACTLY one JSON object as your final response, fenced as a single 
 ` + "`" + `` + "`" + `` + "`" + `
 
 Rules:
-- "verdict" must be exactly one of "APPROVE", "REQUEST_CHANGES", "BLOCK".
+- "verdict" must be exactly one of "APPROVE", "REQUEST_CHANGES", "BLOCK", "REQUEST_CLARIFICATION".
 - "severity" must be exactly one of "info", "warn", "block".
 - Output the JSON object inside ONE fenced ` + "`" + `` + "`" + `` + "`" + `json … ` + "`" + `` + "`" + `` + "`" + ` block. No additional prose, no extra fences, no markdown headings.
-- Do not echo this template back. Do not write the words APPROVE, REQUEST_CHANGES, or BLOCK anywhere except as the JSON value of the verdict field.`
+- Do not echo this template back. Do not write the verdict value anywhere except as the JSON value of the verdict field.`
 
 // BuildReviewPromptOptions configures evidence-bounded prompt assembly.
 // FEAT-022 §5/§7: caps drive per-section trimming and the pre-dispatch
 // short-circuit on residual oversize.
 type BuildReviewPromptOptions struct {
 	Caps evidence.Caps
+	// ACCheckJSON, when non-empty, is the raw JSON content of the
+	// .ddx/executions/<attempt-id>/ac-check.json file produced by
+	// `ddx bead ac-check`. Injected as a structured <ac-check> section so
+	// the reviewer ratifies mechanical results rather than re-grepping the diff.
+	ACCheckJSON string
 }
 
 // ReviewPromptOptions controls optional prompt sections.
@@ -360,6 +455,19 @@ func buildReviewPromptBounded(b *bead.Bead, iter int, rev, diff, projectRoot str
 		})
 	}
 
+	// ── AC-Check section (structured mechanical results) ────────────────────
+	if opts.ACCheckJSON != "" {
+		acStart := sb.Len()
+		sb.WriteString("  <ac-check>\n")
+		sb.WriteString(opts.ACCheckJSON)
+		sb.WriteString("\n  </ac-check>\n\n")
+		sections = append(sections, evidence.EvidenceAssemblySection{
+			Name:          "ac-check",
+			BytesIncluded: sb.Len() - acStart,
+			SelectedItems: []string{"ac-check.json"},
+		})
+	}
+
 	// ── Governing docs section (clamped per-doc) ────────────────────────────
 	sb.WriteString("  <governing>\n")
 	if len(refs) == 0 {
@@ -425,6 +533,16 @@ func buildReviewPromptBounded(b *bead.Bead, iter int, rev, diff, projectRoot str
 			sections = append(sections, proseSectionEvidence)
 		}
 	}
+
+	// ── Strictness mode section ──────────────────────────────────────────────
+	mode := beadStrictnessMode(b.Labels)
+	modeStart := sb.Len()
+	fmt.Fprintf(&sb, "  <strictness-mode mode=%q>%s</strictness-mode>\n\n", mode, reviewXMLEscape(strictnessModeInstructions(mode)))
+	sections = append(sections, evidence.EvidenceAssemblySection{
+		Name:          "strictness-mode",
+		BytesIncluded: sb.Len() - modeStart,
+		SelectedItems: []string{mode},
+	})
 
 	// ── Instructions section ────────────────────────────────────────────────
 	instructions := strings.ReplaceAll(beadReviewInstructions, "<bead-id>", b.ID)
@@ -927,7 +1045,16 @@ func (r *DefaultBeadReviewer) Review(ctx context.Context, projectRoot string, ca
 			"cycle_index":   fmt.Sprintf("%d", candidate.CycleIndex),
 		},
 	}
-	group, groupErr := reviewer.reviewGroupWithDiff(ctx, beadID, candidate.Report.ResultRev, impl, diff, workDir)
+	// Read ac-check.json from the still-live worktree so the reviewer can
+	// ratify mechanical results rather than re-grepping the diff.
+	acCheckJSON := ""
+	if candidate.Report.AttemptID != "" && candidate.WorktreePath != "" {
+		acCheckPath := filepath.Join(candidate.WorktreePath, ExecuteBeadArtifactDir, candidate.Report.AttemptID, "ac-check.json")
+		if data, readErr := os.ReadFile(acCheckPath); readErr == nil {
+			acCheckJSON = string(data)
+		}
+	}
+	group, groupErr := reviewer.reviewGroupWithDiff(ctx, beadID, candidate.Report.ResultRev, impl, diff, workDir, acCheckJSON)
 	review, reduceErr := reducePreCloseReviewGroup(group)
 	if review == nil {
 		if reduceErr != nil {

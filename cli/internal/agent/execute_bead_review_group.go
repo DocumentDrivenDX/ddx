@@ -20,10 +20,10 @@ func (r *DefaultBeadReviewer) ReviewGroup(ctx context.Context, beadID, resultRev
 	if err != nil {
 		return nil, fmt.Errorf("review-group: git show %s: %w", resultRev, err)
 	}
-	return r.reviewGroupWithDiff(ctx, beadID, resultRev, impl, diff, r.ProjectRoot)
+	return r.reviewGroupWithDiff(ctx, beadID, resultRev, impl, diff, r.ProjectRoot, "")
 }
 
-func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, resultRev string, impl ImplementerRouting, diff, reviewWorkDir string) (*ReviewGroupResult, error) {
+func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, resultRev string, impl ImplementerRouting, diff, reviewWorkDir, acCheckJSON string) (*ReviewGroupResult, error) {
 	b, err := r.BeadStore.Get(beadID)
 	if err != nil {
 		return nil, fmt.Errorf("review-group: get bead %s: %w", beadID, err)
@@ -39,7 +39,7 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 	if caps.MaxPromptBytes == 0 {
 		caps = evidence.DefaultCaps()
 	}
-	built := BuildReviewPromptBounded(b, iter, resultRev, diff, r.ProjectRoot, refs, BuildReviewPromptOptions{Caps: caps})
+	built := BuildReviewPromptBounded(b, iter, resultRev, diff, r.ProjectRoot, refs, BuildReviewPromptOptions{Caps: caps, ACCheckJSON: acCheckJSON})
 	groupID := GenerateAttemptID()
 	artifacts, err := createArtifactBundle(r.ProjectRoot, r.ProjectRoot, groupID)
 	if err != nil {
