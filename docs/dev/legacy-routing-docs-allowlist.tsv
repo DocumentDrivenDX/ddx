@@ -9,7 +9,7 @@ docs/dev/routing-lint.md	`agent.routing.profile_ladders`, `agent.routing.model_o
 docs/dev/routing-lint.md	`profile_ladders` and `model_overrides` keys out of an incoming config	lint rejection-path documentation
 docs/dev/routing-lint.md	for _, field := range []string{"default_harness", "profile_ladders", "model_overrides"}	lint annotation example for hard-error rejection path
 docs/migrations/routing-config.md	`profile_ladders`, `model_overrides`, `default_harness`, and the old	migration note for hard-rejected retired config keys
-website/content/docs/cli/commands/ddx_work.md	--profile string             Fizeau profile constraint	generated current flag list; passthrough constraint, not DDx routing policy
+website/content/docs/cli/commands/ddx_work.md	--profile string	generated current flag list; passthrough constraint, not DDx routing policy
 docs/helix/01-frame/features/FEAT-001-cli.md	~~`--quorum=majority --harnesses=a,b`~~ — **removed**	explicit removal requirement; compare-prompts replaces quorum flags
 docs/helix/01-frame/features/FEAT-001-cli.md	**Hard-deprecation handlers** for `ddx agent run`, `ddx agent execute-bead`, `ddx agent execute-loop`	explicit hard-deprecation requirement for removed command leaves
 docs/helix/01-frame/features/FEAT-006-agent-service.md	`ddx agent run`, `ddx agent execute-bead`, and `ddx agent execute-loop` are not	explicit hard-deprecation boundary

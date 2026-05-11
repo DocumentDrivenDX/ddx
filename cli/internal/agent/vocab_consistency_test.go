@@ -17,8 +17,8 @@ func TestVocabConsistency_AttemptIDOnly(t *testing.T) {
 	t.Parallel()
 	// Split strings to avoid this file self-matching.
 	forbidden := []string{
-		"run" + "ID",  // would be runID
-		"Run" + "ID",  // would be RunID
+		"run" + "ID", // would be runID
+		"Run" + "ID", // would be RunID
 	}
 
 	dirs := []string{".", filepath.Join("..", "bead")}

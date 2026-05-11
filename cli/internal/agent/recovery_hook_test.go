@@ -61,11 +61,11 @@ func TestConsecutiveLadderExhaustionsCounter(t *testing.T) {
 	})
 
 	_, _ = worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
-		Mode:                    executeloop.ModeDrain,
+		Mode:                     executeloop.ModeDrain,
 		PostLadderExhaustionHook: hook,
-		ProjectRoot:             t.TempDir(),
-		SessionID:               "sess-hook-test",
-		WorkerID:                "worker-hook-test",
+		ProjectRoot:              t.TempDir(),
+		SessionID:                "sess-hook-test",
+		WorkerID:                 "worker-hook-test",
 	})
 
 	assert.EqualValues(t, 1, atomic.LoadInt32(&hookCalls), "hook must fire exactly once at threshold 2")
@@ -117,11 +117,11 @@ func TestRecoveryManualLabel_SkipsAutoRecovery(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Mode:                    executeloop.ModeDrain,
+		Mode:                     executeloop.ModeDrain,
 		PostLadderExhaustionHook: hook,
-		ProjectRoot:             t.TempDir(),
-		SessionID:               "sess-manual-test",
-		WorkerID:                "worker-manual-test",
+		ProjectRoot:              t.TempDir(),
+		SessionID:                "sess-manual-test",
+		WorkerID:                 "worker-manual-test",
 	})
 	require.NoError(t, err)
 

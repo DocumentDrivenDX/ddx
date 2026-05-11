@@ -59,7 +59,12 @@ trap 'rm -f "$tmp"' EXIT
 set +e
 (
   cd "$root"
-  rg -n --glob '!docs/dev/legacy-routing-docs-allowlist.tsv' -e "$pattern" "${scan_paths[@]}"
+  # Use grep -rn as a portable fallback; rg is preferred when available.
+  if command -v rg >/dev/null 2>&1; then
+    rg -n --glob '!docs/dev/legacy-routing-docs-allowlist.tsv' -e "$pattern" "${scan_paths[@]}"
+  else
+    grep -rn --exclude='legacy-routing-docs-allowlist.tsv' -E "$pattern" "${scan_paths[@]}"
+  fi
 ) > "$tmp"
 rg_status=$?
 set -e
