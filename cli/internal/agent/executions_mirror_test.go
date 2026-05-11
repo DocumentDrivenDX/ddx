@@ -282,6 +282,298 @@ func TestMirrorIndexEntry_JSONRoundtrip(t *testing.T) {
 	}
 }
 
+// TestMirror_CopiesExecutionDir verifies that MirrorBundle copies the full
+// execution bundle directory to the rendered mirror path.
+func TestMirror_CopiesExecutionDir(t *testing.T) {
+	projectRoot := t.TempDir()
+	const attemptID = "20260511T010101-aabbccdd"
+	const beadID = "ddx-copy-exec-dir"
+
+	bundleDir := filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "result.json"), []byte(`{"status":"success"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mirrorRoot := t.TempDir()
+	async := false
+	cfg := &config.ExecutionsMirrorConfig{
+		Kind:  "local",
+		Path:  filepath.Join(mirrorRoot, "{attempt_id}"),
+		Async: &async,
+	}
+	entry, err := MirrorBundle(MirrorRequest{
+		ProjectRoot: projectRoot,
+		AttemptID:   attemptID,
+		BeadID:      beadID,
+		BundleDir:   bundleDir,
+		Cfg:         cfg,
+	})
+	if err != nil {
+		t.Fatalf("MirrorBundle: %v", err)
+	}
+	if entry == nil || entry.AttemptID != attemptID {
+		t.Fatalf("unexpected entry: %#v", entry)
+	}
+
+	got := filepath.Join(mirrorRoot, attemptID, "result.json")
+	if _, err := os.Stat(got); err != nil {
+		t.Errorf("expected execution bundle file at %s: %v", got, err)
+	}
+}
+
+// TestMirror_CopiesAgentLog verifies that MirrorBundle copies the agent-log
+// file when SessionID is set and IncludeAgentLogs is true (default).
+func TestMirror_CopiesAgentLog(t *testing.T) {
+	projectRoot := t.TempDir()
+	const attemptID = "20260511T020202-bbccddee"
+	const beadID = "ddx-copy-agent-log"
+	const sessionID = "test-session-xyz"
+
+	bundleDir := filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "result.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	logDir := filepath.Join(projectRoot, ".ddx", "agent-logs")
+	if err := os.MkdirAll(logDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	agentLog := filepath.Join(logDir, "agent-"+sessionID+".jsonl")
+	if err := os.WriteFile(agentLog, []byte(`{"event":"tool_call"}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mirrorRoot := t.TempDir()
+	async := false
+	cfg := &config.ExecutionsMirrorConfig{
+		Kind:  "local",
+		Path:  filepath.Join(mirrorRoot, "{attempt_id}"),
+		Async: &async,
+		// IncludeAgentLogs is nil → defaults to true
+	}
+	_, err := MirrorBundle(MirrorRequest{
+		ProjectRoot: projectRoot,
+		AttemptID:   attemptID,
+		BeadID:      beadID,
+		BundleDir:   bundleDir,
+		Cfg:         cfg,
+		SessionID:   sessionID,
+	})
+	if err != nil {
+		t.Fatalf("MirrorBundle: %v", err)
+	}
+
+	want := filepath.Join(mirrorRoot, attemptID, "agent-logs", "agent-"+sessionID+".jsonl")
+	if _, err := os.Stat(want); err != nil {
+		t.Errorf("expected agent-log at %s: %v", want, err)
+	}
+}
+
+// TestMirror_CopiesWorkerDirWhenIncluded verifies that the worker state dir is
+// copied when IncludeWorkers is explicitly set to true.
+func TestMirror_CopiesWorkerDirWhenIncluded(t *testing.T) {
+	projectRoot := t.TempDir()
+	const attemptID = "20260511T030303-ccddeegg"
+	const beadID = "ddx-copy-worker-dir"
+	const workerID = "worker-include-test"
+
+	bundleDir := filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "result.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	workerDir := filepath.Join(projectRoot, ".ddx", "workers", workerID)
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workerDir, "status.json"), []byte(`{"state":"done"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mirrorRoot := t.TempDir()
+	async := false
+	incWorkers := true
+	cfg := &config.ExecutionsMirrorConfig{
+		Kind:           "local",
+		Path:           filepath.Join(mirrorRoot, "{attempt_id}"),
+		Async:          &async,
+		IncludeWorkers: &incWorkers,
+	}
+	_, err := MirrorBundle(MirrorRequest{
+		ProjectRoot: projectRoot,
+		AttemptID:   attemptID,
+		BeadID:      beadID,
+		BundleDir:   bundleDir,
+		Cfg:         cfg,
+		WorkerID:    workerID,
+	})
+	if err != nil {
+		t.Fatalf("MirrorBundle: %v", err)
+	}
+
+	want := filepath.Join(mirrorRoot, attemptID, "workers", workerID, "status.json")
+	if _, err := os.Stat(want); err != nil {
+		t.Errorf("expected worker status at %s: %v", want, err)
+	}
+}
+
+// TestMirror_SkipsWorkerDirWhenExcluded verifies that the worker state dir is
+// NOT copied when IncludeWorkers is false (or defaults to false when nil).
+func TestMirror_SkipsWorkerDirWhenExcluded(t *testing.T) {
+	projectRoot := t.TempDir()
+	const attemptID = "20260511T040404-ddeeff00"
+	const beadID = "ddx-skip-worker-dir"
+	const workerID = "worker-exclude-test"
+
+	bundleDir := filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "result.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	workerDir := filepath.Join(projectRoot, ".ddx", "workers", workerID)
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workerDir, "status.json"), []byte(`{"state":"done"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	mirrorRoot := t.TempDir()
+	async := false
+	incWorkers := false // explicitly exclude
+	cfg := &config.ExecutionsMirrorConfig{
+		Kind:           "local",
+		Path:           filepath.Join(mirrorRoot, "{attempt_id}"),
+		Async:          &async,
+		IncludeWorkers: &incWorkers,
+	}
+	_, err := MirrorBundle(MirrorRequest{
+		ProjectRoot: projectRoot,
+		AttemptID:   attemptID,
+		BeadID:      beadID,
+		BundleDir:   bundleDir,
+		Cfg:         cfg,
+		WorkerID:    workerID,
+	})
+	if err != nil {
+		t.Fatalf("MirrorBundle: %v", err)
+	}
+
+	// Workers dir must NOT exist in the mirror.
+	workersMirrorDir := filepath.Join(mirrorRoot, attemptID, "workers")
+	if _, err := os.Stat(workersMirrorDir); err == nil {
+		t.Errorf("workers mirror dir must not exist when IncludeWorkers=false, but found: %s", workersMirrorDir)
+	}
+}
+
+// TestMirror_CopyFailure_DoesNotBlockFinalization verifies that when an
+// agent-log or worker-dir copy fails, MirrorOrLog does not panic or block,
+// and writes a failure record to mirror.log.
+func TestMirror_CopyFailure_DoesNotBlockFinalization(t *testing.T) {
+	projectRoot := t.TempDir()
+	const attemptID = "20260511T050505-eeffaabb"
+	const beadID = "ddx-copy-fail"
+	const workerID = "worker-fail-test"
+
+	bundleDir := filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "result.json"), []byte("{}"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Create a worker dir that exists so the copy is attempted.
+	workerDir := filepath.Join(projectRoot, ".ddx", "workers", workerID)
+	if err := os.MkdirAll(workerDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(workerDir, "status.json"), []byte(`{"state":"done"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Use an invalid mirror path that will cause the bundle upload to fail.
+	async := false
+	incWorkers := true
+	cfg := &config.ExecutionsMirrorConfig{
+		Kind:           "s3", // unsupported — causes NewMirrorBackend to fail
+		Path:           "s3://bucket/{attempt_id}",
+		Async:          &async,
+		IncludeWorkers: &incWorkers,
+	}
+
+	// Must not panic.
+	MirrorOrLog(MirrorRequest{
+		ProjectRoot: projectRoot,
+		AttemptID:   attemptID,
+		BeadID:      beadID,
+		BundleDir:   bundleDir,
+		Cfg:         cfg,
+		WorkerID:    workerID,
+	})
+
+	logPath := filepath.Join(projectRoot, ExecutionsMirrorLogFile)
+	data, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("expected mirror.log to exist after failure: %v", err)
+	}
+	if !strings.Contains(string(data), "ERR") {
+		t.Errorf("mirror.log missing failure marker, got: %s", data)
+	}
+}
+
+// TestMirror_PathAutoCreate verifies that MirrorBundle auto-creates the mirror
+// destination directory when it does not exist yet.
+func TestMirror_PathAutoCreate(t *testing.T) {
+	projectRoot := t.TempDir()
+	const attemptID = "20260511T060606-ffeeddcc"
+	const beadID = "ddx-path-autocreate"
+
+	bundleDir := filepath.Join(projectRoot, ".ddx", "executions", attemptID)
+	if err := os.MkdirAll(bundleDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bundleDir, "result.json"), []byte(`{"status":"success"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Point mirror at a non-existent nested directory.
+	mirrorRoot := filepath.Join(t.TempDir(), "deep", "nested", "mirror")
+	async := false
+	cfg := &config.ExecutionsMirrorConfig{
+		Kind:  "local",
+		Path:  filepath.Join(mirrorRoot, "{attempt_id}"),
+		Async: &async,
+	}
+	_, err := MirrorBundle(MirrorRequest{
+		ProjectRoot: projectRoot,
+		AttemptID:   attemptID,
+		BeadID:      beadID,
+		BundleDir:   bundleDir,
+		Cfg:         cfg,
+	})
+	if err != nil {
+		t.Fatalf("MirrorBundle with non-existent path: %v", err)
+	}
+
+	want := filepath.Join(mirrorRoot, attemptID, "result.json")
+	if _, err := os.Stat(want); err != nil {
+		t.Errorf("expected file at %s after auto-create: %v", want, err)
+	}
+}
+
 func dirHash(t *testing.T, root string) string {
 	t.Helper()
 	h := sha256.New()

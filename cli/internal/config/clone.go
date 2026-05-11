@@ -90,6 +90,14 @@ func (m *ExecutionsMirrorConfig) Clone() *ExecutionsMirrorConfig {
 		v := *m.Async
 		out.Async = &v
 	}
+	if m.IncludeAgentLogs != nil {
+		v := *m.IncludeAgentLogs
+		out.IncludeAgentLogs = &v
+	}
+	if m.IncludeWorkers != nil {
+		v := *m.IncludeWorkers
+		out.IncludeWorkers = &v
+	}
 	return &out
 }
 

@@ -50,6 +50,15 @@ type MirrorRequest struct {
 	BeadID      string
 	BundleDir   string // absolute path to .ddx/executions/<attempt-id>/
 	Cfg         *config.ExecutionsMirrorConfig
+	// SessionID identifies the agent-log file (agent-<SessionID>.jsonl).
+	// Empty skips agent-log mirroring even when IncludeAgentLogs is true.
+	SessionID string
+	// WorkerID identifies the worker state directory under .ddx/workers/.
+	// Empty skips worker-dir mirroring even when IncludeWorkers is true.
+	WorkerID string
+	// AgentLogDir overrides the directory where agent-*.jsonl files are found.
+	// If empty, defaults to {ProjectRoot}/.ddx/agent-logs.
+	AgentLogDir string
 }
 
 // allMirrorParts is the canonical default include list — every part of the
@@ -146,11 +155,94 @@ func projectName(projectRoot string) string {
 	return filepath.Base(clean)
 }
 
+// mirrorKindEnabled returns false when kind is empty or the explicit "none"
+// sentinel (operators set kind=none to explicitly disable mirroring).
+func mirrorKindEnabled(kind string) bool {
+	k := strings.ToLower(strings.TrimSpace(kind))
+	return k != "" && k != "none"
+}
+
+// mirrorIncludeAgentLogs returns whether to copy the agent-log alongside the
+// bundle. Nil (field unset) defaults to true (include by default).
+func mirrorIncludeAgentLogs(v *bool) bool {
+	if v == nil {
+		return true
+	}
+	return *v
+}
+
+// mirrorIncludeWorkers returns whether to copy the worker state dir alongside
+// the bundle. Nil (field unset) defaults to false (exclude by default; worker
+// dirs are large and rarely needed retrospectively).
+func mirrorIncludeWorkers(v *bool) bool {
+	if v == nil {
+		return false
+	}
+	return *v
+}
+
+// copyAgentLogToMirror copies agent-<SessionID>.jsonl from the agent-log
+// directory to <destRoot>/agent-logs/. No-ops silently when the log file
+// doesn't exist (common for embedded-harness sessions whose logs are already
+// inside the bundle). Returns a non-nil error only for copy failures after
+// the file is confirmed to exist.
+func copyAgentLogToMirror(req MirrorRequest, destRoot string) error {
+	logDir := req.AgentLogDir
+	if logDir == "" {
+		logDir = filepath.Join(req.ProjectRoot, DefaultLogDir)
+	}
+	src := filepath.Join(logDir, "agent-"+req.SessionID+".jsonl")
+	if _, err := os.Stat(src); err != nil {
+		return nil // file absent — silently skip
+	}
+	destDir := filepath.Join(destRoot, "agent-logs")
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return fmt.Errorf("creating agent-logs mirror dir: %w", err)
+	}
+	_, err := copyFile(src, filepath.Join(destDir, filepath.Base(src)))
+	return err
+}
+
+// copyWorkerDirToMirror copies .ddx/workers/<WorkerID>/ to
+// <destRoot>/workers/<WorkerID>/. No-ops silently when the worker directory
+// doesn't exist.
+func copyWorkerDirToMirror(req MirrorRequest, destRoot string) error {
+	srcDir := filepath.Join(req.ProjectRoot, ".ddx", "workers", req.WorkerID)
+	if _, err := os.Stat(srcDir); err != nil {
+		return nil // worker dir absent — silently skip
+	}
+	destDir := filepath.Join(destRoot, "workers", req.WorkerID)
+	if err := os.MkdirAll(destDir, 0o755); err != nil {
+		return fmt.Errorf("creating workers mirror dir: %w", err)
+	}
+	return filepath.Walk(srcDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		rel, relErr := filepath.Rel(srcDir, path)
+		if relErr != nil {
+			return relErr
+		}
+		dest := filepath.Join(destDir, rel)
+		if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+			return err
+		}
+		_, copyErr := copyFile(path, dest)
+		return copyErr
+	})
+}
+
 // MirrorBundle uploads one bundle synchronously via the configured backend
-// and appends a row to the local mirror-index.jsonl pointer file. Returns
-// the index entry on success.
+// and appends a row to the local mirror-index.jsonl pointer file. When
+// IncludeAgentLogs is true (the default) and SessionID is set, also copies
+// the agent-log. When IncludeWorkers is true and WorkerID is set, also copies
+// the worker state dir. Subsidiary copy failures are logged to mirror.log but
+// do not fail the bundle upload. Returns the index entry on success.
 func MirrorBundle(req MirrorRequest) (*MirrorIndexEntry, error) {
-	if req.Cfg == nil || strings.TrimSpace(req.Cfg.Kind) == "" || strings.TrimSpace(req.Cfg.Path) == "" {
+	if req.Cfg == nil || !mirrorKindEnabled(req.Cfg.Kind) || strings.TrimSpace(req.Cfg.Path) == "" {
 		return nil, fmt.Errorf("mirror not configured")
 	}
 	backend, err := NewMirrorBackend(req.Cfg.Kind)
@@ -167,6 +259,22 @@ func MirrorBundle(req MirrorRequest) (*MirrorIndexEntry, error) {
 	mirrorURI, bytes, err := backend.Upload(dest, req.BundleDir, filter)
 	if err != nil {
 		return nil, fmt.Errorf("mirror upload: %w", err)
+	}
+
+	// Copy agent-log alongside the bundle (best-effort; failures logged only).
+	if mirrorIncludeAgentLogs(req.Cfg.IncludeAgentLogs) && req.SessionID != "" {
+		if agentErr := copyAgentLogToMirror(req, dest); agentErr != nil {
+			LogMirrorFailure(req.ProjectRoot, req.AttemptID, req.BeadID,
+				fmt.Errorf("agent-log copy: %w", agentErr))
+		}
+	}
+
+	// Copy worker state dir alongside the bundle (best-effort; failures logged only).
+	if mirrorIncludeWorkers(req.Cfg.IncludeWorkers) && req.WorkerID != "" {
+		if workerErr := copyWorkerDirToMirror(req, dest); workerErr != nil {
+			LogMirrorFailure(req.ProjectRoot, req.AttemptID, req.BeadID,
+				fmt.Errorf("worker-dir copy: %w", workerErr))
+		}
 	}
 
 	entry := &MirrorIndexEntry{
@@ -198,9 +306,9 @@ func MirrorBundleAsync(req MirrorRequest) {
 
 // MirrorOrLog dispatches according to the configured async setting. When
 // the bead description says default async=true, callers should treat a nil
-// or true Async as background.
+// or true Async as background. Kind=none (or empty) disables mirroring.
 func MirrorOrLog(req MirrorRequest) {
-	if req.Cfg == nil || strings.TrimSpace(req.Cfg.Kind) == "" || strings.TrimSpace(req.Cfg.Path) == "" {
+	if req.Cfg == nil || !mirrorKindEnabled(req.Cfg.Kind) || strings.TrimSpace(req.Cfg.Path) == "" {
 		return
 	}
 	async := true
@@ -316,14 +424,15 @@ func appendMirrorLog(projectRoot, line string) {
 	_, _ = f.WriteString(line)
 }
 
-// NewMirrorBackend returns the backend for a given kind. Currently only
-// "local" is supported; other kinds return a clear error.
+// NewMirrorBackend returns the backend for a given kind. "local" and
+// "local-dir" both select the local-filesystem backend; other kinds return a
+// clear error.
 func NewMirrorBackend(kind string) (MirrorBackend, error) {
 	switch strings.ToLower(strings.TrimSpace(kind)) {
-	case "local":
+	case "local", "local-dir":
 		return &LocalDirMirror{}, nil
 	default:
-		return nil, fmt.Errorf("unsupported mirror kind %q (only 'local' is implemented)", kind)
+		return nil, fmt.Errorf("unsupported mirror kind %q (only 'local' / 'local-dir' is implemented)", kind)
 	}
 }
 
