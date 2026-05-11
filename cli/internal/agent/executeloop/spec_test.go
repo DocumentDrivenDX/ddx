@@ -10,27 +10,28 @@ import (
 
 func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 	original := executeloop.ExecuteLoopSpec{
-		ProjectRoot:       "/projects/myapp",
-		Harness:           "claude-code",
-		Model:             "claude-opus-4-7",
-		Profile:           "default",
-		Provider:          "anthropic",
-		ModelRef:          "ref-abc",
-		Effort:            "high",
-		LabelFilter:       "area:agent",
-		Mode:              executeloop.ModeWatch,
-		IdleInterval:      executeloop.Duration{Duration: 45 * time.Second},
-		NoReview:          true,
-		ReviewHarness:     "reviewer-harness",
-		ReviewModel:       "claude-sonnet-4-6",
-		OpaquePassthrough: true,
-		MaxCostUSD:        12.50,
-		RequestTimeout:    executeloop.Duration{Duration: 2 * time.Minute},
-		RateLimitMaxWait:  executeloop.Duration{Duration: 90 * time.Second},
-		MinPower:          2,
-		MaxPower:          5,
-		FromRev:           "abc123def456",
-		SpecVersion:       executeloop.SpecCurrentVersion,
+		ProjectRoot:        "/projects/myapp",
+		Harness:            "claude-code",
+		Model:              "claude-opus-4-7",
+		Profile:            "default",
+		Provider:           "anthropic",
+		ModelRef:           "ref-abc",
+		Effort:             "high",
+		LabelFilter:        "area:agent",
+		Mode:               executeloop.ModeWatch,
+		IdleInterval:       executeloop.Duration{Duration: 45 * time.Second},
+		NoReview:           true,
+		ReviewHarness:      "reviewer-harness",
+		ReviewModel:        "claude-sonnet-4-6",
+		OpaquePassthrough:  true,
+		MaxCostUSD:         12.50,
+		MaxRecoveryCostUSD: 2.75,
+		RequestTimeout:     executeloop.Duration{Duration: 2 * time.Minute},
+		RateLimitMaxWait:   executeloop.Duration{Duration: 90 * time.Second},
+		MinPower:           2,
+		MaxPower:           5,
+		FromRev:            "abc123def456",
+		SpecVersion:        executeloop.SpecCurrentVersion,
 	}
 
 	data, err := json.Marshal(original)
@@ -88,6 +89,9 @@ func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 	if got.MaxCostUSD != original.MaxCostUSD {
 		t.Errorf("MaxCostUSD: got %v, want %v", got.MaxCostUSD, original.MaxCostUSD)
 	}
+	if got.MaxRecoveryCostUSD != original.MaxRecoveryCostUSD {
+		t.Errorf("MaxRecoveryCostUSD: got %v, want %v", got.MaxRecoveryCostUSD, original.MaxRecoveryCostUSD)
+	}
 	if got.RequestTimeout != original.RequestTimeout {
 		t.Errorf("RequestTimeout: got %v, want %v", got.RequestTimeout, original.RequestTimeout)
 	}
@@ -135,6 +139,9 @@ func TestExecuteLoopSpec_ApplyDefaults(t *testing.T) {
 		}
 		if s.SpecVersion != executeloop.SpecCurrentVersion {
 			t.Errorf("SpecVersion: got %d, want %d", s.SpecVersion, executeloop.SpecCurrentVersion)
+		}
+		if s.MaxRecoveryCostUSD != 2.0 {
+			t.Errorf("MaxRecoveryCostUSD: got %v, want 2.0", s.MaxRecoveryCostUSD)
 		}
 		if s.IdleInterval.Duration != 0 {
 			t.Errorf("IdleInterval should be zero for drain mode, got %v", s.IdleInterval.Duration)

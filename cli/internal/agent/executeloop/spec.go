@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"strconv"
 	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 )
 
 // SpecCurrentVersion is the single spec version supported by this client and
@@ -87,12 +89,13 @@ type ExecuteLoopSpec struct {
 	// harness/model injection (CONTRACT-003 / FEAT-010).
 	OpaquePassthrough bool `json:"opaque_passthrough,omitempty"`
 
-	MaxCostUSD       float64  `json:"max_cost_usd,omitempty"`
-	MaxBeadCostUSD   float64  `json:"max_bead_cost_usd,omitempty"`
-	RequestTimeout   Duration `json:"request_timeout,omitempty"`
-	RateLimitMaxWait Duration `json:"rate_limit_max_wait,omitempty"`
-	MinPower         int      `json:"min_power,omitempty"`
-	MaxPower         int      `json:"max_power,omitempty"`
+	MaxCostUSD         float64  `json:"max_cost_usd,omitempty"`
+	MaxBeadCostUSD     float64  `json:"max_bead_cost_usd,omitempty"`
+	MaxRecoveryCostUSD float64  `json:"max_recovery_cost_usd,omitempty"`
+	RequestTimeout     Duration `json:"request_timeout,omitempty"`
+	RateLimitMaxWait   Duration `json:"rate_limit_max_wait,omitempty"`
+	MinPower           int      `json:"min_power,omitempty"`
+	MaxPower           int      `json:"max_power,omitempty"`
 
 	// FromRev, if set, narrows execution to beads introduced after this git revision.
 	FromRev string `json:"from_rev,omitempty"`
@@ -124,6 +127,9 @@ func (s *ExecuteLoopSpec) ApplyDefaults() {
 	}
 	if s.SpecVersion == 0 {
 		s.SpecVersion = SpecCurrentVersion
+	}
+	if s.MaxRecoveryCostUSD == 0 {
+		s.MaxRecoveryCostUSD = escalation.DefaultMaxRecoveryCostUSD
 	}
 }
 

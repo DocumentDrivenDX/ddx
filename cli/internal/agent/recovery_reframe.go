@@ -104,20 +104,20 @@ func runReframer(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRu
 		output = strings.TrimSpace(result.Output)
 	}
 	if output == "" {
-		return ReframeResult{Failed: true, Reason: "empty_output"}
+		return ReframeResult{Failed: true, Reason: "empty_output", CostUSD: result.CostUSD}
 	}
 
 	candidate, ok := extractJSONCandidate(output)
 	if !ok {
-		return ReframeResult{Failed: true, Reason: "invalid_output"}
+		return ReframeResult{Failed: true, Reason: "invalid_output", CostUSD: result.CostUSD}
 	}
 
 	var parsed reframerOutput
 	if err := json.Unmarshal([]byte(candidate), &parsed); err != nil {
-		return ReframeResult{Failed: true, Reason: "invalid_output"}
+		return ReframeResult{Failed: true, Reason: "invalid_output", CostUSD: result.CostUSD}
 	}
 	if parsed.Description == nil && parsed.Acceptance == nil {
-		return ReframeResult{Failed: true, Reason: "invalid_output"}
+		return ReframeResult{Failed: true, Reason: "invalid_output", CostUSD: result.CostUSD}
 	}
 
 	current, err := store.Get(beadID)
@@ -131,7 +131,7 @@ func runReframer(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRu
 		strings.TrimSpace(*parsed.Acceptance) != strings.TrimSpace(current.Acceptance)
 
 	if !descChanged && !accChanged {
-		return ReframeResult{Failed: true, Reason: "noop_edits"}
+		return ReframeResult{Failed: true, Reason: "noop_edits", CostUSD: result.CostUSD}
 	}
 
 	var changedFields []string

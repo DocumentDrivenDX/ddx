@@ -101,23 +101,23 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 		output = strings.TrimSpace(result.Output)
 	}
 	if output == "" {
-		return DecomposeResult{Failed: true, Reason: "empty_output"}
+		return DecomposeResult{Failed: true, Reason: "empty_output", CostUSD: result.CostUSD}
 	}
 
 	children, ok := parseDecomposerOutput(output)
 	if !ok {
-		return DecomposeResult{Failed: true, Reason: "invalid_output"}
+		return DecomposeResult{Failed: true, Reason: "invalid_output", CostUSD: result.CostUSD}
 	}
 
 	if len(children) < 1 || len(children) > 5 {
-		return DecomposeResult{Failed: true, Reason: "invalid_count"}
+		return DecomposeResult{Failed: true, Reason: "invalid_count", CostUSD: result.CostUSD}
 	}
 
 	for _, child := range children {
 		if strings.TrimSpace(child.Title) == "" ||
 			strings.TrimSpace(child.Description) == "" ||
 			strings.TrimSpace(child.Acceptance) == "" {
-			return DecomposeResult{Failed: true, Reason: "malformed_child"}
+			return DecomposeResult{Failed: true, Reason: "malformed_child", CostUSD: result.CostUSD}
 		}
 	}
 
