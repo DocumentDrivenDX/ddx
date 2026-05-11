@@ -171,6 +171,7 @@ func (f *fakeExecuteBeadGit) DeleteRef(dir, ref string) error {
 
 // fakeAgentRunner is a minimal mock agent runner for execute-bead tests.
 type fakeAgentRunner struct {
+	mu     sync.Mutex
 	result *agent.Result
 	err    error
 	last   agent.RunArgs
@@ -182,13 +183,18 @@ type fakeAgentRunner struct {
 }
 
 func (r *fakeAgentRunner) Run(opts agent.RunArgs) (*agent.Result, error) {
+	r.mu.Lock()
 	r.last = opts
-	if r.sideEffect != nil {
-		if err := r.sideEffect(opts); err != nil {
+	result := r.result
+	runErr := r.err
+	sideEffect := r.sideEffect
+	r.mu.Unlock()
+	if sideEffect != nil {
+		if err := sideEffect(opts); err != nil {
 			return nil, err
 		}
 	}
-	return r.result, r.err
+	return result, runErr
 }
 
 // newExecuteBeadFactory builds a CommandFactory wired with the given fake git and agent runner.
