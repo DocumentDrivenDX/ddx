@@ -1419,6 +1419,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	reviewModel, _ := cmd.Flags().GetString("review-model")
 	maxCostUSD, _ := cmd.Flags().GetFloat64("max-cost")
 	maxBeadCostUSD, _ := cmd.Flags().GetFloat64("max-bead-cost")
+	maxRecoveryCostUSD, _ := cmd.Flags().GetFloat64("max-recovery-cost")
 	requestTimeout, _ := cmd.Flags().GetDuration("request-timeout")
 	rateLimitMaxWait, _ := cmd.Flags().GetDuration("rate-limit-max-wait")
 	minPower, _ := cmd.Flags().GetInt("min-power")
@@ -1444,26 +1445,27 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	}
 
 	spec := executeloop.ExecuteLoopSpec{
-		ProjectRoot:       projectRoot,
-		Harness:           harness,
-		Model:             model,
-		Profile:           profile,
-		Provider:          provider,
-		ModelRef:          modelRef,
-		Effort:            effort,
-		Mode:              mode,
-		IdleInterval:      idleInterval,
-		NoReview:          noReview,
-		ReviewHarness:     reviewHarness,
-		ReviewModel:       reviewModel,
-		OpaquePassthrough: treatPassthroughAsOpaque,
-		MaxCostUSD:        maxCostUSD,
-		MaxBeadCostUSD:    maxBeadCostUSD,
-		RequestTimeout:    executeloop.Duration{Duration: requestTimeout},
-		RateLimitMaxWait:  executeloop.Duration{Duration: rateLimitMaxWait},
-		MinPower:          minPower,
-		MaxPower:          maxPower,
-		FromRev:           fromRev,
+		ProjectRoot:        projectRoot,
+		Harness:            harness,
+		Model:              model,
+		Profile:            profile,
+		Provider:           provider,
+		ModelRef:           modelRef,
+		Effort:             effort,
+		Mode:               mode,
+		IdleInterval:       idleInterval,
+		NoReview:           noReview,
+		ReviewHarness:      reviewHarness,
+		ReviewModel:        reviewModel,
+		OpaquePassthrough:  treatPassthroughAsOpaque,
+		MaxCostUSD:         maxCostUSD,
+		MaxBeadCostUSD:     maxBeadCostUSD,
+		MaxRecoveryCostUSD: maxRecoveryCostUSD,
+		RequestTimeout:     executeloop.Duration{Duration: requestTimeout},
+		RateLimitMaxWait:   executeloop.Duration{Duration: rateLimitMaxWait},
+		MinPower:           minPower,
+		MaxPower:           maxPower,
+		FromRev:            fromRev,
 	}
 	spec.ApplyDefaults()
 	if err := spec.Validate(); err != nil {
@@ -1639,6 +1641,10 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	innerIntakeHook := agent.NewPreClaimIntakeHook(projectRoot, store, rcfg, nil, qualityRunner)
 	intakeHook := agent.NewACQualityPreClaimGate(store, rcfg.ACQualityMinScore(), innerIntakeHook)
 	triageHook := agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
+	recoveryHook := agent.NewAutoRecoveryPostLadderExhaustionHook(store, qualityRunner, rcfg, projectRoot, agent.AutoRecoveryConfig{
+		MaxRecoveryCostUSD: spec.MaxRecoveryCostUSD,
+		MaxBeadCostUSD:     spec.MaxBeadCostUSD,
+	})
 
 	// harnessBilledLookup resolves whether a harness contributes to any cost
 	// cap. Shared between the global CostCapTracker and per-bead trackers so
@@ -1827,25 +1833,26 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		cleanupLog = io.Discard
 	}
 	result, err := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
-		Mode:                  spec.Mode,
-		IdleInterval:          spec.IdleInterval.Duration,
-		Log:                   progressLog,
-		CleanupLog:            cleanupLog,
-		EventSink:             loopSink,
-		WorkerID:              resolveClaimAssignee(),
-		ProjectRoot:           projectRoot,
-		CleanupRunner:         agent.NewExecutionCleanupManager(projectRoot, &agent.RealGitOps{}),
-		ResourceChecker:       resourceChecker,
-		SessionID:             loopSessionID,
-		PreClaimHook:          buildCLIPreClaimHook(projectRoot, cliLandingOps),
-		PreClaimIntakeHook:    intakeHook,
-		PreDispatchLintHook:   lintHook,
-		PostAttemptTriageHook: triageHook,
-		BudgetStop:            costCapTripped,
-		NoReview:              spec.NoReview,
-		TargetBeadID:          tryTargetBeadID,
-		ReviewCostCap:         costCap,
-		OnAttemptFinalized:    buildAttemptMetricsHook(projectRoot, store, spec.Profile),
+		Mode:                     spec.Mode,
+		IdleInterval:             spec.IdleInterval.Duration,
+		Log:                      progressLog,
+		CleanupLog:               cleanupLog,
+		EventSink:                loopSink,
+		WorkerID:                 resolveClaimAssignee(),
+		ProjectRoot:              projectRoot,
+		CleanupRunner:            agent.NewExecutionCleanupManager(projectRoot, &agent.RealGitOps{}),
+		ResourceChecker:          resourceChecker,
+		SessionID:                loopSessionID,
+		PreClaimHook:             buildCLIPreClaimHook(projectRoot, cliLandingOps),
+		PreClaimIntakeHook:       intakeHook,
+		PreDispatchLintHook:      lintHook,
+		PostAttemptTriageHook:    triageHook,
+		BudgetStop:               costCapTripped,
+		NoReview:                 spec.NoReview,
+		TargetBeadID:             tryTargetBeadID,
+		ReviewCostCap:            costCap,
+		OnAttemptFinalized:       buildAttemptMetricsHook(projectRoot, store, spec.Profile),
+		PostLadderExhaustionHook: recoveryHook,
 	})
 	if err != nil && result != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 		_ = writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, jsonOutput)

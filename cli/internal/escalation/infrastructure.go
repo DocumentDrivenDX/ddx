@@ -98,6 +98,10 @@ const DefaultMaxCostUSD = 100.0
 // on a pathologically difficult bead.
 const DefaultMaxBeadCostUSD = 5.0
 
+// DefaultMaxRecoveryCostUSD is the per-bead recovery budget for automated
+// reframe/decompose attempts after repeated ladder exhaustion.
+const DefaultMaxRecoveryCostUSD = 2.0
+
 // PerBeadBudgetExhaustedReason is the detail-string prefix written into a
 // report when the per-bead budget is exceeded. The execute-loop detects this
 // marker to handle the outcome correctly (unclaim, event, counter increment,
