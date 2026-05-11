@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 	"unicode"
 
 	"github.com/stretchr/testify/assert"
@@ -16,11 +17,17 @@ import (
 // backend name supplied by the caller. The chaos suite uses it so both JSONL
 // and axon run through the same Backend interface surface rather than one path
 // silently defaulting to JSONL.
+//
+// The JSONL backend gets a 30s lock wait to handle the high concurrency in
+// LargeScale tests on slow CI machines (15 goroutines × 15 beads can push
+// the default 10s timeout on loaded runners).
 func newTestBackend(t *testing.T, backend string) Backend {
 	t.Helper()
 	switch backend {
 	case BackendJSONL:
-		return newJSONLStore(t)
+		s := newJSONLStore(t)
+		s.LockWait = 30 * time.Second
+		return s
 	case BackendAxon:
 		return newAxonStore(t)
 	default:
