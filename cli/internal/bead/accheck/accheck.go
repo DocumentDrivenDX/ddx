@@ -460,7 +460,7 @@ func DefaultDiffHits(workingDir, base string) func(symbol string) (int, error) {
 // against the given packages (or `./...` if none).
 func DefaultRunTest(workingDir string) func(name string, packages []string) (bool, string, error) {
 	return func(name string, packages []string) (bool, string, error) {
-		args := []string{"test", "-run", "^" + regexp.QuoteMeta(name) + "$", "-count=1", "-short"}
+		args := []string{"test", "-v", "-run", "^" + regexp.QuoteMeta(name) + "$", "-count=1", "-short"}
 		if len(packages) == 0 {
 			args = append(args, "./...")
 		} else {
@@ -473,10 +473,12 @@ func DefaultRunTest(workingDir string) func(name string, packages []string) (boo
 		if err != nil {
 			return false, text, nil // test failure surfaces as ok=false, err nil
 		}
-		// `go test` exits 0 also when no tests match; detect that case.
-		if strings.Contains(text, "[no tests to run]") || strings.Contains(text, "no test files") {
-			return false, text + " (no matching test found)", nil
+		// Definitive evidence: the test runner reported PASS for this specific test.
+		// Checking for absence of "[no tests to run]" is unreliable when running
+		// ./pkg/... because sub-packages without the test also output that string.
+		if strings.Contains(text, "--- PASS: "+name) {
+			return true, text, nil
 		}
-		return true, text, nil
+		return false, text + " (no matching test found)", nil
 	}
 }
