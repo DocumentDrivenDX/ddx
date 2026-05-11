@@ -1498,7 +1498,6 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// without copying from the project root (AC: no live-worker noise in main).
 	if resultRev != baseRev && exitCode == 0 {
 		if newRev := commitEvidenceBundleInWorktree(wtPath, artifacts.DirRel, attemptID); newRev != "" {
-			resultRev = newRev
 			res.ResultRev = newRev
 			evidenceCommittedInWt = true
 		}

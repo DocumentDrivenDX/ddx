@@ -308,7 +308,6 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 		case VerdictApprove:
 			candidate.Report.ReviewVerdict = string(VerdictApprove)
 			candidate.Report.ReviewRationale = strings.TrimSpace(reviewResult.Rationale)
-			break
 		case VerdictRequestChanges, VerdictBlock:
 			classification := c.classifyCandidateReview(reviewResult)
 			report := candidate.Report

@@ -189,11 +189,6 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		model = pt.Model
 	}
 
-	modelRef := runtime.ModelRefOverride
-	if modelRef == "" && !runtime.ClearRoutingPins {
-		modelRef = rcfg.ModelRef()
-	}
-
 	provider := pt.Provider
 	if runtime.ClearRoutingPins {
 		provider = ""

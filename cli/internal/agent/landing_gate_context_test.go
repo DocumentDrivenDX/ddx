@@ -67,11 +67,11 @@ func resolveRef(t *testing.T, root, ref string) string {
 }
 
 func TestBuildLandingGateContext_NoGoverningIDs(t *testing.T) {
-	root, head := newGateCtxRepo(t)
+	root, _ := newGateCtxRepo(t)
 	manifestRel := writeManifest(t, root, "20260418T010101-empty", nil) // empty governing list
 	runGitInteg(t, root, "add", manifestRel)
 	runGitInteg(t, root, "commit", "-m", "chore: add empty gate manifest")
-	head = runGitInteg(t, root, "rev-parse", "HEAD")
+	head := runGitInteg(t, root, "rev-parse", "HEAD")
 
 	res := &ExecuteBeadResult{
 		BeadID:       "ddx-gatectx-bead",
@@ -95,11 +95,11 @@ func TestBuildLandingGateContext_NoGoverningIDs(t *testing.T) {
 }
 
 func TestBuildLandingGateContext_PinAndCheckout(t *testing.T) {
-	root, head := newGateCtxRepo(t)
+	root, _ := newGateCtxRepo(t)
 	manifestRel := writeManifest(t, root, "20260418T020202-ok", []string{"FEAT-CTX"})
 	runGitInteg(t, root, "add", manifestRel)
 	runGitInteg(t, root, "commit", "-m", "chore: add gate manifest")
-	head = runGitInteg(t, root, "rev-parse", "HEAD")
+	head := runGitInteg(t, root, "rev-parse", "HEAD")
 
 	res := &ExecuteBeadResult{
 		BeadID:       "ddx-gatectx-bead",
@@ -130,11 +130,11 @@ func TestBuildLandingGateContext_PinAndCheckout(t *testing.T) {
 }
 
 func TestBuildLandingGateContext_CleanupRollsBack(t *testing.T) {
-	root, head := newGateCtxRepo(t)
+	root, _ := newGateCtxRepo(t)
 	manifestRel := writeManifest(t, root, "20260418T030303-cleanup", []string{"FEAT-CLEANUP"})
 	runGitInteg(t, root, "add", manifestRel)
 	runGitInteg(t, root, "commit", "-m", "chore: add cleanup gate manifest")
-	head = runGitInteg(t, root, "rev-parse", "HEAD")
+	head := runGitInteg(t, root, "rev-parse", "HEAD")
 
 	res := &ExecuteBeadResult{
 		BeadID:       "ddx-gatectx-bead",
