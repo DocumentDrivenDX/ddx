@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path"
@@ -65,6 +66,56 @@ const ReviewPairingDegradedEventKind = "review-pairing-degraded"
 // impl.ActualPower+1 due to prior review-error or review-pairing-degraded
 // events for the same result_rev.
 const ReviewerEscalatedEventKind = "reviewer-escalated"
+
+// ReviewACOverrideEventKind is appended when the reviewer's per-AC grade
+// contradicts the ac-check.json mechanical result for the same AC item.
+// The event records the mismatch count and per-AC reasons for accuracy auditing.
+const ReviewACOverrideEventKind = "review-ac-override"
+
+// acCheckOutput is the minimal shape of .ddx/executions/<id>/ac-check.json
+// needed for AC-grade mismatch detection.
+type acCheckOutput struct {
+	Items []struct {
+		AC     int    `json:"ac"`
+		Result string `json:"result"`
+	} `json:"items"`
+}
+
+// countACGradeMismatches compares the reviewer's per-AC grades against
+// the mechanical results from ac-check.json. Returns the number of mismatches
+// (reviewer says pass where ac-check says fail, or vice versa) and a list
+// of per-AC reasons. Ignores needs_judgment and error mechanical results.
+func countACGradeMismatches(acCheckJSONStr string, perAC []ReviewAC) (int, []string) {
+	if acCheckJSONStr == "" || len(perAC) == 0 {
+		return 0, nil
+	}
+	var check acCheckOutput
+	if err := json.Unmarshal([]byte(acCheckJSONStr), &check); err != nil {
+		return 0, nil
+	}
+	mechByNum := make(map[int]string, len(check.Items))
+	for _, item := range check.Items {
+		mechByNum[item.AC] = strings.ToLower(item.Result)
+	}
+	count := 0
+	var reasons []string
+	for _, ac := range perAC {
+		mech, ok := mechByNum[ac.Number]
+		if !ok {
+			continue
+		}
+		// Only compare definitive mechanical verdicts; skip needs_judgment/error.
+		if mech != "pass" && mech != "fail" {
+			continue
+		}
+		grade := strings.ToLower(ac.Grade)
+		if (mech == "fail" && grade == "pass") || (mech == "pass" && grade == "fail") {
+			count++
+			reasons = append(reasons, fmt.Sprintf("ac%d: ac_check=%s reviewer=%s", ac.Number, mech, grade))
+		}
+	}
+	return count, reasons
+}
 
 // ImplementerRouting captures the implementer's resolved routing details so
 // the post-merge reviewer can build a paired ExecuteRequest with Role=reviewer,
