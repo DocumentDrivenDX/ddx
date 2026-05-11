@@ -1,0 +1,160 @@
+package agent
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"testing"
+	"time"
+
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge verifies that a
+// TooLarge failure class routes to runDecomposer and, on valid children,
+// creates child beads and sets parent execution-eligible=false.
+func TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{
+		ID:          "ddx-decompose-toolarge",
+		Title:       "decompose too-large test",
+		Description: "PROBLEM\nThis bead is too large.\n\nROOT CAUSE\ncli/internal/agent/foo.go:42 does too much.\n",
+		Acceptance:  "1. TestPostLadderExhaustion_TriggersDecompose_ReviewTooLarge passes\n2. cd cli && go test ./internal/agent/... green\n",
+	}
+	require.NoError(t, store.Create(b))
+
+	// Pre-seed counter to 1 so the next budget exhaustion hits the threshold.
+	require.NoError(t, incrementConsecutiveLadderExhaustions(store, b.ID))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	validChildren := []map[string]interface{}{
+		{
+			"title":       "feat(agent): implement child one",
+			"description": "PROBLEM\nChild one task.\n\nROOT CAUSE\ncli/internal/agent/foo.go:42.\n",
+			"acceptance":  "1. TestChildOne passes\n2. cd cli && go test ./internal/agent/... green\n",
+			"labels":      []string{"phase:6", "area:agent"},
+		},
+		{
+			"title":       "feat(agent): implement child two",
+			"description": "PROBLEM\nChild two task.\n\nROOT CAUSE\ncli/internal/agent/bar.go:10.\n",
+			"acceptance":  "1. TestChildTwo passes\n2. cd cli && go test ./internal/agent/... green\n",
+			"labels":      []string{"phase:6", "area:agent"},
+		},
+	}
+
+	var decomposeDispatched bool
+	decomposeRunner := reframeRunnerFunc(func(opts RunArgs) (*Result, error) {
+		decomposeDispatched = true
+		cancel() // stop the loop after the decomposer fires
+		out, _ := json.Marshal(validChildren)
+		return &Result{
+			ExitCode: 0,
+			Output:   string(out),
+			CostUSD:  0.0123,
+		}, nil
+	})
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	hook := NewDecomposePostLadderExhaustionHook(store, decomposeRunner, rcfg, t.TempDir())
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusExecutionFailed + "_" + ReviewTerminalClassTooLarge,
+				Detail:    escalation.PerBeadBudgetExhaustedReason + ": $1.00 billed >= $0.50 per-bead budget",
+				SessionID: "sess-decompose-toolarge",
+			}, nil
+		}),
+	}
+
+	_, _ = worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+		Mode:                     executeloop.ModeDrain,
+		PostLadderExhaustionHook: hook,
+		ProjectRoot:              t.TempDir(),
+		SessionID:                "sess-decompose-toolarge",
+		WorkerID:                 "worker-decompose-toolarge",
+	})
+
+	assert.True(t, decomposeDispatched, "decomposer must be dispatched for TooLarge class")
+
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, false, got.Extra[bead.ExtraExecutionElig], "parent execution-eligible must be false after decompose")
+
+	all, err := store.ReadAll()
+	require.NoError(t, err)
+	var childBeads []bead.Bead
+	for _, bb := range all {
+		if bb.Parent == b.ID {
+			childBeads = append(childBeads, bb)
+		}
+	}
+	assert.Len(t, childBeads, 2, "two child beads must be created")
+
+	events, err := store.Events(b.ID)
+	require.NoError(t, err)
+	var decomposeApplied bool
+	for _, ev := range events {
+		if ev.Kind == "decompose-applied" {
+			decomposeApplied = true
+			assert.Contains(t, ev.Body, "child_ids", "decompose-applied event body must contain child_ids")
+			assert.Contains(t, ev.Body, "cost_usd", "decompose-applied event body must contain cost_usd")
+		}
+	}
+	assert.True(t, decomposeApplied, "decompose-applied event must be emitted")
+}
+
+// TestDecomposerInvalidChildren_CountsAsFailure verifies that a stub agent
+// returning more than 5 children yields DecomposeResult{Failed:true,
+// Reason:"invalid_count"}.
+func TestDecomposerInvalidChildren_CountsAsFailure(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{
+		ID:          "ddx-decompose-invalid",
+		Title:       "decompose invalid count test",
+		Description: "PROBLEM\nInvalid count test.",
+		Acceptance:  "1. TestDecomposerInvalidChildren_CountsAsFailure\n",
+	}
+	require.NoError(t, store.Create(b))
+
+	// Return 6 children — exceeds max of 5.
+	tooManyChildren := make([]map[string]interface{}, 6)
+	for i := range tooManyChildren {
+		tooManyChildren[i] = map[string]interface{}{
+			"title":       fmt.Sprintf("child %d", i+1),
+			"description": "description",
+			"acceptance":  "1. test",
+			"labels":      []string{},
+		}
+	}
+
+	overflowRunner := reframeRunnerFunc(func(opts RunArgs) (*Result, error) {
+		out, _ := json.Marshal(tooManyChildren)
+		return &Result{
+			ExitCode: 0,
+			Output:   string(out),
+		}, nil
+	})
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result := runDecomposer(context.Background(), store, overflowRunner, rcfg, t.TempDir(), b.ID)
+	assert.True(t, result.Failed, "must be marked as failed for >5 children")
+	assert.Equal(t, "invalid_count", result.Reason)
+}
