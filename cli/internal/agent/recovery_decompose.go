@@ -47,6 +47,7 @@ func NewDecomposePostLadderExhaustionHook(store ExecuteBeadLoopStore, runner Age
 				Attempted: true,
 				Succeeded: false,
 				Path:      Decompose,
+				CostUSD:   result.CostUSD,
 			}, nil
 		}
 		return &PostLadderExhaustionResult{

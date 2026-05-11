@@ -50,6 +50,7 @@ func NewReframePostLadderExhaustionHook(store ExecuteBeadLoopStore, runner Agent
 				Attempted: true,
 				Succeeded: false,
 				Path:      Reframe,
+				CostUSD:   result.CostUSD,
 			}, nil
 		}
 		return &PostLadderExhaustionResult{
