@@ -248,14 +248,27 @@ type ExecutionsConfig struct {
 	TempWorktreeRoot string `yaml:"temp_worktree_root,omitempty" json:"temp_worktree_root,omitempty"`
 }
 
-// ExecutionsMirrorConfig describes the out-of-band archive target for
-// .ddx/executions/<attempt>/ bundles. A configured kind plus path is enough
-// to enable mirroring; missing entries leave mirroring disabled.
+// ExecutionsMirrorConfig describes the out-of-band archive target for the
+// local-tier evidence bundle (.ddx/executions/, .ddx/agent-logs/,
+// .ddx/workers/). A configured kind plus path enables mirroring; kind=none
+// (or empty) leaves mirroring disabled.
 type ExecutionsMirrorConfig struct {
 	Kind    string   `yaml:"kind,omitempty" json:"kind,omitempty"`
 	Path    string   `yaml:"path,omitempty" json:"path,omitempty"`
 	Include []string `yaml:"include,omitempty" json:"include,omitempty"`
 	Async   *bool    `yaml:"async,omitempty" json:"async,omitempty"`
+	// RetentionDays is the mirror-side retention policy (days). Independent of
+	// the in-tree ExecutionsConfig.RetainDays. Zero means no automatic pruning
+	// (operator manages mirror retention out-of-band).
+	RetentionDays int `yaml:"retention_days,omitempty" json:"retention_days,omitempty"`
+	// IncludeAgentLogs controls whether the per-attempt agent-log file is
+	// copied to the mirror alongside the execution bundle. Defaults to true
+	// (nil treated as true).
+	IncludeAgentLogs *bool `yaml:"include_agent_logs,omitempty" json:"include_agent_logs,omitempty"`
+	// IncludeWorkers controls whether the per-worker state directory is
+	// copied to the mirror. Defaults to false (nil treated as false; worker
+	// dirs are large and rarely needed retrospectively).
+	IncludeWorkers *bool `yaml:"include_workers,omitempty" json:"include_workers,omitempty"`
 }
 
 // ServerConfig represents server configuration settings.
