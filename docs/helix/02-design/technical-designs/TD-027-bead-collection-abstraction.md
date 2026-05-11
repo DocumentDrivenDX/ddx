@@ -963,11 +963,11 @@ Archival runs on demand through `ddx bead archive` and opportunistically after a
 | `archive.min_age`              | `30d` since `closed_at`                |
 | `archive.min_active_count`     | `2000` records in `beads`              |
 | `archive.batch_size`           | `500` per opportunistic pass           |
-| `archive.statuses`             | `closed`, `wont_fix`, `superseded`     |
+| `archive.statuses`             | `closed`, `cancelled`                  |
 | `archive.opportunistic`        | `true`                                 |
 | `archive.preserve_dependencies`| `true`                                 |
 
-A bead is eligible to archive when its `status` is in `archive.statuses`, its `closed_at` (or `updated_at` fallback) is older than `archive.min_age`, and no open bead in `beads` lists it as a dependency.
+A bead is eligible to archive when its `status` is in `archive.statuses`, its `closed_at` (or `updated_at` fallback) is older than `archive.min_age`, and no open bead in `beads` lists it as a dependency. Terminal reason names such as `wont_fix` or `superseded` are labels or `extra` metadata, not statuses; they can explain why a bead is terminal but do not belong in `archive.statuses`.
 
 ### Configuration
 
@@ -977,7 +977,7 @@ archive:
   min_age: 30d
   min_active_count: 2000
   batch_size: 500
-  statuses: [closed, wont_fix, superseded]
+  statuses: [closed, cancelled]
   opportunistic: true
 ```
 
@@ -1172,9 +1172,10 @@ The refactor lands as **atomic per-concern beads**, not three monolithic stages.
 Phase 1: Foundation (gate)
     F (ddx-c6317784)    Operation pattern + IDGenerator + sentinels + ctx
                         accessors + foundational sub-interfaces
-                        (Initializer/Reader/Lifecycle{Create+Apply}/EventR/W)
+                        (Initializer/Reader/Lifecycle{Create+Apply}; EventR/W
+                        declarations only)
                         + *Store.Apply + JSONLBackend.OperationApplier
-                        + ctx threading on foundational *Store methods
+                        + ctx threading on non-event foundational *Store methods
 
 Phase 2: Per-concern beads (parallel-safe; any order after F)
     L (ddx-bca628fa)    Lifecycle helpers + ops; remove 7 *Store methods
@@ -1249,8 +1250,8 @@ After BL: physically impossible bypass enforced by the Go compiler.
 | # | Legacy path | Removal plan |
 |---|---|---|
 | L1 | `AxonBackend` (whole-corpus path) | Remove after `AxonStore` ships and passes conformance |
-| L2 | `*Store` workflow methods (Heartbeat, Claim, etc.) | Kept (stable API); rewritten to delegate to `Apply` |
-| L3 | `RawBackend` interface | Kept; placed inside `internal/storage/` post-Stage-3 |
+| L2 | `*Store` workflow methods (Heartbeat, Claim, etc.) | Removed by the relevant per-concern bead after callers migrate to `ops/<concern>/` helpers |
+| L3 | `RawBackend` interface | Kept; placed inside `internal/storage/` after Phase 4 |
 | L4 | `DDX_AXON_EXPERIMENTAL` env var | Removed in AxonStore bead |
 | L5 | `MigrateToAxon` writing JSONL | Replaced by real Postgres importer post-AxonStore |
 | L6 | Lifecycle schema marker methods | Kept JSONL-only; not promoted to interface |
@@ -1302,10 +1303,10 @@ Every bead in every phase must satisfy these baseline gates: `cd cli && go test 
 Key cross-bead invariants after F lands:
 
 - `cli/internal/bead/operation.go`, `id.go`, `errors.go`, `context.go` exist.
-- Foundational sub-interfaces (`BeadInitializer`, `BeadReader`, `BeadLifecycle{Create+Apply}`, `BeadEventReader`, `BeadEventWriter`) declared and satisfied by `*Store` (compile-time assertions).
+- Foundational sub-interfaces (`BeadInitializer`, `BeadReader`, `BeadLifecycle{Create+Apply}`, `BeadEventReader`, `BeadEventWriter`) declared. `*Store` satisfies `BeadInitializer`, `BeadReader`, and `BeadLifecycle`; event interface satisfaction is deferred to E.
 - `*Store.Apply(ctx, id, op Operation) error` exists and type-asserts to `OperationApplier`.
 - `JSONLBackend` implements `OperationApplier` with empty switch + generic fallback.
-- ctx threaded through `*Store`'s foundational read/write/event methods.
+- ctx threaded through `*Store`'s non-event foundational read/write methods.
 - Bead data model invariants (§11.2) asserted via `TestBeadDataModel_InvariantsHold`.
 
 ### 23.2 Phase 2 — Per-concern beads
@@ -1358,7 +1359,7 @@ Key cross-bead invariants after BL lands:
 
 The workstream is "done" when:
 
-1. All 18 active beads (Phases 1-5) are closed with their per-bead AC satisfied.
+1. All 19 active beads (Phases 1-5) are closed with their per-bead AC satisfied.
 2. The conformance suite passes against both `*Store` (JSONL) and `AxonStore` (httptest + real-wire).
 3. `cd cli && go build ./...` succeeds (BL gate).
 4. `cd cli && go test ./...` is green.
@@ -1377,15 +1378,14 @@ After completion, the gating bead `ddx-c6317784` (F) chain is unwound; the works
 | New backend contributor doesn't know what operations to optimize | Canonical catalog lives in `cli/internal/bead/operation.go` package doc. Conformance test `TestOperationCatalog_AxonStoreSwitchCoverage` enumerates via reflection. |
 | Bead data model invariants drift from implementation | `TestBeadDataModel_InvariantsHold` asserts §11.2 invariants on every backend in the conformance suite. |
 | Schema-version migrations land breaking changes without ADR-004 update | CI guard checks that `bead-record.schema.json` and persisted-status enum changes touch ADR-004 + TD-027 in the same commit (per §22). |
-| Caller migration to ctx-aware interfaces is large scope | Stage 2 is its own bead; manual review is the load-bearing activity. |
-| Module-boundary lockdown breaks compilation when caller migration is incomplete | That's the point. Stage 3 only succeeds if Stage 2 fully completed. |
+| Caller migration to ctx-aware interfaces is large scope | Phase 2 is split into per-concern beads with focused caller sets and concrete method-removal checks. |
+| Module-boundary lockdown breaks compilation when caller migration is incomplete | That's the point. Phase 4 only succeeds if Phase 2 fully completed. |
 | AxonStore implementation finds operation patterns we didn't anticipate | The Operation catalog can be extended additively. AxonStore conformance suite catches behavior drift. |
 | Drain-loop content drift (TD-031 references events/labels added without updating TD-027) | §22 makes this a normative process rule; CI guard for schema changes; reviewers check cross-doc consistency. |
 
 ## 25. Open Questions
 
-1. **`*Store` concrete workflow methods retained forever?** Recommended: yes (stable API). New code uses helpers; old callers stay.
-2. **Subscription failure mode** — when a backend can't subscribe, `SubscribeLifecycle` returns `(nil, nil, ErrUnsupported)`. Callers fall back to polling.
-3. **`lifecycle/` helper package scope** — encodes HELIX state-machine rules. Future architectural improvement: move to HELIX plugin so generic bead ops stay workflow-agnostic. Deferred.
-4. **Schema-version v1 → v2 migration** — when the first breaking change lands, the migration ladder is exercised. No v2 currently planned.
-5. **Event externalization threshold** (§17) — when does a bead's `events` array get pushed to a sidecar? Default: keep inline; externalize only on explicit operator command or when total bead size exceeds a configured threshold. Threshold value TBD on first observation of large-event beads in production.
+1. **Subscription failure mode** — when a backend can't subscribe, `SubscribeLifecycle` returns `(nil, nil, ErrUnsupported)`. Callers fall back to polling.
+2. **`lifecycle/` helper package scope** — encodes HELIX state-machine rules. Future architectural improvement: move to HELIX plugin so generic bead ops stay workflow-agnostic. Deferred.
+3. **Schema-version v1 → v2 migration** — when the first breaking change lands, the migration ladder is exercised. No v2 currently planned.
+4. **Event externalization threshold** (§17) — when does a bead's `events` array get pushed to a sidecar? Default: keep inline; externalize only on explicit operator command or when total bead size exceeds a configured threshold. Threshold value TBD on first observation of large-event beads in production.
