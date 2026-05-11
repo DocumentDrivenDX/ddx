@@ -1,0 +1,116 @@
+package agent
+
+import (
+	"encoding/json"
+	"fmt"
+	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestPreClaimACQuality_AllMechanicalACs_Passes(t *testing.T) {
+	acceptance := "1. `ParseAcceptance` function exists in accheck\n2. TestFooBar passes\n3. cd cli && go test ./internal/agent/... green\n"
+	result := CheckACQuality(acceptance, DefaultACQualityMinScore)
+	assert.True(t, result.PassesThreshold)
+	assert.Equal(t, 3, result.Total)
+	assert.Equal(t, 3, result.VerifiableCount)
+	assert.Equal(t, 0, result.ProseCount)
+	for _, item := range result.Items {
+		assert.True(t, item.Verifiable, "AC #%d should be verifiable but kind=%s: %s", item.AC, item.Kind, item.Text)
+	}
+}
+
+func TestPreClaimACQuality_AllProseACs_BlocksClaim(t *testing.T) {
+	acceptance := "1. Improve logging clarity\n2. Make error messages cleaner\n3. Code is more readable\n"
+	result := CheckACQuality(acceptance, DefaultACQualityMinScore)
+	assert.False(t, result.PassesThreshold)
+	assert.Equal(t, 3, result.Total)
+	assert.Equal(t, 0, result.VerifiableCount)
+	assert.Equal(t, 3, result.ProseCount)
+	for _, item := range result.Items {
+		assert.Equal(t, "prose", item.Kind, "AC #%d should be prose: %s", item.AC, item.Text)
+		assert.False(t, item.Verifiable)
+	}
+}
+
+func TestPreClaimACQuality_MixedACs_ScoreAboveThreshold_Passes(t *testing.T) {
+	// 2 verifiable (test-name, symbol), 1 prose => score = 2/3 ≈ 0.667 >= 0.5
+	acceptance := "1. TestFooBar passes\n2. `NewStore` function added\n3. improve clarity\n"
+	result := CheckACQuality(acceptance, DefaultACQualityMinScore)
+	assert.True(t, result.PassesThreshold)
+	assert.Equal(t, 3, result.Total)
+	assert.Equal(t, 2, result.VerifiableCount)
+	assert.Equal(t, 1, result.ProseCount)
+	assert.InDelta(t, 2.0/3.0, result.Score, 0.01)
+}
+
+func TestPreClaimACQuality_MixedACs_ScoreBelowThreshold_Routes(t *testing.T) {
+	// 1 verifiable (test-name), 3 prose => score = 1/4 = 0.25 < 0.5
+	acceptance := "1. TestFooBar passes\n2. improve clarity\n3. better error messages\n4. more readable code\n"
+	result := CheckACQuality(acceptance, DefaultACQualityMinScore)
+	assert.False(t, result.PassesThreshold)
+	assert.Equal(t, 4, result.Total)
+	assert.Equal(t, 1, result.VerifiableCount)
+	assert.Equal(t, 3, result.ProseCount)
+	assert.InDelta(t, 0.25, result.Score, 0.01)
+}
+
+func TestPreClaimACQuality_LowQualityEmitsACQualityEvent(t *testing.T) {
+	b := &bead.Bead{
+		ID:         "ddx-test0001",
+		Title:      "Test bead",
+		Acceptance: "1. Improve clarity\n2. Better error messages\n",
+	}
+	store := &acQualityTestStore{b: b}
+
+	result := CheckACQuality(b.Acceptance, DefaultACQualityMinScore)
+	require.False(t, result.PassesThreshold, "expected all-prose ACs to fail threshold")
+
+	err := MarkBeadACQualityLow(store, b.ID, result)
+	require.NoError(t, err)
+
+	require.Len(t, store.events, 1, "expected exactly one ac-quality-low event")
+	ev := store.events[0]
+	assert.Equal(t, "ac-quality-low", ev.Kind)
+	assert.Contains(t, ev.Summary, "score=0.00")
+	assert.Contains(t, ev.Summary, fmt.Sprintf("threshold=%.2f", DefaultACQualityMinScore))
+
+	var items []ACQualityItem
+	require.NoError(t, json.Unmarshal([]byte(ev.Body), &items))
+	assert.Len(t, items, 2)
+
+	// Bead must be marked ineligible and labeled.
+	assert.Equal(t, false, store.b.Extra["execution-eligible"])
+	assert.True(t, beadHasACQualityLabel(store.b.Labels))
+}
+
+// acQualityTestStore is a minimal in-memory store for AC quality tests.
+type acQualityTestStore struct {
+	b      *bead.Bead
+	events []bead.BeadEvent
+}
+
+func (s *acQualityTestStore) Get(id string) (*bead.Bead, error) {
+	if s.b == nil || s.b.ID != id {
+		return nil, fmt.Errorf("bead %s not found", id)
+	}
+	cp := *s.b
+	return &cp, nil
+}
+
+func (s *acQualityTestStore) Update(id string, mutate func(*bead.Bead)) error {
+	if s.b == nil || s.b.ID != id {
+		return fmt.Errorf("bead %s not found", id)
+	}
+	b := *s.b
+	mutate(&b)
+	s.b = &b
+	return nil
+}
+
+func (s *acQualityTestStore) AppendEvent(id string, event bead.BeadEvent) error {
+	s.events = append(s.events, event)
+	return nil
+}
