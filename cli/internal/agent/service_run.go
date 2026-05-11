@@ -47,6 +47,19 @@ func init() {
 	SetServiceRunFactory(nil)
 }
 
+// resolveService returns a FizeauService for workDir, using the test-injected
+// factory when set and the production NewServiceFromWorkDir otherwise. All
+// internal callers (RunWithConfigViaService, ValidateForExecuteLoopViaService,
+// etc.) must go through this helper so test stubs installed via
+// SetServiceRunFactory are honored everywhere.
+func resolveService(workDir string) (agentlib.FizeauService, error) {
+	factory := serviceRunFactory
+	if factory == nil {
+		factory = NewServiceFromWorkDir
+	}
+	return factory(workDir)
+}
+
 // appendProviderTimeoutHint appends a configuration override hint to errMsg
 // when it indicates a provider request timeout fired. Helps operators find
 // the knob to adjust (AC4 of ddx-2c63bb95).
@@ -117,11 +130,7 @@ func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.Re
 		})
 	}
 
-	factory := serviceRunFactory
-	if factory == nil {
-		factory = NewServiceFromWorkDir
-	}
-	svc, err := factory(workDir)
+	svc, err := resolveService(workDir)
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
 	}
@@ -371,7 +380,7 @@ func CapabilitiesViaService(ctx context.Context, workDir, harnessName string) (*
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	svc, err := NewServiceFromWorkDir(workDir)
+	svc, err := resolveService(workDir)
 	if err != nil {
 		return nil, fmt.Errorf("agent: build service: %w", err)
 	}
@@ -434,7 +443,7 @@ func TestProviderConnectivityViaService(ctx context.Context, workDir, harnessNam
 		status.CreditsOK = true
 		return status
 	}
-	svc, err := NewServiceFromWorkDir(workDir)
+	svc, err := resolveService(workDir)
 	if err != nil {
 		status.Error = err.Error()
 		return status
@@ -470,7 +479,7 @@ func ValidateForExecuteLoopViaService(ctx context.Context, workDir, harnessName,
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	svc, err := NewServiceFromWorkDir(workDir)
+	svc, err := resolveService(workDir)
 	if err != nil {
 		return fmt.Errorf("agent: build service: %w", err)
 	}
@@ -518,7 +527,7 @@ func ValidateEffortForRunViaService(ctx context.Context, workDir, profile, effor
 	if ctx == nil {
 		ctx = context.Background()
 	}
-	svc, err := NewServiceFromWorkDir(workDir)
+	svc, err := resolveService(workDir)
 	if err != nil {
 		return fmt.Errorf("agent: build service: %w", err)
 	}
