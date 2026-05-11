@@ -236,7 +236,9 @@ func TestAttachmentReopenInlinesEvents(t *testing.T) {
 	b := &Bead{Title: "reopen me"}
 	require.NoError(t, s.Create(b))
 	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "routing", Summary: "first"}))
-	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "review", Summary: "APPROVE", Body: "ok"}))
+	// Use REQUEST_CHANGES (not APPROVE) so Reopen does not emit an accuracy-override event,
+	// keeping this test focused on the reopen-inlines-events mechanic.
+	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{Kind: "review", Summary: "REQUEST_CHANGES", Body: "needs fixes"}))
 	require.NoError(t, s.Close(b.ID))
 
 	// Sanity: closed bead has the attachment.

@@ -109,6 +109,27 @@ func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, r
 		out.Slots = append(out.Slots, slot)
 	}
 
+	// AC-check disagreement telemetry: when the reviewer's per-AC grade diverges
+	// from the ac-check.json mechanical result, emit a review-ac-override event
+	// for accuracy auditing. Best-effort — failures do not affect the outcome.
+	if acCheckJSON != "" && r.BeadEvents != nil {
+		for _, slot := range out.Slots {
+			if slot.Result == nil {
+				continue
+			}
+			count, reasons := countACGradeMismatches(acCheckJSON, slot.Result.PerAC)
+			if count > 0 {
+				_ = r.BeadEvents.AppendEvent(beadID, bead.BeadEvent{
+					Kind:      ReviewACOverrideEventKind,
+					Summary:   fmt.Sprintf("%d AC grade(s) diverge from ac-check.json (reviewer_index=%d)", count, slot.ReviewerIndex),
+					Body:      strings.Join(reasons, "\n"),
+					Source:    "ddx agent execute-loop",
+					CreatedAt: time.Now().UTC(),
+				})
+			}
+		}
+	}
+
 	return out, firstErr
 }
 

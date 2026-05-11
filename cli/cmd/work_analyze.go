@@ -18,12 +18,14 @@ import (
 var analyzeValidDims = []string{
 	"model", "harness", "profile", "prompt_template_hash",
 	"spec_id", "outcome", "bead_id", "day", "week", "month",
+	"reviewer_model",
 }
 
 var analyzeAggHeaders = []string{
 	"count", "success_rate", "avg_cost_usd", "sum_cost_usd",
 	"p50_duration_ms", "p95_duration_ms", "avg_input_tokens",
 	"avg_output_tokens", "review_block_rate", "escalation_rate",
+	"reviewer_fp_rate", "reviewer_fn_rate",
 }
 
 // analyzeResultRow is one output row from ddx work analyze.
@@ -39,17 +41,27 @@ type analyzeResultRow struct {
 	AvgOutputTokens float64           `json:"avg_output_tokens"`
 	ReviewBlockRate float64           `json:"review_block_rate"`
 	EscalationRate  float64           `json:"escalation_rate"`
+	// ReviewerFPRate is the fraction of BLOCK verdicts that the operator
+	// subsequently contradicted by closing the bead (false-positive rate).
+	ReviewerFPRate float64 `json:"reviewer_fp_rate"`
+	// ReviewerFNRate is the fraction of APPROVE verdicts that the operator
+	// subsequently contradicted by reopening the bead (false-negative rate).
+	ReviewerFNRate float64 `json:"reviewer_fn_rate"`
 }
 
 type analyzeAggBucket struct {
-	durations []int
-	count     int
-	success   int
-	sumCost   float64
-	sumIn     int
-	sumOut    int
-	blocked   int
-	escalated int
+	durations    []int
+	count        int
+	success      int
+	sumCost      float64
+	sumIn        int
+	sumOut       int
+	blocked      int
+	escalated    int
+	blockTotal   int // total rows with BLOCK verdict (denominator for FP rate)
+	approveTotal int // total rows with APPROVE verdict (denominator for FN rate)
+	fpCount      int // BLOCK + accuracy_signal=override (false positives)
+	fnCount      int // APPROVE + accuracy_signal=override (false negatives)
 }
 
 func (f *CommandFactory) newWorkAnalyzeCommand() *cobra.Command {
@@ -170,6 +182,19 @@ func (f *CommandFactory) runWorkAnalyze(cmd *cobra.Command, _ []string) error {
 		if r.LadderStepsTaken > 0 {
 			agg.escalated++
 		}
+		// Reviewer accuracy signal aggregation.
+		if r.ReviewVerdict == "BLOCK" {
+			agg.blockTotal++
+			if r.ReviewerAccuracySignal == "override" {
+				agg.fpCount++
+			}
+		}
+		if r.ReviewVerdict == "APPROVE" {
+			agg.approveTotal++
+			if r.ReviewerAccuracySignal == "override" {
+				agg.fnCount++
+			}
+		}
 	}
 
 	results := make([]analyzeResultRow, 0, len(keyOrder))
@@ -192,6 +217,8 @@ func (f *CommandFactory) runWorkAnalyze(cmd *cobra.Command, _ []string) error {
 			AvgOutputTokens: analyzeDiv(float64(agg.sumOut), float64(agg.count)),
 			ReviewBlockRate: analyzeRatio(agg.blocked, agg.count),
 			EscalationRate:  analyzeRatio(agg.escalated, agg.count),
+			ReviewerFPRate:  analyzeRatio(agg.fpCount, agg.blockTotal),
+			ReviewerFNRate:  analyzeRatio(agg.fnCount, agg.approveTotal),
 		})
 	}
 
@@ -231,6 +258,8 @@ func analyzeExtractDim(r attemptmetrics.AttemptRow, dim string) string {
 		return r.Outcome
 	case "bead_id":
 		return r.BeadID
+	case "reviewer_model":
+		return r.ReviewerModel
 	case "day":
 		if r.TSStart == "" {
 			return ""
@@ -320,6 +349,8 @@ func analyzeAggValues(r analyzeResultRow) []string {
 		fmt.Sprintf("%.1f", r.AvgOutputTokens),
 		fmt.Sprintf("%.4f", r.ReviewBlockRate),
 		fmt.Sprintf("%.4f", r.EscalationRate),
+		fmt.Sprintf("%.4f", r.ReviewerFPRate),
+		fmt.Sprintf("%.4f", r.ReviewerFNRate),
 	}
 }
 

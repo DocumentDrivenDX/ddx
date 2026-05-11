@@ -185,6 +185,63 @@ func TestAnalyze_JSONOutput(t *testing.T) {
 	}
 }
 
+func TestAnalyze_ByReviewerModel_SurfacesFPRate(t *testing.T) {
+	dir := t.TempDir()
+	// model-A: 2 BLOCK reviews, 1 operator-contradicted (FP rate = 0.5)
+	// model-B: 1 APPROVE review, 1 operator-contradicted (FN rate = 1.0)
+	writeAnalyzeRows(t, dir, []attemptmetrics.AttemptRow{
+		{SchemaVersion: 1, AttemptID: "rm1", BeadID: "b1", ReviewerModel: "model-A", ReviewVerdict: "BLOCK", ReviewerAccuracySignal: "override", Outcome: "review_block", DurationMS: 1000},
+		{SchemaVersion: 1, AttemptID: "rm2", BeadID: "b2", ReviewerModel: "model-A", ReviewVerdict: "BLOCK", ReviewerAccuracySignal: "unknown", Outcome: "review_block", DurationMS: 1000},
+		{SchemaVersion: 1, AttemptID: "rm3", BeadID: "b3", ReviewerModel: "model-B", ReviewVerdict: "APPROVE", ReviewerAccuracySignal: "override", Outcome: "task_succeeded", DurationMS: 2000},
+	})
+
+	out := runAnalyze(t, dir, "--by", "reviewer_model", "--json")
+
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) != 2 {
+		t.Fatalf("expected 2 JSONL lines (one per reviewer model), got %d:\n%s", len(lines), out)
+	}
+
+	rowsByModel := make(map[string]analyzeResultRow)
+	for _, line := range lines {
+		var row analyzeResultRow
+		if err := json.Unmarshal([]byte(line), &row); err != nil {
+			t.Fatalf("invalid JSON line: %v\nline: %s", err, line)
+		}
+		rowsByModel[row.Dimensions["reviewer_model"]] = row
+	}
+
+	// model-A: 2 BLOCKs, 1 override → FP rate = 0.5
+	rowA, ok := rowsByModel["model-A"]
+	if !ok {
+		t.Fatalf("expected model-A in output, got keys: %v", func() []string {
+			var keys []string
+			for k := range rowsByModel {
+				keys = append(keys, k)
+			}
+			return keys
+		}())
+	}
+	if rowA.ReviewerFPRate != 0.5 {
+		t.Errorf("model-A reviewer_fp_rate = %v, want 0.5", rowA.ReviewerFPRate)
+	}
+	if rowA.ReviewerFNRate != 0.0 {
+		t.Errorf("model-A reviewer_fn_rate = %v, want 0.0 (no APPROVE rows)", rowA.ReviewerFNRate)
+	}
+
+	// model-B: 1 APPROVE, 1 override → FN rate = 1.0
+	rowB, ok := rowsByModel["model-B"]
+	if !ok {
+		t.Fatalf("expected model-B in output")
+	}
+	if rowB.ReviewerFNRate != 1.0 {
+		t.Errorf("model-B reviewer_fn_rate = %v, want 1.0", rowB.ReviewerFNRate)
+	}
+	if rowB.ReviewerFPRate != 0.0 {
+		t.Errorf("model-B reviewer_fp_rate = %v, want 0.0 (no BLOCK rows)", rowB.ReviewerFPRate)
+	}
+}
+
 func TestAnalyze_CSVOutput(t *testing.T) {
 	dir := t.TempDir()
 	writeAnalyzeRows(t, dir, []attemptmetrics.AttemptRow{
