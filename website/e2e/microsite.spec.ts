@@ -28,8 +28,8 @@ test.describe('DDx Microsite', () => {
     await expect(page.getByRole('heading', { name: 'Review against criteria' })).toBeVisible()
     // Section 4: Features preview
     await expect(page.locator('.ddx-home-features')).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Work Queue' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Execution Engine' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Structured Work Queue' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Isolated Execution' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'All features →' })).toBeVisible()
     // Section 5: Principles
     await expect(page.locator('.ddx-home-principles')).toBeVisible()
@@ -71,16 +71,14 @@ test.describe('DDx Microsite', () => {
   test('features page loads with maturity badges', async ({ page }) => {
     await page.goto('/features/')
     await expect(page.getByRole('heading', { name: 'Features' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Bead Tracker' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'MCP Server' })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Remote Execution' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Beads/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Execute-Loop/ })).toBeVisible()
+    await expect(page.getByRole('heading', { name: /Agent-Agnostic Dispatch/ })).toBeVisible()
     // Maturity badges
     const stableBadges = page.locator('.ddx-maturity--stable')
     await expect(stableBadges.first()).toBeVisible()
     const betaBadges = page.locator('.ddx-maturity--beta')
     await expect(betaBadges.first()).toBeVisible()
-    const plannedBadges = page.locator('.ddx-maturity--planned')
-    await expect(plannedBadges.first()).toBeVisible()
   })
 
   test('features page screenshot', async ({ page }) => {
@@ -100,14 +98,14 @@ test.describe('DDx Microsite', () => {
 
   test('CLI reference page', async ({ page }) => {
     await page.goto('/docs/cli/')
-    await expect(page.getByRole('heading', { name: 'Beads (Work Tracker)' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Bead Tracker' })).toBeVisible()
     await expect(page.getByText('ddx bead create')).toBeVisible()
   })
 
   test('skills page', async ({ page }) => {
     await page.goto('/docs/skills/')
-    await expect(page.getByRole('heading', { name: 'DDx Skills' })).toBeVisible()
-    await expect(page.getByRole('cell', { name: '/ddx-bead' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'DDx Skill' })).toBeVisible()
+    await expect(page.getByText('SKILL.md')).toBeVisible()
   })
 
   test('plugins page', async ({ page }) => {

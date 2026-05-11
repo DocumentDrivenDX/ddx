@@ -8,6 +8,8 @@ project needs; workflow methodologies layer opinions on top. Knowing which layer
 owns which job tells you where to look — and what you should not expect from
 DDx itself.
 
+## The Stack
+
 ## Two Layers
 
 ```
