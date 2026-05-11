@@ -17,12 +17,13 @@ This TD specifies the **operational contract** by which the DDx drain loop / exe
 
 **Scope:**
 
-1. The outcome → state mapping table (§2) — what the drain loop does with each `execute-bead` outcome.
-2. Worker-state enumeration (§3) — the in-process state of the drain loop, distinct from bead state.
-3. Auto-recovery role catalogue (§4) — when and how the drain proxy dispatches reframer/decomposer roles.
-4. `consecutive_ladder_exhaustions` policy (§5) — when the counter is incremented, reset, and threshold-triggered.
-5. Per-hygiene-bead contracts (§6) — the operational bindings for in-flight beads (NoChanges, Triage, QuotaPause, RateLimit, LockContention).
-6. Future-change process for operational contract changes (§7).
+1. Persisted status enumeration (§2) — the canonical bead lifecycle values this operational layer may consume.
+2. The outcome → state mapping table (§3) — what the drain loop does with each `execute-bead` outcome.
+3. Worker-state enumeration (§4) — the in-process state of the drain loop, distinct from bead state.
+4. Auto-recovery role catalogue (§5) — when and how the drain proxy dispatches reframer/decomposer roles.
+5. `consecutive_ladder_exhaustions` policy (§6) — when the counter is incremented, reset, and threshold-triggered.
+6. Per-hygiene-bead contracts (§7) — the operational bindings for in-flight beads (NoChanges, Triage, QuotaPause, RateLimit, LockContention).
+7. Future-change process for operational contract changes (§8).
 
 **Out of scope:**
 
@@ -52,11 +53,19 @@ Several hygiene beads introduce drain-loop vocabulary that this TD nails down:
 
 Without one normative TD for the operational contract, these beads would independently invent overlapping vocabulary.
 
-## 2. Outcome → Label / Event / Extra Mapping
+## 2. Persisted Status Enumeration
+
+The persisted bead status enum is inherited from TD-027 and ADR-004. This TD may map execution outcomes onto those values, but it MUST NOT authorize additional lifecycle statuses.
+
+open | in_progress | closed | blocked | proposed | cancelled
+
+New DDx execution semantics must use labels, events, or `extra` metadata unless ADR-004 and TD-027 are amended first.
+
+## 3. Outcome → Label / Event / Extra Mapping
 
 When a drain attempt finishes, `execute-bead` returns one of a fixed set of outcomes plus optional no_changes lifecycle evidence. The mapping below is the canonical queue-management contract.
 
-### 2.1 Lifecycle Reliability Invariants
+### 3.1 Lifecycle Reliability Invariants
 
 - Raw `no_changes` is attempt evidence, not a durable bead queue state. The drain loop MUST translate it into one of the rows below before mutating the bead.
 - `execute-loop-retry-after` may be set only when retrying the same bead after time passes could plausibly succeed without human/spec/dependency changes.
@@ -69,7 +78,7 @@ When a drain attempt finishes, `execute-bead` returns one of a fixed set of outc
 - Latest terminal events and close evidence beat stale `execute-loop-*` `extra` metadata. Reconciliation may clear stale management fields, but MUST preserve append-only events and evidence.
 - `ClosureGate` (`store.go:1245`, inside `closeWithEvidence`) applies exclusively to evidence-bearing execute-bead closes via `CloseWithEvidence`. The dependency-satisfied reconcile-close path (`applyReconcilePlan` at `reconcile.go:208-254`, `CloseSatisfied=true`) is a distinct meta-close that intentionally bypasses `ClosureGate`: the bead has no execution session and no `closing_commit_sha` of its own. The bypass is safe because every transitive dependency is `closed` — each having individually passed `ClosureGate` or been a prior meta-close — so the parent's closure inherits its evidence by reference through the dependency edges.
 
-### 2.2 Mapping Table
+### 3.2 Mapping Table
 
 | Outcome or lifecycle action | Status transition | Label changes | Events appended | Extra updates |
 |---|---|---|---|---|
@@ -102,7 +111,7 @@ When a drain attempt finishes, `execute-bead` returns one of a fixed set of outc
 
 Legacy/backcompat `needs_human` and `triage:needs-investigation` labels are not lifecycle controls. New routing uses `status=proposed` for operator decisions; those labels may remain only as migration metadata until cleanup removes them.
 
-## 3. Worker-State Enumeration
+## 4. Worker-State Enumeration
 
 Worker state is the in-process state of the drain loop. It is **distinct from bead state** and is not persisted in the bead store. It exists only for the worker's lifetime.
 
@@ -116,7 +125,7 @@ Worker state is the in-process state of the drain loop. It is **distinct from be
 
 Worker state is observable via the worker's stdout/log; it is not stored on any bead. Hygiene beads affecting worker state (QuotaPauseContract, RateLimitRetryContract) MUST NOT add new fields to the bead schema to represent these transient states.
 
-## 4. Auto-Recovery Role Catalogue
+## 5. Auto-Recovery Role Catalogue
 
 Two agent roles support the cross-cycle recovery path (per ADR-024 P4; SD-025 Layer 3.5). These roles are dispatched by the drain proxy, not by an operator or agent tool directly.
 
@@ -127,28 +136,28 @@ Two agent roles support the cross-cycle recovery path (per ADR-024 P4; SD-025 La
 
 Both roles are dispatched with the same `role`, `bead_id`, `attempt_id`, `session_id`, and `review_group_id` correlation fields used by the reviewer role (ADR-024 Default Adversarial Pre-Close Review Gate). Operator-supplied passthrough constraints (`--harness`, `--provider`, `--model`) are forwarded unchanged. If those constraints prevent satisfying the strong-tier `MinPower` floor, the dispatch returns `readiness_error` and the outcome maps to `auto_recovery_failed`.
 
-## 5. `consecutive_ladder_exhaustions` Policy
+## 6. `consecutive_ladder_exhaustions` Policy
 
 The field `extra.consecutive_ladder_exhaustions` is an integer counter maintained by the drain loop on each bead record. The field's data definition lives in TD-027 §11 (Bead Data Model); this section specifies the operational policy for incrementing, resetting, and threshold-triggering.
 
 - **Incremented** at the end of each drain cycle in which the bead's within-cycle escalation ladder was fully exhausted (all power levels tried, none produced a close or forward progress).
 - **Reset to 0** when the bead is successfully closed, when a reframe or decompose pass fires (the bead's prompt has changed; start fresh), or when an operator explicitly clears the counter via `ddx bead update`.
 - **Threshold**: when `consecutive_ladder_exhaustions >= 2` (default; configurable in `.ddx/config.yaml` as `escalation.auto_recovery_threshold`), the drain loop triggers the auto-recovery sequence described in ADR-024 Escalation Sequencing and SD-025 Layer 3.5.
-- The auto-recovery decision itself fires the `reframe_applied` or `decompose_applied` outcome, which changes status per §2.
+- The auto-recovery decision itself fires the `reframe_applied` or `decompose_applied` outcome, which changes status per §3.
 
-## 6. Per-Hygiene-Bead Contracts
+## 7. Per-Hygiene-Bead Contracts
 
 Each hygiene bead's AC must cite the relevant subsection. Anything not in the contract here is out of scope for that bead.
 
-### 6.1 NoChangesContract (ddx-b24e9630)
+### 7.1 NoChangesContract (ddx-b24e9630)
 
-NoChangesContract outcomes use the canonical mapping in §2. This subsection binds the hygiene bead to that mapping; it does not define a second disposition table.
+NoChangesContract outcomes use the canonical mapping in §3. This subsection binds the hygiene bead to that mapping; it does not define a second disposition table.
 
 **Claim behavior**: the claim is released for every no_changes action that leaves the bead `open`. It is not released separately when the same mutation moves the bead directly to terminal `closed` or hard `blocked`.
 
-**Loop interaction**: the try package parses and verifies no_changes rationale, then returns the lifecycle action. The drain loop applies §2 exactly and appends one of the no_changes event kinds from TD-027 §13; it does not invent new event kinds or use cooldown as a generic parking lot.
+**Loop interaction**: the try package parses and verifies no_changes rationale, then returns the lifecycle action. The drain loop applies §3 exactly and appends one of the no_changes event kinds from TD-027 §13; it does not invent new event kinds or use cooldown as a generic parking lot.
 
-### 6.2 Bead Readiness Assessment And Triage Contract (ddx-3c154349)
+### 7.2 Bead Readiness Assessment And Triage Contract (ddx-3c154349)
 
 Bead readiness assessment is the canonical pre-claim decision for actionability and scope. It owns the readiness queue decision and runs before a worker owns the bead, so most readiness actions start from `open`. Lint/rubric scoring is the diagnostic pass inside readiness; post-attempt triage is a separate after-evidence queue action. The implementation entrypoint may still be named `MODE: intake` for compatibility, but that is legacy wording only; the product concept is bead readiness assessment.
 
@@ -172,7 +181,7 @@ For successful replacement rewrites, the bead body may be materially shorter or 
 
 **Loop interaction**: readiness and triage run out-of-band of execute-bead. They MUST NOT race with an active drain attempt holding the store lock — they acquire the same store lock and releases-then-reclaims is not their job.
 
-### 6.3 QuotaPauseContract (ddx-aede917d)
+### 7.3 QuotaPauseContract (ddx-aede917d)
 
 **Status transitions used**: none. Quota is a worker-state concern, not a bead-state concern.
 
@@ -182,9 +191,9 @@ For successful replacement rewrites, the bead body may be materially shorter or 
 
 **Claim behavior**: the claim on the in-flight bead is released cleanly so another worker (or a later resumed worker) can pick it up.
 
-**Loop interaction**: the worker transitions to worker-state `paused-quota` (§3). It stops claiming new beads until the configured backoff elapses or an explicit resume signal arrives.
+**Loop interaction**: the worker transitions to worker-state `paused-quota` (§4). It stops claiming new beads until the configured backoff elapses or an explicit resume signal arrives.
 
-### 6.4 RateLimitRetryContract (ddx-c6e3db02)
+### 7.4 RateLimitRetryContract (ddx-c6e3db02)
 
 **Status transitions used**: none. Rate-limit retry is internal to a single attempt; the bead remains `in_progress` throughout.
 
@@ -194,9 +203,9 @@ For successful replacement rewrites, the bead body may be materially shorter or 
 
 **Claim behavior**: claim is held continuously across retries.
 
-**Loop interaction**: rate-limit handling is bounded by the retry budget; on budget exhaustion the outcome becomes `execution_failed` and the standard mapping in §2 applies. The worker briefly enters `paused-rate-limit` for the wait window, then returns to `draining`.
+**Loop interaction**: rate-limit handling is bounded by the retry budget; on budget exhaustion the outcome becomes `execution_failed` and the standard mapping in §3 applies. The worker briefly enters `paused-rate-limit` for the wait window, then returns to `draining`.
 
-### 6.5 LockContentionContract (ddx-da11a34a)
+### 7.5 LockContentionContract (ddx-da11a34a)
 
 **Status transitions used**: none. Lock contention is a main-git/tracker coordination concern, not a bead-state concern.
 
@@ -206,7 +215,7 @@ For successful replacement rewrites, the bead body may be materially shorter or 
 
 **Claim behavior**: unaffected. The claim is acquired or not; partial states are not persisted.
 
-**Loop interaction**: the worker retries the locked operation with exponential backoff up to a bounded budget. On budget exhaustion the calling outcome maps to `execution_failed` (§2). The worker does not enter a dedicated worker-state for lock contention; it remains `draining` and treats the failure as ordinary.
+**Loop interaction**: the worker retries the locked operation with exponential backoff up to a bounded budget. On budget exhaustion the calling outcome maps to `execution_failed` (§3). The worker does not enter a dedicated worker-state for lock contention; it remains `draining` and treats the failure as ordinary.
 
 **Filesystem-shape contract**: the main-git/tracker lock path `.ddx/.git-tracker.lock` is a process-shared lock **directory**, not a regular lockfile. Lock acquisition MUST classify the existing path immediately after `mkdir` reports that it already exists and MUST NOT sleep/back off until the path is confirmed to be a real lock directory.
 
@@ -218,22 +227,22 @@ For successful replacement rewrites, the bead body may be materially shorter or 
 
 Malformed lock paths are operator/remediation diagnostics, not lock contention. They do not emit `lock-contention`, do not introduce a new status or label, and do not change claim semantics.
 
-## 7. Future-Change Process
+## 8. Future-Change Process
 
 > Any bead that introduces or changes a label, an event kind, an outcome → state mapping, claim handling, or worker-state semantics MUST cite the relevant TD section that authorizes the change. If no section authorizes it, the TD is amended in the same PR (or a parent bead) before the dependent work lands.
 
 In practice:
 
 - A new event kind: amend TD-027 §13 in the same PR (kind vocabulary lives in TD-027 because consumers depend on the list).
-- A new outcome → state mapping: amend this TD §2.
+- A new outcome → state mapping: amend this TD §3.
 - A new label: amend TD-027 §4.
-- A new worker state: amend this TD §3.
-- A new auto-recovery role: amend this TD §4.
+- A new worker state: amend this TD §4.
+- A new auto-recovery role: amend this TD §5.
 - A new persisted status: do not start the work; file an ADR-004 amendment first (per TD-027's critical constraint).
 
 The CI guard described in TD-027 §22 also applies here: changes to `bead-record.schema.json` or to the persisted-status enum must touch ADR-004 + TD-027 in the same commit.
 
-## 8. Relationship to TD-027
+## 9. Relationship to TD-027
 
 TD-027 owns the bead substrate (storage system + lifecycle + data model). This TD owns the operational contract by which the drain loop / executor uses that substrate. The clean conceptual split:
 
@@ -248,11 +257,12 @@ TD-027 owns the bead substrate (storage system + lifecycle + data model). This T
 | Bead data model (fields, invariants, wire format) | TD-027 §11 |
 | Claim semantics (acquire/release, worker shutdown) | TD-027 §12 |
 | Event vocabulary (the controlled list) | TD-027 §13 |
-| Outcome → state/event/label mapping | **TD-031 §2** |
-| Worker-state enumeration | **TD-031 §3** |
-| Auto-recovery role dispatch | **TD-031 §4** |
-| `consecutive_ladder_exhaustions` policy | **TD-031 §5** |
-| Hygiene-bead operational contracts | **TD-031 §6** |
+| Status enum (the six values) | **TD-031 §2** |
+| Outcome → state/event/label mapping | **TD-031 §3** |
+| Worker-state enumeration | **TD-031 §4** |
+| Auto-recovery role dispatch | **TD-031 §5** |
+| `consecutive_ladder_exhaustions` policy | **TD-031 §6** |
+| Hygiene-bead operational contracts | **TD-031 §7** |
 | Collection registry, archival, attachments | TD-027 §15–§17 |
 | Module boundary (internal/) | TD-027 §21 |
 
