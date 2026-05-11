@@ -52,6 +52,10 @@ func CheckACQuality(acceptance string, threshold float64) ACQualityResult {
 		Items:     make([]ACQualityItem, 0, total),
 	}
 	if total == 0 {
+		// No ACs to evaluate: pass vacuously. The gate targets beads that have
+		// acceptance criteria but those criteria are all prose; absence of ACs
+		// is a separate quality signal handled by other checks.
+		result.PassesThreshold = true
 		return result
 	}
 	for _, item := range items {
