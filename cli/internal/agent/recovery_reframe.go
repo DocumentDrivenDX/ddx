@@ -16,9 +16,11 @@ const reframerDefaultTimeout = 5 * time.Minute
 
 // ReframeResult is the outcome of a runReframer invocation.
 type ReframeResult struct {
-	Failed  bool
-	Reason  string
-	CostUSD float64
+	Failed         bool
+	Reason         string
+	NewDescription string
+	NewAcceptance  string
+	CostUSD        float64
 }
 
 type reframerOutput struct {
@@ -173,10 +175,17 @@ func runReframer(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRu
 		CreatedAt: time.Now().UTC(),
 	})
 
-	return ReframeResult{
+	out := ReframeResult{
 		Failed:  false,
 		CostUSD: result.CostUSD,
 	}
+	if descChanged {
+		out.NewDescription = rewrite.Description
+	}
+	if accChanged {
+		out.NewAcceptance = rewrite.Acceptance
+	}
+	return out
 }
 
 func buildReframerPrompt(store ExecuteBeadLoopStore, b *bead.Bead) (string, error) {
