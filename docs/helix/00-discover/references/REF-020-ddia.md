@@ -15,4 +15,4 @@ tags: [distributed-systems, foundational, data]
 
 # Kleppmann — Designing Data-Intensive Applications
 
-Standard reference for distributed-systems trade-offs informing DDx's storage, sync, and contract decisions (bead JSONL interchange, git-subtree sync, event-sourced bead history).
+Standard reference for distributed-systems trade-offs informing DDx's storage, sync, and contract decisions (bead JSONL interchange, library-registry fetch, event-sourced bead history).

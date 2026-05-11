@@ -433,7 +433,6 @@ The server feature spec should also define requirements for:
 | MCP spec changes break server | Medium | Medium | Keep MCP integration thin; abstract behind internal API |
 | Too much structure discourages adoption | Medium | Medium | Minimal defaults; let teams grow into structure |
 | Rate of change in agentic ecosystem | High | Medium | Flexible plugin API; minimal DDx core; adapt without breaking plugin contracts |
-| Git subtree complexity confuses users | Medium | Low | Wrap in simple commands; clear error messages |
 
 ## Success Criteria
 

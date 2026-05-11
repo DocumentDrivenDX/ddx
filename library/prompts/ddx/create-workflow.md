@@ -266,7 +266,7 @@ Before finalizing the workflow, validate:
    - Follows DDX patterns and conventions
    - Uses appropriate tags and metadata
    - Integrates with DDX CLI commands
-   - Supports git subtree workflows
+   - Supports library registry installation
 
 ## Example Interaction
 
