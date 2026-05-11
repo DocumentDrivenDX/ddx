@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
@@ -69,21 +70,67 @@ func investigationRetryInitialMinPower(b *bead.Bead, baseMinPower, maxPower int,
 		}
 		return floor, agent.ExecuteBeadReport{}, false
 	}
-	// Tier-name hint: written by the review-triage path; jump to highest viable.
-	if tier, ok := triageTierHint(b); !ok || tier != policyescalation.TierSmart {
-		return baseMinPower, agent.ExecuteBeadReport{}, false
+	// Tier-name hint: written by the review-triage path; jump to highest viable for smart.
+	if tier, ok := triageTierHint(b); ok && tier == policyescalation.TierSmart {
+		floor, err := highestViableEscalationFloor(ladder)
+		if err != nil {
+			return baseMinPower, smartRouteUnavailableReport(b, baseMinPower, maxPower, err), true
+		}
+		if baseMinPower > floor {
+			return baseMinPower, smartRouteUnavailableReport(b, baseMinPower, maxPower, nil), true
+		}
+		if maxPower > 0 && floor >= maxPower {
+			return baseMinPower, smartRouteUnavailableReport(b, floor, maxPower, nil), true
+		}
+		return floor, agent.ExecuteBeadReport{}, false
 	}
-	floor, err := highestViableEscalationFloor(ladder)
-	if err != nil {
-		return baseMinPower, smartRouteUnavailableReport(b, baseMinPower, maxPower, err), true
+	// Label-based tier hint: tier:hint=<name> sets the initial MinPower floor.
+	// --min-power flag composes as max(labelFloor, baseMinPower): the flag can
+	// raise the floor above the label but cannot lower it below.
+	if b != nil {
+		if tier, ok := policyescalation.ParseBeadTierHintLabel(b.Labels); ok {
+			labelFloor := resolveTierFloor(tier, ladder)
+			floor := labelFloor
+			if baseMinPower > floor {
+				floor = baseMinPower
+			}
+			if maxPower > 0 && floor >= maxPower {
+				return baseMinPower, smartRouteUnavailableReport(b, floor, maxPower, nil), true
+			}
+			return floor, agent.ExecuteBeadReport{}, false
+		} else if policyescalation.HasBeadTierHintLabel(b.Labels) {
+			fmt.Fprintf(os.Stderr, "ddx: bead %s has unrecognized tier:hint label; using default MinPower\n", b.ID)
+		}
 	}
-	if baseMinPower > floor {
-		return baseMinPower, smartRouteUnavailableReport(b, baseMinPower, maxPower, nil), true
+	return baseMinPower, agent.ExecuteBeadReport{}, false
+}
+
+// resolveTierFloor maps an abstract tier to an initial MinPower floor using the
+// escalation ladder:
+//   - TierSmart    → highest viable floor (jump straight to the top tier)
+//   - TierStandard → second viable floor (skip the cheapest tier)
+//   - TierCheap    → 0 (unconstrained; same as having no label)
+func resolveTierFloor(tier policyescalation.ModelTier, ladder escalationFloorFinder) int {
+	switch tier {
+	case policyescalation.TierSmart:
+		floor, err := highestViableEscalationFloor(ladder)
+		if err != nil {
+			return 0
+		}
+		return floor
+	case policyescalation.TierStandard:
+		first, err := nextEscalationFloor(ladder, 0)
+		if err != nil {
+			return 0
+		}
+		second, err := nextEscalationFloor(ladder, first)
+		if err != nil {
+			return first
+		}
+		return second
+	default: // TierCheap or unrecognized
+		return 0
 	}
-	if maxPower > 0 && floor >= maxPower {
-		return baseMinPower, smartRouteUnavailableReport(b, floor, maxPower, nil), true
-	}
-	return floor, agent.ExecuteBeadReport{}, false
 }
 
 // numericTierFloorHint returns the numeric MinPower floor stored by the
