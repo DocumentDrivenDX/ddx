@@ -92,6 +92,11 @@ type ExecuteBeadLoopRuntime struct {
 	// immediately after the report is appended to loop results. Best-effort:
 	// the hook must not block and its errors are silently discarded.
 	OnAttemptFinalized func(report ExecuteBeadReport)
+	// PostLadderExhaustionHook, when non-nil, is called when a bead's
+	// consecutive_ladder_exhaustions counter reaches the auto-recovery
+	// threshold (>= 2). A nil hook or Attempted=false result falls through to
+	// the existing loop path unchanged.
+	PostLadderExhaustionHook PostLadderExhaustionHook
 }
 
 func (r ExecuteBeadLoopRuntime) loopIntent() (executeloop.Mode, time.Duration) {
@@ -1494,6 +1499,28 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				CreatedAt: now().UTC(),
 			})
 			_ = incrementConsecutiveLadderExhaustions(w.Store, candidate.ID)
+			if updated, getErr := w.Store.Get(candidate.ID); getErr == nil &&
+				consecutiveLadderExhaustionsValue(updated.Extra[consecutiveLadderExhaustionsKey]) >= 2 {
+				hasManualLabel := false
+				for _, lbl := range candidate.Labels {
+					if lbl == "recovery:manual" {
+						hasManualLabel = true
+						break
+					}
+				}
+				if hasManualLabel {
+					_ = w.Store.ParkToProposed(candidate.ID, bead.ParkLadderExhaustionManual, func(b *bead.Bead) {
+						bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
+							Reason: "recovery:manual label set",
+							Since:  now().UTC().Format(time.RFC3339),
+							Source: "ddx agent execute-loop",
+						})
+					})
+				} else if runtime.PostLadderExhaustionHook != nil {
+					failureClass := deriveRecoveryFailureClass(report)
+					_, _ = runtime.PostLadderExhaustionHook(ctx, candidate.ID, failureClass)
+				}
+			}
 			if err := w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC())); err != nil {
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log, "outcome store error (AppendEvent %s): %v (continuing)\n", candidate.ID, err)
