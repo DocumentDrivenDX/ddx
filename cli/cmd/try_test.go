@@ -375,9 +375,9 @@ func TestTry_FlagsPlumbThrough(t *testing.T) {
 	assert.NotNil(t, tryCmd.Flags().Lookup("review-model"), "try must expose --review-model flag")
 }
 
-// TestTry_HooksWired verifies that ddx try wires the pre-dispatch lint and
-// post-attempt triage hooks into ExecuteBeadLoopRuntime, and that both hooks
-// route through the shared runner override seam.
+// TestTry_HooksWired verifies that ddx try wires the pre-dispatch lint hook
+// into ExecuteBeadLoopRuntime, and that the triage hook is skipped (not invoked)
+// when the implementer produces no commits (BaseRev == ResultRev).
 func TestTry_HooksWired(t *testing.T) {
 	env := NewTestEnvironment(t)
 	skillPath := env.Dir + "/.agents/skills/ddx/bead-lifecycle"
@@ -411,21 +411,22 @@ func TestTry_HooksWired(t *testing.T) {
 	)
 	require.Error(t, err)
 	assert.Contains(t, out, "bead:", "try command should still render the terminal report")
-	assert.Equal(t, []string{"bead-lifecycle-lint", "bead-lifecycle-triage"}, runner.promptSource)
+	// triage is skipped for empty diffs (BaseRev == ResultRev); only lint fires
+	assert.Equal(t, []string{"bead-lifecycle-lint"}, runner.promptSource)
 
 	events, err := store.Events("hook-bead-001")
 	require.NoError(t, err)
-	var lintSeen, triageSeen bool
+	var lintSeen, skippedSeen bool
 	for _, ev := range events {
 		switch ev.Kind {
 		case "bead-quality.lint":
 			lintSeen = true
-		case "bead-quality.triage":
-			triageSeen = true
+		case agent.ReviewerSkippedEmptyDiffEventKind:
+			skippedSeen = true
 		}
 	}
 	assert.True(t, lintSeen, "try must emit the lint event when the hook is wired")
-	assert.True(t, triageSeen, "try must emit the triage event when the hook is wired")
+	assert.True(t, skippedSeen, "try must emit the reviewer-skipped-empty-diff event for empty-diff no_changes")
 }
 
 // TestTry_NoReviewRequiresAckFlag verifies the break-glass guardrail: the

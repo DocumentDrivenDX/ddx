@@ -217,23 +217,18 @@ func TestTriageHook_NoJSONOutputReturnsWarningResult(t *testing.T) {
 }
 
 func TestLoop_TriageHook_FiresPostOutcome(t *testing.T) {
-	realStore, candidate, _ := newExecuteLoopTestStore(t)
+	store, candidate, _ := newExecuteLoopTestStore(t)
 	triageCalled := false
-	store := &errorInjectingStore{ExecuteBeadLoopStore: realStore}
-	store.onSetCooldown = func(id string, until time.Time, status, detail, baseRev string) error {
-		require.True(t, triageCalled, "triage hook must fire before SetExecutionCooldown")
-		return realStore.SetExecutionCooldown(id, until, status, detail, baseRev)
-	}
 
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, id string) (ExecuteBeadReport, error) {
 			return ExecuteBeadReport{
 				BeadID:    id,
-				Status:    ExecuteBeadStatusNoChanges,
-				Detail:    "nothing changed",
+				Status:    ExecuteBeadStatusExecutionFailed,
+				Detail:    "execution error",
 				BaseRev:   "abc123",
-				ResultRev: "abc123",
+				ResultRev: "def456",
 				SessionID: "sess-order",
 			}, nil
 		}),
@@ -245,17 +240,17 @@ func TestLoop_TriageHook_FiresPostOutcome(t *testing.T) {
 		PostAttemptTriageHook: func(ctx context.Context, beadID string, report ExecuteBeadReport) (TriageResult, error) {
 			triageCalled = true
 			assert.Equal(t, candidate.ID, beadID)
-			assert.Equal(t, ExecuteBeadStatusNoChanges, report.Status)
-			assert.Equal(t, "nothing changed", report.Detail)
+			assert.Equal(t, ExecuteBeadStatusExecutionFailed, report.Status)
+			assert.Equal(t, "execution error", report.Detail)
 			assert.Equal(t, "abc123", report.BaseRev)
-			assert.Equal(t, "abc123", report.ResultRev)
+			assert.Equal(t, "def456", report.ResultRev)
 			return TriageResult{}, nil
 		},
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Results, 1)
 	assert.True(t, triageCalled)
-	assert.Equal(t, ExecuteBeadStatusNoChanges, result.Results[0].Status)
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, result.Results[0].Status)
 	assert.Empty(t, result.Results[0].OutcomeReason)
 	assert.Empty(t, result.Results[0].RetryAfter)
 }
@@ -268,10 +263,10 @@ func TestTriageHook_RecordsButDoesNotMutateOutcome(t *testing.T) {
 		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, id string) (ExecuteBeadReport, error) {
 			return ExecuteBeadReport{
 				BeadID:    id,
-				Status:    ExecuteBeadStatusNoChanges,
+				Status:    ExecuteBeadStatusExecutionFailed,
 				Detail:    "zero diff",
 				BaseRev:   "fff111",
-				ResultRev: "fff111",
+				ResultRev: "aaa222",
 				SessionID: "sess-record",
 			}, nil
 		}),
@@ -291,7 +286,7 @@ func TestTriageHook_RecordsButDoesNotMutateOutcome(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Results, 1)
 	report := result.Results[0]
-	assert.Equal(t, ExecuteBeadStatusNoChanges, report.Status)
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, report.Status)
 	assert.Equal(t, "transport", report.OutcomeReason)
 	assert.Empty(t, report.RetryAfter, "transient classification should bypass the no-progress cooldown")
 
@@ -318,10 +313,10 @@ func TestTriageHook_WarningOnlyRecordsEvidenceWithoutOutcomeReason(t *testing.T)
 		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, id string) (ExecuteBeadReport, error) {
 			return ExecuteBeadReport{
 				BeadID:    id,
-				Status:    ExecuteBeadStatusNoChanges,
+				Status:    ExecuteBeadStatusExecutionFailed,
 				Detail:    "zero diff",
 				BaseRev:   "abc123",
-				ResultRev: "abc123",
+				ResultRev: "def456",
 				SessionID: "sess-warning",
 			}, nil
 		}),
@@ -342,7 +337,7 @@ func TestTriageHook_WarningOnlyRecordsEvidenceWithoutOutcomeReason(t *testing.T)
 	})
 	require.NoError(t, err)
 	require.Len(t, result.Results, 1)
-	assert.Equal(t, ExecuteBeadStatusNoChanges, result.Results[0].Status)
+	assert.Equal(t, ExecuteBeadStatusExecutionFailed, result.Results[0].Status)
 	assert.Empty(t, result.Results[0].OutcomeReason)
 	assert.Empty(t, result.Results[0].RetryAfter)
 	assert.Contains(t, log.String(), "post-attempt triage warning")
@@ -372,10 +367,10 @@ func TestTriageHook_RecognizedClassificationWithWarningSetsOutcomeAndRecordsOneT
 		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, id string) (ExecuteBeadReport, error) {
 			return ExecuteBeadReport{
 				BeadID:    id,
-				Status:    ExecuteBeadStatusNoChanges,
+				Status:    ExecuteBeadStatusExecutionFailed,
 				Detail:    "zero diff",
 				BaseRev:   "abc123",
-				ResultRev: "abc123",
+				ResultRev: "def456",
 				SessionID: "sess-warning-classified",
 			}, nil
 		}),
@@ -426,10 +421,10 @@ func TestTriageHook_UnknownClassificationRecordsWarningWithoutOutcomeReason(t *t
 		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, id string) (ExecuteBeadReport, error) {
 			return ExecuteBeadReport{
 				BeadID:    id,
-				Status:    ExecuteBeadStatusNoChanges,
+				Status:    ExecuteBeadStatusExecutionFailed,
 				Detail:    "zero diff",
 				BaseRev:   "abc123",
-				ResultRev: "abc123",
+				ResultRev: "def456",
 				SessionID: "sess-unknown-class",
 			}, nil
 		}),
@@ -500,6 +495,143 @@ func TestTriageHook_HookError_DoesNotCreateDefaultCooldown(t *testing.T) {
 	require.NotNil(t, got.Extra)
 	_, ok := got.Extra["execute-loop-retry-after"]
 	assert.False(t, ok)
+}
+
+// TestNoChanges_SkipsReviewer verifies that when the implementer returns
+// no_changes (BaseRev == ResultRev, zero commits), the PostAttemptTriageHook
+// (reviewer) is NOT invoked. Per ADR-024 P1: paying a reviewer to evaluate an
+// empty diff is unjustified cost.
+func TestNoChanges_SkipsReviewer(t *testing.T) {
+	store, _, _ := newExecuteLoopTestStore(t)
+	reviewerCalled := false
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, id string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    id,
+				Status:    ExecuteBeadStatusNoChanges,
+				BaseRev:   "abc123",
+				ResultRev: "abc123",
+			}, nil
+		}),
+	}
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		PostAttemptTriageHook: func(_ context.Context, _ string, _ ExecuteBeadReport) (TriageResult, error) {
+			reviewerCalled = true
+			return TriageResult{}, nil
+		},
+	})
+	require.NoError(t, err)
+	assert.False(t, reviewerCalled, "reviewer must not be invoked when implementer produced no commits")
+}
+
+// TestSomeChanges_StillInvokesReviewer verifies that when the implementer
+// produces commits (ResultRev != BaseRev), the PostAttemptTriageHook is still
+// invoked for non-success outcomes.
+func TestSomeChanges_StillInvokesReviewer(t *testing.T) {
+	store, _, _ := newExecuteLoopTestStore(t)
+	reviewerCalled := false
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, id string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    id,
+				Status:    ExecuteBeadStatusExecutionFailed,
+				Detail:    "test failure",
+				BaseRev:   "abc123",
+				ResultRev: "def456",
+			}, nil
+		}),
+	}
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		PostAttemptTriageHook: func(_ context.Context, _ string, _ ExecuteBeadReport) (TriageResult, error) {
+			reviewerCalled = true
+			return TriageResult{}, nil
+		},
+	})
+	require.NoError(t, err)
+	assert.True(t, reviewerCalled, "reviewer must be invoked when implementer produced commits")
+}
+
+// TestNoChangesWithReviewSpecGapClassification_RoutesToProposed verifies that
+// when the implementer signals no_changes with status: proposed (spec gap),
+// the bead routes to proposed status without reviewer gating.
+func TestNoChangesWithReviewSpecGapClassification_RoutesToProposed(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{ID: "ddx-specgap1", Title: "Spec gap bead"}
+	require.NoError(t, store.Create(b))
+
+	reviewerCalled := false
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, id string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:             id,
+				Status:             ExecuteBeadStatusNoChanges,
+				NoChangesRationale: "status: proposed\nreason: AC conflicts with governing spec — spec update required",
+			}, nil
+		}),
+	}
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		PostAttemptTriageHook: func(_ context.Context, _ string, _ ExecuteBeadReport) (TriageResult, error) {
+			reviewerCalled = true
+			return TriageResult{}, nil
+		},
+	})
+	require.NoError(t, err)
+
+	got, err := store.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status, "spec-gap no_changes must route bead to proposed without reviewer")
+	assert.False(t, reviewerCalled, "reviewer must not gate spec-gap routing")
+}
+
+// TestReviewerSkippedEmptyDiffEvent verifies that a structured
+// "reviewer-skipped-empty-diff" event is emitted each time reviewer dispatch
+// is skipped due to an empty diff.
+func TestReviewerSkippedEmptyDiffEvent(t *testing.T) {
+	store, candidate, _ := newExecuteLoopTestStore(t)
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(_ context.Context, id string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    id,
+				Status:    ExecuteBeadStatusNoChanges,
+				BaseRev:   "abc123",
+				ResultRev: "abc123",
+			}, nil
+		}),
+	}
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
+	require.NoError(t, err)
+
+	events, err := store.Events(candidate.ID)
+	require.NoError(t, err)
+	var found bool
+	for _, ev := range events {
+		if ev.Kind == ReviewerSkippedEmptyDiffEventKind {
+			found = true
+			assert.Equal(t, "reviewer skipped: empty diff (no commits produced)", ev.Summary)
+			break
+		}
+	}
+	assert.True(t, found, "reviewer-skipped-empty-diff event must be emitted for no_changes outcomes")
 }
 
 func TestPostAttemptTriageHook_DispatchesWithCheapestProfile(t *testing.T) {
