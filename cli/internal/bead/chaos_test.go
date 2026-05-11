@@ -18,7 +18,7 @@ import (
 // and axon run through the same Backend interface surface rather than one path
 // silently defaulting to JSONL.
 //
-// The JSONL backend gets a 30s lock wait to handle the high concurrency in
+// Both backends get a 30s lock wait to handle the high concurrency in
 // LargeScale tests on slow CI machines (15 goroutines × 15 beads can push
 // the default 10s timeout on loaded runners).
 func newTestBackend(t *testing.T, backend string) Backend {
@@ -29,7 +29,11 @@ func newTestBackend(t *testing.T, backend string) Backend {
 		s.LockWait = 30 * time.Second
 		return s
 	case BackendAxon:
-		return newAxonStore(t)
+		s := newAxonStore(t)
+		if ab, ok := s.backend.(*AxonBackend); ok {
+			ab.LockWait = 30 * time.Second
+		}
+		return s
 	default:
 		t.Fatalf("unsupported chaos backend %q", backend)
 		return nil
