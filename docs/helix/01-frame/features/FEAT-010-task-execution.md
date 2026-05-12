@@ -212,10 +212,11 @@ The readiness assessment result is one of:
   file:line evidence, add an obvious test command, or wire deterministic
   labels/parent/deps. The mutation is recorded through `ddx bead` paths before
   claim, with before/after hashes and enough evidence to audit the replacement.
-- `too_large_decomposed` — DDx created child beads, mapped every parent AC to
-  child ACs or an explicit operator-required / `non_scope` marker, left the
-  parent `status=open` with dependency edges to the children, and did not
-  execute the parent.
+- `too_large_decomposed` — DDx created child, sibling, or replacement beads,
+  mapped every parent AC to generated ACs or an explicit operator-required /
+  `non_scope` marker, left the oversized bead `status=open` with dependency,
+  execution-eligibility, or supersession metadata that lets the queue advance,
+  and did not execute the oversized bead directly.
 - `ambiguous_requires_operator` — the bead/spec is unclear, contradictory,
   unverifiable, or missing acceptance criteria that DDx cannot safely invent.
   DDx moves the bead to `status=proposed` and does not claim it.
@@ -257,8 +258,10 @@ If post-attempt triage finds that an implementation attempt stopped because the
 bead was too large or the worker could not legally decompose inside its
 worktree/depth context, the layer-3 worker must invoke the same orchestrator
 decomposition path used by `BeadReadinessHook`. This is machine-actionable
-work: DDx files child beads, records the AC map, and blocks the parent unless
-the split is lossy, ambiguous, or at the queue-level decomposition depth cap.
+work: DDx files child, sibling, or replacement beads, records the AC map, and
+leaves the oversized bead open with dependency, execution-eligibility, or
+supersession metadata that lets the queue advance. Only lossy or ambiguous
+splits require operator attention.
 The operator is not required merely because the implementer could not split
 from inside the attempted execution.
 
@@ -487,10 +490,12 @@ The layer-3 drain evaluates each ready bead through this mechanical sequence:
    leave a clearer implementation prompt, expanding underspecified beads or
    compressing noisy/stale beads as the durable context requires; original text
    is preserved in readiness evidence for audit. Too-large work is decomposed
-   before an implementation attempt. Ambiguous or underspecified work moves to
+   before an implementation attempt, using sibling or replacement decomposition
+   when child depth is exhausted. Ambiguous or underspecified work moves to
    `status=proposed` only when the gate reaches a hard operator-required
-   condition; otherwise WARN-ONLY findings proceed on the open forward-progress
-   lane. Readiness infrastructure failure records evidence and follows the
+   condition after safe rewrite/decomposition options are exhausted; otherwise
+   WARN-ONLY findings proceed on the open forward-progress lane. Readiness
+   infrastructure failure records evidence and follows the
    configured fail-open/factory-mode policy; it never creates an unexplained
    cooldown.
 2. **Claim.** Claim only an `actionable_atomic` or safely rewritten bead. Claim
