@@ -27,6 +27,12 @@
 				<dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Session</dt>
 				<dd class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{session.id}</dd>
 			</div>
+			{#if session.workerId}
+				<div>
+					<dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Worker</dt>
+					<dd class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{session.workerId}</dd>
+				</div>
+			{/if}
 			<div>
 				<dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Harness</dt>
 				<dd class="mt-1 text-body-sm text-fg-ink dark:text-dark-fg-ink">{session.harness}</dd>
@@ -47,6 +53,18 @@
 				<dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Billing</dt>
 				<dd class="mt-1 text-body-sm text-fg-ink dark:text-dark-fg-ink">{session.billingMode}</dd>
 			</div>
+			{#if session.baseRev}
+				<div>
+					<dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Base rev</dt>
+					<dd class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{session.baseRev}</dd>
+				</div>
+			{/if}
+			{#if session.resultRev}
+				<div>
+					<dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Result rev</dt>
+					<dd class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{session.resultRev}</dd>
+				</div>
+			{/if}
 			<div>
 				<dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Prompt tokens</dt>
 				<dd class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{session.tokens?.prompt?.toLocaleString() ?? '—'}</dd>
@@ -55,6 +73,50 @@
 				<dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Completion tokens</dt>
 				<dd class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{session.tokens?.completion?.toLocaleString() ?? '—'}</dd>
 			</div>
+			<div>
+				<dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Total tokens</dt>
+				<dd class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{session.tokens?.total?.toLocaleString() ?? '—'}</dd>
+			</div>
+			<div>
+				<dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Cached tokens</dt>
+				<dd class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{session.tokens?.cached?.toLocaleString() ?? '—'}</dd>
+			</div>
+			{#if session.stderrPath}
+				<div class="col-span-2 sm:col-span-4">
+					<dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Stderr path</dt>
+					<dd class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{session.stderrPath}</dd>
+				</div>
+			{/if}
+			{#if session.stdoutPath}
+				<div class="col-span-2 sm:col-span-4">
+					<dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Stdout path</dt>
+					<dd class="mt-1 font-mono-code text-mono-code text-fg-ink dark:text-dark-fg-ink">{session.stdoutPath}</dd>
+				</div>
+			{/if}
+			{#if session.prompt}
+				<div class="col-span-2 sm:col-span-4">
+					<dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Prompt body</dt>
+					<dd class="mt-1 whitespace-pre-wrap rounded border border-border-line bg-terminal-bg px-3 py-2 font-mono-code text-mono-code text-terminal-fg dark:border-dark-border-line">
+						{session.prompt}
+					</dd>
+				</div>
+			{/if}
+			{#if session.response}
+				<div class="col-span-2 sm:col-span-4">
+					<dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Response body</dt>
+					<dd class="mt-1 whitespace-pre-wrap rounded border border-border-line bg-terminal-bg px-3 py-2 font-mono-code text-mono-code text-terminal-fg dark:border-dark-border-line">
+						{session.response}
+					</dd>
+				</div>
+			{/if}
+			{#if session.stderr}
+				<div class="col-span-2 sm:col-span-4">
+					<dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Stderr</dt>
+					<dd class="mt-1 whitespace-pre-wrap rounded border border-border-line bg-terminal-bg px-3 py-2 font-mono-code text-mono-code text-terminal-fg dark:border-dark-border-line">
+						{session.stderr}
+					</dd>
+				</div>
+			{/if}
 			{#if session.outcome}
 				<div class="col-span-2 sm:col-span-4">
 					<dt class="text-label-caps font-label-caps uppercase tracking-wide text-fg-muted dark:text-dark-fg-muted">Outcome</dt>

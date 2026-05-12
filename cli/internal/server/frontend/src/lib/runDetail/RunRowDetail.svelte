@@ -8,7 +8,6 @@
 	import Evidence from './Evidence.svelte';
 	import {
 		RUN_DETAIL_QUERY,
-		RUN_EXECUTION_QUERY,
 		RUN_SESSION_QUERY,
 		RUN_TOOL_CALLS_QUERY
 	} from './queries';
@@ -24,26 +23,11 @@
 		initialTab?: Tab;
 		onTabChange?: (tab: Tab) => void;
 	}
+
 	let { runId, layer, nodeId, projectId, initialTab = 'overview', onTabChange }: Props = $props();
 
 	let run = $state<RunDetail | null>(null);
 	let runLoading = $state(false);
-
-	let exec = $state<{
-		id: string;
-		sessionId: string | null;
-		bundlePath: string;
-		promptPath: string | null;
-		manifestPath: string | null;
-		resultPath: string | null;
-		agentLogPath: string | null;
-		prompt: string | null;
-		manifest: string | null;
-		result: string | null;
-		rationale: string | null;
-	} | null>(null);
-	let execLoading = $state(false);
-	let execLoaded = $state(false);
 
 	let session = $state<SessionDetail | null>(null);
 	let sessionLoading = $state(false);
@@ -73,6 +57,10 @@
 		return `/nodes/${nodeId}/projects/${projectId}/beads/${beadId}`;
 	}
 
+	function workerHref(workerId: string): string {
+		return `/nodes/${nodeId}/projects/${projectId}/workers/${workerId}`;
+	}
+
 	async function fetchRun() {
 		if (run || runLoading) return;
 		runLoading = true;
@@ -82,28 +70,6 @@
 			run = data.run;
 		} finally {
 			runLoading = false;
-		}
-	}
-
-	function executionIdFor(rid: string): string {
-		// Try-layer run IDs are synthesised as "exec-<bundleID>"; strip the prefix.
-		return rid.startsWith('exec-') ? rid.slice('exec-'.length) : rid;
-	}
-
-	async function fetchExec() {
-		if (execLoaded || execLoading) return;
-		execLoading = true;
-		try {
-			const client = createClient();
-			const data = await client.request<{ execution: typeof exec }>(RUN_EXECUTION_QUERY, {
-				id: executionIdFor(runId)
-			});
-			exec = data.execution;
-			execLoaded = true;
-		} catch {
-			execLoaded = true;
-		} finally {
-			execLoading = false;
 		}
 	}
 
@@ -130,21 +96,21 @@
 		try {
 			const client = createClient();
 			const data = await client.request<{
-				executionToolCalls: {
+				runToolCalls: {
 					edges: Array<{ node: ToolCall; cursor: string }>;
 					pageInfo: { hasNextPage: boolean; endCursor: string | null };
 					totalCount: number;
 				};
 			}>(RUN_TOOL_CALLS_QUERY, {
-				id: executionIdFor(runId),
+				id: runId,
 				first: 50,
 				after: more ? toolCallsCursor : null
 			});
-			const newCalls = data.executionToolCalls.edges.map((e) => e.node);
+			const newCalls = data.runToolCalls.edges.map((e) => e.node);
 			toolCalls = more ? [...toolCalls, ...newCalls] : newCalls;
-			toolCallsTotal = data.executionToolCalls.totalCount;
-			toolCallsCursor = data.executionToolCalls.pageInfo.endCursor;
-			toolCallsHasMore = data.executionToolCalls.pageInfo.hasNextPage;
+			toolCallsTotal = data.runToolCalls.totalCount;
+			toolCallsCursor = data.runToolCalls.pageInfo.endCursor;
+			toolCallsHasMore = data.runToolCalls.pageInfo.hasNextPage;
 			toolCallsLoaded = true;
 		} catch {
 			toolCallsLoaded = true;
@@ -155,18 +121,8 @@
 
 	$effect(() => {
 		void fetchRun();
-		// run-layer rows correspond to AgentSession invocations
 		if (layer === 'run') {
-			void (async () => {
-				await fetchExec();
-				if (exec?.sessionId) {
-					await fetchSession(exec.sessionId);
-				}
-			})();
-		}
-		// try-layer rows correspond to execute-bead bundles
-		if (layer === 'try') {
-			void fetchExec();
+			void fetchSession(runId);
 		}
 		if (activeTab === 'tools' && !toolCallsLoaded && !toolCallsLoading) {
 			void fetchToolCalls(false);
@@ -181,27 +137,23 @@
 		onTabChange?.(tab);
 	}
 
-	const tabs: Array<{ id: Tab; label: string; show: boolean }> = $derived.by(() => {
-		const list: Array<{ id: Tab; label: string; show: boolean }> = [
-			{ id: 'overview', label: 'Overview', show: true }
-		];
+	const tabs: Array<{ id: Tab; label: string }> = $derived.by(() => {
+		const list: Array<{ id: Tab; label: string }> = [{ id: 'overview', label: 'Overview' }];
 		if (layer !== 'work') {
-			list.push({ id: 'prompt', label: 'Prompt', show: true });
-			list.push({ id: 'response', label: 'Response', show: true });
+			list.push({ id: 'prompt', label: 'Prompt' });
+			list.push({ id: 'response', label: 'Response' });
 		}
 		if (layer === 'run') {
-			list.push({ id: 'session', label: 'Session', show: true });
+			list.push({ id: 'session', label: 'Session' });
 		}
 		if (layer === 'run' || layer === 'try') {
-			list.push({ id: 'tools', label: 'Tool calls', show: true });
-			list.push({ id: 'evidence', label: 'Evidence', show: true });
+			list.push({ id: 'tools', label: 'Tools' });
 		}
 		return list;
 	});
 </script>
 
 <div class="space-y-3" data-testid="rundetail" data-layer={layer}>
-	<!-- Tabs -->
 	<div class="border-border-line dark:border-dark-border-line border-b">
 		<nav class="flex gap-1">
 			{#each tabs as tab (tab.id)}
@@ -214,7 +166,7 @@
 					}}
 					class="text-body-sm border-b-2 px-3 py-2 font-medium {activeTab === tab.id
 						? 'border-accent-lever text-accent-lever dark:border-dark-accent-lever dark:text-dark-accent-lever'
-						: 'text-fg-muted hover:text-fg-ink dark:text-dark-fg-muted dark:hover:text-dark-fg-ink border-transparent'}"
+						: 'border-transparent text-fg-muted hover:text-fg-ink dark:text-dark-fg-muted dark:hover:text-dark-fg-ink'}"
 				>
 					{tab.label}
 				</button>
@@ -227,29 +179,26 @@
 			{#if runLoading && !run}
 				<div class="text-body-sm text-fg-muted dark:text-dark-fg-muted">Loading run…</div>
 			{:else if run}
-				<Overview {run} beadHrefFn={beadHref} />
+				<Overview
+					{run}
+					beadHrefFn={beadHref}
+					workerHrefFn={workerHref}
+					liveWorkerId={session?.workerId ?? null}
+				/>
 			{:else}
 				<div class="text-body-sm text-fg-muted dark:text-dark-fg-muted">Run not found.</div>
 			{/if}
 		{:else if activeTab === 'prompt'}
-			<Prompt
-				prompt={layer === 'run' ? session?.prompt : exec?.prompt}
-				summary={run?.promptSummary}
-				path={layer === 'try'
-					? (exec?.promptPath ?? (exec ? `${exec.bundlePath}/prompt.md` : null))
-					: null}
-			/>
+			<Prompt prompt={layer === 'run' ? session?.prompt ?? run?.prompt : run?.prompt} summary={run?.promptSummary} />
 		{:else if activeTab === 'response'}
 			<Response
-				response={layer === 'run' ? session?.response : exec?.result}
+				response={layer === 'run' ? session?.response ?? run?.response : run?.response}
 				excerpt={run?.outputExcerpt}
-				stderr={layer === 'run' ? session?.stderr : null}
-				path={layer === 'try'
-					? (exec?.resultPath ?? (exec ? `${exec.bundlePath}/result.json` : null))
-					: null}
+				stderr={layer === 'run' ? session?.stderr ?? run?.stderr : run?.stderr}
+				verdict={layer === 'try' ? run?.status : null}
 			/>
 		{:else if activeTab === 'session'}
-			<Session {session} loading={sessionLoading} sessionId={exec?.sessionId ?? null} />
+			<Session {session} loading={sessionLoading} sessionId={runId} />
 		{:else if activeTab === 'tools'}
 			<Tools
 				calls={toolCalls}
@@ -257,7 +206,7 @@
 				total={toolCallsTotal}
 				hasMore={toolCallsHasMore}
 				onLoadMore={() => fetchToolCalls(true)}
-				sourcePath={exec?.agentLogPath}
+				sourcePath={session?.stdoutPath ?? null}
 			/>
 		{:else if activeTab === 'evidence'}
 			<Evidence runId={runId} files={run?.bundleFiles ?? []} />

@@ -4,11 +4,37 @@
 		excerpt?: string | null
 		stderr?: string | null
 		path?: string | null
+		verdict?: string | null
 	}
-	let { response, excerpt, stderr, path }: Props = $props()
+	let { response, excerpt, stderr, path, verdict }: Props = $props()
+
+	function verdictClass(value: string): string {
+		switch (value) {
+			case 'success':
+				return 'badge-status-closed'
+			case 'failure':
+				return 'badge-status-failed'
+			case 'preserved':
+				return 'badge-status-in-progress'
+			case 'running':
+				return 'badge-status-running'
+			default:
+				return 'badge-status-open'
+		}
+	}
 </script>
 
 <div class="space-y-2" data-testid="rundetail-response">
+	{#if verdict}
+		<div class="flex items-center gap-2">
+			<span class="font-label-caps text-label-caps inline-block rounded-full px-2 py-0.5 uppercase {verdictClass(
+				verdict
+			)}">
+				{verdict}
+			</span>
+			<span class="text-body-sm text-fg-muted dark:text-dark-fg-muted">Verdict</span>
+		</div>
+	{/if}
 	{#if excerpt && !response}
 		<div class="text-body-sm text-fg-ink dark:text-dark-fg-ink">{excerpt}</div>
 	{/if}

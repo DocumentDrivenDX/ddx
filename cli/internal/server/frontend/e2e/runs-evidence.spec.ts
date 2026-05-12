@@ -220,7 +220,6 @@ test('runs Evidence tab: list bundle files, inline view (whitelist+size), downlo
 	await expect(page.locator('h1', { hasText: RUN_ID })).toBeVisible();
 
 	const detail = page.locator('[data-testid="rundetail"]');
-	await expect(detail.locator('button[data-tab="evidence"]')).toBeVisible();
 	await expect(detail.locator('[data-active-tab]')).toHaveAttribute(
 		'data-active-tab',
 		'evidence'

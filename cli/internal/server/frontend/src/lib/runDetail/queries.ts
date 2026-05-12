@@ -36,6 +36,13 @@ export const RUN_DETAIL_QUERY = gql`
 			costUsd
 			outputExcerpt
 			evidenceLinks
+			prompt
+			response
+			stderr
+			billingMode
+			outcome
+			detail
+			cachedTokens
 
 			bundleFiles {
 				path
@@ -58,32 +65,19 @@ export const RUN_BUNDLE_FILE_QUERY = gql`
 	}
 `
 
-export const RUN_EXECUTION_QUERY = gql`
-	query RunExecutionExpand($id: ID!) {
-		execution(id: $id) {
-			id
-			sessionId
-			bundlePath
-			promptPath
-			manifestPath
-			resultPath
-			agentLogPath
-			prompt
-			manifest
-			result
-			rationale
-		}
-	}
-`
-
 export const RUN_SESSION_QUERY = gql`
 	query RunSessionExpand($id: ID!) {
 		agentSession(id: $id) {
 			id
+			workerId
 			harness
 			model
 			cost
 			billingMode
+			baseRev
+			resultRev
+			stdoutPath
+			stderrPath
 			tokens {
 				prompt
 				completion
@@ -101,16 +95,16 @@ export const RUN_SESSION_QUERY = gql`
 
 export const RUN_TOOL_CALLS_QUERY = gql`
 	query RunToolCallsExpand($id: ID!, $first: Int, $after: String) {
-		executionToolCalls(id: $id, first: $first, after: $after) {
+		runToolCalls(id: $id, first: $first, after: $after) {
 			edges {
 				node {
 					id
-					name
 					seq
-					ts
-					inputs
+					name: tool
+					inputs: input
 					output
-					truncated
+					error
+					durationMs
 				}
 				cursor
 			}
