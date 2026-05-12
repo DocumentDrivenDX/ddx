@@ -464,8 +464,8 @@ func TestAcceptancePreservesCriteria_AxonFixture_044a5b5b(t *testing.T) {
 }
 
 // TestPreClaimIntakePrompt_AsksForFitForPurposeValidatedReplacement verifies
-// that the intake prompt tells the model to optimize prompt fitness, avoid
-// append-only noise, and classify ambiguous cases as operator-required. (AC5)
+// that the intake prompt keeps prompt-fitness edits advisory during intake and
+// classifies ambiguous cases as operator-required. (AC5)
 func TestPreClaimIntakePrompt_AsksForFitForPurposeValidatedReplacement(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
@@ -475,15 +475,9 @@ func TestPreClaimIntakePrompt_AsksForFitForPurposeValidatedReplacement(t *testin
 
 	lower := strings.ToLower(prompt)
 
-	// Prompt must describe fit-for-purpose / prompt fitness as a rewrite goal.
-	assert.True(t,
-		strings.Contains(lower, "prompt fitness") || strings.Contains(lower, "fit-for-purpose"),
-		"prompt must mention prompt fitness or fit-for-purpose; got:\n%s", prompt)
-
-	// Prompt must allow replacement (not just appending).
-	assert.True(t,
-		strings.Contains(lower, "replacement") || strings.Contains(lower, "replace"),
-		"prompt must allow replacement rewrites; got:\n%s", prompt)
+	assert.Contains(t, lower, "prompt-quality improvements")
+	assert.Contains(t, lower, "suggested_fixes")
+	assert.Contains(t, lower, "do not rewrite")
 
 	// Prompt must instruct the model to classify unclear cases as operator_required.
 	assert.Contains(t, lower, "operator_required",
