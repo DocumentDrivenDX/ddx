@@ -19,7 +19,7 @@ import (
 const ExecutionCleanupMetadataFileName = "cleanup.json"
 
 const defaultExecutionCleanupScratchMinAge = 24 * time.Hour
-const defaultEvidenceRetainDays = 7
+const defaultEvidenceRetainDays = 90
 
 var defaultExecutionCleanupScratchPrefixes = []string{
 	"ddx-test-",
@@ -215,8 +215,8 @@ func executionCleanupRetainDays(projectRoot string) int {
 	if projectRoot != "" {
 		projectConfig := filepath.Join(projectRoot, ".ddx", "config.yaml")
 		cfg, err := config.LoadFromFile(projectConfig)
-		if err == nil && cfg != nil && cfg.Executions != nil && cfg.Executions.RetainDays > 0 {
-			return cfg.Executions.RetainDays
+		if err == nil && cfg != nil && cfg.Executions != nil {
+			return cfg.Executions.ResolveRetainDays()
 		}
 	}
 	return defaultEvidenceRetainDays
