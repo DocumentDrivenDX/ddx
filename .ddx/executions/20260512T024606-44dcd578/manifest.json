@@ -1,0 +1,51 @@
+{
+  "attempt_id": "20260512T024606-44dcd578",
+  "bead_id": "ddx-170bea78",
+  "base_rev": "ff0fd049898353bee4a1fb75fb87dee3315d3fb5",
+  "created_at": "2026-05-12T02:46:10.161228808Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-170bea78",
+    "title": "docs(operator): document harness-mixing for parallel ddx work shells",
+    "description": "PROBLEM\n  The 2026-05-09 plan-review opus self-review identified a gap in the\n  operator playbook: when running multiple ddx work --once shells in\n  parallel (after ddx-1f774edf lands), operators must understand that\n  using the same harness across all N workers will throttle on the\n  per-account rate limit (e.g., Anthropic 5-tier rate limits for the\n  claude harness). Mixing harnesses across workers (claude + codex +\n  openrouter, etc.) dodges per-harness ceilings and delivers true N×\n  throughput. There is no operator documentation today that says this.\n\nCURRENT STATE\n  - CLAUDE.md describes the project structure and per-CLI commands but\n    not the operator playbook for parallel drains.\n  - docs/helix/06-iterate/ contains reliability principles and alignment\n    reviews but no operator-facing parallel-drain guide.\n  - .agents/skills/ddx/reference/ and .claude/skills/ddx/reference/\n    contain skill documentation but not an explicit\n    parallel-drain-playbook section.\n  - CLAUDE.md memory note feedback_models.md says \"prefer claude harness\n    for execute-loop; avoid agent harness for real work\" — the harness\n    selection guidance exists for single-worker drain but not for\n    parallel.\n\nPROPOSED FIX\n  Add a short section to CLAUDE.md (or docs/helix/06-iterate/ if\n  preferred for separation of concerns) titled \"Parallel drain\n  operator playbook\" covering:\n\n  1. When to use parallel drain: after ddx-1f774edf lands; not before\n     (lock contention defeats the parallelism today).\n\n  2. How to start: open N tmux panes / shells, each running a\n     `ddx work --once` loop. No code change required.\n\n  3. Harness mixing: example of running claude on one shell, codex on\n     another, openrouter on a third — mixing dodges per-harness rate\n     limits and avoids serializing on Anthropic quota.\n\n  4. Cost ceiling: each ddx work invocation accepts --max-cost; budget\n     across N shells.\n\n  5. Conflict expectations: parallel landing produces some preservation\n     under load (covered by the chaos sister bead); set operator\n     expectation that occasional preservation is normal and the\n     preserved iteration refs can be merged manually.\n\n  6. Observability: point at the lock-metrics sister bead's output\n     channels (once landed) for debugging contention.\n\nNON-SCOPE\n  - Building a `ddx work --parallel N` flag (deliberately YAGNI per\n    plan review; external shells deliver the same throughput).\n  - Server-spawned-worker design (ADR-022 step 7, separate work).\n  - Harness-selection algorithm (single-worker memory note already\n    covers default selection).\n\nINTERSECTIONS\n  - Sister beads: ddx-1f774edf (must land before parallel drain is\n    safe), the chaos test bead, the lock-metrics bead.",
+    "acceptance": "1. CLAUDE.md (or docs/helix/06-iterate/parallel-drain-playbook.md) contains a \"Parallel drain operator playbook\" section covering the 6 items in PROPOSED FIX.\n2. The doc explicitly notes that parallel drain is unsafe before ddx-1f774edf lands (because of withMainGitLock spanning network I/O).\n3. The doc gives a concrete example of mixing harnesses (claude + codex + openrouter or equivalent) across N shells.\n4. The doc cross-references the chaos test bead and the lock-metrics bead.\n5. lefthook run pre-commit passes (markdown lint + secrets + ddx-config validation are the relevant gates for a doc-only change).",
+    "labels": [
+      "phase:6",
+      "area:docs",
+      "area:operator",
+      "kind:doc",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T02:45:01Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "4014696",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no viable routing candidate: 3 candidates rejected\"}",
+          "created_at": "2026-05-12T02:46:06.85555782Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T02:45:01.136030592Z",
+      "queue-rank": "9"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260512T024606-44dcd578",
+    "prompt": ".ddx/executions/20260512T024606-44dcd578/prompt.md",
+    "manifest": ".ddx/executions/20260512T024606-44dcd578/manifest.json",
+    "result": ".ddx/executions/20260512T024606-44dcd578/result.json",
+    "checks": ".ddx/executions/20260512T024606-44dcd578/checks.json",
+    "usage": ".ddx/executions/20260512T024606-44dcd578/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-170bea78-20260512T024606-44dcd578"
+  },
+  "prompt_sha": "b22c25ab1030d5100ea54eed3cbc3211eda0f82fae849590ac039eb3c435e7e1"
+}
