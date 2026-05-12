@@ -1,0 +1,2 @@
+verification_command: cd cli && go test ./internal/docprose/... && lefthook run pre-commit
+reason: The corpus harness, corpus fixtures, and corpus tests already exist in the current tree and both required verification commands passed without code changes.
