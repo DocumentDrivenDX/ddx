@@ -158,6 +158,12 @@ const StoreErrorCooldown = 5 * time.Minute
 // triage:needs-investigation park.
 const ProviderUnavailableCooldown = 15 * time.Minute
 
+// SmartRetryCooldown is the queue-fairness pause after a real no_changes
+// implementation attempt asks for status=open/smart retry. The bead remains
+// open with its tier hint, but a watch worker moves on instead of repeating the
+// same empty-diff attempt every idle cycle.
+const SmartRetryCooldown = 5 * time.Minute
+
 // SubmitWithPreMergeChecks is the canonical land-back step for the execute-bead
 // loop. It runs the project's .ddx/checks/*.yaml gate against the worker's
 // (baseRev, resultRev) before forwarding to submit. On Blocked, it preserves
@@ -1838,6 +1844,27 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						return result, ctx.Err()
 					}
 					continue
+				}
+				if shouldSuppressNoProgress(report) {
+					retryAfter := now().UTC().Add(SmartRetryCooldown)
+					cooldownStatus := noChanges.EventKind
+					if cooldownStatus == "" {
+						cooldownStatus = report.Status
+					}
+					cooldownDetail := noChanges.Reason
+					if cooldownDetail == "" {
+						cooldownDetail = report.Detail
+					}
+					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, cooldownStatus, cooldownDetail, report.BaseRev); err != nil {
+						_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
+							return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
+						})
+						if ctx.Err() != nil {
+							return result, ctx.Err()
+						}
+						continue
+					}
+					report.RetryAfter = retryAfter.Format(time.RFC3339)
 				}
 				result.Failures++
 				result.LastFailureStatus = report.Status

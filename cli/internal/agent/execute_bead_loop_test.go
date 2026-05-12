@@ -1756,6 +1756,8 @@ func TestNoChangesAutonomousInvestigationRemainsOpen(t *testing.T) {
 			return ExecuteBeadReport{
 				BeadID:             beadID,
 				Status:             ExecuteBeadStatusNoChanges,
+				BaseRev:            "base",
+				ResultRev:          "base",
 				NoChangesRationale: "status: open\nreason: retryable after stronger code search\nsuggested_action: retry with smart agent",
 			}, nil
 		}),
@@ -1772,8 +1774,9 @@ func TestNoChangesAutonomousInvestigationRemainsOpen(t *testing.T) {
 	assert.Equal(t, bead.StatusOpen, got.Status, "autonomous no_changes must remain worker-runnable")
 	assert.NotContains(t, got.Labels, bead.LabelNeedsInvestigation)
 	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman)
-	_, hasRetry := got.Extra["execute-loop-retry-after"]
-	assert.False(t, hasRetry, "smart-runnable no_changes must not set execute-loop-retry-after")
+	retryAfter, hasRetry := got.Extra["execute-loop-retry-after"]
+	require.True(t, hasRetry, "smart-runnable no_changes must set a short retry-after so watch workers drain other beads")
+	assert.Equal(t, r.Results[0].RetryAfter, retryAfter)
 	assert.Equal(t, true, got.Extra[executeLoopSmartRetryKey])
 	assert.Equal(t, string(escalation.TierSmart), got.Extra[TriageTierHintKey])
 	assert.Equal(t, NoChangesEventAutonomousRetry, got.Extra[bead.ExtraLastStatus])
@@ -1830,6 +1833,8 @@ func TestNoChangesSmartRetry_StepwiseClimb(t *testing.T) {
 				BeadID:             beadID,
 				Status:             ExecuteBeadStatusNoChanges,
 				ActualPower:        power,
+				BaseRev:            "base",
+				ResultRev:          "base",
 				NoChangesRationale: "status: open\nreason: needs stronger model",
 			}, nil
 		}),
@@ -1846,6 +1851,8 @@ func TestNoChangesSmartRetry_StepwiseClimb(t *testing.T) {
 	assert.Equal(t, bead.StatusOpen, got.Status)
 	// After JSON round-trip, int values in Extra come back as float64.
 	assert.Equal(t, float64(70), got.Extra[TriageTierHintKey], "first no_changes at power 50 must set hint to next step (70), not top of ladder (90)")
+	_, err = store.ClearCooldowns(nil)
+	require.NoError(t, err)
 
 	// Second run: no_changes at actualPower=70 → hint must advance by one more step to 90.
 	_, err = worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{Once: true})
