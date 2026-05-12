@@ -336,7 +336,7 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		assert.Empty(t, got.Owner, "bead must be unclaimed after terminal intake")
 		assert.NotContains(t, got.Labels, bead.LabelNeedsHuman,
 			"terminal intake outcome must not rely on needs_human label parking")
-		assert.Contains(t, bead.GetNeedsHumanMeta(*got).Reason, "missing root cause")
+		assert.Equal(t, "operator_required", bead.GetNeedsHumanMeta(*got).Reason)
 
 		// An intake.blocked event must be recorded on the bead.
 		events, err := store.Events(candidate.ID)

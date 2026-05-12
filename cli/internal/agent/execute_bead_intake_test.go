@@ -203,7 +203,7 @@ func TestIntake_NonAtomicSkipsClaim(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status)
 	assert.Empty(t, got.Owner)
-	assert.Contains(t, bead.GetNeedsHumanMeta(*got).Reason, "human clarification")
+	assert.Equal(t, "operator_required", bead.GetNeedsHumanMeta(*got).Reason)
 }
 
 func TestReadinessNeedsRefineWarnsAndClaimsInWarnOnly(t *testing.T) {
@@ -1209,7 +1209,7 @@ func TestIntake_AmbiguousNeedsHuman_BlocksWithoutClaim(t *testing.T) {
 	got, err := inner.Get("ddx-0001")
 	require.NoError(t, err)
 	assert.Equal(t, bead.StatusProposed, got.Status, "bead must be moved to operator attention")
-	assert.Contains(t, bead.GetNeedsHumanMeta(*got).Reason, "AC conflicts with non-scope")
+	assert.Equal(t, "operator_required", bead.GetNeedsHumanMeta(*got).Reason)
 
 	events, err := inner.Events("ddx-0001")
 	require.NoError(t, err)
