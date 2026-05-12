@@ -254,8 +254,10 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 			"bead_id": candidate.ID,
 			"reason":  reason,
 		})
-		if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeOperatorRequired, "operator_required", reason, at); berr != nil && runtime.Log != nil {
+		if parked, berr := parkBeadPostIntakeRejection(w.Store, candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", reason, at); berr != nil && runtime.Log != nil {
 			_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition park error: %v\n", berr)
+		} else if parked {
+			// parkBeadPostIntakeRejection already handled the proposed transition.
 		}
 	}
 
@@ -1044,31 +1046,33 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				overflowDetail := fmt.Sprintf("bead depth %d reached max_decomposition_depth %d; operator must split", depth, maxDepth)
 				if strictIntakeBlocking() {
-					if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeOperatorRequired, "operator_required", overflowDetail, now().UTC()); berr != nil && runtime.Log != nil {
+					if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", overflowDetail, now().UTC()); berr != nil && runtime.Log != nil {
 						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+					} else if parked {
+						_ = w.Store.Unclaim(candidate.ID)
+						if stopAfterNonAttemptSkip() {
+							applyStop(work.StopInput{Once: true})
+							return result, nil
+						}
+						continue
 					}
-					_ = w.Store.Unclaim(candidate.ID)
-					if stopAfterNonAttemptSkip() {
-						applyStop(work.StopInput{Once: true})
-						return result, nil
-					}
-					continue
+				} else {
+					appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "decomposition_depth_cap", overflowDetail, now().UTC())
+					emit("pre_claim_intake.warn", readinessDecisionBody(
+						"pre_claim_intake.decomposition_depth_cap",
+						"too_large",
+						"pre_claim_intake",
+						"best-effort",
+						"attempt",
+						"continue with implementation; operator attention is reserved for explicit targeted execution",
+						map[string]any{
+							"bead_id": candidate.ID,
+							"outcome": string(PreClaimIntakeTooLargeDecomposed),
+							"detail":  overflowDetail,
+						},
+					))
+					skipPreClaimIntake = true
 				}
-				appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "decomposition_depth_cap", overflowDetail, now().UTC())
-				emit("pre_claim_intake.warn", readinessDecisionBody(
-					"pre_claim_intake.decomposition_depth_cap",
-					"too_large",
-					"pre_claim_intake",
-					"best-effort",
-					"attempt",
-					"continue with implementation; operator attention is reserved for explicit targeted execution",
-					map[string]any{
-						"bead_id": candidate.ID,
-						"outcome": string(PreClaimIntakeTooLargeDecomposed),
-						"detail":  overflowDetail,
-					},
-				))
-				skipPreClaimIntake = true
 			}
 		}
 
@@ -1212,17 +1216,19 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						"detail":  blockedDetail,
 					})
 					if strictIntakeBlocking() {
-						if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeOperatorRequired, "operator_required", blockedDetail, now().UTC()); berr != nil && runtime.Log != nil {
+						if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", blockedDetail, now().UTC()); berr != nil && runtime.Log != nil {
 							_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+						} else if parked {
+							_ = w.Store.Unclaim(candidate.ID)
+							if stopAfterNonAttemptSkip() {
+								applyStop(work.StopInput{Once: true})
+								return result, nil
+							}
+							continue
 						}
-						_ = w.Store.Unclaim(candidate.ID)
-						if stopAfterNonAttemptSkip() {
-							applyStop(work.StopInput{Once: true})
-							return result, nil
-						}
-						continue
+					} else {
+						appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "decomposition_blocked_best_effort", blockedDetail, now().UTC())
 					}
-					appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "decomposition_blocked_best_effort", blockedDetail, now().UTC())
 					break
 				}
 				childIDs, decompErr := applyPreClaimDecomposition(w.Store, &candidate, decomp, assignee, now().UTC())
@@ -1244,17 +1250,19 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						},
 					))
 					if strictIntakeBlocking() {
-						if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeOperatorRequired, "operator_required", decompErr.Error(), now().UTC()); berr != nil && runtime.Log != nil {
+						if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", decompErr.Error(), now().UTC()); berr != nil && runtime.Log != nil {
 							_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+						} else if parked {
+							_ = w.Store.Unclaim(candidate.ID)
+							if stopAfterNonAttemptSkip() {
+								applyStop(work.StopInput{Once: true})
+								return result, nil
+							}
+							continue
 						}
-						_ = w.Store.Unclaim(candidate.ID)
-						if stopAfterNonAttemptSkip() {
-							applyStop(work.StopInput{Once: true})
-							return result, nil
-						}
-						continue
+					} else {
+						appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "decomposition_error_best_effort", decompErr.Error(), now().UTC())
 					}
-					appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "decomposition_error_best_effort", decompErr.Error(), now().UTC())
 					break
 				}
 				if runtime.Log != nil {
@@ -1298,17 +1306,19 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					},
 				))
 				if strictIntakeBlocking() {
-					if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, intakeOutcome, intakeResult.Reason, intakeResult.Detail, now().UTC()); berr != nil && runtime.Log != nil {
+					if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, intakeOutcome, intakeResult.Reason, intakeResult.Detail, now().UTC()); berr != nil && runtime.Log != nil {
 						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+					} else if parked {
+						_ = w.Store.Unclaim(candidate.ID)
+						if stopAfterNonAttemptSkip() {
+							applyStop(work.StopInput{Once: true})
+							return result, nil
+						}
+						continue
 					}
-					_ = w.Store.Unclaim(candidate.ID)
-					if stopAfterNonAttemptSkip() {
-						applyStop(work.StopInput{Once: true})
-						return result, nil
-					}
-					continue
+				} else {
+					appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "readiness_best_effort", warning, now().UTC())
 				}
-				appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "readiness_best_effort", warning, now().UTC())
 			}
 		}
 
@@ -2894,7 +2904,10 @@ func applyPreClaimDecomposition(store ExecuteBeadLoopStore, parent *bead.Bead, d
 // intake.blocked event so the bead is filtered from ReadyExecution until an
 // operator reviews the intake decision. It does not unclaim — the caller must
 // call Unclaim after this returns (whether or not parking succeeds).
-func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, beadID, actor string, outcome PreClaimIntakeOutcome, reason, detail string, at time.Time) error {
+func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, candidate *bead.Bead, actor string, outcome PreClaimIntakeOutcome, reason, detail string, at time.Time) (bool, error) {
+	if candidate == nil {
+		return false, fmt.Errorf("pre-claim intake park requires a bead candidate")
+	}
 	reason = strings.TrimSpace(reason)
 	if reason == "" {
 		reason = string(outcome)
@@ -2903,7 +2916,33 @@ func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, beadID, actor strin
 	if detail == "" {
 		detail = reason
 	}
-	if err := store.ParkToProposed(beadID, bead.ParkIntakeRejection, func(b *bead.Bead) {
+	ruleID := "pre_claim_intake." + strings.TrimSpace(string(outcome))
+	findingFingerprint := preClaimIntakeFindingFingerprint(candidate, ruleID, reason, "pre_claim_intake", "block", "park", "review intake result and accept, rewrite, split, block, or cancel")
+	promptFingerprint := bead.PromptFingerprint(*candidate)
+	if honored, err := preClaimIntakeOverrideHonored(store, candidate, findingFingerprint); err != nil {
+		return false, err
+	} else if honored {
+		appendPreClaimIntakeOverrideHonoredEvent(store, candidate.ID, actor, findingFingerprint, promptFingerprint, at)
+		return false, nil
+	}
+	body := readinessDecisionBody(
+		ruleID,
+		reason,
+		"pre_claim_intake",
+		"block",
+		"park",
+		"review intake result and accept, rewrite, split, block, or cancel",
+		map[string]any{
+			"intake_outcome":       string(outcome),
+			"detail":               detail,
+			"prompt_fingerprint":   promptFingerprint,
+			"accepted_fingerprint": findingFingerprint,
+		},
+	)
+	body["fingerprint"] = findingFingerprint
+	body["prompt_fingerprint"] = promptFingerprint
+	bodyJSON, _ := json.Marshal(body)
+	if err := store.ParkToProposed(candidate.ID, bead.ParkIntakeRejection, func(b *bead.Bead) {
 		ensureBeadExtra(b)
 		// Migration-only cleanup: defensive removal for legacy rows that escaped
 		// the lifecycle migration or arrived via external import.
@@ -2916,28 +2955,19 @@ func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, beadID, actor strin
 			Summary:         "pre-claim intake blocked execution",
 		})
 	}); err != nil {
-		return err
+		return false, err
 	}
-	body := readinessDecisionBodyJSON(
-		"pre_claim_intake."+strings.TrimSpace(string(outcome)),
-		reason,
-		"pre_claim_intake",
-		"block",
-		"park",
-		"review intake result and accept, rewrite, split, block, or cancel",
-		map[string]any{
-			"intake_outcome": string(outcome),
-			"detail":         detail,
-		},
-	)
-	return store.AppendEvent(beadID, bead.BeadEvent{
+	if err := store.AppendEvent(candidate.ID, bead.BeadEvent{
 		Kind:      "intake.blocked",
 		Summary:   string(outcome),
-		Body:      body,
+		Body:      string(bodyJSON),
 		Actor:     actor,
 		Source:    "ddx work",
 		CreatedAt: at,
-	})
+	}); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func appendPreClaimIntakeWarning(store ExecuteBeadLoopStore, beadID, actor, reason, detail string, at time.Time) {
