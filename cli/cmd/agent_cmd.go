@@ -2140,10 +2140,15 @@ func resolveProjectRoot(projectFlag, workingDir string) string {
 	return gitpkg.FindProjectRoot(workingDir)
 }
 
+type preClaimGitOps interface {
+	CurrentBranch(dir string) (string, error)
+	FetchOriginAncestryCheck(dir, targetBranch string) (agent.PreClaimResult, error)
+}
+
 // buildCLIPreClaimHook returns a PreClaimHook for inline queue work
 // that fetches origin and verifies ancestry before each bead claim. Fetch
 // failures are logged but do not block the worker (air-gap friendly).
-func buildCLIPreClaimHook(projectRoot string, gitOps agent.LandingGitOps) func(ctx context.Context) error {
+func buildCLIPreClaimHook(projectRoot string, gitOps preClaimGitOps) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		branch, err := gitOps.CurrentBranch(projectRoot)
 		if err != nil {
