@@ -14,6 +14,9 @@ import (
 // This covers the FEAT-015 requirement that skills.Install is always invoked
 // with Force:true during update (via refreshShippedSkills).
 func TestUpdate_ForceReplacesStaleSymlinks(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
 	te := NewTestEnvironment(t, WithGitInit(false))
 
 	// Create .agents/skills/ddx as a symlink (pre-migration state).
@@ -52,6 +55,9 @@ func TestUpdate_ForceReplacesStaleSymlinks(t *testing.T) {
 }
 
 func TestUpdate_DoesNotAttemptBinaryUpgrade(t *testing.T) {
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
 	te := NewTestEnvironment(t, WithGitInit(false))
 
 	output, err := te.RunCommand("update")
