@@ -98,6 +98,20 @@ show. The shared detail tabs are:
 - `try` rows: `overview`, `prompt`, `response`, `tools`, `evidence`
 - `run` rows: `overview`, `prompt`, `response`, `session`, `tools`, `evidence`
 
+### Run-detail page
+
+The shared run-detail page is the canonical deep surface for anything exposed
+through the Runs tab.
+
+- Trust boundary: anyone with project read access can inspect the raw prompt,
+  response, stderr, and tool-call arguments attached to visible `try` and
+  `run` records. The page does not redact those fields inside the project
+  boundary.
+- Evidence browser whitelist: the Evidence tab renders only `*.txt`, `*.md`,
+  `manifest.json`, `prompt.md`, and `result.json` inline, and only when the
+  file is 64 KB or smaller. Other files remain download-only. The evidence
+  browser does not render Markdown as HTML.
+
 - `layer=run` rows expand to AgentSession transcript / billing / cached
   tokens / stderr (the old Sessions detail).
 - `layer=try` rows expand to the `.ddx/executions/<attempt-id>/` bundle

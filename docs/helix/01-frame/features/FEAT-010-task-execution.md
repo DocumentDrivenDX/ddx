@@ -583,7 +583,8 @@ Common fields:
 
 Layer extensions:
 - `layer1` — prompt reference, agent config, model id, token usage,
-  upstream session id, structured response pointer
+  upstream session id, structured response pointer, normalized
+  `ToolCallEntry` stream captured at drain time
 - `layer2` — bead id, base revision, worktree path, finalization mode
   (`merge` | `preserve`), child layer-1 run ids, evidence-bundle pointer
 - `layer3` — queue snapshot pointer, stop-condition evaluation log,
@@ -1234,6 +1235,36 @@ project-scoped identity of the inspection:
 | `actor` | Viewer identity derived from the authenticated project member |
 | `source` | `graphql:run` |
 | `body` | Single line: `project_id=<projectId> run_id=<runId> layer=<layer> visibility=project_membership` |
+
+### Run resolver contract
+
+The canonical deep loader for a run detail surface is `run(id:)`. It returns
+the run-layer fields used by FEAT-008:
+
+- `prompt`
+- `response`
+- `stderr`
+- `bundleFiles[]`
+
+The tool-call resolver is the `toolCalls(first, after)` stream exposed via
+`runToolCalls(id:, first:, after:)`. It returns the normalized tool-call
+stream as a paginated `RunToolCallConnection`, where each node projects the
+canonical drain-time `ToolCallEntry` shape:
+
+- `tool`
+- `input`
+- `output`
+- `duration_ms`
+- `error`
+
+`ToolCallEntry` is the normalized agent-side record of one tool execution. DDx
+persists the stream at drain time so the run substrate can page the stored
+sequence without rehydrating raw agent logs.
+
+The `bundleFile(path)` lookup is exposed via `runBundleFile(id:, path:)`. It
+is confined to the run's bundle root, rejects path traversal, absolute paths,
+and symlink escapes, and inlines content only for the whitelist of small text
+files documented by FEAT-008.
 
 ### Layer-to-substrate mapping for the Runs UI
 
