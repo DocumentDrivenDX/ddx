@@ -49,6 +49,7 @@ type Report struct {
 	NoChangesRationale          string
 	ReviewVerdict               string
 	ReviewRationale             string
+	CycleTrace                  []ExecutionCycleTrace
 	Tier                        string
 	ProbeResult                 string
 	CostUSD                     float64
@@ -67,6 +68,48 @@ type Report struct {
 	Stderr                      string
 	RateLimitBudget             time.Duration
 	ResourceExhausted           any
+}
+
+type ExecutionCycleRouteFacts struct {
+	Harness         string
+	Provider        string
+	Model           string
+	ActualPower     int
+	RouteReason     string
+	ResolvedBaseURL string
+}
+
+type ExecutionCycleReviewResult struct {
+	Verdict        string
+	Rationale      string
+	Classification string
+	PerAC          []ReviewAC
+	Findings       []Finding
+}
+
+type ExecutionCycleTrace struct {
+	CycleIndex       int
+	AttemptID        string
+	ResultRev        string
+	ImplementerRoute ExecutionCycleRouteFacts
+	ReviewGroupID    string
+	ReviewerIndices  []int
+	ReviewVerdicts   []string
+	ReviewResult     ExecutionCycleReviewResult
+	FinalDecision    string
+}
+
+type ReviewAC struct {
+	Number   int
+	Item     string
+	Grade    string
+	Evidence string
+}
+
+type Finding struct {
+	Severity string
+	Summary  string
+	Location string
 }
 
 type Executor interface {

@@ -1115,11 +1115,22 @@ func (r *DefaultBeadReviewer) Review(ctx context.Context, projectRoot string, ca
 		return CandidateReviewResult{}, groupErr
 	}
 	out := CandidateReviewResult{
-		Verdict:        string(review.Verdict),
-		Rationale:      review.Rationale,
-		PerAC:          append([]ReviewAC(nil), review.PerAC...),
-		Findings:       append([]Finding(nil), review.Findings...),
-		Classification: ClassifyReviewFindings(review).Class,
+		Verdict:          string(review.Verdict),
+		Rationale:        review.Rationale,
+		PerAC:            append([]ReviewAC(nil), review.PerAC...),
+		Findings:         append([]Finding(nil), review.Findings...),
+		Classification:   ClassifyReviewFindings(review).Class,
+		ReviewGroupID:    group.Bundle.GroupID,
+		ReviewerIndices:  make([]int, 0, len(group.Slots)),
+		ReviewerVerdicts: make([]string, 0, len(group.Slots)),
+	}
+	for _, slot := range group.Slots {
+		out.ReviewerIndices = append(out.ReviewerIndices, slot.ReviewerIndex)
+		if slot.Result == nil {
+			out.ReviewerVerdicts = append(out.ReviewerVerdicts, "")
+			continue
+		}
+		out.ReviewerVerdicts = append(out.ReviewerVerdicts, strings.TrimSpace(string(slot.Result.Verdict)))
 	}
 	if reduceErr != nil {
 		return out, reduceErr

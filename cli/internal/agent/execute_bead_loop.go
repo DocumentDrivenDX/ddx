@@ -416,6 +416,8 @@ type ExecuteBeadReport struct {
 	// ReviewRationale carries the actionable reviewer-authored findings for
 	// non-APPROVE review outcomes.
 	ReviewRationale string `json:"review_rationale,omitempty"`
+	// CycleTrace carries the append-only execution cycle trace in order.
+	CycleTrace []ExecutionCycleTrace `json:"cycle_trace,omitempty"`
 	// Tier is the model tier used for the final attempt (cheap, standard, smart).
 	// Populated by tier-escalating executors; empty for single-tier attempts.
 	Tier string `json:"tier,omitempty"`
@@ -2455,6 +2457,11 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 	}
 	if report.ReviewRationale != "" {
 		parts = append(parts, report.ReviewRationale)
+	}
+	if len(report.CycleTrace) > 0 {
+		if traceJSON, err := json.Marshal(report.CycleTrace); err == nil {
+			parts = append(parts, "cycle_trace="+string(traceJSON))
+		}
 	}
 	if report.PreserveRef != "" {
 		parts = append(parts, fmt.Sprintf("preserve_ref=%s", report.PreserveRef))
