@@ -417,6 +417,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		ProjectRoot:              projectRoot,
 		CleanupRunner:            agent.NewExecutionCleanupManager(projectRoot, &agent.RealGitOps{}),
 		ResourceChecker:          resourceChecker,
+		BinaryRefreshCheck:       f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID),
 		SessionID:                loopSessionID,
 		PreClaimHook:             buildCLIPreClaimHook(projectRoot, cliLandingOps),
 		PreClaimIntakeHook:       intakeHook,
@@ -434,6 +435,9 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	}
 	if err != nil {
 		return err
+	}
+	if result != nil && result.ExitReason == "binary_refresh" {
+		return nil
 	}
 	return writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, jsonOutput)
 }
