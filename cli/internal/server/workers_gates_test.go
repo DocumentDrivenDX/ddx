@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/stretchr/testify/assert"
@@ -216,6 +217,12 @@ func TestWorker_RequiredGateFail_PreservesWithoutCoordinator(t *testing.T) {
 	const specID = "FEAT-WSGATE-FAIL"
 	const beadID = "ddx-gates-fail"
 	const attemptID = "20260418T070100-gates-fail"
+
+	oldNow := agent.NowFunc
+	agent.NowFunc = func() time.Time {
+		return time.Date(2026, 5, 12, 7, 3, 22, 0, time.UTC)
+	}
+	defer func() { agent.NowFunc = oldNow }()
 
 	root, initialTip := gateRepoFixture(t, specID, true, 1) // gate exits 1
 	manifestRel := writeGateManifest(t, root, beadID, attemptID, []string{specID})

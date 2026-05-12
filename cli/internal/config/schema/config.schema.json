@@ -94,6 +94,11 @@
       "type": "object",
       "description": "Bead quality gates that run before dispatch",
       "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["warn-only", "block", "factory"],
+          "description": "Whether bead-quality findings warn and proceed or may block dispatch"
+        },
         "lint": {
           "type": "object",
           "description": "Pre-dispatch bead quality lint settings",

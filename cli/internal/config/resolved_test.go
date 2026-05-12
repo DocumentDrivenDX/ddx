@@ -38,6 +38,7 @@ func sealedFixture() ResolvedConfig {
 		sessionLogDir:           "/tmp/sessions",
 		mirrorConfig:            &ExecutionsMirrorConfig{Kind: "fs", Path: "/tmp/mirror"},
 		reasoningLevels:         map[string][]string{"smart": {"high"}},
+		beadQualityMode:         BeadQualityModeBlock,
 	}
 }
 
@@ -93,6 +94,7 @@ func TestResolvedConfigZeroValuePanicsOnEveryAccessor(t *testing.T) {
 		"MirrorConfig":                       func(r ResolvedConfig) { _ = r.MirrorConfig() },
 		"ReasoningLevels":                    func(r ResolvedConfig) { _ = r.ReasoningLevels() },
 		"BeadQualityLintBlockThresholdScore": func(r ResolvedConfig) { _ = r.BeadQualityLintBlockThresholdScore() },
+		"BeadQualityMode":                    func(r ResolvedConfig) { _ = r.BeadQualityMode() },
 	}
 	for name, call := range cases {
 		name, call := name, call

@@ -737,6 +737,7 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		var qualityRunner agent.AgentRunner
 		lintHook = agent.NewPreDispatchLintHook(projectRoot, store, rcfg, nil, qualityRunner)
 		intakeHook = agent.NewPreClaimIntakeHook(projectRoot, store, rcfg, nil, qualityRunner)
+		intakeHook = agent.NewACQualityPreClaimGate(store, rcfg.BeadQualityMode(), rcfg.ACQualityMinScore(), intakeHook)
 		triageHook = agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
 	}
 

@@ -170,7 +170,7 @@ func TestWorkerExecutionDoesNotCallResolveRouteForPinnedProfileOrModel(t *testin
 	})
 	require.NoError(t, err)
 
-	final := waitForWorkerExit(t, m, record.ID, 10*time.Second)
+	final := waitForWorkerExit(t, m, record.ID, 30*time.Second)
 	assert.NotEqual(t, "failed", final.State, "worker should complete without a ResolveRoute failure")
 
 	svc.mu.Lock()

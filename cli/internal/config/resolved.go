@@ -110,6 +110,7 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 
 	r.evidenceCaps = c.ResolveEvidenceCaps(r.harness)
 	r.beadQualityLintBlockThresholdScore = c.ResolveBeadQualityLintBlockThresholdScore()
+	r.beadQualityMode = c.ResolveBeadQualityMode()
 
 	r.contextBudget = overrides.ContextBudget
 	if r.contextBudget == "" && c != nil {
@@ -199,6 +200,7 @@ type ResolvedConfig struct {
 	reasoningLevels                    map[string][]string
 	providerRequestTimeout             time.Duration
 	beadQualityLintBlockThresholdScore int
+	beadQualityMode                    string
 	triagePolicy                       triage.TriagePolicy
 	maxDecompositionDepth              int
 	acQualityMinScore                  float64
@@ -390,6 +392,12 @@ func (r ResolvedConfig) MaxDecompositionDepth() int {
 func (r ResolvedConfig) BeadQualityLintBlockThresholdScore() int {
 	r.requireSealed()
 	return r.beadQualityLintBlockThresholdScore
+}
+
+// BeadQualityMode returns the effective bead-quality policy.
+func (r ResolvedConfig) BeadQualityMode() string {
+	r.requireSealed()
+	return r.beadQualityMode
 }
 
 // ACQualityMinScore returns the minimum verifiability score required by the

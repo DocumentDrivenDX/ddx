@@ -132,6 +132,7 @@ func TestSchemaAcceptsBeadQualityLintBlockThreshold(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, v.Validate([]byte(`version: "1.0"
 bead-quality:
+  mode: warn-only
   lint:
     block_threshold_score: 5
 `)))
@@ -140,12 +141,14 @@ bead-quality:
 func TestResolvedConfig_BeadQualityLintBlockThresholdAccessor(t *testing.T) {
 	cfg := &NewConfig{
 		BeadQuality: &BeadQualityConfig{
+			Mode: BeadQualityModeBlock,
 			Lint: &BeadQualityLintConfig{
 				BlockThresholdScore: intPtr(7),
 			},
 		},
 	}
 	resolved := cfg.Resolve(CLIOverrides{})
+	assert.Equal(t, BeadQualityModeBlock, resolved.BeadQualityMode())
 	assert.Equal(t, 7, resolved.BeadQualityLintBlockThresholdScore())
 }
 

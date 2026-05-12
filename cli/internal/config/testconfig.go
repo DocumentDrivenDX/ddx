@@ -18,6 +18,7 @@ type TestLoopConfigOpts struct {
 	Profile                            string
 	MinTier                            string
 	MaxTier                            string
+	BeadQualityMode                    string
 	BeadQualityLintBlockThresholdScore int
 	EvidenceCaps                       EvidenceCapsConfig
 	// MaxDecompositionDepth, when non-zero, sets agent.triage.max_decomposition_depth
@@ -51,6 +52,7 @@ func NewTestConfigForLoop(opts TestLoopConfigOpts) *Config {
 	return &Config{
 		Version: "1.0",
 		BeadQuality: &BeadQualityConfig{
+			Mode: opts.BeadQualityMode,
 			Lint: &BeadQualityLintConfig{
 				BlockThresholdScore: &lintBlockThreshold,
 			},
