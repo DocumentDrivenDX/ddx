@@ -2,7 +2,6 @@ package agent
 
 import (
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -18,23 +17,6 @@ func TestIsIgnorableFetchOriginError(t *testing.T) {
 			name: "nil",
 			err:  nil,
 			want: false,
-		},
-		{
-			name: "typed fetch origin error",
-			err: &fetchOriginError{
-				targetBranch: "main",
-				output:       "fatal: unable to access origin",
-				err:          errors.New("exit status 128"),
-			},
-			want: true,
-		},
-		{
-			name: "wrapped typed fetch origin error",
-			err: fmt.Errorf("pre-claim ancestry check: %w", &fetchOriginError{
-				targetBranch: "main",
-				err:          errors.New("exit status 128"),
-			}),
-			want: true,
 		},
 		{
 			name: "legacy fetch origin error string",

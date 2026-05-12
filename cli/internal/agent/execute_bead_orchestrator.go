@@ -133,8 +133,8 @@ type BeadLandingOptions struct {
 
 	// LandingAdvancer, when non-nil, replaces the old in-process Merge step
 	// with the coordinator-pattern Land() call. The callback is expected to
-	// run fetch → (ff or merge) → push serialized against other submissions
-	// for the same projectRoot. When nil, LandBeadResult falls back to
+	// run the local land sequence serialized against other submissions for
+	// the same projectRoot. When nil, LandBeadResult falls back to
 	// preserving the result under refs/ddx/iterations/<bead-id>/...
 	// rather than touching the target branch.
 	LandingAdvancer func(res *ExecuteBeadResult) (*LandResult, error)
@@ -280,11 +280,11 @@ func LandBeadResult(projectRoot string, res *ExecuteBeadResult, gitOps Orchestra
 
 	// Default: land the worker's commits on the target branch. When a
 	// LandingAdvancer is provided (server coordinator / --local coordinator)
-	// it runs the fetch → (ff or merge) → push sequence serialized per
-	// projectRoot. When no advancer is provided, LandBeadResult falls back
-	// to preserving the result under refs/ddx/iterations/ — the interactive
-	// single-bead CLI path, which intentionally does NOT auto-advance the
-	// target branch (the operator moves the ref themselves).
+	// it runs the local land sequence serialized per projectRoot. When no
+	// advancer is provided, LandBeadResult falls back to preserving the
+	// result under refs/ddx/iterations/ — the interactive single-bead CLI
+	// path, which intentionally does NOT auto-advance the target branch
+	// (the operator moves the ref themselves).
 	if opts.LandingAdvancer != nil {
 		land, landErr := opts.LandingAdvancer(res)
 		if landErr != nil {
@@ -298,9 +298,6 @@ func LandBeadResult(projectRoot string, res *ExecuteBeadResult, gitOps Orchestra
 			}
 			if land.NewTip != "" {
 				res.ResultRev = land.NewTip
-			}
-			if land.PushFailed {
-				landing.Reason = PushFailedReasonPrefix + " " + land.PushError
 			}
 		case "preserved":
 			landing.Outcome = "preserved"
