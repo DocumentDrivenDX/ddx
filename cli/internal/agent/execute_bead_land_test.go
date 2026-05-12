@@ -221,6 +221,68 @@ func (r *landTestRepo) shaReachable(ref, sha string) bool {
 	return cmd.Run() == nil
 }
 
+type localOnlyGitOps struct {
+	real RealLandingGitOps
+}
+
+var _ LandingGitOps = (*localOnlyGitOps)(nil)
+
+func (g *localOnlyGitOps) CurrentBranch(dir string) (string, error) {
+	return g.real.CurrentBranch(dir)
+}
+
+func (g *localOnlyGitOps) ResolveRef(dir, ref string) (string, error) {
+	return g.real.ResolveRef(dir, ref)
+}
+
+func (g *localOnlyGitOps) UpdateRefTo(dir, ref, sha, oldSHA string) error {
+	return g.real.UpdateRefTo(dir, ref, sha, oldSHA)
+}
+
+func (g *localOnlyGitOps) SyncWorkTreeToHead(dir, fromRev string) error {
+	return g.real.SyncWorkTreeToHead(dir, fromRev)
+}
+
+func (g *localOnlyGitOps) AddWorktree(dir, path, rev string) error {
+	return g.real.AddWorktree(dir, path, rev)
+}
+
+func (g *localOnlyGitOps) AddBranchWorktree(dir, path, branch string) error {
+	return g.real.AddBranchWorktree(dir, path, branch)
+}
+
+func (g *localOnlyGitOps) RemoveWorktree(dir, path string) error {
+	return g.real.RemoveWorktree(dir, path)
+}
+
+func (g *localOnlyGitOps) MergeInto(wtDir, srcRev, msg string) error {
+	return g.real.MergeInto(wtDir, srcRev, msg)
+}
+
+func (g *localOnlyGitOps) HeadRevAt(dir string) (string, error) {
+	return g.real.HeadRevAt(dir)
+}
+
+func (g *localOnlyGitOps) CountCommits(dir, base, tip string) int {
+	return g.real.CountCommits(dir, base, tip)
+}
+
+func (g *localOnlyGitOps) StageDir(dir, relPath string) error {
+	return g.real.StageDir(dir, relPath)
+}
+
+func (g *localOnlyGitOps) CommitStaged(dir, msg string) (string, error) {
+	return g.real.CommitStaged(dir, msg)
+}
+
+func (g *localOnlyGitOps) DiffNumstat(dir, base, tip string) (string, error) {
+	return g.real.DiffNumstat(dir, base, tip)
+}
+
+func (g *localOnlyGitOps) DiffNameOnly(dir, base, tip string) ([]string, error) {
+	return g.real.DiffNameOnly(dir, base, tip)
+}
+
 // ----------------------------------------------------------------------------
 // Tests
 // ----------------------------------------------------------------------------
@@ -1023,80 +1085,52 @@ func TestLand_ConcurrentSubmissions_Serialized(t *testing.T) {
 	}
 }
 
-// TestLand_PushIsFFOnly verifies that Land() never force-pushes and reports
-// PushFailed when the remote has advanced beyond the local tip. The local
-// target ref is still advanced successfully; remote reconciliation is left
-// for later.
-func TestLand_PushIsFFOnly(t *testing.T) {
-	r := newLandTestRepoWithOrigin(t)
-	ops := RealLandingGitOps{}
+// TestLand_IsNetworkFree verifies that Land() no longer performs remote fetch
+// or push work and that it releases the main-git lock as soon as it returns.
+func TestLand_IsNetworkFree(t *testing.T) {
+	r := newLandTestRepo(t)
+	ops := &localOnlyGitOps{}
 
-	// Seed a commit directly on the bare origin so the remote main is
-	// ahead of the local main.
-	//
-	// To create a commit on a bare repo, push from a throwaway clone.
-	sideDir, err := os.MkdirTemp("", "land-side-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(sideDir)
-	runCmd := func(dir string, args ...string) {
-		c := exec.Command("git", append([]string{"-C", dir}, args...)...)
-		out, cerr := c.CombinedOutput()
-		if cerr != nil {
-			t.Fatalf("git %s: %s: %v", strings.Join(args, " "), string(out), cerr)
-		}
-	}
-	runCmd("", "clone", r.origin, sideDir)
-	runCmd(sideDir, "config", "user.name", "Side")
-	runCmd(sideDir, "config", "user.email", "side@test.local")
-	if err := os.WriteFile(filepath.Join(sideDir, "remote-only.txt"), []byte("remote\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runCmd(sideDir, "add", "-A")
-	runCmd(sideDir, "commit", "-m", "remote: seed")
-	runCmd(sideDir, "push", "origin", "main")
-
-	// Now the origin has advanced beyond the local r.dir/main. To force a
-	// push failure specifically, we need the local main to be advanced
-	// ahead of origin AND the push to conflict. Simplest construction:
-	// disable the auto-fetch by marking the remote as unreachable, then
-	// land a local commit via the ff path and watch the push fail.
-	r.runGit("remote", "set-url", "origin", "/nonexistent/path/"+filepath.Base(r.dir))
-
-	workerSHA := r.commitOn(r.baseSHA, "local-only.txt", "local\n", "feat: local")
-
+	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "feature\n", "feat: feature")
 	req := LandRequest{
 		WorktreeDir:  r.dir,
 		BaseRev:      r.baseSHA,
 		ResultRev:    workerSHA,
-		BeadID:       "ddx-land-pushff",
-		AttemptID:    "20260414T000009-pf",
+		BeadID:       "ddx-land-network-free",
+		AttemptID:    "20260511T000000-network-free",
 		TargetBranch: "main",
 	}
 	land, err := Land(r.dir, req, ops)
 	if err != nil {
 		t.Fatalf("Land: %v", err)
 	}
-	// Local target ref must still advance — push failure is non-fatal.
 	if land.Status != "landed" {
-		t.Fatalf("expected status=landed (local) even when push fails, got %q", land.Status)
+		t.Fatalf("expected status=landed, got %q (reason=%q)", land.Status, land.Reason)
 	}
-	if !land.PushFailed {
-		t.Errorf("expected PushFailed=true when origin is unreachable, got false")
+	if land.NewTip != workerSHA {
+		t.Fatalf("expected new tip %s, got %s", workerSHA, land.NewTip)
 	}
-	if land.PushError == "" {
-		t.Errorf("expected non-empty PushError when push fails")
-	}
-	if got := r.resolveRef("refs/heads/main"); got != workerSHA {
-		t.Errorf("local main tip = %s, want %s", got, workerSHA)
-	}
-	// Force-push canary: ensure no --force was used. The unreachable path
-	// makes verification of the remote tricky; instead, we verify that the
-	// PushError message mentions push (git's own error) and does NOT mention
-	// "force".
-	if strings.Contains(strings.ToLower(land.PushError), "--force") {
-		t.Errorf("PushError mentions --force; Land() must never force-push: %s", land.PushError)
+
+	acquired := make(chan time.Duration, 1)
+	go func() {
+		start := time.Now()
+		if err := withMainGitLock(r.dir, func() error { return nil }); err != nil {
+			t.Errorf("withMainGitLock after Land: %v", err)
+			return
+		}
+		acquired <- time.Since(start)
+	}()
+
+	// Simulate caller-side post-Land work that should not hold the git lock.
+	time.Sleep(5 * time.Second)
+
+	select {
+	case waited := <-acquired:
+		if waited > time.Second {
+			t.Fatalf("main-git lock was held for %s after Land returned; want < 1s", waited)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("timed out waiting for main-git lock acquisition after Land returned")
 	}
 }
 
@@ -1119,221 +1153,6 @@ func TestLand_NoChanges(t *testing.T) {
 	}
 	if land.Status != "no-changes" {
 		t.Errorf("expected status=no-changes, got %q", land.Status)
-	}
-}
-
-// TestLand_PushAutoRecovery_RaceWithRemoteResolved verifies the AC for
-// ddx-a458af7c (#1, #4): a non-fast-forward push because origin advanced
-// while the worker was running is auto-recovered by fetch + merge + retry-push.
-// The bead lands cleanly without operator intervention.
-func TestLand_PushAutoRecovery_RaceWithRemoteResolved(t *testing.T) {
-	r := newLandTestRepoWithOrigin(t)
-	ops := RealLandingGitOps{}
-
-	// Side-clone advances origin/main with a commit that touches a different
-	// file, so the auto-merge will succeed without conflicts.
-	sideDir, err := os.MkdirTemp("", "land-side-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(sideDir)
-	runCmd := func(dir string, args ...string) {
-		c := exec.Command("git", append([]string{"-C", dir}, args...)...)
-		out, cerr := c.CombinedOutput()
-		if cerr != nil {
-			t.Fatalf("git %s: %s: %v", strings.Join(args, " "), string(out), cerr)
-		}
-	}
-	runCmd("", "clone", r.origin, sideDir)
-	runCmd(sideDir, "config", "user.name", "Side")
-	runCmd(sideDir, "config", "user.email", "side@test.local")
-	if err := os.WriteFile(filepath.Join(sideDir, "remote-only.txt"), []byte("remote\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runCmd(sideDir, "add", "-A")
-	runCmd(sideDir, "commit", "-m", "remote: side-clone advance")
-	runCmd(sideDir, "push", "origin", "main")
-
-	// Worker branched off baseSHA before the side-clone landed.
-	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "worker\n", "feat: worker")
-
-	req := LandRequest{
-		WorktreeDir:  r.dir,
-		BaseRev:      r.baseSHA,
-		ResultRev:    workerSHA,
-		BeadID:       "ddx-land-pushrace",
-		AttemptID:    "20260429T000001-pr",
-		TargetBranch: "main",
-	}
-	land, err := Land(r.dir, req, ops)
-	if err != nil {
-		t.Fatalf("Land: %v", err)
-	}
-	if land.Status != "landed" {
-		t.Fatalf("expected status=landed, got %q (reason=%q)", land.Status, land.Reason)
-	}
-	if land.PushFailed {
-		t.Errorf("expected PushFailed=false after auto-recovery, got true (err=%q)", land.PushError)
-	}
-	if land.PushConflict {
-		t.Errorf("expected PushConflict=false on clean auto-merge, got true (err=%q)", land.PushError)
-	}
-	if !land.PushRecovered {
-		t.Errorf("expected PushRecovered=true after a successful auto-recovery, got false")
-	}
-	// Local target ref must point at the merge commit (not the original
-	// workerSHA, since auto-recovery merged origin into it).
-	localTip := r.resolveRef("refs/heads/main")
-	if localTip == workerSHA {
-		t.Errorf("expected local main to advance past workerSHA after auto-recovery, still at %s", workerSHA)
-	}
-	if land.NewTip != localTip {
-		t.Errorf("LandResult.NewTip = %s, want local main tip %s", land.NewTip, localTip)
-	}
-	// Origin must have received the new tip (push retry succeeded).
-	originOut, err := exec.Command("git", "-C", r.origin, "rev-parse", "refs/heads/main").CombinedOutput()
-	if err != nil {
-		t.Fatalf("rev-parse origin/main: %s: %v", string(originOut), err)
-	}
-	originTip := strings.TrimSpace(string(originOut))
-	if originTip != localTip {
-		t.Errorf("origin/main = %s, want local %s — retry push must have landed remotely", originTip, localTip)
-	}
-	// Replay fidelity: workerSHA's own parent is unchanged (= baseSHA).
-	parents := r.commitParents(workerSHA)
-	if len(parents) != 1 || parents[0] != r.baseSHA {
-		t.Errorf("worker commit parent = %v, want [%s] (auto-recovery must not rewrite worker commits)", parents, r.baseSHA)
-	}
-}
-
-func TestLand_PushAutoRecoveryDoesNotSyncDirtyProjectRoot(t *testing.T) {
-	r := newLandTestRepoWithOrigin(t)
-	ops := RealLandingGitOps{}
-
-	sideDir, err := os.MkdirTemp("", "land-side-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(sideDir)
-	runCmd := func(dir string, args ...string) {
-		c := exec.Command("git", append([]string{"-C", dir}, args...)...)
-		out, cerr := c.CombinedOutput()
-		if cerr != nil {
-			t.Fatalf("git %s: %s: %v", strings.Join(args, " "), string(out), cerr)
-		}
-	}
-	runCmd("", "clone", r.origin, sideDir)
-	runCmd(sideDir, "config", "user.name", "Side")
-	runCmd(sideDir, "config", "user.email", "side@test.local")
-	if err := os.WriteFile(filepath.Join(sideDir, "remote-only.txt"), []byte("remote\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runCmd(sideDir, "add", "-A")
-	runCmd(sideDir, "commit", "-m", "remote: side-clone advance")
-	runCmd(sideDir, "push", "origin", "main")
-
-	r.writeFile("README.md", "# operator edit\n")
-	workerSHA := r.commitOn(r.baseSHA, "README.md", "# worker edit\n", "feat: worker readme")
-
-	req := LandRequest{
-		WorktreeDir:  r.dir,
-		BaseRev:      r.baseSHA,
-		ResultRev:    workerSHA,
-		BeadID:       "ddx-land-push-dirty",
-		AttemptID:    "20260507T000005-pushdirty",
-		TargetBranch: "main",
-	}
-	land, err := Land(r.dir, req, ops)
-	if err != nil {
-		t.Fatalf("Land: %v", err)
-	}
-	if !land.PushRecovered {
-		t.Fatalf("expected push auto-recovery")
-	}
-	if !land.CheckoutSyncDeferred {
-		t.Fatalf("expected checkout sync deferral after push auto-recovery")
-	}
-	content, err := os.ReadFile(filepath.Join(r.dir, "README.md"))
-	if err != nil {
-		t.Fatalf("read README.md: %v", err)
-	}
-	if string(content) != "# operator edit\n" {
-		t.Fatalf("dirty operator README was overwritten during push auto-recovery: %q", string(content))
-	}
-}
-
-// TestLand_PushAutoRecovery_UnresolvableConflictReportsPushConflict verifies
-// AC #3 + #5 of ddx-a458af7c: when origin advanced with overlapping changes
-// the auto-merge cannot resolve, Land() reports PushConflict (distinct from
-// generic PushFailed) so the loop can park the bead for human review under
-// the 24h cap.
-func TestLand_PushAutoRecovery_UnresolvableConflictReportsPushConflict(t *testing.T) {
-	r := newLandTestRepoWithOrigin(t)
-	ops := RealLandingGitOps{}
-
-	// Side-clone edits the SAME file (feature.txt) on origin so the auto-merge
-	// against our worker's edits will conflict.
-	sideDir, err := os.MkdirTemp("", "land-side-*")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(sideDir)
-	runCmd := func(dir string, args ...string) {
-		c := exec.Command("git", append([]string{"-C", dir}, args...)...)
-		out, cerr := c.CombinedOutput()
-		if cerr != nil {
-			t.Fatalf("git %s: %s: %v", strings.Join(args, " "), string(out), cerr)
-		}
-	}
-	runCmd("", "clone", r.origin, sideDir)
-	runCmd(sideDir, "config", "user.name", "Side")
-	runCmd(sideDir, "config", "user.email", "side@test.local")
-	if err := os.WriteFile(filepath.Join(sideDir, "feature.txt"), []byte("origin-version\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	runCmd(sideDir, "add", "-A")
-	runCmd(sideDir, "commit", "-m", "remote: conflict")
-	runCmd(sideDir, "push", "origin", "main")
-
-	// Worker edits the same file with conflicting content.
-	workerSHA := r.commitOn(r.baseSHA, "feature.txt", "worker-version\n", "feat: worker")
-
-	req := LandRequest{
-		WorktreeDir:  r.dir,
-		BaseRev:      r.baseSHA,
-		ResultRev:    workerSHA,
-		BeadID:       "ddx-land-pushconflict",
-		AttemptID:    "20260429T000002-pc",
-		TargetBranch: "main",
-	}
-	land, err := Land(r.dir, req, ops)
-	if err != nil {
-		t.Fatalf("Land: %v", err)
-	}
-	if land.Status != "landed" {
-		t.Fatalf("expected status=landed (local) even when push auto-recovery conflicts, got %q", land.Status)
-	}
-	if !land.PushConflict {
-		t.Errorf("expected PushConflict=true when auto-merge conflicts, got false (PushFailed=%v PushError=%q)", land.PushFailed, land.PushError)
-	}
-	if land.PushFailed {
-		t.Errorf("expected PushFailed=false (PushConflict is the more specific signal), got true")
-	}
-	if land.PushRecovered {
-		t.Errorf("expected PushRecovered=false on conflict, got true")
-	}
-	if land.PushError == "" {
-		t.Errorf("expected non-empty PushError describing the conflict, got empty")
-	}
-	// ApplyLandResultToExecuteBeadResult must surface the conflict marker so
-	// the loop classifies the report as push_conflict, not push_failed.
-	res := &ExecuteBeadResult{ExitCode: 0, BaseRev: r.baseSHA, ResultRev: workerSHA, BeadID: req.BeadID, AttemptID: req.AttemptID}
-	ApplyLandResultToExecuteBeadResult(res, land)
-	if !strings.HasPrefix(res.Reason, PushConflictReasonPrefix) {
-		t.Errorf("expected res.Reason to start with PushConflictReasonPrefix, got %q", res.Reason)
-	}
-	if res.Status != ExecuteBeadStatusPushConflict {
-		t.Errorf("expected res.Status = push_conflict, got %q", res.Status)
 	}
 }
 

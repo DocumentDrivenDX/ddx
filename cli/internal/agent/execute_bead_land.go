@@ -10,8 +10,7 @@ package agent
 //
 // The flow mirrors how a human merges PRs:
 //
-//   1. Fetch the current target tip (from origin when a remote exists, or
-//      from the local branch otherwise).
+//   1. Read the current target tip from the local branch.
 //   2. If the current tip equals the worker's BaseRev — fast-forward the
 //      target branch directly to the worker's ResultRev via update-ref. The
 //      worker's commit keeps its original parent; no new commit is created.
@@ -24,9 +23,12 @@ package agent
 //   4. If the merge conflicts — abort cleanly, preserve the original
 //      ResultRev under refs/ddx/iterations/<bead-id>/<attempt-id>-<short-tip>,
 //      and return preserved status. Target branch is never modified.
-//   5. If an origin remote exists — push the new target tip. The push is
-//      strictly fast-forward; push failures are reported via PushFailed but
-//      do not roll back the local target ref.
+//   5. If evidence needs to be folded in, stage and commit it locally, then
+//      sync the operator checkout to the new head when safe to do so.
+//
+// Network sync is intentionally out of scope for Land(): no fetch and no
+// push happen here. Operators sync origin with raw git commands after the
+// drain session completes.
 //
 // Replay fidelity is the reason for merge-over-rebase: a rebased commit has
 // a rewritten parent that lies about what the worker saw at execution time.
@@ -41,7 +43,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"go/parser"
 	"go/token"
@@ -98,8 +99,8 @@ type LandRequest struct {
 
 	// PostLandCommand is an optional project verification command run after
 	// Land() advances the local target ref and syncs the worktree, but before
-	// evidence commit creation or push. A failure restores the target ref to
-	// its pre-land SHA and preserves ResultRev under refs/ddx/iterations.
+	// evidence commit creation or checkout sync. A failure restores the target
+	// ref to its pre-land SHA and preserves ResultRev under refs/ddx/iterations.
 	PostLandCommand []string
 
 	// LargeDeletionLineThreshold overrides the default per-file deletion gate
@@ -136,31 +137,8 @@ type LandResult struct {
 	PreserveRef string
 
 	// Reason is a human-readable explanation, especially useful when
-	// Status == "preserved" (e.g. "merge conflict") or when PushFailed.
+	// Status == "preserved" (e.g. "merge conflict").
 	Reason string
-
-	// PushFailed is true when the local target ref was advanced successfully
-	// but the subsequent push to origin was rejected (e.g. non-fast-forward).
-	// The local state is authoritative; the remote will need to be
-	// reconciled by a later land or an operator.
-	PushFailed bool
-
-	// PushError captures the underlying push error when PushFailed is true.
-	PushError string
-
-	// PushConflict is true when the initial push was rejected (e.g. origin
-	// advanced) and the loop's automatic pull/merge/retry recovery ran into
-	// a merge conflict it cannot resolve without operator input. Distinct
-	// from PushFailed so the loop can park the bead for human review under
-	// a short cooldown instead of treating it as a generic push failure.
-	PushConflict bool
-
-	// PushRecovered is true when the initial push was rejected but the loop
-	// successfully fetched, merged, and re-pushed without operator input.
-	// The land is fully complete; PushFailed and PushConflict are false.
-	// Set so callers can record telemetry on how often the auto-recovery
-	// path actually saves an operator round-trip.
-	PushRecovered bool
 
 	// MergedCommitCount is the number of commits reachable from ResultRev but
 	// not from BaseRev — i.e. the "size" of the worker's contribution being
@@ -196,31 +174,12 @@ type PreClaimResult struct {
 	OriginSHA string
 }
 
-type fetchOriginError struct {
-	targetBranch string
-	output       string
-	err          error
-}
-
-func (e *fetchOriginError) Error() string {
-	if e.output == "" {
-		return fmt.Sprintf("git fetch origin %s: %v", e.targetBranch, e.err)
-	}
-	return fmt.Sprintf("git fetch origin %s: %s: %v", e.targetBranch, e.output, e.err)
-}
-
-func (e *fetchOriginError) Unwrap() error { return e.err }
-
 // IsIgnorableFetchOriginError reports whether a pre-claim ancestry-check
 // failure came from the best-effort network fetch. Local worktree safety
 // failures must propagate so workers do not claim work from an unsafe trunk.
 func IsIgnorableFetchOriginError(err error) bool {
 	if err == nil {
 		return false
-	}
-	var fetchErr *fetchOriginError
-	if errors.As(err, &fetchErr) {
-		return true
 	}
 	msg := err.Error()
 	return strings.HasPrefix(msg, "git fetch origin ") || strings.HasPrefix(msg, "git fetch origin:")
@@ -229,16 +188,9 @@ func IsIgnorableFetchOriginError(err error) bool {
 // LandingGitOps abstracts the git operations Land() needs. RealLandingGitOps
 // shells out to git; tests inject fakes or run against real temp repos.
 type LandingGitOps interface {
-	// HasRemote reports whether the given remote name exists in dir.
-	HasRemote(dir, remote string) bool
-
 	// CurrentBranch returns the branch HEAD currently points at in dir, or
 	// an error if HEAD is detached or unresolvable.
 	CurrentBranch(dir string) (string, error)
-
-	// FetchBranch fetches remote/branch into dir (no merge, no checkout).
-	// Returns nil when no remote exists.
-	FetchBranch(dir, remote, branch string) error
 
 	// ResolveRef resolves ref (e.g. "refs/heads/main" or "origin/main") to a
 	// commit SHA. When ref is unresolvable returns ("", error).
@@ -289,19 +241,6 @@ type LandingGitOps interface {
 	// HeadRevAt returns HEAD of the git workdir at dir.
 	HeadRevAt(dir string) (string, error)
 
-	// PushFFOnly pushes localRef to remote as targetBranch with strict
-	// fast-forward semantics. Returns an error when the push would not be
-	// fast-forward or when the network call fails.
-	PushFFOnly(dir, remote, localRef, targetBranch string) error
-
-	// FetchOriginAncestryCheck fetches origin/targetBranch and compares it
-	// to the local branch tip. When origin is ahead the local branch is
-	// fast-forwarded via update-ref + read-tree. When the two tips have
-	// diverged (neither is ancestor of the other) the returned result has
-	// Action == "diverged". When no origin remote exists the result has
-	// Action == "no-origin". The caller decides whether to abort a claim.
-	FetchOriginAncestryCheck(dir, targetBranch string) (PreClaimResult, error)
-
 	// CountCommits returns the number of commits reachable from tip but not
 	// from base (i.e. git rev-list --count base..tip). Used to record the
 	// contribution size in land metrics. Returns 0 on error.
@@ -329,33 +268,12 @@ type LandingGitOps interface {
 // RealLandingGitOps implements LandingGitOps via os/exec git commands.
 type RealLandingGitOps struct{}
 
-func (RealLandingGitOps) HasRemote(dir, remote string) bool {
-	out, err := internalgit.Command(context.Background(), dir, "remote").Output()
-	if err != nil {
-		return false
-	}
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
-		if strings.TrimSpace(line) == remote {
-			return true
-		}
-	}
-	return false
-}
-
 func (RealLandingGitOps) CurrentBranch(dir string) (string, error) {
 	out, err := internalgit.Command(context.Background(), dir, "symbolic-ref", "--short", "HEAD").CombinedOutput()
 	if err != nil {
 		return "", fmt.Errorf("git symbolic-ref HEAD: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 	return strings.TrimSpace(string(out)), nil
-}
-
-func (RealLandingGitOps) FetchBranch(dir, remote, branch string) error {
-	out, err := internalgit.Command(context.Background(), dir, "fetch", remote, branch).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git fetch %s %s: %s: %w", remote, branch, strings.TrimSpace(string(out)), err)
-	}
-	return nil
 }
 
 func (RealLandingGitOps) ResolveRef(dir, ref string) (string, error) {
@@ -682,16 +600,6 @@ func (RealLandingGitOps) HeadRevAt(dir string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func (RealLandingGitOps) PushFFOnly(dir, remote, localRef, targetBranch string) error {
-	// Refspec "<local>:<remote>" with no '+' prefix → fast-forward only.
-	refspec := fmt.Sprintf("%s:refs/heads/%s", localRef, targetBranch)
-	out, err := internalgit.Command(context.Background(), dir, "push", remote, refspec).CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("git push %s %s: %s: %w", remote, refspec, strings.TrimSpace(string(out)), err)
-	}
-	return nil
-}
-
 func (RealLandingGitOps) CountCommits(dir, base, tip string) int {
 	out, err := internalgit.Command(context.Background(), dir, "rev-list", "--count", base+".."+tip).CombinedOutput()
 	if err != nil {
@@ -766,7 +674,8 @@ func (RealLandingGitOps) DiffNameOnly(dir, base, tip string) ([]string, error) {
 	return paths, nil
 }
 
-// FetchOriginAncestryCheck implements LandingGitOps.FetchOriginAncestryCheck.
+// FetchOriginAncestryCheck performs the pre-claim origin ancestry check used
+// by the CLI and server preclaim hooks.
 func (RealLandingGitOps) FetchOriginAncestryCheck(dir, targetBranch string) (PreClaimResult, error) {
 	var result PreClaimResult
 	err := withMainGitLock(dir, func() error {
@@ -792,11 +701,10 @@ func fetchOriginAncestryCheckLocked(dir, targetBranch string) (PreClaimResult, e
 
 	// Step 2: fetch origin/targetBranch (best-effort; failure is non-fatal but surfaced).
 	if fetchOut, fetchErr := internalgit.Command(context.Background(), dir, "fetch", "origin", targetBranch).CombinedOutput(); fetchErr != nil {
-		return PreClaimResult{}, &fetchOriginError{
-			targetBranch: targetBranch,
-			output:       strings.TrimSpace(string(fetchOut)),
-			err:          fetchErr,
+		if trimmed := strings.TrimSpace(string(fetchOut)); trimmed != "" {
+			return PreClaimResult{}, fmt.Errorf("git fetch origin %s: %s: %w", targetBranch, trimmed, fetchErr)
 		}
+		return PreClaimResult{}, fmt.Errorf("git fetch origin %s: %w", targetBranch, fetchErr)
 	}
 
 	// Step 3: resolve local tip.
@@ -862,8 +770,8 @@ func landIterationRef(beadID, attemptID, tip string) string {
 
 // landEvidence creates a trailing commit that folds the per-attempt execution
 // evidence directory into the target branch. Called after the main land (ff or
-// merge) succeeds and before the push. The evidence commit is a normal child of
-// result.NewTip — the agent's original commit SHA is not amended.
+// merge) succeeds and before checkout sync. The evidence commit is a normal
+// child of result.NewTip — the agent's original commit SHA is not amended.
 func landEvidence(wd, targetBranch string, req LandRequest, gitOps LandingGitOps, result *LandResult) error {
 	branch, err := gitOps.CurrentBranch(wd)
 	if err != nil {
@@ -1033,7 +941,7 @@ func sameFilesystemPath(a, b string) bool {
 	return absA == absB
 }
 
-// Land performs fetch → (ff or merge) → push for a single submission.
+// Land performs the local land flow for a single submission.
 // It serializes primary-checkout git operations with the process-shared
 // main-git lock so separate ddx work processes cannot interleave landing with
 // tracker commits or pre-dispatch checkpoint/ref updates.
@@ -1085,15 +993,6 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 	}
 	targetRef := "refs/heads/" + targetBranch
 
-	// Fetch the current target tip from origin when available; otherwise
-	// read the local branch directly.
-	hasOrigin := gitOps.HasRemote(wd, "origin")
-	if hasOrigin {
-		// Fetch is best-effort: a disconnected remote must not block
-		// a local land. Log-style errors are swallowed here; the
-		// subsequent ResolveRef will surface any fatal issue.
-		_ = gitOps.FetchBranch(wd, "origin", targetBranch)
-	}
 	currentTip, err := gitOps.ResolveRef(wd, targetRef)
 	if err != nil {
 		return nil, fmt.Errorf("resolving target tip %s: %w", targetRef, err)
@@ -1145,7 +1044,6 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 			}
 			cleanupProjectEvidenceCopy(projectRoot, req.EvidenceDir)
 		}
-		landPush(finalWD, targetBranch, result.NewTip, hasOrigin, gitOps, result)
 		if syncOperatorAfterLand {
 			syncWorkTreeToHeadGuarded(gitOps, wd, currentTip, operatorDirtyBeforeLand, result)
 		}
@@ -1218,7 +1116,6 @@ func landLocked(projectRoot string, req LandRequest, gitOps LandingGitOps) (*Lan
 		}
 		cleanupProjectEvidenceCopy(projectRoot, req.EvidenceDir)
 	}
-	landPush(finalWD, targetBranch, result.NewTip, hasOrigin, gitOps, result)
 	if syncOperatorAfterLand {
 		syncWorkTreeToHeadGuarded(gitOps, wd, currentTip, operatorDirtyBeforeLand, result)
 	}
@@ -1471,123 +1368,6 @@ func svelteSanityFailure(base, result []byte) (string, bool) {
 	return "", false
 }
 
-// landPush pushes the new target tip to origin when a remote exists. Push
-// failure is non-fatal for the local land outcome; it is surfaced via
-// PushFailed/PushError on the result.
-//
-// On the first push rejection landPush attempts one automatic recovery —
-// fetch origin, merge our local tip into the new origin tip, advance the
-// local target ref, and retry the push. The race-with-remote case (origin
-// advanced with non-overlapping work between our local merge and our push)
-// is the common failure in a multi-worker / multi-operator setup and can be
-// fixed without operator intervention. If the auto-merge produces a conflict
-// the loop cannot resolve, landPush marks the result PushConflict (a distinct
-// signal from generic PushFailed) so the caller can park the bead for human
-// review under a short cooldown rather than the long park used for
-// non-recoverable push failures.
-func landPush(wd, targetBranch, newTip string, hasOrigin bool, gitOps LandingGitOps, result *LandResult) {
-	if !hasOrigin {
-		return
-	}
-	firstErr := gitOps.PushFFOnly(wd, "origin", newTip, targetBranch)
-	if firstErr == nil {
-		return
-	}
-	// First push rejected. Try one automatic pull/merge/retry-push pass.
-	if recovered, mergeSHA, recErr := landPushAutoRecover(wd, targetBranch, newTip, gitOps); recovered {
-		result.NewTip = mergeSHA
-		result.PushRecovered = true
-		return
-	} else if recErr != nil && isPushAutoMergeConflict(recErr) {
-		// Auto-merge could not be resolved without operator input.
-		result.PushConflict = true
-		result.PushError = recErr.Error()
-		return
-	}
-	// Either recovery itself failed for non-conflict reasons (network, auth,
-	// fetch error, retry push still rejected) or origin was already at our
-	// tip. Surface the original push error so operator messages match the
-	// historical contract.
-	result.PushFailed = true
-	result.PushError = firstErr.Error()
-}
-
-// landPushAutoMergeConflictError tags a recovery error that originates from
-// an unresolvable git merge conflict, so landPush can branch on it without
-// pattern-matching free-form error strings.
-type landPushAutoMergeConflictError struct{ inner error }
-
-func (e *landPushAutoMergeConflictError) Error() string { return e.inner.Error() }
-func (e *landPushAutoMergeConflictError) Unwrap() error { return e.inner }
-
-func isPushAutoMergeConflict(err error) bool {
-	for err != nil {
-		if _, ok := err.(*landPushAutoMergeConflictError); ok {
-			return true
-		}
-		type unwrapper interface{ Unwrap() error }
-		u, ok := err.(unwrapper)
-		if !ok {
-			return false
-		}
-		err = u.Unwrap()
-	}
-	return false
-}
-
-// landPushAutoRecover attempts one fetch + merge + retry-push pass after the
-// initial push was rejected. Returns recovered=true and the new merge SHA
-// when the retry-push succeeds; otherwise returns recovered=false plus an
-// error that indicates whether the recovery hit a merge conflict (wrapped in
-// landPushAutoMergeConflictError) or some other failure.
-//
-// Caller responsibilities (already met by landPush):
-//   - The local target ref is at newTip and not yet pushed.
-//   - hasOrigin is true.
-func landPushAutoRecover(wd, targetBranch, newTip string, gitOps LandingGitOps) (recovered bool, mergeSHA string, err error) {
-	dirtyBefore := dirtyWorktreePaths(wd)
-	if fetchErr := gitOps.FetchBranch(wd, "origin", targetBranch); fetchErr != nil {
-		return false, "", fmt.Errorf("auto-recovery fetch origin %s: %w", targetBranch, fetchErr)
-	}
-	originSHA, resolveErr := gitOps.ResolveRef(wd, "refs/remotes/origin/"+targetBranch)
-	if resolveErr != nil {
-		return false, "", fmt.Errorf("auto-recovery resolve origin/%s: %w", targetBranch, resolveErr)
-	}
-	if originSHA == newTip {
-		// Origin is already at our tip — push must have failed for a reason
-		// other than a non-fast-forward (auth, branch protection, large
-		// blob, etc.). Recovery cannot help.
-		return false, "", fmt.Errorf("origin already at local tip; push failure not recoverable by auto-merge")
-	}
-	tempWT, mkErr := os.MkdirTemp("", "ddx-push-recover-*")
-	if mkErr != nil {
-		return false, "", fmt.Errorf("auto-recovery temp worktree: %w", mkErr)
-	}
-	_ = os.RemoveAll(tempWT)
-	if addErr := gitOps.AddWorktree(wd, tempWT, originSHA); addErr != nil {
-		return false, "", fmt.Errorf("auto-recovery add worktree at %s: %w", originSHA, addErr)
-	}
-	defer func() { _ = gitOps.RemoveWorktree(wd, tempWT) }()
-
-	mergeMsg := fmt.Sprintf("Merge origin/%s into %s after push race", targetBranch, targetBranch)
-	if mergeErr := gitOps.MergeInto(tempWT, newTip, mergeMsg); mergeErr != nil {
-		return false, "", &landPushAutoMergeConflictError{inner: mergeErr}
-	}
-	mergeSHA, headErr := gitOps.HeadRevAt(tempWT)
-	if headErr != nil {
-		return false, "", fmt.Errorf("auto-recovery read merge HEAD: %w", headErr)
-	}
-	targetRef := "refs/heads/" + targetBranch
-	if updErr := gitOps.UpdateRefTo(wd, targetRef, mergeSHA, newTip); updErr != nil {
-		return false, "", fmt.Errorf("auto-recovery advance %s to %s: %w", targetRef, mergeSHA, updErr)
-	}
-	syncWorkTreeToHeadGuarded(gitOps, wd, newTip, dirtyBefore, nil)
-	if pushErr := gitOps.PushFFOnly(wd, "origin", mergeSHA, targetBranch); pushErr != nil {
-		return false, "", fmt.Errorf("auto-recovery retry push: %w", pushErr)
-	}
-	return true, mergeSHA, nil
-}
-
 // LandConflictAutoRecover attempts a 3-way merge of a preserved iteration ref
 // onto the current target-branch tip using the ort strategy with -X ours. The
 // strategy resolves mechanical conflicts (positional drift from parallel beads)
@@ -1679,11 +1459,6 @@ func ApplyLandResultToExecuteBeadResult(res *ExecuteBeadResult, land *LandResult
 		res.PreserveRef = ""
 		if land.Merged {
 			res.Reason = "merged onto current tip"
-		}
-		if land.PushConflict {
-			res.Reason = PushConflictReasonPrefix + " " + land.PushError
-		} else if land.PushFailed {
-			res.Reason = PushFailedReasonPrefix + " " + land.PushError
 		}
 		if land.CheckoutSyncDeferred {
 			detail := "checkout_sync_deferred"

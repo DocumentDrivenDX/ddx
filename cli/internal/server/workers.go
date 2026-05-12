@@ -1655,11 +1655,16 @@ func (m *WorkerManager) SubscribeProgress(workerID string) (<-chan agent.Progres
 	return ch, unsub
 }
 
+type preClaimGitOps interface {
+	CurrentBranch(dir string) (string, error)
+	FetchOriginAncestryCheck(dir, targetBranch string) (agent.PreClaimResult, error)
+}
+
 // buildPreClaimHook returns a PreClaimHook function that fetches origin and
 // verifies ancestry before each bead claim. It resolves the target branch at
-// call time via LandingGitOps.CurrentBranch so detached-HEAD and non-main
-// trunks are handled correctly.
-func buildPreClaimHook(projectRoot string, gitOps agent.LandingGitOps) func(ctx context.Context) error {
+// call time via CurrentBranch so detached-HEAD and non-main trunks are
+// handled correctly.
+func buildPreClaimHook(projectRoot string, gitOps preClaimGitOps) func(ctx context.Context) error {
 	return func(ctx context.Context) error {
 		branch, err := gitOps.CurrentBranch(projectRoot)
 		if err != nil {
