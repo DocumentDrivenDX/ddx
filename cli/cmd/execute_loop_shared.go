@@ -231,6 +231,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	innerIntakeHook := agent.NewPreClaimIntakeHook(projectRoot, store, rcfg, nil, qualityRunner)
 	intakeHook := agent.NewACQualityPreClaimGate(store, rcfg.BeadQualityMode(), rcfg.ACQualityMinScore(), innerIntakeHook)
 	triageHook := agent.NewPostAttemptTriageHook(projectRoot, store, rcfg, nil, qualityRunner, nil)
+	decompositionHook := agent.NewPreClaimDecompositionHook(store, qualityRunner, rcfg, projectRoot)
 	recoveryHook := agent.NewAutoRecoveryPostLadderExhaustionHook(store, qualityRunner, rcfg, projectRoot, agent.AutoRecoveryConfig{
 		MaxRecoveryCostUSD: spec.MaxRecoveryCostUSD,
 		MaxBeadCostUSD:     spec.MaxBeadCostUSD,
@@ -408,27 +409,28 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		cleanupLog = io.Discard
 	}
 	result, err := worker.Run(cmd.Context(), rcfg, agent.ExecuteBeadLoopRuntime{
-		Mode:                     spec.Mode,
-		IdleInterval:             spec.IdleInterval.Duration,
-		Log:                      progressLog,
-		CleanupLog:               cleanupLog,
-		EventSink:                loopSink,
-		WorkerID:                 resolveClaimAssignee(),
-		ProjectRoot:              projectRoot,
-		CleanupRunner:            agent.NewExecutionCleanupManager(projectRoot, &agent.RealGitOps{}),
-		ResourceChecker:          resourceChecker,
-		BinaryRefreshCheck:       f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID),
-		SessionID:                loopSessionID,
-		PreClaimHook:             buildCLIPreClaimHook(projectRoot, cliLandingOps),
-		PreClaimIntakeHook:       intakeHook,
-		PreDispatchLintHook:      lintHook,
-		PostAttemptTriageHook:    triageHook,
-		BudgetStop:               costCapTripped,
-		NoReview:                 spec.NoReview,
-		TargetBeadID:             tryTargetBeadID,
-		ReviewCostCap:            costCap,
-		OnAttemptFinalized:       buildAttemptMetricsHook(projectRoot, store, spec.Profile),
-		PostLadderExhaustionHook: recoveryHook,
+		Mode:                         spec.Mode,
+		IdleInterval:                 spec.IdleInterval.Duration,
+		Log:                          progressLog,
+		CleanupLog:                   cleanupLog,
+		EventSink:                    loopSink,
+		WorkerID:                     resolveClaimAssignee(),
+		ProjectRoot:                  projectRoot,
+		CleanupRunner:                agent.NewExecutionCleanupManager(projectRoot, &agent.RealGitOps{}),
+		ResourceChecker:              resourceChecker,
+		BinaryRefreshCheck:           f.buildWorkBinaryRefreshCheck(cmd, projectRoot, tryTargetBeadID),
+		SessionID:                    loopSessionID,
+		PreClaimHook:                 buildCLIPreClaimHook(projectRoot, cliLandingOps),
+		PreClaimIntakeHook:           intakeHook,
+		PreDispatchLintHook:          lintHook,
+		PostAttemptTriageHook:        triageHook,
+		PostAttemptDecompositionHook: decompositionHook,
+		BudgetStop:                   costCapTripped,
+		NoReview:                     spec.NoReview,
+		TargetBeadID:                 tryTargetBeadID,
+		ReviewCostCap:                costCap,
+		OnAttemptFinalized:           buildAttemptMetricsHook(projectRoot, store, spec.Profile),
+		PostLadderExhaustionHook:     recoveryHook,
 	})
 	if err != nil && result != nil && (errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded)) {
 		_ = writeExecuteLoopResult(cmd.OutOrStdout(), projectRoot, result, jsonOutput)
