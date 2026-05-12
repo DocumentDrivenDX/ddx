@@ -435,8 +435,8 @@ create commits or modify worktree state.
 **Terminal dispositions** for a candidate-cycle attempt:
 - `landed` — candidate was approved and merged to the base branch.
 - `preserved` — candidate is approved but land was deferred; worktree retained.
-- `parked` — repair budget exhausted without approval; bead moved to
-  `status=proposed`.
+- `parked` — automatic repair, review retry, reframe, and decomposition paths
+  exhausted without an executable next step; bead moved to `status=proposed`.
 - `conflicted` — approved candidate failed to land due to merge conflict; bead
   returned to `open` for re-attempt with a fresh `base_rev`.
 - `budget-stopped` — drain-level cost or no-progress budget tripped; worktree
@@ -458,7 +458,9 @@ create commits or modify worktree state.
    `repair_max_cycles`: emit `repair-cycle-started`, run append-only repair in
    same worktree, return to step 3.
 8. On `repair_max_cycles` exhausted: emit `repair-cycle-exhausted`, preserve
-   worktree, move bead to `status=proposed`.
+   worktree, and return the bead to the TD-031 auto-recovery path. Move to
+   `status=proposed` only after automatic reframe/decompose/replacement cannot
+   produce executable follow-up work or the finding requires operator judgment.
 9. On approved candidate that fails to land (merge conflict): emit
    `approved-land-conflict`, release claim, return bead to `open`.
 
@@ -466,12 +468,15 @@ create commits or modify worktree state.
 no-progress budgets):
 
 - **`repair_max_cycles`** — maximum repair cycles per attempt. Exhaustion fires
-  `repair-cycle-exhausted` and moves the bead to `status=proposed`; it does not
-  consume the no-progress counter.
+  `repair-cycle-exhausted` and enters the TD-031 auto-recovery path; it moves
+  the bead to `status=proposed` only after automatic recovery fails or requires
+  operator judgment. It does not consume the no-progress counter.
 - **`review_max_retries_per_candidate`** — maximum reviewer retry attempts for a
-  single candidate ref when reviewer invocations fail. Exhaustion fires
-  `review-manual-required`. A new candidate ref (next repair cycle or fresh
-  `ddx try`) resets this counter independently; it is strictly per-candidate.
+  single candidate ref when reviewer invocations fail. Exhaustion returns to
+  automatic recovery unless the error class proves operator action is required;
+  only operator-required exhaustion fires `review-manual-required`. A new
+  candidate ref (next repair cycle or fresh `ddx try`) resets this counter
+  independently; it is strictly per-candidate.
 
 These axes do not interact with the drain-level cost cap (FEAT-014), the
 rate-limit retry budget internal to a single attempt, or the no-progress counter
@@ -520,14 +525,19 @@ The layer-3 drain evaluates each ready bead through this mechanical sequence:
    required repair context and optionally raising `MinPower`; it preserves the
    retry path and does not move the bead to `status=proposed`.
    `review_spec_gap`, `review_missing_acceptance`, `review_too_large`, and
-   non-mechanical unsafe or out-of-scope findings move the bead to
-   `status=proposed`, clear the active claim, and do not ask another implementer
-   to guess. Malformed, empty, context-overflow, and
-   transport reviewer failures emit `review-error` scoped to `result_rev` and
-   reviewer slot; after `review_max_retries_per_candidate` they emit
-   `review-manual-required`, clear the active claim, move the bead to
-   `status=proposed`, and do not close. The `review_fixable_gap` path stays on
-   the automatic retry track instead of converting into operator review.
+   non-mechanical unsafe or out-of-scope findings enter the TD-031
+   decomposition-first path: safe reframe, child decomposition, and
+   sibling/replacement decomposition are attempted when they can preserve
+   explicit scope. DDx moves the bead to `status=proposed` only when those paths
+   would be lossy or require operator judgment, and it does not ask another
+   implementer to guess. Malformed, empty, context-overflow, and transport
+   reviewer failures emit `review-error` scoped to `result_rev` and reviewer
+   slot; after `review_max_retries_per_candidate` they return to automatic
+   recovery unless the error class proves operator action is required. Only
+   operator-required review errors emit `review-manual-required`, clear the
+   active claim, move the bead to `status=proposed`, and prevent close. The
+   `review_fixable_gap` path stays on the automatic retry track instead of
+   converting into operator review.
 6. **Infrastructure fallback.** Transport, quota, rate-limit, command setup,
    context cancellation, routing preflight rejection, and worker disruption are
    not model-capability failures. They emit structured evidence and either stay

@@ -173,13 +173,16 @@ Non-approve reviewer findings are classified before the next action:
   finding is plausibly capability-sensitive.
 - `review_spec_gap` / `review_missing_acceptance` — the bead or governing spec
   is ambiguous, unverifiable, contradictory, or missing acceptance criteria. DDx
-  moves the bead to `status=proposed`, clears the active claim, and does not ask
-  another implementer to guess. The operator resolves that state by retry,
-  split, obsolete, or defer actions recorded in the bead history.
+  first tries the TD-031 decomposition-first path: safe reframe when durable
+  anchors are sufficient, then child/sibling/replacement decomposition when the
+  problem is structural. It moves the bead to `status=proposed` only when those
+  automatic paths would be lossy or require operator judgment. DDx does not ask
+  another implementer to guess at unresolved product or spec choices.
 - `review_too_large` — the result or bead is too broad for bounded review. DDx
-  runs the intake/decomposition path, decomposes the parent when lossless child
-  work is possible, or moves it to `status=proposed` when operator input is
-  required. It does not re-run the same monolithic implementation attempt.
+  runs the intake/decomposition path, generates lossless child, sibling, or
+  replacement work when possible, or moves it to `status=proposed` when operator
+  input is required. It does not re-run the same monolithic implementation
+  attempt.
 - `review_unsafe_or_out_of_scope` — the implementation changed forbidden scope,
   removed checks, weakened behavior, or otherwise needs explicit repair. If the
   repair is mechanical it follows `review_fixable_gap`; otherwise it moves to
@@ -187,14 +190,13 @@ Non-approve reviewer findings are classified before the next action:
 
 Review errors retry the review path up to `review_max_retries_per_candidate` for
 the same candidate ref (`result_rev`) and reviewer slot. On exhaustion, DDx
-emits `review-manual-required`, clears the active claim, moves the bead to
-`status=proposed`, and leaves it for operator review without closing it. This
-terminal resolution is the same contract used by `review_spec_gap` and
-`review_missing_acceptance`: the bead carries the human-review context and waits
-for an operator decision rather than another automatic implementation attempt. A
-new candidate ref (from a repair cycle or a fresh `ddx try`) resets this counter
-independently; it is strictly per-candidate. A new implementation result starts a
-new review-error retry scope, while
+emits `review-error` with exhausted retry evidence and returns to the automatic
+recovery path unless the error class itself proves operator action is required.
+Only operator-required review errors emit `review-manual-required`, clear the
+active claim, move the bead to `status=proposed`, and leave it for operator
+review without closing it. A new candidate ref (from a repair cycle or a fresh
+`ddx try`) resets this counter independently; it is strictly per-candidate. A
+new implementation result starts a new review-error retry scope, while
 `review_fixable_gap` continues through the normal repair retry path counted
 against `repair_max_cycles` instead of entering the operator lane.
 
@@ -230,7 +232,7 @@ Every bead's escalation and auto-recovery attempts are bounded by a configurable
 
 Two bead labels modify the default escalation and auto-recovery behavior:
 
-- **`recovery:manual`** — skip all automatic cross-cycle recovery steps (reframe, decompose). When this label is present, exhausting the within-cycle ladder moves the bead directly to `status=proposed` without attempting reframe or decompose. This is the operator's signal that they want to review the bead before any structural changes are made.
+- **`recovery:manual`** — skip all automatic cross-cycle recovery steps (reframe, decompose). This label is valid only when added by an explicit operator command or accepted tracker mutation that records the actor and reason. When this label is present, exhausting the within-cycle ladder moves the bead directly to `status=proposed` without attempting reframe or decompose. Automation must not add this label as a lifecycle shortcut, and stale inherited copies must not suppress automatic recovery on generated child, sibling, or replacement beads.
 - **`budget:<USD>`** — override the default per-bead cost cap for this specific bead. Example: `budget:5.00` sets a $5.00 per-bead limit. The label value must be a decimal USD amount. Invalid or non-parseable values are ignored; DDx emits a `malformed-budget-label` warning but does not stop the drain.
 
 These labels are read at claim time, before each retry decision, and before each auto-recovery dispatch. Operators may add or remove them between drain cycles.
