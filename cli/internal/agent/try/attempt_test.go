@@ -155,7 +155,7 @@ func TestAttempt_NoChangesBlockedInternalScopeStaysAutonomous(t *testing.T) {
 			return Report{
 				BeadID:             beadID,
 				Status:             StatusNoChanges,
-				NoChangesRationale: "status: blocked\nreason: cannot be satisfied inside this bead alone; requires a broad caller migration\nfollow_up_needed: split into executable children",
+				NoChangesRationale: "status: blocked\nreason: External blocker: cannot be satisfied inside this bead alone; requires a broader API migration outside this bead\nfollow_up_needed: split into executable children",
 			}, nil
 		}),
 	})
