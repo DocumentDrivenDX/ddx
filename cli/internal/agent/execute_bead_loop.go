@@ -264,7 +264,7 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 			Summary:   "depth cap exceeded during post-attempt decomposition",
 			Body:      string(overflowBody),
 			Actor:     assignee,
-			Source:    "ddx agent execute-loop",
+			Source:    "ddx work",
 			CreatedAt: at,
 		})
 		parkOperator("queue-level depth cap exceeded; operator must split")
@@ -342,7 +342,7 @@ func emitReviewerSkippedEmptyDiff(store BeadEventAppender, beadID, assignee stri
 		Kind:      ReviewerSkippedEmptyDiffEventKind,
 		Summary:   "reviewer skipped: empty diff (no commits produced)",
 		Actor:     assignee,
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
 		CreatedAt: at,
 	})
 }
@@ -1015,7 +1015,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					Summary:   "depth cap exceeded",
 					Body:      string(body),
 					Actor:     assignee,
-					Source:    "ddx agent execute-loop",
+					Source:    "ddx work",
 					CreatedAt: now().UTC(),
 				})
 				if lerr := addBeadLabel(w.Store, candidate.ID, "needs-human-decomposition"); lerr != nil && runtime.Log != nil {
@@ -1092,22 +1092,15 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				if err := applyPreClaimIntakeRewrite(w.Store, candidate.ID, assignee, intakeResult, now().UTC()); err != nil {
 					warning := trimDiagnosticPrefix(err.Error(), "pre-claim intake rewrite")
 					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "bead readiness: rewrite error: %s (parking %s)\n", warning, candidate.ID)
+						_, _ = fmt.Fprintf(runtime.Log, "bead readiness: rewrite error: %s (continuing with original %s)\n", warning, candidate.ID)
 					}
-					emit("pre_claim_intake.blocked", map[string]any{
+					emit("pre_claim_intake.warn", map[string]any{
 						"bead_id": candidate.ID,
-						"outcome": string(PreClaimIntakeOperatorRequired),
+						"outcome": string(PreClaimIntakeActionableButRewritten),
+						"reason":  "rewrite_rejected",
 						"detail":  warning,
 					})
-					if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeOperatorRequired, warning, now().UTC()); berr != nil && runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
-					}
-					_ = w.Store.Unclaim(candidate.ID)
-					if loopMode == executeloop.ModeOnce {
-						applyStop(work.StopInput{Once: true})
-						return result, nil
-					}
-					continue
+					appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "rewrite_rejected", warning, now().UTC())
 				}
 			case intakeOutcome == PreClaimIntakeError:
 				warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
@@ -1495,7 +1488,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				Summary:   "per-bead cost budget exhausted; bead returned to open without cooldown",
 				Body:      fmt.Sprintf("total_cost=%.4f\n%s", report.CostUSD, report.Detail),
 				Actor:     assignee,
-				Source:    "ddx agent execute-loop",
+				Source:    "ddx work",
 				CreatedAt: now().UTC(),
 			})
 			_ = incrementConsecutiveLadderExhaustions(w.Store, candidate.ID)
@@ -1513,7 +1506,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
 							Reason: "recovery:manual label set",
 							Since:  now().UTC().Format(time.RFC3339),
-							Source: "ddx agent execute-loop",
+							Source: "ddx work",
 						})
 					})
 				} else if runtime.PostLadderExhaustionHook != nil {
@@ -1598,7 +1591,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					Summary:   parking.Event.Summary,
 					Body:      parking.Event.Body,
 					Actor:     assignee,
-					Source:    "ddx agent execute-loop",
+					Source:    "ddx work",
 					CreatedAt: now().UTC(),
 				})
 			}
@@ -1708,7 +1701,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					Summary:   noChanges.EventKind,
 					Body:      noChanges.EventBody,
 					Actor:     assignee,
-					Source:    "ddx agent execute-loop",
+					Source:    "ddx work",
 					CreatedAt: now().UTC(),
 				})
 			}
@@ -2207,7 +2200,7 @@ func appendLoopRoutingEvidence(store BeadEventAppender, beadID string, report Ex
 		Summary:   summary,
 		Body:      string(body),
 		Actor:     "ddx",
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
 		CreatedAt: createdAt,
 	})
 }
@@ -2264,7 +2257,7 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 		Summary:   summary,
 		Body:      string(data),
 		Actor:     "ddx",
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
 		CreatedAt: createdAt,
 	})
 }
@@ -2295,7 +2288,7 @@ func appendPreDispatchLintEvent(store BeadEventAppender, beadID string, result L
 			Summary:   summary,
 			Body:      string(encoded),
 			Actor:     actor,
-			Source:    "ddx agent execute-loop",
+			Source:    "ddx work",
 			CreatedAt: createdAt,
 		})
 		return
@@ -2317,7 +2310,7 @@ func appendPreDispatchLintEvent(store BeadEventAppender, beadID string, result L
 		Summary:   summary,
 		Body:      strings.Join(parts, "\n"),
 		Actor:     actor,
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
 		CreatedAt: createdAt,
 	})
 }
@@ -2386,7 +2379,7 @@ func executeBeadLoopEvent(report ExecuteBeadReport, actor string, createdAt time
 		Summary:   report.Status,
 		Body:      strings.Join(parts, "\n"),
 		Actor:     actor,
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
 		CreatedAt: createdAt,
 	}
 }
@@ -2584,7 +2577,7 @@ func emitResourceExhausted(emit func(string, map[string]any), store ExecuteBeadL
 		Summary:   ResourceExhaustedStopMessage,
 		Body:      string(body),
 		Actor:     actor,
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
 		CreatedAt: createdAt,
 	})
 }
@@ -2772,7 +2765,7 @@ func applyPreClaimDecomposition(store ExecuteBeadLoopStore, parent *bead.Bead, d
 		Summary:   fmt.Sprintf("decomposed into %s", strings.Join(childIDs, ", ")),
 		Body:      string(body),
 		Actor:     actor,
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
 		CreatedAt: at,
 	})
 }
@@ -2794,7 +2787,7 @@ func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, beadID, actor strin
 		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
 			Reason:          reason,
 			Since:           at.UTC().Format(time.RFC3339),
-			Source:          "ddx agent execute-loop",
+			Source:          "ddx work",
 			SuggestedAction: "review intake result and accept, rewrite, split, block, or cancel",
 			Summary:         "pre-claim intake blocked execution",
 		})
@@ -2810,7 +2803,25 @@ func parkBeadPostIntakeRejection(store ExecuteBeadLoopStore, beadID, actor strin
 		Summary:   string(outcome),
 		Body:      string(body),
 		Actor:     actor,
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
+		CreatedAt: at,
+	})
+}
+
+func appendPreClaimIntakeWarning(store ExecuteBeadLoopStore, beadID, actor, reason, detail string, at time.Time) {
+	if store == nil {
+		return
+	}
+	body, _ := json.Marshal(map[string]any{
+		"reason": reason,
+		"detail": detail,
+	})
+	_ = store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:      "intake.warn",
+		Summary:   reason,
+		Body:      string(body),
+		Actor:     actor,
+		Source:    "ddx work",
 		CreatedAt: at,
 	})
 }
@@ -2858,7 +2869,7 @@ func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, 
 		return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
 			Reason: reason,
 			Actor:  actor,
-			Source: "ddx agent execute-loop",
+			Source: "ddx work",
 		}, func(b *bead.Bead) error {
 			ensureBeadExtra(b)
 			clearNoChangesLifecycleLabels(b)
@@ -2875,7 +2886,7 @@ func applyNoChangesSmartRetry(store ExecuteBeadLoopStore, beadID, actor string, 
 	return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
 		Reason: reason,
 		Actor:  actor,
-		Source: "ddx agent execute-loop",
+		Source: "ddx work",
 	}, func(b *bead.Bead) error {
 		ensureBeadExtra(b)
 		clearNoChangesLifecycleLabels(b)
@@ -2899,7 +2910,7 @@ func applyRepairCycleExhaustedEscalation(store ExecuteBeadLoopStore, beadID, act
 			return store.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
 				Reason: "repair cycle exhausted: escalating implementer to higher tier",
 				Actor:  actor,
-				Source: "ddx agent execute-loop",
+				Source: "ddx work",
 			}, func(b *bead.Bead) error {
 				ensureBeadExtra(b)
 				b.Extra[TriageTierHintKey] = nextFloor
@@ -2912,7 +2923,7 @@ func applyRepairCycleExhaustedEscalation(store ExecuteBeadLoopStore, beadID, act
 		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
 			Reason:          "repair cycle exhausted at top tier: operator decision required",
 			Since:           at.UTC().Format(time.RFC3339),
-			Source:          "ddx agent execute-loop",
+			Source:          "ddx work",
 			SuggestedAction: "review the blocked attempt and accept, split, or retry with a stronger model",
 			Summary:         "repair cycle exhausted: operator attention required",
 		})
@@ -2937,7 +2948,7 @@ func applyNoChangesOperatorRequired(store ExecuteBeadLoopStore, beadID, actor st
 		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
 			Reason:          reason,
 			Since:           at.UTC().Format(time.RFC3339),
-			Source:          "ddx agent execute-loop",
+			Source:          "ddx work",
 			SuggestedAction: suggestedAction,
 			Summary:         "no_changes requested operator attention",
 		})
@@ -2957,7 +2968,7 @@ func applyNoChangesBlockedExternal(store ExecuteBeadLoopStore, beadID, actor str
 		ExternalBlockerReason: reason,
 		Reason:                reason,
 		Actor:                 actor,
-		Source:                "ddx agent execute-loop",
+		Source:                "ddx work",
 	}, func(b *bead.Bead) error {
 		ensureBeadExtra(b)
 		clearNoChangesLifecycleLabels(b)
@@ -3237,7 +3248,7 @@ func emitDisruptionDetected(emit func(string, map[string]any), store BeadEventAp
 		Summary:   reason,
 		Body:      bodyStr,
 		Actor:     assignee,
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
 		CreatedAt: now,
 	})
 }

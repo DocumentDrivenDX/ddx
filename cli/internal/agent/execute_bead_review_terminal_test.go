@@ -81,7 +81,7 @@ func TestReviewTerminalClassifications_BlockWithoutNoProgress(t *testing.T) {
 				"terminal block must not add needs_human label (class=%s)", tc.class)
 			meta := bead.GetNeedsHumanMeta(*got)
 			assert.Contains(t, meta.Reason, tc.class)
-			assert.Equal(t, "ddx agent execute-loop", meta.Source)
+			assert.Equal(t, "ddx work", meta.Source)
 
 			// review-terminal-block event must be appended with the correct class.
 			events, err := store.Events(first.ID)
@@ -151,7 +151,7 @@ func TestReviewTerminalClassifications_ExhaustedReviewErrorProposed(t *testing.T
 		"exhausted review_error must not use needs_human label parking")
 	meta := bead.GetNeedsHumanMeta(*got)
 	assert.Contains(t, meta.Reason, evidence.OutcomeReviewProviderEmpty)
-	assert.Equal(t, "ddx agent execute-loop", meta.Source)
+	assert.Equal(t, "ddx work", meta.Source)
 
 	// Bead must NOT be closed by reviewer-failure escalation.
 	assert.NotEqual(t, bead.StatusClosed, got.Status,

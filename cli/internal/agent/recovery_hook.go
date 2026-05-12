@@ -117,8 +117,8 @@ func (s *autoRecoveryState) recoveryResult(path RecoveryPath, failed bool, costU
 			Kind:      "per-bead-budget-exhausted",
 			Summary:   "per-bead cost budget exhausted during automated recovery",
 			Body:      detail,
-			Actor:     "ddx agent execute-loop",
-			Source:    "ddx agent execute-loop",
+			Actor:     "ddx work",
+			Source:    "ddx work",
 			CreatedAt: time.Now().UTC(),
 		})
 		return &PostLadderExhaustionResult{
@@ -161,15 +161,15 @@ func (s *autoRecoveryState) parkFailed(reason, detail string) (*PostLadderExhaus
 		Kind:      "auto-recovery-failed",
 		Summary:   reason,
 		Body:      string(body),
-		Actor:     "ddx agent execute-loop",
-		Source:    "ddx agent execute-loop",
+		Actor:     "ddx work",
+		Source:    "ddx work",
 		CreatedAt: time.Now().UTC(),
 	})
 	err := s.store.ParkToProposed(s.beadID, bead.ParkAutoRecoveryFailed, func(b *bead.Bead) {
 		bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
 			Reason: reason,
 			Since:  time.Now().UTC().Format(time.RFC3339),
-			Source: "ddx agent execute-loop",
+			Source: "ddx work",
 		})
 	})
 	return &PostLadderExhaustionResult{

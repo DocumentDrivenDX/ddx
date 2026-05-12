@@ -52,7 +52,7 @@ func seedReviewErrorEventsWithRev(t *testing.T, store *bead.Store, beadID, resul
 			Summary:   class,
 			Body:      ReviewErrorEventBody(class, i+1, resultRev, "simulated transport failure"),
 			Actor:     "worker",
-			Source:    "ddx agent execute-loop",
+			Source:    "ddx work",
 			CreatedAt: time.Now().UTC(),
 		}))
 	}
@@ -187,7 +187,7 @@ func TestReviewerEscalation_PairingDegraded_TriggersEscalation(t *testing.T) {
 			"codex", "openai", "gpt-5", 70, head,
 		),
 		Actor:     "worker",
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
 		CreatedAt: time.Now().UTC(),
 	}))
 

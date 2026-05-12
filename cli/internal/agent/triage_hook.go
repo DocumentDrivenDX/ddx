@@ -291,7 +291,7 @@ func recordPostAttemptTriageEvent(store BeadEventAppender, beadID string, report
 		Summary:   summary,
 		Body:      string(encoded),
 		Actor:     actor,
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
 		CreatedAt: createdAt.UTC(),
 	})
 }

@@ -1933,7 +1933,7 @@ func TestNoChangesOperatorRequiredBecomesProposed(t *testing.T) {
 	meta := bead.GetNeedsHumanMeta(*got)
 	assert.Equal(t, "AC conflicts with governing spec", meta.Reason)
 	assert.Equal(t, "choose whether to update the spec or cancel", meta.SuggestedAction)
-	assert.Equal(t, "ddx agent execute-loop", meta.Source)
+	assert.Equal(t, "ddx work", meta.Source)
 
 	events, err := store.Events(b.ID)
 	require.NoError(t, err)

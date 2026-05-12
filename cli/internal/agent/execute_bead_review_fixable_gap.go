@@ -82,7 +82,7 @@ func scheduleReviewFixableGapRepair(
 		Summary:   "review_fixable_gap",
 		Body:      reviewFixableGapEventBody(reviewGroupID, resultRev, rationale),
 		Actor:     actor,
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
 		CreatedAt: now.UTC(),
 	})
 	return &RepairContextFromReviewGroup{

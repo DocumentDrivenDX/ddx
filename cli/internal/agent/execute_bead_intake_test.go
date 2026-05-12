@@ -610,7 +610,7 @@ func TestIntake_ActionableButRewritten_UpdatesAfterClaim(t *testing.T) {
 	require.True(t, found, "rewritten intake must record an intake-rewritten event")
 }
 
-func TestIntake_UnsafeRewriteBlocksForHuman(t *testing.T) {
+func TestIntake_UnsafeRewriteWarnsAndExecutesOriginal(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
 		b.Description = "PROBLEM\nlegacy intake is vague\n\nROOT CAUSE\nmissing constraints\n\nPROPOSED FIX\nrewrite the bead\n"
@@ -622,8 +622,12 @@ func TestIntake_UnsafeRewriteBlocksForHuman(t *testing.T) {
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			t.Fatal("executor must not run for unsafe rewrites")
-			return ExecuteBeadReport{}, nil
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-rejected-rewrite",
+				ResultRev: "rewrite-rejected",
+			}, nil
 		}),
 	}
 
@@ -648,38 +652,43 @@ func TestIntake_UnsafeRewriteBlocksForHuman(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, result)
 
-	// Claim now happens before intake; for unsafe rewrites the bead is
-	// claimed then immediately unclaimed, so claimCalls == 1 but execution
-	// does not proceed and the bead description/acceptance must be unchanged.
+	// Claim happens before intake. If the lifecycle hook proposes an unsafe
+	// rewrite, the worker must ignore that rewrite, warn, and keep moving with
+	// the original bead instead of parking it for operator attention.
 	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "claim runs before intake check")
-	assert.Contains(t, eventSink.String(), "pre_claim_intake.blocked")
-	assert.Contains(t, eventSink.String(), "operator_required")
-	assert.Equal(t, 0, result.Attempts)
+	assert.Contains(t, eventSink.String(), "pre_claim_intake.warn")
+	assert.Contains(t, eventSink.String(), "rewrite_rejected")
+	assert.NotContains(t, eventSink.String(), "pre_claim_intake.blocked")
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
 
 	got, err := inner.Get(candidate.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusProposed, got.Status, "rejected rewrite must move bead to operator attention")
+	assert.Equal(t, bead.StatusClosed, got.Status, "rejected rewrite must not move bead to operator attention")
 	assert.NotContains(t, got.Description, "invented product semantics", "original description must be preserved")
 	assert.Equal(t, "1. preserve the original intent\n2. name the verification command", got.Acceptance)
-	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman, "operator parking must be status-owned, not needs_human label-owned")
-	assert.Contains(t, bead.GetNeedsHumanMeta(*got).Reason, "acceptance criteria")
 
 	events, err := inner.Events(candidate.ID)
 	require.NoError(t, err)
 	var foundIntakeBlocked bool
+	var foundIntakeWarn bool
 	for _, ev := range events {
-		if ev.Kind != "intake.blocked" {
-			continue
+		switch ev.Kind {
+		case "intake.blocked":
+			foundIntakeBlocked = true
+		case "intake.warn":
+			foundIntakeWarn = true
+			var body map[string]any
+			require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+			assert.Equal(t, "rewrite_rejected", body["reason"])
+			assert.Contains(t, fmt.Sprintf("%v", body["detail"]), "acceptance criteria")
 		}
-		foundIntakeBlocked = true
-		var body map[string]any
-		require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
-		assert.Equal(t, "operator_required", body["intake_outcome"])
 	}
-	assert.True(t, foundIntakeBlocked, "rejected rewrite must append intake.blocked event to bead")
+	assert.False(t, foundIntakeBlocked, "rejected rewrite must not append intake.blocked event to bead")
+	assert.True(t, foundIntakeWarn, "rejected rewrite must append intake.warn evidence to bead")
 }
 
-func TestIntake_UnsafeRewriteRemovedFromReadyExecution(t *testing.T) {
+func TestIntake_UnsafeRewriteDoesNotParkOrRemoveFromExecution(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
 		b.Description = "PROBLEM\noriginal description\n\nROOT CAUSE\nsome cause\n\nNON-SCOPE\nDo not change the API contract\n"
@@ -690,15 +699,19 @@ func TestIntake_UnsafeRewriteRemovedFromReadyExecution(t *testing.T) {
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			t.Fatal("executor must not run for unsafe rewrites")
-			return ExecuteBeadReport{}, nil
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-rewrite-warning",
+				ResultRev: "rewrite-warning",
+			}, nil
 		}),
 	}
 
 	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
-	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once: true,
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			return PreClaimIntakeResult{
@@ -713,17 +726,18 @@ func TestIntake_UnsafeRewriteRemovedFromReadyExecution(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
+	require.NotNil(t, result)
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
 
-	ready, err := inner.ReadyExecution()
+	got, err := inner.Get(candidate.ID)
 	require.NoError(t, err)
-	for _, b := range ready {
-		if b.ID == candidate.ID {
-			t.Fatalf("parked bead %s must not appear in ReadyExecution after unsafe rewrite rejection", candidate.ID)
-		}
-	}
+	assert.Equal(t, bead.StatusClosed, got.Status)
+	assert.Contains(t, got.Description, "Do not change the API contract")
+	assert.NotContains(t, got.Description, "completely different description")
 }
 
-func TestIntake_DescriptionPreservationFailureParksForHuman(t *testing.T) {
+func TestIntake_DescriptionPreservationFailureWarnsAndContinues(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
 		b.Description = "PROBLEM\noriginal problem text\n\nROOT CAUSE\ncli/internal/agent/preclaim.go:42\n\nNON-SCOPE\nDo not touch acceptance criteria\n"
@@ -735,8 +749,12 @@ func TestIntake_DescriptionPreservationFailureParksForHuman(t *testing.T) {
 	worker := &ExecuteBeadWorker{
 		Store: store,
 		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
-			t.Fatal("executor must not run for description preservation failures")
-			return ExecuteBeadReport{}, nil
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-preservation-warning",
+				ResultRev: "preservation-warning",
+			}, nil
 		}),
 	}
 
@@ -760,30 +778,34 @@ func TestIntake_DescriptionPreservationFailureParksForHuman(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, result)
-	assert.Equal(t, 0, result.Attempts)
+	assert.Equal(t, 1, result.Attempts)
+	assert.Equal(t, 1, result.Successes)
 
 	got, err := inner.Get(candidate.ID)
 	require.NoError(t, err)
-	assert.Equal(t, bead.StatusProposed, got.Status, "bead must move to operator attention after description preservation failure")
-	assert.NotContains(t, got.Labels, bead.LabelNeedsHuman, "operator parking must be status-owned, not needs_human label-owned")
-	assert.Contains(t, bead.GetNeedsHumanMeta(*got).Reason, "description")
+	assert.Equal(t, bead.StatusClosed, got.Status, "bead must keep moving after description preservation failure")
 	assert.Contains(t, got.Description, "original problem text", "original description must not be overwritten")
 
 	events, err := inner.Events(candidate.ID)
 	require.NoError(t, err)
 	var foundBlocked bool
+	var foundWarn bool
 	for _, ev := range events {
-		if ev.Kind != "intake.blocked" {
-			continue
+		switch ev.Kind {
+		case "intake.blocked":
+			foundBlocked = true
+		case "intake.warn":
+			foundWarn = true
+			var body map[string]any
+			require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
+			assert.Equal(t, "rewrite_rejected", body["reason"])
+			assert.Contains(t, fmt.Sprintf("%v", body["detail"]), "drops commitment")
 		}
-		foundBlocked = true
-		var body map[string]any
-		require.NoError(t, json.Unmarshal([]byte(ev.Body), &body))
-		assert.Equal(t, "operator_required", body["intake_outcome"])
-		assert.Contains(t, fmt.Sprintf("%v", body["detail"]), "drops commitment")
 	}
-	assert.True(t, foundBlocked, "description preservation failure must append intake.blocked event")
-	assert.Contains(t, logBuf.String(), "parking")
+	assert.False(t, foundBlocked, "description preservation failure must not append intake.blocked event")
+	assert.True(t, foundWarn, "description preservation failure must append intake.warn evidence")
+	assert.Contains(t, logBuf.String(), "continuing with original")
+	assert.NotContains(t, logBuf.String(), "parking")
 }
 
 // TestReadinessHookEmptyOutput_DeduplicatesPrefix asserts that when the intake

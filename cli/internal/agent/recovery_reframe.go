@@ -153,7 +153,7 @@ func runReframer(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRu
 		Rewrite: rewrite,
 	}
 
-	if err := applyPreClaimIntakeRewrite(store, beadID, "ddx agent execute-loop", intake, time.Now()); err != nil {
+	if err := applyPreClaimIntakeRewrite(store, beadID, "ddx work", intake, time.Now()); err != nil {
 		return ReframeResult{Failed: true, Reason: "apply_error"}
 	}
 
@@ -171,8 +171,8 @@ func runReframer(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRu
 		Kind:      "reframe-applied",
 		Summary:   strings.Join(changedFields, ","),
 		Body:      string(body),
-		Actor:     "ddx agent execute-loop",
-		Source:    "ddx agent execute-loop",
+		Actor:     "ddx work",
+		Source:    "ddx work",
 		CreatedAt: time.Now().UTC(),
 	})
 

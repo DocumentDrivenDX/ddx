@@ -261,7 +261,7 @@ func recoverDanglingSuccess(
 		Summary:   "recovered dangling success: closing bead after merged result_rev detected",
 		Body:      fmt.Sprintf("result_rev=%s\nattempt_id=%s\naction=idempotent_close", prior.ResultRev, prior.AttemptID),
 		Actor:     assignee,
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
 		CreatedAt: t,
 	})
 

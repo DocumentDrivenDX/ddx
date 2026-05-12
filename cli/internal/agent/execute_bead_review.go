@@ -1222,7 +1222,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 			Kind:      ReviewerEscalatedEventKind,
 			Summary:   fmt.Sprintf("reviewer escalated to min_power=%d after %d prior error(s)", reviewProfile.MinPower, priorErrors),
 			Body:      reviewerEscalatedEventBody(reviewProfile.MinPower, priorErrors, resultRev),
-			Source:    "ddx agent execute-loop",
+			Source:    "ddx work",
 			CreatedAt: time.Now().UTC(),
 		})
 	}
@@ -1374,7 +1374,7 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 			Kind:      ReviewPairingDegradedEventKind,
 			Summary:   fmt.Sprintf("reviewer pinned to same provider as implementer (%s)", impl.Provider),
 			Body:      reviewPairingDegradedBody(impl, actualHarness, actualProvider, actualModel, actualPower, resultRev),
-			Source:    "ddx agent execute-loop",
+			Source:    "ddx work",
 			CreatedAt: time.Now().UTC(),
 		})
 	}

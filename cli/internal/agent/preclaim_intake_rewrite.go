@@ -192,7 +192,7 @@ func applyPreClaimIntakeRewrite(store ExecuteBeadLoopStore, beadID, actor string
 		Summary:   summary,
 		Body:      string(body),
 		Actor:     actor,
-		Source:    "ddx agent execute-loop",
+		Source:    "ddx work",
 		CreatedAt: createdAt.UTC(),
 	})
 }

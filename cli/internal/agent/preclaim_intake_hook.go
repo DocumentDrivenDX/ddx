@@ -245,9 +245,11 @@ func buildPreClaimIntakePrompt(projectRoot string, store BeadReader, b *bead.Bea
 	var sb strings.Builder
 	sb.WriteString("MODE: intake\n")
 	sb.WriteString("You are evaluating whether this bead is atomic, decomposable, ambiguous, or safely refinable before claim.\n")
+	sb.WriteString("Use exactly these readiness classifications: ready, needs_refine, needs_split, operator_required, system_unready.\n")
 	sb.WriteString("Use rewritten to improve prompt fitness: compress stale, duplicated, or noisy description prose, or expand a vague bead with durable context grounded in the repository or governing artifacts.\n")
 	sb.WriteString("Validated replacement is preferred over append-only amendment when it makes the bead a better implementation prompt.\n")
 	sb.WriteString("Preservation rules: non-scope items, governing artifact references (FEAT-NNN, ADR-NNN), named test functions (TestFoo), file:line evidence, and dependency IDs (ddx-XXXXXXXX) must all appear in the replacement description.\n")
+	sb.WriteString("When classification is needs_refine or rewritten, rewrite.changed_fields is required and rewrite.description / rewrite.acceptance must be strings, not arrays.\n")
 	sb.WriteString("When preservation cannot be proven from durable anchors, or when rewriting would require inventing acceptance criteria, changing scope, or choosing between conflicting requirements, classify as operator_required.\n")
 	sb.WriteString("Return exactly one JSON object matching the intake schema with classification, confidence, reasoning, and optional rewrite fields.\n")
 	sb.WriteString("When classification is rewritten, include rewrite.changed_fields, rewrite.description, and rewrite.acceptance.\n")
@@ -376,6 +378,9 @@ func decodeCanonicalReadinessPayloadWithMode(payload string, qualityMode string)
 	case "actionable_atomic":
 		return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic, Detail: detail}, nil
 	case "actionable_but_rewritten":
+		if hasPreClaimIntakeRewriteContent(rewrite) && !hasPreClaimIntakeRewrite(rewrite) {
+			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: rewrite.changed_fields is required when rewrite.description or rewrite.acceptance is provided")
+		}
 		return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableButRewritten, Detail: detail, Rewrite: rewrite}, nil
 	case "too_large_decomposed":
 		return PreClaimIntakeResult{Outcome: PreClaimIntakeTooLargeDecomposed, Reason: ReadinessReasonTooLarge, Detail: detail}, nil
@@ -426,6 +431,8 @@ func decodeReadinessClassificationPayloadWithMode(payload string, qualityMode st
 	if classified.Classification == ReadinessClassificationNeedsRefine && hasPreClaimIntakeRewrite(rewrite) {
 		result.Outcome = PreClaimIntakeActionableButRewritten
 		result.Rewrite = rewrite
+	} else if classified.Classification == ReadinessClassificationNeedsRefine && hasPreClaimIntakeRewriteContent(rewrite) {
+		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: rewrite.changed_fields is required when rewrite.description or rewrite.acceptance is provided")
 	}
 	return result, nil
 }
@@ -481,6 +488,12 @@ func firstNonEmptyReadinessDetail(values ...string) string {
 }
 
 func hasPreClaimIntakeRewrite(rewrite PreClaimIntakeRewrite) bool {
+	return len(rewrite.ChangedFields) > 0 &&
+		(strings.TrimSpace(rewrite.Description) != "" ||
+			strings.TrimSpace(rewrite.Acceptance) != "")
+}
+
+func hasPreClaimIntakeRewriteContent(rewrite PreClaimIntakeRewrite) bool {
 	return strings.TrimSpace(rewrite.Description) != "" ||
 		strings.TrimSpace(rewrite.Acceptance) != "" ||
 		len(rewrite.ChangedFields) > 0
@@ -495,14 +508,18 @@ func decodeLegacyIntakePayload(payload string) (PreClaimIntakeResult, error) {
 	case "atomic", "ok", "ready", "actionable", "pass":
 		return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic, Detail: strings.TrimSpace(out.Reasoning)}, nil
 	case "rewritten":
+		rewrite := PreClaimIntakeRewrite{
+			Description:   strings.TrimSpace(out.Rewrite.Description),
+			Acceptance:    strings.TrimSpace(out.Rewrite.Acceptance),
+			ChangedFields: normalizePreClaimIntakeRewriteFields(out.Rewrite.ChangedFields),
+		}
+		if hasPreClaimIntakeRewriteContent(rewrite) && !hasPreClaimIntakeRewrite(rewrite) {
+			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: rewrite.changed_fields is required when rewrite.description or rewrite.acceptance is provided")
+		}
 		return PreClaimIntakeResult{
 			Outcome: PreClaimIntakeActionableButRewritten,
 			Detail:  strings.TrimSpace(out.Reasoning),
-			Rewrite: PreClaimIntakeRewrite{
-				Description:   strings.TrimSpace(out.Rewrite.Description),
-				Acceptance:    strings.TrimSpace(out.Rewrite.Acceptance),
-				ChangedFields: normalizePreClaimIntakeRewriteFields(out.Rewrite.ChangedFields),
-			},
+			Rewrite: rewrite,
 		}, nil
 	case "decomposable":
 		return PreClaimIntakeResult{Outcome: PreClaimIntakeTooLargeDecomposed, Detail: strings.TrimSpace(out.Reasoning)}, nil
@@ -511,6 +528,9 @@ func decodeLegacyIntakePayload(payload string) (PreClaimIntakeResult, error) {
 	case "":
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: missing classification")
 	default:
-		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: unknown classification %q", out.Classification)
+		return PreClaimIntakeResult{}, fmt.Errorf(
+			"pre-claim intake: unknown classification %q: expected one of atomic, ok, ready, actionable, pass, rewritten, decomposable, operator_required, human_review_required, needs_split, needs_refine, system_unready",
+			out.Classification,
+		)
 	}
 }

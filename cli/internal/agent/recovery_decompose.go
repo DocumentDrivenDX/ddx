@@ -150,8 +150,8 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 		Kind:      "decompose-applied",
 		Summary:   fmt.Sprintf("decomposed into %s", strings.Join(childIDs, ", ")),
 		Body:      string(body),
-		Actor:     "ddx agent execute-loop",
-		Source:    "ddx agent execute-loop",
+		Actor:     "ddx work",
+		Source:    "ddx work",
 		CreatedAt: time.Now().UTC(),
 	})
 

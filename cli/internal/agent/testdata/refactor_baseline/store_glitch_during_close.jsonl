@@ -1,3 +1,3 @@
 {"actor":"ddx","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"claude-sonnet-4-6\",\"fallback_chain\":[]}","kind":"routing","source":"ddx agent execute-bead","summary":"provider=claude model=claude-sonnet-4-6"}
-{"actor":"ddx","body":"transient storage failure","kind":"loop-error","source":"ddx agent execute-loop","summary":"CloseWithEvidence failed"}
+{"actor":"ddx","body":"transient storage failure","kind":"loop-error","source":"ddx work","summary":"CloseWithEvidence failed"}
 {"data":{"base_rev":"8888888888888888888888888888888888888888","bead_id":"ddx-baseline-closeglitch","detail":"close store failure","duration_ms":11223,"result_rev":"9999999999999999999999999999999999999999","session_id":"session-baseline-closeglitch","status":"execution_failed"},"kind":"bead.result","stream":"loop"}
