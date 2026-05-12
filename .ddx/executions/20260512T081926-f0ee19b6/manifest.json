@@ -1,0 +1,62 @@
+{
+  "attempt_id": "20260512T081926-f0ee19b6",
+  "bead_id": "ddx-c1511aa3",
+  "base_rev": "bb06e185715f776d668ebd4c5823b356eecdd3db",
+  "created_at": "2026-05-12T08:19:33.279721004Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c1511aa3",
+    "title": "docprose: invoke Vale and parse JSON",
+    "description": "PROBLEM\nDDx needs a Vale subprocess adapter that invokes the pinned engine and parses JSON output into internal structs before findings can be normalized for users.\n\nROOT CAUSE\ndocs/helix/02-design/plan-2026-05-06-prose-quality-integration.md:109-130 requires `vale --config \u003ctmp\u003e --output=JSON --no-global`, missing/unsupported diagnostics, and explicit path mode. The adapter does not exist yet.\n\nPROPOSED FIX\n- Add a Vale subprocess adapter using generated temp config.\n- Invoke `vale --config \u003ctmp\u003e --output=JSON --no-global \u003cpaths\u003e`.\n- Parse Vale JSON by file, line, span, check, severity, message, and match.\n- Return DDx-owned diagnostics for missing or unsupported Vale.\n\nNON-SCOPE\n- Do not map raw Vale checks to final DDx rule IDs in this bead.\n- Do not switch the public command default yet.\n- Do not implement workflow hooks.\n\nDEPS\nDepends on temp Vale config generation.",
+    "acceptance": "1. `TestValeRunner_InvokesWithConfigJSONNoGlobal` verifies subprocess args.\n2. `TestValeRunner_ParsesJSONFindings` verifies file, line, span, check, severity, message, and match parsing.\n3. `TestValeRunner_MissingValeDiagnostic` verifies missing binary diagnostics.\n4. `TestValeRunner_UnsupportedValeDiagnostic` verifies unsupported version diagnostics.\n5. cd cli \u0026\u0026 go test ./internal/docprose/... green.\n6. lefthook run pre-commit passes.",
+    "parent": "ddx-ccda7a32",
+    "labels": [
+      "phase:2",
+      "area:docprose",
+      "area:cli",
+      "kind:implementation",
+      "prose-quality",
+      "adr:025",
+      "spec:PLAN-2026-05-06-prose-quality-integration",
+      "tier:standard"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T08:17:21Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "654662",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: bad-json: json: cannot unmarshal array into Go struct field LintResult.rationale of type string\"}",
+          "created_at": "2026-05-12T08:19:25.744723639Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T08:17:21.689816711Z",
+      "spec-id": "PLAN-2026-05-06-prose-quality-integration"
+    }
+  },
+  "governing": [
+    {
+      "id": "PLAN-2026-05-06-prose-quality-integration",
+      "path": "docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md",
+      "title": "Plan: Prose Quality Integration with Vale"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260512T081926-f0ee19b6",
+    "prompt": ".ddx/executions/20260512T081926-f0ee19b6/prompt.md",
+    "manifest": ".ddx/executions/20260512T081926-f0ee19b6/manifest.json",
+    "result": ".ddx/executions/20260512T081926-f0ee19b6/result.json",
+    "checks": ".ddx/executions/20260512T081926-f0ee19b6/checks.json",
+    "usage": ".ddx/executions/20260512T081926-f0ee19b6/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c1511aa3-20260512T081926-f0ee19b6"
+  },
+  "prompt_sha": "09f4978063660404fc67763bd32ce63ab3471a9c0a65c327ca8d5fa38fb77d6a"
+}
