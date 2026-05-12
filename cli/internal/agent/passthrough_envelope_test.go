@@ -490,6 +490,75 @@ func TestExecuteOnService_MinMaxPowerReachServiceRequest(t *testing.T) {
 	}
 }
 
+// TestFizeauAutoRoutingDefaultWorkRequestLeavesRouteUnpinned verifies that a
+// zero-config work/try execution request leaves harness/provider/model/profile
+// empty so Fizeau can auto-route while still receiving the requested power
+// bounds.
+func TestFizeauAutoRoutingDefaultWorkRequestLeavesRouteUnpinned(t *testing.T) {
+	svc := &passthroughTestService{}
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{
+		MinPower: 40,
+		MaxPower: 90,
+	})
+
+	_, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "hello",
+	})
+	require.NoError(t, err)
+
+	assert.Empty(t, svc.lastReq.Harness)
+	assert.Empty(t, svc.lastReq.Provider)
+	assert.Empty(t, svc.lastReq.Model)
+	assert.Empty(t, svc.lastReq.Policy)
+	assert.Equal(t, 40, svc.lastReq.MinPower)
+	assert.Equal(t, 90, svc.lastReq.MaxPower)
+}
+
+// TestFizeauAutoRoutingExplicitPinsRemainPassthrough verifies that explicit
+// implementation and review routing pins are forwarded unchanged instead of
+// being normalized or collapsed by DDx.
+func TestFizeauAutoRoutingExplicitPinsRemainPassthrough(t *testing.T) {
+	svc := &passthroughTestService{}
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{
+		Harness:  "claude",
+		Provider: "anthropic",
+		Model:    "claude-3-7-sonnet",
+		Profile:  "fast",
+		MinPower: 40,
+		MaxPower: 90,
+	})
+
+	_, err := executeOnService(context.Background(), svc, t.TempDir(), rcfg, AgentRunRuntime{
+		Prompt: "hello",
+	})
+	require.NoError(t, err)
+
+	assert.Equal(t, "claude", svc.lastReq.Harness)
+	assert.Equal(t, "anthropic", svc.lastReq.Provider)
+	assert.Equal(t, "claude-3-7-sonnet", svc.lastReq.Model)
+	assert.Equal(t, "fast", svc.lastReq.Policy)
+	assert.Equal(t, 40, svc.lastReq.MinPower)
+	assert.Equal(t, 90, svc.lastReq.MaxPower)
+
+	impl := ImplementerRouting{
+		Harness:     "claude",
+		Provider:    "anthropic",
+		Model:       "claude-3-7-sonnet",
+		ActualPower: 40,
+	}
+	runRuntime := BuildReviewExecuteRequest(impl, "review-harness", "review-profile")
+	reviewer := &DefaultBeadReviewer{Model: "review-model"}
+	pinned := reviewer.applyExplicitReviewerPins(&runRuntime)
+
+	assert.Equal(t, "review-harness", runRuntime.HarnessOverride)
+	assert.Equal(t, "review-profile", runRuntime.ProfileOverride)
+	assert.Equal(t, "review-model", runRuntime.ModelOverride)
+	assert.Equal(t, "review-model", pinned)
+	assert.True(t, runRuntime.ClearRoutingPins)
+	assert.True(t, runRuntime.ClearProfile)
+	assert.True(t, runRuntime.ClearMaxPower)
+}
+
 func TestExecuteOnService_InvalidPowerBoundsFailBeforeService(t *testing.T) {
 	svc := &passthroughTestService{}
 	rcfg := resolvedWithPassthrough("claude", "anthropic", "claude-3-7-sonnet", 90, 8)

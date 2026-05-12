@@ -565,3 +565,42 @@ func TestResolveTracksExplicitRoutePinsSeparatelyFromConfigDefaults(t *testing.T
 		t.Fatalf("ExplicitModelRef = (%q, %v), want (openai:gpt-5.4-mini, true)", got, ok)
 	}
 }
+
+func TestFizeauAutoRoutingLocalProvidersNotDefaultBeforeValidation(t *testing.T) {
+	tempDir := t.TempDir()
+	ddxDir := filepath.Join(tempDir, ".ddx")
+	if err := os.MkdirAll(ddxDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	yaml := `version: "1.0"
+library:
+  path: ./library
+  repository:
+    url: https://github.com/example/repo
+    branch: main
+agent:
+  endpoints:
+    - type: openrouter
+      base_url: https://openrouter.ai/api/v1
+`
+	if err := os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(yaml), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	rcfg, err := LoadAndResolve(tempDir, CLIOverrides{})
+	if err != nil {
+		t.Fatalf("LoadAndResolve: %v", err)
+	}
+	if got := rcfg.Harness(); got != "" {
+		t.Fatalf("Harness = %q, want empty", got)
+	}
+	if got := rcfg.Provider(); got != "" {
+		t.Fatalf("Provider = %q, want empty", got)
+	}
+	if got := rcfg.Model(); got != "" {
+		t.Fatalf("Model = %q, want empty", got)
+	}
+	if got := rcfg.Profile(); got != "" {
+		t.Fatalf("Profile = %q, want empty", got)
+	}
+}
