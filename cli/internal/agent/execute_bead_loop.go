@@ -696,6 +696,12 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	emit := func(eventType string, data map[string]any) {
 		writeLoopEvent(runtime.EventSink, runtime.SessionID, eventType, data, now().UTC())
 	}
+	stopAfterNonAttemptSkip := func() bool {
+		return loopMode == executeloop.ModeOnce && runtime.TargetBeadID != ""
+	}
+	strictIntakeBlocking := func() bool {
+		return runtime.TargetBeadID != ""
+	}
 
 	emit("loop.start", map[string]any{
 		"worker_id":    runtime.WorkerID,
@@ -1002,6 +1008,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 		}
 
+		skipPreClaimIntake := false
+
 		// Queue-level decomposition depth cap: when the bead has already been split
 		// to the configured limit, block it for operator review without invoking
 		// the classifier or splitter (docs/triage/decomposition.md §Recursion depth cap).
@@ -1022,15 +1030,32 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					_, _ = fmt.Fprintf(runtime.Log, "triage-overflow label error: %v\n", lerr)
 				}
 				overflowDetail := fmt.Sprintf("bead depth %d reached max_decomposition_depth %d; operator must split", depth, maxDepth)
-				if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeOperatorRequired, "operator_required", overflowDetail, now().UTC()); berr != nil && runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+				if strictIntakeBlocking() {
+					if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeOperatorRequired, "operator_required", overflowDetail, now().UTC()); berr != nil && runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+					}
+					_ = w.Store.Unclaim(candidate.ID)
+					if stopAfterNonAttemptSkip() {
+						applyStop(work.StopInput{Once: true})
+						return result, nil
+					}
+					continue
 				}
-				_ = w.Store.Unclaim(candidate.ID)
-				if loopMode == executeloop.ModeOnce {
-					applyStop(work.StopInput{Once: true})
-					return result, nil
-				}
-				continue
+				appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "decomposition_depth_cap", overflowDetail, now().UTC())
+				emit("pre_claim_intake.warn", readinessDecisionBody(
+					"pre_claim_intake.decomposition_depth_cap",
+					"too_large",
+					"pre_claim_intake",
+					"best-effort",
+					"attempt",
+					"continue with implementation; operator attention is reserved for explicit targeted execution",
+					map[string]any{
+						"bead_id": candidate.ID,
+						"outcome": string(PreClaimIntakeTooLargeDecomposed),
+						"detail":  overflowDetail,
+					},
+				))
+				skipPreClaimIntake = true
 			}
 		}
 
@@ -1039,7 +1064,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		// the claim race skip intake entirely (picker.claim_race above). Terminal
 		// non-actionable outcomes unclaim and park the bead so it does not
 		// re-appear in ReadyExecution until an operator reviews it.
-		if runtime.PreClaimIntakeHook != nil {
+		if runtime.PreClaimIntakeHook != nil && !skipPreClaimIntake {
 			if runtime.Log != nil {
 				_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
 					Phase:    "readiness",
@@ -1165,7 +1190,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						blockedDetail = "depth cap reached during decomposition; operator must split"
 					}
 					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "bead decomposition blocked: %s (releasing %s)\n", blockedDetail, candidate.ID)
+						_, _ = fmt.Fprintf(runtime.Log, "bead decomposition blocked: %s (%s)\n", blockedDetail, candidate.ID)
 					}
 					emit("pre_claim_intake.blocked", map[string]any{
 						"bead_id": candidate.ID,
@@ -1173,20 +1198,24 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						"reason":  blockedDetail,
 						"detail":  blockedDetail,
 					})
-					if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeOperatorRequired, "operator_required", blockedDetail, now().UTC()); berr != nil && runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+					if strictIntakeBlocking() {
+						if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeOperatorRequired, "operator_required", blockedDetail, now().UTC()); berr != nil && runtime.Log != nil {
+							_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+						}
+						_ = w.Store.Unclaim(candidate.ID)
+						if stopAfterNonAttemptSkip() {
+							applyStop(work.StopInput{Once: true})
+							return result, nil
+						}
+						continue
 					}
-					_ = w.Store.Unclaim(candidate.ID)
-					if loopMode == executeloop.ModeOnce {
-						applyStop(work.StopInput{Once: true})
-						return result, nil
-					}
-					continue
+					appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "decomposition_blocked_best_effort", blockedDetail, now().UTC())
+					break
 				}
 				childIDs, decompErr := applyPreClaimDecomposition(w.Store, &candidate, decomp, assignee, now().UTC())
 				if decompErr != nil {
 					if runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "bead decomposition error: %v (releasing %s)\n", decompErr, candidate.ID)
+						_, _ = fmt.Fprintf(runtime.Log, "bead decomposition error: %v (%s)\n", decompErr, candidate.ID)
 					}
 					emit("pre_claim_intake.blocked", readinessDecisionBody(
 						"pre_claim_intake."+strings.TrimSpace(string(PreClaimIntakeOperatorRequired)),
@@ -1201,15 +1230,19 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 							"detail":  decompErr.Error(),
 						},
 					))
-					if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeOperatorRequired, "operator_required", decompErr.Error(), now().UTC()); berr != nil && runtime.Log != nil {
-						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+					if strictIntakeBlocking() {
+						if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, PreClaimIntakeOperatorRequired, "operator_required", decompErr.Error(), now().UTC()); berr != nil && runtime.Log != nil {
+							_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+						}
+						_ = w.Store.Unclaim(candidate.ID)
+						if stopAfterNonAttemptSkip() {
+							applyStop(work.StopInput{Once: true})
+							return result, nil
+						}
+						continue
 					}
-					_ = w.Store.Unclaim(candidate.ID)
-					if loopMode == executeloop.ModeOnce {
-						applyStop(work.StopInput{Once: true})
-						return result, nil
-					}
-					continue
+					appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "decomposition_error_best_effort", decompErr.Error(), now().UTC())
+					break
 				}
 				if runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log, "bead decomposed into %s (releasing %s)\n", strings.Join(childIDs, ", "), candidate.ID)
@@ -1221,43 +1254,48 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				// Parent stays open (not proposed) — it is now dependency-blocked on
 				// children and will re-enter the queue only after they close.
 				_ = w.Store.Unclaim(candidate.ID)
-				if loopMode == executeloop.ModeOnce {
+				if stopAfterNonAttemptSkip() {
 					applyStop(work.StopInput{Once: true})
 					return result, nil
 				}
 				continue
 			default:
-				// Terminal non-actionable outcome: move to status=proposed so
-				// ReadyExecution filters this bead until an operator reviews it.
+				// Terminal non-actionable intake outcomes are warnings during
+				// broad queue drain: the worker should prefer making an attempt
+				// and letting review/follow-up work handle gaps. Explicit
+				// targeted execution keeps the stricter parking behavior.
 				warning := trimDiagnosticPrefix(intakeResult.Detail, "pre-claim intake")
 				if warning == "" {
 					warning = string(intakeOutcome)
 				}
 				if runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "bead readiness blocked: %s (releasing %s)\n", warning, candidate.ID)
+					_, _ = fmt.Fprintf(runtime.Log, "bead readiness blocked: %s (%s)\n", warning, candidate.ID)
 				}
 				emit("pre_claim_intake.blocked", readinessDecisionBody(
 					"pre_claim_intake."+strings.TrimSpace(string(intakeOutcome)),
 					intakeResult.Reason,
 					"pre_claim_intake",
-					"block",
-					"park",
-					"review intake result and accept, rewrite, split, block, or cancel",
+					"best-effort",
+					"attempt",
+					"continue with implementation; review should create follow-up work for remaining gaps",
 					map[string]any{
 						"bead_id": candidate.ID,
 						"outcome": string(intakeOutcome),
 						"detail":  warning,
 					},
 				))
-				if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, intakeOutcome, intakeResult.Reason, intakeResult.Detail, now().UTC()); berr != nil && runtime.Log != nil {
-					_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+				if strictIntakeBlocking() {
+					if berr := parkBeadPostIntakeRejection(w.Store, candidate.ID, assignee, intakeOutcome, intakeResult.Reason, intakeResult.Detail, now().UTC()); berr != nil && runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+					}
+					_ = w.Store.Unclaim(candidate.ID)
+					if stopAfterNonAttemptSkip() {
+						applyStop(work.StopInput{Once: true})
+						return result, nil
+					}
+					continue
 				}
-				_ = w.Store.Unclaim(candidate.ID)
-				if loopMode == executeloop.ModeOnce {
-					applyStop(work.StopInput{Once: true})
-					return result, nil
-				}
-				continue
+				appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "readiness_best_effort", warning, now().UTC())
 			}
 		}
 
@@ -1316,12 +1354,15 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					"suggested_fixes":  lintResult.SuggestedFixes,
 					"waivers_applied":  lintResult.WaiversApplied,
 				})
-				_ = w.Store.Unclaim(candidate.ID)
-				if loopMode == executeloop.ModeOnce {
-					applyStop(work.StopInput{Once: true})
-					return result, nil
+				if strictIntakeBlocking() {
+					_ = w.Store.Unclaim(candidate.ID)
+					if stopAfterNonAttemptSkip() {
+						applyStop(work.StopInput{Once: true})
+						return result, nil
+					}
+					continue
 				}
-				continue
+				appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "lint_blocked_best_effort", blockMsg, now().UTC())
 			}
 		}
 
