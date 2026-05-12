@@ -1,0 +1,251 @@
+package cmd
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"sync"
+	"testing"
+
+	"github.com/DocumentDrivenDX/ddx/internal/agent"
+	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	agentlib "github.com/easel/fizeau"
+	"github.com/stretchr/testify/require"
+)
+
+type stubAgentService struct {
+	execute func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
+}
+
+func (s *stubAgentService) Execute(_ context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+	if s.execute != nil {
+		return s.execute(req)
+	}
+	ch := make(chan agentlib.ServiceEvent, 1)
+	ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok"}`)}
+	close(ch)
+	return ch, nil
+}
+
+func (s *stubAgentService) ResolveRoute(_ context.Context, _ agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
+	return nil, fmt.Errorf("routinglint: ResolveRoute called in execution path — violates CONTRACT-003 / ddx-da19756a")
+}
+
+func (s *stubAgentService) TailSessionLog(_ context.Context, _ string) (<-chan agentlib.ServiceEvent, error) {
+	ch := make(chan agentlib.ServiceEvent)
+	close(ch)
+	return ch, nil
+}
+
+func (s *stubAgentService) ListHarnesses(_ context.Context) ([]agentlib.HarnessInfo, error) {
+	return []agentlib.HarnessInfo{{Name: "claude", Available: true}, {Name: "agent", Available: true}}, nil
+}
+
+func (s *stubAgentService) ListProviders(_ context.Context) ([]agentlib.ProviderInfo, error) {
+	return nil, nil
+}
+
+func (s *stubAgentService) ListModels(_ context.Context, _ agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
+	return nil, nil
+}
+
+func (s *stubAgentService) HealthCheck(_ context.Context, _ agentlib.HealthTarget) error {
+	return nil
+}
+
+func (s *stubAgentService) ListPolicies(_ context.Context) ([]agentlib.PolicyInfo, error) {
+	return nil, nil
+}
+
+func (s *stubAgentService) RecordRouteAttempt(_ context.Context, _ agentlib.RouteAttempt) error {
+	return nil
+}
+
+func (s *stubAgentService) RouteStatus(_ context.Context) (*agentlib.RouteStatusReport, error) {
+	return nil, nil
+}
+
+func (s *stubAgentService) ListSessionLogs(_ context.Context) ([]agentlib.SessionLogEntry, error) {
+	return nil, nil
+}
+
+func (s *stubAgentService) WriteSessionLog(_ context.Context, _ string, _ io.Writer) error {
+	return nil
+}
+
+func (s *stubAgentService) ReplaySession(_ context.Context, _ string, _ io.Writer) error {
+	return nil
+}
+
+func (s *stubAgentService) UsageReport(_ context.Context, _ agentlib.UsageReportOptions) (*agentlib.UsageReport, error) {
+	return nil, nil
+}
+
+type executeCapturingStub struct {
+	mu            sync.Mutex
+	executeCalled bool
+	lastReq       agentlib.ServiceExecuteRequest
+	executionReq  agentlib.ServiceExecuteRequest
+	executionSeen bool
+	executeFn     func(agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
+	listModels    []agentlib.ModelInfo
+	listPolicies  []agentlib.PolicyInfo
+}
+
+func (s *executeCapturingStub) Execute(_ context.Context, req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+	s.mu.Lock()
+	s.executeCalled = true
+	s.lastReq = req
+	if req.Role == "implementer" {
+		s.executionReq = req
+		s.executionSeen = true
+	}
+	s.mu.Unlock()
+	if s.executeFn != nil {
+		return s.executeFn(req)
+	}
+	ch := make(chan agentlib.ServiceEvent, 1)
+	ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok"}`)}
+	close(ch)
+	return ch, nil
+}
+
+func (s *executeCapturingStub) ResolveRoute(_ context.Context, _ agentlib.RouteRequest) (*agentlib.RouteDecision, error) {
+	return nil, fmt.Errorf("routinglint: ResolveRoute called in execution path — violates CONTRACT-003 / ddx-da19756a")
+}
+
+func (s *executeCapturingStub) TailSessionLog(_ context.Context, _ string) (<-chan agentlib.ServiceEvent, error) {
+	ch := make(chan agentlib.ServiceEvent)
+	close(ch)
+	return ch, nil
+}
+
+func (s *executeCapturingStub) ListHarnesses(_ context.Context) ([]agentlib.HarnessInfo, error) {
+	return []agentlib.HarnessInfo{{Name: "claude", Available: true}, {Name: "agent", Available: true}}, nil
+}
+
+func (s *executeCapturingStub) ListProviders(_ context.Context) ([]agentlib.ProviderInfo, error) {
+	return nil, nil
+}
+
+func (s *executeCapturingStub) ListModels(_ context.Context, _ agentlib.ModelFilter) ([]agentlib.ModelInfo, error) {
+	return append([]agentlib.ModelInfo(nil), s.listModels...), nil
+}
+
+func (s *executeCapturingStub) ListPolicies(_ context.Context) ([]agentlib.PolicyInfo, error) {
+	return append([]agentlib.PolicyInfo(nil), s.listPolicies...), nil
+}
+
+func (s *executeCapturingStub) HealthCheck(_ context.Context, _ agentlib.HealthTarget) error {
+	return nil
+}
+
+func (s *executeCapturingStub) RecordRouteAttempt(_ context.Context, _ agentlib.RouteAttempt) error {
+	return nil
+}
+
+func (s *executeCapturingStub) RouteStatus(_ context.Context) (*agentlib.RouteStatusReport, error) {
+	return nil, nil
+}
+
+func (s *executeCapturingStub) ListSessionLogs(_ context.Context) ([]agentlib.SessionLogEntry, error) {
+	return nil, nil
+}
+
+func (s *executeCapturingStub) WriteSessionLog(_ context.Context, _ string, _ io.Writer) error {
+	return nil
+}
+
+func (s *executeCapturingStub) ReplaySession(_ context.Context, _ string, _ io.Writer) error {
+	return nil
+}
+
+func (s *executeCapturingStub) UsageReport(_ context.Context, _ agentlib.UsageReportOptions) (*agentlib.UsageReport, error) {
+	return nil, nil
+}
+
+func installExecuteCapturingStub(t *testing.T) *executeCapturingStub {
+	t.Helper()
+	stub := &executeCapturingStub{}
+	agent.SetServiceRunFactory(func(_ string) (agentlib.FizeauService, error) {
+		return stub, nil
+	})
+	t.Cleanup(func() { agent.SetServiceRunFactory(nil) })
+	return stub
+}
+
+func minimalProjectDir(t *testing.T) string {
+	t.Helper()
+	dir := t.TempDir()
+	t.Setenv("HOME", dir)
+	ddxDir := filepath.Join(dir, ".ddx")
+	require.NoError(t, os.MkdirAll(ddxDir, 0o755))
+	cfg := `version: "1.0"
+library:
+  path: ".ddx/plugins/ddx"
+  repository:
+    url: "https://example.com/lib"
+    branch: "main"
+`
+	require.NoError(t, os.WriteFile(filepath.Join(ddxDir, "config.yaml"), []byte(cfg), 0o644))
+	return dir
+}
+
+func appendTestRoutingEvidence(t *testing.T, dir, beadID, harness, provider, model, routeReason, baseURL string) {
+	t.Helper()
+	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	body := struct {
+		ResolvedProvider string   `json:"resolved_provider"`
+		ResolvedModel    string   `json:"resolved_model,omitempty"`
+		RouteReason      string   `json:"route_reason,omitempty"`
+		FallbackChain    []string `json:"fallback_chain"`
+		BaseURL          string   `json:"base_url,omitempty"`
+	}{
+		ResolvedProvider: provider,
+		ResolvedModel:    model,
+		RouteReason:      routeReason,
+		FallbackChain:    []string{},
+		BaseURL:          baseURL,
+	}
+	if body.ResolvedProvider == "" {
+		body.ResolvedProvider = harness
+	}
+	raw, err := json.Marshal(body)
+	require.NoError(t, err)
+	require.NoError(t, store.AppendEvent(beadID, bead.BeadEvent{
+		Kind:    "routing",
+		Summary: fmt.Sprintf("provider=%s model=%s reason=%s", body.ResolvedProvider, body.ResolvedModel, body.RouteReason),
+		Body:    string(raw),
+		Actor:   "ddx",
+		Source:  "ddx try",
+	}))
+}
+
+func setupWorkIntakeFixture(t *testing.T) string {
+	t.Helper()
+	dir := minimalProjectDir(t)
+
+	skillDir := filepath.Join(dir, ".agents", "skills", "ddx", "bead-lifecycle")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte("intake"), 0o644))
+
+	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:        "ddx-intake-test",
+		Title:     "work intake wiring test bead",
+		IssueType: "docs",
+	}))
+
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
+	require.NoError(t, exec.Command("git", "init", dir).Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "commit", "--allow-empty", "-m", "init").Run())
+	return dir
+}

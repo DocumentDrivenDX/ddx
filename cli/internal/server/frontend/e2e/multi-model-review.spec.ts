@@ -1,7 +1,7 @@
 // Quorum review (multi-model review) end-to-end UI flow.
 //
 // Driving spec for the quorum-review UI surfaced from
-// `ddx agent run --quorum=majority --harnesses=a,b,c`. The flow under test:
+// `legacy agent run --quorum=majority --harnesses=a,b,c`. The flow under test:
 //
 //   1. Operator opens a bead (or artifact) and dispatches a quorum review,
 //      picking ≥2 harnesses and a verdict policy (majority / unanimous).

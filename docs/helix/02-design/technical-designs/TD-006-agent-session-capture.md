@@ -87,9 +87,9 @@ When reading an invocation:
 
 ## Inspection Algorithm
 
-- `ddx agent log` sorts activity rows by timestamp descending and renders
+- `legacy agent log` sorts activity rows by timestamp descending and renders
   metadata first so operators can scan recent activity quickly.
-- `ddx agent log <session-id>` finds the exact activity row and emits the
+- `legacy agent log <session-id>` finds the exact activity row and emits the
   stored record, including native session or trace references and any optional
   DDx-owned bodies.
 - Server/API detail endpoints mirror the same reader to avoid drift.

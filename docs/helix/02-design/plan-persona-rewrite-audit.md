@@ -104,7 +104,7 @@ With zero runtime config bindings detected, the deprecation warning
 is purely defensive — it exists for users in downstream projects who
 may have bound dropped personas. The warning should:
 
-- Emit stderr when `ddx agent run --persona <dropped-name>` is invoked
+- Emit stderr when `legacy agent run --persona <dropped-name>` is invoked
 - Emit stderr when `ddx persona show <dropped-name>` is inspected
 - Emit stderr when `.ddx/config.yaml` has a binding to a dropped
   persona (at load time, not at every invocation)

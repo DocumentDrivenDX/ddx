@@ -22,7 +22,7 @@ A **minimum viable read-only deployment** ships in this order:
 
 After those four, the **working command set**: full bead inspection, full execution-evidence inspection, all metrics commands, persona/agent config introspection, and `ddx doctor`/`ddx status` working in degraded-but-honest mode.
 
-**Still broken without StreamStore**: `ddx agent log` (full history), `ddx agent usage`, `ddx agent route-status` recent-decisions tail.
+**Still broken without StreamStore**: `legacy agent log` (full history), `legacy agent usage`, `legacy agent route-status` recent-decisions tail.
 
 **Still broken without library-registry abstraction**: `ddx list`, `ddx prompts`, `ddx skills`, `ddx installed`, `ddx search`, `ddx outdated`, `ddx verify`.
 
@@ -39,8 +39,8 @@ The user framed it as: *"ddx should be able to run in a read-only state with Blo
 | Category | Examples | Reads from |
 |---|---|---|
 | Bead query | `ddx bead show/list/ready/blocked/status/dep tree/export/doctor/lint/routing/queue/replay/evidence list` | `.ddx/beads.jsonl`, `.ddx/beads-archive.jsonl`, `.ddx/attachments/` |
-| Execution-derived metrics | `ddx bead metrics`, `ddx agent metrics tier-success/review-outcomes/cost-efficiency` | `.ddx/executions/*/result.json`, `.ddx/metrics/attempts.jsonl` |
-| Agent inspection | `ddx agent log`, `ddx agent list/capabilities/doctor/workers/providers/models/route-status/usage/executions fetch` | `.ddx/agent-logs/`, `.ddx/workers/`, `.ddx/executions/`, config |
+| Execution-derived metrics | `ddx bead metrics`, `legacy agent metrics tier-success/review-outcomes/cost-efficiency` | `.ddx/executions/*/result.json`, `.ddx/metrics/attempts.jsonl` |
+| Agent inspection | `legacy agent log`, `legacy agent list/capabilities/doctor/workers/providers/models/route-status/usage/executions fetch` | `.ddx/agent-logs/`, `.ddx/workers/`, `.ddx/executions/`, config |
 | Library browse | `ddx list`, `ddx prompts/persona/skills`, `ddx installed/search/outdated/verify`, `ddx exec list/show` | `.ddx/plugins/`, `.ddx/skills/`, `library/` |
 | Project state | `ddx status`, `ddx doctor`, `ddx config` (read), `ddx jq`, `ddx log` | mixed |
 
@@ -48,7 +48,7 @@ The user framed it as: *"ddx should be able to run in a read-only state with Blo
 
 **Already served by today's `bead.Backend`** (would map to Axon-EntityStore directly): all bead query commands.
 
-**Will be served by FEAT-028 v1 BlobStore** (after migration): `ddx bead evidence list/show`, all `result.json`/`manifest.json` readers, `ddx agent executions fetch`.
+**Will be served by FEAT-028 v1 BlobStore** (after migration): `ddx bead evidence list/show`, all `result.json`/`manifest.json` readers, `legacy agent executions fetch`.
 
 **Need new EntityStore collections in Axon**:
 
@@ -56,11 +56,11 @@ The user framed it as: *"ddx should be able to run in a read-only state with Blo
 - **`run_state`** — for in-flight runs; read-only deployment can probably skip entirely.
 - **`plugin_dispatches`** — graphql resolver consumes; no CLI read path uses directly.
 
-**Workers**: server-process in-memory today; on-disk `.ddx/workers/<id>/{spec,status}.json` is diagnostic projection. `ddx agent workers` already does HTTP-first fetch from server (`agent_workers.go:307`). In remote read-only deployment, command MUST go through server API; local-disk fallback is meaningless. Not a new EntityStore collection — a transport question.
+**Workers**: server-process in-memory today; on-disk `.ddx/workers/<id>/{spec,status}.json` is diagnostic projection. `legacy agent workers` already does HTTP-first fetch from server (`agent_workers.go:307`). In remote read-only deployment, command MUST go through server API; local-disk fallback is meaningless. Not a new EntityStore collection — a transport question.
 
-**Need StreamStore (deferred in FEAT-028)** for: `ddx agent log` (`.ddx/agent-logs/agent-*.jsonl` + per-session `mirror.log`), `ddx agent usage`, `ddx agent route-status` (recent decisions from `routing-outcomes.jsonl`), `ddx agent metrics` (also reads `.ddx/metrics/attempts.jsonl` via `cli/internal/attemptmetrics/`).
+**Need StreamStore (deferred in FEAT-028)** for: `legacy agent log` (`.ddx/agent-logs/agent-*.jsonl` + per-session `mirror.log`), `legacy agent usage`, `legacy agent route-status` (recent decisions from `routing-outcomes.jsonl`), `legacy agent metrics` (also reads `.ddx/metrics/attempts.jsonl` via `cli/internal/attemptmetrics/`).
 
-**Need ConfigStore** for: `ddx config` (read), `ddx persona --list/--show` (bindings), every `ddx agent providers/models/route-status/list/capabilities/doctor` command (loads `.ddx/config.yaml`), `ddx status`, `ddx doctor`.
+**Need ConfigStore** for: `ddx config` (read), `ddx persona --list/--show` (bindings), every `legacy agent providers/models/route-status/list/capabilities/doctor` command (loads `.ddx/config.yaml`), `ddx status`, `ddx doctor`.
 
 **Need library-registry abstraction**: every `ddx list/prompts/skills/installed/search/outdated/verify/exec list-show`. Either treat installed packages as a BlobStore prefix (and `List`) — works mechanically but loses manifest semantics — or add a proper `PackageRegistry` (`ListInstalled() []PackageRef`, `Manifest(pkg) Manifest`, `OpenFile(pkg, path) io.Reader`). Cleaner. FEAT-028 calls this out as deferred.
 
@@ -86,8 +86,8 @@ Read-only doesn't need Create/Update/Close/Claim — much smaller surface than f
 
 - `ddx doctor` — does writability checks (`cli/cmd/doctor.go:449`). Needs a `--read-only` mode to skip writability gracefully.
 - `ddx status` — git modification check (`--changes`, `--diff`) implicitly requires a git working tree.
-- `ddx agent doctor` — config probes work; harness probes (which try to invoke agents) fail.
-- `ddx agent workers` — works through server HTTP API; local `.ddx/executions/*/manifest.json` scan path is dead.
+- `legacy agent doctor` — config probes work; harness probes (which try to invoke agents) fail.
+- `legacy agent workers` — works through server HTTP API; local `.ddx/executions/*/manifest.json` scan path is dead.
 - `ddx config` (read flags) — works through ConfigStore.
 
 ## Implications

@@ -37,6 +37,9 @@ func TestAcceptance_US006_GetCommandHelp(t *testing.T) {
 		assert.Contains(t, output, "list", "Should list list command")
 		assert.Contains(t, output, "update", "Should list update command")
 		assert.Contains(t, output, "doctor", "Should list doctor command")
+		assert.Contains(t, output, "run", "Should list run command")
+		assert.Contains(t, output, "try", "Should list try command")
+		assert.Contains(t, output, "work", "Should list work command")
 		assert.Contains(t, output, "config", "Should list config command")
 		assert.Contains(t, output, "prompts", "Should list prompts command")
 		assert.Contains(t, output, "persona", "Should list persona command")
@@ -53,6 +56,9 @@ func TestAcceptance_US006_GetCommandHelp(t *testing.T) {
 			}
 		}
 		assert.GreaterOrEqual(t, commandLines, 3, "Commands should have descriptions")
+		for _, line := range lines {
+			assert.NotRegexp(t, `^\s+agent\s+`, line, "Legacy agent namespace should not appear in root help")
+		}
 	})
 
 	t.Run("command_specific_help", func(t *testing.T) {

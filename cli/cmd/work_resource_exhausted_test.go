@@ -146,6 +146,9 @@ library:
 
 func TestWorkResourceExhaustionEndToEnd_StopsBeforeNextClaim(t *testing.T) {
 	projectRoot := t.TempDir()
+	t.Cleanup(func() {
+		_ = os.RemoveAll(filepath.Join(projectRoot, ".codex"))
+	})
 	execTempRoot := filepath.Join(t.TempDir(), "ddx-exec-wt")
 	require.NoError(t, os.MkdirAll(execTempRoot, 0o755))
 	t.Setenv("DDX_EXEC_WT_DIR", execTempRoot)

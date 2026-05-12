@@ -300,7 +300,7 @@ do not drift.
 6. Persist one immutable `exec-runs` metadata row.
 
 The first implementation supports `command` execution. `agent` remains a
-defined executor kind and must eventually delegate to `ddx agent` while
+defined executor kind and must eventually delegate to `legacy agent` while
 preserving the same run/attachment model.
 
 ## Failure Modes
@@ -387,7 +387,7 @@ without walking the remote backend.
 
 ### Retrieval
 
-`ddx agent executions fetch <attempt-id>` resolves the index entry, dispatches
+`legacy agent executions fetch <attempt-id>` resolves the index entry, dispatches
 to the matching backend's `Fetch`, and rehydrates the bundle into
 `.ddx/executions/<attempt-id>/` (or `--dest` when given). Subsequent local
 inspection (replay, review) works unchanged because the on-disk layout matches
@@ -408,7 +408,7 @@ retention — operators manage retention on the mirror backend.
 2. Run a normal `ddx work` / `ddx try` cycle. Confirm one new
    row in `.ddx/executions/mirror-index.jsonl` per finalized attempt.
 3. To inspect an old bundle locally:
-   `ddx agent executions fetch <attempt-id>`
+   `legacy agent executions fetch <attempt-id>`
 4. To diagnose a mirror failure:
    `tail -F .ddx/agent-logs/mirror.log`
 5. To exclude the per-iteration trace (large): set

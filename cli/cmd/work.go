@@ -1,6 +1,10 @@
 package cmd
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
+	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
@@ -134,4 +138,188 @@ func (f *CommandFactory) runWork(cmd *cobra.Command, args []string) error {
 	}
 
 	return f.runAgentExecuteLoopImpl(cmd, true, "")
+}
+
+func writeExecuteLoopResult(w io.Writer, projectRoot string, result *agent.ExecuteBeadLoopResult, asJSON bool) error {
+	if asJSON {
+		payload := struct {
+			ProjectRoot string `json:"project_root"`
+			*agent.ExecuteBeadLoopResult
+		}{
+			ProjectRoot:           projectRoot,
+			ExecuteBeadLoopResult: result,
+		}
+		enc := json.NewEncoder(w)
+		enc.SetIndent("", "  ")
+		return enc.Encode(payload)
+	}
+
+	if result.NoReadyWork && result.Attempts == 0 {
+		writeNoReadyWorkSummary(w, projectRoot, result.NoReadyWorkDetail)
+		writeQueueSnapshotTerminalSummary(w, result.QueueSnapshot)
+		return nil
+	}
+
+	fmt.Fprintf(w, "\nproject: %s\n", projectRoot)
+	writeWorkTerminalSummary(w, result)
+	if result.Failures > 0 {
+		fmt.Fprintf(w, "\nfailed:\n")
+		for _, attempt := range result.Results {
+			if attempt.Status != "success" {
+				fmt.Fprintf(w, "  - %s: %s", attempt.BeadID, attempt.Detail)
+				if attempt.PreserveRef != "" {
+					fmt.Fprintf(w, " (preserved)")
+				}
+				fmt.Fprintln(w)
+			}
+		}
+	}
+	if result.NoReadyWork {
+		fmt.Fprintln(w)
+		writeNoReadyWorkSummary(w, "", result.NoReadyWorkDetail)
+		writeQueueSnapshotTerminalSummary(w, result.QueueSnapshot)
+	}
+	return nil
+}
+
+func writeWorkTerminalSummary(w io.Writer, result *agent.ExecuteBeadLoopResult) {
+	closed, changed, alreadySatisfied := countWorkTerminalOutcomes(result)
+	fmt.Fprintf(w, "worker exited: %s\n", workExitSummary(result))
+	fmt.Fprintf(w, "attempts: %d  |  closed: %d  |  changed: %d  |  already-satisfied: %d  |  failures: %d\n",
+		result.Attempts, closed, changed, alreadySatisfied, result.Failures)
+}
+
+func countWorkTerminalOutcomes(result *agent.ExecuteBeadLoopResult) (closed, changed, alreadySatisfied int) {
+	for _, attempt := range result.Results {
+		switch attempt.Status {
+		case agent.ExecuteBeadStatusSuccess:
+			closed++
+			changed++
+		case agent.ExecuteBeadStatusAlreadySatisfied:
+			closed++
+			alreadySatisfied++
+		}
+	}
+	if closed == 0 && result.Successes > 0 {
+		closed = result.Successes
+	}
+	return closed, changed, alreadySatisfied
+}
+
+func workExitSummary(result *agent.ExecuteBeadLoopResult) string {
+	switch result.ExitReason {
+	case "drained":
+		return "drained current execution-ready queue"
+	case "once_complete":
+		return "once complete"
+	case "budget":
+		return "budget reached"
+	case "no_progress":
+		return "no-progress policy stopped work"
+	case "blocked":
+		return "blocked waiting for external action"
+	case "sigint", "sigterm", "context_cancelled":
+		return "stopped by signal"
+	case "fatal_config":
+		return "fatal configuration error"
+	case "preflight_failed":
+		return "preflight failed"
+	case "resource_exhausted":
+		return "resource exhausted"
+	case "routing_unavailable":
+		return "routing unavailable"
+	}
+	if result.StopCondition != "" {
+		return strings.ToLower(strings.ReplaceAll(result.StopCondition, "_", " "))
+	}
+	return "completed"
+}
+
+func writeQueueSnapshotTerminalSummary(w io.Writer, snapshot *agent.QueueSnapshot) {
+	if snapshot == nil {
+		return
+	}
+	retry := ""
+	if snapshot.NextRetryAfter != "" {
+		retry = " next-retry=" + snapshot.NextRetryAfter
+	}
+	fmt.Fprintf(w, "remaining queue: execution-ready=%d blocked=%d operator-attention=%d needs-human/investigation=%d cooldown/deferred=%d%s execution-ineligible=%d superseded=%d epics=%d epic-closure-candidates=%d\n",
+		snapshot.ExecutionReadyCount,
+		snapshot.BlockedCount,
+		snapshot.ProposedOperatorAttentionCount,
+		snapshot.HumanReviewBlockerCount,
+		snapshot.RetryCooldownCount,
+		retry,
+		snapshot.ExecutionIneligibleCount,
+		snapshot.SupersededCount,
+		snapshot.SkippedEpicsCount,
+		snapshot.EpicClosureCandidatesCount,
+	)
+	if snapshot.HumanReviewBlockedTotal <= 0 || snapshot.HumanReviewBlockerCount <= 0 {
+		return
+	}
+	fmt.Fprintf(w, "%d beads blocked behind %d needs-human blockers:\n",
+		snapshot.HumanReviewBlockedTotal, snapshot.HumanReviewBlockerCount)
+	for i, blocker := range snapshot.HumanReviewBlockers {
+		fmt.Fprintf(w, "  %d. %s %s (%d downstream)\n", i+1, blocker.ID, blocker.Title, blocker.DownstreamBlockedCount)
+	}
+}
+
+func writeNoReadyWorkSummary(w io.Writer, projectRoot string, d agent.NoReadyWorkBreakdown) {
+	if projectRoot != "" {
+		fmt.Fprintf(w, "project: %s\n", projectRoot)
+	}
+	fmt.Fprintln(w, "No execution-ready beads.")
+	if noReadyWorkBreakdownEmpty(d) {
+		fmt.Fprintln(w, "  queue drained: no open work remains in lifecycle queues.")
+	}
+	if len(d.ProposedOperatorAttention) > 0 {
+		fmt.Fprintf(w, "  operator attention: %d proposed bead(s) stop autonomous work and may block downstream dependents: %s\n",
+			len(d.ProposedOperatorAttention), strings.Join(d.ProposedOperatorAttention, ", "))
+	}
+	if len(d.DependencyWaiting) > 0 {
+		fmt.Fprintf(w, "  waiting on dependencies: %d open bead(s): %s\n",
+			len(d.DependencyWaiting), strings.Join(d.DependencyWaiting, ", "))
+	}
+	if len(d.ExternalBlocked) > 0 {
+		fmt.Fprintf(w, "  external blocked: %d bead(s) with explicit blocked status: %s\n",
+			len(d.ExternalBlocked), strings.Join(d.ExternalBlocked, ", "))
+	}
+	if len(d.RetryCooldown) > 0 {
+		retryHint := ""
+		if d.NextRetryAfter != "" {
+			retryHint = " (next retry-after: " + d.NextRetryAfter + ")"
+		}
+		fmt.Fprintf(w, "  retry cooldown: %d bead(s)%s: %s\n",
+			len(d.RetryCooldown), retryHint, strings.Join(d.RetryCooldown, ", "))
+	}
+	if len(d.NotEligible) > 0 {
+		fmt.Fprintf(w, "  not execution eligible: %d bead(s): %s\n",
+			len(d.NotEligible), strings.Join(d.NotEligible, ", "))
+	}
+	if len(d.Superseded) > 0 {
+		fmt.Fprintf(w, "  superseded: %d bead(s): %s\n",
+			len(d.Superseded), strings.Join(d.Superseded, ", "))
+	}
+	if len(d.Epics) > 0 {
+		fmt.Fprintf(w, "  epic containers: %d ready epic(s) with open children (decompose into tasks): %s\n",
+			len(d.Epics), strings.Join(d.Epics, ", "))
+	}
+	if len(d.EpicClosureCandidates) > 0 {
+		fmt.Fprintf(w, "  completed epic closure candidate(s) (all direct children closed; surfaced for closure evaluation): %s\n",
+			strings.Join(d.EpicClosureCandidates, ", "))
+	}
+}
+
+func noReadyWorkBreakdownEmpty(d agent.NoReadyWorkBreakdown) bool {
+	return len(d.ExecutionReady) == 0 &&
+		len(d.DependencyWaiting) == 0 &&
+		len(d.ProposedOperatorAttention) == 0 &&
+		len(d.RetryCooldown) == 0 &&
+		len(d.ExternalBlocked) == 0 &&
+		len(d.NotEligible) == 0 &&
+		len(d.Superseded) == 0 &&
+		len(d.Epics) == 0 &&
+		len(d.EpicClosureCandidates) == 0 &&
+		d.NextRetryAfter == ""
 }

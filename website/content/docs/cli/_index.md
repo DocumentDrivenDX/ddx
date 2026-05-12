@@ -64,12 +64,11 @@ ddx try <id>                # attempt one bead in an isolated worktree
 ddx run --prompt <file>     # invoke the agent once
 ```
 
-## Legacy Agent Surface
+## Execution Surface
 
-The retired `ddx agent` namespace is preserved only in the historical command
-reference pages. Use `ddx run`, `ddx try`, and `ddx work` for current
-execution workflows, and use `compare-prompts` or `adversarial-review` when
-you need multi-model comparison.
+Use `ddx run`, `ddx try`, and `ddx work` for current execution workflows, and
+use `compare-prompts` or `adversarial-review` when you need multi-model
+comparison.
 
 ## Resource Commands
 

@@ -195,10 +195,10 @@ Same as single-ticket worker log, but also includes child-level progress:
 
 ## CLI Surface
 
-### `ddx agent execute-epic`
+### `legacy agent execute-epic`
 
 ```
-ddx agent execute-epic <epic-bead-id> [flags]
+legacy agent execute-epic <epic-bead-id> [flags]
 
 Flags:
   --model string         Model to use for child execution
@@ -256,7 +256,7 @@ const (
 ## Acceptance
 
 1. Server API exposes `mode`, epic fields, and child results on worker records
-2. `ddx agent execute-epic` creates a persistent epic branch and worktree
+2. `legacy agent execute-epic` creates a persistent epic branch and worktree
 3. Child beads execute sequentially inside the epic worktree
 4. Epic worker log shows per-child progress with aggregate status
 5. Merge gate rebases epic branch and creates merge commit on success

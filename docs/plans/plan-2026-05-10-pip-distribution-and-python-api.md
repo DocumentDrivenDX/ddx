@@ -57,7 +57,7 @@ python/
 - Codegen runs as hatch build hook BEFORE each wheel is packed. Cross-compiled wheels reuse the host's introspection JSON (command tree is platform-invariant).
 - Each generated function: real signature with kwargs typed from flag types, docstring lifted from Cobra's `cmd.Long`, dispatches via `_runtime._invoke(argv, flags=...)`.
 - Output-format mapping lives in `python/codegen/output_formats.yaml` (NOT in Go-side annotations — keeps Go untouched). Missing entries default to "text + return CompletedProcess" — works automatically; promote to typed JSON via yaml edit.
-- Streaming commands (`ddx work`, `ddx agent execute-loop`) marked in the yaml; codegen emits an iterator/Popen-returning variant.
+- Streaming commands (`ddx work`, `legacy agent execute-loop`) marked in the yaml; codegen emits an iterator/Popen-returning variant.
 - Flag mangling: `--no-merge` → `no_merge`. Bool `True` → emit, `False` → omit (no `--no-no-merge`).
 - Required for notebook UX (added per opus review):
   - Every generated function takes `cwd=` (default `os.getcwd()`), `stdin=`, `env=`.

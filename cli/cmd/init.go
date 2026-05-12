@@ -663,7 +663,7 @@ After modifying any of these paths, stage and commit them:
 
 ## Merge Policy
 
-Branches containing ` + "`" + `ddx agent execute-bead` + "`" + ` or ` + "`" + `ddx work` + "`" + ` commits
+Branches containing ` + "`" + `ddx try` + "`" + ` or ` + "`" + `ddx work` + "`" + ` commits
 carry a per-attempt execution audit trail:
 
 - ` + "`" + `chore: update tracker (execute-bead <TIMESTAMP>)` + "`" + ` — attempt heartbeats

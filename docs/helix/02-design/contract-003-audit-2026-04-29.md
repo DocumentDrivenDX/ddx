@@ -14,7 +14,7 @@ Bead: ddx-90234d47 — gates plan-2026-04-29-artifact-and-run-architecture.md be
 Per the plan, this audit confirms whether the upstream `ddx-agent` module
 already exports the surfaces DDx needs for:
 
-1. The structural `ddx agent` passthrough (mountable Cobra root).
+1. The structural `legacy agent` passthrough (mountable Cobra root).
 2. Layer-1 generate-artifact runs (`produces_artifact` / `media_type` metadata
    round-trip).
 3. The three-layer architecture (`ddx run` / `ddx try` / `ddx work`).
@@ -30,7 +30,7 @@ It then enumerates the CONTRACT-003 amendments that must land in
 The plan (line 28) commits to:
 
 > DDx imports the upstream agent module's Cobra root and mounts it under
-> `ddx agent`. Notionally `cli(ddx).agent(load_cli(agent))`.
+> `legacy agent`. Notionally `cli(ddx).agent(load_cli(agent))`.
 
 That is not currently possible. The upstream CLI does not use Cobra at
 all:
@@ -167,7 +167,7 @@ and need no change:
 
 | # | ID | Area | Required for | Status |
 |---|----|------|---|---|
-| 1 | CONTRACT-003-A | Public `MountCLI() *cobra.Command` on the `agent` package; port `cmd/agent` from `flag` to `cobra` | Plan §"`ddx agent` subcommand fates" — entire structural-passthrough story; bead #15 (delete-with-prejudice list); bead #7 (FEAT-006 §"`ddx agent` is structural passthrough"). | **BLOCKING** — open bead #6 in `~/Projects/agent` |
+| 1 | CONTRACT-003-A | Public `MountCLI() *cobra.Command` on the `agent` package; port `cmd/agent` from `flag` to `cobra` | Plan §"`legacy agent` subcommand fates" — entire structural-passthrough story; bead #15 (delete-with-prejudice list); bead #7 (FEAT-006 §"`legacy agent` is structural passthrough"). | **BLOCKING** — open bead #6 in `~/Projects/agent` |
 | 2 | CONTRACT-003-B | Document reserved metadata keys `produces_artifact`, `media_type` | Plan §"Generate-artifact layer placement" forward-compat. | Optional — courtesy clarification |
 
 ## Recommendation

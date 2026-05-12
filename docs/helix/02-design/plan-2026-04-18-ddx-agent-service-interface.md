@@ -570,13 +570,13 @@ type DdxAgent interface {
     // ResolveRoute resolves a single under-specified request to (Harness,
     // Provider, Model). The returned RouteDecision can be passed back to
     // Execute via ExecuteRequest.PreResolved to skip re-resolution (used by
-    // dry-run-then-execute flows like `ddx agent route-status` followed by
+    // dry-run-then-execute flows like `legacy agent route-status` followed by
     // an explicit invocation).
     ResolveRoute(ctx context.Context, req RouteRequest) (*RouteDecision, error)
 
     // RouteStatus returns global routing state across all routes: cooldowns,
     // recent decisions, observation-derived per-(provider,model) latency
-    // summary. Used by `ddx agent route-status` to render the operator
+    // summary. Used by `legacy agent route-status` to render the operator
     // dashboard. NOT a per-request resolution — that's ResolveRoute.
     RouteStatus(ctx context.Context) (*RouteStatusReport, error)
 }
@@ -1207,4 +1207,4 @@ Subprocess CLI (`ddx-agent` binary as a polyglot front door) is **deferred** —
 2. Does `ExecuteStream` need a write-back channel (e.g., for human-in-the-loop tool approvals), or is it strictly read-only?
 3. Should `ExecuteRequest` carry the working directory, or should the Service launch in the caller's CWD by default? (Probably: keep WorkDir explicit; Service should never inherit ambient state.)
 4. Is one `Service` instance per `ExecuteRequest` correct, or should `New(Options)` return a long-lived service that handles many executes? (Probably long-lived; routing tables, provider connections, catalog cache should be amortized.)
-5. Do we need `ListHarnesses` as a fifth verb? Today DDx surfaces `ddx agent list` showing codex/claude/gemini/etc. — is that "providers" or its own concept?
+5. Do we need `ListHarnesses` as a fifth verb? Today DDx surfaces `legacy agent list` showing codex/claude/gemini/etc. — is that "providers" or its own concept?

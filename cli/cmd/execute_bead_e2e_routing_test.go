@@ -56,7 +56,7 @@ func TestExecuteBeadRoutingEvidencePersisted(t *testing.T) {
 	evt := routingEvents[0]
 	assert.Equal(t, "routing", evt.Kind)
 	assert.Equal(t, "ddx", evt.Actor)
-	assert.Equal(t, "ddx agent execute-bead", evt.Source)
+	assert.Equal(t, "ddx try", evt.Source)
 	assert.NotEmpty(t, evt.Summary)
 
 	// Parse the JSON body and assert all three required routing fields.

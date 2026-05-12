@@ -702,7 +702,7 @@ func appendTierAttemptEvent(store agent.BeadEventAppender, beadID string, report
 		Summary:   summary,
 		Body:      body,
 		Actor:     actor,
-		Source:    "ddx agent execute-loop",
+		Source:    "legacy agent execute-loop",
 		CreatedAt: createdAt,
 	})
 }

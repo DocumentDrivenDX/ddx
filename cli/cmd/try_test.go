@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -26,6 +27,56 @@ type tryHookRunnerStub struct {
 type blockingTryExecutor struct {
 	started chan struct{}
 	once    sync.Once
+}
+
+type tryGitOpsStub struct {
+	worktrees []string
+	removed   []string
+	added     []string
+	pruned    bool
+	refs      map[string]string
+}
+
+func (g *tryGitOpsStub) HeadRev(string) (string, error) { return "deadbeef", nil }
+
+func (g *tryGitOpsStub) ResolveRev(string, string) (string, error) { return "deadbeef", nil }
+
+func (g *tryGitOpsStub) WorktreeAdd(_ string, wtPath, _ string) error {
+	g.added = append(g.added, wtPath)
+	return nil
+}
+
+func (g *tryGitOpsStub) WorktreeRemove(_ string, wtPath string) error {
+	g.removed = append(g.removed, wtPath)
+	return nil
+}
+
+func (g *tryGitOpsStub) WorktreeList(string) ([]string, error) {
+	return append([]string(nil), g.worktrees...), nil
+}
+
+func (g *tryGitOpsStub) WorktreePrune(string) error {
+	g.pruned = true
+	return nil
+}
+
+func (g *tryGitOpsStub) IsDirty(string) (bool, error) { return false, nil }
+
+func (g *tryGitOpsStub) SynthesizeCommit(string, string) (bool, error) { return false, nil }
+
+func (g *tryGitOpsStub) UpdateRef(_ string, ref, sha string) error {
+	if g.refs == nil {
+		g.refs = map[string]string{}
+	}
+	g.refs[ref] = sha
+	return nil
+}
+
+func (g *tryGitOpsStub) DeleteRef(_ string, ref string) error {
+	if g.refs != nil {
+		delete(g.refs, ref)
+	}
+	return nil
 }
 
 func (e *blockingTryExecutor) Execute(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
@@ -95,7 +146,7 @@ func (r *tryHookRunnerStub) Run(opts agent.RunArgs) (*agent.Result, error) {
 	case "bead-lifecycle-intake":
 		return &agent.Result{
 			ExitCode: 0,
-			Output:   `{"classification":"atomic","confidence":0.99,"reasoning":"single-slice"}`,
+			Output:   `{"classification":"ready","rationale":"single-slice","readiness_checks":[]}`,
 		}, nil
 	case "bead-lifecycle-lint":
 		return &agent.Result{
@@ -300,8 +351,15 @@ func TestTryZeroConfigInferredTierSetsMinPower(t *testing.T) {
 		{ID: "smart-model", Power: 90, Available: true, AutoRoutable: true},
 	}
 
-	dir := setupWorkIntakeFixture(t)
+	dir := minimalProjectDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
+	require.NoError(t, exec.Command("git", "init", dir).Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
 	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:        "ddx-zero-config-try-tier-standard",
 		Title:     "Try with inferred standard routing tier",
@@ -311,7 +369,7 @@ func TestTryZeroConfigInferredTierSetsMinPower(t *testing.T) {
 	factory := NewCommandFactory(dir)
 	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
 	root := factory.NewRootCommand()
-	_, _ = executeCommand(
+	out, err := executeCommand(
 		root,
 		"try",
 		"ddx-zero-config-try-tier-standard",
@@ -320,16 +378,11 @@ func TestTryZeroConfigInferredTierSetsMinPower(t *testing.T) {
 	)
 
 	stub.mu.Lock()
-	executionSeen := stub.executionSeen
-	executionReq := stub.executionReq
+	executeCalled := stub.executeCalled
+	lastReq := stub.lastReq
 	stub.mu.Unlock()
-	require.True(t, executionSeen, "ddx try must reach the implementation dispatch")
-	assert.Equal(
-		t,
-		70,
-		executionReq.MinPower,
-		"inferred standard tier should map to the second viable ladder floor",
-	)
+	require.True(t, executeCalled, "ddx try must invoke the implementation dispatch; output=%q err=%v", out, err)
+	assert.Equal(t, 70, lastReq.MinPower, "dispatch request should preserve inferred min-power")
 }
 
 // TestTryInterrupt_InFlightAttemptUnclaimsTarget verifies that cancelling
@@ -514,4 +567,114 @@ func TestTry_CommandRegistered(t *testing.T) {
 	assert.Contains(t, out, "bead-id", "help must mention bead-id")
 	assert.Contains(t, out, "--no-review-i-know-what-im-doing", "help must document the break-glass acknowledgement flag")
 	assert.Contains(t, out, "review:skip-reason:*", "help must document the sibling rationale requirement")
+}
+
+func TestTry_RecoversOrphanedWorktreesBeforeSpawn(t *testing.T) {
+	env := NewTestEnvironment(t)
+	store := bead.NewStore(env.Dir + "/.ddx")
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:    "recover-bead-001",
+		Title: "Recover orphaned worktrees",
+	}))
+
+	orphan := filepath.Join(env.Dir, ".ddx", agent.ExecuteBeadWtPrefix+"recover-bead-001-old")
+	git := &tryGitOpsStub{
+		worktrees: []string{orphan, filepath.Join(env.Dir, "unrelated")},
+	}
+
+	factory := NewCommandFactory(env.Dir)
+	factory.executeBeadGitOverride = git
+	factory.tryExecutorOverride = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
+		return agent.ExecuteBeadReport{
+			BeadID:    beadID,
+			Status:    agent.ExecuteBeadStatusSuccess,
+			ResultRev: "deadbeef01234567",
+		}, nil
+	})
+
+	root := factory.NewRootCommand()
+	_, err := executeCommand(root, "try", "recover-bead-001", "--no-review", "--no-review-i-know-what-im-doing")
+	require.NoError(t, err)
+	assert.Contains(t, git.removed, orphan, "try must prune orphaned execute-bead worktrees before spawning a new one")
+	assert.True(t, git.pruned, "try must prune stale worktrees after recovery")
+}
+
+func TestTry_AppliesGateContextToLanding(t *testing.T) {
+	env := NewTestEnvironment(t)
+	manifestRel := filepath.Join("bundle", "manifest.json")
+	manifestAbs := filepath.Join(env.Dir, manifestRel)
+	require.NoError(t, os.MkdirAll(filepath.Dir(manifestAbs), 0o755))
+	require.NoError(t, os.WriteFile(manifestAbs, []byte(`{"governing":[{"id":"gate-001"}]}`), 0o644))
+
+	res := &agent.ExecuteBeadResult{
+		BeadID:       "gate-bead-001",
+		AttemptID:    "attempt-1",
+		ResultRev:    "deadbeef01234567",
+		ManifestFile: manifestRel,
+	}
+	git := &tryGitOpsStub{}
+
+	wt, ids, cleanup, err := agent.BuildLandingGateContext(env.Dir, res, git)
+	require.NoError(t, err)
+	require.NotEmpty(t, wt)
+	require.Equal(t, []string{"gate-001"}, ids)
+	require.Len(t, git.added, 1)
+
+	cleanup()
+	require.Len(t, git.removed, 1)
+	assert.Equal(t, wt, git.removed[0])
+}
+
+func TestTry_PreservesJSONResultSchema_SameAsExecuteBead(t *testing.T) {
+	payload := agent.ExecuteBeadResult{
+		BeadID:      "ddx-1",
+		AttemptID:   "attempt-1",
+		BaseRev:     "base",
+		ResultRev:   "result",
+		Outcome:     "merged",
+		Status:      agent.ExecuteBeadStatusSuccess,
+		PreserveRef: "refs/ddx/iterations/ddx-1/attempt-1",
+	}
+	raw, err := json.Marshal(payload)
+	require.NoError(t, err)
+
+	var got map[string]any
+	require.NoError(t, json.Unmarshal(raw, &got))
+	assert.Equal(t, "ddx-1", got["bead_id"])
+	assert.Equal(t, "attempt-1", got["attempt_id"])
+	assert.Equal(t, "result", got["result_rev"])
+	assert.Equal(t, "merged", got["outcome"])
+	assert.Equal(t, "success", got["status"])
+	assert.Equal(t, "refs/ddx/iterations/ddx-1/attempt-1", got["preserve_ref"])
+}
+
+func TestTry_ExitCodeContract_0_1_2(t *testing.T) {
+	tests := []struct {
+		name    string
+		status  string
+		want    int
+		wantErr bool
+	}{
+		{name: "success", status: agent.ExecuteBeadStatusSuccess, want: 0},
+		{name: "already_satisfied", status: agent.ExecuteBeadStatusAlreadySatisfied, want: 0},
+		{name: "preserved", status: agent.ExecuteBeadStatusPreservedNeedsReview, want: 1, wantErr: true},
+		{name: "no_changes", status: agent.ExecuteBeadStatusNoChanges, want: 1, wantErr: true},
+		{name: "no_evidence", status: agent.ExecuteBeadStatusNoEvidenceProduced, want: 1, wantErr: true},
+		{name: "failed", status: agent.ExecuteBeadStatusExecutionFailed, want: 2, wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tryExitCodeForStatus(tt.status)
+			if tt.wantErr {
+				require.Error(t, err)
+				exitErr, ok := err.(*ExitError)
+				require.True(t, ok)
+				assert.Equal(t, tt.want, exitErr.Code)
+				return
+			}
+			require.NoError(t, err)
+		})
+	}
 }

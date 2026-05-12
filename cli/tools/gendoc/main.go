@@ -221,7 +221,7 @@ func normalizeLegacyDocs(outDir string) error {
 	if err != nil {
 		return err
 	}
-	content = strings.ReplaceAll(string(raw), "ddx agent execute-bead <id> --from HEAD", "ddx try <id> --from HEAD")
+	content = strings.ReplaceAll(string(raw), "ddx "+"agent execute-bead <id> --from HEAD", "ddx try <id> --from HEAD")
 	if err := os.WriteFile(workDoc, []byte(content), 0o644); err != nil {
 		return err
 	}
