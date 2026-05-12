@@ -16,6 +16,7 @@ import (
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	tierescalation "github.com/DocumentDrivenDX/ddx/internal/agent/escalation"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
+	"github.com/DocumentDrivenDX/ddx/internal/agent/work"
 	"github.com/DocumentDrivenDX/ddx/internal/agent/workerprobe"
 	"github.com/DocumentDrivenDX/ddx/internal/attemptmetrics"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -256,12 +257,13 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	accumulateBilledCost := func(report agent.ExecuteBeadReport) {
 		costCap.Add(report.Harness, report.CostUSD)
 	}
-	costCapTripped := func() (agent.ExecuteBeadReport, bool) {
+	costCapTripped := func() (work.StopDecision, agent.ExecuteBeadReport, bool) {
 		if _, tripped := costCap.Tripped(); !tripped {
-			return agent.ExecuteBeadReport{}, false
+			return work.StopDecision{}, agent.ExecuteBeadReport{}, false
 		}
 		spent := costCap.Spent()
-		return agent.ExecuteBeadReport{
+		decision, _ := work.ClassifyStop(work.StopInput{Budget: true})
+		return decision, agent.ExecuteBeadReport{
 			Status: agent.ExecuteBeadStatusExecutionFailed,
 			Detail: fmt.Sprintf("cost cap reached: $%.2f billed >= $%.2f cap; raise the cap or set 0 to disable. Subscription and local providers do not count.", spent, spec.MaxCostUSD),
 		}, true
