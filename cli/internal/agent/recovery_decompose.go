@@ -159,7 +159,7 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 	}
 
 	result, err := dispatchViaResolvedConfig(tctx, projectRoot, nil, runner, rcfg, runtime)
-	if err != nil {
+	if err != nil && result == nil {
 		if tctx.Err() != nil {
 			return DecomposeResult{Failed: true, Reason: "timeout"}
 		}
@@ -200,13 +200,13 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 			Labels:      append([]string(nil), child.Labels...),
 			Parent:      beadID,
 		}
-		if err := store.Create(ctx, nb); err != nil {
+		if err := store.Create(context.Background(), nb); err != nil {
 			return DecomposeResult{Failed: true, Reason: "create_error"}
 		}
 		childIDs = append(childIDs, nb.ID)
 	}
 
-	_ = store.Update(ctx, beadID, func(b *bead.Bead) {
+	_ = store.Update(context.Background(), beadID, func(b *bead.Bead) {
 		ensureBeadExtra(b)
 		b.Extra[bead.ExtraExecutionElig] = false
 	})

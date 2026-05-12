@@ -1472,8 +1472,9 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 
 		// tryExecutor preserves the legacy w.Executor.Execute(ctx, candidate.ID)
 		// invocation while letting try.Attempt own conflict recovery.
-		attemptOut, err := work.WithHeartbeat(ctx, candidate.ID, heartbeatInterval, w.Store, func() (agenttry.Outcome, error) {
-			return agenttry.Attempt(ctx, w.Store, candidate.ID, agenttry.AttemptOpts{
+		attemptCtx := ctx
+		attemptOut, err := work.WithHeartbeat(attemptCtx, candidate.ID, heartbeatInterval, w.Store, func() (agenttry.Outcome, error) {
+			return agenttry.Attempt(attemptCtx, w.Store, candidate.ID, agenttry.AttemptOpts{
 				Bead:                candidate,
 				Executor:            tryExecutor(w.Executor),
 				Store:               w.Store,
@@ -1772,7 +1773,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 
 		if attemptOut.Disposition == agenttry.OutcomeSuccess {
-			if err := clearExecuteLoopNoChangesMetadata(ctx, w.Store, candidate.ID); err != nil {
+			finalizationCtx := context.Background()
+			if err := clearExecuteLoopNoChangesMetadata(finalizationCtx, w.Store, candidate.ID); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, err)
 				})
@@ -1784,7 +1786,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			result.Successes++
 			result.LastSuccessAt = now().UTC()
 		} else if report.Status == ExecuteBeadStatusSuccess {
-			if err := clearExecuteLoopNoChangesMetadata(ctx, w.Store, candidate.ID); err != nil {
+			finalizationCtx := context.Background()
+			if err := clearExecuteLoopNoChangesMetadata(finalizationCtx, w.Store, candidate.ID); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, err)
 				})
@@ -1888,13 +1891,14 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				// BaseRev is empty (test fixtures and genuinely-no-commit
 				// satisfied beads).
 				report.Status = ExecuteBeadStatusAlreadySatisfied
-				if noChanges.Evidence != "" {
+			if noChanges.Evidence != "" {
 					// Checker evidence explains why the bead is being closed;
 					// it takes precedence over the executor's attempt detail.
 					report.Detail = noChanges.Evidence
 				}
 				_ = w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC()))
-				if err := clearExecuteLoopNoChangesMetadata(ctx, w.Store, candidate.ID); err != nil {
+				finalizationCtx := context.Background()
+				if err := clearExecuteLoopNoChangesMetadata(finalizationCtx, w.Store, candidate.ID); err != nil {
 					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 						return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, err)
 					})
