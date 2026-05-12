@@ -21,7 +21,7 @@ ddx/
   reference/
     beads.md        # work-item authoring
     work.md         # draining the queue, executing beads
-    review.md       # bead review, quorum/adversarial review
+    review.md       # bead review, compare-prompts/adversarial review
     agents.md       # agent dispatch, harness/power passthrough, personas
     status.md       # queue health, ddx doctor, sync status
 ```
@@ -44,8 +44,10 @@ attempt one bead in an isolated worktree, claim → build → verify → close.
 ### review
 
 Two concepts under one roof. *Bead review* (`ddx bead review <id>`) grades a
-completed bead against its acceptance criteria. *Comparison/adversarial
-review* composes multiple `ddx run` invocations to cross-check work.
+completed bead against its acceptance criteria. *Comparison review* composes
+multiple `ddx run` invocations to cross-check work, and
+*adversarial-review* adds a critic-focused pass when you need stronger
+pressure testing.
 
 ### agents
 

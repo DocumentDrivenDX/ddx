@@ -64,19 +64,12 @@ ddx try <id>                # attempt one bead in an isolated worktree
 ddx run --prompt <file>     # invoke the agent once
 ```
 
-## Agent Diagnostics
+## Legacy Agent Surface
 
-Inspect harness health, session logs, routing, and provider availability.
-The `ddx agent` namespace is a diagnostics surface; use `ddx run`, `ddx try`,
-and `ddx work` for execution.
-
-```bash
-ddx agent list              # available harnesses
-ddx agent doctor            # harness health check
-ddx agent log               # session history
-ddx agent capabilities      # model and reasoning-level capabilities
-ddx agent providers         # configured providers with live status
-```
+The retired `ddx agent` namespace is preserved only in the historical command
+reference pages. Use `ddx run`, `ddx try`, and `ddx work` for current
+execution workflows, and use `compare-prompts` or `adversarial-review` when
+you need multi-model comparison.
 
 ## Resource Commands
 

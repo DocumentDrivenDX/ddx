@@ -120,16 +120,19 @@ Use what you measured to decide the next move:
 ### Optional: Project-Level Routing Override
 
 Projects that need to pin a specific harness, model, or endpoint can author
-`.ddx/config.yaml` with an `agent:` block (see [Agent execute
-docs](../agent-execute)). This is an advanced override, not a prerequisite:
+`.ddx/config.yaml` with an `agent:` block (see [Run Architecture](../concepts/run-architecture/)
+and [Skills](../skills/)). This is an advanced override, not a prerequisite:
 the zero-config flow above is the default path.
 
-## Run Agents
+## Run
 
 ```bash
 ddx run --harness claude --prompt task.md
-ddx agent usage
+ddx work --once
 ```
+
+For side-by-side prompt comparison, use `compare-prompts`. For critique-driven
+multi-model review, use `adversarial-review`.
 
 ## Update
 

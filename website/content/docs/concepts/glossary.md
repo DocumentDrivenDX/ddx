@@ -11,12 +11,12 @@ The checked items on a bead that define when the bead is complete. Reviews
 check the criteria, not the developer's memory of the conversation. See
 [Architecture: Bead Lifecycle](../architecture/#bead-lifecycle).
 
-## Agent Service
+## Run Service
 
 The DDx subsystem that dispatches work to AI harnesses behind a unified
-prompt envelope. Handles routing, session logging, quorum review, and the
-underlying invocation runtime that `ddx run` / `ddx try` / `ddx work`
-compose on top of. Surfaced as `ddx agent ...`.
+prompt envelope. Handles routing, session logging, and the underlying
+invocation runtime that `ddx run` / `ddx try` / `ddx work` compose on top of.
+Comparison and adversarial review compose `ddx run` at the skill layer.
 
 ## Bead
 
@@ -79,10 +79,11 @@ The structured composition of bead context, persona, project config, and
 relevant patterns that the agent service hands to a harness. The envelope
 is what makes harnesses interchangeable.
 
-## Quorum Review
+## Comparison Review
 
-A multi-agent dispatch mode where several harnesses review the same work
-and a configured policy (e.g. `majority`) decides the outcome.
+A multi-agent review workflow where several harnesses review the same work
+and a configured policy such as `majority` decides the outcome. Implemented
+through skills like `compare-prompts` and `adversarial-review`.
 
 ## Ready Queue
 

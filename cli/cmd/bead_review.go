@@ -16,24 +16,19 @@ func (f *CommandFactory) newBeadReviewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "review <id>",
 		Short: "Generate a review prompt for a bead's implementation",
-		Long: `Generate a review-ready prompt for a bead implementation.
-
-The prompt includes:
-  - Bead title, description, and acceptance criteria
-  - Full content of governing documents (spec-id refs from the bead)
-  - Git diff of the reviewed commit (git show)
-  - Review instructions with the expected APPROVE/REQUEST_CHANGES/BLOCK output contract
-
-Use --prose to add an advisory prose-quality section derived from the bead
-text, using the same deterministic prose checker as ` + "`ddx doc prose`" + `.
-
-By default the commit is taken from the bead's closing_commit_sha field.
-Use --from-rev to override.
-
-Pipe the output into ddx agent run:
-
-  ddx bead review <id> | ddx agent run --prompt @-
-  ddx bead review <id> --output /tmp/review.md && ddx agent run --prompt /tmp/review.md`,
+		Long: "Generate a review-ready prompt for a bead implementation.\n\n" +
+			"The prompt includes:\n" +
+			"  - Bead title, description, and acceptance criteria\n" +
+			"  - Full content of governing documents (spec-id refs from the bead)\n" +
+			"  - Git diff of the reviewed commit (git show)\n" +
+			"  - Review instructions with the expected APPROVE/REQUEST_CHANGES/BLOCK output contract\n\n" +
+			"Use --prose to add an advisory prose-quality section derived from the bead\n" +
+			"text, using the same deterministic prose checker as `ddx doc prose`.\n\n" +
+			"By default the commit is taken from the bead's closing_commit_sha field.\n" +
+			"Use --from-rev to override.\n\n" +
+			"Pipe the output into `ddx run`:\n\n" +
+			"  ddx bead review <id> | ddx run --prompt @-\n" +
+			"  ddx bead review <id> --output /tmp/review.md && ddx run --prompt /tmp/review.md",
 		Args: cobra.ExactArgs(1),
 		RunE: f.runBeadReview,
 	}

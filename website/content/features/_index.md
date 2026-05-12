@@ -36,22 +36,22 @@ ddx bead ready
 ddx bead tree <id>
 ```
 
-## Execute-Loop (`ddx work`) {#execute-loop} {{< maturity "stable" >}}
+## Queue Drain (`ddx work`) {#queue-drain} {{< maturity "stable" >}}
 
-![Execute-loop draining the queue](/ui/feature-execute-loop.png "ddx work draining the queue — planned UI")
+![Queue drain image](/ui/feature-queue-drain.png "ddx work draining the queue — planned UI")
 
-`ddx work` drains the bead queue. It picks the next ready bead, runs the configured agent harness inside an isolated git worktree, captures evidence, and merges the result back when acceptance criteria pass. Failing or timed-out runs are preserved as refs for inspection rather than discarded.
+`ddx work` drains the bead queue. It picks the next ready bead, runs the configured harness inside an isolated git worktree, captures evidence, and merges the result back when acceptance criteria pass. Failing or timed-out runs are preserved as refs for inspection rather than discarded.
 
 ```
 ddx work                              # drain the queue
-ddx agent execute-bead <id> --from HEAD
+ddx try <id> --from HEAD
 ```
 
 Because each iteration runs in its own worktree, parallel runs are safe and a failed run never poisons the main branch.
 
 ### Why a loop, not a long session — bounded context execution
 
-The execute-loop is the operational shape of **bounded context execution** — sometimes called the **Ralph loop**. LLM output quality decays as a single context window fills: transcript, tool output, and failed attempts accumulate and compete with the original instructions. We call this decay **context rot**, and it is why long-running agent sessions are unreliable even on frontier models.
+The queue drain is the operational shape of **bounded context execution** — sometimes called the **Ralph loop**. LLM output quality decays as a single context window fills: transcript, tool output, and failed attempts accumulate and compete with the original instructions. We call this decay **context rot**, and it is why long-running sessions are unreliable even on frontier models.
 
 `ddx work` answers context rot structurally. Each bead runs in a fresh agent invocation with a clean context, scoped tightly to the bead's description, acceptance criteria, and the files it touches. When the attempt ends — merged, preserved, or abandoned — the context is discarded. Persistent state lands on disk as evidence, code, an updated bead, or a `<review-findings>` block threaded into the next attempt's prompt. The next iteration starts cold and reads what it needs from the substrate.
 
@@ -66,7 +66,7 @@ See [Bounded Context Execution](/docs/concepts/bounded-context-execution/) for t
 Every execution writes a bundle under `.ddx/executions/<timestamp>-<hash>/` with the prompt, the agent transcript, token and cost telemetry, the diff produced, and the merge outcome. Evidence stays in the repository, attached to the commit, so future reviewers (human or model) can reconstruct what happened without rerunning the agent.
 
 ```
-ddx agent log
+ddx exec log <run-id>
 ls .ddx/executions/
 ```
 
@@ -81,17 +81,15 @@ ddx install <plugin-name>     # plugins can carry skills
 ls .claude/skills/
 ```
 
-## Agent-Agnostic Dispatch {#agent-agnostic-dispatch} {{< maturity "stable" >}}
+## Run Dispatch {#agent-agnostic-dispatch} {{< maturity "stable" >}}
 
 ![Agent harness selection](/ui/feature-agent-dispatch.png "Agent-agnostic dispatch — planned UI")
 
-DDx talks to agents through a uniform harness interface. Swap Claude for Codex for a local model by changing configuration, not commands. The same `ddx agent run` invocation works across providers; cost, tokens, and latency are recorded the same way regardless of which harness answered.
+DDx talks to agents through `ddx run`. Swap Claude for Codex for a local model by changing configuration, not commands. The same `ddx run` invocation works across providers; cost, tokens, and latency are recorded the same way regardless of which harness answered.
 
 ```
-ddx agent list                # show available harnesses
-ddx agent run --harness claude --prompt prompts/implement.md
-ddx agent run --harness codex --prompt prompts/implement.md
-ddx agent doctor              # harness health check
+ddx run --harness claude --prompt prompts/implement.md
+ddx run --harness codex --prompt prompts/implement.md
 ```
 
-This is what makes cost-tiered routing and multi-model review possible: the rest of the platform never has to care which model is on the other end of the wire.
+This is what makes cost-tiered routing and multi-model review possible: the rest of the platform never has to care which model is on the other end of the wire. For side-by-side comparisons, use the `compare-prompts` skill; for critique-driven review, use `adversarial-review`.

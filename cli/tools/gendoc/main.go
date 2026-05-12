@@ -49,6 +49,9 @@ func main() {
 	if err := injectExamples(outDir, root); err != nil {
 		log.Fatalf("injecting examples: %v", err)
 	}
+	if err := normalizeLegacyDocs(outDir); err != nil {
+		log.Fatalf("normalizing legacy docs: %v", err)
+	}
 
 	// Write a generated _index.md that lists every top-level command.
 	if err := writeIndex(outDir, root); err != nil {
@@ -96,6 +99,9 @@ func writeIndex(outDir string, root *cobra.Command) error {
 
 	for _, sub := range root.Commands() {
 		if sub.Hidden {
+			continue
+		}
+		if sub.Name() == "agent" {
 			continue
 		}
 		name := sub.Name()
@@ -160,6 +166,67 @@ func visibleCommands(root *cobra.Command) []*cobra.Command {
 func commandDocName(c *cobra.Command) string {
 	parts := strings.Fields(c.CommandPath())
 	return strings.Join(parts, "_")
+}
+
+func normalizeLegacyDocs(outDir string) error {
+	agentNotice := "This legacy page is retained for historical context only. Use `ddx run`, `ddx try`, `ddx work`, and skill workflows such as `compare-prompts` or `adversarial-review` for current work.\n"
+
+	agentPages, err := filepath.Glob(filepath.Join(outDir, "ddx_agent*.md"))
+	if err != nil {
+		return err
+	}
+	for _, filename := range agentPages {
+		raw, err := os.ReadFile(filename)
+		if err != nil {
+			return err
+		}
+		content := string(raw)
+		frontmatter := ""
+		if strings.HasPrefix(content, "---\n") {
+			if end := strings.Index(content[4:], "\n---\n"); end >= 0 {
+				frontmatter = content[:4+end+5]
+			}
+		}
+		commandName := strings.TrimSuffix(filepath.Base(filename), ".md")
+		commandName = strings.ReplaceAll(commandName, "_", " ")
+		if frontmatter == "" {
+			frontmatter = "---\ntitle: \"" + strings.TrimPrefix(commandName, "ddx ") + "\"\ngenerated: true\n---\n"
+		}
+		content = frontmatter + "\n## " + commandName + "\n\n" + agentNotice
+		if err := os.WriteFile(filename, []byte(content), 0o644); err != nil {
+			return err
+		}
+	}
+
+	rootDoc := filepath.Join(outDir, "ddx.md")
+	raw, err := os.ReadFile(rootDoc)
+	if err != nil {
+		return err
+	}
+	var filteredRoot strings.Builder
+	for _, line := range strings.Split(string(raw), "\n") {
+		if strings.Contains(line, "/docs/cli/commands/ddx_agent/") {
+			continue
+		}
+		filteredRoot.WriteString(line)
+		filteredRoot.WriteString("\n")
+	}
+	content := filteredRoot.String()
+	if err := os.WriteFile(rootDoc, []byte(content), 0o644); err != nil {
+		return err
+	}
+
+	workDoc := filepath.Join(outDir, "ddx_work.md")
+	raw, err = os.ReadFile(workDoc)
+	if err != nil {
+		return err
+	}
+	content = strings.ReplaceAll(string(raw), "ddx agent execute-bead <id> --from HEAD", "ddx try <id> --from HEAD")
+	if err := os.WriteFile(workDoc, []byte(content), 0o644); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 // defaultOutDir returns the default output directory relative to the location
