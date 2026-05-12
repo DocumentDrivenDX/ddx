@@ -1,3 +1,3 @@
-The DDx toolkit enables sophisticated autonomous behaviors that solve complex problems across environments.
+This enables better collaboration across the workflow.
 
-The system provides powerful commands that create productive ways of managing large development projects.
+The release supports faster reviews when teams need a concrete handoff.

@@ -1,35 +1,61 @@
 mode: technical
 rules:
-  - id: prose.generic.claims
+  - id: prose.claim.unsupported
     severity: warning
     contains_any:
       - robust
       - comprehensive
       - seamless
-      - industry-leading
       - world-class
+      - industry-leading
       - best-in-class
       - cutting-edge
-      - better alignment
-      - better pattern
-      - better tools
+    rationale: The sentence uses unsupported promotional claims such as "robust", "comprehensive", and "seamless" instead of precise behavior.
+    suggested_edit: Replace the claim with a concrete description of the actual change and its measured effect.
+  - id: prose.ai_slop.polish
+    severity: warning
+    contains_any:
       - complex problems
-      - cutting edge
       - powerful commands
+      - powerful automation
       - productive ways
+      - seamless experience
       - sophisticated autonomous
       - sophisticated control flow
       - sophisticated multi-agent
       - true power
-    rationale: The sentence uses unsupported promotional claims such as "robust", "comprehensive", and "seamless" instead of precise behavior.
-    suggested_edit: Replace the claim with a concrete description of the actual change and its measured effect.
-  - id: prose.generic.importance
+    rationale: The sentence uses polished but empty AI-default phrasing instead of concrete detail.
+    suggested_edit: Replace the polished phrasing with specific behavior, constraints, or evidence.
+  - id: prose.filler.transition
+    severity: warning
+    contains_any:
+      - to be clear
+      - first, we should note
+      - in conclusion
+      - it is important to note
+      - for clarity
+      - that said
+    rationale: The transition adds throat-clearing instead of information.
+    suggested_edit: Remove the transition or replace it with a specific point.
+  - id: prose.specificity.actor_action
+    severity: warning
+    contains_any:
+      - enables
+      - supports
+      - streamlines
+    rationale: The sentence says something enables or supports work without naming the actor, action, artifact, or boundary.
+    suggested_edit: Name the actor, action, artifact, or boundary that makes the statement concrete.
+  - id: prose.cost.filler
     severity: warning
     contains_any:
       - very important
+      - in order to
+      - effectively
+      - begin to
+      - make the experience better
     rationale: The phrase "very important" asserts significance without naming the technical consequence.
-    suggested_edit: State the specific consequence, invariant, or user-visible impact instead of importance language.
-  - id: prose.generic.repeated_opening
+    suggested_edit: Remove the filler or replace it with the concrete consequence.
+  - id: prose.structure.repeated_opening
     severity: warning
     kind: repeated_opening
     rationale: The same opening sentence is repeated, which reads like filler rather than new information.

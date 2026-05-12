@@ -170,7 +170,7 @@ func TestDocProseCorpus_NegativeStructureCasesStayQuiet(t *testing.T) {
 		})
 	}
 
-	required := []string{"path", "command", "table", "code-span", "frontmatter", "id"}
+	required := []string{"path", "command", "table", "code-span", "frontmatter", "fenced-block", "id"}
 	for _, cat := range required {
 		found := false
 		for name := range seenCategories {

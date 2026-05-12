@@ -267,7 +267,7 @@ func TestBeadReviewCommandWithProseIncludesAdvisoryFindings(t *testing.T) {
 	if !strings.Contains(out, "prose_findings") {
 		t.Fatalf("expected prose findings output contract, got:\n%s", out)
 	}
-	if !strings.Contains(out, "prose.generic.claims") {
+	if !strings.Contains(out, "prose.claim.unsupported") {
 		t.Fatalf("expected prose fixture findings in output, got:\n%s", out)
 	}
 }

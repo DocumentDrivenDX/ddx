@@ -40,7 +40,7 @@ persona_bindings: {}
 	output, err := env.RunCommand("doc", "prose", "--changed")
 	require.NoError(t, err)
 
-	if !strings.Contains(output, "docs/helix/guide.md:3 [advisory] prose.generic.claims") {
+	if !strings.Contains(output, "docs/helix/guide.md:3 [advisory] prose.claim.unsupported") {
 		t.Fatalf("expected advisory prose finding, got: %q", output)
 	}
 	if !strings.Contains(output, "rationale:") || !strings.Contains(output, "suggested edit:") {
@@ -80,7 +80,7 @@ In the next phase, the team will focus on the most important work and other stra
 	if !strings.Contains(output, "prose.planning.vagueness") {
 		t.Fatalf("expected planning vagueness finding, got: %q", output)
 	}
-	if strings.Contains(output, "prose.generic.claims") {
+	if strings.Contains(output, "prose.claim.unsupported") {
 		t.Fatalf("did not expect technical-mode generic claims finding, got: %q", output)
 	}
 }

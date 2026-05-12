@@ -2,7 +2,7 @@
   {
     "file": "input.md",
     "line": 3,
-    "rule_id": "prose.generic.claims",
+    "rule_id": "prose.claim.unsupported",
     "severity": "warning",
     "rationale": "The sentence uses unsupported promotional claims such as \"robust\", \"comprehensive\", and \"seamless\" instead of precise behavior.",
     "suggested_edit": "Replace the claim with a concrete description of the actual change and its measured effect."
@@ -10,17 +10,33 @@
   {
     "file": "input.md",
     "line": 5,
-    "rule_id": "prose.generic.importance",
+    "rule_id": "prose.cost.filler",
     "severity": "warning",
     "rationale": "The phrase \"very important\" asserts significance without naming the technical consequence.",
-    "suggested_edit": "State the specific consequence, invariant, or user-visible impact instead of importance language."
+    "suggested_edit": "Remove the filler or replace it with the concrete consequence."
   },
   {
     "file": "input.md",
     "line": 7,
-    "rule_id": "prose.generic.repeated_opening",
+    "rule_id": "prose.filler.transition",
+    "severity": "warning",
+    "rationale": "The transition adds throat-clearing instead of information.",
+    "suggested_edit": "Remove the transition or replace it with a specific point."
+  },
+  {
+    "file": "input.md",
+    "line": 7,
+    "rule_id": "prose.structure.repeated_opening",
     "severity": "warning",
     "rationale": "The same opening sentence is repeated, which reads like filler rather than new information.",
     "suggested_edit": "Keep the first instance and replace the duplicate with a distinct sentence that adds new information."
+  },
+  {
+    "file": "input.md",
+    "line": 9,
+    "rule_id": "prose.filler.transition",
+    "severity": "warning",
+    "rationale": "The transition adds throat-clearing instead of information.",
+    "suggested_edit": "Remove the transition or replace it with a specific point."
   }
 ]
