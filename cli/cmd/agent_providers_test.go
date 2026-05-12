@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -43,6 +44,9 @@ func newOAIModelsStub(t *testing.T, modelIDs []string) *httptest.Server {
 func makeProviderTestDir(t *testing.T, agentCfgYAML string) string {
 	t.Helper()
 	dir := t.TempDir()
+	t.Cleanup(func() {
+		time.Sleep(5 * time.Second)
+	})
 
 	// Isolate from ~/.config/fizeau/config.yaml.
 	t.Setenv("HOME", dir)
