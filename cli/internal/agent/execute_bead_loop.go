@@ -65,6 +65,11 @@ type ExecuteBeadLoopRuntime struct {
 	// report is still appended for operator visibility, but the stop itself is
 	// classified through work.StopConditionBudget.
 	BudgetStop func() (work.StopDecision, ExecuteBeadReport, bool)
+	// BinaryRefreshCheck, when non-nil, is checked before selecting the next
+	// bead. A true result means the caller has started a replacement worker
+	// with equivalent arguments and this loop should exit before claiming work.
+	// Errors are logged and fail open so update-probing never blocks the queue.
+	BinaryRefreshCheck func(ctx context.Context) (bool, error)
 	// Mode and IdleInterval are the runtime loop intent. Once and
 	// PollInterval remain for older tests/callers but production entry points
 	// should set Mode and IdleInterval directly.
@@ -858,6 +863,19 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				}
 				setExit("Preflight", "preflight_failed")
 				return result, checkErr
+			}
+		}
+		if runtime.BinaryRefreshCheck != nil {
+			refreshed, refreshErr := runtime.BinaryRefreshCheck(ctx)
+			if refreshErr != nil {
+				if runtime.Log != nil {
+					_, _ = fmt.Fprintf(runtime.Log, "binary refresh check failed: %v; continuing\n", refreshErr)
+				}
+				emit("loop.binary_refresh_check_error", map[string]any{"error": refreshErr.Error()})
+			} else if refreshed {
+				setExit("BinaryRefresh", "binary_refresh")
+				emit("loop.binary_refresh", map[string]any{"reason": "installed_binary_changed"})
+				return result, nil
 			}
 		}
 
