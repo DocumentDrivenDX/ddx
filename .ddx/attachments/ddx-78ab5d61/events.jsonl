@@ -1,0 +1,2 @@
+{"actor":"erik","body":"{\"detail\":\"description drops commitment \\\"non_scope:No readiness policy changes; ddx-91898f19 owns warn/proceed versus park.\\\"\",\"intake_outcome\":\"operator_required\"}","created_at":"2026-05-12T08:10:44.005494821Z","kind":"intake.blocked","source":"ddx agent execute-loop","summary":"operator_required"}
+{"actor":"erik","body":"Restored the missing non-scope contract line; retrying with unchanged acceptance.","created_at":"2026-05-12T12:22:53.731312347Z","kind":"needs_human_resolved","source":"ddx bead human resolve","summary":"action=retry"}
