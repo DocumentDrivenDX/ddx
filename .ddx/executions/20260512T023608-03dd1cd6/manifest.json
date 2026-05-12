@@ -1,0 +1,51 @@
+{
+  "attempt_id": "20260512T023608-03dd1cd6",
+  "bead_id": "ddx-42741260",
+  "base_rev": "dbd00a1596f8e820b74a1f8883f2b60860f2258f",
+  "created_at": "2026-05-12T02:36:14.687360755Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-42741260",
+    "title": "agent/chaos: cover concurrent-drain landing under shared-main contention",
+    "description": "PROBLEM\n  After sister bead ddx-1f774edf removes network I/O from Land(), the\n  drain becomes safe for external parallelism (multiple ddx work --once\n  shells running concurrently). However, parallel workers will land their\n  own bead's worktree against the same local main and may produce\n  overlapping changes — multi-worker conflict frequency on Land()'s\n  git merge step is unmeasured. The 2026-05-09 plan-review opus\n  self-review identified this as a key risk: under high parallelism,\n  preservation (resource_exhausted to iteration ref) could become the\n  common path rather than the exception, defeating the gain.\n\n  This bead adds chaos coverage for the parallel-landing case and a\n  sentinel that fails if the preservation rate exceeds an acceptable\n  threshold under simulated load.\n\nCURRENT STATE\n  - cli/internal/bead/chaos_test.go and chaos2_test.go cover\n    bead.Store-layer concurrency only.\n  - cli/internal/agent/tracker_lock_test.go covers single-worker\n    semantics.\n  - Sister bead ddx-c019e48a covers stale-lock recovery for a single\n    worker's local-only land. It does not cover N\u003e1 workers landing in\n    parallel.\n  - No test verifies what happens when worker A lands branch-A into\n    main, then worker B (whose worktree was branched from pre-A main)\n    tries to land branch-B with overlapping changes.\n\nPROPOSED FIX\n  Add three chaos tests in cli/internal/agent/landing_chaos_test.go (new\n  file, or extend tracker_lock_test.go):\n\n  1. TestConcurrentLand_NonOverlappingChanges_BothLandClean:\n     - Spawn 3 worker goroutines, each with its own bead/worktree\n       touching disjoint files.\n     - All three call Land() concurrently.\n     - Assert: all three land on local main, in some order; no\n       preservation; main contains all three commits.\n\n  2. TestConcurrentLand_OverlappingChanges_OneLandsRestPreserve:\n     - Spawn 3 worker goroutines, each touching the same file with\n       different content.\n     - All three call Land() concurrently.\n     - Assert: exactly one lands; the other two are preserved to\n       iteration refs; the preserved branches are intact and contain\n       their bead's full work.\n\n  3. TestConcurrentLand_PreservationRateUnderLoadIsBounded:\n     - Spawn N worker goroutines (N=4) over M cycles (M=10), each with\n       a randomized mix of overlapping/non-overlapping changes.\n     - Assert: preservation rate is \u003c 50% (i.e., at least half of\n       attempts land cleanly). This is a smoke check that parallel\n       drain is viable, not a hard SLA.\n\n  Use deterministic timing (channels or synctest), not wall-clock.\n  Use testutils.NewFixtureRepo or t.TempDir() per test.\n  Depends on sister bead ddx-1f774edf so the lock holds are sub-second\n  (otherwise the test exercises today's contention bug, not the\n  parallel-landing concern).\n\nNON-SCOPE\n  - Multi-process chaos (these are goroutine-level concurrent landings\n    using fake LandingGitOps that mirror the real merge logic).\n  - Coordinating workers via a \"land queue\" abstraction (separate\n    architectural concern; this bead establishes the baseline measurement\n    against which any such work would be evaluated).\n\nINTERSECTIONS\n  - Sister bead ddx-1f774edf (depends on it landing first).\n  - Sister bead (just-filed) \"agent/lock: instrument bead.Store\n    WithLock wait time\" — its metrics are referenced by these tests'\n    assertions if available.\n  - Sister bead ddx-c019e48a complements this for the single-worker\n    stale-lock case.",
+    "acceptance": "1. cli/internal/agent/landing_chaos_test.go (new file or extending tracker_lock_test.go) contains TestConcurrentLand_NonOverlappingChanges_BothLandClean asserting all parallel non-conflicting lands succeed.\n2. The same file contains TestConcurrentLand_OverlappingChanges_OneLandsRestPreserve asserting exactly one of three conflicting lands succeeds; the other two preserve correctly.\n3. The same file contains TestConcurrentLand_PreservationRateUnderLoadIsBounded with N=4 workers over M=10 cycles, asserting preservation rate \u003c 50%.\n4. Tests use deterministic timing (channels or synctest) and per-test sandbox via testutils.NewFixtureRepo or t.TempDir().\n5. cd cli \u0026\u0026 go test ./internal/agent/... -run 'TestConcurrentLand_' green.\n6. lefthook run pre-commit passes.",
+    "labels": [
+      "phase:6",
+      "area:agent",
+      "area:lock",
+      "kind:test",
+      "prevention"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T02:35:01Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "4014696",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no viable routing candidate: 3 candidates rejected\"}",
+          "created_at": "2026-05-12T02:36:07.901548108Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T02:35:01.729089895Z",
+      "queue-rank": "8"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260512T023608-03dd1cd6",
+    "prompt": ".ddx/executions/20260512T023608-03dd1cd6/prompt.md",
+    "manifest": ".ddx/executions/20260512T023608-03dd1cd6/manifest.json",
+    "result": ".ddx/executions/20260512T023608-03dd1cd6/result.json",
+    "checks": ".ddx/executions/20260512T023608-03dd1cd6/checks.json",
+    "usage": ".ddx/executions/20260512T023608-03dd1cd6/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-42741260-20260512T023608-03dd1cd6"
+  },
+  "prompt_sha": "06fe3ac44e6e17773fc69a7f0978b8fe540c6a3e29635a5c863550bf8ac8e481"
+}
