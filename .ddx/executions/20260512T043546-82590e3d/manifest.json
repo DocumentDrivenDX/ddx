@@ -1,0 +1,62 @@
+{
+  "attempt_id": "20260512T043546-82590e3d",
+  "bead_id": "ddx-cf8fb41c",
+  "base_rev": "70018bfad16404cf2344595c0fb57186f67312dc",
+  "created_at": "2026-05-12T04:35:56.50063816Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-cf8fb41c",
+    "title": "docprose: port initial rules to Vale styles",
+    "description": "PROBLEM\nThe DDx prose checker needs Vale-backed rules for unsupported claims, AI-slop polish, filler, missing actor/action, repeated openings, token cost, and vocabulary. Without tuned rules, `ddx doc prose` cannot improve documentation clarity or token cost reliably.\n\nROOT CAUSE\ndocs/helix/02-design/plan-2026-05-06-prose-quality-integration.md:85-107 defines the initial rule pack and implementation notes, but the Vale style files and corpus golden cases are not implemented.\n\nSMART JUSTIFICATION: Rule semantics are high-judgment work. The bead must balance catching common model-generated prose against preserving precise technical text, commands, IDs, tables, and legitimate density.\n\nPROPOSED FIX\n- Add Vale style files for the initial DDx rule families.\n- Add corpus golden cases for unsupported claims, AI slop, filler transitions, missing actor/action, repeated openings, token-cost candidates, and vocabulary substitution.\n- Use Vale scopes/token ignores for Markdown structure.\n- Keep raw Vale messages short and leave DDx rationale/suggested edits to normalization.\n\nNON-SCOPE\n- Do not switch `ddx doc prose` to Vale yet.\n- Do not wire workflow hooks.\n- Do not make findings blocking.\n\nDEPS\nDepends on the corpus harness so rule behavior is measured against positives and negatives.",
+    "acceptance": "1. `TestDocProseValeRules_UnsupportedClaim` covers `prose.claim.unsupported`.\n2. `TestDocProseValeRules_AISlop` covers `prose.ai_slop.polish`.\n3. `TestDocProseValeRules_TokenCost` covers `prose.cost.filler`.\n4. `TestDocProseValeRules_StructureIgnores` proves code spans, fenced blocks, paths, commands, frontmatter, and DDx IDs are not flagged unless explicitly positive.\n5. Vale 3.13.0 validates the packaged rule files.\n6. cd cli \u0026\u0026 go test ./internal/docprose/... ./internal/checks/... green.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-ccda7a32",
+    "labels": [
+      "phase:2",
+      "area:docprose",
+      "area:checks",
+      "kind:implementation",
+      "prose-quality",
+      "adr:025",
+      "spec:PLAN-2026-05-06-prose-quality-integration",
+      "tier:smart"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T04:35:04Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "654662",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"bead uses tier:smart but has no SMART JUSTIFICATION section\",\"score\":0,\"suggested_fixes\":[\"bead uses tier:smart but has no SMART JUSTIFICATION section\"],\"waivers_applied\":null}",
+          "created_at": "2026-05-12T04:35:45.153572416Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T04:35:04.362687702Z",
+      "spec-id": "PLAN-2026-05-06-prose-quality-integration"
+    }
+  },
+  "governing": [
+    {
+      "id": "PLAN-2026-05-06-prose-quality-integration",
+      "path": "docs/helix/02-design/plan-2026-05-06-prose-quality-integration.md",
+      "title": "Plan: Prose Quality Integration with Vale"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260512T043546-82590e3d",
+    "prompt": ".ddx/executions/20260512T043546-82590e3d/prompt.md",
+    "manifest": ".ddx/executions/20260512T043546-82590e3d/manifest.json",
+    "result": ".ddx/executions/20260512T043546-82590e3d/result.json",
+    "checks": ".ddx/executions/20260512T043546-82590e3d/checks.json",
+    "usage": ".ddx/executions/20260512T043546-82590e3d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-cf8fb41c-20260512T043546-82590e3d"
+  },
+  "prompt_sha": "1ff47819322166ab8ffaf4f3a8b23887f435a590449a03dedc73c179a2ac5189"
+}
