@@ -125,12 +125,13 @@ func NewPreDispatchLintHook(projectRoot string, store BeadReader, rcfg config.Re
 			return LintResult{}, &LintHookError{Kind: LintHookErrorKindDispatchFailure, Err: err}
 		}
 
+		profileOverride, clearRoutingPins := lifecycleHookRouting(ctx, projectRoot, svc, runner, rcfg, SelectCheapestProfile)
 		result, err := dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, AgentRunRuntime{
 			Prompt:           prompt,
 			WorkDir:          projectRoot,
 			PromptSource:     "bead-lifecycle-lint",
-			ProfileOverride:  selectProfileForDispatch(ctx, projectRoot, svc, runner, SelectCheapestProfile),
-			ClearRoutingPins: true,
+			ProfileOverride:  profileOverride,
+			ClearRoutingPins: clearRoutingPins,
 			ClearProfile:     true,
 			ClearMinPower:    true,
 			ClearMaxPower:    true,

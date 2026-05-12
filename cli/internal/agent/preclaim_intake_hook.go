@@ -99,11 +99,11 @@ type preClaimReadinessWaiver struct {
 // using the repository's triage prompt and returns one of the typed intake
 // outcomes so the loop can decide whether to claim or skip the candidate.
 //
-// The hook uses the normal service execution path but clears hidden
-// profile/power bounds so auxiliary readiness calls do not create DDx-side
-// routing pins. Route failures are infrastructure failures, not bead-readiness
-// decisions, so they return intake_error and let the loop use its fail-open
-// readiness path.
+// The hook uses the normal service execution path. Unpinned workers get the
+// lifecycle hook's strongest-profile hint; explicitly pinned workers keep their
+// operator route pins. Route failures are infrastructure failures, not
+// bead-readiness decisions, so they return intake_error and let the loop use
+// its fail-open readiness path.
 func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner) func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 	return func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 		if ctx != nil {
@@ -131,12 +131,13 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: build prompt: %w", err)
 		}
 
+		profileOverride, clearRoutingPins := lifecycleHookRouting(ctx, projectRoot, svc, runner, rcfg, SelectStrongestProfile)
 		runtime := AgentRunRuntime{
 			Prompt:           prompt,
 			WorkDir:          projectRoot,
 			PromptSource:     PreClaimIntakePromptSource,
-			ProfileOverride:  selectProfileForDispatch(ctx, projectRoot, svc, runner, SelectStrongestProfile),
-			ClearRoutingPins: true,
+			ProfileOverride:  profileOverride,
+			ClearRoutingPins: clearRoutingPins,
 			ClearProfile:     true,
 			ClearMinPower:    true,
 			ClearMaxPower:    true,
@@ -151,6 +152,20 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 
 		return decodePreClaimIntakePayloadResult(payload)
 	}
+}
+
+func lifecycleHookRouting(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, selector func(ProfileSnapshot) string) (string, bool) {
+	if lifecycleHookHasRoutePin(rcfg) {
+		return "", false
+	}
+	return selectProfileForDispatch(ctx, projectRoot, svc, runner, selector), true
+}
+
+func lifecycleHookHasRoutePin(rcfg config.ResolvedConfig) bool {
+	return strings.TrimSpace(rcfg.Harness()) != "" ||
+		strings.TrimSpace(rcfg.Provider()) != "" ||
+		strings.TrimSpace(rcfg.Model()) != "" ||
+		strings.TrimSpace(rcfg.ModelRef()) != ""
 }
 
 func dispatchPreClaimIntakePayload(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (string, error) {

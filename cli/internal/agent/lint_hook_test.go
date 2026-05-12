@@ -80,7 +80,7 @@ func newLintHookTestStore(t *testing.T, root string) (*bead.Store, *bead.Bead) {
 
 func lintHookTestConfig() config.ResolvedConfig {
 	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{})
-	return cfg.Resolve(config.CLIOverrides{Harness: "codex"})
+	return cfg.Resolve(config.CLIOverrides{})
 }
 
 func TestLintHook_UsesRunnerLibrary(t *testing.T) {
@@ -305,6 +305,36 @@ func TestPreDispatchLintHook_DispatchesWithCheapestProfile(t *testing.T) {
 	assert.Empty(t, svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
 	assert.Empty(t, svc.lastReq.Model)
+	assert.Zero(t, svc.lastReq.MinPower, "lint dispatch must not inherit implementation min_power pins")
+	assert.Zero(t, svc.lastReq.MaxPower, "lint dispatch must not inherit implementation max_power pins")
+}
+
+func TestPreDispatchLintHook_PreservesExplicitRoutingPins(t *testing.T) {
+	root := newLintHookTestRoot(t)
+	store, b := newLintHookTestStore(t, root)
+
+	svc := &passthroughTestService{
+		executeEvents: []agentlib.ServiceEvent{
+			{
+				Type: "final",
+				Data: []byte(`{"status":"success","final_text":"{\"score\":8,\"rationale\":\"pins intact\",\"suggested_fixes\":[],\"waivers_applied\":[]}"}`),
+			},
+		},
+	}
+
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{
+		Harness: "codex",
+		Model:   "gpt-5.4-mini",
+	})
+
+	hook := NewPreDispatchLintHook(root, store, rcfg, svc, nil)
+	got, err := hook(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 8, got.Score)
+	assert.Equal(t, "codex", svc.lastReq.Harness)
+	assert.Empty(t, svc.lastReq.Provider)
+	assert.Equal(t, "gpt-5.4-mini", svc.lastReq.Model)
+	assert.Empty(t, svc.lastReq.Policy)
 	assert.Zero(t, svc.lastReq.MinPower, "lint dispatch must not inherit implementation min_power pins")
 	assert.Zero(t, svc.lastReq.MaxPower, "lint dispatch must not inherit implementation max_power pins")
 }
