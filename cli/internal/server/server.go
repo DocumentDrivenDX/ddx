@@ -552,6 +552,111 @@ func isTrusted(r *http.Request) bool {
 	return isLocalhost(r)
 }
 
+const (
+	federationOriginIdentityHeader      = "X-DDx-Origin-Identity"
+	federationCoordinatorIdentityHeader = "X-DDx-Coordinator-Identity"
+)
+
+// federationRequestIdentity returns the peer identity attested at the
+// transport edge. ts-net callers use the injected X-Tailscale-Node header;
+// loopback callers fall back to a localhost:<remote-addr> actor string.
+func federationRequestIdentity(r *http.Request) string {
+	if node := strings.TrimSpace(r.Header.Get("X-Tailscale-Node")); node != "" {
+		return node
+	}
+	if user := strings.TrimSpace(r.Header.Get("X-Tailscale-User")); user != "" {
+		return user
+	}
+	if isLocalhost(r) && r.RemoteAddr != "" {
+		return "localhost:" + r.RemoteAddr
+	}
+	return ""
+}
+
+// federationSelfIdentity returns the server's attested identity for
+// coordinator-forwarded mutations.
+func (s *Server) federationSelfIdentity() string {
+	if name := strings.TrimSpace(s.state.Node.Name); name != "" {
+		return name
+	}
+	return strings.TrimSpace(s.state.Node.ID)
+}
+
+// federationIdentityKnown reports whether identity is a registered federation
+// peer or the server's own attested identity.
+func (s *Server) federationIdentityKnown(identity string) bool {
+	identity = strings.TrimSpace(identity)
+	if identity == "" {
+		return false
+	}
+	if identity == s.state.Node.ID || identity == s.state.Node.Name {
+		return true
+	}
+	if s.hub == nil {
+		return false
+	}
+	s.hub.mu.Lock()
+	defer s.hub.mu.Unlock()
+	if s.hub.registry.FindSpoke(identity) != nil {
+		return true
+	}
+	for _, spoke := range s.hub.registry.Spokes {
+		if spoke.Name == identity {
+			return true
+		}
+	}
+	return false
+}
+
+// requireTrustedForwarded gates /graphql. Direct localhost / ts-net callers
+// keep the existing trusted-transport behavior. Forwarded mutations must
+// carry both attestation headers, and the spoke verifies the coordinator
+// identity against the direct peer identity observed on the socket.
+func (s *Server) requireTrustedForwarded(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		origin := strings.TrimSpace(r.Header.Get(federationOriginIdentityHeader))
+		coordinator := strings.TrimSpace(r.Header.Get(federationCoordinatorIdentityHeader))
+		if origin == "" && coordinator == "" {
+			if !isTrusted(r) {
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "graphql is localhost-only"})
+				return
+			}
+			next(w, r)
+			return
+		}
+		if origin == "" || coordinator == "" {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden: forwarded mutation requires origin and coordinator attestation"})
+			return
+		}
+		if !isTrusted(r) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden: trusted connection required for forwarded mutation"})
+			return
+		}
+		directPeer := federationRequestIdentity(r)
+		if directPeer == "" {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden: unable to verify coordinator identity"})
+			return
+		}
+		if coordinator != directPeer {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden: coordinator identity does not match peer attestation"})
+			return
+		}
+		if !s.federationIdentityKnown(coordinator) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden: untrusted coordinator identity"})
+			return
+		}
+		if strings.HasPrefix(origin, "localhost:") {
+			next(w, r)
+			return
+		}
+		if !s.federationIdentityKnown(origin) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden: untrusted origin identity"})
+			return
+		}
+		next(w, r)
+	}
+}
+
 // isLocalhostAddr parses a RemoteAddr and checks for loopback.
 func isLocalhostAddr(addr string) bool {
 	host := addr
@@ -953,8 +1058,8 @@ func (s *Server) routes() {
 	trusted("POST /mcp", s.handleMCP)
 
 	// GraphQL (gqlgen) — POST for queries/mutations, GET for WebSocket subscriptions
-	trusted("POST /graphql", s.handleGraphQLQuery)
-	trusted("GET /graphql", s.handleGraphQLQuery)
+	trusted("POST /graphql", s.requireTrustedForwarded(s.handleGraphQLQuery))
+	trusted("GET /graphql", s.requireTrustedForwarded(s.handleGraphQLQuery))
 	trusted("GET /graphiql", s.handleGraphiQL)
 	// LAYER 1 scoped GraphQL endpoint (ddx-4c51d33e). Closes the HIGH-severity
 	// DocumentByPath cross-project leak by serving each request against the
@@ -4983,12 +5088,10 @@ func containsString(ss []string, s string) bool {
 // --- GraphQL Endpoints ---
 
 func (s *Server) handleGraphQLQuery(w http.ResponseWriter, r *http.Request) {
-	// Gate /graphql on the same localhost auth that protects every /api/*
-	// handler. Without this, operators running `ddx server --addr 0.0.0.0`
-	// ship an unauthenticated GraphQL endpoint serving bead data, worker
-	// logs, mutations, and subscriptions. See opus final-gate review of
-	// ddx-02d6142d and the scope line "isTrusted() is still the gatekeeper;
-	// no auth bypass introduced".
+	// GraphQL is protected by the route wrapper plus this local guard.
+	// Direct localhost / ts-net requests stay on the existing trust path;
+	// forwarded mutations are only accepted after the attestation headers
+	// are checked by requireTrustedForwarded.
 	if !isTrusted(r) {
 		writeJSON(w, http.StatusForbidden, map[string]string{"error": "graphql is localhost-only"})
 		return

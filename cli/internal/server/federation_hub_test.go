@@ -49,6 +49,26 @@ func newHubServer(t *testing.T, allowPlainHTTP bool) *Server {
 	return s
 }
 
+func setServerIdentity(t *testing.T, s *Server, identity string) {
+	t.Helper()
+	s.state.Node.Name = identity
+	s.state.Node.ID = identity
+}
+
+func registerFederationPeer(t *testing.T, s *Server, nodeID string) {
+	t.Helper()
+	s.hub.mu.Lock()
+	defer s.hub.mu.Unlock()
+	if err := s.hub.registry.UpsertSpoke(federation.SpokeRecord{
+		NodeID: nodeID,
+		Name:   nodeID,
+		URL:    "https://" + nodeID + ":7743",
+		Status: federation.StatusActive,
+	}); err != nil {
+		t.Fatalf("register peer %q: %v", nodeID, err)
+	}
+}
+
 func decodeBody(t *testing.T, resp *http.Response, dst any) {
 	t.Helper()
 	if err := json.NewDecoder(resp.Body).Decode(dst); err != nil {
@@ -101,6 +121,7 @@ func TestFederationRoutesMountedInHubMode(t *testing.T) {
 
 func TestFederationForwardMutation_RoutesToProjectOwner(t *testing.T) {
 	s := newHubServer(t, false)
+	setServerIdentity(t, s, "coord-456")
 
 	var gotMethod string
 	var gotPath string
@@ -132,8 +153,9 @@ func TestFederationForwardMutation_RoutesToProjectOwner(t *testing.T) {
 
 	req := httptest.NewRequest(http.MethodPost, "/api/federation/projects/proj-a/graphql", bytes.NewBufferString(`{"query":"mutation { doThing }"}`))
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("X-DDx-Origin-Identity", "origin-123")
-	req.Header.Set("X-DDx-Coordinator-Identity", "coord-456")
+	req.Header.Set("X-Tailscale-Node", "origin-123")
+	req.Header.Set("X-DDx-Origin-Identity", "tampered-origin")
+	req.Header.Set("X-DDx-Coordinator-Identity", "tampered-coord")
 	req.RemoteAddr = "127.0.0.1:54321"
 
 	rec := httptest.NewRecorder()
@@ -161,6 +183,106 @@ func TestFederationForwardMutation_RoutesToProjectOwner(t *testing.T) {
 	}
 	if body := rec.Body.String(); body != `{"data":{"forwarded":true}}` {
 		t.Fatalf("response body = %s", body)
+	}
+}
+
+func TestRequireTrusted_ForwardedMutation_AuthorizesOriginAndCoordinator(t *testing.T) {
+	s := newHubServer(t, false)
+	setServerIdentity(t, s, "coord-456")
+	registerFederationPeer(t, s, "origin-123")
+
+	var called bool
+	handler := s.requireTrustedForwarded(func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.WriteHeader(http.StatusOK)
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":"mutation { __typename }"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tailscale-Node", "coord-456")
+	req.Header.Set("X-DDx-Origin-Identity", "origin-123")
+	req.Header.Set("X-DDx-Coordinator-Identity", "coord-456")
+	req.RemoteAddr = "127.0.0.1:54321"
+
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+	if !called {
+		t.Fatal("handler was not called")
+	}
+}
+
+func TestRequireTrusted_ForwardedMutation_OriginUntrusted(t *testing.T) {
+	s := newHubServer(t, false)
+	setServerIdentity(t, s, "coord-456")
+
+	handler := s.requireTrustedForwarded(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be called")
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":"mutation { __typename }"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tailscale-Node", "coord-456")
+	req.Header.Set("X-DDx-Origin-Identity", "untrusted-origin")
+	req.Header.Set("X-DDx-Coordinator-Identity", "coord-456")
+	req.RemoteAddr = "127.0.0.1:54321"
+
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRequireTrusted_ForwardedMutation_CoordinatorUntrusted(t *testing.T) {
+	s := newHubServer(t, false)
+	setServerIdentity(t, s, "coord-456")
+	registerFederationPeer(t, s, "origin-123")
+
+	handler := s.requireTrustedForwarded(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be called")
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":"mutation { __typename }"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tailscale-Node", "coord-456")
+	req.Header.Set("X-DDx-Origin-Identity", "origin-123")
+	req.Header.Set("X-DDx-Coordinator-Identity", "rewritten-coord")
+	req.RemoteAddr = "127.0.0.1:54321"
+
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestRequireTrusted_ForwardedMutation_HeaderRewriteAttempt(t *testing.T) {
+	s := newHubServer(t, false)
+	setServerIdentity(t, s, "coord-456")
+	registerFederationPeer(t, s, "origin-123")
+
+	handler := s.requireTrustedForwarded(func(w http.ResponseWriter, r *http.Request) {
+		t.Fatal("handler should not be called")
+	})
+
+	req := httptest.NewRequest(http.MethodPost, "/graphql", strings.NewReader(`{"query":"mutation { __typename }"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-Tailscale-Node", "coord-456")
+	req.Header.Set("X-DDx-Origin-Identity", "tampered-origin")
+	req.Header.Set("X-DDx-Coordinator-Identity", "coord-456")
+	req.RemoteAddr = "127.0.0.1:54321"
+
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Fatalf("status = %d, body=%s", rec.Code, rec.Body.String())
 	}
 }
 

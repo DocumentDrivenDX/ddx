@@ -353,6 +353,16 @@ func (s *Server) handleFederationForwardMutation(w http.ResponseWriter, r *http.
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": "read body: " + err.Error()})
 		return
 	}
+	originIdentity := federationRequestIdentity(r)
+	if originIdentity == "" {
+		writeJSON(w, http.StatusForbidden, map[string]string{"error": "forbidden: unable to verify origin identity"})
+		return
+	}
+	coordinatorIdentity := s.federationSelfIdentity()
+	if coordinatorIdentity == "" {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "federation coordinator identity unavailable"})
+		return
+	}
 
 	s.hub.mu.Lock()
 	target, routeErr := federation.RouteMutationToProjectOwner(s.hub.registry, projectID)
@@ -367,8 +377,13 @@ func (s *Server) handleFederationForwardMutation(w http.ResponseWriter, r *http.
 		if len(values) == 0 {
 			continue
 		}
+		if strings.EqualFold(k, federationOriginIdentityHeader) || strings.EqualFold(k, federationCoordinatorIdentityHeader) {
+			continue
+		}
 		headers[k] = strings.Join(values, ",")
 	}
+	headers[federationOriginIdentityHeader] = originIdentity
+	headers[federationCoordinatorIdentityHeader] = coordinatorIdentity
 
 	resp, err := federation.NewFanOutClient().ForwardMutation(r.Context(), target, body, headers)
 	if err != nil {
