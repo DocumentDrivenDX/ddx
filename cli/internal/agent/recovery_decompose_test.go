@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -208,4 +209,43 @@ func TestPreClaimDecompositionHook_ParsesAgentSplit(t *testing.T) {
 	assert.Len(t, decomp.ACMap, 2)
 	assert.Contains(t, gotPrompt, "MODE: preclaim-decompose")
 	assert.Contains(t, gotPrompt, "ac_map")
+}
+
+func TestPreClaimDecompositionHook_FallsBackWhenAgentOutputEmpty(t *testing.T) {
+	store := bead.NewStore(t.TempDir())
+	require.NoError(t, store.Init())
+
+	b := &bead.Bead{
+		ID:          "ddx-preclaim-fallback",
+		Title:       "fallback split test",
+		Description: "PROBLEM\nToo large.\n\nROOT CAUSE\ncli/internal/agent/foo.go:42.\n",
+		Acceptance: strings.Join([]string{
+			"1. TestOne covers first slice",
+			"2. TestTwo covers second slice",
+			"3. TestThree covers third slice",
+			"4. TestFour covers fourth slice",
+			"5. cd cli && go test ./internal/agent/... passes",
+			"6. lefthook run pre-commit passes",
+		}, "\n"),
+		Labels: []string{"phase:iterate", "area:agent"},
+	}
+	require.NoError(t, store.Create(b))
+
+	runner := reframeRunnerFunc(func(opts RunArgs) (*Result, error) {
+		return &Result{ExitCode: 0, Output: ""}, nil
+	})
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+	hook := NewPreClaimDecompositionHook(store, runner, rcfg, t.TempDir())
+
+	decomp, err := hook(context.Background(), b.ID)
+	require.NoError(t, err)
+	require.NotNil(t, decomp)
+	assert.Len(t, decomp.Children, 3)
+	assert.Len(t, decomp.ACMap, 6)
+	assert.Contains(t, decomp.Rationale, "deterministic fallback split")
+	for _, child := range decomp.Children {
+		assert.Contains(t, child.Description, "PROBLEM")
+		assert.Contains(t, child.Labels, "decomposed")
+	}
 }

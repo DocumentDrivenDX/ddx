@@ -72,6 +72,9 @@ func runPreClaimDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runn
 		if tctx.Err() != nil {
 			return nil, tctx.Err()
 		}
+		if fallback, fallbackErr := fallbackPreClaimDecomposition(b, fmt.Sprintf("dispatch error: %s", err.Error())); fallbackErr == nil {
+			return fallback, nil
+		}
 		return nil, fmt.Errorf("decomposer: dispatch: %w", err)
 	}
 	output := strings.TrimSpace(result.CondensedOutput)
@@ -79,13 +82,22 @@ func runPreClaimDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runn
 		output = strings.TrimSpace(result.Output)
 	}
 	if output == "" {
+		if fallback, fallbackErr := fallbackPreClaimDecomposition(b, "empty output"); fallbackErr == nil {
+			return fallback, nil
+		}
 		return nil, fmt.Errorf("decomposer: empty output")
 	}
 	decomp, ok := parsePreClaimDecompositionOutput(output)
 	if !ok {
+		if fallback, fallbackErr := fallbackPreClaimDecomposition(b, "invalid output"); fallbackErr == nil {
+			return fallback, nil
+		}
 		return nil, fmt.Errorf("decomposer: invalid output")
 	}
 	if err := validatePreClaimDecomposition(decomp); err != nil {
+		if fallback, fallbackErr := fallbackPreClaimDecomposition(b, err.Error()); fallbackErr == nil {
+			return fallback, nil
+		}
 		return nil, err
 	}
 	return decomp, nil
@@ -399,4 +411,162 @@ func validatePreClaimDecomposition(decomp *PreClaimDecomposition) error {
 	}
 	decomp.Rationale = strings.TrimSpace(decomp.Rationale)
 	return nil
+}
+
+func fallbackPreClaimDecomposition(b *bead.Bead, reason string) (*PreClaimDecomposition, error) {
+	items := numberedAcceptanceItems(b.Acceptance)
+	if len(items) == 0 {
+		items = []string{
+			"Implement the first bounded slice of the parent bead.",
+			"Implement the remaining bounded slice of the parent bead.",
+		}
+	}
+	childCount := 2
+	if len(items) >= 12 {
+		childCount = 5
+	} else if len(items) >= 9 {
+		childCount = 4
+	} else if len(items) >= 5 {
+		childCount = 3
+	}
+	if childCount > len(items) {
+		childCount = len(items)
+	}
+	if childCount < 1 {
+		return nil, fmt.Errorf("fallback decomposer: no child scopes")
+	}
+
+	chunks := chunkStrings(items, childCount)
+	children := make([]PreClaimDecompositionChild, 0, len(chunks))
+	acMap := make([]ACMapEntry, 0, len(items))
+	parentSummary := clampForPrompt(strings.TrimSpace(b.Description), 2400)
+	if parentSummary == "" {
+		parentSummary = strings.TrimSpace(b.Title)
+	}
+	baseLabels := append([]string(nil), b.Labels...)
+	baseLabels = appendUniqueLabel(baseLabels, "decomposed")
+	for i, chunk := range chunks {
+		if len(chunk) == 0 {
+			continue
+		}
+		title := fallbackChildTitle(b.Title, i+1)
+		description := fallbackChildDescription(b, parentSummary, chunk, i+1, len(chunks))
+		acceptance := fallbackChildAcceptance(chunk, b.Acceptance)
+		children = append(children, PreClaimDecompositionChild{
+			Title:       title,
+			Description: description,
+			Acceptance:  acceptance,
+			Labels:      append([]string(nil), baseLabels...),
+		})
+		for _, item := range chunk {
+			acMap = append(acMap, ACMapEntry{
+				ParentAC: item,
+				Coverage: fmt.Sprintf("covered by child %d: %s", i+1, title),
+			})
+		}
+	}
+	if len(children) == 0 {
+		return nil, fmt.Errorf("fallback decomposer: no child scopes")
+	}
+	return &PreClaimDecomposition{
+		Children:  children,
+		ACMap:     acMap,
+		Rationale: "deterministic fallback split after agent decomposer returned " + strings.TrimSpace(reason),
+	}, nil
+}
+
+func numberedAcceptanceItems(acceptance string) []string {
+	lines := strings.Split(acceptance, "\n")
+	items := make([]string, 0, len(lines))
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		dot := strings.Index(trimmed, ".")
+		if dot <= 0 {
+			continue
+		}
+		prefix := trimmed[:dot]
+		if _, err := fmt.Sscanf(prefix, "%d", new(int)); err != nil {
+			continue
+		}
+		item := strings.TrimSpace(trimmed[dot+1:])
+		if item != "" {
+			items = append(items, item)
+		}
+	}
+	return items
+}
+
+func chunkStrings(items []string, chunks int) [][]string {
+	if chunks <= 0 {
+		return nil
+	}
+	out := make([][]string, 0, chunks)
+	for i := 0; i < chunks; i++ {
+		start := i * len(items) / chunks
+		end := (i + 1) * len(items) / chunks
+		out = append(out, items[start:end])
+	}
+	return out
+}
+
+func fallbackChildTitle(parentTitle string, n int) string {
+	title := strings.TrimSpace(parentTitle)
+	if len(title) > 72 {
+		title = strings.TrimSpace(title[:72])
+	}
+	if title == "" {
+		title = "decomposed bead"
+	}
+	return fmt.Sprintf("%s: part %d", title, n)
+}
+
+func fallbackChildDescription(parent *bead.Bead, parentSummary string, chunk []string, n, total int) string {
+	var sb strings.Builder
+	sb.WriteString("PROBLEM\n")
+	sb.WriteString("Parent bead ")
+	sb.WriteString(parent.ID)
+	sb.WriteString(" is too broad for one execution pass. This child owns part ")
+	sb.WriteString(fmt.Sprintf("%d of %d", n, total))
+	sb.WriteString(" of that parent scope.\n\nROOT CAUSE\n")
+	sb.WriteString(parentSummary)
+	sb.WriteString("\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n")
+	for _, item := range chunk {
+		sb.WriteString("- ")
+		sb.WriteString(item)
+		sb.WriteByte('\n')
+	}
+	sb.WriteString("\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.")
+	return sb.String()
+}
+
+func fallbackChildAcceptance(chunk []string, parentAcceptance string) string {
+	var sb strings.Builder
+	for i, item := range chunk {
+		sb.WriteString(fmt.Sprintf("%d. %s\n", i+1, item))
+	}
+	next := len(chunk) + 1
+	if !strings.Contains(parentAcceptance, "go test") {
+		sb.WriteString(fmt.Sprintf("%d. cd cli && go test ./... passes.\n", next))
+		next++
+	}
+	if !strings.Contains(parentAcceptance, "lefthook run pre-commit") {
+		sb.WriteString(fmt.Sprintf("%d. lefthook run pre-commit passes.\n", next))
+	}
+	return strings.TrimSpace(sb.String())
+}
+
+func appendUniqueLabel(labels []string, label string) []string {
+	for _, existing := range labels {
+		if existing == label {
+			return labels
+		}
+	}
+	return append(labels, label)
+}
+
+func clampForPrompt(s string, max int) string {
+	if max <= 0 || len(s) <= max {
+		return s
+	}
+	return strings.TrimSpace(s[:max]) + "\n...[truncated]"
 }
