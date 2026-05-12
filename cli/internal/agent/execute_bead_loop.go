@@ -1855,7 +1855,11 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					if cooldownDetail == "" {
 						cooldownDetail = report.Detail
 					}
-					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, cooldownStatus, cooldownDetail, report.BaseRev); err != nil {
+					// This is a queue-fairness pause, not a stale-world
+					// no-progress cooldown. Keep it wall-clock only so a
+					// locally-ahead branch does not immediately invalidate it
+					// against origin/main.
+					if err := w.Store.SetExecutionCooldown(candidate.ID, retryAfter, cooldownStatus, cooldownDetail, ""); err != nil {
 						_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 							return commitOutcomeError("SetExecutionCooldown", assignee, result, err)
 						})
