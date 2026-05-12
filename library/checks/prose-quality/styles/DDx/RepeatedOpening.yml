@@ -2,5 +2,6 @@ extends: existence
 message: "Vary or remove repeated generic opening structure."
 level: suggestion
 ignorecase: true
+scope: summary
 tokens:
   - __ddx_repeated_opening_placeholder__

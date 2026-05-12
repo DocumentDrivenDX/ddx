@@ -7,6 +7,8 @@ import (
 	"unicode"
 )
 
+var inlineCodePattern = regexp.MustCompile("`[^`]*`")
+
 type Mode string
 
 const (
@@ -49,11 +51,50 @@ func NewChecker(mode Mode, vocabulary Vocabulary) (*Checker, error) {
 func (c *Checker) Findings(file, text string) []Finding {
 	var findings []Finding
 	lines := strings.Split(text, "\n")
+	inFrontmatter := false
+	inFence := false
+	fenceMarker := ""
+	seenContent := false
 
 	for idx, raw := range lines {
 		lineNo := idx + 1
-		line := strings.TrimSpace(raw)
-		if line == "" {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			continue
+		}
+		if !seenContent && trimmed == "---" {
+			inFrontmatter = true
+			seenContent = true
+			continue
+		}
+		seenContent = true
+
+		if inFrontmatter {
+			if trimmed == "---" {
+				inFrontmatter = false
+			}
+			continue
+		}
+
+		if isFenceLine(trimmed) {
+			if inFence {
+				if fenceMarker != "" && strings.HasPrefix(trimmed, fenceMarker) {
+					inFence = false
+					fenceMarker = ""
+				}
+				continue
+			}
+			inFence = true
+			fenceMarker = fenceDelimiter(trimmed)
+			continue
+		}
+		if inFence {
+			continue
+		}
+
+		line := stripInlineCode(raw)
+		line = strings.TrimSpace(line)
+		if line == "" || isMarkdownStructureLine(line) {
 			continue
 		}
 
@@ -127,30 +168,36 @@ func (c *Checker) termAccepted(term string) bool {
 }
 
 func matchesRule(line string, rule ruleSpec) bool {
-	if len(rule.ContainsAny) == 0 {
-		return false
-	}
 	if isMarkdownStructureLine(line) {
 		return false
 	}
+	switch rule.ID {
+	case "prose.claim.unsupported":
+		return unsupportedClaim(line)
+	case "prose.ai_slop.polish":
+		return aiSlop(line)
+	case "prose.filler.transition":
+		return fillerTransition(line)
+	case "prose.specificity.actor_action":
+		return missingActorAction(line)
+	case "prose.cost.filler":
+		return tokenCost(line)
+	case "prose.structure.repeated_opening":
+		return repeatedOpeningKey(line) != ""
+	}
+	if len(rule.ContainsAny) == 0 {
+		return false
+	}
 	lower := strings.ToLower(line)
-	matched := false
 	for _, phrase := range rule.ContainsAny {
 		if phrase == "" {
 			continue
 		}
 		if strings.Contains(lower, strings.ToLower(phrase)) {
-			matched = true
-			break
+			return true
 		}
 	}
-	if !matched {
-		return false
-	}
-	if strings.HasSuffix(rule.ID, ".claims") {
-		return unsupportedClaim(line)
-	}
-	return true
+	return false
 }
 
 func isMarkdownStructureLine(line string) bool {
@@ -176,7 +223,8 @@ func isMarkdownStructureLine(line string) bool {
 func unsupportedClaim(line string) bool {
 	lower := strings.ToLower(line)
 	if containsAny(lower, []string{
-		"seamless",
+		"robust",
+		"comprehensive",
 		"industry-leading",
 		"world-class",
 		"best-in-class",
@@ -185,18 +233,6 @@ func unsupportedClaim(line string) bool {
 		return true
 	}
 	if unsupportedComprehensiveClaim(lower) {
-		return true
-	}
-	if hasEmpiricalOrCheckContext(lower) {
-		return false
-	}
-	if unsupportedBenefitClaim(lower) {
-		return true
-	}
-	if countMatches(lower, []string{"robust", "comprehensive", "smooth", "elegant", "excited", "high"}) >= 2 {
-		return true
-	}
-	if countWords(line) <= 8 {
 		return true
 	}
 	return containsAny(lower, []string{
@@ -222,35 +258,49 @@ func unsupportedComprehensiveClaim(lower string) bool {
 	})
 }
 
-func unsupportedBenefitClaim(lower string) bool {
+func aiSlop(line string) bool {
+	lower := strings.ToLower(line)
 	return containsAny(lower, []string{
-		"better alignment",
-		"better pattern",
-		"better tools",
 		"complex problems",
-		"cutting edge",
 		"powerful commands",
-		"productive ways",
+		"powerful automation",
 		"sophisticated autonomous",
 		"sophisticated control flow",
 		"sophisticated multi-agent",
+		"productive ways",
 		"true power",
 	})
 }
 
-func hasEmpiricalOrCheckContext(lower string) bool {
+func fillerTransition(line string) bool {
+	lower := strings.ToLower(line)
 	return containsAny(lower, []string{
-		"reproduced",
-		"measured",
-		"benchmark",
-		"test",
-		"coverage",
-		"contract",
-		"verifiable",
-		"quality-lifting pattern",
-		"risk",
-		"mitigation",
+		"to be clear",
+		"first, we should note",
+		"in conclusion",
+		"it is important to note",
+		"for clarity",
+		"that said",
 	})
+}
+
+func missingActorAction(line string) bool {
+	lower := strings.ToLower(line)
+	return containsAny(lower, []string{"enables", "supports", "streamlines"})
+}
+
+func tokenCost(line string) bool {
+	lower := strings.ToLower(line)
+	if containsAny(lower, []string{
+		"very important",
+		"in order to",
+		"effectively",
+		"begin to",
+		"make the experience better",
+	}) {
+		return true
+	}
+	return countMatches(lower, []string{"robust", "comprehensive", "smooth", "elegant", "excited", "high"}) >= 2
 }
 
 func containsAny(s string, needles []string) bool {
@@ -274,6 +324,24 @@ func countMatches(s string, needles []string) int {
 
 func countWords(s string) int {
 	return len(strings.Fields(s))
+}
+
+func stripInlineCode(line string) string {
+	return inlineCodePattern.ReplaceAllString(line, "")
+}
+
+func isFenceLine(trimmed string) bool {
+	return strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~")
+}
+
+func fenceDelimiter(trimmed string) string {
+	if strings.HasPrefix(trimmed, "```") {
+		return "```"
+	}
+	if strings.HasPrefix(trimmed, "~~~") {
+		return "~~~"
+	}
+	return ""
 }
 
 func repeatedOpeningKey(line string) string {

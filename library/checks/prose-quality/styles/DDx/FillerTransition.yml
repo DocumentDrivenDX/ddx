@@ -2,5 +2,11 @@ extends: existence
 message: "Remove the filler transition unless it carries information."
 level: suggestion
 ignorecase: true
+scope: summary
 tokens:
-  - __ddx_filler_transition_placeholder__
+  - to be clear
+  - first, we should note
+  - in conclusion
+  - it is important to note
+  - for clarity
+  - that said

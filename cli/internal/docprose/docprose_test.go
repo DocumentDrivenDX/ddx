@@ -150,7 +150,7 @@ func TestProseCheckerPathMode(t *testing.T) {
 	input := strings.Join([]string{
 		"## Technical Context",
 		"",
-		"This is robust and comprehensive.",
+		"This is world-class and best-in-class.",
 	}, "\n")
 	findings := checker.Findings("docs/helix/example.md", input)
 	if len(findings) != 1 {
@@ -161,14 +161,26 @@ func TestProseCheckerPathMode(t *testing.T) {
 	}
 }
 
-func TestProseCheckerDoesNotFlagUsefulTechnicalContext(t *testing.T) {
+func TestDocProseValeRules_StructureIgnores(t *testing.T) {
 	checker, err := NewChecker(ModeTechnical, Vocabulary{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	input := strings.Join([]string{
-		"The effect is robust and reproduced across model families.",
-		"| Bead CRUD, claims, evidence | Comprehensive unit + integration | `cli/internal/bead/*_test.go` |",
+		"---",
+		"title: DDx prose quality plan",
+		"description: world-class release notes should stay in front matter.",
+		"---",
+		"",
+		"# Technical Context",
+		"",
+		"Use `world-class` as a code span, not prose.",
+		"```markdown",
+		"This is robust and seamless inside a fenced block.",
+		"```",
+		"",
+		"Parent bead: ddx-ccda7a32.",
+		"Governing spec: PLAN-2026-05-06-prose-quality-integration.",
 		"`docs/helix/02-design/solution-designs/SD-007-release-readiness.md` documents release gating.",
 		"`--once` processes at most one ready bead, then exits.",
 	}, "\n")
@@ -178,23 +190,61 @@ func TestProseCheckerDoesNotFlagUsefulTechnicalContext(t *testing.T) {
 	}
 }
 
-func TestProseCheckerFlagsUnsupportedBenefitClaims(t *testing.T) {
+func TestDocProseValeRules_UnsupportedClaim(t *testing.T) {
 	checker, err := NewChecker(ModeTechnical, Vocabulary{})
 	if err != nil {
 		t.Fatal(err)
 	}
 	input := strings.Join([]string{
-		"The framework exposes powerful commands for better alignment.",
-		"Teams can use sophisticated multi-agent systems to solve complex problems.",
-		"The pattern enables cutting edge automation in productive ways.",
-		"Benchmarks showed significantly better output on the prompt suite.",
+		"This implementation delivers world-class reliability and industry-leading performance characteristics.",
+		"The approach represents a best-in-class solution for document-driven development workflows.",
 	}, "\n")
 	findings := checker.Findings("docs/helix/example.md", input)
-	if len(findings) != 3 {
-		t.Fatalf("expected three unsupported benefit findings, got %+v", findings)
+	if len(findings) != 2 {
+		t.Fatalf("expected two unsupported-claim findings, got %+v", findings)
 	}
 	for _, finding := range findings {
-		if finding.RuleID != "prose.generic.claims" {
+		if finding.RuleID != "prose.claim.unsupported" {
+			t.Fatalf("unexpected rule id: %+v", finding)
+		}
+	}
+}
+
+func TestDocProseValeRules_AISlop(t *testing.T) {
+	checker, err := NewChecker(ModeTechnical, Vocabulary{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := strings.Join([]string{
+		"Sophisticated autonomous workflows handle complex problems at scale.",
+		"The toolkit provides true power for development teams through sophisticated multi-agent coordination.",
+	}, "\n")
+	findings := checker.Findings("docs/helix/example.md", input)
+	if len(findings) != 2 {
+		t.Fatalf("expected two ai-slop findings, got %+v", findings)
+	}
+	for _, finding := range findings {
+		if finding.RuleID != "prose.ai_slop.polish" {
+			t.Fatalf("unexpected rule id: %+v", finding)
+		}
+	}
+}
+
+func TestDocProseValeRules_TokenCost(t *testing.T) {
+	checker, err := NewChecker(ModeTechnical, Vocabulary{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := strings.Join([]string{
+		"It is very important to run the full test suite before merging any changes.",
+		"This validation step is very important because it catches integration failures early.",
+	}, "\n")
+	findings := checker.Findings("docs/helix/example.md", input)
+	if len(findings) != 2 {
+		t.Fatalf("expected two token-cost findings, got %+v", findings)
+	}
+	for _, finding := range findings {
+		if finding.RuleID != "prose.cost.filler" {
 			t.Fatalf("unexpected rule id: %+v", finding)
 		}
 	}

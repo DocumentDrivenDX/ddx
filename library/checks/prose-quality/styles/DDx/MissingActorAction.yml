@@ -2,5 +2,8 @@ extends: existence
 message: "Name the actor, action, artifact, or boundary."
 level: suggestion
 ignorecase: true
+scope: summary
 tokens:
-  - __ddx_missing_actor_action_placeholder__
+  - enables
+  - supports
+  - streamlines

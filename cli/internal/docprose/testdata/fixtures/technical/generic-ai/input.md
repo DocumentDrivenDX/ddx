@@ -1,8 +1,8 @@
 # Overview
 
-This is a robust and comprehensive update that delivers a seamless experience for everyone involved.
+This is world-class and best-in-class.
 
-To be clear, this change is very important because it aligns the system and creates a better path forward.
+This validation step is very important because it catches integration failures early.
 
 First, we should note that the approach is flexible. First, we should note that the approach is flexible.
 

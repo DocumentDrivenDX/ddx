@@ -2,5 +2,12 @@ extends: existence
 message: "DDx prose claim needs a concrete subject, mechanism, or evidence."
 level: suggestion
 ignorecase: true
+scope: summary
 tokens:
-  - __ddx_unsupported_claim_placeholder__
+  - robust
+  - comprehensive
+  - seamless
+  - world-class
+  - industry-leading
+  - best-in-class
+  - cutting-edge

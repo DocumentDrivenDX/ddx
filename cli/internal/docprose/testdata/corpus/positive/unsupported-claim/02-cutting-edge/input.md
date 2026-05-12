@@ -1,3 +1,3 @@
-The cutting-edge architecture enables powerful commands for building productive workflows.
+The architecture is world-class and industry-leading.
 
-These sophisticated control flow patterns represent cutting edge research in agent coordination.
+These best-in-class workflows keep the release focused on concrete outcomes.
