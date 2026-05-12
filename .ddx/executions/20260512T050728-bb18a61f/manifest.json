@@ -1,0 +1,73 @@
+{
+  "attempt_id": "20260512T050728-bb18a61f",
+  "bead_id": "ddx-ef9e8aec",
+  "base_rev": "269f4c43de8e2e55337b5a1c665365880f1dd5d5",
+  "created_at": "2026-05-12T05:07:37.120367226Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-ef9e8aec",
+    "title": "spec: define forward-progress readiness override policy",
+    "description": "PROBLEM\nDDx needs an explicit readiness lifecycle contract that optimizes for continuous forward progress. Today the specs both allow readiness to move ambiguous/underspecified open beads to status=proposed and say quality gates default to WARN-ONLY, leaving workers and lifecycle hooks free to park operator-accepted work repeatedly.\n\nROOT CAUSE\n- docs/helix/01-frame/features/FEAT-010-task-execution.md:219-224 defines ambiguous_requires_operator as moving the bead to status=proposed, and docs/helix/01-frame/features/FEAT-010-task-execution.md:485-493 repeats that ambiguous or underspecified work moves to proposed. It does not define operator promotion as an override.\n- docs/helix/02-design/adr/ADR-023-bead-lifecycle-quality-policy.md:85-99 says WARN-ONLY is the default, but docs/helix/02-design/adr/ADR-023-bead-lifecycle-quality-policy.md:136-173 still permits readiness to block for human input or lossy decomposition without spelling out which findings are advisory versus hard blockers.\n- docs/helix/02-design/technical-designs/TD-027-bead-collection-abstraction.md:70-75 and :785-792 define proposed -\u003e open as triaged, but the operator-acceptance semantics are not connected to readiness re-evaluation.\n- docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md:160-172 allows open -\u003e proposed for depth overflow or ambiguity, but does not require idempotency after proposed -\u003e open.\n\nPROPOSED FIX\nUpdate the governing docs to state:\n- open is the forward-progress execution lane; proposed is the hard operator-decision escape hatch.\n- Default pre-claim readiness is warn/improve/decompose; it must proceed for recoverable rubric gaps, lint noise, uncertain model judgment, and readiness infrastructure failures.\n- Automatic open -\u003e proposed is reserved for true operator_required outcomes, lossy decomposition, contradictory requirements, unsafe commitment loss, or explicit hard manual-decision blockers.\n- proposed -\u003e open via operator action is durable acceptance. Re-readiness must not re-park the same bead for the same rule/finding unless prompt-relevant bead fields changed or the operator explicitly requests re-triage.\n- Reuse the TD-027 triaged event for proposed -\u003e open. If new warning event kinds are needed, amend TD-027 event vocabulary in the same spec change; otherwise use existing event kinds with structured fields.\n\nNON-SCOPE\n- No Go implementation in this bead.\n- No change to Fizeau routing/profile/model/provider behavior.\n- No weakening of post-attempt review/manual-required outcomes that already have concrete execution evidence.\n\nPARENT/DEPS\nParent: ddx-cc0641a7. No deps.",
+    "acceptance": "1. docs/helix/01-frame/features/FEAT-010-task-execution.md states that open is the forward-progress lane and that default readiness warnings proceed unless a hard operator-required condition is present.\n2. docs/helix/02-design/adr/ADR-023-bead-lifecycle-quality-policy.md distinguishes warn/proceed findings from hard parking findings and names operator promotion as a durable override.\n3. docs/helix/02-design/technical-designs/TD-027-bead-collection-abstraction.md and docs/helix/02-design/technical-designs/TD-031-bead-state-machine.md define proposed -\u003e open / triaged as the operator-acceptance signal used by readiness idempotency.\n4. docs/triage/decomposition.md states how lossy/depth-cap decomposition interacts with operator acceptance without creating downgrade loops.\n5. Documentation grep check passes: `rg -n \"operator acceptance|triaged|WARN-ONLY|open is the forward-progress\" docs/helix docs/triage` shows the new policy language in the expected files.\n6. `cd cli \u0026\u0026 go test ./internal/agent/... ./internal/bead/...` passes.\n7. `lefthook run pre-commit` passes.",
+    "parent": "ddx-cc0641a7",
+    "labels": [
+      "phase:2",
+      "area:docs",
+      "area:agent",
+      "area:bead-lifecycle",
+      "kind:docs",
+      "prevention",
+      "spec:FEAT-010",
+      "adr:023",
+      "td:027",
+      "td:031",
+      "triage:skip"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T05:05:30Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "654662",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"description drops commitment \\\"non_scope:No weakening of post-attempt review/manual-required outcomes that already have concrete execution evidence.\\\"\",\"intake_outcome\":\"operator_required\"}",
+          "created_at": "2026-05-12T04:28:21.649402997Z",
+          "kind": "intake.blocked",
+          "source": "ddx agent execute-loop",
+          "summary": "operator_required"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: bad-json: json: cannot unmarshal array into Go struct field LintResult.rationale of type string\"}",
+          "created_at": "2026-05-12T05:07:27.616206967Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T05:05:30.646942757Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260512T050728-bb18a61f",
+    "prompt": ".ddx/executions/20260512T050728-bb18a61f/prompt.md",
+    "manifest": ".ddx/executions/20260512T050728-bb18a61f/manifest.json",
+    "result": ".ddx/executions/20260512T050728-bb18a61f/result.json",
+    "checks": ".ddx/executions/20260512T050728-bb18a61f/checks.json",
+    "usage": ".ddx/executions/20260512T050728-bb18a61f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-ef9e8aec-20260512T050728-bb18a61f"
+  },
+  "prompt_sha": "810d8434c8ea8a809bf20e0c8f8522b79489ce8489f488384e97caeb2670110f"
+}
