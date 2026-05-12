@@ -71,6 +71,10 @@ readiness decides whether a bead should be claimed or rewritten before
 execution, lint/rubric scoring measures prompt quality inside the readiness
 evaluation, and triage classifies the attempt after evidence exists.
 
+Readiness treats `open` as the forward-progress lane. WARN-ONLY findings are
+proceed-by-default findings unless they expose a hard operator-required parking
+condition.
+
 Both checkpoints invoke the same nested bead-lifecycle workflow skill under the
 `ddx` skill tree. The skill is responsible for translating the rubric into
 agent-readable findings; DDx remains responsible for hook timing, evidence
@@ -87,12 +91,15 @@ triage, becomes externally blocked, is superseded, or receives a retry cooldown.
 The default rollout is WARN-ONLY.
 
 - WARN-ONLY mode reports the lint score, missing criteria, waiver matches, and
-  suggested remediation, then proceeds with dispatch.
+  suggested remediation, then proceeds with dispatch. Recoverable rubric gaps,
+  lint noise, uncertain model judgment, and readiness infrastructure failures
+  are proceed findings, not hard parking findings.
 - BLOCK mode is opt-in until the queue baseline confirms that ordinary
   execution-ready beads can consistently satisfy the rubric.
 - BLOCK mode may stop only on a valid low lint score after applicable rubric
-  skips and label waivers are applied. It must not stop on hook crashes,
-  missing skill files, transient filesystem errors, or malformed lint output.
+  skips and label waivers are applied, or on a hard operator-required blocker.
+  It must not stop on hook crashes, missing skill files, transient filesystem
+  errors, or malformed lint output.
 - Reliable factory mode is BLOCK mode plus default adversarial review. In that
   mode, poorly specified work is improved, decomposed, or blocked before claim
   rather than allowed to consume implementation attempts.
@@ -163,6 +170,11 @@ explicit constraint.
 Readiness must block for human input instead of inventing acceptance criteria,
 changing scope, choosing between conflicting requirements, deleting unresolved
 constraints, or guessing a missing governing artifact.
+
+Operator promotion via `triaged` is a durable override. When an operator moves a
+bead from `status=proposed` back to `status=open`, readiness must not re-park
+the same bead for the same rule or finding unless prompt-relevant fields changed
+or the operator explicitly requests re-triage.
 
 If readiness finds the bead too broad, it decomposes before claim. Every parent AC
 must map to at least one child AC or be explicitly marked `operator_required` or

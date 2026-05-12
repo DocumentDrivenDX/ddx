@@ -81,6 +81,19 @@ children as if the work were complete.
 Children re-enter the triage gate on their next dispatch cycle. If a child is
 itself decomposable, the gate will split it further — up to the depth cap.
 
+## Operator acceptance and re-readiness
+
+When an operator moves a decomposed or overflowed bead from `status=proposed`
+back to `status=open`, DDx records `triaged` as durable acceptance of the
+current prompt snapshot. Re-readiness may inspect the bead again, but it must
+not send the bead back to `status=proposed` for the same decomposition or
+ambiguity finding unless prompt-relevant fields changed or the operator
+explicitly requests re-triage.
+
+For lossy or depth-cap splits, the existing child beads and dependency edges
+remain in place; operator acceptance restores the parent to the forward-progress
+lane without creating an open↔proposed downgrade loop.
+
 ## Recursion depth cap
 
 Default depth cap: **3** levels. Configurable in `.ddx/config.yaml` at
