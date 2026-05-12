@@ -343,6 +343,57 @@ func TestHardOperatorRequiredStillParksProposed(t *testing.T) {
 	assert.Empty(t, got.Owner)
 }
 
+func TestIntakeBlockedEventIncludesStructuredDecisionFields(t *testing.T) {
+	inner, _, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatal("executor must not run when intake parks the bead")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome: PreClaimIntakeOperatorRequired,
+				Reason:  "ambiguous_scope",
+				Detail:  "ambiguous scope requires human review",
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+
+	events, err := inner.Events("ddx-0001")
+	require.NoError(t, err)
+	var blocked *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "intake.blocked" {
+			blocked = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, blocked, "blocked intake must append durable evidence")
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(blocked.Body), &body))
+	assert.Equal(t, "pre_claim_intake.operator_required", body["rule_id"])
+	assert.Equal(t, "ambiguous_scope", body["reason"])
+	assert.Equal(t, "pre_claim_intake", body["decision_source"])
+	assert.Equal(t, "block", body["policy_mode"])
+	assert.Equal(t, "park", body["decision"])
+	assert.Equal(t, "review intake result and accept, rewrite, split, block, or cancel", body["suggested_action"])
+	assert.NotEmpty(t, body["fingerprint"])
+	assert.Equal(t, "operator_required", body["intake_outcome"])
+	assert.Equal(t, "ambiguous scope requires human review", body["detail"])
+}
+
 func TestIntake_ErrorContinuesToClaimWithoutParkingCandidate(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	store := &claimCountingStore{Store: inner}
@@ -806,6 +857,65 @@ func TestIntake_DescriptionPreservationFailureWarnsAndContinues(t *testing.T) {
 	assert.True(t, foundWarn, "description preservation failure must append intake.warn evidence")
 	assert.Contains(t, logBuf.String(), "continuing with original")
 	assert.NotContains(t, logBuf.String(), "parking")
+}
+
+func TestReadinessWarningEvidenceIncludesStructuredDecisionFields(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &claimCountingStore{Store: inner}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-rewrite-warning",
+				ResultRev: "rewrite-warning",
+			}, nil
+		}),
+	}
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once: true,
+		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+			return PreClaimIntakeResult{
+				Outcome: PreClaimIntakeActionableButRewritten,
+				Detail:  "attempted to drop acceptance criteria",
+				Rewrite: PreClaimIntakeRewrite{
+					Description:   "PROBLEM\ninvented product semantics\n",
+					Acceptance:    "1. preserve the original intent",
+					ChangedFields: []string{"description", "acceptance"},
+				},
+			}, nil
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	events, err := inner.Events(candidate.ID)
+	require.NoError(t, err)
+	var warned *bead.BeadEvent
+	for i := range events {
+		if events[i].Kind == "intake.warn" {
+			warned = &events[i]
+			break
+		}
+	}
+	require.NotNil(t, warned, "warning evidence must be appended without parking the bead")
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(warned.Body), &body))
+	assert.Equal(t, "pre_claim_intake.rewrite_rejected", body["rule_id"])
+	assert.Equal(t, "rewrite_rejected", body["reason"])
+	assert.Equal(t, "pre_claim_intake", body["decision_source"])
+	assert.Equal(t, "warn-only", body["policy_mode"])
+	assert.Equal(t, "warn", body["decision"])
+	assert.Equal(t, "revise the rewrite so it preserves every explicit commitment", body["suggested_action"])
+	assert.NotEmpty(t, body["fingerprint"])
+	assert.Contains(t, fmt.Sprintf("%v", body["detail"]), "acceptance criteria")
 }
 
 // TestReadinessHookEmptyOutput_DeduplicatesPrefix asserts that when the intake
