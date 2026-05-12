@@ -14,6 +14,14 @@ func TestLoadConfigHardErrorsOnProfileLadders() {}
 // flagged unless they equal the literal exactly.
 const sentence = "the legacy profile_ladders_section concept was removed"
 
+// Exact historical literals that remain allowed by explicit allowlist
+// or migration annotations.
+const externalAgentSite = "agentskills.io"
+const historicalAgentName = "Agent Service"
+const historicalPackagePath = "cli/internal/agent"
+const legacyDefaultHarness = "agent.routing.default_harness"
+const legacyProfilePriority = "agent.routing.profile_priority"
+
 // Identifiers whose names happen to embed a retired symbol as a
 // substring are not flagged.
 type ProfileLaddersMigrationNote struct{ Reason string }

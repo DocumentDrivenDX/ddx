@@ -48,6 +48,7 @@ package routinglint
 import (
 	"go/ast"
 	"go/token"
+	"go/types"
 	"regexp"
 	"strings"
 
@@ -104,6 +105,29 @@ var forbiddenLiterals = map[string]string{
 	"agent.routing.model_overrides": "agent.routing.model_overrides config key retired by ddx-3bd7396a",
 }
 
+// allowlistedLiterals are historical exact strings that remain
+// permitted in docs, tests, or migration notes. They are not forbidden
+// tokens, but keeping the allowlist explicit makes the boundary easy to
+// audit when the analyzer grows new checks.
+var allowlistedLiterals = map[string]string{
+	"agentskills.io":                 "external skill-site reference retained for historical docs",
+	"legacy agent":                   "historical workflow wording retained in migration docs",
+	"Agent Service":                  "historical service name retained in docs",
+	"cli/internal/agent":             "historical package path retained in docs and tests",
+	"agent.routing.default_harness":  "removed config key retained in migration docs",
+	"agent.routing.profile_priority": "deprecated config key retained in migration docs",
+}
+
+// allowedAgentSubpkgLeafs are the already-approved subpackages under
+// cli/internal/agent/. New leaf packages beneath that tree are rejected.
+var allowedAgentSubpkgLeafs = map[string]bool{
+	"escalation":  true,
+	"executeloop": true,
+	"try":         true,
+	"work":        true,
+	"workerprobe": true,
+}
+
 // selfPkgFragments lists path fragments that mark this analyzer's own
 // package or its testdata fixtures. Diagnostics from those packages
 // are suppressed because the closed-list constants above legitimately
@@ -132,6 +156,16 @@ func run(pass *analysis.Pass) (interface{}, error) {
 	}
 
 	insp := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
+
+	if inRetiredAgentSubpkg(pass) {
+		if len(pass.Files) > 0 {
+			pass.Report(analysis.Diagnostic{
+				Pos:     pass.Files[0].Package,
+				Message: "routinglint: DDx-owned cli/internal/agent subpackages are retired — keep the execution surface in the root cli/internal/agent package and do not add new agent subpackages",
+			})
+		}
+		return nil, nil
+	}
 
 	// Build a per-file index of lines that carry an exemption
 	// annotation, either as an inline comment on the same line or as
@@ -197,5 +231,213 @@ func run(pass *analysis.Pass) (interface{}, error) {
 		}
 	})
 
+	// Structural guardrails for DDx command and request construction
+	// surfaces. These catch the new public-command / model-routing
+	// regressions without flagging historical prose in docs or tests.
+	insp.Preorder([]ast.Node{(*ast.CompositeLit)(nil)}, func(n ast.Node) {
+		lit := n.(*ast.CompositeLit)
+		checkRetiredCommandSurface(pass, lit, report)
+		checkExecuteRequestRouting(pass, lit, report)
+	})
+
 	return nil, nil
+}
+
+func inRetiredAgentSubpkg(pass *analysis.Pass) bool {
+	if len(pass.Files) == 0 {
+		return false
+	}
+	for _, f := range pass.Files {
+		filename := pass.Fset.Position(f.Package).Filename
+		leaf, ok := agentSubpkgLeaf(filename)
+		if !ok {
+			continue
+		}
+		if !allowedAgentSubpkgLeafs[leaf] {
+			return true
+		}
+	}
+	return false
+}
+
+func agentSubpkgLeaf(filename string) (string, bool) {
+	const marker = "/cli/internal/agent/"
+	idx := strings.Index(filename, marker)
+	if idx < 0 {
+		return "", false
+	}
+	rest := filename[idx+len(marker):]
+	if rest == "" || !strings.Contains(rest, "/") {
+		return "", false
+	}
+	parts := strings.Split(rest, "/")
+	if len(parts) == 0 {
+		return "", false
+	}
+	leaf := parts[0]
+	leaf = strings.TrimSuffix(leaf, "_test")
+	if leaf == "" {
+		return "", false
+	}
+	return leaf, true
+}
+
+func isNamedType(named *types.Named, pkgPath, typeName string) bool {
+	if named == nil {
+		return false
+	}
+	obj := named.Obj()
+	if obj == nil || obj.Pkg() == nil {
+		return false
+	}
+	return obj.Pkg().Path() == pkgPath && obj.Name() == typeName
+}
+
+func namedUnderlyingType(t types.Type) *types.Named {
+	if t == nil {
+		return nil
+	}
+	if ptr, ok := t.(*types.Pointer); ok {
+		t = ptr.Elem()
+	}
+	named, _ := t.(*types.Named)
+	return named
+}
+
+func stringLiteralValue(e ast.Expr) (string, bool) {
+	lit, ok := e.(*ast.BasicLit)
+	if !ok || lit.Kind != token.STRING {
+		return "", false
+	}
+	s := lit.Value
+	if len(s) >= 2 && (s[0] == '"' || s[0] == '`') {
+		s = s[1 : len(s)-1]
+	}
+	return s, true
+}
+
+func checkRetiredCommandSurface(pass *analysis.Pass, lit *ast.CompositeLit, report func(token.Pos, string)) {
+	t := pass.TypesInfo.TypeOf(lit)
+	named := namedUnderlyingType(t)
+	if !isNamedType(named, "github.com/spf13/cobra", "Command") {
+		return
+	}
+
+	for _, elt := range lit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok || key.Name != "Use" {
+			continue
+		}
+		if val, ok := stringLiteralValue(kv.Value); ok && val == "agent" {
+			report(kv.Pos(), `routinglint: forbidden public command surface Use:"agent" — DDx must not reintroduce a ddx agent command; keep the workflow surface on ddx run/try/work`)
+		}
+	}
+}
+
+func checkExecuteRequestRouting(pass *analysis.Pass, lit *ast.CompositeLit, report func(token.Pos, string)) {
+	t := pass.TypesInfo.TypeOf(lit)
+	named := namedUnderlyingType(t)
+	if !isNamedType(named, "github.com/easel/fizeau", "ServiceExecuteRequest") {
+		return
+	}
+
+	for _, elt := range lit.Elts {
+		kv, ok := elt.(*ast.KeyValueExpr)
+		if !ok {
+			continue
+		}
+		key, ok := kv.Key.(*ast.Ident)
+		if !ok {
+			continue
+		}
+		switch key.Name {
+		case "Harness", "Provider", "Model":
+			if reason, bad := routedFromConfigOrNormalization(key.Name, kv.Value); bad {
+				report(kv.Pos(), "routinglint: forbidden "+key.Name+" source for ServiceExecuteRequest — "+reason)
+			}
+		}
+	}
+}
+
+func routedFromConfigOrNormalization(field string, e ast.Expr) (string, bool) {
+	switch x := e.(type) {
+	case *ast.Ident:
+		if x.Name == "model" || x.Name == "provider" || x.Name == "harness" {
+			return "", false
+		}
+		return "", false
+	case *ast.SelectorExpr:
+		if reason, bad := selectorRoutingReason(field, x); bad {
+			return reason, true
+		}
+		return routedFromConfigOrNormalization(field, x.X)
+	case *ast.CallExpr:
+		if reason, bad := callRoutingReason(field, x); bad {
+			return reason, true
+		}
+		if reason, bad := routedFromConfigOrNormalization(field, x.Fun); bad {
+			return reason, true
+		}
+		for _, arg := range x.Args {
+			if reason, bad := routedFromConfigOrNormalization(field, arg); bad {
+				return reason, true
+			}
+		}
+	case *ast.ParenExpr:
+		return routedFromConfigOrNormalization(field, x.X)
+	case *ast.UnaryExpr:
+		return routedFromConfigOrNormalization(field, x.X)
+	}
+	return "", false
+}
+
+func selectorRoutingReason(field string, sel *ast.SelectorExpr) (string, bool) {
+	x, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return "", false
+	}
+	switch sel.Sel.Name {
+	case "Model", "Provider", "Harness":
+		switch x.Name {
+		case "cfg", "rcfg", "resolved", "resolvedCfg", "resolvedConfig", "config":
+			return "config-derived " + field + " access via " + x.Name + "." + sel.Sel.Name + "() bypasses explicit operator passthrough", true
+		}
+	}
+	return "", false
+}
+
+func callRoutingReason(field string, call *ast.CallExpr) (string, bool) {
+	sel, ok := call.Fun.(*ast.SelectorExpr)
+	if ok {
+		if reason, bad := selectorRoutingReason(field, sel); bad {
+			return reason, true
+		}
+		if suspiciousFieldSource(sel.Sel.Name) {
+			return "normalization or fuzzy matching helper " + sel.Sel.Name + " used to build " + field + " violates the explicit-passthrough boundary", true
+		}
+		return "", false
+	}
+	ident, ok := call.Fun.(*ast.Ident)
+	if !ok {
+		return "", false
+	}
+	if suspiciousFieldSource(ident.Name) {
+		return "normalization or fuzzy matching helper " + ident.Name + " used to build " + field + " violates the explicit-passthrough boundary", true
+	}
+	return "", false
+}
+
+func suspiciousFieldSource(name string) bool {
+	lower := strings.ToLower(name)
+	return strings.Contains(lower, "normalize") ||
+		strings.Contains(lower, "fuzzy") ||
+		strings.Contains(lower, "alias") ||
+		strings.Contains(lower, "match") ||
+		strings.Contains(lower, "resolvemodel") ||
+		strings.Contains(lower, "resolveprovider") ||
+		strings.Contains(lower, "resolveharness")
 }
