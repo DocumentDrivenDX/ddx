@@ -586,12 +586,14 @@ func (s *Store) updateBead(id string, allowStatusChange bool, mutate func(*Bead)
 // atomically with the status write.
 func (s *Store) TransitionLifecycle(id string, status string, opts LifecycleTransitionOptions, mutate func(*Bead) error) error {
 	return s.updateBead(id, true, func(b *Bead) error {
+		beforeStatus := b.Status
 		if err := transitionLifecycleInPlace(b, status, opts); err != nil {
 			return err
 		}
 		if mutate != nil {
 			return mutate(b)
 		}
+		appendOperatorAcceptedTriagedEventIfNeeded(b, beforeStatus, status, opts)
 		return nil
 	})
 }
@@ -614,7 +616,11 @@ func (s *Store) UpdateWithLifecycleStatus(id string, status string, opts Lifecyc
 		if b.Status != beforeStatus {
 			return fmt.Errorf("bead: UpdateWithLifecycleStatus mutator changed lifecycle status directly")
 		}
-		return transitionLifecycleInPlace(b, status, opts)
+		if err := transitionLifecycleInPlace(b, status, opts); err != nil {
+			return err
+		}
+		appendOperatorAcceptedTriagedEventIfNeeded(b, beforeStatus, status, opts)
+		return nil
 	})
 }
 
@@ -641,6 +647,73 @@ func applyLifecycleTransitionMetadata(b *Bead, status string, opts LifecycleTran
 	} else {
 		delete(b.Extra, ExtraLifecycleExternalBlockerReason)
 	}
+}
+
+func appendOperatorAcceptedTriagedEventIfNeeded(b *Bead, from, to string, opts LifecycleTransitionOptions) {
+	if b == nil || from != StatusProposed || to != StatusOpen {
+		return
+	}
+	acceptedFingerprint, acceptedPromptFingerprint := latestParkedIntakeFingerprint(b)
+	body := map[string]any{
+		"from_status":                 from,
+		"to_status":                   to,
+		"reason":                      strings.TrimSpace(opts.Reason),
+		"source":                      strings.TrimSpace(opts.Source),
+		"operator_required":           true,
+		"accepted_fingerprint":        acceptedFingerprint,
+		"accepted_prompt_fingerprint": acceptedPromptFingerprint,
+	}
+	if actor := strings.TrimSpace(opts.Actor); actor != "" {
+		body["actor"] = actor
+	}
+	if promptFingerprint := PromptFingerprint(*b); promptFingerprint != "" {
+		body["prompt_fingerprint"] = promptFingerprint
+	}
+	payload, _ := json.Marshal(body)
+	appendInlineEvent(b, BeadEvent{
+		Kind:      "triaged",
+		Summary:   "operator accepted proposed bead",
+		Body:      string(payload),
+		Actor:     strings.TrimSpace(opts.Actor),
+		Source:    strings.TrimSpace(opts.Source),
+		CreatedAt: time.Now().UTC(),
+	})
+}
+
+func latestParkedIntakeFingerprint(b *Bead) (string, string) {
+	if b == nil || b.Extra == nil {
+		return "", ""
+	}
+	events := decodeBeadEvents(b.Extra["events"])
+	for i := len(events) - 1; i >= 0; i-- {
+		switch events[i].Kind {
+		case "intake.blocked", "pre_claim_intake.blocked":
+			fields := beadEventBodyFields(events[i].Body)
+			fingerprint := strings.TrimSpace(fields["fingerprint"])
+			if fingerprint == "" {
+				continue
+			}
+			return fingerprint, strings.TrimSpace(fields["prompt_fingerprint"])
+		}
+	}
+	return "", ""
+}
+
+func beadEventBodyFields(body string) map[string]string {
+	fields := map[string]string{}
+	if strings.TrimSpace(body) == "" {
+		return fields
+	}
+	var raw map[string]any
+	if err := json.Unmarshal([]byte(body), &raw); err != nil {
+		return fields
+	}
+	for k, v := range raw {
+		if s, ok := v.(string); ok {
+			fields[k] = s
+		}
+	}
+	return fields
 }
 
 // HeartbeatInterval is how often a claim owner should refresh the external

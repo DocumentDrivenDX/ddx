@@ -1,6 +1,7 @@
 package bead
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -71,4 +72,44 @@ func TestLifecycleTransitionWriteAPI_RejectsDirectUpdateBypass(t *testing.T) {
 	got, getErr := s.Get(b.ID)
 	require.NoError(t, getErr)
 	assert.Equal(t, StatusOpen, got.Status)
+}
+
+func TestLifecycleProposedToOpenAppendsTriaged(t *testing.T) {
+	s := newTestStore(t)
+	b := &Bead{Title: "operator accepted bead", Status: StatusProposed}
+	require.NoError(t, s.Create(b))
+
+	require.NoError(t, s.AppendEvent(b.ID, BeadEvent{
+		Kind:      "intake.blocked",
+		Summary:   "operator_required",
+		Body:      `{"fingerprint":"finding-123","prompt_fingerprint":"prompt-abc"}`,
+		Actor:     "worker",
+		Source:    "ddx work",
+		CreatedAt: b.CreatedAt,
+	}))
+
+	require.NoError(t, s.SetLifecycleStatus(b.ID, StatusOpen, LifecycleTransitionOptions{
+		Reason: "operator accepted readiness decision",
+		Actor:  "reviewer",
+		Source: "test",
+	}))
+
+	got, err := s.Get(b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, StatusOpen, got.Status)
+
+	events, err := s.EventsByKind(b.ID, "triaged")
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+
+	var body map[string]any
+	require.NoError(t, json.Unmarshal([]byte(events[0].Body), &body))
+	assert.Equal(t, "proposed", body["from_status"])
+	assert.Equal(t, "open", body["to_status"])
+	assert.Equal(t, "operator accepted readiness decision", body["reason"])
+	assert.Equal(t, "reviewer", body["actor"])
+	assert.Equal(t, true, body["operator_required"])
+	assert.Equal(t, "finding-123", body["accepted_fingerprint"])
+	assert.Equal(t, "prompt-abc", body["accepted_prompt_fingerprint"])
+	assert.NotEmpty(t, body["prompt_fingerprint"])
 }
