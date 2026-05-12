@@ -125,7 +125,6 @@ func RunWithConfigViaService(ctx context.Context, workDir string, rcfg config.Re
 			Correlation:   runtime.Correlation,
 			Model:         rcfg.Model(),
 			Provider:      rcfg.Provider(),
-			ModelRef:      rcfg.ModelRef(),
 			Effort:        rcfg.Effort(),
 			Timeout:       rcfg.Timeout(),
 			WallClock:     rcfg.WallClock(),
@@ -481,7 +480,7 @@ func TestProviderConnectivityViaService(ctx context.Context, workDir, harnessNam
 // will pick at claim time). When harness is specified it confirms the harness
 // exists in the service registry and (when model is set) attempts a
 // ResolveRoute pre-flight.
-func ValidateForExecuteLoopViaService(ctx context.Context, workDir, harnessName, model, provider, modelRef string) error {
+func ValidateForExecuteLoopViaService(ctx context.Context, workDir, harnessName, model, provider string) error {
 	if harnessName == "" {
 		return nil
 	}
@@ -511,8 +510,8 @@ func ValidateForExecuteLoopViaService(ctx context.Context, workDir, harnessName,
 	}
 
 	// Pre-flight orphan-model check via ResolveRoute. Only meaningful when a
-	// model is provided and provider/model-ref are not set.
-	if model != "" && provider == "" && modelRef == "" && harnessName == "agent" {
+	// model is provided and provider is not set.
+	if model != "" && provider == "" && harnessName == "agent" {
 		if _, err := svc.ResolveRoute(ctx, agentlib.RouteRequest{
 			Model:    model,
 			Harness:  fizeauHarness(harnessName),

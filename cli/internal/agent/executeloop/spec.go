@@ -70,7 +70,6 @@ type ExecuteLoopSpec struct {
 	Model       string `json:"model,omitempty"`
 	Profile     string `json:"profile,omitempty"`
 	Provider    string `json:"provider,omitempty"`
-	ModelRef    string `json:"model_ref,omitempty"`
 	Effort      string `json:"effort,omitempty"`
 	LabelFilter string `json:"label_filter,omitempty"`
 

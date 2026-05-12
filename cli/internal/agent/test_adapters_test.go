@@ -101,7 +101,7 @@ func runnerCapabilities(r *Runner, name string) (*HarnessCapabilities, error) {
 // runnerValidateForExecuteLoop is the test-only equivalent of the retired
 // Runner.ValidateForExecuteLoop. Production callers use
 // ValidateForExecuteLoopViaService.
-func runnerValidateForExecuteLoop(r *Runner, harnessName, model, _provider, _modelRef string) error {
+func runnerValidateForExecuteLoop(r *Runner, harnessName, model, _provider string) error {
 	if harnessName == "" {
 		return nil
 	}

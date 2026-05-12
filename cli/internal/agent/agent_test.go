@@ -1033,7 +1033,7 @@ func TestOSExecutor_EarlyCancel(t *testing.T) {
 // returns an error immediately so execute-loop fails before claiming any beads.
 func TestValidateForExecuteLoopUnknownHarness(t *testing.T) {
 	r := newTestRunner(&mockExecutor{})
-	err := runnerValidateForExecuteLoop(r, "nonexistent", "", "", "")
+	err := runnerValidateForExecuteLoop(r, "nonexistent", "", "")
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "unknown harness")
 }
@@ -1042,21 +1042,21 @@ func TestValidateForExecuteLoopUnknownHarness(t *testing.T) {
 // (routing will pick at bead-claim time) returns no error.
 func TestValidateForExecuteLoopEmptyHarnessIsNoop(t *testing.T) {
 	r := newTestRunner(&mockExecutor{})
-	assert.NoError(t, runnerValidateForExecuteLoop(r, "", "", "", ""))
+	assert.NoError(t, runnerValidateForExecuteLoop(r, "", "", ""))
 }
 
 // TestValidateForExecuteLoopValidHarnessNoModel verifies that a valid,
 // available harness passes pre-flight with no model specified.
 func TestValidateForExecuteLoopValidHarnessNoModel(t *testing.T) {
 	r := newTestRunner(&mockExecutor{})
-	assert.NoError(t, runnerValidateForExecuteLoop(r, "claude", "", "", ""))
+	assert.NoError(t, runnerValidateForExecuteLoop(r, "claude", "", ""))
 }
 
 // TestValidateForExecuteLoopValidHarnessAndModel verifies that a valid harness
 // with a compatible model string passes pre-flight.
 func TestValidateForExecuteLoopValidHarnessAndModel(t *testing.T) {
 	r := newTestRunner(&mockExecutor{})
-	assert.NoError(t, runnerValidateForExecuteLoop(r, "claude", "claude-sonnet-4-6", "", ""))
+	assert.NoError(t, runnerValidateForExecuteLoop(r, "claude", "claude-sonnet-4-6", ""))
 }
 
 func TestOSExecutor_NormalExit(t *testing.T) {

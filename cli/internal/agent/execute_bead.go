@@ -172,7 +172,7 @@ var RunStateRefreshInterval = 10 * time.Second
 // ExecuteBeadRuntime carries the non-durable plumbing for an execute-bead
 // run: per-invocation intent (FromRev, PromptFile, WorkerID) and
 // non-serializable injection seams (BeadEvents, Service, AgentRunner).
-// Durable knobs (Harness, Model, Provider, ModelRef, Effort,
+// Durable knobs (Harness, Model, Provider, Effort,
 // ContextBudget, MirrorCfg) live on config.ResolvedConfig and are passed
 // via ExecuteBeadWithConfig's rcfg argument.
 //
@@ -270,7 +270,6 @@ type executeBeadRequested struct {
 	Harness  string `json:"harness,omitempty"`
 	Model    string `json:"model,omitempty"`
 	Provider string `json:"provider,omitempty"`
-	ModelRef string `json:"model_ref,omitempty"`
 	Effort   string `json:"effort,omitempty"`
 	Prompt   string `json:"prompt,omitempty"`
 	// Power bounds: separate from passthrough constraints.
@@ -1674,7 +1673,6 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 			Harness:  rcfg.Passthrough().Harness,
 			Model:    rcfg.Passthrough().Model,
 			Provider: rcfg.Passthrough().Provider,
-			ModelRef: rcfg.ModelRef(),
 			Effort:   rcfg.Effort(),
 			Prompt:   promptSource,
 			MinPower: rcfg.MinPower(),

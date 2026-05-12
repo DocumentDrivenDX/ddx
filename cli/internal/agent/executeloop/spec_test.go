@@ -15,7 +15,6 @@ func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 		Model:              "claude-opus-4-7",
 		Profile:            "default",
 		Provider:           "anthropic",
-		ModelRef:           "ref-abc",
 		Effort:             "high",
 		LabelFilter:        "area:agent",
 		Mode:               executeloop.ModeWatch,
@@ -58,9 +57,6 @@ func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 	}
 	if got.Provider != original.Provider {
 		t.Errorf("Provider: got %q, want %q", got.Provider, original.Provider)
-	}
-	if got.ModelRef != original.ModelRef {
-		t.Errorf("ModelRef: got %q, want %q", got.ModelRef, original.ModelRef)
 	}
 	if got.Effort != original.Effort {
 		t.Errorf("Effort: got %q, want %q", got.Effort, original.Effort)
