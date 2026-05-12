@@ -250,6 +250,30 @@ func TestDocProseValeRules_TokenCost(t *testing.T) {
 	}
 }
 
+func TestDocProseValeRules_NegationPredicate(t *testing.T) {
+	checker, err := NewChecker(ModePlanning, Vocabulary{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	input := strings.Join([]string{
+		"HELIX is a control loop, not a pipeline.",
+		"HELIX is a methodology with seven activities; it is not a pipeline.",
+		"## What HELIX Is Not",
+		"",
+		"HELIX is not a CLI.",
+	}, "\n")
+	findings := checker.Findings("docs/helix/example.md", input)
+	if len(findings) != 1 {
+		t.Fatalf("expected one negation-predicate finding, got %+v", findings)
+	}
+	if findings[0].RuleID != "prose.definition_by_negation" {
+		t.Fatalf("unexpected rule id: %+v", findings[0])
+	}
+	if findings[0].Line != 1 {
+		t.Fatalf("unexpected finding line: %+v", findings[0])
+	}
+}
+
 func sameFindings(got, want []Finding) bool {
 	if len(got) != len(want) {
 		return false

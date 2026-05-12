@@ -8,6 +8,9 @@ import (
 )
 
 var inlineCodePattern = regexp.MustCompile("`[^`]*`")
+var negationSectionHeadingPattern = regexp.MustCompile(`(?i)^(?:what .+ is not|non-?goals?|out of scope|anti-?patterns?)$`)
+var positiveCopulaPattern = regexp.MustCompile(`(?i)\b(?:is|are|stays|remains)\s+(?:a|an|the\s+)?[[:alpha:]][[:alnum:]_-]*(?:\s+[[:alpha:]][[:alnum:]_-]*){0,4}`)
+var negationCopulaPattern = regexp.MustCompile(`(?i)\b(?:is|are|stays|remains)\b.*\bnot\b`)
 
 type Mode string
 
@@ -21,6 +24,10 @@ type Checker struct {
 	mode       Mode
 	rules      []ruleSpec
 	vocabulary Vocabulary
+}
+
+type lineContext struct {
+	suppressNegation bool
 }
 
 func NewChecker(mode Mode, vocabulary Vocabulary) (*Checker, error) {
@@ -55,6 +62,7 @@ func (c *Checker) Findings(file, text string) []Finding {
 	inFence := false
 	fenceMarker := ""
 	seenContent := false
+	negationSuppressed := false
 
 	for idx, raw := range lines {
 		lineNo := idx + 1
@@ -92,13 +100,34 @@ func (c *Checker) Findings(file, text string) []Finding {
 			continue
 		}
 
+		if level, heading, ok := markdownHeading(trimmed); ok {
+			if level == 2 || level == 3 {
+				negationSuppressed = negationSectionHeadingPattern.MatchString(heading)
+			}
+			continue
+		}
+
 		line := stripInlineCode(raw)
 		line = strings.TrimSpace(line)
 		if line == "" || isMarkdownStructureLine(line) {
 			continue
 		}
 
+		ctx := lineContext{suppressNegation: negationSuppressed}
 		for _, rule := range c.rules {
+			if rule.Kind == "negation_predicate" {
+				if matchesRule(line, rule, ctx) {
+					findings = append(findings, Finding{
+						File:          file,
+						Line:          lineNo,
+						RuleID:        rule.ID,
+						Severity:      rule.Severity,
+						Rationale:     rule.Rationale,
+						SuggestedEdit: rule.SuggestedEdit,
+					})
+				}
+				continue
+			}
 			if rule.Kind == "repeated_opening" {
 				if repeatedOpeningKey(line) != "" {
 					findings = append(findings, Finding{
@@ -112,7 +141,7 @@ func (c *Checker) Findings(file, text string) []Finding {
 				}
 				continue
 			}
-			if matchesRule(line, rule) {
+			if matchesRule(line, rule, ctx) {
 				findings = append(findings, Finding{
 					File:          file,
 					Line:          lineNo,
@@ -167,7 +196,7 @@ func (c *Checker) termAccepted(term string) bool {
 	return false
 }
 
-func matchesRule(line string, rule ruleSpec) bool {
+func matchesRule(line string, rule ruleSpec, ctx lineContext) bool {
 	if isMarkdownStructureLine(line) {
 		return false
 	}
@@ -184,6 +213,12 @@ func matchesRule(line string, rule ruleSpec) bool {
 		return tokenCost(line)
 	case "prose.structure.repeated_opening":
 		return repeatedOpeningKey(line) != ""
+	}
+	if rule.Kind == "negation_predicate" {
+		if ctx.suppressNegation {
+			return false
+		}
+		return definitionByNegation(line)
 	}
 	if len(rule.ContainsAny) == 0 {
 		return false
@@ -324,6 +359,92 @@ func countMatches(s string, needles []string) int {
 
 func countWords(s string) int {
 	return len(strings.Fields(s))
+}
+
+func markdownHeading(line string) (level int, heading string, ok bool) {
+	if !strings.HasPrefix(line, "#") {
+		return 0, "", false
+	}
+	level = 0
+	for level < len(line) && line[level] == '#' {
+		level++
+	}
+	if level < 2 || level > 3 {
+		return 0, "", false
+	}
+	if level >= len(line) || line[level] != ' ' {
+		return 0, "", false
+	}
+	heading = strings.TrimSpace(line[level+1:])
+	heading = strings.TrimRightFunc(heading, func(r rune) bool {
+		return r == '#' || unicode.IsSpace(r)
+	})
+	heading = strings.TrimSpace(heading)
+	return level, heading, heading != ""
+}
+
+func definitionByNegation(line string) bool {
+	for _, sentence := range sentenceFragments(line) {
+		if sentenceDefinitionByNegation(sentence) {
+			return true
+		}
+	}
+	return false
+}
+
+func sentenceFragments(line string) []string {
+	var fragments []string
+	rest := strings.TrimSpace(line)
+	for rest != "" {
+		head, tail, ok := cutSentence(rest)
+		if !ok {
+			fragments = append(fragments, rest)
+			break
+		}
+		fragments = append(fragments, head)
+		rest = strings.TrimSpace(tail)
+	}
+	return fragments
+}
+
+func sentenceDefinitionByNegation(sentence string) bool {
+	sentence = strings.TrimSpace(sentence)
+	if sentence == "" {
+		return false
+	}
+	if !negationCopulaPattern.MatchString(sentence) {
+		return false
+	}
+	if positivePredicateAfterNegation(sentence) {
+		return false
+	}
+	if positivePredicateBeforeSemicolon(sentence) {
+		return false
+	}
+	return true
+}
+
+func positivePredicateAfterNegation(sentence string) bool {
+	lower := strings.ToLower(sentence)
+	idx := strings.Index(lower, " not ")
+	if idx == -1 {
+		return false
+	}
+	tail := strings.TrimSpace(sentence[idx+len(" not "):])
+	return positiveCopulaPattern.MatchString(tail)
+}
+
+func positivePredicateBeforeSemicolon(sentence string) bool {
+	idx := strings.IndexAny(sentence, ";:")
+	if idx == -1 {
+		return false
+	}
+	head := strings.TrimSpace(sentence[:idx])
+	tail := strings.TrimSpace(sentence[idx+1:])
+	if !positiveCopulaPattern.MatchString(head) {
+		return false
+	}
+	return negationCopulaPattern.MatchString(tail)
 }
 
 func stripInlineCode(line string) string {
