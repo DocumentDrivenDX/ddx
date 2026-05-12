@@ -331,8 +331,8 @@ func TestDecompositionHook_ClearsImplementationPowerBounds(t *testing.T) {
 	}
 	svc.executeFunc = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 		assert.Zero(t, req.MinPower)
-		assert.Equal(t, "smart", req.Policy)
-		assert.Empty(t, req.Harness)
+		assert.Empty(t, req.Policy)
+		assert.Equal(t, "claude", req.Harness)
 		assert.Empty(t, req.Model)
 		assert.Zero(t, req.MaxPower, "pre-claim intake must not inherit implementation max_power pins")
 		ch := make(chan agentlib.ServiceEvent, 1)

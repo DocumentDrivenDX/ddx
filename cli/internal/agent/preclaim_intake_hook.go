@@ -131,17 +131,15 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 			return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: build prompt: %w", err)
 		}
 
-		profileOverride, clearRoutingPins := lifecycleHookRouting(ctx, projectRoot, svc, runner, rcfg, SelectStrongestProfile)
 		runtime := AgentRunRuntime{
-			Prompt:           prompt,
-			WorkDir:          projectRoot,
-			PromptSource:     PreClaimIntakePromptSource,
-			ProfileOverride:  profileOverride,
-			ClearRoutingPins: clearRoutingPins,
-			ClearProfile:     true,
-			ClearMinPower:    true,
-			ClearMaxPower:    true,
+			Prompt:        prompt,
+			WorkDir:       projectRoot,
+			PromptSource:  PreClaimIntakePromptSource,
+			ClearProfile:  true,
+			ClearMinPower: true,
+			ClearMaxPower: true,
 		}
+		applyLifecycleHookRouting(ctx, projectRoot, svc, runner, rcfg, &runtime, SelectStrongestProfile)
 		payload, err := dispatchPreClaimIntakePayload(ctx, projectRoot, svc, runner, rcfg, runtime)
 		if err != nil {
 			return PreClaimIntakeResult{
@@ -154,18 +152,30 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 	}
 }
 
-func lifecycleHookRouting(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, selector func(ProfileSnapshot) string) (string, bool) {
-	if lifecycleHookHasRoutePin(rcfg) {
-		return "", false
-	}
-	return selectProfileForDispatch(ctx, projectRoot, svc, runner, selector), true
-}
+func applyLifecycleHookRouting(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime *AgentRunRuntime, selector func(ProfileSnapshot) string) {
+	runtime.ClearRoutingPins = true
 
-func lifecycleHookHasRoutePin(rcfg config.ResolvedConfig) bool {
-	return strings.TrimSpace(rcfg.Harness()) != "" ||
-		strings.TrimSpace(rcfg.Provider()) != "" ||
-		strings.TrimSpace(rcfg.Model()) != "" ||
-		strings.TrimSpace(rcfg.ModelRef()) != ""
+	pinned := false
+	if harness, ok := rcfg.ExplicitHarness(); ok {
+		runtime.HarnessOverride = strings.TrimSpace(harness)
+		pinned = true
+	}
+	if provider, ok := rcfg.ExplicitProvider(); ok {
+		runtime.ProviderOverride = strings.TrimSpace(provider)
+		pinned = true
+	}
+	if model, ok := rcfg.ExplicitModel(); ok {
+		runtime.ModelOverride = strings.TrimSpace(model)
+		pinned = true
+	}
+	if modelRef, ok := rcfg.ExplicitModelRef(); ok {
+		runtime.ModelRefOverride = strings.TrimSpace(modelRef)
+		pinned = true
+	}
+	if pinned {
+		return
+	}
+	runtime.ProfileOverride = selectProfileForDispatch(ctx, projectRoot, svc, runner, selector)
 }
 
 func dispatchPreClaimIntakePayload(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (string, error) {

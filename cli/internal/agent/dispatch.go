@@ -80,8 +80,8 @@ func buildRunArgsFromConfig(ctx context.Context, rcfg config.ResolvedConfig, run
 	if modelRef == "" && !runtime.ClearRoutingPins {
 		modelRef = rcfg.ModelRef()
 	}
-	provider := ""
-	if !runtime.ClearRoutingPins {
+	provider := runtime.ProviderOverride
+	if provider == "" && !runtime.ClearRoutingPins {
 		provider = rcfg.Provider()
 	}
 	permissions := runtime.PermissionsOverride
