@@ -254,10 +254,11 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 			"bead_id": candidate.ID,
 			"reason":  reason,
 		})
-		if parked, berr := parkBeadPostIntakeRejection(w.Store, candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", reason, at); berr != nil && runtime.Log != nil {
-			_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition park error: %v\n", berr)
-		} else if parked {
-			// parkBeadPostIntakeRejection already handled the proposed transition.
+		_, berr := parkBeadPostIntakeRejection(w.Store, candidate, assignee, PreClaimIntakeOperatorRequired, "operator_required", reason, at)
+		if berr != nil {
+			if runtime.Log != nil {
+				_, _ = fmt.Fprintf(runtime.Log, "post-attempt decomposition park error: %v\n", berr)
+			}
 		}
 	}
 

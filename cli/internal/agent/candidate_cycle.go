@@ -296,7 +296,6 @@ func (c *AttemptCycleCoordinator) Run(ctx context.Context, beadID string) (Attem
 		if c.Reviewer == nil {
 			break
 		}
-		cycleReview = nil
 
 		c.recordCandidateCycleState(candidate, CandidateCycleState{
 			Active:       true,

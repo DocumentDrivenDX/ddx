@@ -74,6 +74,7 @@ func newWorkLoopOperatorOverrideFixture(t *testing.T) (*bead.Store, *bead.Bead, 
 		b.AddDep("ddx-override-dep", "blocks")
 	}))
 
+	// Build the preservation baseline from the mutated bead, not the helper defaults.
 	updated, err := inner.Get(target.ID)
 	require.NoError(t, err)
 	target = updated
