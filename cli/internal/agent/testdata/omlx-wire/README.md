@@ -30,7 +30,7 @@ just to refresh timestamps.
 
 ## How to regenerate
 
-Use `scripts/capture-omlx-fixture.sh`, which wraps `ddx agent run` with
+Use `scripts/capture-omlx-fixture.sh`, which wraps `legacy agent run` with
 `FIZEAU_DEBUG_WIRE_STREAM_FULL=1` (shipped in Fizeau v0.3.14) so the full
 stream is captured to a sidecar JSONL, then reshapes it into the fixture
 format:

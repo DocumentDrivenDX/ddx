@@ -525,7 +525,7 @@ func ValidateForExecuteLoopViaService(ctx context.Context, workDir, harnessName,
 }
 
 // ValidateEffortForRunViaService rejects effort requests that no currently
-// available harness can satisfy. `ddx agent run` passes effort through to the
+// available harness can satisfy. `legacy agent run` passes effort through to the
 // service rather than resolving a route locally, but the command still needs a
 // fast failure for obviously impossible combinations so operators get a useful
 // error instead of a silent success path.

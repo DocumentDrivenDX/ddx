@@ -35,7 +35,7 @@ var refactorBaselineScenarios = map[string][]baselineEvent{
 			"kind":    "routing",
 			"summary": "provider=claude model=claude-sonnet-4-6",
 			"body":    `{"resolved_provider":"claude","resolved_model":"claude-sonnet-4-6","fallback_chain":[]}`,
-			"source":  "ddx agent execute-bead",
+			"source":  "legacy agent execute-bead",
 			"actor":   "ddx",
 		},
 		{
@@ -64,7 +64,7 @@ var refactorBaselineScenarios = map[string][]baselineEvent{
 			"kind":    "routing",
 			"summary": "provider=claude model=claude-sonnet-4-6",
 			"body":    `{"resolved_provider":"claude","resolved_model":"claude-sonnet-4-6","fallback_chain":[]}`,
-			"source":  "ddx agent execute-bead",
+			"source":  "legacy agent execute-bead",
 			"actor":   "ddx",
 		},
 		{
@@ -100,7 +100,7 @@ var refactorBaselineScenarios = map[string][]baselineEvent{
 			"kind":    "routing",
 			"summary": "provider=claude model=claude-sonnet-4-6",
 			"body":    `{"resolved_provider":"claude","resolved_model":"claude-sonnet-4-6","fallback_chain":[]}`,
-			"source":  "ddx agent execute-bead",
+			"source":  "legacy agent execute-bead",
 			"actor":   "ddx",
 		},
 		{
@@ -147,7 +147,7 @@ var refactorBaselineScenarios = map[string][]baselineEvent{
 			"kind":    "routing",
 			"summary": "provider=claude model=claude-sonnet-4-6",
 			"body":    `{"resolved_provider":"claude","resolved_model":"claude-sonnet-4-6","fallback_chain":[]}`,
-			"source":  "ddx agent execute-bead",
+			"source":  "legacy agent execute-bead",
 			"actor":   "ddx",
 		},
 		{
@@ -183,7 +183,7 @@ var refactorBaselineScenarios = map[string][]baselineEvent{
 			"kind":    "routing",
 			"summary": "provider=claude model=claude-sonnet-4-6",
 			"body":    `{"resolved_provider":"claude","resolved_model":"claude-sonnet-4-6","fallback_chain":[]}`,
-			"source":  "ddx agent execute-bead",
+			"source":  "legacy agent execute-bead",
 			"actor":   "ddx",
 		},
 		{
@@ -211,7 +211,7 @@ var refactorBaselineScenarios = map[string][]baselineEvent{
 			"kind":    "routing",
 			"summary": "provider=claude model=claude-sonnet-4-6",
 			"body":    `{"resolved_provider":"claude","resolved_model":"claude-sonnet-4-6","fallback_chain":[]}`,
-			"source":  "ddx agent execute-bead",
+			"source":  "legacy agent execute-bead",
 			"actor":   "ddx",
 		},
 		{
@@ -242,7 +242,7 @@ var refactorBaselineScenarios = map[string][]baselineEvent{
 			"kind":    "routing",
 			"summary": "provider=claude model=claude-sonnet-4-6",
 			"body":    `{"resolved_provider":"claude","resolved_model":"claude-sonnet-4-6","fallback_chain":[]}`,
-			"source":  "ddx agent execute-bead",
+			"source":  "legacy agent execute-bead",
 			"actor":   "ddx",
 		},
 		{
@@ -276,7 +276,7 @@ var refactorBaselineScenarios = map[string][]baselineEvent{
 			"kind":    "routing",
 			"summary": "provider=claude model=claude-sonnet-4-6",
 			"body":    `{"resolved_provider":"claude","resolved_model":"claude-sonnet-4-6","fallback_chain":[]}`,
-			"source":  "ddx agent execute-bead",
+			"source":  "legacy agent execute-bead",
 			"actor":   "ddx",
 		},
 		{
@@ -306,7 +306,7 @@ var refactorBaselineScenarios = map[string][]baselineEvent{
 			"kind":    "routing",
 			"summary": "provider=claude model=claude-sonnet-4-6",
 			"body":    `{"resolved_provider":"claude","resolved_model":"claude-sonnet-4-6","fallback_chain":[]}`,
-			"source":  "ddx agent execute-bead",
+			"source":  "legacy agent execute-bead",
 			"actor":   "ddx",
 		},
 		{
@@ -343,7 +343,7 @@ var refactorBaselineScenarios = map[string][]baselineEvent{
 			"kind":    "routing",
 			"summary": "provider=claude model=claude-sonnet-4-6",
 			"body":    `{"resolved_provider":"claude","resolved_model":"claude-sonnet-4-6","fallback_chain":[]}`,
-			"source":  "ddx agent execute-bead",
+			"source":  "legacy agent execute-bead",
 			"actor":   "ddx",
 		},
 		{
@@ -372,7 +372,7 @@ var refactorBaselineScenarios = map[string][]baselineEvent{
 			"kind":    "routing",
 			"summary": "provider=claude model=claude-sonnet-4-6",
 			"body":    `{"resolved_provider":"claude","resolved_model":"claude-sonnet-4-6","fallback_chain":[]}`,
-			"source":  "ddx agent execute-bead",
+			"source":  "legacy agent execute-bead",
 			"actor":   "ddx",
 		},
 		{
@@ -402,7 +402,7 @@ var refactorBaselineScenarios = map[string][]baselineEvent{
 			"kind":    "routing",
 			"summary": "provider=claude model=claude-sonnet-4-6",
 			"body":    `{"resolved_provider":"claude","resolved_model":"claude-sonnet-4-6","fallback_chain":[]}`,
-			"source":  "ddx agent execute-bead",
+			"source":  "legacy agent execute-bead",
 			"actor":   "ddx",
 		},
 		{

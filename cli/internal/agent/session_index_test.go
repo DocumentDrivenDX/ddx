@@ -332,13 +332,13 @@ func TestRunViaServiceWithAppendsOneSessionIndexRow(t *testing.T) {
 func TestProductionAgentExecutionPathsUseIndexedServiceWriter(t *testing.T) {
 	root := filepath.Join("..", "..")
 	checks := map[string]string{
-		"ddx agent run":  filepath.Join(root, "cmd", "agent_cmd.go"),
-		"quorum":         filepath.Join(root, "internal", "agent", "compare_adapter.go"),
-		"compare":        filepath.Join(root, "internal", "agent", "compare_adapter.go"),
-		"execute-bead":   filepath.Join(root, "internal", "agent", "execute_bead.go"),
-		"execute-loop":   filepath.Join(root, "internal", "agent", "execute_bead_loop.go"),
-		"replay":         filepath.Join(root, "cmd", "agent_cmd.go"),
-		"service writer": filepath.Join(root, "internal", "agent", "service_run.go"),
+		"legacy agent run": filepath.Join(root, "cmd", "agent_cmd.go"),
+		"quorum":           filepath.Join(root, "internal", "agent", "compare_adapter.go"),
+		"compare":          filepath.Join(root, "internal", "agent", "compare_adapter.go"),
+		"execute-bead":     filepath.Join(root, "internal", "agent", "execute_bead.go"),
+		"execute-loop":     filepath.Join(root, "internal", "agent", "execute_bead_loop.go"),
+		"replay":           filepath.Join(root, "cmd", "agent_cmd.go"),
+		"service writer":   filepath.Join(root, "internal", "agent", "service_run.go"),
 	}
 	for name, path := range checks {
 		data, err := os.ReadFile(path)

@@ -117,7 +117,7 @@ func TestLintHook_UsesRunnerLibrary(t *testing.T) {
 	}
 	body, err := os.ReadFile(lintHookPath)
 	require.NoError(t, err)
-	assert.NotContains(t, string(body), "ddx agent run", "lint_hook.go must not shell out to ddx agent run")
+	assert.NotContains(t, string(body), "legacy agent run", "lint_hook.go must not shell out to legacy agent run")
 }
 
 func TestLintHook_PromptIncludesStandaloneBead(t *testing.T) {

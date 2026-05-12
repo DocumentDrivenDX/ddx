@@ -21,7 +21,7 @@
       "id": "impl-benchmark-cmd",
       "name": "Wire Benchmark CLI Command",
       "tags": ["coding", "multi-file", "complex"],
-      "prompt": "Read cli/internal/agent/benchmark.go to understand BenchmarkSuite, RunBenchmark, and SaveBenchmarkResult. Read cli/cmd/agent_cmd.go to understand the command factory pattern.\n\nAdd a new subcommand 'ddx agent benchmark' that:\n1. Takes --suite <path> flag pointing to a benchmark JSON file\n2. Takes --output <path> flag for saving results (default: stdout as JSON)\n3. Loads the suite via LoadBenchmarkSuite\n4. Calls runner.RunBenchmark(suite)\n5. Prints a summary table to stderr showing per-arm stats\n6. Writes full results to --output or stdout\n\nAdd the command to the agent command group in the existing newAgentCommand function. Follow the existing patterns in agent_cmd.go. Do not create test files."
+      "prompt": "Read cli/internal/agent/benchmark.go to understand BenchmarkSuite, RunBenchmark, and SaveBenchmarkResult. Read cli/cmd/agent_cmd.go to understand the command factory pattern.\n\nAdd a new subcommand 'legacy agent benchmark' that:\n1. Takes --suite <path> flag pointing to a benchmark JSON file\n2. Takes --output <path> flag for saving results (default: stdout as JSON)\n3. Loads the suite via LoadBenchmarkSuite\n4. Calls runner.RunBenchmark(suite)\n5. Prints a summary table to stderr showing per-arm stats\n6. Writes full results to --output or stdout\n\nAdd the command to the agent command group in the existing newAgentCommand function. Follow the existing patterns in agent_cmd.go. Do not create test files."
     },
     {
       "id": "impl-extract-output",

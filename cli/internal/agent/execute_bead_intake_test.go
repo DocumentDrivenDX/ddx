@@ -861,6 +861,10 @@ func TestIntake_DescriptionPreservationFailureWarnsAndContinues(t *testing.T) {
 
 func TestReadinessWarningEvidenceIncludesStructuredDecisionFields(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
+	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+		b.Description = "PROBLEM\noriginal description\n\nROOT CAUSE\nsome cause\n\nNON-SCOPE\nDo not change the API contract\n"
+		b.Acceptance = "1. verify something\n2. run tests"
+	}))
 	store := &claimCountingStore{Store: inner}
 
 	worker := &ExecuteBeadWorker{
@@ -915,7 +919,7 @@ func TestReadinessWarningEvidenceIncludesStructuredDecisionFields(t *testing.T) 
 	assert.Equal(t, "warn", body["decision"])
 	assert.Equal(t, "revise the rewrite so it preserves every explicit commitment", body["suggested_action"])
 	assert.NotEmpty(t, body["fingerprint"])
-	assert.Contains(t, fmt.Sprintf("%v", body["detail"]), "acceptance criteria")
+	assert.Contains(t, fmt.Sprintf("%v", body["detail"]), "drops commitment")
 }
 
 // TestReadinessHookEmptyOutput_DeduplicatesPrefix asserts that when the intake

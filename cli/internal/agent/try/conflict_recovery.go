@@ -78,7 +78,7 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 			Summary:   "preserved iteration auto-recovered onto current tip via ort",
 			Body:      fmt.Sprintf("preserve_ref=%s\nnew_tip=%s", report.PreserveRef, newTip),
 			Actor:     in.Assignee,
-			Source:    "ddx agent try",
+			Source:    "legacy agent try",
 			CreatedAt: now().UTC(),
 		})
 		report.Status = StatusSuccess
@@ -103,7 +103,7 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 				Summary:   "preserved iteration resolved by focused conflict-resolve agent",
 				Body:      fmt.Sprintf("preserve_ref=%s\nnew_tip=%s", report.PreserveRef, resolvedTip),
 				Actor:     in.Assignee,
-				Source:    "ddx agent try",
+				Source:    "legacy agent try",
 				CreatedAt: now().UTC(),
 			})
 			report.Status = StatusSuccess
@@ -152,7 +152,7 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 		Summary:   "preserved iteration could not be auto-recovered; parked for operator",
 		Body:      bodyStr,
 		Actor:     in.Assignee,
-		Source:    "ddx agent try",
+		Source:    "legacy agent try",
 		CreatedAt: now().UTC(),
 	})
 	report.Detail = report.Status + ": preserve_ref=" + report.PreserveRef
@@ -169,7 +169,7 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 			OperatorRequired: true,
 			Reason:           reason,
 			Actor:            in.Assignee,
-			Source:           "ddx agent try",
+			Source:           "legacy agent try",
 		}, func(b *bead.Bead) error {
 			// Migration-only cleanup: defensive removal for legacy rows that escaped
 			// the lifecycle migration or arrived via external import.
@@ -177,7 +177,7 @@ func RunConflictRecovery(ctx context.Context, in ConflictRecoveryInput) Conflict
 			bead.SetNeedsHumanMeta(b, bead.NeedsHumanMeta{
 				Reason:          reason,
 				Since:           now().UTC().Format(time.RFC3339),
-				Source:          "ddx agent try",
+				Source:          "legacy agent try",
 				SuggestedAction: "resolve the preserved land conflict manually or split the bead",
 				Summary:         "land conflict requires operator decision",
 			})

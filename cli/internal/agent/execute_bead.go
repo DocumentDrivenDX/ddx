@@ -750,7 +750,7 @@ func appendBeadRoutingEvidence(appender BeadEventAppender, beadID, harness, prov
 		Summary: summary,
 		Body:    string(data),
 		Actor:   "ddx",
-		Source:  "ddx agent execute-bead",
+		Source:  "legacy agent execute-bead",
 	})
 }
 
@@ -804,7 +804,7 @@ func appendBeadCostEvidence(appender BeadEventAppender, beadID, attemptID string
 		Summary: summary,
 		Body:    string(data),
 		Actor:   "ddx",
-		Source:  "ddx agent execute-bead",
+		Source:  "legacy agent execute-bead",
 	})
 }
 
@@ -943,7 +943,7 @@ func appendRateLimitRetryEvent(appender BeadEventAppender, beadID string, info R
 		Summary: summary,
 		Body:    string(data),
 		Actor:   "ddx",
-		Source:  "ddx agent execute-bead",
+		Source:  "legacy agent execute-bead",
 	})
 }
 

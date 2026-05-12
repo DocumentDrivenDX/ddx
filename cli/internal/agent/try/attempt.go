@@ -261,7 +261,7 @@ func Attempt(ctx context.Context, store Store, beadID string, opts AttemptOpts) 
 		if effectiveStore != nil {
 			if err := effectiveStore.UpdateWithLifecycleStatus(beadID, bead.StatusOpen, bead.LifecycleTransitionOptions{
 				Reason: "declined: bead requires decomposition before execution",
-				Source: "ddx agent try",
+				Source: "legacy agent try",
 			}, func(b *bead.Bead) error {
 				if b.Extra == nil {
 					b.Extra = make(map[string]any)

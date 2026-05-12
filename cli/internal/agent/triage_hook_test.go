@@ -120,7 +120,7 @@ func TestTriageHook_UsesRunnerLibrary(t *testing.T) {
 	}
 	body, err := os.ReadFile(triageHookPath)
 	require.NoError(t, err)
-	assert.NotContains(t, string(body), "ddx agent run", "triage_hook.go must not shell out to ddx agent run")
+	assert.NotContains(t, string(body), "legacy agent run", "triage_hook.go must not shell out to legacy agent run")
 }
 
 func TestTriageHook_PromptIncludesOutcomeAndLogExcerpt(t *testing.T) {

@@ -1,4 +1,4 @@
-{"actor":"ddx","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"claude-sonnet-4-6\",\"fallback_chain\":[]}","kind":"routing","source":"ddx agent execute-bead","summary":"provider=claude model=claude-sonnet-4-6"}
+{"actor":"ddx","body":"{\"resolved_provider\":\"claude\",\"resolved_model\":\"claude-sonnet-4-6\",\"fallback_chain\":[]}","kind":"routing","source":"legacy agent execute-bead","summary":"provider=claude model=claude-sonnet-4-6"}
 {"actor":"ddx","body":"result_rev=eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee\nbase_rev=ffffffffffffffffffffffffffffffffffffffff","kind":"execute-bead","source":"ddx work","summary":"merged_success"}
 {"actor":"ddx","body":"post-merge review: BLOCK (flagged for human)","kind":"review","source":"ddx work","summary":"review: BLOCK"}
 {"kind":"reopen","summary":"review: BLOCK"}
