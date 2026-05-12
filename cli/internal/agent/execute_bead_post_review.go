@@ -626,7 +626,7 @@ func applyTriageAction(store ExecuteBeadLoopStore, beadID, actor string, now tim
 	case triage.ActionEscalateTier:
 		nextTier := nextEscalatedTier(currentTier)
 		body["tier_hint"] = string(nextTier)
-		_ = store.Update(beadID, func(b *bead.Bead) {
+		_ = store.Update(context.Background(), beadID, func(b *bead.Bead) {
 			if b.Extra == nil {
 				b.Extra = make(map[string]any)
 			}

@@ -101,7 +101,7 @@ func NewPreDispatchLintHook(projectRoot string, store BeadReader, rcfg config.Re
 			return LintResult{}, &LintHookError{Kind: LintHookErrorKindDispatchFailure, Err: fmt.Errorf("bead reader required")}
 		}
 
-		b, err := store.Get(beadID)
+		b, err := store.Get(ctx, beadID)
 		if err != nil {
 			return LintResult{}, &LintHookError{Kind: LintHookErrorKindDispatchFailure, Err: fmt.Errorf("load bead %s: %w", beadID, err)}
 		}

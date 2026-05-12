@@ -71,7 +71,7 @@ func runReframer(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRu
 	tctx, cancel := context.WithTimeout(ctx, reframerDefaultTimeout)
 	defer cancel()
 
-	b, err := store.Get(beadID)
+	b, err := store.Get(ctx, beadID)
 	if err != nil {
 		return ReframeResult{Failed: true, Reason: "store_error"}
 	}
@@ -121,7 +121,7 @@ func runReframer(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRu
 		return ReframeResult{Failed: true, Reason: "invalid_output", CostUSD: result.CostUSD}
 	}
 
-	current, err := store.Get(beadID)
+	current, err := store.Get(ctx, beadID)
 	if err != nil {
 		return ReframeResult{Failed: true, Reason: "store_error"}
 	}
@@ -157,7 +157,7 @@ func runReframer(ctx context.Context, store ExecuteBeadLoopStore, runner AgentRu
 		return ReframeResult{Failed: true, Reason: "apply_error"}
 	}
 
-	_ = store.Update(beadID, func(b *bead.Bead) {
+	_ = store.Update(ctx, beadID, func(b *bead.Bead) {
 		ensureBeadExtra(b)
 		delete(b.Extra, consecutiveLadderExhaustionsKey)
 	})

@@ -270,9 +270,9 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 	// Queue-level depth check: orchestrator uses its own cap, not the
 	// implementation prompt's hardcoded depth-2 cap.
 	maxDepth := rcfg.MaxDecompositionDepth()
-	if maxDepth > 0 && storeBeadDepth(w.Store, candidate) >= maxDepth {
+	if maxDepth > 0 && storeBeadDepth(ctx, w.Store, candidate) >= maxDepth {
 		overflowBody, _ := json.Marshal(map[string]any{
-			"depth": storeBeadDepth(w.Store, candidate),
+			"depth": storeBeadDepth(ctx, w.Store, candidate),
 			"max":   maxDepth,
 		})
 		_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
@@ -302,7 +302,7 @@ func (w *ExecuteBeadWorker) handlePostAttemptDecomposition(ctx context.Context, 
 		return
 	}
 
-	childIDs, decompErr := applyPreClaimDecomposition(w.Store, candidate, decomp, assignee, at)
+	childIDs, decompErr := applyPreClaimDecomposition(ctx, w.Store, candidate, decomp, assignee, at)
 	if decompErr != nil {
 		parkOperator(fmt.Sprintf("decomposition apply error: %s", decompErr.Error()))
 		return
@@ -488,8 +488,8 @@ func (f ExecuteBeadExecutorFunc) Execute(ctx context.Context, beadID string) (Ex
 
 type ExecuteBeadLoopStore interface {
 	ReadyExecution() ([]bead.Bead, error)
-	Get(id string) (*bead.Bead, error)
-	Create(b *bead.Bead) error
+	Get(args ...any) (*bead.Bead, error)
+	Create(args ...any) error
 	Claim(id, assignee string) error
 	Unclaim(id string) error
 	TouchClaimHeartbeat(id string) error
@@ -506,7 +506,7 @@ type ExecuteBeadLoopStore interface {
 	// Update mutates a bead in place. Used by the post-merge triage step to
 	// add metadata hints (e.g. tier-pin) when the triage policy escalates after
 	// repeated review BLOCKs.
-	Update(id string, mutate func(*bead.Bead)) error
+	Update(args ...any) error
 	UpdateWithLifecycleStatus(id string, status string, opts bead.LifecycleTransitionOptions, mutate func(*bead.Bead) error) error
 	ParkToProposed(id string, reason bead.ParkReason, mutate func(*bead.Bead)) error
 }
@@ -1049,7 +1049,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		// the classifier or splitter (docs/triage/decomposition.md §Recursion depth cap).
 		if runtime.PreClaimIntakeHook != nil && rcfg.MaxDecompositionDepth() > 0 {
 			maxDepth := rcfg.MaxDecompositionDepth()
-			depth := storeBeadDepth(w.Store, &candidate)
+			depth := storeBeadDepth(ctx, w.Store, &candidate)
 			if depth >= maxDepth {
 				body, _ := json.Marshal(map[string]any{"depth": depth, "max": maxDepth})
 				_ = w.Store.AppendEvent(candidate.ID, bead.BeadEvent{
@@ -1060,7 +1060,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					Source:    "ddx work",
 					CreatedAt: now().UTC(),
 				})
-				if lerr := addBeadLabel(w.Store, candidate.ID, "needs-human-decomposition"); lerr != nil && runtime.Log != nil {
+				if lerr := addBeadLabel(ctx, w.Store, candidate.ID, "needs-human-decomposition"); lerr != nil && runtime.Log != nil {
 					_, _ = fmt.Fprintf(runtime.Log, "triage-overflow label error: %v\n", lerr)
 				}
 				overflowDetail := fmt.Sprintf("bead depth %d reached max_decomposition_depth %d; operator must split", depth, maxDepth)
@@ -1261,7 +1261,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				// too_large_decomposed with concrete child specs: validate the AC map,
 				// check the queue-level depth cap, then create children and wire deps.
 				lossyOrEmpty := isDecompositionLossy(decomp.ACMap) || (len(decomp.ACMap) == 0 && strings.TrimSpace(candidate.Acceptance) != "")
-				depthAtCap := storeBeadDepth(w.Store, &candidate) >= rcfg.MaxDecompositionDepth()
+				depthAtCap := storeBeadDepth(ctx, w.Store, &candidate) >= rcfg.MaxDecompositionDepth()
 				if lossyOrEmpty || depthAtCap {
 					// Cannot produce a lossless split: block for operator.
 					blockedDetail := "decomposition AC map is incomplete or depth cap reached; operator review required"
@@ -1293,7 +1293,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					}
 					break
 				}
-				childIDs, decompErr := applyPreClaimDecomposition(w.Store, &candidate, decomp, assignee, now().UTC())
+				childIDs, decompErr := applyPreClaimDecomposition(ctx, w.Store, &candidate, decomp, assignee, now().UTC())
 				if decompErr != nil {
 					if runtime.Log != nil {
 						_, _ = fmt.Fprintf(runtime.Log, "bead decomposition error: %v (%s)\n", decompErr, candidate.ID)
@@ -1653,8 +1653,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				Source:    "ddx work",
 				CreatedAt: now().UTC(),
 			})
-			_ = incrementConsecutiveLadderExhaustions(w.Store, candidate.ID)
-			if updated, getErr := w.Store.Get(candidate.ID); getErr == nil &&
+	_ = incrementConsecutiveLadderExhaustions(ctx, w.Store, candidate.ID)
+	if updated, getErr := w.Store.Get(ctx, candidate.ID); getErr == nil &&
 				consecutiveLadderExhaustionsValue(updated.Extra[consecutiveLadderExhaustionsKey]) >= 2 {
 				hasManualLabel := false
 				for _, lbl := range candidate.Labels {
@@ -1772,7 +1772,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		}
 
 		if attemptOut.Disposition == agenttry.OutcomeSuccess {
-			if err := clearExecuteLoopNoChangesMetadata(w.Store, candidate.ID); err != nil {
+			if err := clearExecuteLoopNoChangesMetadata(ctx, w.Store, candidate.ID); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, err)
 				})
@@ -1784,7 +1784,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			result.Successes++
 			result.LastSuccessAt = now().UTC()
 		} else if report.Status == ExecuteBeadStatusSuccess {
-			if err := clearExecuteLoopNoChangesMetadata(w.Store, candidate.ID); err != nil {
+			if err := clearExecuteLoopNoChangesMetadata(ctx, w.Store, candidate.ID); err != nil {
 				_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 					return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, err)
 				})
@@ -1868,7 +1868,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				})
 			}
 			if noChanges.Label != "" {
-				if err := addBeadLabel(w.Store, candidate.ID, noChanges.Label); err != nil {
+				if err := addBeadLabel(ctx, w.Store, candidate.ID, noChanges.Label); err != nil {
 					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 						return commitOutcomeError("addBeadLabel", assignee, result, err)
 					})
@@ -1894,7 +1894,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 					report.Detail = noChanges.Evidence
 				}
 				_ = w.Store.AppendEvent(candidate.ID, executeBeadLoopEvent(report, assignee, now().UTC()))
-				if err := clearExecuteLoopNoChangesMetadata(w.Store, candidate.ID); err != nil {
+				if err := clearExecuteLoopNoChangesMetadata(ctx, w.Store, candidate.ID); err != nil {
 					_ = commitOutcome(ctx, w.Store, candidate.ID, func() error {
 						return commitOutcomeError("clearExecuteLoopNoChangesMetadata", assignee, result, err)
 					})
@@ -2895,7 +2895,7 @@ func classifyLoopReportFailure(report *ExecuteBeadReport) {
 // consumes decomposition budget when it is a child marked with the decomposed
 // label; epics and other organizational parents do not make execution less
 // eligible.
-func storeBeadDepth(store ExecuteBeadLoopStore, b *bead.Bead) int {
+func storeBeadDepth(ctx context.Context, store ExecuteBeadLoopStore, b *bead.Bead) int {
 	if b == nil {
 		return 0
 	}
@@ -2911,7 +2911,7 @@ func storeBeadDepth(store ExecuteBeadLoopStore, b *bead.Bead) int {
 			break
 		}
 		seen[parentID] = struct{}{}
-		parent, err := store.Get(parentID)
+		parent, err := store.Get(ctx, parentID)
 		if err != nil || parent == nil {
 			break
 		}
@@ -2927,7 +2927,7 @@ func storeBeadDepth(store ExecuteBeadLoopStore, b *bead.Bead) int {
 // applyPreClaimDecomposition creates child beads, wires parent→child dependency
 // edges, and appends a triage-decomposed event to the parent. It returns the
 // IDs of the created children so the caller can log or record them.
-func applyPreClaimDecomposition(store ExecuteBeadLoopStore, parent *bead.Bead, decomp *PreClaimDecomposition, actor string, at time.Time) ([]string, error) {
+func applyPreClaimDecomposition(ctx context.Context, store ExecuteBeadLoopStore, parent *bead.Bead, decomp *PreClaimDecomposition, actor string, at time.Time) ([]string, error) {
 	childIDs := make([]string, 0, len(decomp.Children))
 	for _, child := range decomp.Children {
 		nb := &bead.Bead{
@@ -2937,7 +2937,7 @@ func applyPreClaimDecomposition(store ExecuteBeadLoopStore, parent *bead.Bead, d
 			Labels:      append([]string(nil), child.Labels...),
 			Parent:      parent.ID,
 		}
-		if err := store.Create(nb); err != nil {
+		if err := store.Create(ctx, nb); err != nil {
 			return childIDs, fmt.Errorf("decompose: create child %q: %w", child.Title, err)
 		}
 		childIDs = append(childIDs, nb.ID)
@@ -2945,7 +2945,7 @@ func applyPreClaimDecomposition(store ExecuteBeadLoopStore, parent *bead.Bead, d
 
 	// Wire parent → children dependency edges so the parent is blocked until
 	// all children close.
-	if err := store.Update(parent.ID, func(b *bead.Bead) {
+	if err := store.Update(ctx, parent.ID, func(b *bead.Bead) {
 		for _, childID := range childIDs {
 			b.AddDep(childID, "depends_on")
 		}
@@ -3066,11 +3066,11 @@ func appendPreClaimIntakeWarning(store ExecuteBeadLoopStore, beadID, actor, reas
 
 // addBeadLabel mutates the bead in place to add a label idempotently. The
 // store handles persistence; concurrent callers serialize via the store lock.
-func addBeadLabel(store ExecuteBeadLoopStore, beadID, label string) error {
+func addBeadLabel(ctx context.Context, store ExecuteBeadLoopStore, beadID, label string) error {
 	if label == "" {
 		return nil
 	}
-	return store.Update(beadID, func(b *bead.Bead) {
+	return store.Update(ctx, beadID, func(b *bead.Bead) {
 		for _, existing := range b.Labels {
 			if existing == label {
 				return
@@ -3276,8 +3276,8 @@ func setOrDeleteBeadExtra(extra map[string]any, key, value string) {
 	extra[key] = value
 }
 
-func clearExecuteLoopNoChangesMetadata(store ExecuteBeadLoopStore, beadID string) error {
-	return store.Update(beadID, func(b *bead.Bead) {
+func clearExecuteLoopNoChangesMetadata(ctx context.Context, store ExecuteBeadLoopStore, beadID string) error {
+	return store.Update(ctx, beadID, func(b *bead.Bead) {
 		if b.Extra == nil {
 			return
 		}
@@ -3658,8 +3658,31 @@ func isPerBeadBudgetExhaustedReport(report ExecuteBeadReport) bool {
 // The counter is read by the auto-recovery hook to trigger reframe/decompose
 // once the threshold is exceeded. The value is stored as int but may be read
 // back as float64 after a JSON round-trip through the bead store.
-func incrementConsecutiveLadderExhaustions(store ExecuteBeadLoopStore, beadID string) error {
-	return store.Update(beadID, func(b *bead.Bead) {
+func incrementConsecutiveLadderExhaustions(args ...any) error {
+	ctx := context.Background()
+	var store ExecuteBeadLoopStore
+	var beadID string
+	for _, arg := range args {
+		switch v := arg.(type) {
+		case context.Context:
+			if v != nil {
+				ctx = v
+			}
+		case ExecuteBeadLoopStore:
+			store = v
+		case string:
+			if beadID == "" {
+				beadID = v
+			}
+		}
+	}
+	if store == nil {
+		return fmt.Errorf("incrementConsecutiveLadderExhaustions: store required")
+	}
+	if beadID == "" {
+		return fmt.Errorf("incrementConsecutiveLadderExhaustions: bead id required")
+	}
+	return store.Update(ctx, beadID, func(b *bead.Bead) {
 		ensureBeadExtra(b)
 		current := consecutiveLadderExhaustionsValue(b.Extra[consecutiveLadderExhaustionsKey])
 		b.Extra[consecutiveLadderExhaustionsKey] = current + 1

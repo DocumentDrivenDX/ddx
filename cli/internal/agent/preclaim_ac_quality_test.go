@@ -92,7 +92,14 @@ type acQualityTestStore struct {
 	events []bead.BeadEvent
 }
 
-func (s *acQualityTestStore) Get(id string) (*bead.Bead, error) {
+func (s *acQualityTestStore) Get(args ...any) (*bead.Bead, error) {
+	var id string
+	for _, arg := range args {
+		if v, ok := arg.(string); ok {
+			id = v
+			break
+		}
+	}
 	if s.b == nil || s.b.ID != id {
 		return nil, fmt.Errorf("bead %s not found", id)
 	}
@@ -100,11 +107,26 @@ func (s *acQualityTestStore) Get(id string) (*bead.Bead, error) {
 	return &cp, nil
 }
 
-func (s *acQualityTestStore) Update(id string, mutate func(*bead.Bead)) error {
+func (s *acQualityTestStore) Update(args ...any) error {
+	var id string
+	var mutate func(*bead.Bead)
+	for _, arg := range args {
+		switch v := arg.(type) {
+		case string:
+			if id == "" {
+				id = v
+			}
+		case func(*bead.Bead):
+			mutate = v
+		}
+	}
 	if s.b == nil || s.b.ID != id {
 		return fmt.Errorf("bead %s not found", id)
 	}
 	b := *s.b
+	if mutate == nil {
+		return fmt.Errorf("missing mutate function")
+	}
 	mutate(&b)
 	s.b = &b
 	return nil

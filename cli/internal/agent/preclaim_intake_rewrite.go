@@ -1,6 +1,7 @@
 package agent
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -151,7 +152,7 @@ func applyPreClaimIntakeRewrite(store ExecuteBeadLoopStore, beadID, actor string
 		return fmt.Errorf("pre-claim intake rewrite: unexpected outcome %q", intake.normalizedOutcome())
 	}
 
-	original, err := store.Get(beadID)
+	original, err := store.Get(context.Background(), beadID)
 	if err != nil {
 		return fmt.Errorf("pre-claim intake rewrite: load bead %s: %w", beadID, err)
 	}
@@ -161,7 +162,7 @@ func applyPreClaimIntakeRewrite(store ExecuteBeadLoopStore, beadID, actor string
 		return err
 	}
 
-	if err := store.Update(beadID, func(b *bead.Bead) {
+	if err := store.Update(context.Background(), beadID, func(b *bead.Bead) {
 		if rewrite.Description != "" {
 			b.Description = rewrite.Description
 		}

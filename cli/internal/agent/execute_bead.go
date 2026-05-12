@@ -1747,7 +1747,7 @@ func prepareArtifacts(projectRoot, wtPath, beadID, attemptID, baseRev string, rc
 
 func loadBeadContext(wtPath, beadID string) (*bead.Bead, []executeBeadGoverningRef, error) {
 	store := bead.NewStore(filepath.Join(wtPath, ".ddx"))
-	b, err := store.Get(beadID)
+	b, err := store.Get(context.Background(), beadID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("loading bead %s from worktree snapshot: %w", beadID, err)
 	}
@@ -2153,7 +2153,7 @@ func beadDecompositionDepth(workDir string, b *bead.Bead) int {
 			break
 		}
 		seen[parentID] = struct{}{}
-		parent, err := store.Get(parentID)
+		parent, err := store.Get(context.Background(), parentID)
 		if err != nil || parent == nil {
 			break
 		}

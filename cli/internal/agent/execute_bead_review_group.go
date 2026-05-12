@@ -24,7 +24,7 @@ func (r *DefaultBeadReviewer) ReviewGroup(ctx context.Context, beadID, resultRev
 }
 
 func (r *DefaultBeadReviewer) reviewGroupWithDiff(ctx context.Context, beadID, resultRev string, impl ImplementerRouting, diff, reviewWorkDir, acCheckJSON string) (*ReviewGroupResult, error) {
-	b, err := r.BeadStore.Get(beadID)
+	b, err := r.BeadStore.Get(ctx, beadID)
 	if err != nil {
 		return nil, fmt.Errorf("review-group: get bead %s: %w", beadID, err)
 	}

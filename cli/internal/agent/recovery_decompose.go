@@ -49,7 +49,7 @@ func runPreClaimDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runn
 	tctx, cancel := context.WithTimeout(ctx, decomposerDefaultTimeout)
 	defer cancel()
 
-	b, err := store.Get(beadID)
+	b, err := store.Get(ctx, beadID)
 	if err != nil {
 		return nil, fmt.Errorf("decomposer: load bead: %w", err)
 	}
@@ -137,7 +137,7 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 	tctx, cancel := context.WithTimeout(ctx, decomposerDefaultTimeout)
 	defer cancel()
 
-	b, err := store.Get(beadID)
+	b, err := store.Get(ctx, beadID)
 	if err != nil {
 		return DecomposeResult{Failed: true, Reason: "store_error"}
 	}
@@ -200,13 +200,13 @@ func runDecomposer(ctx context.Context, store ExecuteBeadLoopStore, runner Agent
 			Labels:      append([]string(nil), child.Labels...),
 			Parent:      beadID,
 		}
-		if err := store.Create(nb); err != nil {
+		if err := store.Create(ctx, nb); err != nil {
 			return DecomposeResult{Failed: true, Reason: "create_error"}
 		}
 		childIDs = append(childIDs, nb.ID)
 	}
 
-	_ = store.Update(beadID, func(b *bead.Bead) {
+	_ = store.Update(ctx, beadID, func(b *bead.Bead) {
 		ensureBeadExtra(b)
 		b.Extra[bead.ExtraExecutionElig] = false
 	})

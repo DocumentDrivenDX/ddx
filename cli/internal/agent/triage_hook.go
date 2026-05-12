@@ -92,7 +92,7 @@ func NewPostAttemptTriageHook(projectRoot string, store BeadReader, rcfg config.
 			return TriageResult{}, fmt.Errorf("triage hook: %w", err)
 		}
 
-		b, err := store.Get(beadID)
+		b, err := store.Get(ctx, beadID)
 		if err != nil {
 			return TriageResult{}, fmt.Errorf("triage hook: load bead %s: %w", beadID, err)
 		}
