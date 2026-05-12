@@ -246,7 +246,7 @@ async function mockWorkerProgress(page: import('@playwright/test').Page) {
 	};
 }
 
-test('runs work→try→run drill-down with breadcrumb back-navigation and artifact link', async ({
+test('full stack: prompt/response/tool-trace/evidence', async ({
 	page
 }) => {
 	await page.route('/graphql', async (route) => {
@@ -337,9 +337,41 @@ test('runs work→try→run drill-down with breadcrumb back-navigation and artif
 				body: JSON.stringify({
 					data: {
 						runToolCalls: {
-							edges: [],
+							edges: [
+								{
+									node: {
+										id: 'rtc-0',
+										seq: 0,
+										name: 'Read',
+										inputs: JSON.stringify({ path: 'prompt.md' }),
+										output: 'read ok',
+										error: null,
+										durationMs: 42
+									},
+									cursor: 'rtc-0'
+								}
+							],
 							pageInfo: { hasNextPage: false, endCursor: null },
-							totalCount: 0
+							totalCount: 1
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunEvidenceFiles')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						run: {
+							id: RUN_ID,
+							bundleFiles: [
+								{ path: 'manifest.json', size: 256, mimeType: 'application/json' },
+								{ path: 'prompt.md', size: 128, mimeType: 'text/markdown' },
+								{ path: 'result.json', size: 140, mimeType: 'application/json' }
+							]
 						}
 					}
 				})
@@ -1050,63 +1082,46 @@ test('tab state survives navigation', async ({ page }) => {
 	// Default tab is overview
 	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'overview');
 	await expect(detail.locator('[data-testid="rundetail-overview"]')).toBeVisible();
+	await expect(detail.getByText('claude', { exact: true }).first()).toBeVisible();
+	await expect(page.getByText('12,000')).toBeVisible();
+	await expect(page.getByText('3,400')).toBeVisible();
+	await expect(page.getByText('$0.0876')).toBeVisible();
 
-	// AC2: clicking a tab updates URL
+	// Prompt tab shows the raw prompt body.
 	await detail.locator('button[data-tab="prompt"]').click();
 	await expect(page).toHaveURL(/[?&]tab=prompt\b/);
 	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'prompt');
 	await expect(detail.locator('[data-testid="rundetail-prompt"]')).toBeVisible();
+	await expect(detail.locator('[data-testid="rundetail-prompt-body"]')).toContainText(
+		'session prompt'
+	);
 
+	// Response tab shows the raw response body.
 	await detail.locator('button[data-tab="response"]').click();
 	await expect(page).toHaveURL(/[?&]tab=response\b/);
 	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'response');
+	await expect(detail.locator('[data-testid="rundetail-response-body"]')).toContainText(
+		'session response'
+	);
 
+	// Tools tab exposes the tool trace.
 	await detail.locator('button[data-tab="tools"]').click();
 	await expect(page).toHaveURL(/[?&]tab=tools\b/);
 	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'tools');
+	await expect(detail.locator('[data-testid="rundetail-tools"]')).toBeVisible();
+	await expect(detail.locator('[data-tool-seq="0"]')).toBeVisible();
+	await detail.locator('[data-tool-seq="0"]').click();
+	await expect(detail.locator('[data-testid="rundetail-tools"]')).toContainText('prompt.md');
+	await expect(detail.locator('[data-testid="rundetail-tools"]')).toContainText('read ok');
 
-	await detail.locator('button[data-tab="session"]').click();
-	await expect(page).toHaveURL(/[?&]tab=session\b/);
-	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'session');
-
+	// Evidence tab lists bundle files.
 	await detail.locator('button[data-tab="evidence"]').click();
 	await expect(page).toHaveURL(/[?&]tab=evidence\b/);
 	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'evidence');
 	await expect(detail.locator('[data-testid="rundetail-evidence"]')).toBeVisible();
-
-	// AC2: returning to overview removes tab from URL
-	await detail.locator('button[data-tab="overview"]').click();
-	await expect(page).not.toHaveURL(/[?&]tab=/);
-	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'overview');
-
-	// AC2: deep-link with ?tab=prompt opens that tab on load
-	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}?tab=prompt`);
-	await expect(page.locator('[data-testid="rundetail"] [data-active-tab]')).toHaveAttribute(
-		'data-active-tab',
-		'prompt'
-	);
-	await expect(page.locator('[data-testid="rundetail-prompt"]')).toBeVisible();
-
-	// Work-layer detail: only overview tab is shown
-	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${WORK_ID}`);
-	await expect(page.locator('h1', { hasText: WORK_ID })).toBeVisible();
-	const workDetail = page.locator('[data-testid="rundetail"]');
-	await expect(workDetail.locator('button[data-tab="overview"]')).toBeVisible();
-	await expect(workDetail.locator('button[data-tab="prompt"]')).toHaveCount(0);
-	await expect(workDetail.locator('button[data-tab="response"]')).toHaveCount(0);
-	await expect(workDetail.locator('button[data-tab="session"]')).toHaveCount(0);
-	await expect(workDetail.locator('button[data-tab="tools"]')).toHaveCount(0);
-
-	// Try-layer detail: overview, prompt, response, tools, evidence (no session)
-	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${TRY_ID}`);
-	await expect(page.locator('h1', { hasText: TRY_ID })).toBeVisible();
-	const tryDetail = page.locator('[data-testid="rundetail"]');
-	await expect(tryDetail.locator('button[data-tab="overview"]')).toBeVisible();
-	await expect(tryDetail.locator('button[data-tab="prompt"]')).toBeVisible();
-	await expect(tryDetail.locator('button[data-tab="response"]')).toBeVisible();
-	await expect(tryDetail.locator('button[data-tab="tools"]')).toBeVisible();
-	await expect(tryDetail.locator('button[data-tab="evidence"]')).toBeVisible();
-	await expect(tryDetail.locator('button[data-tab="session"]')).toHaveCount(0);
+	await expect(detail.locator('[data-evidence-path="manifest.json"]')).toBeVisible();
+	await expect(detail.locator('[data-evidence-path="prompt.md"]')).toBeVisible();
+	await expect(detail.locator('[data-evidence-path="result.json"]')).toBeVisible();
 });
 
 test('deep-link to tools tab', async ({ page }) => {

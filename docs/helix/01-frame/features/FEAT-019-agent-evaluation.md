@@ -9,6 +9,7 @@ ddx:
     - FEAT-012
     - FEAT-014
 ---
+
 # Feature: DDx Agent Evaluation UX
 
 **ID:** FEAT-019
@@ -87,6 +88,7 @@ other preserved `ddx try` iteration.
 ### Relationship to workflow skills and tools
 
 Workflow shapes live in the skills library:
+
 - `compare-prompts` — N-arm dispatch + aggregation
 - `replay-bead` — re-run with altered conditions + baseline diff
 - `benchmark-suite` — compare across prompt matrix
@@ -99,6 +101,7 @@ exploration loops.
 ## Problem Statement
 
 **Current situation:**
+
 - `ddx run` can dispatch one agent invocation and capture output/tokens/cost.
 - Comparison skills can run multiple arms and check consensus (pass/fail).
 - Fizeau gives DDx one execution boundary with route facts, tool-call logging,
@@ -108,6 +111,7 @@ exploration loops.
   bead with a different model, or grade the quality of results.
 
 **Pain points:**
+
 - When evaluating whether a local Fizeau route can replace a cloud
   model for a task class, there's no structured way to compare.
 - Side-effecting agent runs (file writes, shell commands) can't be safely
@@ -136,6 +140,7 @@ The canonical architecture is
 > those records. Requirements below describe the evaluation UX layer.
 
 **Comparison record storage and display**
+
 1. Comparison records written by the `compare-prompts` skill (or any skill
    that produces a `ComparisonRecord`) are stored in the FEAT-010 run
    substrate with `type: comparison`.
@@ -237,12 +242,14 @@ The canonical architecture is
 ### Evaluation UX, not execution framework
 
 FEAT-019 provides the storage schema and UI surfaces for evaluation results:
+
 - Store and display comparison records (written by skills)
 - Store, manage, and display grading rubrics
 - Aggregate and display benchmark results
 - Invoke the grading harness and record results
 
 FEAT-019 does **not** provide:
+
 - Comparison dispatch (→ `compare-prompts` skill)
 - Replay execution (→ `replay-bead` skill)
 - Benchmark execution (→ `benchmark-suite` skill)
@@ -281,17 +288,19 @@ compare-prompts --grade cmp-abc123 --rubric rubrics/code-quality.md
 # .ddx/config.yaml
 evaluation:
   compare:
-    default_grader_min_power: 10   # requested reviewer strength for grading
+    default_grader_min_power: 10 # requested reviewer strength for grading
 ```
 
 ## User Stories
 
 ### US-190: Developer Views Comparison Results in Web UI
+
 **As a** developer evaluating whether a local model can handle a task class
 **I want** to view comparison records in the web UI after the `compare-prompts` skill runs
 **So that** I can see concrete differences in output quality and cost
 
 **Acceptance Criteria:**
+
 - Given a comparison record exists in the FEAT-010 substrate, then the web UI
   comparison list shows per-arm summary (tokens, cost, duration)
 - Given I open a comparison detail view, then I see per-arm output, effect diff,
@@ -300,11 +309,13 @@ evaluation:
   via CLI for CI consumption
 
 ### US-191: Developer Grades Agent Outputs
+
 **As a** developer assessing prompt quality
 **I want** to have a smart model grade the outputs of a comparison run
 **So that** I get a structured quality score without manual review
 
 **Acceptance Criteria:**
+
 - Given a completed comparison, when a grading workflow evaluates `<id>`,
   then a reviewer route evaluates each arm
 - Given the grading completes, then each arm has a score, pass/fail, and
@@ -313,11 +324,13 @@ evaluation:
   the default grading template
 
 ### US-192: CI Pipeline Runs Prompt Regression Test
+
 **As a** CI system ensuring prompt quality
 **I want** to compare agent outputs against a recorded baseline
 **So that** prompt changes that degrade quality are caught before merge
 
 **Acceptance Criteria:**
+
 - Given a comparison with an `agent` arm and the virtual provider baseline,
   when the DDx Agent output diverges significantly, then the
   comparison record reflects the difference
@@ -325,11 +338,13 @@ evaluation:
   fail the pipeline on grade regression
 
 ### US-193: Developer Inspects Effect Diffs in Comparison View
+
 **As a** developer reviewing comparison experiment results
 **I want** to see each arm's effect diff in the comparison detail view
 **So that** I can understand what each model actually changed in the codebase
 
 **Acceptance Criteria:**
+
 - Given a comparison record with effect diffs, then the web UI comparison
   detail view renders each arm's diff with syntax highlighting
 - Given a comparison has tool call logs, then they are accessible as
@@ -337,11 +352,13 @@ evaluation:
 - Given an arm failed, then its failure reason is shown in the comparison view
 
 ### US-194: Developer Views Replay Results on Bead Detail
+
 **As a** developer evaluating local model capability
 **I want** to view replay results in the bead detail view after the `replay-bead` skill runs
 **So that** I can compare the new model's output against the known-good result
 
 **Acceptance Criteria:**
+
 - Given a replay record exists for a bead, then the bead detail view includes
   a "Replays" tab listing all replays with model/harness/outcome summary
 - Given I open a replay detail view, then I see the new diff, the baseline diff,
@@ -350,11 +367,13 @@ evaluation:
   replay detail view
 
 ### US-195: Bead Links to Agent Session on Close
+
 **As a** developer building a replay corpus
 **I want** bead close to record the session ID and closing commit
 **So that** future replays can reconstruct the exact prompt and baseline
 
 **Acceptance Criteria:**
+
 - Given an agent run closes bead ddx-xxx, then `session_id` and
   `closing_commit_sha` are recorded as bead evidence
 - Given `ddx bead show ddx-xxx`, then model/harness/tokens/cost are
@@ -363,11 +382,13 @@ evaluation:
   and `ddx bead show` omits agent metadata
 
 ### US-196: Evaluation UI Displays Records from Preserved Try Iterations
+
 **As** a developer evaluating bead execution quality
 **I want** FEAT-019 UI to display comparison/grading records sourced from preserved `ddx try` iterations
 **So that** the evaluation UX surfaces what skills produce from preserved iterations — not a parallel execution model
 
 **Acceptance Criteria:**
+
 - Given preserved `ddx try` iterations exist for a bead, when skills write
   comparison or benchmark records referencing those iterations, then FEAT-019
   UI displays them without requiring a separate evaluation execution path.
@@ -375,7 +396,7 @@ evaluation:
   provenance is inspected in the UI, then it traces back to the originating
   try session ID and hidden ref — no FEAT-019-owned duplicate provenance record exists.
 - Given an evaluation record links to a run detail, then opening that link
-  uses the shared project-scoped run-detail surface, including the layer-
+  uses the shared project-scoped run-detail surface at `/runs/[runId]`, including the layer-
   appropriate tab strip (`work` → `overview`; `try` → `overview`, `prompt`,
   `response`, `tools`, `evidence`; `run` → `overview`, `prompt`, `response`,
   `session`, `tools`, `evidence`), the Evidence tab / download affordances,
