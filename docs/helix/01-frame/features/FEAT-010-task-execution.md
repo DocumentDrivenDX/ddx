@@ -238,10 +238,14 @@ prompt fitness rather than raw length: expanding a one-line underspecified bead
 is safe when the added durable context is required for execution, and compressing
 a noisy bead is safe when explicit commitments remain preserved.
 
-Readiness must reject the rewrite and move the bead to `status=proposed` when
-preservation cannot be proven from durable anchors. It must not invent
-product behavior, choose between conflicting requirements, change scope, delete
-unresolved constraints, or guess a missing governing artifact.
+Readiness must reject the rewrite when preservation cannot be proven from
+durable anchors. Rejected rewrite does not by itself authorize operator
+attention: DDx next tries safe decomposition or replacement work when that can
+preserve explicit scope, and moves the bead to `status=proposed` only when the
+remaining ambiguity, missing governing artifact, or scope conflict requires
+operator judgment. It must not invent product behavior, choose between
+conflicting requirements, change scope, delete unresolved constraints, or guess
+a missing governing artifact.
 
 `PostAttemptTriageHook` runs after the attempt has produced its local evidence:
 agent result, commit/no-commit state, no-changes rationale if any, post-run

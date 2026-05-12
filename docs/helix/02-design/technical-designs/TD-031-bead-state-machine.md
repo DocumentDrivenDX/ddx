@@ -229,7 +229,7 @@ Bead readiness assessment is the canonical pre-claim decision for actionability 
 
 The `proposed → open` transition, recorded by `triaged`, is the operator-acceptance signal for readiness idempotency. After that durable override, readiness may re-evaluate the bead, but it must not re-park the same bead for the same rule or finding unless prompt-relevant fields changed or the operator explicitly requests re-triage.
 
-For successful replacement rewrites, the bead body may be materially shorter or longer than the original when prompt fitness requires it. Preservation is proven by the `triage-rewritten` / `intake-rewritten` evidence record and durable anchors, not by keeping old text inside the prompt body. For rejected rewrites, readiness moves the bead to `status=proposed`.
+For successful replacement rewrites, the bead body may be materially shorter or longer than the original when prompt fitness requires it. Preservation is proven by the `triage-rewritten` / `intake-rewritten` evidence record and durable anchors, not by keeping old text inside the prompt body. For rejected rewrites, readiness enters the §3.3 decomposition-first sequence when structural follow-up work can preserve explicit scope; it moves the bead to `status=proposed` only when safe rewrite/decomposition/replacement cannot resolve the ambiguity without operator judgment.
 
 **Labels added**: `triage`, `blocked-on-upstream:<id>`, `decomposed`, `triage:spec-gap`, `triage:missing-acceptance` (as applicable). Legacy/backcompat labels (`needs_human`, `needs-human-decomposition`) may be read during migration but must not be added as lifecycle controls.
 
