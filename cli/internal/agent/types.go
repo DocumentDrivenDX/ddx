@@ -78,12 +78,13 @@ type AgentRunRuntime struct {
 	EstimatedPromptTokens int
 	RequiresTools         bool
 	SessionLogDirOverride string
-	// HarnessOverride, ModelOverride, ModelRefOverride, ProfileOverride, and
+	// HarnessOverride, ProviderOverride, ModelOverride, ModelRefOverride, ProfileOverride, and
 	// PermissionsOverride let a caller override one durable knob from rcfg for
 	// this single invocation without re-resolving the full ResolvedConfig.
 	// SD-024 step B22d-d: execute-bead sets permissions=unrestricted; hidden
 	// lifecycle calls use profile-only routing hints sourced from fizeau.
 	HarnessOverride     string
+	ProviderOverride    string
 	ModelOverride       string
 	ModelRefOverride    string
 	ProfileOverride     string

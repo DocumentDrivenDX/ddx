@@ -69,14 +69,18 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	r.heartbeatInterval = workers.ResolveHeartbeatInterval()
 
 	r.harness = overrides.Harness
+	r.explicitHarness = overrides.Harness != ""
 
 	r.model = overrides.Model
+	r.explicitModel = overrides.Model != ""
 	if r.model == "" && !overrides.OpaquePassthrough && agent != nil {
 		r.model = agent.Model
 	}
 
 	r.provider = overrides.Provider
 	r.modelRef = overrides.ModelRef
+	r.explicitProvider = overrides.Provider != ""
+	r.explicitModelRef = overrides.ModelRef != ""
 	r.profile = overrides.Profile
 	r.minTier = overrides.MinTier
 	r.maxTier = overrides.MaxTier
@@ -106,6 +110,7 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 
 	r.evidenceCaps = c.ResolveEvidenceCaps(r.harness)
 	r.beadQualityLintBlockThresholdScore = c.ResolveBeadQualityLintBlockThresholdScore()
+	r.beadQualityMode = c.ResolveBeadQualityMode()
 
 	r.contextBudget = overrides.ContextBudget
 	if r.contextBudget == "" && c != nil {
@@ -174,6 +179,10 @@ type ResolvedConfig struct {
 	model                              string
 	provider                           string
 	modelRef                           string
+	explicitHarness                    bool
+	explicitModel                      bool
+	explicitProvider                   bool
+	explicitModelRef                   bool
 	profile                            string
 	minTier                            string
 	maxTier                            string
@@ -191,6 +200,7 @@ type ResolvedConfig struct {
 	reasoningLevels                    map[string][]string
 	providerRequestTimeout             time.Duration
 	beadQualityLintBlockThresholdScore int
+	beadQualityMode                    string
 	triagePolicy                       triage.TriagePolicy
 	maxDecompositionDepth              int
 	acQualityMinScore                  float64
@@ -250,6 +260,26 @@ func (r ResolvedConfig) Provider() string {
 func (r ResolvedConfig) ModelRef() string {
 	r.requireSealed()
 	return r.modelRef
+}
+
+func (r ResolvedConfig) ExplicitHarness() (string, bool) {
+	r.requireSealed()
+	return r.harness, r.explicitHarness
+}
+
+func (r ResolvedConfig) ExplicitModel() (string, bool) {
+	r.requireSealed()
+	return r.model, r.explicitModel
+}
+
+func (r ResolvedConfig) ExplicitProvider() (string, bool) {
+	r.requireSealed()
+	return r.provider, r.explicitProvider
+}
+
+func (r ResolvedConfig) ExplicitModelRef() (string, bool) {
+	r.requireSealed()
+	return r.modelRef, r.explicitModelRef
 }
 
 func (r ResolvedConfig) Profile() string {
@@ -362,6 +392,12 @@ func (r ResolvedConfig) MaxDecompositionDepth() int {
 func (r ResolvedConfig) BeadQualityLintBlockThresholdScore() int {
 	r.requireSealed()
 	return r.beadQualityLintBlockThresholdScore
+}
+
+// BeadQualityMode returns the effective bead-quality policy.
+func (r ResolvedConfig) BeadQualityMode() string {
+	r.requireSealed()
+	return r.beadQualityMode
 }
 
 // ACQualityMinScore returns the minimum verifiability score required by the

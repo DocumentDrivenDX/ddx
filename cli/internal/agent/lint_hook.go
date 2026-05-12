@@ -125,16 +125,16 @@ func NewPreDispatchLintHook(projectRoot string, store BeadReader, rcfg config.Re
 			return LintResult{}, &LintHookError{Kind: LintHookErrorKindDispatchFailure, Err: err}
 		}
 
-		result, err := dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, AgentRunRuntime{
-			Prompt:           prompt,
-			WorkDir:          projectRoot,
-			PromptSource:     "bead-lifecycle-lint",
-			ProfileOverride:  selectProfileForDispatch(ctx, projectRoot, svc, runner, SelectCheapestProfile),
-			ClearRoutingPins: true,
-			ClearProfile:     true,
-			ClearMinPower:    true,
-			ClearMaxPower:    true,
-		})
+		runtime := AgentRunRuntime{
+			Prompt:        prompt,
+			WorkDir:       projectRoot,
+			PromptSource:  "bead-lifecycle-lint",
+			ClearProfile:  true,
+			ClearMinPower: true,
+			ClearMaxPower: true,
+		}
+		applyLifecycleHookRouting(ctx, projectRoot, svc, runner, rcfg, &runtime, SelectCheapestProfile)
+		result, err := dispatchViaResolvedConfig(ctx, projectRoot, svc, runner, rcfg, runtime)
 		if err != nil {
 			switch {
 			case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded):

@@ -488,9 +488,11 @@ The layer-3 drain evaluates each ready bead through this mechanical sequence:
    compressing noisy/stale beads as the durable context requires; original text
    is preserved in readiness evidence for audit. Too-large work is decomposed
    before an implementation attempt. Ambiguous or underspecified work moves to
-   `status=proposed`. Readiness infrastructure failure records evidence and
-   follows the configured fail-open/factory-mode policy; it never creates an
-   unexplained cooldown.
+   `status=proposed` only when the gate reaches a hard operator-required
+   condition; otherwise WARN-ONLY findings proceed on the open forward-progress
+   lane. Readiness infrastructure failure records evidence and follows the
+   configured fail-open/factory-mode policy; it never creates an unexplained
+   cooldown.
 2. **Claim.** Claim only an `actionable_atomic` or safely rewritten bead. Claim
    races skip the bead for the current pass without cooldown.
 3. **Primary implementation cycle.** Run one layer-2 implementation attempt.
@@ -899,13 +901,18 @@ after-evidence action. The legacy compatibility name `PreClaimIntakeHook` and
 `MODE: intake` may still appear in migration code or notes, but they are not
 the product concept.
 
+Open is the forward-progress lane. In WARN-ONLY mode, readiness warnings
+proceed by default, and only a hard operator-required condition may park the
+bead in `status=proposed`.
+
 The hook receives the bead record, current execution policy, hook mode
 (`WARN-ONLY` or `BLOCK`), and the layer-3 evidence directory. It invokes the
 bead-lifecycle workflow skill from FEAT-011 and writes a bead readiness,
 scope, and decomposition report. In WARN-ONLY mode, the report is diagnostic
-unless the hook can safely improve or decompose the bead. In BLOCK/factory
-mode, a valid low readiness score, unsafe ambiguity, or too-large
-classification stops implementation before claim.
+and the open forward-progress lane continues unless the hook can safely
+improve or decompose the bead or reaches a hard operator-required condition.
+In BLOCK/factory mode, a valid low readiness score, unsafe ambiguity, or
+too-large classification stops implementation before claim.
 
 `PostAttemptTriageHook` runs after the attempt has produced its owned
 evidence: commits or no-changes rationale, command results, review verdicts,

@@ -31,7 +31,7 @@ Bad:
 
 Good:
 > When `ddx update` runs in a worktree whose `.ddx/config.yaml`
-> specifies `library.path: /custom/path`, the subtree pull uses the
+> specifies `library.path: /custom/path`, the library fetch uses the
 > wrong remote. Root cause: `resolveLibraryPath()` in
 > `cli/internal/config/paths.go:43` returns the default path when
 > `library.path` is an absolute path. Make the function respect

@@ -117,6 +117,7 @@ func TestValidateResolve(t *testing.T) {
 		assert.Equal(t, 30*time.Second, rcfg.HeartbeatInterval(), "default heartbeat")
 		assert.Empty(t, rcfg.Harness())
 		assert.Empty(t, rcfg.ContextBudget())
+		assert.Equal(t, BeadQualityModeWarnOnly, rcfg.BeadQualityMode(), "default bead-quality mode")
 	})
 
 	t.Run("agent config supplies model fallback", func(t *testing.T) {
@@ -203,6 +204,17 @@ func TestValidateResolve(t *testing.T) {
 		}
 		rcfg := cfg.Resolve(CLIOverrides{})
 		assert.Equal(t, 5, rcfg.ReviewMaxRetries())
+	})
+
+	t.Run("bead quality mode resolves", func(t *testing.T) {
+		cfg := &NewConfig{
+			Version: "1.0",
+			BeadQuality: &BeadQualityConfig{
+				Mode: BeadQualityModeBlock,
+			},
+		}
+		rcfg := cfg.Resolve(CLIOverrides{})
+		assert.Equal(t, BeadQualityModeBlock, rcfg.BeadQualityMode())
 	})
 
 	t.Run("zero-value ResolvedConfig panics on access", func(t *testing.T) {

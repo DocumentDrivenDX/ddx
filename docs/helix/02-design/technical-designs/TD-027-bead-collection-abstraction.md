@@ -69,7 +69,7 @@ Plain-English semantics:
 
 | From → To | Allowed? | Driver | Event fired |
 |---|---|---|---|
-| `proposed` → `open` | yes | operator (`ddx bead update --status open`) | `triaged` |
+| `proposed` → `open` | yes | operator acceptance (`ddx bead update --status open`) | `triaged` |
 | `proposed` → `cancelled` | yes | operator | `cancelled` |
 | `open` → `proposed` | yes | readiness or operator found missing decision input | `triage-ambiguous` / `review-manual-required` |
 | `open` → `in_progress` | yes | drain loop or operator (claim) | `claimed` |
@@ -85,6 +85,8 @@ Plain-English semantics:
 | `cancelled` → * | no | — | — (cancelled is terminal) |
 
 Closed and cancelled are terminal. `closed` satisfies dependency edges; `cancelled` does not satisfy dependency edges unless a future dependency policy explicitly defines an exception. Re-opening a closed bead is not a transition; it is filing a follow-up bead with `replaces` set.
+
+`triaged` is the operator-acceptance signal for `proposed → open`. Readiness idempotency uses that signal to avoid re-parking the same bead for the same rule or finding unless prompt-relevant fields changed or the operator explicitly requests re-triage.
 
 ### 2.1 Derived Queue Buckets
 
@@ -788,7 +790,7 @@ Events are append-only entries in `events` (§11.1). The `kind` field uses a clo
 
 ### Lifecycle events (storage-level state transitions)
 
-- `triaged` — `proposed → open`
+- `triaged` — `proposed → open` (operator acceptance signal)
 - `claimed` — claim acquired
 - `unclaimed` — claim released
 - `blocked` — moved to `blocked`

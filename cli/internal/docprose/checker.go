@@ -7,6 +7,11 @@ import (
 	"unicode"
 )
 
+var inlineCodePattern = regexp.MustCompile("`[^`]*`")
+var negationSectionHeadingPattern = regexp.MustCompile(`(?i)^(?:what .+ is not|non-?goals?|out of scope|anti-?patterns?)$`)
+var positiveCopulaPattern = regexp.MustCompile(`(?i)\b(?:is|are|stays|remains)\s+(?:a|an|the\s+)?[[:alpha:]][[:alnum:]_-]*(?:\s+[[:alpha:]][[:alnum:]_-]*){0,4}`)
+var negationCopulaPattern = regexp.MustCompile(`(?i)\b(?:is|are|stays|remains)\b.*\bnot\b`)
+
 type Mode string
 
 const (
@@ -19,6 +24,10 @@ type Checker struct {
 	mode       Mode
 	rules      []ruleSpec
 	vocabulary Vocabulary
+}
+
+type lineContext struct {
+	suppressNegation bool
 }
 
 func NewChecker(mode Mode, vocabulary Vocabulary) (*Checker, error) {
@@ -49,15 +58,76 @@ func NewChecker(mode Mode, vocabulary Vocabulary) (*Checker, error) {
 func (c *Checker) Findings(file, text string) []Finding {
 	var findings []Finding
 	lines := strings.Split(text, "\n")
+	inFrontmatter := false
+	inFence := false
+	fenceMarker := ""
+	seenContent := false
+	negationSuppressed := false
 
 	for idx, raw := range lines {
 		lineNo := idx + 1
-		line := strings.TrimSpace(raw)
-		if line == "" {
+		trimmed := strings.TrimSpace(raw)
+		if trimmed == "" {
+			continue
+		}
+		if !seenContent && trimmed == "---" {
+			inFrontmatter = true
+			seenContent = true
+			continue
+		}
+		seenContent = true
+
+		if inFrontmatter {
+			if trimmed == "---" {
+				inFrontmatter = false
+			}
 			continue
 		}
 
+		if isFenceLine(trimmed) {
+			if inFence {
+				if fenceMarker != "" && strings.HasPrefix(trimmed, fenceMarker) {
+					inFence = false
+					fenceMarker = ""
+				}
+				continue
+			}
+			inFence = true
+			fenceMarker = fenceDelimiter(trimmed)
+			continue
+		}
+		if inFence {
+			continue
+		}
+
+		if level, heading, ok := markdownHeading(trimmed); ok {
+			if level == 2 || level == 3 {
+				negationSuppressed = negationSectionHeadingPattern.MatchString(heading)
+			}
+			continue
+		}
+
+		line := stripInlineCode(raw)
+		line = strings.TrimSpace(line)
+		if line == "" || isMarkdownStructureLine(line) {
+			continue
+		}
+
+		ctx := lineContext{suppressNegation: negationSuppressed}
 		for _, rule := range c.rules {
+			if rule.Kind == "negation_predicate" {
+				if matchesRule(line, rule, ctx) {
+					findings = append(findings, Finding{
+						File:          file,
+						Line:          lineNo,
+						RuleID:        rule.ID,
+						Severity:      rule.Severity,
+						Rationale:     rule.Rationale,
+						SuggestedEdit: rule.SuggestedEdit,
+					})
+				}
+				continue
+			}
 			if rule.Kind == "repeated_opening" {
 				if repeatedOpeningKey(line) != "" {
 					findings = append(findings, Finding{
@@ -71,7 +141,7 @@ func (c *Checker) Findings(file, text string) []Finding {
 				}
 				continue
 			}
-			if matchesRule(line, rule) {
+			if matchesRule(line, rule, ctx) {
 				findings = append(findings, Finding{
 					File:          file,
 					Line:          lineNo,
@@ -126,31 +196,43 @@ func (c *Checker) termAccepted(term string) bool {
 	return false
 }
 
-func matchesRule(line string, rule ruleSpec) bool {
-	if len(rule.ContainsAny) == 0 {
-		return false
-	}
+func matchesRule(line string, rule ruleSpec, ctx lineContext) bool {
 	if isMarkdownStructureLine(line) {
 		return false
 	}
+	switch rule.ID {
+	case "prose.claim.unsupported":
+		return unsupportedClaim(line)
+	case "prose.ai_slop.polish":
+		return aiSlop(line)
+	case "prose.filler.transition":
+		return fillerTransition(line)
+	case "prose.specificity.actor_action":
+		return missingActorAction(line)
+	case "prose.cost.filler":
+		return tokenCost(line)
+	case "prose.structure.repeated_opening":
+		return repeatedOpeningKey(line) != ""
+	}
+	if rule.Kind == "negation_predicate" {
+		if ctx.suppressNegation {
+			return false
+		}
+		return definitionByNegation(line)
+	}
+	if len(rule.ContainsAny) == 0 {
+		return false
+	}
 	lower := strings.ToLower(line)
-	matched := false
 	for _, phrase := range rule.ContainsAny {
 		if phrase == "" {
 			continue
 		}
 		if strings.Contains(lower, strings.ToLower(phrase)) {
-			matched = true
-			break
+			return true
 		}
 	}
-	if !matched {
-		return false
-	}
-	if strings.HasSuffix(rule.ID, ".claims") {
-		return unsupportedClaim(line)
-	}
-	return true
+	return false
 }
 
 func isMarkdownStructureLine(line string) bool {
@@ -176,7 +258,8 @@ func isMarkdownStructureLine(line string) bool {
 func unsupportedClaim(line string) bool {
 	lower := strings.ToLower(line)
 	if containsAny(lower, []string{
-		"seamless",
+		"robust",
+		"comprehensive",
 		"industry-leading",
 		"world-class",
 		"best-in-class",
@@ -185,18 +268,6 @@ func unsupportedClaim(line string) bool {
 		return true
 	}
 	if unsupportedComprehensiveClaim(lower) {
-		return true
-	}
-	if hasEmpiricalOrCheckContext(lower) {
-		return false
-	}
-	if unsupportedBenefitClaim(lower) {
-		return true
-	}
-	if countMatches(lower, []string{"robust", "comprehensive", "smooth", "elegant", "excited", "high"}) >= 2 {
-		return true
-	}
-	if countWords(line) <= 8 {
 		return true
 	}
 	return containsAny(lower, []string{
@@ -222,35 +293,49 @@ func unsupportedComprehensiveClaim(lower string) bool {
 	})
 }
 
-func unsupportedBenefitClaim(lower string) bool {
+func aiSlop(line string) bool {
+	lower := strings.ToLower(line)
 	return containsAny(lower, []string{
-		"better alignment",
-		"better pattern",
-		"better tools",
 		"complex problems",
-		"cutting edge",
 		"powerful commands",
-		"productive ways",
+		"powerful automation",
 		"sophisticated autonomous",
 		"sophisticated control flow",
 		"sophisticated multi-agent",
+		"productive ways",
 		"true power",
 	})
 }
 
-func hasEmpiricalOrCheckContext(lower string) bool {
+func fillerTransition(line string) bool {
+	lower := strings.ToLower(line)
 	return containsAny(lower, []string{
-		"reproduced",
-		"measured",
-		"benchmark",
-		"test",
-		"coverage",
-		"contract",
-		"verifiable",
-		"quality-lifting pattern",
-		"risk",
-		"mitigation",
+		"to be clear",
+		"first, we should note",
+		"in conclusion",
+		"it is important to note",
+		"for clarity",
+		"that said",
 	})
+}
+
+func missingActorAction(line string) bool {
+	lower := strings.ToLower(line)
+	return containsAny(lower, []string{"enables", "supports", "streamlines"})
+}
+
+func tokenCost(line string) bool {
+	lower := strings.ToLower(line)
+	if containsAny(lower, []string{
+		"very important",
+		"in order to",
+		"effectively",
+		"begin to",
+		"make the experience better",
+	}) {
+		return true
+	}
+	return countMatches(lower, []string{"robust", "comprehensive", "smooth", "elegant", "excited", "high"}) >= 2
 }
 
 func containsAny(s string, needles []string) bool {
@@ -274,6 +359,110 @@ func countMatches(s string, needles []string) int {
 
 func countWords(s string) int {
 	return len(strings.Fields(s))
+}
+
+func markdownHeading(line string) (level int, heading string, ok bool) {
+	if !strings.HasPrefix(line, "#") {
+		return 0, "", false
+	}
+	level = 0
+	for level < len(line) && line[level] == '#' {
+		level++
+	}
+	if level < 2 || level > 3 {
+		return 0, "", false
+	}
+	if level >= len(line) || line[level] != ' ' {
+		return 0, "", false
+	}
+	heading = strings.TrimSpace(line[level+1:])
+	heading = strings.TrimRightFunc(heading, func(r rune) bool {
+		return r == '#' || unicode.IsSpace(r)
+	})
+	heading = strings.TrimSpace(heading)
+	return level, heading, heading != ""
+}
+
+func definitionByNegation(line string) bool {
+	for _, sentence := range sentenceFragments(line) {
+		if sentenceDefinitionByNegation(sentence) {
+			return true
+		}
+	}
+	return false
+}
+
+func sentenceFragments(line string) []string {
+	var fragments []string
+	rest := strings.TrimSpace(line)
+	for rest != "" {
+		head, tail, ok := cutSentence(rest)
+		if !ok {
+			fragments = append(fragments, rest)
+			break
+		}
+		fragments = append(fragments, head)
+		rest = strings.TrimSpace(tail)
+	}
+	return fragments
+}
+
+func sentenceDefinitionByNegation(sentence string) bool {
+	sentence = strings.TrimSpace(sentence)
+	if sentence == "" {
+		return false
+	}
+	if !negationCopulaPattern.MatchString(sentence) {
+		return false
+	}
+	if positivePredicateAfterNegation(sentence) {
+		return false
+	}
+	if positivePredicateBeforeSemicolon(sentence) {
+		return false
+	}
+	return true
+}
+
+func positivePredicateAfterNegation(sentence string) bool {
+	lower := strings.ToLower(sentence)
+	idx := strings.Index(lower, " not ")
+	if idx == -1 {
+		return false
+	}
+	tail := strings.TrimSpace(sentence[idx+len(" not "):])
+	return positiveCopulaPattern.MatchString(tail)
+}
+
+func positivePredicateBeforeSemicolon(sentence string) bool {
+	idx := strings.IndexAny(sentence, ";:")
+	if idx == -1 {
+		return false
+	}
+	head := strings.TrimSpace(sentence[:idx])
+	tail := strings.TrimSpace(sentence[idx+1:])
+	if !positiveCopulaPattern.MatchString(head) {
+		return false
+	}
+	return negationCopulaPattern.MatchString(tail)
+}
+
+func stripInlineCode(line string) string {
+	return inlineCodePattern.ReplaceAllString(line, "")
+}
+
+func isFenceLine(trimmed string) bool {
+	return strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~")
+}
+
+func fenceDelimiter(trimmed string) string {
+	if strings.HasPrefix(trimmed, "```") {
+		return "```"
+	}
+	if strings.HasPrefix(trimmed, "~~~") {
+		return "~~~"
+	}
+	return ""
 }
 
 func repeatedOpeningKey(line string) string {

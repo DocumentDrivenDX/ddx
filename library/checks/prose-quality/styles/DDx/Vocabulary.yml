@@ -2,5 +2,6 @@ extends: substitution
 message: "Use the DDx term that names the concept."
 level: suggestion
 ignorecase: true
+scope: summary
 swap:
   __ddx_generic_substitute_placeholder__: __ddx_specific_term_placeholder__

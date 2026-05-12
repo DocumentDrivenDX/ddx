@@ -19,6 +19,7 @@ func TestNewTestConfigForLoop(t *testing.T) {
 		Profile:                 "smart",
 		MinTier:                 "smart",
 		MaxTier:                 "smart",
+		BeadQualityMode:         BeadQualityModeBlock,
 		EvidenceCaps: EvidenceCapsConfig{
 			MaxPromptBytes:       intPtrLoop(123456),
 			MaxInlinedFileBytes:  intPtrLoop(2048),
@@ -63,6 +64,9 @@ func TestNewTestConfigForLoop(t *testing.T) {
 	}
 	if got := rcfg.MaxTier(); got != opts.MaxTier {
 		t.Errorf("MaxTier: got %q, want %q", got, opts.MaxTier)
+	}
+	if got := rcfg.BeadQualityMode(); got != BeadQualityModeBlock {
+		t.Errorf("BeadQualityMode: got %q, want %q", got, BeadQualityModeBlock)
 	}
 
 	caps := rcfg.EvidenceCaps()

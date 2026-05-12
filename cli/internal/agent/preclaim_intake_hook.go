@@ -99,11 +99,11 @@ type preClaimReadinessWaiver struct {
 // using the repository's triage prompt and returns one of the typed intake
 // outcomes so the loop can decide whether to claim or skip the candidate.
 //
-// The hook uses the normal service execution path but clears hidden
-// profile/power bounds so auxiliary readiness calls do not create DDx-side
-// routing pins. Route failures are infrastructure failures, not bead-readiness
-// decisions, so they return intake_error and let the loop use its fail-open
-// readiness path.
+// The hook uses the normal service execution path. Unpinned workers get the
+// lifecycle hook's strongest-profile hint; explicitly pinned workers keep their
+// operator route pins. Route failures are infrastructure failures, not
+// bead-readiness decisions, so they return intake_error and let the loop use
+// its fail-open readiness path.
 func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.ResolvedConfig, svc agentlib.FizeauService, runner AgentRunner) func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 	return func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 		if ctx != nil {
@@ -132,15 +132,14 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 		}
 
 		runtime := AgentRunRuntime{
-			Prompt:           prompt,
-			WorkDir:          projectRoot,
-			PromptSource:     PreClaimIntakePromptSource,
-			ProfileOverride:  selectProfileForDispatch(ctx, projectRoot, svc, runner, SelectStrongestProfile),
-			ClearRoutingPins: true,
-			ClearProfile:     true,
-			ClearMinPower:    true,
-			ClearMaxPower:    true,
+			Prompt:        prompt,
+			WorkDir:       projectRoot,
+			PromptSource:  PreClaimIntakePromptSource,
+			ClearProfile:  true,
+			ClearMinPower: true,
+			ClearMaxPower: true,
 		}
+		applyLifecycleHookRouting(ctx, projectRoot, svc, runner, rcfg, &runtime, SelectStrongestProfile)
 		payload, err := dispatchPreClaimIntakePayload(ctx, projectRoot, svc, runner, rcfg, runtime)
 		if err != nil {
 			return PreClaimIntakeResult{
@@ -149,8 +148,34 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 			}, nil
 		}
 
-		return decodePreClaimIntakePayloadResult(payload)
+		return decodePreClaimIntakePayloadResultWithMode(payload, rcfg.BeadQualityMode())
 	}
+}
+
+func applyLifecycleHookRouting(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime *AgentRunRuntime, selector func(ProfileSnapshot) string) {
+	runtime.ClearRoutingPins = true
+
+	pinned := false
+	if harness, ok := rcfg.ExplicitHarness(); ok {
+		runtime.HarnessOverride = strings.TrimSpace(harness)
+		pinned = true
+	}
+	if provider, ok := rcfg.ExplicitProvider(); ok {
+		runtime.ProviderOverride = strings.TrimSpace(provider)
+		pinned = true
+	}
+	if model, ok := rcfg.ExplicitModel(); ok {
+		runtime.ModelOverride = strings.TrimSpace(model)
+		pinned = true
+	}
+	if modelRef, ok := rcfg.ExplicitModelRef(); ok {
+		runtime.ModelRefOverride = strings.TrimSpace(modelRef)
+		pinned = true
+	}
+	if pinned {
+		return
+	}
+	runtime.ProfileOverride = selectProfileForDispatch(ctx, projectRoot, svc, runner, selector)
 }
 
 func dispatchPreClaimIntakePayload(ctx context.Context, projectRoot string, svc agentlib.FizeauService, runner AgentRunner, rcfg config.ResolvedConfig, runtime AgentRunRuntime) (string, error) {
@@ -281,6 +306,10 @@ func normalizePreClaimIntakeRewriteFields(fields []string) []string {
 // It accepts both the legacy intake schema (classification field) and the canonical
 // readiness schema (outcome field), converting both into the same decision model.
 func decodePreClaimIntakePayloadResult(payload string) (PreClaimIntakeResult, error) {
+	return decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
+}
+
+func decodePreClaimIntakePayloadResultWithMode(payload string, qualityMode string) (PreClaimIntakeResult, error) {
 	var probe struct {
 		Classification  string `json:"classification"`
 		Outcome         string `json:"outcome"`
@@ -298,11 +327,11 @@ func decodePreClaimIntakePayloadResult(payload string) (PreClaimIntakeResult, er
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode result: %w", err)
 	}
 	if probe.Outcome != "" {
-		return decodeCanonicalReadinessPayload(payload)
+		return decodeCanonicalReadinessPayloadWithMode(payload, qualityMode)
 	}
 	if probe.Classification != "" {
 		if isReadinessClassificationPayload(probe.Classification, probe.Tractability, probe.Rationale, probe.Score, len(probe.ReadinessChecks), len(probe.SuggestedFixes)) {
-			return decodeReadinessClassificationPayload(payload)
+			return decodeReadinessClassificationPayloadWithMode(payload, qualityMode)
 		}
 		return decodeLegacyIntakePayload(payload)
 	}
@@ -329,7 +358,7 @@ func isReadinessClassificationPayload(classification, tractability, rationale st
 	}
 }
 
-func decodeCanonicalReadinessPayload(payload string) (PreClaimIntakeResult, error) {
+func decodeCanonicalReadinessPayloadWithMode(payload string, qualityMode string) (PreClaimIntakeResult, error) {
 	var out preClaimReadinessPromptResult
 	if err := json.Unmarshal([]byte(payload), &out); err != nil {
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode readiness result: %w", err)
@@ -356,7 +385,7 @@ func decodeCanonicalReadinessPayload(payload string) (PreClaimIntakeResult, erro
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: legacy readiness outcome %q removed by lifecycle migration; use %q", out.Outcome, PreClaimIntakeOperatorRequired)
 	case "readiness_error", "system_unready":
 		// system_unready maps to fail-open/skip per ADR-023/FEAT-010 policy
-		classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, detail)
+		classified := ClassifyReadinessWithMode(ReadinessClassificationSystemUnready, nil, detail, qualityMode)
 		return PreClaimIntakeResult{
 			Outcome:      PreClaimIntakeError,
 			Reason:       classified.Reason,
@@ -370,14 +399,14 @@ func decodeCanonicalReadinessPayload(payload string) (PreClaimIntakeResult, erro
 	}
 }
 
-func decodeReadinessClassificationPayload(payload string) (PreClaimIntakeResult, error) {
+func decodeReadinessClassificationPayloadWithMode(payload string, qualityMode string) (PreClaimIntakeResult, error) {
 	var out preClaimReadinessClassificationPromptResult
 	if err := json.Unmarshal([]byte(payload), &out); err != nil {
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode readiness classification result: %w", err)
 	}
 	reasons := failedReadinessReasons(out.ReadinessChecks)
 	detail := firstNonEmptyReadinessDetail(out.Rationale, out.Detail, out.Reasoning)
-	classified := ClassifyReadiness(out.Classification, reasons, detail)
+	classified := ClassifyReadinessWithMode(out.Classification, reasons, detail, qualityMode)
 	if detail == "" {
 		detail = readinessCheckEvidence(out.ReadinessChecks)
 	}

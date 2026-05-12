@@ -2,5 +2,14 @@ extends: existence
 message: "Replace default polish with concrete detail."
 level: suggestion
 ignorecase: true
+scope: summary
 tokens:
-  - __ddx_ai_slop_placeholder__
+  - complex problems
+  - powerful commands
+  - powerful automation
+  - productive ways
+  - seamless experience
+  - sophisticated autonomous
+  - sophisticated control flow
+  - sophisticated multi-agent
+  - true power

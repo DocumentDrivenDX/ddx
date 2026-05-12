@@ -1,0 +1,10 @@
+[
+  {
+    "file": "input.md",
+    "line": 3,
+    "rule_id": "prose.definition_by_negation",
+    "severity": "warning",
+    "rationale": "This sentence defines its subject by what it is not. Readers infer what you mean; stronger prose names the positive shape directly.",
+    "suggested_edit": "Replace the negation with a sentence whose main predicate describes what the subject is. Keep the negation only if a positive predicate follows in the same paragraph."
+  }
+]

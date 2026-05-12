@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -43,6 +44,10 @@ func newOAIModelsStub(t *testing.T, modelIDs []string) *httptest.Server {
 func makeProviderTestDir(t *testing.T, agentCfgYAML string) string {
 	t.Helper()
 	dir := t.TempDir()
+	t.Cleanup(func() {
+		waitForDirEmpty(filepath.Join(dir, ".codex", ".tmp"), 20*time.Second)
+		_ = os.RemoveAll(filepath.Join(dir, ".codex"))
+	})
 
 	// Isolate from ~/.config/fizeau/config.yaml.
 	t.Setenv("HOME", dir)
@@ -79,6 +84,23 @@ library:
 	))
 
 	return dir
+}
+
+func waitForDirEmpty(path string, timeout time.Duration) {
+	deadline := time.Now().Add(timeout)
+	for {
+		entries, err := os.ReadDir(path)
+		if os.IsNotExist(err) {
+			return
+		}
+		if err == nil && len(entries) == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
 }
 
 // oaiAgentConfig returns .fizeau/config.yaml YAML for a single openai-compat

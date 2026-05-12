@@ -1,9 +1,19 @@
 package config
 
 import (
+	"strings"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/triage"
+)
+
+const (
+	// BeadQualityModeWarnOnly is the default bead-quality policy: report
+	// findings but continue execution.
+	BeadQualityModeWarnOnly = "warn-only"
+	// BeadQualityModeBlock is the blocking bead-quality policy: valid
+	// low-quality findings may park the bead.
+	BeadQualityModeBlock = "block"
 )
 
 // NewConfig represents the simplified DDx configuration structure
@@ -61,6 +71,9 @@ type IntakeACQualityConfig struct {
 
 // BeadQualityConfig controls bead quality gates that run before dispatch.
 type BeadQualityConfig struct {
+	// Mode selects the bead-quality policy. Empty or unknown values resolve to
+	// warn-only.
+	Mode string                 `yaml:"mode,omitempty" json:"mode,omitempty"`
 	Lint *BeadQualityLintConfig `yaml:"lint,omitempty" json:"lint,omitempty"`
 }
 
@@ -146,6 +159,22 @@ func (c *NewConfig) ResolveBeadQualityLintBlockThresholdScore() int {
 		return 0
 	}
 	return *c.BeadQuality.Lint.BlockThresholdScore
+}
+
+// ResolveBeadQualityMode returns the effective bead-quality policy.
+// Empty, unknown, or legacy values default to WARN-ONLY.
+func (c *NewConfig) ResolveBeadQualityMode() string {
+	if c == nil || c.BeadQuality == nil {
+		return BeadQualityModeWarnOnly
+	}
+	switch strings.ToLower(strings.TrimSpace(c.BeadQuality.Mode)) {
+	case "", BeadQualityModeWarnOnly:
+		return BeadQualityModeWarnOnly
+	case BeadQualityModeBlock, "factory":
+		return BeadQualityModeBlock
+	default:
+		return BeadQualityModeWarnOnly
+	}
 }
 
 // ResolveReviewMaxRetries returns the effective reviewer retry cap for this

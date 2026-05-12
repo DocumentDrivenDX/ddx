@@ -38,6 +38,7 @@ func sealedFixture() ResolvedConfig {
 		sessionLogDir:           "/tmp/sessions",
 		mirrorConfig:            &ExecutionsMirrorConfig{Kind: "fs", Path: "/tmp/mirror"},
 		reasoningLevels:         map[string][]string{"smart": {"high"}},
+		beadQualityMode:         BeadQualityModeBlock,
 	}
 }
 
@@ -93,6 +94,7 @@ func TestResolvedConfigZeroValuePanicsOnEveryAccessor(t *testing.T) {
 		"MirrorConfig":                       func(r ResolvedConfig) { _ = r.MirrorConfig() },
 		"ReasoningLevels":                    func(r ResolvedConfig) { _ = r.ReasoningLevels() },
 		"BeadQualityLintBlockThresholdScore": func(r ResolvedConfig) { _ = r.BeadQualityLintBlockThresholdScore() },
+		"BeadQualityMode":                    func(r ResolvedConfig) { _ = r.BeadQualityMode() },
 	}
 	for name, call := range cases {
 		name, call := name, call
@@ -528,5 +530,38 @@ func TestOpaquePassthroughBlocksConfigModel(t *testing.T) {
 	}
 	if got := explicitRcfg.Model(); got != "gpt-5" {
 		t.Fatalf("explicit opaque Model = %q, want gpt-5", got)
+	}
+}
+
+func TestResolveTracksExplicitRoutePinsSeparatelyFromConfigDefaults(t *testing.T) {
+	cfg := &NewConfig{
+		Version: "1.0",
+		Agent: &AgentConfig{
+			Model: "openrouter/gpt-5.4-mini",
+		},
+	}
+
+	configOnly := cfg.Resolve(CLIOverrides{})
+	if got, ok := configOnly.ExplicitModel(); ok || got != "openrouter/gpt-5.4-mini" {
+		t.Fatalf("config-only ExplicitModel = (%q, %v), want (config model, false)", got, ok)
+	}
+
+	explicit := cfg.Resolve(CLIOverrides{
+		Harness:  "codex",
+		Provider: "openai",
+		Model:    "gpt-5.4-mini",
+		ModelRef: "openai:gpt-5.4-mini",
+	})
+	if got, ok := explicit.ExplicitHarness(); !ok || got != "codex" {
+		t.Fatalf("ExplicitHarness = (%q, %v), want (codex, true)", got, ok)
+	}
+	if got, ok := explicit.ExplicitProvider(); !ok || got != "openai" {
+		t.Fatalf("ExplicitProvider = (%q, %v), want (openai, true)", got, ok)
+	}
+	if got, ok := explicit.ExplicitModel(); !ok || got != "gpt-5.4-mini" {
+		t.Fatalf("ExplicitModel = (%q, %v), want (gpt-5.4-mini, true)", got, ok)
+	}
+	if got, ok := explicit.ExplicitModelRef(); !ok || got != "openai:gpt-5.4-mini" {
+		t.Fatalf("ExplicitModelRef = (%q, %v), want (openai:gpt-5.4-mini, true)", got, ok)
 	}
 }

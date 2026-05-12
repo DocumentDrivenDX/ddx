@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -110,7 +111,7 @@ func TestReadinessClassification_BeadDefectsUseReadinessReasons(t *testing.T) {
 			reasons:            []string{ReadinessReasonMissingVerification},
 			wantClassification: ReadinessClassificationNeedsRefine,
 			wantReason:         ReadinessReasonMissingVerification,
-			wantOutcome:        PreClaimIntakeOperatorRequired,
+			wantOutcome:        PreClaimIntakeActionableAtomic,
 		},
 	}
 
@@ -141,9 +142,21 @@ func TestReadinessClassification_DecodesReadinessSchema(t *testing.T) {
 
 	refine, err := decodePreClaimIntakePayloadResult(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}]}`)
 	require.NoError(t, err)
-	assert.Equal(t, PreClaimIntakeOperatorRequired, refine.Outcome)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, refine.Outcome)
 	assert.Equal(t, ReadinessReasonMissingVerification, refine.Reason)
 	assert.Empty(t, refine.SystemReason)
+}
+
+func TestReadinessClassification_NeedsRefineBlocksInBlockMode(t *testing.T) {
+	got := ClassifyReadinessWithMode(
+		ReadinessClassificationNeedsRefine,
+		[]string{ReadinessReasonMissingVerification},
+		"bead body failed readiness rubric",
+		config.BeadQualityModeBlock,
+	)
+	assert.Equal(t, ReadinessClassificationNeedsRefine, got.Classification)
+	assert.Equal(t, ReadinessReasonMissingVerification, got.Reason)
+	assert.Equal(t, PreClaimIntakeOperatorRequired, got.IntakeOutcome)
 }
 
 func TestReadinessClassification_DeterministicSystemReasonBypassesModelTriage(t *testing.T) {

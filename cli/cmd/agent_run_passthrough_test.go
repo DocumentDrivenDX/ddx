@@ -380,6 +380,72 @@ func TestDDxWork_WiresPreClaimIntakeHook(t *testing.T) {
 	assert.GreaterOrEqual(t, len(got), 2, "work must continue past intake to later execution stages")
 }
 
+func TestDDxWork_PinnedLifecycleHooksPreserveRouteWithoutResolveRoute(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+
+	var mu sync.Mutex
+	var intakeReq agentlib.ServiceExecuteRequest
+	var lintReq agentlib.ServiceExecuteRequest
+	stub := installExecuteCapturingStub(t)
+	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		mode := "execute"
+		switch {
+		case strings.Contains(req.Prompt, "MODE: intake"):
+			mode = "intake"
+		case strings.Contains(req.Prompt, "MODE: lint"):
+			mode = "lint"
+		case strings.Contains(req.Prompt, "MODE: triage"):
+			mode = "triage"
+		}
+		mu.Lock()
+		if mode == "intake" {
+			intakeReq = req
+		}
+		if mode == "lint" {
+			lintReq = req
+		}
+		mu.Unlock()
+
+		ch := make(chan agentlib.ServiceEvent, 1)
+		switch mode {
+		case "intake":
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"atomic\",\"confidence\":0.99,\"reasoning\":\"single-slice\"}"}`)}
+		case "lint":
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"score\":9,\"rationale\":\"ok\",\"suggested_fixes\":[],\"waivers_applied\":[]}"}`)}
+		case "triage":
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"already_satisfied\",\"recommended_action\":\"close_already_satisfied\",\"rationale\":\"ok\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}"}`)}
+		default:
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok"}`)}
+		}
+		close(ch)
+		return ch, nil
+	}
+
+	dir := setupWorkIntakeFixture(t)
+	root := NewCommandFactory(dir).NewRootCommand()
+	_, err := executeCommand(root,
+		"work", "--once",
+		"--harness", "codex",
+		"--model", "gpt-5.4-mini",
+		"--no-review", "--no-review-i-know-what-im-doing",
+	)
+	if err != nil {
+		require.NotContains(t, err.Error(), "ResolveRoute called in execution path",
+			"pinned ddx work lifecycle hook dispatch must not call ResolveRoute")
+	}
+
+	mu.Lock()
+	gotIntakeReq := intakeReq
+	gotLintReq := lintReq
+	mu.Unlock()
+	assert.Equal(t, "codex", gotIntakeReq.Harness)
+	assert.Equal(t, "gpt-5.4-mini", gotIntakeReq.Model)
+	assert.Empty(t, gotIntakeReq.Policy)
+	assert.Equal(t, "codex", gotLintReq.Harness)
+	assert.Equal(t, "gpt-5.4-mini", gotLintReq.Model)
+	assert.Empty(t, gotLintReq.Policy)
+}
+
 // TestDDxWork_ReadinessUnavailableOutput (AC1, AC6 / ddx-30bc30ed): when the
 // intake service is unreachable, ddx work must print actionable
 // readiness-unavailable output rather than exposing internal error prefixes.

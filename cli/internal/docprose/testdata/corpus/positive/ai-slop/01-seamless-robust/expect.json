@@ -1,4 +1,4 @@
 {
   "mode": "technical",
-  "expect_rule_ids": ["prose.generic.claims"]
+  "expect_rule_ids": ["prose.ai_slop.polish"]
 }

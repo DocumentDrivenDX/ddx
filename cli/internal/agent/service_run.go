@@ -204,8 +204,11 @@ func executeOnService(ctx context.Context, svc agentlib.FizeauService, workDir s
 		model = pt.Model
 	}
 
-	provider := pt.Provider
-	if runtime.ClearRoutingPins {
+	provider := runtime.ProviderOverride
+	if provider == "" && !runtime.ClearRoutingPins {
+		provider = pt.Provider
+	}
+	if runtime.ClearRoutingPins && runtime.ProviderOverride == "" {
 		provider = ""
 	}
 

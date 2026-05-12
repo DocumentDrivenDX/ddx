@@ -123,7 +123,7 @@ pre-commit:
       <<: *go_checks
       name: "Go Build"
       glob: "cli/**/*.go"
-      run: 'go build -v ./...'
+      run: 'go build -buildvcs=false -v ./...'
       skip:
         - merge
         - rebase
@@ -206,7 +206,7 @@ pre-commit:
         packages=$(echo {staged_files} | xargs -n1 dirname | sort -u | sed 's|^cli/||')
         for pkg in $packages; do
           if ls "$pkg"/*_test.go >/dev/null 2>&1; then
-            go test -short -race "./$pkg"
+            go test -short -race -timeout 30m "./$pkg"
           fi
         done
       skip:

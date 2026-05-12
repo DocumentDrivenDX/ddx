@@ -36,7 +36,7 @@ type LandOutcomeSummary struct {
 	TS          time.Time `json:"ts"`
 	BeadID      string    `json:"bead_id,omitempty"`
 	AttemptID   string    `json:"attempt_id,omitempty"`
-	Outcome     string    `json:"outcome"` // landed | preserved | failed | push_failed
+	Outcome     string    `json:"outcome"` // landed | preserved | failed
 	DurationMS  int64     `json:"duration_ms"`
 	CommitCount int       `json:"commit_count"` // worker's contribution size (BaseRev..ResultRev)
 }
@@ -162,11 +162,7 @@ func (c *LandCoordinator) recordMetrics(req agent.LandRequest, result *agent.Lan
 	if err == nil && result != nil {
 		switch result.Status {
 		case "landed":
-			if result.PushFailed {
-				outcome = "push_failed"
-			} else {
-				outcome = "landed"
-			}
+			outcome = "landed"
 			commitCount = result.MergedCommitCount
 		case "preserved":
 			outcome = "preserved"
@@ -188,9 +184,6 @@ func (c *LandCoordinator) recordMetrics(req agent.LandRequest, result *agent.Lan
 		c.metrics.Preserved++
 	case "failed":
 		c.metrics.Failed++
-	case "push_failed":
-		c.metrics.PushFailed++
-		c.metrics.Landed++ // push_failed still landed locally
 	}
 	c.metrics.TotalDurationMS += elapsedMS
 	c.metrics.TotalCommits += int64(commitCount)

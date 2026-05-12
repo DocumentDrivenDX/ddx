@@ -129,7 +129,7 @@ func newPreClaimIntakeHookTestStore(t *testing.T, root string) (*bead.Store, *be
 
 func intakeHookTestConfig() config.ResolvedConfig {
 	cfg := config.NewTestConfigForRun(config.TestRunConfigOpts{})
-	return cfg.Resolve(config.CLIOverrides{Harness: "claude"})
+	return cfg.Resolve(config.CLIOverrides{})
 }
 
 func TestPreClaimIntakeHook_DispatchesWithStrongestProfileNoStrongPowerTrick(t *testing.T) {
@@ -224,36 +224,77 @@ func TestDecompositionHook_SmartProfileUnavailableFallsBackToAutoRoute(t *testin
 	assert.Zero(t, svc.lastReq.MaxPower)
 }
 
-func TestDecompositionHook_ClearsPassthroughConstraints(t *testing.T) {
+func TestPreClaimIntakeHook_PreservesExplicitRoutingPins(t *testing.T) {
 	root := newPreClaimIntakeHookTestRoot(t)
 	store, b := newPreClaimIntakeHookTestStore(t, root)
 
 	svc := &preClaimIntakeHookServiceStub{
-		listPolicies: []agentlib.PolicyInfo{
-			{Name: "smart", MinPower: 9, MaxPower: 10},
-		},
-		listModels: []agentlib.ModelInfo{
-			{ID: "smart", Power: 9, Available: true, AutoRoutable: true},
-		},
-		finalText: `{"classification":"atomic","confidence":0.95,"reasoning":"passthrough intact"}`,
+		finalText: `{"classification":"atomic","confidence":0.95,"reasoning":"pins intact"}`,
 	}
 
-	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{
-		Model: "claude-sonnet-4-6",
-	}).Resolve(config.CLIOverrides{
-		Harness:  "claude",
-		Provider: "anthropic",
+	rcfg := config.NewTestConfigForRun(config.TestRunConfigOpts{}).Resolve(config.CLIOverrides{
+		Harness: "codex",
+		Model:   "gpt-5.4-mini",
 	})
 
 	hook := NewPreClaimIntakeHook(root, store, rcfg, svc, nil)
 	got, err := hook(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
-	assert.Empty(t, svc.lastReq.Harness)
+	assert.Equal(t, "codex", svc.lastReq.Harness)
 	assert.Empty(t, svc.lastReq.Provider)
-	assert.Empty(t, svc.lastReq.Model)
-	assert.Equal(t, "smart", svc.lastReq.Policy)
+	assert.Equal(t, "gpt-5.4-mini", svc.lastReq.Model)
+	assert.Empty(t, svc.lastReq.Policy)
 	assert.Zero(t, svc.lastReq.MinPower)
+}
+
+func TestLifecycleHooks_UnpinnedWorkersStillUseProfileSelection(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+	rcfg := intakeHookTestConfig()
+
+	intakeSvc := &preClaimIntakeHookServiceStub{
+		listPolicies: []agentlib.PolicyInfo{
+			{Name: "cheap", MinPower: 5, MaxPower: 5},
+			{Name: "smart", MinPower: 9, MaxPower: 10},
+		},
+		listModels: []agentlib.ModelInfo{
+			{ID: "cheap-model", Power: 5, Available: true, AutoRoutable: true},
+			{ID: "smart-model", Power: 9, Available: true, AutoRoutable: true},
+		},
+		finalText: `{"classification":"atomic","confidence":0.95,"reasoning":"profile selected"}`,
+	}
+	intakeHook := NewPreClaimIntakeHook(root, store, rcfg, intakeSvc, nil)
+	intake, err := intakeHook(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, intake.Outcome)
+	assert.Equal(t, "smart", intakeSvc.lastReq.Policy)
+	assert.Empty(t, intakeSvc.lastReq.Harness)
+	assert.Empty(t, intakeSvc.lastReq.Provider)
+	assert.Empty(t, intakeSvc.lastReq.Model)
+
+	lintSvc := &passthroughTestService{
+		listPolicies: []agentlib.PolicyInfo{
+			{Name: "standard", MinPower: 7, MaxPower: 8},
+			{Name: "cheap", MinPower: 5, MaxPower: 5},
+		},
+		listModels: []agentlib.ModelInfo{
+			{ID: "cheap-model", Power: 5, Available: true, AutoRoutable: true},
+		},
+		executeEvents: []agentlib.ServiceEvent{
+			{
+				Type: "final",
+				Data: []byte(`{"status":"success","final_text":"{\"score\":8,\"rationale\":\"profile selected\",\"suggested_fixes\":[],\"waivers_applied\":[]}"}`),
+			},
+		},
+	}
+	lint, err := NewPreDispatchLintHook(root, store, rcfg, lintSvc, nil)(context.Background(), b.ID)
+	require.NoError(t, err)
+	assert.Equal(t, 8, lint.Score)
+	assert.Equal(t, "cheap", lintSvc.lastReq.Policy)
+	assert.Empty(t, lintSvc.lastReq.Harness)
+	assert.Empty(t, lintSvc.lastReq.Provider)
+	assert.Empty(t, lintSvc.lastReq.Model)
 }
 
 func TestDecompositionHook_StrongPowerUnsatisfiedReturnsIntakeError(t *testing.T) {
@@ -290,8 +331,8 @@ func TestDecompositionHook_ClearsImplementationPowerBounds(t *testing.T) {
 	}
 	svc.executeFunc = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 		assert.Zero(t, req.MinPower)
-		assert.Equal(t, "smart", req.Policy)
-		assert.Empty(t, req.Harness)
+		assert.Empty(t, req.Policy)
+		assert.Equal(t, "claude", req.Harness)
 		assert.Empty(t, req.Model)
 		assert.Zero(t, req.MaxPower, "pre-claim intake must not inherit implementation max_power pins")
 		ch := make(chan agentlib.ServiceEvent, 1)

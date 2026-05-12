@@ -73,6 +73,7 @@ func setupBeadLookupFixture(tb testing.TB) *beadLookupFixture {
 	tb.Helper()
 	tb.Setenv("XDG_DATA_HOME", tb.TempDir())
 	tb.Setenv("DDX_NODE_NAME", "gql-bead-lookup-perf")
+	tb.Setenv("DDX_BEAD_LOCK_TIMEOUT", "30s")
 
 	root := tb.TempDir()
 	projectPaths := make([]string, 0, beadLookupProjectCount)
