@@ -50,10 +50,17 @@ func TestBeadLifecycleSkillReadinessDocumentsRewriteContract(t *testing.T) {
 	for name, body := range skills {
 		t.Run(name, func(t *testing.T) {
 			readiness := skillSection(t, body, "## READINESS MODE")
-			assert.Contains(t, body, "ready, needs_refine, needs_split, operator_required, and system_unready")
-			assert.Contains(t, body, "Do not emit synonyms such as `safely_refinable`, `rewritten`, or `needs_human`.")
-			assert.Contains(t, body, "`suggested_fixes` are advisory diagnostics for the author or operator")
-			assert.Contains(t, body, "`rewrite` is the machine-consumable replacement contract DDx may apply before claim")
+			assert.Contains(t, body, "Use the exact readiness classifications:")
+			for _, want := range []string{"`ready`", "`needs_refine`", "`needs_split`", "`operator_required`", "`system_unready`"} {
+				assert.Contains(t, body, want)
+			}
+			for _, want := range []string{"`safely_refinable`", "`rewritten`", "`needs_human`"} {
+				assert.Contains(t, body, want)
+			}
+			assert.Contains(t, body, "`suggested_fixes` are")
+			assert.Contains(t, body, "advisory diagnostics for the author or operator")
+			assert.Contains(t, body, "`rewrite` is the machine-")
+			assert.Contains(t, body, "consumable replacement contract DDx may apply before claim")
 			assert.Contains(t, body, "`rewrite.changed_fields` is required")
 			assert.Contains(t, body, "`rewrite.description` / `rewrite.acceptance` must be strings, not arrays")
 			assert.Contains(t, readiness, `"classification": "ready|needs_refine|needs_split|operator_required|system_unready"`)
@@ -68,7 +75,7 @@ func TestBeadLifecycleSkillLintDocumentsRationaleShape(t *testing.T) {
 	for name, body := range skills {
 		t.Run(name, func(t *testing.T) {
 			lint := skillSection(t, body, "## LINT MODE")
-			assert.Contains(t, lint, "LintResult.rationale is a single string summary")
+			assert.Contains(t, lint, "`LintResult.rationale` is a single string summary.")
 			assert.Contains(t, lint, `"rationale": "brief evidence-grounded explanation"`)
 			assert.Contains(t, lint, `"suggested_fixes": [`)
 			assert.Contains(t, lint, `"specific amendment to make"`)
