@@ -78,9 +78,10 @@ type ExecuteBeadResult struct {
 	RatchetEvidence []RatchetEvidence `json:"ratchet_evidence,omitempty"`
 	RatchetSummary  string            `json:"ratchet_summary,omitempty"`
 
-	// NoChangesRationale is populated when outcome == task_no_changes and the
-	// agent wrote a rationale file to the execution bundle dir inside the
-	// worktree. It carries the agent's explanation of why no commits were made.
+	// NoChangesRationale is populated when the agent wrote a rationale file to
+	// the execution bundle dir inside the worktree. It carries the agent's
+	// explanation of why no commits were made, and is preserved even when a
+	// mixed commit + no_changes rationale is rejected.
 	NoChangesRationale string `json:"no_changes_rationale,omitempty"`
 
 	// NoEvidencePaths names worktree paths that remained dirty when the agent
@@ -330,6 +331,8 @@ func executeBeadWorktreePath(projectRoot, beadID, attemptID string) string {
 	}
 	return filepath.Join(base, ExecuteBeadWtPrefix+beadID+"-"+attemptID)
 }
+
+const mixedCommitAndNoChangesRationaleReason = "mixed_commit_and_no_changes_rationale"
 
 // RealGitOps implements GitOps via os/exec git commands.
 type RealGitOps struct{}
@@ -1413,10 +1416,25 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	// Classify worker outcome: task_succeeded / task_failed / task_no_changes /
 	// task_no_evidence. A clean agent exit with no commit is only a legitimate
 	// no_changes signal when the agent also wrote the explicit rationale file.
+	// If a rationale file appears alongside implementation commits, reject the
+	// mixed signal so the parent orchestrator does not see a clean success.
 	// The parent orchestrator (LandBeadResult + ApplyLandingToResult) will
 	// overwrite Outcome and Status with the landing decision before output.
 	agentReportedError := strings.TrimSpace(agentErrMsg) != ""
+	rationaleFile := filepath.Join(wtPath, artifacts.DirRel, "no_changes_rationale.txt")
+	rationaleText := ""
+	if data, readErr := os.ReadFile(rationaleFile); readErr == nil {
+		rationaleText = strings.TrimSpace(string(data))
+		if rationaleText != "" {
+			res.NoChangesRationale = rationaleText
+		}
+	}
+	mixedCommitAndRationale := resultRev != baseRev && rationaleText != ""
 	switch {
+	case mixedCommitAndRationale:
+		res.Outcome = ExecuteBeadOutcomeTaskFailed
+		res.Reason = mixedCommitAndNoChangesRationaleReason
+		res.Error = mixedCommitAndNoChangesRationaleReason
 	case exitCode != 0 || agentReportedError:
 		res.Outcome = ExecuteBeadOutcomeTaskFailed
 	case resultRev == baseRev:
@@ -1425,15 +1443,10 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 		res.Outcome = ExecuteBeadOutcomeTaskSucceeded
 	}
 
-	// When the outcome is no_changes, attempt to read the agent's rationale file.
-	// The agent is instructed to write this file (relative to the worktree) when it
-	// determines the bead's work is already present. We read it before the deferred
-	// worktree cleanup removes the file.
+	// When the outcome is no_changes, the agent's rationale file becomes the
+	// canonical explanation for the no-op decision. We read it before the
+	// deferred worktree cleanup removes the file.
 	if res.Outcome == ExecuteBeadOutcomeTaskNoChanges {
-		rationaleFile := filepath.Join(wtPath, artifacts.DirRel, "no_changes_rationale.txt")
-		if data, readErr := os.ReadFile(rationaleFile); readErr == nil {
-			res.NoChangesRationale = strings.TrimSpace(string(data))
-		}
 		if res.NoChangesRationale == "" {
 			res.Outcome = ExecuteBeadOutcomeTaskNoEvidence
 			res.Reason = "agent exited without a commit or no_changes_rationale.txt"

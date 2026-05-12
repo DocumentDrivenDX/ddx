@@ -75,7 +75,7 @@ func runExecutionCleanupPass(ctx context.Context, projectRoot string, runner exe
 		})
 	}
 	if meaningful && log != nil {
-		fmt.Fprintf(log, "cleanup: %s %d temp dir(s), %d worktree(s), %d run-state file(s), %d scratch dir(s), %d evidence dir(s), %d byte(s), %d inode(s)\n",
+		fmt.Fprintf(log, "cleanup: %s %d temp dir(s), %d worktree(s), %d run-state file(s), %d scratch dir(s), %d evidence dir(s), %d agent log(s), %d worker dir(s), %d byte(s), %d inode(s)\n",
 			reason,
 			summary.RemovedUnregisteredTempDirs,
 			summary.RemovedRegisteredWorktrees,

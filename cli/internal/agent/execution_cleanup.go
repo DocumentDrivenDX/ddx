@@ -192,7 +192,7 @@ type ExecutionCleanupManager struct {
 	Now             func() time.Time
 	Probe           ExecutionCleanupLivenessProbe
 	// RetainDays controls how many days of evidence dirs under
-	// .ddx/executions/ to retain. 0 disables the prune; default is 7.
+	// .ddx/executions/ to retain. 0 disables the prune; default is 90.
 	RetainDays int
 }
 
