@@ -53,7 +53,8 @@ func TestIntake_TooLargeDecomposed_CreatesChildrenAndBlocksParent(t *testing.T) 
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
+		Once:         true,
+		TargetBeadID: candidate.ID,
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			return PreClaimIntakeResult{
 				Outcome:       PreClaimIntakeTooLargeDecomposed,
@@ -139,7 +140,8 @@ func TestIntake_DecompositionEventIncludesACMap(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
+		Once:         true,
+		TargetBeadID: candidate.ID,
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			return PreClaimIntakeResult{
 				Outcome:       PreClaimIntakeTooLargeDecomposed,
@@ -210,7 +212,8 @@ func TestIntake_DecompositionACMapRejectsDroppedAC(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
+		Once:         true,
+		TargetBeadID: candidate.ID,
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			return PreClaimIntakeResult{
 				Outcome:       PreClaimIntakeTooLargeDecomposed,
@@ -271,7 +274,8 @@ func TestIntake_DepthCapOverflow_BlocksOperator(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
+		Once:         true,
+		TargetBeadID: grandchild.ID,
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			atomic.AddInt32(&intakeCalls, 1)
 			t.Errorf("intake hook must not be called when depth cap triggers (called for %s)", beadID)

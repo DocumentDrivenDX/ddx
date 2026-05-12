@@ -49,7 +49,8 @@ func TestIntake_ActionableAtomic_ClaimsNormally(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
+		Once:         true,
+		TargetBeadID: "ddx-0001",
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			atomic.AddInt32(&intakeCalls, 1)
 			return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
@@ -233,6 +234,7 @@ func TestReadinessNeedsRefineWarnsAndClaimsInWarnOnly(t *testing.T) {
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
 		Once:               true,
+		TargetBeadID:       beadRef.ID,
 		PreClaimIntakeHook: intakeHook,
 	})
 	require.NoError(t, err)
@@ -359,7 +361,8 @@ func TestIntakeBlockedEventIncludesStructuredDecisionFields(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
+		Once:         true,
+		TargetBeadID: "ddx-0001",
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			return PreClaimIntakeResult{
 				Outcome: PreClaimIntakeOperatorRequired,
@@ -982,7 +985,8 @@ func TestIntake_OutcomeReasonsPersist(t *testing.T) {
 		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 		_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-			Once: true,
+			Once:         true,
+			TargetBeadID: candidate.ID,
 			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 				return PreClaimIntakeResult{
 					Outcome: PreClaimIntakeActionableButRewritten,
@@ -1031,7 +1035,8 @@ func TestIntake_OutcomeReasonsPersist(t *testing.T) {
 		cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
 		rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 		_, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-			Once: true,
+			Once:         true,
+			TargetBeadID: candidate.ID,
 			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 				return PreClaimIntakeResult{
 					Outcome:       PreClaimIntakeTooLargeDecomposed,
@@ -1146,7 +1151,8 @@ func TestIntake_ActionableButRewritten_UpdatesBeforeClaim(t *testing.T) {
 	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
 
 	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
-		Once: true,
+		Once:         true,
+		TargetBeadID: "ddx-0001",
 		PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 			return PreClaimIntakeResult{
 				Outcome: PreClaimIntakeActionableButRewritten,
