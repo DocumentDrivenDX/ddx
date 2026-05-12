@@ -1213,10 +1213,53 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 						"detail":        warning,
 					},
 				))
-			case intakeOutcome == PreClaimIntakeTooLargeDecomposed && intakeResult.Decomposition != nil:
+			case intakeOutcome == PreClaimIntakeTooLargeDecomposed:
+				// too_large_decomposed should move work forward by splitting before
+				// claim. Some intake classifiers only identify the need to split;
+				// when no concrete children are attached, ask the orchestrator
+				// decomposer for executable child specs and then apply them.
+				decomp := intakeResult.Decomposition
+				if decomp == nil && runtime.PostAttemptDecompositionHook != nil {
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "bead readiness requested decomposition; generating split (%s)\n", candidate.ID)
+					}
+					var hookErr error
+					decomp, hookErr = runtime.PostAttemptDecompositionHook(ctx, candidate.ID)
+					if hookErr != nil {
+						if err := ctx.Err(); err != nil {
+							applyStop(work.StopInput{ContextErr: err})
+							return result, err
+						}
+						warning := fmt.Sprintf("decomposition hook unavailable: %s", hookErr.Error())
+						if runtime.Log != nil {
+							_, _ = fmt.Fprintf(runtime.Log, "bead decomposition unavailable: %s (%s); continuing with attempt\n", hookErr.Error(), candidate.ID)
+						}
+						appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "decomposition_hook_unavailable", warning, now().UTC())
+						emit("pre_claim_intake.warn", map[string]any{
+							"bead_id": candidate.ID,
+							"outcome": string(PreClaimIntakeTooLargeDecomposed),
+							"reason":  "decomposition_hook_unavailable",
+							"detail":  warning,
+						})
+						break
+					}
+				}
+				if decomp == nil {
+					warning := "decomposition hook returned no split"
+					if runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "bead decomposition unavailable: %s (%s); continuing with attempt\n", warning, candidate.ID)
+					}
+					appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "decomposition_hook_empty", warning, now().UTC())
+					emit("pre_claim_intake.warn", map[string]any{
+						"bead_id": candidate.ID,
+						"outcome": string(PreClaimIntakeTooLargeDecomposed),
+						"reason":  "decomposition_hook_empty",
+						"detail":  warning,
+					})
+					break
+				}
 				// too_large_decomposed with concrete child specs: validate the AC map,
 				// check the queue-level depth cap, then create children and wire deps.
-				decomp := intakeResult.Decomposition
 				lossyOrEmpty := isDecompositionLossy(decomp.ACMap) || (len(decomp.ACMap) == 0 && strings.TrimSpace(candidate.Acceptance) != "")
 				depthAtCap := storeBeadDepth(w.Store, &candidate) >= rcfg.MaxDecompositionDepth()
 				if lossyOrEmpty || depthAtCap {
