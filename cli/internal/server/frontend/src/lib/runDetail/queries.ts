@@ -43,7 +43,14 @@ export const RUN_DETAIL_QUERY = gql`
 			outcome
 			detail
 			cachedTokens
+		}
+	}
+`
 
+export const RUN_EVIDENCE_QUERY = gql`
+	query RunEvidenceFiles($id: ID!) {
+		run(id: $id) {
+			id
 			bundleFiles {
 				path
 				size

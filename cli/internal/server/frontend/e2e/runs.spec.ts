@@ -590,6 +590,25 @@ test('bead detail shows linked runs and click navigates to run detail', async ({
 			});
 			return;
 		}
+		if (body.query.includes('RunEvidenceFiles')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						run: {
+							id: RUN_ID,
+							bundleFiles: [
+								{ path: 'manifest.json', size: 256, mimeType: 'application/json' },
+								{ path: 'prompt.md', size: 128, mimeType: 'text/markdown' },
+								{ path: 'screenshots/big.png', size: 200_000, mimeType: 'image/png' }
+							]
+						}
+					}
+				})
+			});
+			return;
+		}
 		if (body.query.includes('ProducedArtifact')) {
 			await route.fulfill({
 				status: 200,
@@ -1013,19 +1032,20 @@ test('tab state survives navigation', async ({ page }) => {
 		await route.continue();
 	});
 
-	// Navigate directly to a run-layer detail page (run-layer has all 5 tabs)
+	// Navigate directly to a run-layer detail page (run-layer has all 6 tabs)
 	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}`);
 	await expect(page.locator('h1', { hasText: RUN_ID })).toBeVisible();
 
 	const detail = page.locator('[data-testid="rundetail"]');
 	await expect(detail).toBeVisible();
 
-	// AC1: tabbed UI with all 5 tabs visible for run-layer
+	// AC1: tabbed UI with all 6 tabs visible for run-layer
 	await expect(detail.locator('button[data-tab="overview"]')).toBeVisible();
 	await expect(detail.locator('button[data-tab="prompt"]')).toBeVisible();
 	await expect(detail.locator('button[data-tab="response"]')).toBeVisible();
 	await expect(detail.locator('button[data-tab="tools"]')).toBeVisible();
 	await expect(detail.locator('button[data-tab="session"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="evidence"]')).toBeVisible();
 
 	// Default tab is overview
 	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'overview');
@@ -1048,6 +1068,11 @@ test('tab state survives navigation', async ({ page }) => {
 	await detail.locator('button[data-tab="session"]').click();
 	await expect(page).toHaveURL(/[?&]tab=session\b/);
 	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'session');
+
+	await detail.locator('button[data-tab="evidence"]').click();
+	await expect(page).toHaveURL(/[?&]tab=evidence\b/);
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'evidence');
+	await expect(detail.locator('[data-testid="rundetail-evidence"]')).toBeVisible();
 
 	// AC2: returning to overview removes tab from URL
 	await detail.locator('button[data-tab="overview"]').click();
@@ -1072,7 +1097,7 @@ test('tab state survives navigation', async ({ page }) => {
 	await expect(workDetail.locator('button[data-tab="session"]')).toHaveCount(0);
 	await expect(workDetail.locator('button[data-tab="tools"]')).toHaveCount(0);
 
-	// Try-layer detail: overview, prompt, response, tools (no session)
+	// Try-layer detail: overview, prompt, response, tools, evidence (no session)
 	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${TRY_ID}`);
 	await expect(page.locator('h1', { hasText: TRY_ID })).toBeVisible();
 	const tryDetail = page.locator('[data-testid="rundetail"]');
@@ -1080,6 +1105,7 @@ test('tab state survives navigation', async ({ page }) => {
 	await expect(tryDetail.locator('button[data-tab="prompt"]')).toBeVisible();
 	await expect(tryDetail.locator('button[data-tab="response"]')).toBeVisible();
 	await expect(tryDetail.locator('button[data-tab="tools"]')).toBeVisible();
+	await expect(tryDetail.locator('button[data-tab="evidence"]')).toBeVisible();
 	await expect(tryDetail.locator('button[data-tab="session"]')).toHaveCount(0);
 });
 

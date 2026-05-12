@@ -8,10 +8,11 @@
 	import Evidence from './Evidence.svelte';
 	import {
 		RUN_DETAIL_QUERY,
+		RUN_EVIDENCE_QUERY,
 		RUN_SESSION_QUERY,
 		RUN_TOOL_CALLS_QUERY
 	} from './queries';
-	import type { RunDetail, ToolCall, SessionDetail } from './types';
+	import type { BundleFile, RunDetail, ToolCall, SessionDetail } from './types';
 
 	type Tab = 'overview' | 'prompt' | 'response' | 'tools' | 'session' | 'evidence';
 
@@ -32,6 +33,10 @@
 	let session = $state<SessionDetail | null>(null);
 	let sessionLoading = $state(false);
 	let sessionLoaded = $state(false);
+
+	let evidenceFiles = $state<BundleFile[]>([]);
+	let evidenceLoading = $state(false);
+	let evidenceLoaded = $state(false);
 
 	let toolCalls = $state<ToolCall[]>([]);
 	let toolCallsTotal = $state<number | undefined>(undefined);
@@ -70,6 +75,21 @@
 			run = data.run;
 		} finally {
 			runLoading = false;
+		}
+	}
+
+	async function fetchEvidence() {
+		if (evidenceLoaded || evidenceLoading) return;
+		evidenceLoading = true;
+		try {
+			const client = createClient();
+			const data = await client.request<{
+				run: { id: string; bundleFiles: BundleFile[] } | null;
+			}>(RUN_EVIDENCE_QUERY, { id: runId });
+			evidenceFiles = data.run?.bundleFiles ?? [];
+		} finally {
+			evidenceLoading = false;
+			evidenceLoaded = true;
 		}
 	}
 
@@ -127,12 +147,18 @@
 		if (activeTab === 'tools' && !toolCallsLoaded && !toolCallsLoading) {
 			void fetchToolCalls(false);
 		}
+		if (activeTab === 'evidence' && !evidenceLoaded && !evidenceLoading) {
+			void fetchEvidence();
+		}
 	});
 
 	function pickTab(tab: Tab) {
 		activeTab = tab;
 		if (tab === 'tools' && !toolCallsLoaded) {
 			void fetchToolCalls(false);
+		}
+		if (tab === 'evidence' && !evidenceLoaded) {
+			void fetchEvidence();
 		}
 		onTabChange?.(tab);
 	}
@@ -148,6 +174,7 @@
 		}
 		if (layer === 'run' || layer === 'try') {
 			list.push({ id: 'tools', label: 'Tools' });
+			list.push({ id: 'evidence', label: 'Evidence' });
 		}
 		return list;
 	});
@@ -209,7 +236,11 @@
 				sourcePath={session?.stdoutPath ?? null}
 			/>
 		{:else if activeTab === 'evidence'}
-			<Evidence runId={runId} files={run?.bundleFiles ?? []} />
+			<Evidence
+				runId={runId}
+				files={evidenceFiles}
+				loading={evidenceLoading && !evidenceLoaded}
+			/>
 		{/if}
 	</div>
 </div>
