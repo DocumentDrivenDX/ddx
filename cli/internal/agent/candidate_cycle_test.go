@@ -716,6 +716,84 @@ func TestRepairCycle_RerunsChecksAndReview(t *testing.T) {
 	assert.True(t, foundRepairStart, "repair cycle start event must be recorded")
 }
 
+func TestExecutionTrace_RecordsInitialAndRepairCycles(t *testing.T) {
+	var repairSawTraceLen int
+	coord := &AttemptCycleCoordinator{
+		Pass: implementationPassFunc(func(_ context.Context, beadID string) (CandidateResult, error) {
+			return repairCycleCandidate(beadID, "attempt-trace-001", "base-rev", "candidate-rev", 0), nil
+		}),
+		Reviewer: candidateReviewerFunc(func(_ context.Context, _ string, candidate CandidateResult) (CandidateReviewResult, error) {
+			switch candidate.Report.ResultRev {
+			case "candidate-rev":
+				return CandidateReviewResult{
+					Verdict:          "REQUEST_CHANGES",
+					Rationale:        "missing regression coverage",
+					Classification:   ReviewFindingClassFixableGap,
+					ReviewGroupID:    "rg-initial",
+					ReviewerIndices:  []int{0, 1},
+					ReviewerVerdicts: []string{"BLOCK", "BLOCK"},
+					PerAC: []ReviewAC{
+						{Number: 1, Item: "Add regression", Grade: "REQUEST_CHANGES", Evidence: "TestTrace missing"},
+					},
+					Findings: []Finding{
+						{Severity: "warn", Summary: "missing regression coverage", Location: "cli/internal/agent/candidate_cycle_test.go:1"},
+					},
+				}, nil
+			case "repair-rev":
+				return CandidateReviewResult{
+					Verdict:          "APPROVE",
+					Rationale:        "repair complete",
+					ReviewGroupID:    "rg-repair",
+					ReviewerIndices:  []int{0, 1},
+					ReviewerVerdicts: []string{"APPROVE", "APPROVE"},
+				}, nil
+			default:
+				t.Fatalf("unexpected review rev %q", candidate.Report.ResultRev)
+				return CandidateReviewResult{}, nil
+			}
+		}),
+		Repair: repairPassFunc(func(_ context.Context, candidate CandidateResult, _ string) (CandidateResult, error) {
+			repairSawTraceLen = len(candidate.Report.CycleTrace)
+			if repairSawTraceLen != 1 {
+				t.Fatalf("repair must receive the prior trace entry, got %d entries", repairSawTraceLen)
+			}
+			require.Len(t, candidate.Report.CycleTrace, 1)
+			assert.Equal(t, "candidate-rev", candidate.Report.CycleTrace[0].ResultRev)
+			return repairCycleCandidate(candidate.Report.BeadID, candidate.Report.AttemptID, candidate.Report.BaseRev, "repair-rev", 1), nil
+		}),
+		Lander: candidateLanderFunc(func(_ context.Context, candidate CandidateResult) (ExecuteBeadReport, error) {
+			return candidate.Report, nil
+		}),
+		RefStore:    &inMemoryCandidateRefStore{},
+		ProjectRoot: "/project",
+	}
+
+	result, err := coord.Run(context.Background(), "ddx-trace-bead")
+	require.NoError(t, err)
+	require.True(t, result.Landed)
+	require.Len(t, result.Report.CycleTrace, 2)
+
+	initial := result.Report.CycleTrace[0]
+	assert.Equal(t, 0, initial.CycleIndex)
+	assert.Equal(t, "attempt-trace-001", initial.AttemptID)
+	assert.Equal(t, "candidate-rev", initial.ResultRev)
+	assert.Equal(t, "rg-initial", initial.ReviewGroupID)
+	assert.Equal(t, []int{0, 1}, initial.ReviewerIndices)
+	assert.Equal(t, []string{"BLOCK", "BLOCK"}, initial.ReviewVerdicts)
+	assert.Equal(t, "REQUEST_CHANGES", initial.ReviewResult.Verdict)
+	assert.Equal(t, "review_fixable_gap", initial.FinalDecision)
+
+	repair := result.Report.CycleTrace[1]
+	assert.Equal(t, 1, repair.CycleIndex)
+	assert.Equal(t, "repair-rev", repair.ResultRev)
+	assert.Equal(t, "rg-repair", repair.ReviewGroupID)
+	assert.Equal(t, []int{0, 1}, repair.ReviewerIndices)
+	assert.Equal(t, []string{"APPROVE", "APPROVE"}, repair.ReviewVerdicts)
+	assert.Equal(t, "APPROVE", repair.ReviewResult.Verdict)
+	assert.Equal(t, ExecuteBeadStatusSuccess, repair.FinalDecision)
+	assert.Equal(t, 1, repairSawTraceLen)
+}
+
 func TestRepairCycle_MaxCyclesExhaustedPreservesCandidate(t *testing.T) {
 	refStore := &inMemoryCandidateRefStore{}
 	coord := &AttemptCycleCoordinator{

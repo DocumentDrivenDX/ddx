@@ -89,6 +89,10 @@ type ExecuteBeadResult struct {
 	// operators diagnose silent commit failures before the worktree is cleaned up.
 	NoEvidencePaths []string `json:"no_evidence_paths,omitempty"`
 
+	// CycleTrace records the append-only execution cycle trace in order.
+	// Each entry captures one implementation or repair cycle.
+	CycleTrace []ExecutionCycleTrace `json:"cycle_trace,omitempty"`
+
 	// ResourceExhausted captures the root and cleanup summary when execution
 	// stopped before a bead attempt because the host could not safely continue.
 	ResourceExhausted any `json:"resource_exhausted,omitempty"`
@@ -126,6 +130,41 @@ type ExecuteBeadResult struct {
 
 	StartedAt  time.Time `json:"started_at"`
 	FinishedAt time.Time `json:"finished_at"`
+}
+
+// ExecutionCycleRouteFacts captures the implementer-side routing facts for
+// one execution cycle.
+type ExecutionCycleRouteFacts struct {
+	Harness         string `json:"harness,omitempty"`
+	Provider        string `json:"provider,omitempty"`
+	Model           string `json:"model,omitempty"`
+	ActualPower     int    `json:"actual_power,omitempty"`
+	RouteReason     string `json:"route_reason,omitempty"`
+	ResolvedBaseURL string `json:"resolved_base_url,omitempty"`
+}
+
+// ExecutionCycleReviewResult captures the reduced review outcome for one
+// execution cycle.
+type ExecutionCycleReviewResult struct {
+	Verdict        string     `json:"verdict,omitempty"`
+	Rationale      string     `json:"rationale,omitempty"`
+	Classification string     `json:"classification,omitempty"`
+	PerAC          []ReviewAC `json:"per_ac,omitempty"`
+	Findings       []Finding  `json:"findings,omitempty"`
+}
+
+// ExecutionCycleTrace records one implementation or repair cycle and its
+// durable review/final-decision metadata.
+type ExecutionCycleTrace struct {
+	CycleIndex       int                        `json:"cycle_index"`
+	AttemptID        string                     `json:"attempt_id,omitempty"`
+	ResultRev        string                     `json:"result_rev,omitempty"`
+	ImplementerRoute ExecutionCycleRouteFacts   `json:"implementer_route"`
+	ReviewGroupID    string                     `json:"review_group_id,omitempty"`
+	ReviewerIndices  []int                      `json:"reviewer_indices,omitempty"`
+	ReviewVerdicts   []string                   `json:"review_verdicts,omitempty"`
+	ReviewResult     ExecutionCycleReviewResult `json:"review_result,omitempty"`
+	FinalDecision    string                     `json:"final_decision,omitempty"`
 }
 
 // AttemptDiagnostic captures infrastructure state when an attempt cannot be

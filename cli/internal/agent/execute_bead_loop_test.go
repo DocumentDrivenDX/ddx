@@ -54,6 +54,48 @@ func TestReport_OutcomeReason_Persists_BesideDisrupted(t *testing.T) {
 	assert.Contains(t, event.Body, "predicted_cost_usd_per_1k_tokens=0.012345 source=catalog")
 }
 
+func TestExecutionTrace_BeadResultEventRetainsCompatibleFields(t *testing.T) {
+	report := ExecuteBeadReport{
+		BeadID:    "ddx-trace",
+		AttemptID: "attempt-trace-003",
+		Status:    ExecuteBeadStatusSuccess,
+		BaseRev:   "base-rev",
+		ResultRev: "result-rev",
+		CycleTrace: []ExecutionCycleTrace{
+			{
+				CycleIndex: 0,
+				AttemptID:  "attempt-trace-003",
+				ResultRev:  "result-rev",
+				ImplementerRoute: ExecutionCycleRouteFacts{
+					Harness:     "codex",
+					Provider:    "openai",
+					Model:       "gpt-5",
+					ActualPower: 70,
+				},
+				ReviewGroupID:   "rg-trace",
+				ReviewerIndices: []int{0, 1},
+				ReviewVerdicts:  []string{"BLOCK", "BLOCK"},
+				ReviewResult: ExecutionCycleReviewResult{
+					Verdict:        "REQUEST_CHANGES",
+					Rationale:      "missing coverage",
+					Classification: ReviewFindingClassFixableGap,
+				},
+				FinalDecision: ExecuteBeadStatusReviewFixableGap,
+			},
+		},
+	}
+
+	event := executeBeadLoopEvent(report, "worker", time.Now().UTC())
+	assert.Equal(t, "execute-bead", event.Kind)
+	assert.Equal(t, ExecuteBeadStatusSuccess, event.Summary)
+	assert.Contains(t, event.Body, "result_rev=result-rev")
+	assert.Contains(t, event.Body, "base_rev=base-rev")
+	assert.Contains(t, event.Body, "cycle_trace=")
+	assert.Contains(t, event.Body, `"review_group_id":"rg-trace"`)
+	assert.Contains(t, event.Body, `"reviewer_indices":[0,1]`)
+	assert.Contains(t, event.Body, `"final_decision":"review_fixable_gap"`)
+}
+
 // TestStopCondition_NoProgress_IgnoresIntakeRoutingReviewAndOperatorStates
 // verifies that isValidImplementationAttempt and shouldSuppressNoProgress both
 // return false (no no-progress budget consumed) for every non-implementation

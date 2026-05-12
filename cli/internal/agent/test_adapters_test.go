@@ -4,9 +4,12 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 // beadReviewerFunc is a test-local functional adapter implementing BeadReviewer.
@@ -162,4 +165,58 @@ func runnerTestProviderConnectivity(r *Runner, harnessName string, timeout time.
 // RunQuorumWithConfig. Production callers use RunQuorumWithConfigViaService.
 func runQuorumWithConfig(run RunFunc, _rcfg config.ResolvedConfig, runtime QuorumRuntime) ([]*Result, error) {
 	return RunQuorumWith(run, runtime)
+}
+
+func TestExecutionTrace_AdapterPreservesCycleFields(t *testing.T) {
+	original := ExecuteBeadReport{
+		BeadID:    "ddx-trace",
+		AttemptID: "attempt-trace-002",
+		WorkerID:  "worker-1",
+		BaseRev:   "base-rev",
+		ResultRev: "result-rev",
+		CycleTrace: []ExecutionCycleTrace{
+			{
+				CycleIndex: 0,
+				AttemptID:  "attempt-trace-002",
+				ResultRev:  "candidate-rev",
+				ImplementerRoute: ExecutionCycleRouteFacts{
+					Harness:         "codex",
+					Provider:        "openai",
+					Model:           "gpt-5",
+					ActualPower:     70,
+					RouteReason:     "profile_hint",
+					ResolvedBaseURL: "https://api.openai.com",
+				},
+				ReviewGroupID:   "rg-1",
+				ReviewerIndices: []int{0, 1},
+				ReviewVerdicts:  []string{"BLOCK", "BLOCK"},
+				ReviewResult:    ExecutionCycleReviewResult{Verdict: "REQUEST_CHANGES", Rationale: "fix gap", Classification: ReviewFindingClassFixableGap, PerAC: []ReviewAC{{Number: 1, Item: "Add test", Grade: "REQUEST_CHANGES", Evidence: "missing coverage"}}, Findings: []Finding{{Severity: "warn", Summary: "missing coverage", Location: "file.go:1"}}},
+				FinalDecision:   ExecuteBeadStatusReviewFixableGap,
+			},
+		},
+	}
+
+	legacy := toTryReport(original)
+	require.Len(t, legacy.CycleTrace, 1)
+	assert.Equal(t, original.CycleTrace[0].CycleIndex, legacy.CycleTrace[0].CycleIndex)
+	assert.Equal(t, original.CycleTrace[0].AttemptID, legacy.CycleTrace[0].AttemptID)
+	assert.Equal(t, original.CycleTrace[0].ResultRev, legacy.CycleTrace[0].ResultRev)
+	assert.Equal(t, original.CycleTrace[0].ImplementerRoute.Harness, legacy.CycleTrace[0].ImplementerRoute.Harness)
+	assert.Equal(t, original.CycleTrace[0].ImplementerRoute.Provider, legacy.CycleTrace[0].ImplementerRoute.Provider)
+	assert.Equal(t, original.CycleTrace[0].ImplementerRoute.Model, legacy.CycleTrace[0].ImplementerRoute.Model)
+	assert.Equal(t, original.CycleTrace[0].ImplementerRoute.ActualPower, legacy.CycleTrace[0].ImplementerRoute.ActualPower)
+	assert.Equal(t, original.CycleTrace[0].ImplementerRoute.RouteReason, legacy.CycleTrace[0].ImplementerRoute.RouteReason)
+	assert.Equal(t, original.CycleTrace[0].ImplementerRoute.ResolvedBaseURL, legacy.CycleTrace[0].ImplementerRoute.ResolvedBaseURL)
+	assert.Equal(t, original.CycleTrace[0].ReviewGroupID, legacy.CycleTrace[0].ReviewGroupID)
+	assert.Equal(t, original.CycleTrace[0].ReviewerIndices, legacy.CycleTrace[0].ReviewerIndices)
+	assert.Equal(t, original.CycleTrace[0].ReviewVerdicts, legacy.CycleTrace[0].ReviewVerdicts)
+	assert.Equal(t, original.CycleTrace[0].ReviewResult.Verdict, legacy.CycleTrace[0].ReviewResult.Verdict)
+	assert.Equal(t, original.CycleTrace[0].ReviewResult.Rationale, legacy.CycleTrace[0].ReviewResult.Rationale)
+	assert.Equal(t, original.CycleTrace[0].ReviewResult.Classification, legacy.CycleTrace[0].ReviewResult.Classification)
+	assert.Equal(t, original.CycleTrace[0].ReviewResult.PerAC[0].Evidence, legacy.CycleTrace[0].ReviewResult.PerAC[0].Evidence)
+	assert.Equal(t, original.CycleTrace[0].ReviewResult.Findings[0].Summary, legacy.CycleTrace[0].ReviewResult.Findings[0].Summary)
+	assert.Equal(t, original.CycleTrace[0].FinalDecision, legacy.CycleTrace[0].FinalDecision)
+
+	roundTripped := fromTryReport(legacy)
+	assert.Equal(t, original, roundTripped)
 }
