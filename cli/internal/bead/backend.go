@@ -7,9 +7,11 @@ import (
 
 // RawBackend is the low-level storage contract — read/write the entire bead
 // corpus and serialize concurrent rewrites. JSONLBackend and ExternalBackend
-// implement it. Higher-level operations (CRUD, claim, ready/blocked, dep ops,
-// events, archive, JSONL interchange) live on the Backend interface below and
-// are composed on top of a RawBackend by Store.
+// implement it. New backends should implement Backend directly; RawBackend is
+// retained for the JSONL/external composition path that Store uses internally.
+// Higher-level operations (CRUD, claim, ready/blocked, dep ops, events,
+// archive, JSONL interchange) live on the Backend interface below and are
+// composed on top of a RawBackend by Store.
 type RawBackend interface {
 	Init() error
 	ReadAll() ([]Bead, error)
@@ -32,14 +34,14 @@ type RawBackend interface {
 // interface so additional backends can be exercised by the same tests.
 type Backend interface {
 	// Foundational
-	Init() error
-	ReadAll() ([]Bead, error)
+	Init(args ...any) error
+	ReadAll(args ...any) ([]Bead, error)
 
 	// CRUD
-	Create(b *Bead) error
-	Get(id string) (*Bead, error)
-	Update(id string, mutate func(*Bead)) error
-	Close(id string) error
+	Create(args ...any) error
+	Get(args ...any) (*Bead, error)
+	Update(args ...any) error
+	Close(args ...any) error
 
 	// Claim
 	Claim(id, assignee string) error
@@ -72,17 +74,17 @@ type Backend interface {
 // TD-027 foundation interfaces. These are additive and intentionally do not
 // change the legacy Store-backed interface above in this bead slice.
 type BeadInitializer interface {
-	Init(ctx context.Context) error
+	Init(args ...any) error
 }
 
 type BeadReader interface {
-	ReadAll(ctx context.Context) ([]Bead, error)
-	ReadAllFiltered(ctx context.Context, pred func(Bead) bool) ([]Bead, error)
-	Get(ctx context.Context, id string) (*Bead, error)
+	ReadAll(args ...any) ([]Bead, error)
+	ReadAllFiltered(args ...any) ([]Bead, error)
+	Get(args ...any) (*Bead, error)
 }
 
 type BeadLifecycle interface {
-	Create(ctx context.Context, b *Bead) error
+	Create(args ...any) error
 	Apply(ctx context.Context, id string, op Operation) error
 }
 

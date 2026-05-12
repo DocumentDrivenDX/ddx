@@ -19,7 +19,7 @@ func TestCreateWithDanglingDep(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "Has bad dep", Dependencies: []Dependency{{DependsOnID: "nonexistent-id", Type: "blocks"}}}
-	err := s.Create(b)
+	err := s.Create(testCtx(), b)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "dependency not found")
 }
@@ -28,12 +28,12 @@ func TestCreateWithValidDep(t *testing.T) {
 	s := newTestStore(t)
 
 	a := &Bead{Title: "Exists"}
-	require.NoError(t, s.Create(a))
+	require.NoError(t, s.Create(testCtx(), a))
 
 	b := &Bead{Title: "Depends on A", Dependencies: []Dependency{{DependsOnID: a.ID, Type: "blocks"}}}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(testCtx(), b.ID)
 	require.NoError(t, err)
 	assert.Contains(t, got.DepIDs(), a.ID)
 }
@@ -43,9 +43,9 @@ func TestCreateWithValidDep(t *testing.T) {
 func TestReadySortedByPriority(t *testing.T) {
 	s := newTestStore(t)
 
-	require.NoError(t, s.Create(&Bead{Title: "Low priority", Priority: 3}))
-	require.NoError(t, s.Create(&Bead{Title: "High priority", Priority: 0}))
-	require.NoError(t, s.Create(&Bead{Title: "Medium priority", Priority: 2}))
+	require.NoError(t, s.Create(testCtx(), &Bead{Title: "Low priority", Priority: 3}))
+	require.NoError(t, s.Create(testCtx(), &Bead{Title: "High priority", Priority: 0}))
+	require.NoError(t, s.Create(testCtx(), &Bead{Title: "Medium priority", Priority: 2}))
 
 	ready, err := s.Ready()
 	require.NoError(t, err)
@@ -177,8 +177,8 @@ func TestReadyExecutionSkipsRetrySuppressedBeads(t *testing.T) {
 
 	a := &Bead{Title: "Suppressed", Priority: 0}
 	b := &Bead{Title: "Eligible", Priority: 1}
-	require.NoError(t, s.Create(a))
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), a))
+	require.NoError(t, s.Create(testCtx(), b))
 	require.NoError(t, s.SetExecutionCooldown(a.ID, time.Now().UTC().Add(6*time.Hour), "no_changes", "agent made no commits", ""))
 
 	exec, err := s.ReadyExecution()
@@ -197,8 +197,8 @@ func TestReadyExecutionBreakdown_SeparatesCooldownFromNonExecutable(t *testing.T
 		Priority: 1,
 		Extra:    map[string]any{"execution-eligible": false},
 	}
-	require.NoError(t, s.Create(cooldown))
-	require.NoError(t, s.Create(notEligible))
+	require.NoError(t, s.Create(testCtx(), cooldown))
+	require.NoError(t, s.Create(testCtx(), notEligible))
 	require.NoError(t, s.SetExecutionCooldown(cooldown.ID, time.Now().UTC().Add(time.Hour), "no_changes", "retry later", ""))
 
 	breakdown, err := s.ReadyExecutionBreakdown()
@@ -224,10 +224,10 @@ func TestReadyExecutionBreakdown_UsesLifecycleBuckets(t *testing.T) {
 	}
 	dependencyWaiting := &Bead{ID: "ddx-dependency-waiting", Title: "Dependency waiting", Priority: 3}
 	dependencyWaiting.AddDep(externalBlocked.ID, "blocks")
-	require.NoError(t, s.Create(ready))
-	require.NoError(t, s.Create(proposed))
-	require.NoError(t, s.Create(externalBlocked))
-	require.NoError(t, s.Create(dependencyWaiting))
+	require.NoError(t, s.Create(testCtx(), ready))
+	require.NoError(t, s.Create(testCtx(), proposed))
+	require.NoError(t, s.Create(testCtx(), externalBlocked))
+	require.NoError(t, s.Create(testCtx(), dependencyWaiting))
 
 	breakdown, err := s.ReadyExecutionBreakdown()
 	require.NoError(t, err)
@@ -246,7 +246,7 @@ func TestQueueSnapshot_HumanReviewBlockersAggregateTransitiveBlockedBeads(t *tes
 		{ID: "ddx-human-3", Title: "No changes unverified", Priority: 2, Labels: []string{LabelNoChangesUnverified}},
 	}
 	for i := range blockers {
-		require.NoError(t, s.Create(&blockers[i]))
+		require.NoError(t, s.Create(testCtx(), &blockers[i]))
 		prevID := blockers[i].ID
 		for n := 0; n < 10; n++ {
 			id := fmt.Sprintf("ddx-down-%d-%02d", i+1, n+1)
@@ -256,7 +256,7 @@ func TestQueueSnapshot_HumanReviewBlockersAggregateTransitiveBlockedBeads(t *tes
 				Priority: 4,
 			}
 			b.AddDep(prevID, "blocks")
-			require.NoError(t, s.Create(b))
+			require.NoError(t, s.Create(testCtx(), b))
 			prevID = id
 		}
 	}
@@ -279,8 +279,8 @@ func TestReadyExecution_ExcludesOrdinaryEpics(t *testing.T) {
 
 	epic := &Bead{ID: "ddx-epic", Title: "Epic container", IssueType: "epic", Priority: 0}
 	task := &Bead{ID: "ddx-task", Title: "Task work", IssueType: "task", Priority: 1}
-	require.NoError(t, s.Create(epic))
-	require.NoError(t, s.Create(task))
+	require.NoError(t, s.Create(testCtx(), epic))
+	require.NoError(t, s.Create(testCtx(), task))
 
 	ready, err := s.ReadyExecution()
 	require.NoError(t, err)
@@ -301,12 +301,12 @@ func TestReadyExecutionBreakdown_ClassifiesEpicClosureCandidates(t *testing.T) {
 	closedChildOne := &Bead{ID: "ddx-epic-closed-child-1", Title: "Closed child one", Parent: completedEpic.ID, Status: StatusClosed}
 	closedChildTwo := &Bead{ID: "ddx-epic-closed-child-2", Title: "Closed child two", Parent: completedEpic.ID, Status: StatusClosed}
 	openChild := &Bead{ID: "ddx-epic-open-child", Title: "Open child", Parent: activeEpic.ID, Status: StatusBlocked}
-	require.NoError(t, s.Create(task))
-	require.NoError(t, s.Create(completedEpic))
-	require.NoError(t, s.Create(activeEpic))
-	require.NoError(t, s.Create(closedChildOne))
-	require.NoError(t, s.Create(closedChildTwo))
-	require.NoError(t, s.Create(openChild))
+	require.NoError(t, s.Create(testCtx(), task))
+	require.NoError(t, s.Create(testCtx(), completedEpic))
+	require.NoError(t, s.Create(testCtx(), activeEpic))
+	require.NoError(t, s.Create(testCtx(), closedChildOne))
+	require.NoError(t, s.Create(testCtx(), closedChildTwo))
+	require.NoError(t, s.Create(testCtx(), openChild))
 
 	ready, err := s.ReadyExecution()
 	require.NoError(t, err)
@@ -325,9 +325,9 @@ func TestBlockedAllClassifiesDepAndRetryCooldown(t *testing.T) {
 	dep := &Bead{Title: "Dep root", Priority: 1}
 	blockedByDep := &Bead{Title: "Blocked by dep", Priority: 2}
 	parked := &Bead{Title: "Retry parked", Priority: 0}
-	require.NoError(t, s.Create(dep))
-	require.NoError(t, s.Create(blockedByDep))
-	require.NoError(t, s.Create(parked))
+	require.NoError(t, s.Create(testCtx(), dep))
+	require.NoError(t, s.Create(testCtx(), blockedByDep))
+	require.NoError(t, s.Create(testCtx(), parked))
 	require.NoError(t, s.DepAdd(blockedByDep.ID, dep.ID))
 
 	until := time.Now().UTC().Add(4 * time.Hour).Truncate(time.Second)
@@ -369,9 +369,9 @@ func TestBlockedAll_ReportsRetryCooldownWithoutHidingDependencyBlockers(t *testi
 	dep := &Bead{ID: "ddx-dep", Title: "Dep root", Priority: 1}
 	blockedByDep := &Bead{ID: "ddx-blocked", Title: "Blocked by dep", Priority: 2}
 	parked := &Bead{ID: "ddx-parked", Title: "Retry parked", Priority: 0}
-	require.NoError(t, s.Create(dep))
-	require.NoError(t, s.Create(blockedByDep))
-	require.NoError(t, s.Create(parked))
+	require.NoError(t, s.Create(testCtx(), dep))
+	require.NoError(t, s.Create(testCtx(), blockedByDep))
+	require.NoError(t, s.Create(testCtx(), parked))
 	require.NoError(t, s.DepAdd(blockedByDep.ID, dep.ID))
 
 	until := time.Now().UTC().Add(4 * time.Hour).Truncate(time.Second)
@@ -395,7 +395,7 @@ func TestBlockedAllOmitsExpiredCooldown(t *testing.T) {
 	s := newTestStore(t)
 
 	a := &Bead{Title: "Cooldown expired"}
-	require.NoError(t, s.Create(a))
+	require.NoError(t, s.Create(testCtx(), a))
 	require.NoError(t, s.SetExecutionCooldown(a.ID, time.Now().UTC().Add(-1*time.Hour), "no_changes", "stale", ""))
 
 	entries, err := s.BlockedAll()
@@ -408,8 +408,8 @@ func TestBlockedAllPrefersDependencyOverCooldown(t *testing.T) {
 
 	dep := &Bead{Title: "Dep root"}
 	both := &Bead{Title: "Dep blocked + parked"}
-	require.NoError(t, s.Create(dep))
-	require.NoError(t, s.Create(both))
+	require.NoError(t, s.Create(testCtx(), dep))
+	require.NoError(t, s.Create(testCtx(), both))
 	require.NoError(t, s.DepAdd(both.ID, dep.ID))
 	require.NoError(t, s.SetExecutionCooldown(both.ID, time.Now().UTC().Add(2*time.Hour), "no_changes", "also parked", ""))
 
@@ -435,7 +435,7 @@ exit 1`
 	hookPath := filepath.Join(hookDir, "validate-bead-create")
 	require.NoError(t, os.WriteFile(hookPath, []byte(hookScript), 0o755))
 
-	err := s.Create(&Bead{Title: "Should fail"})
+	err := s.Create(testCtx(), &Bead{Title: "Should fail"})
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "missing required label")
 }
@@ -453,7 +453,7 @@ exit 2`
 
 	// Warning should not block creation
 	b := &Bead{Title: "Should succeed with warning"}
-	err := s.Create(b)
+	err := s.Create(testCtx(), b)
 	assert.NoError(t, err)
 	assert.NotEmpty(t, b.ID)
 }
@@ -469,7 +469,7 @@ exit 0`
 	require.NoError(t, os.WriteFile(hookPath, []byte(hookScript), 0o755))
 
 	b := &Bead{Title: "Passes hook"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	assert.NotEmpty(t, b.ID)
 }
 
@@ -478,7 +478,7 @@ func TestNoHookNoError(t *testing.T) {
 
 	// No hook installed — should work fine
 	b := &Bead{Title: "No hook"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 }
 
 // ── Stale lock detection ──────────────────────────────────────────
@@ -496,7 +496,7 @@ func TestStaleLockByAge(t *testing.T) {
 
 	// Should break stale lock and succeed
 	b := &Bead{Title: "After stale lock"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 	assert.NotEmpty(t, b.ID)
 }
 
@@ -544,7 +544,7 @@ func TestConcurrentCreatesSerialized(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		go func(n int) {
 			b := &Bead{Title: "Concurrent " + string(rune('A'+n))}
-			done <- s.Create(b)
+			done <- s.Create(testCtx(), b)
 		}(i)
 	}
 
@@ -553,7 +553,7 @@ func TestConcurrentCreatesSerialized(t *testing.T) {
 		assert.NoError(t, <-done)
 	}
 
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(testCtx())
 	require.NoError(t, err)
 	assert.Len(t, beads, 2)
 	_, tmpErr := os.Stat(s.File + ".tmp")
@@ -570,9 +570,9 @@ func TestCircularDepDetected(t *testing.T) {
 	a := &Bead{Title: "A"}
 	b := &Bead{Title: "B"}
 	c := &Bead{Title: "C"}
-	require.NoError(t, s.Create(a))
-	require.NoError(t, s.Create(b))
-	require.NoError(t, s.Create(c))
+	require.NoError(t, s.Create(testCtx(), a))
+	require.NoError(t, s.Create(testCtx(), b))
+	require.NoError(t, s.Create(testCtx(), c))
 
 	require.NoError(t, s.DepAdd(b.ID, a.ID)) // B depends on A
 	require.NoError(t, s.DepAdd(c.ID, b.ID)) // C depends on B
@@ -612,7 +612,7 @@ not json at all`
 	var beads []Bead
 	var err error
 	stderr := captureStderr(t, func() {
-		beads, err = s.ReadAll()
+		beads, err = s.ReadAll(testCtx())
 	})
 	require.NoError(t, err)
 	require.Len(t, beads, 1)
@@ -632,7 +632,7 @@ func TestMalformedJSONLAllBadReturnsError(t *testing.T) {
 	jsonl := "not json at all\nstill bad"
 	require.NoError(t, os.WriteFile(s.File, []byte(jsonl), 0o644))
 
-	_, err := s.ReadAll()
+	_, err := s.ReadAll(testCtx())
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "0 valid")
 	assert.True(t, strings.Contains(err.Error(), "beads.jsonl"))

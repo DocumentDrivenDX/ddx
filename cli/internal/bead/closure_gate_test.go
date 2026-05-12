@@ -113,16 +113,16 @@ func TestClosureGate(t *testing.T) {
 // note so operator audit sees why.
 func TestCloseWithEvidence_RefusesInsufficientEvidence(t *testing.T) {
 	store := NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(testCtx()))
 
 	b := &Bead{ID: "ddx-gate-test", Title: "gate test", Priority: 2}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(testCtx(), b))
 
 	// Replay the axon-c5cc071a shape: no events, no commit.
 	err := store.CloseWithEvidence("ddx-gate-test", "session-123", "")
 	require.NoError(t, err, "Store.CloseWithEvidence itself does not error; it records the refusal on the bead so callers can observe it")
 
-	after, err := store.Get("ddx-gate-test")
+	after, err := store.Get(testCtx(), "ddx-gate-test")
 	require.NoError(t, err)
 	assert.Equal(t, StatusOpen, after.Status,
 		"bead must remain open when closure gate rejects — the whole point is to prevent silent closure")
@@ -136,10 +136,10 @@ func TestCloseWithEvidence_RefusesInsufficientEvidence(t *testing.T) {
 // gate.
 func TestCloseWithEvidence_AllowsHappyPath(t *testing.T) {
 	store := NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(testCtx()))
 
 	b := &Bead{ID: "ddx-happy-close", Title: "happy", Priority: 2}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(testCtx(), b))
 
 	require.NoError(t, store.AppendEvent("ddx-happy-close", BeadEvent{
 		Kind:      "execute-bead",
@@ -155,7 +155,7 @@ func TestCloseWithEvidence_AllowsHappyPath(t *testing.T) {
 
 	require.NoError(t, store.CloseWithEvidence("ddx-happy-close", "session-abc", "deadbeef"))
 
-	after, err := store.Get("ddx-happy-close")
+	after, err := store.Get(testCtx(), "ddx-happy-close")
 	require.NoError(t, err)
 	assert.Equal(t, StatusClosed, after.Status)
 	assert.Equal(t, "deadbeef", after.Extra["closing_commit_sha"])

@@ -15,10 +15,10 @@ import (
 // limit so `bd import` still accepts it.
 func TestAppendEvent_CapsOversizedBody(t *testing.T) {
 	store := NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(testCtx()))
 
 	b := &Bead{ID: "ddx-cap-test", Title: "cap test", Priority: 2}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(testCtx(), b))
 
 	huge := strings.Repeat("A", 1024*1024) // 1MB body
 	require.NoError(t, store.AppendEvent("ddx-cap-test", BeadEvent{
@@ -45,10 +45,10 @@ func TestAppendEvent_CapsOversizedBody(t *testing.T) {
 // common case: normal-sized events round-trip verbatim.
 func TestAppendEvent_UndersizedBodyUnchanged(t *testing.T) {
 	store := NewStore(t.TempDir())
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(testCtx()))
 
 	b := &Bead{ID: "ddx-cap-test", Title: "cap test", Priority: 2}
-	require.NoError(t, store.Create(b))
+	require.NoError(t, store.Create(testCtx(), b))
 
 	body := "APPROVE\nAll acceptance clauses met."
 	require.NoError(t, store.AppendEvent("ddx-cap-test", BeadEvent{

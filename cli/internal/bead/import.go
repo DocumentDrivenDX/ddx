@@ -1,6 +1,7 @@
 package bead
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -43,7 +44,7 @@ func (s *Store) Import(source, filePath string) (int, error) {
 // the active store's attachment dir (where Migrate writes them) before
 // emission.
 func (s *Store) ExportTo(w io.Writer) error {
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(context.Background())
 	if err != nil {
 		return err
 	}
@@ -68,7 +69,7 @@ func (s *Store) ExportTo(w io.Writer) error {
 		return nil
 	}
 	archive := s.archivePartner()
-	archived, aerr := archive.ReadAll()
+	archived, aerr := archive.ReadAll(context.Background())
 	if aerr != nil {
 		// Treat a missing/unreadable archive partner as empty — the
 		// active collection is still a valid export.
@@ -121,7 +122,7 @@ func (s *Store) MigrateFromHelix() (int, bool, error) {
 	}
 
 	// Check if DDx store already has beads
-	existing, err := s.ReadAll()
+	existing, err := s.ReadAll(context.Background())
 	if err == nil && len(existing) > 0 {
 		return 0, false, nil // DDx store already populated
 	}
@@ -238,7 +239,7 @@ func (s *Store) mergeJSONL(data string) (int, error) {
 func (s *Store) mergeBeads(incoming []Bead) (int, error) {
 	var count int
 	err := s.WithLock(func() error {
-		existing, err := s.ReadAll()
+		existing, err := s.ReadAll(context.Background())
 		if err != nil {
 			return err
 		}

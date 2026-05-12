@@ -116,8 +116,8 @@ func TestExecuteLoopSkipsProposedBeads(t *testing.T) {
 
 	open := &Bead{ID: "ddx-open", Title: "open bead", Priority: 1}
 	proposed := &Bead{ID: "ddx-proposed", Title: "proposed operator attention", Status: StatusProposed, Priority: 0}
-	require.NoError(t, s.Create(open))
-	require.NoError(t, s.Create(proposed))
+	require.NoError(t, s.Create(testCtx(), open))
+	require.NoError(t, s.Create(testCtx(), proposed))
 
 	ready, err := s.ReadyExecution()
 	require.NoError(t, err)
@@ -148,8 +148,8 @@ func TestExecuteLoopSkipsDependencyWaiting(t *testing.T) {
 	dep := &Bead{ID: "ddx-dep", Title: "unresolved dependency", Priority: 1}
 	waiting := &Bead{ID: "ddx-waiting", Title: "dep-waiting bead", Priority: 0}
 	waiting.AddDep(dep.ID, "blocks")
-	require.NoError(t, s.Create(dep))
-	require.NoError(t, s.Create(waiting))
+	require.NoError(t, s.Create(testCtx(), dep))
+	require.NoError(t, s.Create(testCtx(), waiting))
 
 	ready, err := s.ReadyExecution()
 	require.NoError(t, err)
@@ -179,7 +179,7 @@ func TestExecuteLoopSelectsExternalBlockedAfterRecheck(t *testing.T) {
 	s := newTestStore(t)
 
 	blocked := &Bead{ID: "ddx-blocked", Title: "external blocker", Priority: 0}
-	require.NoError(t, s.Create(blocked))
+	require.NoError(t, s.Create(testCtx(), blocked))
 
 	// Transition to blocked with an explicit external blocker reason.
 	require.NoError(t, s.UpdateWithLifecycleStatus(blocked.ID, StatusBlocked, LifecycleTransitionOptions{
@@ -226,8 +226,8 @@ func TestLifecycleClosedSatisfiesDependents(t *testing.T) {
 	parent := &Bead{ID: "ddx-parent", Title: "parent", Priority: 1}
 	child := &Bead{ID: "ddx-child", Title: "child", Priority: 0}
 	child.AddDep(parent.ID, "blocks")
-	require.NoError(t, s.Create(parent))
-	require.NoError(t, s.Create(child))
+	require.NoError(t, s.Create(testCtx(), parent))
+	require.NoError(t, s.Create(testCtx(), child))
 
 	// Child has unmet dep — must not be ready.
 	ready, err := s.ReadyExecution()
@@ -239,7 +239,7 @@ func TestLifecycleClosedSatisfiesDependents(t *testing.T) {
 	}
 
 	// Close parent — dep is now satisfied.
-	require.NoError(t, s.Close(parent.ID))
+	require.NoError(t, s.Close(testCtx(), parent.ID))
 
 	ready, err = s.ReadyExecution()
 	require.NoError(t, err)
@@ -262,8 +262,8 @@ func TestLifecycleCancelledDoesNotSatisfyDependents(t *testing.T) {
 	parent := &Bead{ID: "ddx-parent-cancel", Title: "cancelled parent", Priority: 1}
 	child := &Bead{ID: "ddx-child-cancel", Title: "child of cancelled", Priority: 0}
 	child.AddDep(parent.ID, "blocks")
-	require.NoError(t, s.Create(parent))
-	require.NoError(t, s.Create(child))
+	require.NoError(t, s.Create(testCtx(), parent))
+	require.NoError(t, s.Create(testCtx(), child))
 
 	// Cancel the parent.
 	require.NoError(t, s.UpdateWithLifecycleStatus(parent.ID, StatusCancelled, LifecycleTransitionOptions{

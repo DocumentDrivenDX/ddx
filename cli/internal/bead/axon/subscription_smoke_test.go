@@ -20,7 +20,7 @@ import (
 func TestAxonSubscription_ReceivesBeadMutations(t *testing.T) {
 	projectDir := t.TempDir()
 	store := bead.NewStore(projectDir + "/.ddx")
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(context.Background()))
 
 	hub := bead.NewWatcherHub(10 * time.Millisecond)
 	t.Cleanup(hub.Close)
@@ -203,7 +203,7 @@ func (s *axonSmokeServer) handleQuery(t *testing.T, w http.ResponseWriter, r *ht
 			Dependencies: dependencyInputsToLocal(input.Dependencies),
 			Extra:        cloneStringAnyMap(input.Extra),
 		}
-		if err := s.store.Create(&b); err != nil {
+		if err := s.store.Create(context.Background(), &b); err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
@@ -234,7 +234,7 @@ func (s *axonSmokeServer) handleQuery(t *testing.T, w http.ResponseWriter, r *ht
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		updated, err := s.store.Get(id)
+		updated, err := s.store.Get(context.Background(), id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -242,14 +242,14 @@ func (s *axonSmokeServer) handleQuery(t *testing.T, w http.ResponseWriter, r *ht
 		write(map[string]any{"updateEntity": BeadFromLocal(*updated)})
 	case getBeadQuery:
 		id, _ := req.Variables["id"].(string)
-		b, err := s.store.Get(id)
+		b, err := s.store.Get(context.Background(), id)
 		if err != nil {
 			write(map[string]any{"ddxBead": nil})
 			return
 		}
 		write(map[string]any{"ddxBead": BeadFromLocal(*b)})
 	case listBeadsQuery:
-		beads, err := s.store.ReadAll()
+		beads, err := s.store.ReadAll(context.Background())
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return

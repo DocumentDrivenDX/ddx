@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -58,7 +59,7 @@ func (f *CommandFactory) runWorkClearCooldowns(cmd *cobra.Command, _ []string) e
 	}
 
 	if dryRun {
-		allBeads, err := store.ReadAll()
+		allBeads, err := store.ReadAll(context.Background())
 		if err != nil {
 			return err
 		}

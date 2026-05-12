@@ -87,7 +87,7 @@ func TestChaos_ConcurrentAppendSafety(t *testing.T) {
 				defer wg.Done()
 				for i := 0; i < beadsEach; i++ {
 					b := &Bead{Title: fmt.Sprintf("goroutine-%d-bead-%d", g, i)}
-					if err := s.Create(b); err != nil {
+					if err := s.Create(testCtx(), b); err != nil {
 						errCh <- fmt.Errorf("goroutine %d create %d: %w", g, i, err)
 					}
 				}
@@ -103,7 +103,7 @@ func TestChaos_ConcurrentAppendSafety(t *testing.T) {
 		}
 		require.Empty(t, errs, "concurrent creates must not error: %v", errs)
 
-		beads, err := s.ReadAll()
+		beads, err := s.ReadAll(testCtx())
 		require.NoError(t, err)
 		assert.Len(t, beads, total, "all %d beads must be present", total)
 
@@ -132,7 +132,7 @@ func TestChaos_ConcurrentAppendSafety(t *testing.T) {
 func TestChaos_AtomicStatusTransitions(t *testing.T) {
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		b := &Bead{Title: "status-churn"}
-		require.NoError(t, s.Create(b))
+		require.NoError(t, s.Create(testCtx(), b))
 		id := b.ID
 
 		const goroutines = 5
@@ -159,13 +159,13 @@ func TestChaos_AtomicStatusTransitions(t *testing.T) {
 		wg.Wait()
 
 		// Bead must still exist with a valid status
-		got, err := s.Get(id)
+		got, err := s.Get(testCtx(), id)
 		require.NoError(t, err, "bead must be readable after concurrent status updates")
 		assert.Contains(t, allLifecycleStatusesForTests(), got.Status,
 			"bead must have a valid status after concurrent updates")
 
 		// Store must be parseable end-to-end
-		allBeads, err := s.ReadAll()
+		allBeads, err := s.ReadAll(testCtx())
 		require.NoError(t, err, "store must be parseable after concurrent status transitions")
 		assert.NotEmpty(t, allBeads, "store must not be empty after updates")
 
@@ -184,7 +184,7 @@ func TestChaos_ConcurrentCloseAndAppend(t *testing.T) {
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		// Pre-create the bead that will be closed
 		existing := &Bead{Title: "to-be-closed"}
-		require.NoError(t, s.Create(existing))
+		require.NoError(t, s.Create(testCtx(), existing))
 		closeID := existing.ID
 
 		const rounds = 50
@@ -202,14 +202,14 @@ func TestChaos_ConcurrentCloseAndAppend(t *testing.T) {
 			// Goroutine A: close the existing bead
 			go func() {
 				defer wg.Done()
-				_ = s.Close(closeID)
+				_ = s.Close(testCtx(), closeID)
 			}()
 
 			// Goroutine B: create a new bead
 			go func() {
 				defer wg.Done()
 				nb := &Bead{Title: newTitle}
-				if err := s.Create(nb); err == nil {
+				if err := s.Create(testCtx(), nb); err == nil {
 					newID = nb.ID
 				}
 			}()
@@ -218,7 +218,7 @@ func TestChaos_ConcurrentCloseAndAppend(t *testing.T) {
 
 			// The new bead must exist
 			if newID != "" {
-				got, err := s.Get(newID)
+				got, err := s.Get(testCtx(), newID)
 				require.NoError(t, err, "round %d: new bead %s must exist", round, newID)
 				assert.Equal(t, newTitle, got.Title, "round %d: new bead title must match", round)
 			}
@@ -227,7 +227,7 @@ func TestChaos_ConcurrentCloseAndAppend(t *testing.T) {
 			// re-opened by a subsequent round, but within this round, if the close
 			// completed first and create ran after, the close must be visible).
 			// The critical check: the closed bead must still exist and be parseable.
-			closedBead, err := s.Get(closeID)
+			closedBead, err := s.Get(testCtx(), closeID)
 			require.NoError(t, err, "round %d: closed bead must still exist", round)
 			assert.NotEmpty(t, closedBead.ID, "round %d: closed bead ID must not be empty", round)
 		}
@@ -243,7 +243,7 @@ func TestChaos_ConcurrentCloseAndAppend(t *testing.T) {
 func TestChaos_ConcurrentCloseNotLost(t *testing.T) {
 	forEachChaosBackend(t, func(t *testing.T, s Backend) {
 		existing := &Bead{Title: "must-stay-closed"}
-		require.NoError(t, s.Create(existing))
+		require.NoError(t, s.Create(testCtx(), existing))
 		closeID := existing.ID
 
 		const rounds = 20
@@ -262,13 +262,13 @@ func TestChaos_ConcurrentCloseNotLost(t *testing.T) {
 
 			go func() {
 				defer wg.Done()
-				closeErr <- s.Close(closeID)
+				closeErr <- s.Close(testCtx(), closeID)
 			}()
 
 			go func() {
 				defer wg.Done()
 				nb := &Bead{Title: fmt.Sprintf("concurrent-create-%d", round)}
-				err := s.Create(nb)
+				err := s.Create(testCtx(), nb)
 				createErr <- err
 				if err == nil {
 					createdID <- nb.ID
@@ -297,7 +297,7 @@ func TestChaos_ConcurrentCloseNotLost(t *testing.T) {
 			// read the store AFTER close completed (lock was released), so bead is closed.
 			//
 			// This test documents and verifies the invariant: close is never lost.
-			finalBead, err := s.Get(closeID)
+			finalBead, err := s.Get(testCtx(), closeID)
 			require.NoError(t, err, "round %d: closed bead must be readable", round)
 			assert.Equal(t, StatusClosed, finalBead.Status,
 				"round %d: bead must be closed after close+create race — "+
@@ -305,7 +305,7 @@ func TestChaos_ConcurrentCloseNotLost(t *testing.T) {
 
 			// The new bead must also exist
 			if nID != "" {
-				_, err := s.Get(nID)
+				_, err := s.Get(testCtx(), nID)
 				assert.NoError(t, err, "round %d: newly created bead %s must exist", round, nID)
 			}
 		}
@@ -357,7 +357,7 @@ func TestChaos_JSONLRoundTripIntegrity(t *testing.T) {
 				Labels:      []string{"chaos", tc.name},
 				Priority:    rng.Intn(5),
 			}
-			if err := s.Create(b); err != nil {
+			if err := s.Create(testCtx(), b); err != nil {
 				// If title is empty after trimming, skip — that's a validation rule, not a bug
 				if strings.Contains(err.Error(), "title is required") {
 					t.Logf("skipping case %q: title trims to empty", tc.name)
@@ -369,7 +369,7 @@ func TestChaos_JSONLRoundTripIntegrity(t *testing.T) {
 		}
 
 		// Read all back and verify field-by-field
-		beads, err := s.ReadAll()
+		beads, err := s.ReadAll(testCtx())
 		require.NoError(t, err, "ReadAll must succeed after writing random beads")
 
 		byID := make(map[string]Bead, len(beads))

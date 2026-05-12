@@ -131,13 +131,25 @@ func NewStore(dir string, opts ...StoreOption) *Store {
 	return s
 }
 
+func storeCallContext(args []any) context.Context {
+	for _, arg := range args {
+		if ctx, ok := arg.(context.Context); ok && ctx != nil {
+			return ctx
+		}
+	}
+	return context.Background()
+}
+
 // NewStoreWithCollection creates a store for a named logical collection.
 func NewStoreWithCollection(dir, collection string) *Store {
 	return NewStore(dir, WithCollection(collection))
 }
 
 // Init creates the storage directory and file.
-func (s *Store) Init() error {
+func (s *Store) Init(args ...any) error {
+	if err := storeCallContext(args).Err(); err != nil {
+		return err
+	}
 	if s.backend != nil {
 		return s.backend.Init()
 	}
@@ -152,17 +164,54 @@ func (s *Store) Init() error {
 }
 
 // GenID generates a unique bead ID with the configured prefix.
-func (s *Store) GenID() (string, error) {
-	b := make([]byte, 4)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("bead: gen id: %w", err)
+func (s *Store) GenID(args ...any) (string, error) {
+	ctx := storeCallContext(args)
+	if err := ctx.Err(); err != nil {
+		return "", err
 	}
-	return fmt.Sprintf("%s-%s", s.Prefix, hex.EncodeToString(b)), nil
+	prefix := s.Prefix
+	if prefix == "" {
+		prefix = DefaultIDPrefix
+	} else if !strings.HasSuffix(prefix, "-") {
+		prefix += "-"
+	}
+	return RandomHexIDGenerator{Prefix: prefix, Bytes: 4}.GenID(ctx)
 }
 
 // ReadAll loads all beads from the configured backend.
-func (s *Store) ReadAll() ([]Bead, error) {
-	return s.ReadAllFiltered(nil)
+func (s *Store) ReadAll(args ...any) ([]Bead, error) {
+	ctx := storeCallContext(args)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	if s.backend != nil {
+		all, err := s.backend.ReadAll()
+		if err != nil {
+			return nil, err
+		}
+		return all, nil
+	}
+	beads, warnings, err := s.readAllRaw()
+	if err != nil {
+		return nil, fmt.Errorf("bead: read %s: %w", s.File, err)
+	}
+	beads = foldLatestBeads(beads)
+	for _, warning := range warnings {
+		fmt.Fprintln(os.Stderr, warning)
+	}
+	if len(warnings) > 0 && len(beads) > 0 {
+		repaired, repairErr := s.repairJSONL()
+		if repairErr != nil {
+			return beads, fmt.Errorf("bead: repair %s: %w", s.File, repairErr)
+		}
+		if repaired {
+			fmt.Fprintf(os.Stderr, "bead: repaired %s; backup written to %s.bak\n", s.File, s.File)
+		}
+	}
+	if len(beads) == 0 && len(warnings) > 0 {
+		return nil, fmt.Errorf("bead: read %s: %d malformed record(s), 0 valid", s.File, len(warnings))
+	}
+	return beads, nil
 }
 
 // ReadAllFiltered loads all beads, folds them by latest-wins, and returns only
@@ -172,7 +221,18 @@ func (s *Store) ReadAll() ([]Bead, error) {
 // the return slice without first being held in an intermediate full-corpus
 // list, so queries that match a small subset avoid materializing the
 // mismatches (ddx-9ce6842a Part 2 step 2: filter pushdown).
-func (s *Store) ReadAllFiltered(pred func(Bead) bool) ([]Bead, error) {
+func (s *Store) ReadAllFiltered(args ...any) ([]Bead, error) {
+	ctx := storeCallContext(args)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	var pred func(Bead) bool
+	for _, arg := range args {
+		if fn, ok := arg.(func(Bead) bool); ok {
+			pred = fn
+			break
+		}
+	}
 	if s.backend != nil {
 		all, err := s.backend.ReadAll()
 		if err != nil {
@@ -455,10 +515,24 @@ func (s *Store) WriteAll(beads []Bead) error {
 }
 
 // Create adds a new bead. Assigns defaults, validates, then persists.
-func (s *Store) Create(b *Bead) error {
+func (s *Store) Create(args ...any) error {
+	ctx := storeCallContext(args)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	var b *Bead
+	for _, arg := range args {
+		if bead, ok := arg.(*Bead); ok {
+			b = bead
+			break
+		}
+	}
+	if b == nil {
+		return fmt.Errorf("bead: create requires bead")
+	}
 	now := time.Now().UTC()
 	if b.ID == "" {
-		id, err := s.GenID()
+		id, err := s.GenID(ctx)
 		if err != nil {
 			return err
 		}
@@ -521,8 +595,22 @@ func (s *Store) Create(b *Bead) error {
 }
 
 // Get retrieves a bead by ID.
-func (s *Store) Get(id string) (*Bead, error) {
-	beads, err := s.ReadAll()
+func (s *Store) Get(args ...any) (*Bead, error) {
+	ctx := storeCallContext(args)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	var id string
+	for _, arg := range args {
+		if s, ok := arg.(string); ok {
+			id = s
+			break
+		}
+	}
+	if id == "" {
+		return nil, fmt.Errorf("bead: get requires bead id")
+	}
+	beads, err := s.ReadAll(args...)
 	if err != nil {
 		return nil, err
 	}
@@ -536,7 +624,29 @@ func (s *Store) Get(id string) (*Bead, error) {
 
 // Update modifies a bead by ID. The mutate function receives a pointer to
 // modify, but persisted lifecycle status changes must use TransitionLifecycle.
-func (s *Store) Update(id string, mutate func(*Bead)) error {
+func (s *Store) Update(args ...any) error {
+	ctx := storeCallContext(args)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	var id string
+	var mutate func(*Bead)
+	for _, arg := range args {
+		switch v := arg.(type) {
+		case string:
+			if id == "" {
+				id = v
+			}
+		case func(*Bead):
+			mutate = v
+		}
+	}
+	if id == "" {
+		return fmt.Errorf("bead: update requires bead id")
+	}
+	if mutate == nil {
+		return fmt.Errorf("bead: update requires mutate func")
+	}
 	return s.updateBead(id, false, func(b *Bead) error {
 		mutate(b)
 		return nil
@@ -919,7 +1029,7 @@ func (s *Store) Unclaim(id string) error {
 // rev-bound auto-invalidation: if origin/main advances past baseRev the
 // cooldown clears automatically on the next ready-queue pass.
 func (s *Store) SetExecutionCooldown(id string, until time.Time, status, detail, baseRev string) error {
-	return s.Update(id, func(b *Bead) {
+	return s.Update(context.Background(), id, func(b *Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
@@ -996,7 +1106,7 @@ func (s *Store) ClearCooldowns(filter func(Bead) bool) (int, error) {
 // bead should be auto-closed after repeated no-change attempts.
 func (s *Store) IncrNoChangesCount(id string) (int, error) {
 	var newCount int
-	err := s.Update(id, func(b *Bead) {
+	err := s.Update(context.Background(), id, func(b *Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
@@ -1059,7 +1169,7 @@ const (
 // (either by this call or a prior one).
 func (s *Store) RequestCancel(id string) (bool, error) {
 	var set bool
-	err := s.Update(id, func(b *Bead) {
+	err := s.Update(context.Background(), id, func(b *Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
@@ -1076,7 +1186,7 @@ func (s *Store) RequestCancel(id string) (bool, error) {
 // IsCancelRequested reports whether the bead carries an unconsumed cancel
 // marker (cancel-requested:true and cancel-honored not yet set).
 func (s *Store) IsCancelRequested(id string) (bool, error) {
-	b, err := s.Get(id)
+	b, err := s.Get(context.Background(), id)
 	if err != nil {
 		return false, err
 	}
@@ -1092,7 +1202,7 @@ func (s *Store) IsCancelRequested(id string) (bool, error) {
 // MarkCancelHonored sets Extra[cancel-honored]=true. Called by the worker once
 // it has aborted at the next safe point in response to a cancel request.
 func (s *Store) MarkCancelHonored(id string) error {
-	return s.Update(id, func(b *Bead) {
+	return s.Update(context.Background(), id, func(b *Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
@@ -1124,7 +1234,7 @@ func (s *Store) AppendEvent(id string, event BeadEvent) error {
 	// attachment model). When the bead has been externalized we append to the
 	// sidecar and leave the row untouched aside from updated_at.
 	var appendedToAttachment bool
-	if err := s.Update(id, func(b *Bead) {
+	if err := s.Update(context.Background(), id, func(b *Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
@@ -1161,7 +1271,7 @@ func (s *Store) AppendEvent(id string, event BeadEvent) error {
 // or the externalized sidecar referenced by Extra[events_attachment] once the
 // bead has been closed.
 func (s *Store) Events(id string) ([]BeadEvent, error) {
-	b, err := s.Get(id)
+	b, err := s.Get(context.Background(), id)
 	if err != nil {
 		return nil, err
 	}
@@ -1265,7 +1375,21 @@ func lastReviewVerdictFromEvents(events []BeadEvent) string {
 // carries an inline event history, those events are moved to a sidecar
 // attachment under .ddx/attachments/<id>/events.jsonl so the active row stays
 // small (per ADR-004's attachment model and TD-027 §c).
-func (s *Store) Close(id string) error {
+func (s *Store) Close(args ...any) error {
+	ctx := storeCallContext(args)
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	var id string
+	for _, arg := range args {
+		if s, ok := arg.(string); ok {
+			id = s
+			break
+		}
+	}
+	if id == "" {
+		return fmt.Errorf("bead: close requires bead id")
+	}
 	// Capture last review verdict before closure for reviewer-accuracy tracking.
 	// If the operator manually closes a BLOCK-reviewed bead, that contradicts
 	// the reviewer's verdict (potential false-positive).
@@ -1397,7 +1521,7 @@ func (s *Store) CloseWithEvidence(id string, sessionID string, commitSHA string)
 	}
 	// Externalize events only when the gate actually transitioned the bead
 	// to closed; rejected closes leave the bead open and inline.
-	if b, err := s.Get(id); err == nil && b != nil && b.Status == StatusClosed {
+	if b, err := s.Get(context.Background(), id); err == nil && b != nil && b.Status == StatusClosed {
 		if err := s.externalizeEvents(id); err != nil {
 			return err
 		}
@@ -1451,7 +1575,7 @@ func (s *Store) AppendNotes(id string, appendNotes string) error {
 	if appendNotes == "" {
 		return nil
 	}
-	return s.Update(id, func(b *Bead) {
+	return s.Update(context.Background(), id, func(b *Bead) {
 		if b.Notes != "" {
 			b.Notes = b.Notes + "\n\n" + appendNotes
 			return
@@ -1573,7 +1697,7 @@ func (s *Store) Reopen(id string, reason string, appendNotes string) error {
 // where is an optional map of key=value predicates that match against
 // known struct fields and Extra (unknown/workflow-specific) fields.
 func (s *Store) List(status, label string, where map[string]string) ([]Bead, error) {
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -1776,7 +1900,7 @@ func (s *Store) ReadyExecution() ([]Bead, error) {
 // sorted by queue order. The legacy needs_human label is explanatory metadata
 // only and does not affect selection.
 func (s *Store) ProposedOperatorAttention() ([]Bead, error) {
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -1824,7 +1948,7 @@ type HumanReviewBlockerPressure struct {
 
 func (s *Store) ReadyExecutionBreakdown() (ReadyExecutionBreakdown, error) {
 	out := ReadyExecutionBreakdown{}
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(context.Background())
 	if err != nil {
 		return out, err
 	}
@@ -1956,7 +2080,7 @@ func activeForDependencyPressure(b Bead) bool {
 }
 
 func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -1976,7 +2100,7 @@ func (s *Store) readyFiltered(executionOnly bool) ([]Bead, error) {
 
 // Blocked returns open beads in the derived dependency-waiting bucket.
 func (s *Store) Blocked() ([]Bead, error) {
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -1995,7 +2119,7 @@ func (s *Store) Blocked() ([]Bead, error) {
 // This is the new semantics for the /api/beads/blocked endpoint — explicit external
 // blockers only, not dependency-waiting beads.
 func (s *Store) ExternalBlocked() ([]Bead, error) {
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -2013,7 +2137,7 @@ func (s *Store) ExternalBlocked() ([]Bead, error) {
 // DependencyWaiting returns open/in_progress beads with unmet dependencies.
 // This is the semantics for /api/beads/dependency-waiting.
 func (s *Store) DependencyWaiting() ([]Bead, error) {
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -2035,7 +2159,7 @@ func (s *Store) DependencyWaiting() ([]Bead, error) {
 // that is both dep-blocked and cooldown-parked is reported as dependency-
 // blocked, because deps are the stronger blocker.
 func (s *Store) BlockedAll() ([]BlockedBead, error) {
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -2197,7 +2321,7 @@ func parseQueueRank(raw any) (int, bool) {
 
 // Status returns aggregate counts.
 func (s *Store) Status() (*StatusCounts, error) {
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(context.Background())
 	if err != nil {
 		return nil, err
 	}
@@ -2227,7 +2351,7 @@ func (s *Store) Status() (*StatusCounts, error) {
 	}
 	if s.Collection == DefaultCollection {
 		archive := s.archivePartner()
-		if archived, aerr := archive.ReadAll(); aerr == nil {
+		if archived, aerr := archive.ReadAll(context.Background()); aerr == nil {
 			for _, b := range archived {
 				if seen[b.ID] {
 					continue
@@ -2320,14 +2444,14 @@ func (s *Store) DepAdd(id, depID string) error {
 
 // DepRemove removes a dependency.
 func (s *Store) DepRemove(id, depID string) error {
-	return s.Update(id, func(b *Bead) {
+	return s.Update(context.Background(), id, func(b *Bead) {
 		b.RemoveDep(depID)
 	})
 }
 
 // DepTree returns a text representation of the dependency tree.
 func (s *Store) DepTree(rootID string) (string, error) {
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(context.Background())
 	if err != nil {
 		return "", err
 	}
@@ -2335,7 +2459,7 @@ func (s *Store) DepTree(rootID string) (string, error) {
 	// beads stored only in the archive must still appear.
 	if s.Collection == DefaultCollection {
 		archive := s.archivePartner()
-		if archived, aerr := archive.ReadAll(); aerr == nil {
+		if archived, aerr := archive.ReadAll(context.Background()); aerr == nil {
 			seen := make(map[string]bool, len(beads))
 			for _, b := range beads {
 				seen[b.ID] = true

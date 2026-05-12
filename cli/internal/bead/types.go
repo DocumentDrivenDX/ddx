@@ -10,15 +10,16 @@ import (
 // The schema matches bd/br JSONL format for interchange compatibility.
 // Unknown fields from external sources are preserved in Extra.
 type Bead struct {
-	ID        string    `json:"id"`
-	Title     string    `json:"title"`
-	Status    string    `json:"status"`
-	Priority  int       `json:"priority"`
-	IssueType string    `json:"issue_type"`
-	Owner     string    `json:"owner,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	CreatedBy string    `json:"created_by,omitempty"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID            string    `json:"id"`
+	Title         string    `json:"title"`
+	Status        string    `json:"status"`
+	Priority      int       `json:"priority"`
+	IssueType     string    `json:"issue_type"`
+	SchemaVersion int       `json:"schema_version"`
+	Owner         string    `json:"owner,omitempty"`
+	CreatedAt     time.Time `json:"created_at"`
+	CreatedBy     string    `json:"created_by,omitempty"`
+	UpdatedAt     time.Time `json:"updated_at"`
 
 	// Optional fields (bd-compatible)
 	Labels      []string `json:"labels,omitempty"`
@@ -182,12 +183,13 @@ func NewOperatorPromptBead(prompt string, defaultTier int) *Bead {
 
 // Default values
 const (
-	DefaultType     = "task"
-	DefaultStatus   = StatusOpen
-	DefaultPriority = 2
-	DefaultPrefix   = "bx" // used only when repo name detection fails
-	MinPriority     = 0
-	MaxPriority     = 4
+	DefaultType          = "task"
+	DefaultStatus        = StatusOpen
+	DefaultPriority      = 2
+	DefaultPrefix        = "bx" // used only when repo name detection fails
+	CurrentSchemaVersion = 1
+	MinPriority          = 0
+	MaxPriority          = 4
 )
 
 // StatusCounts holds aggregate counts for a bead store.

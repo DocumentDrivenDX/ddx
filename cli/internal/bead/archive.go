@@ -1,6 +1,7 @@
 package bead
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"time"
@@ -169,14 +170,14 @@ func (s *Store) Archive(policy ArchivePolicy) ([]string, error) {
 // `ddx bead show` command uses so a closed-and-archived bead remains
 // addressable by ID.
 func (s *Store) GetWithArchive(id string) (*Bead, error) {
-	if b, err := s.Get(id); err == nil {
+	if b, err := s.Get(context.Background(), id); err == nil {
 		return b, nil
 	}
 	if s.Collection != DefaultCollection {
 		return nil, fmt.Errorf("bead: not found: %s", id)
 	}
 	archive := s.archivePartner()
-	b, err := archive.Get(id)
+	b, err := archive.Get(context.Background(), id)
 	if err != nil {
 		return nil, fmt.Errorf("bead: not found: %s", id)
 	}

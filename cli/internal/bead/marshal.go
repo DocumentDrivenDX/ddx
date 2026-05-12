@@ -9,7 +9,7 @@ import (
 // Known field names that map to Bead struct fields (bd-compatible names).
 var knownFields = map[string]bool{
 	"id": true, "title": true, "issue_type": true, "status": true,
-	"priority": true, "owner": true, "created_at": true, "created_by": true,
+	"priority": true, "schema_version": true, "owner": true, "created_at": true, "created_by": true,
 	"updated_at": true, "labels": true, "parent": true, "description": true,
 	"acceptance": true, "dependencies": true, "notes": true,
 	// Note: bd computed fields (dependency_count, dependent_count, comment_count)
@@ -33,6 +33,9 @@ func unmarshalBead(data []byte) (Bead, error) {
 	}
 	if v, ok := raw["issue_type"]; ok {
 		_ = json.Unmarshal(v, &b.IssueType)
+	}
+	if v, ok := raw["schema_version"]; ok {
+		_ = json.Unmarshal(v, &b.SchemaVersion)
 	}
 	if v, ok := raw["status"]; ok {
 		_ = json.Unmarshal(v, &b.Status)
@@ -81,6 +84,9 @@ func unmarshalBead(data []byte) (Bead, error) {
 	if b.IssueType == "" {
 		b.IssueType = DefaultType
 	}
+	if b.SchemaVersion == 0 {
+		b.SchemaVersion = CurrentSchemaVersion
+	}
 	if b.Status == "" {
 		b.Status = DefaultStatus
 	}
@@ -109,13 +115,14 @@ func MarshalBead(b Bead) ([]byte, error) {
 
 func marshalBead(b Bead) ([]byte, error) {
 	m := map[string]any{
-		"id":         b.ID,
-		"title":      b.Title,
-		"status":     b.Status,
-		"priority":   b.Priority,
-		"issue_type": b.IssueType,
-		"created_at": b.CreatedAt,
-		"updated_at": b.UpdatedAt,
+		"id":             b.ID,
+		"title":          b.Title,
+		"status":         b.Status,
+		"priority":       b.Priority,
+		"issue_type":     b.IssueType,
+		"schema_version": b.SchemaVersion,
+		"created_at":     b.CreatedAt,
+		"updated_at":     b.UpdatedAt,
 	}
 
 	// Optional fields — only include if non-empty

@@ -309,7 +309,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			return agent.ReportFromExecuteBeadResult(res, ""), nil
 		}
 		if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
-			targetBead, _ := store.Get(beadID)
+			targetBead, _ := store.Get(context.Background(), beadID)
 			landRes, _, landErr := agent.SubmitWithPreMergeChecks(
 				ctx, projectRoot, targetBead, res,
 				func(req agent.LandRequest) (*agent.LandResult, error) { return localCoord.Submit(req) },
@@ -370,7 +370,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			return nextEscalationFloor(loadLadder(), actualPower)
 		},
 		Executor: agent.ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (agent.ExecuteBeadReport, error) {
-			targetBead, err := store.Get(beadID)
+			targetBead, err := store.Get(context.Background(), beadID)
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
 			}
@@ -451,7 +451,7 @@ func buildAttemptMetricsHook(projectRoot string, store *bead.Store, profile stri
 		}
 		specID := ""
 		if report.BeadID != "" && store != nil {
-			if b, err := store.Get(report.BeadID); err == nil {
+			if b, err := store.Get(context.Background(), report.BeadID); err == nil {
 				specID, _ = b.Extra["spec-id"].(string)
 			}
 		}

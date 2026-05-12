@@ -103,7 +103,7 @@ func newJSONLBenchStore(b *testing.B, beads []Bead) *Store {
 	b.Helper()
 	dir := filepath.Join(b.TempDir(), ".ddx")
 	s := NewStore(dir)
-	require.NoError(b, s.Init())
+	require.NoError(b, s.Init(testCtx()))
 	require.NoError(b, s.WriteAll(beads))
 	return s
 }
@@ -113,7 +113,7 @@ func newAxonBenchStore(b *testing.B, beads []Bead) *Store {
 	dir := filepath.Join(b.TempDir(), ".ddx")
 	s := NewStore(dir)
 	s.backend = NewAxonBackend(dir, s.LockWait)
-	require.NoError(b, s.Init())
+	require.NoError(b, s.Init(testCtx()))
 	require.NoError(b, s.WriteAll(beads))
 	return s
 }

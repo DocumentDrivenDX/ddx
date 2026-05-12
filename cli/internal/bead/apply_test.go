@@ -64,7 +64,7 @@ func TestStore_Apply_GenericFallback_WhenNotAvailable(t *testing.T) {
 
 	s := newTestStore(t)
 	b := &Bead{Title: "apply fallback"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(context.Background(), b))
 
 	require.NoError(t, s.Apply(b.ID, MutateFunc(func(b *Bead) error {
 		b.Notes = "applied through the generic fallback"
@@ -72,7 +72,7 @@ func TestStore_Apply_GenericFallback_WhenNotAvailable(t *testing.T) {
 		return nil
 	})))
 
-	got, err := s.Get(b.ID)
+	got, err := s.Get(context.Background(), b.ID)
 	require.NoError(t, err)
 	assert.Equal(t, "apply fallback", got.Title)
 	assert.Equal(t, "applied through the generic fallback", got.Notes)
@@ -120,7 +120,7 @@ func TestBeadDataModel_InvariantsHold(t *testing.T) {
 		s := newBackendConformanceStore(t, tc.backend)
 
 		dep := &Bead{Title: fmt.Sprintf("%s-dependency", tc.name), Priority: 2}
-		require.NoError(t, s.Create(dep))
+		require.NoError(t, s.Create(context.Background(), dep))
 
 		target := &Bead{
 			Title:    fmt.Sprintf("%s-target", tc.name),
@@ -128,9 +128,9 @@ func TestBeadDataModel_InvariantsHold(t *testing.T) {
 			Labels:   []string{"area:bead", "kind:feature"},
 		}
 		target.AddDep(dep.ID, "blocks")
-		require.NoError(t, s.Create(target))
+		require.NoError(t, s.Create(context.Background(), target))
 
-		before, err := s.Get(target.ID)
+		before, err := s.Get(context.Background(), target.ID)
 		require.NoError(t, err)
 		beforeEvents, err := s.Events(target.ID)
 		require.NoError(t, err)
@@ -141,14 +141,14 @@ func TestBeadDataModel_InvariantsHold(t *testing.T) {
 			b.Notes = "mutated through Apply"
 			return nil
 		})))
-		afterApply, err := s.Get(target.ID)
+		afterApply, err := s.Get(context.Background(), target.ID)
 		require.NoError(t, err)
 		afterApplyEvents, err := s.Events(target.ID)
 		require.NoError(t, err)
 		assertBeadMutationInvariants(t, *before, *afterApply, beforeEvents, afterApplyEvents)
 
 		require.NoError(t, s.Claim(target.ID, "worker-1"))
-		afterClaim, err := s.Get(target.ID)
+		afterClaim, err := s.Get(context.Background(), target.ID)
 		require.NoError(t, err)
 		afterClaimEvents, err := s.Events(target.ID)
 		require.NoError(t, err)
@@ -168,7 +168,7 @@ func TestBeadDataModel_InvariantsHold(t *testing.T) {
 			Actor:     "tester",
 			CreatedAt: time.Unix(20, 0).UTC(),
 		}))
-		afterEvent, err := s.Get(target.ID)
+		afterEvent, err := s.Get(context.Background(), target.ID)
 		require.NoError(t, err)
 		afterEventEvents, err := s.Events(target.ID)
 		require.NoError(t, err)
@@ -181,7 +181,7 @@ func TestBeadDataModel_InvariantsHold(t *testing.T) {
 		requested, err = s.RequestCancel(target.ID)
 		require.NoError(t, err)
 		assert.True(t, requested)
-		afterRequested, err := s.Get(target.ID)
+		afterRequested, err := s.Get(context.Background(), target.ID)
 		require.NoError(t, err)
 		afterRequestedEvents, err := s.Events(target.ID)
 		require.NoError(t, err)
@@ -193,7 +193,7 @@ func TestBeadDataModel_InvariantsHold(t *testing.T) {
 		assert.True(t, cancelRequested)
 
 		require.NoError(t, s.MarkCancelHonored(target.ID))
-		afterHonored, err := s.Get(target.ID)
+		afterHonored, err := s.Get(context.Background(), target.ID)
 		require.NoError(t, err)
 		afterHonoredEvents, err := s.Events(target.ID)
 		require.NoError(t, err)
@@ -205,7 +205,7 @@ func TestBeadDataModel_InvariantsHold(t *testing.T) {
 		assert.False(t, cancelRequested)
 
 		require.NoError(t, s.Unclaim(target.ID))
-		afterUnclaim, err := s.Get(target.ID)
+		afterUnclaim, err := s.Get(context.Background(), target.ID)
 		require.NoError(t, err)
 		afterUnclaimEvents, err := s.Events(target.ID)
 		require.NoError(t, err)
@@ -217,7 +217,7 @@ func TestBeadDataModel_InvariantsHold(t *testing.T) {
 		assert.Empty(t, afterUnclaim.Extra[ClaimHeartbeatExtraKey])
 
 		require.NoError(t, s.SetExecutionCooldown(target.ID, time.Now().UTC().Add(2*time.Hour), "no_changes", "retry later", ""))
-		afterCooldown, err := s.Get(target.ID)
+		afterCooldown, err := s.Get(context.Background(), target.ID)
 		require.NoError(t, err)
 		afterCooldownEvents, err := s.Events(target.ID)
 		require.NoError(t, err)

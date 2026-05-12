@@ -266,7 +266,7 @@ func (f *CommandFactory) newBeadInitCommand() *cobra.Command {
 		Args:  cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
-			if err := s.Init(); err != nil {
+			if err := s.Init(context.Background()); err != nil {
 				return err
 			}
 			fmt.Fprintf(cmd.OutOrStdout(), "Initialized bead storage at %s\n", s.File)
@@ -333,7 +333,7 @@ func (f *CommandFactory) newBeadCreateCommand() *cobra.Command {
 				}
 			}
 
-			if err := s.Create(b); err != nil {
+			if err := s.Create(context.Background(), b); err != nil {
 				return err
 			}
 			if markerPresent, _ := s.HasLifecycleSchemaMarker(); !markerPresent && !beadHasLegacyLifecycleInputs(*b) {
@@ -628,7 +628,7 @@ func (f *CommandFactory) newBeadUpdateCommand() *cobra.Command {
 			if statusChanged {
 				err = s.UpdateWithLifecycleStatus(args[0], statusValue, statusOpts, applyUpdateFields)
 			} else {
-				err = s.Update(args[0], func(b *bead.Bead) {
+				err = s.Update(context.Background(), args[0], func(b *bead.Bead) {
 					_ = applyUpdateFields(b)
 				})
 			}
@@ -803,7 +803,7 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 				commitSHA = normalizedCommitSHA
 			}
 
-			target, err := s.Get(args[0])
+			target, err := s.Get(context.Background(), args[0])
 			if err != nil {
 				return err
 			}
@@ -813,7 +813,7 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 			// manual-administration territory — use the ungated Store.Close
 			// so the gate doesn't reject legitimate tracker admin.
 			if sessionID == "" && commitSHA == "" {
-				if err := s.Close(args[0]); err != nil {
+				if err := s.Close(context.Background(), args[0]); err != nil {
 					return err
 				}
 			} else if err := s.CloseWithEvidence(args[0], sessionID, commitSHA); err != nil {
@@ -831,7 +831,7 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 						// replay boundary. The close commit itself is the metadata-only
 						// backfill, so clear stale closing provenance instead of
 						// preserving an unrelated implementation SHA.
-						if err := s.Update(args[0], func(b *bead.Bead) {
+						if err := s.Update(context.Background(), args[0], func(b *bead.Bead) {
 							if b.Extra == nil {
 								return
 							}
@@ -852,7 +852,7 @@ func (f *CommandFactory) newBeadCloseCommand() *cobra.Command {
 					// real implementation work. Pure tracker backfills should not
 					// advertise a replay boundary that points at metadata-only
 					// provenance.
-					if err := s.Update(args[0], func(b *bead.Bead) {
+					if err := s.Update(context.Background(), args[0], func(b *bead.Bead) {
 						if b.Extra == nil {
 							b.Extra = make(map[string]any)
 						}
@@ -1246,14 +1246,14 @@ func normalizeChildIDs(children []string) []string {
 }
 
 func validateSplitChildren(s *bead.Store, parentID string, children []string) error {
-	if _, err := s.Get(parentID); err != nil {
+	if _, err := s.Get(context.Background(), parentID); err != nil {
 		return err
 	}
 	for _, childID := range children {
 		if childID == parentID {
 			return fmt.Errorf("split child cannot be the parent bead: %s", childID)
 		}
-		if _, err := s.Get(childID); err != nil {
+		if _, err := s.Get(context.Background(), childID); err != nil {
 			return fmt.Errorf("split child %s: %w", childID, err)
 		}
 	}
@@ -1643,7 +1643,7 @@ Use this command instead of editing the magic Extra key directly:
 		Args:  cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
-			b, err := s.Get(args[0])
+			b, err := s.Get(context.Background(), args[0])
 			if err != nil {
 				return err
 			}
@@ -1689,7 +1689,7 @@ Use this command instead of editing the magic Extra key directly:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			s := f.beadStore()
 			cleared := false
-			if err := s.Update(args[0], func(b *bead.Bead) {
+			if err := s.Update(context.Background(), args[0], func(b *bead.Bead) {
 				if b.Extra == nil {
 					return
 				}

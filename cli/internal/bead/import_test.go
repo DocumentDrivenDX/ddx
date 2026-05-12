@@ -24,7 +24,7 @@ func TestImportJSONL(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, n)
 
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(testCtx())
 	require.NoError(t, err)
 	assert.Len(t, beads, 2)
 }
@@ -44,7 +44,7 @@ func TestImportPreservesAllLifecycleStatuses(t *testing.T) {
 	assert.Equal(t, len(CanonicalStatuses), n)
 
 	for i, status := range CanonicalStatuses {
-		got, err := s.Get(fmt.Sprintf("bx-status%02d", i))
+		got, err := s.Get(testCtx(), fmt.Sprintf("bx-status%02d", i))
 		require.NoError(t, err)
 		assert.Equal(t, status, got.Status)
 	}
@@ -65,7 +65,7 @@ func TestImportRejectsLegacyPseudoStatusesOutsideLifecycleMigrator(t *testing.T)
 			assert.Contains(t, err.Error(), pseudoStatus)
 			assert.Contains(t, err.Error(), "ddx bead migrate --lifecycle")
 
-			beads, readErr := s.ReadAll()
+			beads, readErr := s.ReadAll(testCtx())
 			require.NoError(t, readErr)
 			assert.Empty(t, beads)
 		})
@@ -76,7 +76,7 @@ func TestImportSkipsDuplicates(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "Existing"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	// Import file with same ID
 	importFile := filepath.Join(t.TempDir(), "import.jsonl")
@@ -88,7 +88,7 @@ func TestImportSkipsDuplicates(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, n) // only the new one
 
-	beads, err := s.ReadAll()
+	beads, err := s.ReadAll(testCtx())
 	require.NoError(t, err)
 	assert.Len(t, beads, 2)
 }
@@ -116,7 +116,7 @@ func TestImportPreservesUnknownFields(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 1, n)
 
-	got, err := s.Get("hx-helix001")
+	got, err := s.Get(testCtx(), "hx-helix001")
 	require.NoError(t, err)
 	assert.Equal(t, "FEAT-001", got.Extra["spec-id"])
 	assert.Equal(t, true, got.Extra["execution-eligible"])
@@ -125,8 +125,8 @@ func TestImportPreservesUnknownFields(t *testing.T) {
 func TestExportRoundTrip(t *testing.T) {
 	s := newTestStore(t)
 
-	require.NoError(t, s.Create(&Bead{Title: "Task A", Labels: []string{"backend"}}))
-	require.NoError(t, s.Create(&Bead{Title: "Task B", IssueType: "bug", Priority: 0}))
+	require.NoError(t, s.Create(testCtx(), &Bead{Title: "Task A", Labels: []string{"backend"}}))
+	require.NoError(t, s.Create(testCtx(), &Bead{Title: "Task B", IssueType: "bug", Priority: 0}))
 
 	// Export
 	exportFile := filepath.Join(t.TempDir(), "export.jsonl")
@@ -138,7 +138,7 @@ func TestExportRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, 2, n)
 
-	beads, err := s2.ReadAll()
+	beads, err := s2.ReadAll(testCtx())
 	require.NoError(t, err)
 	assert.Len(t, beads, 2)
 }

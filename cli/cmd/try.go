@@ -148,7 +148,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	store := bead.NewStore(filepath.Join(projectRoot, ".ddx"))
 
 	// Pre-flight: look up the bead.
-	target, err := store.Get(beadID)
+	target, err := store.Get(context.Background(), beadID)
 	if err != nil {
 		fmt.Fprintf(cmd.ErrOrStderr(), "bead not found: %s\n", beadID)
 		return &ExitError{Code: tryExitFailed, Message: ""}
@@ -269,7 +269,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 			requestMinPower := minPower
 			if autoInferTier {
 				var targetBead *bead.Bead
-				if b, getErr := store.Get(execBeadID); getErr == nil {
+				if b, getErr := store.Get(context.Background(), execBeadID); getErr == nil {
 					targetBead = b
 					inferredTier = escalation.InferTier(targetBead)
 				} else {
@@ -490,7 +490,7 @@ func unmetDeps(store *bead.Store, b *bead.Bead) []string {
 	}
 	var unmet []string
 	for _, depID := range depIDs {
-		dep, err := store.Get(depID)
+		dep, err := store.Get(context.Background(), depID)
 		if err != nil || dep.Status != bead.StatusClosed {
 			unmet = append(unmet, depID)
 		}

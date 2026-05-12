@@ -104,7 +104,7 @@ func (r *mutationResolver) BeadCreate(ctx context.Context, input BeadInput) (*Be
 	}
 
 	store := r.beadStore(ctx)
-	if err := store.Create(b); err != nil {
+	if err := store.Create(ctx, b); err != nil {
 		return nil, err
 	}
 	return beadModelFromBead(b), nil
@@ -151,7 +151,7 @@ func (r *mutationResolver) BeadUpdate(ctx context.Context, id string, input Bead
 			Source: "graphql:beadUpdate",
 		}, mutate)
 	} else {
-		err = store.Update(id, func(b *bead.Bead) {
+		err = store.Update(ctx, id, func(b *bead.Bead) {
 			_ = mutate(b)
 		})
 	}
@@ -159,7 +159,7 @@ func (r *mutationResolver) BeadUpdate(ctx context.Context, id string, input Bead
 		return nil, err
 	}
 
-	b, err := store.Get(id)
+	b, err := store.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +177,7 @@ func (r *mutationResolver) BeadClaim(ctx context.Context, id string, assignee st
 		return nil, err
 	}
 
-	b, err := store.Get(id)
+	b, err := store.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -195,7 +195,7 @@ func (r *mutationResolver) BeadUnclaim(ctx context.Context, id string) (*Bead, e
 		return nil, err
 	}
 
-	b, err := store.Get(id)
+	b, err := store.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -213,7 +213,7 @@ func (r *mutationResolver) BeadReopen(ctx context.Context, id string) (*Bead, er
 		return nil, err
 	}
 
-	b, err := store.Get(id)
+	b, err := store.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +250,7 @@ func (r *mutationResolver) BeadApprove(ctx context.Context, id string, note stri
 		return nil, err
 	}
 
-	b, err := store.Get(id)
+	b, err := store.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -286,7 +286,7 @@ func (r *mutationResolver) BeadCancel(ctx context.Context, id string, reason str
 		return nil, err
 	}
 
-	b, err := store.Get(id)
+	b, err := store.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}
@@ -313,7 +313,7 @@ func (r *mutationResolver) BeadBlock(ctx context.Context, id string, externalBlo
 		return nil, err
 	}
 
-	b, err := store.Get(id)
+	b, err := store.Get(ctx, id)
 	if err != nil {
 		return nil, err
 	}

@@ -18,7 +18,7 @@ func archiveTestStore(t *testing.T) (*Store, string) {
 	dir := filepath.Join(t.TempDir(), ".ddx")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	s := NewStore(dir)
-	require.NoError(t, s.Init())
+	require.NoError(t, s.Init(testCtx()))
 	return s, dir
 }
 
@@ -75,7 +75,7 @@ func TestArchiveMovesEligibleClosedBeads(t *testing.T) {
 	assert.Greater(t, info.Size(), int64(0))
 
 	// Active retains only the fresh-closed and open beads.
-	remaining, err := s.ReadAll()
+	remaining, err := s.ReadAll(testCtx())
 	require.NoError(t, err)
 	ids := make([]string, 0, len(remaining))
 	for _, b := range remaining {
@@ -85,7 +85,7 @@ func TestArchiveMovesEligibleClosedBeads(t *testing.T) {
 
 	// Archive contains the moved beads with archived_at set.
 	archive := s.archivePartner()
-	archived, err := archive.ReadAll()
+	archived, err := archive.ReadAll(testCtx())
 	require.NoError(t, err)
 	assert.Len(t, archived, 2)
 	for _, b := range archived {
@@ -113,7 +113,7 @@ func TestArchiveRespectsMinActiveCount(t *testing.T) {
 	if statErr == nil {
 		// File may exist from Init() but must be empty.
 		archive := s.archivePartner()
-		archived, _ := archive.ReadAll()
+		archived, _ := archive.ReadAll(testCtx())
 		assert.Empty(t, archived)
 	}
 }
@@ -144,7 +144,7 @@ func TestArchivePreservesReferencedClosedBeads(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, moved, "closed dep referenced by an open bead must stay active")
 
-	remaining, err := s.ReadAll()
+	remaining, err := s.ReadAll(testCtx())
 	require.NoError(t, err)
 	assert.Len(t, remaining, 2)
 }
@@ -271,12 +271,12 @@ func TestArchiveOpportunisticTriggerOnClose(t *testing.T) {
 	require.NoError(t, err)
 	require.Greater(t, info.Size(), DefaultArchiveSizeThreshold)
 
-	require.NoError(t, s.Close("ddx-target"))
+	require.NoError(t, s.Close(testCtx(), "ddx-target"))
 
 	_, err = os.Stat(filepath.Join(dir, BeadsArchiveCollection+".jsonl"))
 	require.NoError(t, err)
 
-	active, err := s.ReadAll()
+	active, err := s.ReadAll(testCtx())
 	require.NoError(t, err)
 	assert.Empty(t, active, "close-time maintenance should drain eligible closed rows once the active file crosses the size threshold")
 

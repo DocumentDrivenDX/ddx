@@ -83,7 +83,7 @@ func TestDdxBeadFieldNames(t *testing.T) {
 	s := newTestStore(t)
 
 	b := &Bead{Title: "New bead", IssueType: "task"}
-	require.NoError(t, s.Create(b))
+	require.NoError(t, s.Create(testCtx(), b))
 
 	// Marshal and check field names
 	out, err := marshalBead(*b)

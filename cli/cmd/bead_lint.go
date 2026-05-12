@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -36,7 +37,7 @@ Examples:
 		RunE: func(cmd *cobra.Command, args []string) error {
 			beadID := args[0]
 			s := f.beadStore()
-			b, err := s.Get(beadID)
+			b, err := s.Get(context.Background(), beadID)
 			if err != nil {
 				return fmt.Errorf("bead %s: %w", beadID, err)
 			}

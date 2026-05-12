@@ -47,7 +47,7 @@ func (f *CommandFactory) runBeadReview(cmd *cobra.Command, args []string) error 
 	includeProse, _ := cmd.Flags().GetBool("prose")
 
 	s := f.beadStore()
-	b, err := s.Get(beadID)
+	b, err := s.Get(context.Background(), beadID)
 	if err != nil {
 		return err
 	}

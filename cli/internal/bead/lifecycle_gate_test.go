@@ -64,7 +64,7 @@ func TestLifecycleMigrationGateReportsMarkerlessCleanQueueWithoutBlocking(t *tes
 func TestLifecycleMigrationGateDoesNotRequireCleanMarkedQueue(t *testing.T) {
 	dir := t.TempDir()
 	store := NewStore(filepath.Join(dir, ".ddx"))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(testCtx()))
 	require.NoError(t, store.WriteLifecycleSchemaMarker(time.Now().UTC()))
 	now := time.Now().UTC().Format(time.RFC3339)
 	row := `{"id":"ddx-clean","title":"clean","status":"open","priority":2,"issue_type":"task","created_at":"` + now + `","updated_at":"` + now + `"}` + "\n"
@@ -81,7 +81,7 @@ func TestLifecycleMigrationGateDoesNotRequireCleanMarkedQueue(t *testing.T) {
 func TestLifecycleMigrationGateRequiresOldMarker(t *testing.T) {
 	dir := t.TempDir()
 	store := NewStore(filepath.Join(dir, ".ddx"))
-	require.NoError(t, store.Init())
+	require.NoError(t, store.Init(testCtx()))
 	require.NoError(t, os.WriteFile(store.LifecycleSchemaMarkerPath(), []byte(`{"version":0}`+"\n"), 0o644))
 
 	status, err := store.DetectLifecycleMigrationRequired()

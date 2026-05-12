@@ -62,7 +62,7 @@ func (r *mutationResolver) RunRequeue(ctx context.Context, input RunRequeueInput
 		// A prior call under this key already requeued a bead. Return that
 		// bead unchanged regardless of its current lifecycle status —
 		// "duplicate-key returns existing requeued bead, not error".
-		if existing, err := store.Get(cachedID); err == nil {
+		if existing, err := store.Get(ctx, cachedID); err == nil {
 			return &RunRequeueResult{
 				Bead:         beadModelFromBead(existing),
 				Deduplicated: true,
@@ -104,7 +104,7 @@ func (r *mutationResolver) RunRequeue(ctx context.Context, input RunRequeueInput
 
 	cache.Store(input.IdempotencyKey, originatingBeadID)
 
-	persisted, err := store.Get(originatingBeadID)
+	persisted, err := store.Get(ctx, originatingBeadID)
 	if err != nil {
 		return nil, err
 	}

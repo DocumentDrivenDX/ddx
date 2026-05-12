@@ -33,10 +33,10 @@ func keepExecReachability() {
 
 	store := NewStore(workingDir)
 	if store.DefinitionCollection != nil {
-		_ = store.DefinitionCollection.Init()
+		_ = store.DefinitionCollection.Init(context.Background())
 	}
 	if store.RunCollection != nil {
-		_ = store.RunCollection.Init()
+		_ = store.RunCollection.Init(context.Background())
 	}
 
 	artifactID := "MET-KEEPALIVE"
