@@ -2,7 +2,7 @@ package cmd
 
 // run_cmd_test.go verifies ddx-0248f921 AC:
 //   - ddx run --help exits 0 and describes the layer-1 command.
-//   - ddx run forwards harness/provider/model/model-ref to Execute.
+//   - ddx run forwards harness/provider/model/profile to Execute.
 //   - ddx run forwards min-power/max-power bounds to Execute.
 //   - ddx run --persona injects persona body into the prompt.
 //   - ddx run does not call ResolveRoute (CONTRACT-003).
@@ -71,9 +71,9 @@ func TestRunPassthroughHarnessModelProviderToExecute(t *testing.T) {
 	assert.Equal(t, "openai", lastReq.Provider, "Provider must pass through unchanged")
 }
 
-// TestRunPassthroughModelRefToExecute verifies AC3: ddx run forwards
-// --model-ref to ServiceExecuteRequest.
-func TestRunPassthroughModelRefToExecute(t *testing.T) {
+// TestRunPassthroughProfileToExecute verifies AC3: ddx run forwards
+// --profile to ServiceExecuteRequest.Policy.
+func TestRunPassthroughProfileToExecute(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 
 	stub := installExecuteCapturingStub(t)
@@ -81,7 +81,7 @@ func TestRunPassthroughModelRefToExecute(t *testing.T) {
 	dir := minimalProjectDir(t)
 	root := NewCommandFactory(dir).NewRootCommand()
 	_, err := executeCommand(root, "run",
-		"--model-ref", "code-medium",
+		"--profile", "smart",
 		"--text", "hello",
 		"--timeout", "5s",
 	)
@@ -89,9 +89,11 @@ func TestRunPassthroughModelRefToExecute(t *testing.T) {
 
 	stub.mu.Lock()
 	executeCalled := stub.executeCalled
+	lastReq := stub.lastReq
 	stub.mu.Unlock()
 
 	require.True(t, executeCalled, "Execute must be called")
+	assert.Equal(t, "smart", lastReq.Policy, "Policy must pass through unchanged")
 }
 
 // TestRunPassthroughMinMaxPowerToExecute verifies AC3: ddx run forwards

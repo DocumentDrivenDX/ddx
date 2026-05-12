@@ -9,11 +9,11 @@ DDx (Document-Driven Development eXperience) is a CLI platform for
 document-driven development. It ships a bead tracker (portable work
 items with acceptance criteria), a task-execution boundary (DDx
 forwards raw passthrough constraints for harness, provider, model,
-model-ref, and profile while power travels as `MinPower`/`MaxPower`
-bounds; Fizeau owns concrete routing, provider/model discovery,
-aliases, fuzzy matching, catalog lookups, and transcript/session
-rendering), a persona system (bindable AI personalities), a library
-registry (plugins with prompts, templates, personas), and git-aware
+and profile while power travels as `MinPower`/`MaxPower` bounds;
+Fizeau owns concrete routing, provider/model discovery, aliases,
+fuzzy matching, catalog lookups, and transcript/session rendering), a
+persona system (bindable AI personalities), a library registry
+(plugins with prompts, templates, personas), and git-aware
 synchronization. This skill makes any skills-compatible coding agent
 (Claude Code, OpenAI Codex, Gemini CLI, etc.) understand and operate
 the DDx surface correctly.

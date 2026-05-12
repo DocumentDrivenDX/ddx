@@ -426,7 +426,10 @@ func TestTryInterrupt_DoesNotReportOperatorCancel(t *testing.T) {
 func TestTry_FlagsPlumbThrough(t *testing.T) {
 	// Isolate from ~/.config/fizeau/config.yaml so the pre-dispatch lint hook
 	// does not dispatch to real providers (HTTP or exec-based) during the test.
-	t.Setenv("HOME", t.TempDir())
+	homeDir, err := os.MkdirTemp("", "ddx-home-")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(homeDir) })
+	t.Setenv("HOME", homeDir)
 	env := NewTestEnvironment(t)
 	store := bead.NewStore(env.Dir + "/.ddx")
 	require.NoError(t, store.Init())

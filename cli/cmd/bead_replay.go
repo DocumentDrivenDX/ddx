@@ -27,7 +27,6 @@ type replayManifest struct {
 		Harness  string `json:"harness,omitempty"`
 		Model    string `json:"model,omitempty"`
 		Provider string `json:"provider,omitempty"`
-		ModelRef string `json:"model_ref,omitempty"`
 		Effort   string `json:"effort,omitempty"`
 		MinPower int    `json:"min_power,omitempty"`
 		MaxPower int    `json:"max_power,omitempty"`

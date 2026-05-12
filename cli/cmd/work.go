@@ -25,9 +25,9 @@ func (f *CommandFactory) newWorkCommand() *cobra.Command {
 queue drain: it iterates ddx try (layer 2) across ready beads until a stop
 condition is met and owns retry-power policy between attempts.
 
-ddx work treats --harness, --provider, and --model as opaque passthrough
-constraints forwarded to Fizeau unchanged. DDx does not validate these values
-or branch on them; Fizeau owns routing within the requested power
+ddx work treats --harness, --provider, --model, and --profile as opaque
+passthrough constraints forwarded to Fizeau unchanged. DDx does not validate
+these values or branch on them; Fizeau owns routing within the requested power
 bounds.
 
 Review is on by default. --no-review is a break-glass override and
@@ -78,7 +78,6 @@ work runs inline in the current process; per ADR-022 there is no separate
 	cmd.Flags().String("model", "", "Model constraint (passthrough; ddx work does not validate)")
 	cmd.Flags().String("profile", "", "Routing profile: default, cheap, fast, or smart (empty = unconstrained; let the agent service choose)")
 	cmd.Flags().String("provider", "", "Provider constraint (passthrough; ddx work does not validate)")
-	cmd.Flags().String("model-ref", "", "Model reference passthrough (e.g. code-medium); resolved by Fizeau")
 	cmd.Flags().String("effort", "", "Effort level")
 	cmd.Flags().Bool("once", false, "Process at most one ready bead")
 	cmd.Flags().Bool("watch", false, "Keep watching for newly-ready beads after the current queue drains")

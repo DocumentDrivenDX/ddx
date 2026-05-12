@@ -379,7 +379,7 @@ func (m *WorkerManager) StartExecuteLoop(spec ExecuteLoopWorkerSpec) (WorkerReco
 	// Skipped when OpaquePassthrough=true (ddx work path): routing belongs to
 	// the agent service; DDx must not pre-resolve or validate the route.
 	if !spec.OpaquePassthrough {
-		if err := agent.ValidateForExecuteLoopViaService(context.Background(), effectiveRoot, spec.Harness, spec.Model, spec.Provider, spec.ModelRef); err != nil {
+		if err := agent.ValidateForExecuteLoopViaService(context.Background(), effectiveRoot, spec.Harness, spec.Model, spec.Provider); err != nil {
 			return WorkerRecord{}, fmt.Errorf("execute-loop: %w", err)
 		}
 	}
@@ -717,7 +717,6 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 		Harness:           spec.Harness,
 		Model:             spec.Model,
 		Provider:          spec.Provider,
-		ModelRef:          spec.ModelRef,
 		Profile:           agent.NormalizeRoutingProfile(spec.Profile),
 		Effort:            spec.Effort,
 		MinPower:          spec.MinPower,
@@ -769,7 +768,6 @@ func (m *WorkerManager) runWorker(ctx context.Context, id, dir string, spec Exec
 				Harness:           resolvedHarness,
 				Model:             resolvedModel,
 				Provider:          attemptProvider,
-				ModelRef:          spec.ModelRef,
 				Profile:           rcfg.Profile(),
 				Effort:            spec.Effort,
 				MinPower:          requestedMinPower,

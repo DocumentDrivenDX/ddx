@@ -73,9 +73,6 @@ func TestWorkerDispatchAdapterEmptyArgsDefaultsProfile(t *testing.T) {
 	if spec.Provider != "" {
 		t.Errorf("Provider must be empty on default path, got %q", spec.Provider)
 	}
-	if spec.ModelRef != "" {
-		t.Errorf("ModelRef must be empty on default path, got %q", spec.ModelRef)
-	}
 	if spec.Effort != "" {
 		t.Errorf("Effort must be empty on default path, got %q", spec.Effort)
 	}
@@ -229,9 +226,6 @@ func TestGraphQL_WorkerDispatch_UsesExecuteLoopSpec(t *testing.T) {
 	}
 	if spec.Provider != "openrouter" {
 		t.Errorf("Provider: got %q", spec.Provider)
-	}
-	if spec.ModelRef != "openrouter/qwen/qwen3.6" {
-		t.Errorf("ModelRef: got %q", spec.ModelRef)
 	}
 	if spec.Effort != "high" {
 		t.Errorf("Effort: got %q", spec.Effort)
