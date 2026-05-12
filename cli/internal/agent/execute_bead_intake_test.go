@@ -17,6 +17,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+// parkCountingStore wraps claimCountingStore and counts ParkToProposed calls.
+type parkCountingStore struct {
+	*claimCountingStore
+	parkCalls int32
+}
+
+func (s *parkCountingStore) ParkToProposed(id string, reason bead.ParkReason, mutate func(*bead.Bead)) error {
+	atomic.AddInt32(&s.parkCalls, 1)
+	return s.Store.ParkToProposed(id, reason, mutate)
+}
+
 func TestIntake_ActionableAtomic_ClaimsNormally(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	store := &claimCountingStore{Store: inner}
@@ -193,6 +204,143 @@ func TestIntake_NonAtomicSkipsClaim(t *testing.T) {
 	assert.Equal(t, bead.StatusProposed, got.Status)
 	assert.Empty(t, got.Owner)
 	assert.Contains(t, bead.GetNeedsHumanMeta(*got).Reason, "human clarification")
+}
+
+func TestReadinessNeedsRefineWarnsAndClaimsInWarnOnly(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	inner, beadRef := newPreClaimIntakeHookTestStore(t, root)
+	store := &parkCountingStore{claimCountingStore: &claimCountingStore{Store: inner}}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-readiness-warn",
+				ResultRev: "readiness-warn",
+			}, nil
+		}),
+	}
+
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"classification":"needs_refine","rationale":"missing verification","readiness_checks":[{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}]}`,
+	}
+	intakeHook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:               true,
+		PreClaimIntakeHook: intakeHook,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "warn-only readiness must still claim")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&store.parkCalls), "warn-only readiness must not park")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&svc.executeCalls), "readiness hook must execute once")
+	assert.Equal(t, 1, result.Successes)
+	assert.Equal(t, 1, result.Attempts)
+
+	got, err := inner.Get(beadRef.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusClosed, got.Status)
+}
+
+func TestACQualityGateWarnOnlyDoesNotPark(t *testing.T) {
+	inner, candidate, _ := newExecuteLoopTestStore(t)
+	store := &parkCountingStore{claimCountingStore: &claimCountingStore{Store: inner}}
+
+	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {
+		b.Acceptance = "1. Improve clarity\n2. Better error messages\n"
+	}))
+
+	var innerSeen int32
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			return ExecuteBeadReport{
+				BeadID:    beadID,
+				Status:    ExecuteBeadStatusSuccess,
+				SessionID: "sess-ac-quality",
+				ResultRev: "ac-quality",
+			}, nil
+		}),
+	}
+
+	intakeHook := NewACQualityPreClaimGate(store, config.BeadQualityModeWarnOnly, DefaultACQualityMinScore, func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+		b, err := store.Get(beadID)
+		require.NoError(t, err)
+		assert.NotEqual(t, false, b.Extra["execution-eligible"], "warn-only AC quality must not make the bead ineligible")
+		atomic.StoreInt32(&innerSeen, 1)
+		return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
+	})
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:               true,
+		PreClaimIntakeHook: intakeHook,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "warn-only AC quality must still claim")
+	assert.Equal(t, int32(0), atomic.LoadInt32(&store.parkCalls), "warn-only AC quality must not park")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&innerSeen), "warn-only AC quality must reach the inner hook")
+	assert.Equal(t, 1, result.Successes)
+
+	events, err := inner.Events(candidate.ID)
+	require.NoError(t, err)
+	var found bool
+	for _, ev := range events {
+		if ev.Kind == "ac-quality-low" {
+			found = true
+			break
+		}
+	}
+	assert.True(t, found, "warn-only AC quality must still append warning evidence")
+}
+
+func TestHardOperatorRequiredStillParksProposed(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	inner, beadRef := newPreClaimIntakeHookTestStore(t, root)
+	store := &parkCountingStore{claimCountingStore: &claimCountingStore{Store: inner}}
+
+	worker := &ExecuteBeadWorker{
+		Store: store,
+		Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+			t.Fatal("executor must not run for operator_required intake")
+			return ExecuteBeadReport{}, nil
+		}),
+	}
+
+	svc := &preClaimIntakeHookServiceStub{
+		finalText: `{"outcome":"operator_required","reason":"ambiguous scope","detail":"need human clarification"}`,
+	}
+	intakeHook := NewPreClaimIntakeHook(root, store, intakeHookTestConfig(), svc, nil)
+
+	cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+	rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+	result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+		Once:               true,
+		PreClaimIntakeHook: intakeHook,
+	})
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.claimCalls), "operator_required intake must still claim before parking")
+	assert.Equal(t, int32(1), atomic.LoadInt32(&store.parkCalls), "operator_required intake must park the bead")
+	assert.Equal(t, 0, result.Attempts, "operator_required must not reach implementation")
+
+	got, err := inner.Get(beadRef.ID)
+	require.NoError(t, err)
+	assert.Equal(t, bead.StatusProposed, got.Status)
+	assert.Empty(t, got.Owner)
 }
 
 func TestIntake_ErrorContinuesToClaimWithoutParkingCandidate(t *testing.T) {

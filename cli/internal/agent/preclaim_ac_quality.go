@@ -77,16 +77,17 @@ func CheckACQuality(acceptance string, threshold float64) ACQualityResult {
 	return result
 }
 
-// MarkBeadACQualityLow sets execution-eligible=false, adds the label
-// "ac-quality:needs-refinement", and emits an "ac-quality-low" event with
-// per-AC classifications in the body. Safe to call more than once (idempotent
-// label add; events are append-only).
-func MarkBeadACQualityLow(store BeadACQualityStore, beadID string, result ACQualityResult) error {
+// MarkBeadACQualityLow emits the low-quality evidence event and, when block is
+// true, sets execution-eligible=false so the bead leaves ReadyExecution.
+// Safe to call more than once (idempotent label add; events are append-only).
+func MarkBeadACQualityLow(store BeadACQualityStore, beadID string, result ACQualityResult, block bool) error {
 	if err := store.Update(beadID, func(b *bead.Bead) {
 		if b.Extra == nil {
 			b.Extra = make(map[string]any)
 		}
-		b.Extra["execution-eligible"] = false
+		if block {
+			b.Extra["execution-eligible"] = false
+		}
 		if !beadHasACQualityLabel(b.Labels) {
 			b.Labels = append(b.Labels, "ac-quality:needs-refinement")
 		}
@@ -113,16 +114,16 @@ func beadHasACQualityLabel(labels []string) bool {
 }
 
 // NewACQualityPreClaimGate returns a PreClaimIntakeHook that checks the bead's
-// AC verifiability score before any execution attempt. When score < threshold,
-// the bead is marked ineligible (execution-eligible=false, label added, event
-// emitted) and PreClaimIntakeOperatorRequired is returned to block claim. When
-// score >= threshold, inner is called (if non-nil) or
-// PreClaimIntakeActionableAtomic is returned.
+// AC verifiability score before any execution attempt. In WARN-ONLY mode, low
+// scores append warning evidence and still proceed to the inner hook. In
+// BLOCK/factory mode, low scores mark the bead ineligible and return
+// PreClaimIntakeOperatorRequired. When score >= threshold, inner is called (if
+// non-nil) or PreClaimIntakeActionableAtomic is returned.
 //
 // This gate is deterministic: no LLM call is made. It should be chained
 // before the LLM-based intake hook so that beads with low-quality ACs never
 // burn drain budget.
-func NewACQualityPreClaimGate(store BeadACQualityStore, threshold float64, inner PreClaimIntakeHook) PreClaimIntakeHook {
+func NewACQualityPreClaimGate(store BeadACQualityStore, mode string, threshold float64, inner PreClaimIntakeHook) PreClaimIntakeHook {
 	return func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
 		if ctx != nil {
 			if err := ctx.Err(); err != nil {
@@ -139,7 +140,14 @@ func NewACQualityPreClaimGate(store BeadACQualityStore, threshold float64, inner
 		}
 		result := CheckACQuality(b.Acceptance, threshold)
 		if !result.PassesThreshold {
-			_ = MarkBeadACQualityLow(store, beadID, result)
+			block := isReadinessBlockingMode(mode)
+			_ = MarkBeadACQualityLow(store, beadID, result, block)
+			if !block {
+				if inner != nil {
+					return inner(ctx, beadID)
+				}
+				return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
+			}
 			return PreClaimIntakeResult{
 				Outcome: PreClaimIntakeOperatorRequired,
 				Reason:  "ac-quality:needs-refinement",

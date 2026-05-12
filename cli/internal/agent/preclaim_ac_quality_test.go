@@ -68,7 +68,7 @@ func TestPreClaimACQuality_LowQualityEmitsACQualityEvent(t *testing.T) {
 	result := CheckACQuality(b.Acceptance, DefaultACQualityMinScore)
 	require.False(t, result.PassesThreshold, "expected all-prose ACs to fail threshold")
 
-	err := MarkBeadACQualityLow(store, b.ID, result)
+	err := MarkBeadACQualityLow(store, b.ID, result, true)
 	require.NoError(t, err)
 
 	require.Len(t, store.events, 1, "expected exactly one ac-quality-low event")

@@ -148,7 +148,7 @@ func NewPreClaimIntakeHook(projectRoot string, store BeadReader, rcfg config.Res
 			}, nil
 		}
 
-		return decodePreClaimIntakePayloadResult(payload)
+		return decodePreClaimIntakePayloadResultWithMode(payload, rcfg.BeadQualityMode())
 	}
 }
 
@@ -306,6 +306,10 @@ func normalizePreClaimIntakeRewriteFields(fields []string) []string {
 // It accepts both the legacy intake schema (classification field) and the canonical
 // readiness schema (outcome field), converting both into the same decision model.
 func decodePreClaimIntakePayloadResult(payload string) (PreClaimIntakeResult, error) {
+	return decodePreClaimIntakePayloadResultWithMode(payload, config.BeadQualityModeWarnOnly)
+}
+
+func decodePreClaimIntakePayloadResultWithMode(payload string, qualityMode string) (PreClaimIntakeResult, error) {
 	var probe struct {
 		Classification  string `json:"classification"`
 		Outcome         string `json:"outcome"`
@@ -323,11 +327,11 @@ func decodePreClaimIntakePayloadResult(payload string) (PreClaimIntakeResult, er
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode result: %w", err)
 	}
 	if probe.Outcome != "" {
-		return decodeCanonicalReadinessPayload(payload)
+		return decodeCanonicalReadinessPayloadWithMode(payload, qualityMode)
 	}
 	if probe.Classification != "" {
 		if isReadinessClassificationPayload(probe.Classification, probe.Tractability, probe.Rationale, probe.Score, len(probe.ReadinessChecks), len(probe.SuggestedFixes)) {
-			return decodeReadinessClassificationPayload(payload)
+			return decodeReadinessClassificationPayloadWithMode(payload, qualityMode)
 		}
 		return decodeLegacyIntakePayload(payload)
 	}
@@ -354,7 +358,7 @@ func isReadinessClassificationPayload(classification, tractability, rationale st
 	}
 }
 
-func decodeCanonicalReadinessPayload(payload string) (PreClaimIntakeResult, error) {
+func decodeCanonicalReadinessPayloadWithMode(payload string, qualityMode string) (PreClaimIntakeResult, error) {
 	var out preClaimReadinessPromptResult
 	if err := json.Unmarshal([]byte(payload), &out); err != nil {
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode readiness result: %w", err)
@@ -381,7 +385,7 @@ func decodeCanonicalReadinessPayload(payload string) (PreClaimIntakeResult, erro
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: legacy readiness outcome %q removed by lifecycle migration; use %q", out.Outcome, PreClaimIntakeOperatorRequired)
 	case "readiness_error", "system_unready":
 		// system_unready maps to fail-open/skip per ADR-023/FEAT-010 policy
-		classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, detail)
+		classified := ClassifyReadinessWithMode(ReadinessClassificationSystemUnready, nil, detail, qualityMode)
 		return PreClaimIntakeResult{
 			Outcome:      PreClaimIntakeError,
 			Reason:       classified.Reason,
@@ -395,14 +399,14 @@ func decodeCanonicalReadinessPayload(payload string) (PreClaimIntakeResult, erro
 	}
 }
 
-func decodeReadinessClassificationPayload(payload string) (PreClaimIntakeResult, error) {
+func decodeReadinessClassificationPayloadWithMode(payload string, qualityMode string) (PreClaimIntakeResult, error) {
 	var out preClaimReadinessClassificationPromptResult
 	if err := json.Unmarshal([]byte(payload), &out); err != nil {
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode readiness classification result: %w", err)
 	}
 	reasons := failedReadinessReasons(out.ReadinessChecks)
 	detail := firstNonEmptyReadinessDetail(out.Rationale, out.Detail, out.Reasoning)
-	classified := ClassifyReadiness(out.Classification, reasons, detail)
+	classified := ClassifyReadinessWithMode(out.Classification, reasons, detail, qualityMode)
 	if detail == "" {
 		detail = readinessCheckEvidence(out.ReadinessChecks)
 	}

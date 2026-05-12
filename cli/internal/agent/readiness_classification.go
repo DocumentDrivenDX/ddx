@@ -3,6 +3,8 @@ package agent
 import (
 	"errors"
 	"strings"
+
+	"github.com/DocumentDrivenDX/ddx/internal/config"
 )
 
 const (
@@ -45,6 +47,12 @@ type ReadinessClassificationResult struct {
 // quota, transport, resource, and repository-concurrency failures do not park a
 // bead as needs_refine/needs_split.
 func ClassifyReadiness(classification string, reasons []string, detail string) ReadinessClassificationResult {
+	return ClassifyReadinessWithMode(classification, reasons, detail, config.BeadQualityModeWarnOnly)
+}
+
+// ClassifyReadinessWithMode maps bead-lifecycle readiness evidence to a stable
+// result using the configured bead-quality mode.
+func ClassifyReadinessWithMode(classification string, reasons []string, detail, qualityMode string) ReadinessClassificationResult {
 	classification = normalizeReadinessClassification(classification)
 	reason := firstReadinessReason(reasons)
 	systemReason := classifyReadinessSystemReason(detail, reasons)
@@ -88,10 +96,13 @@ func ClassifyReadiness(classification string, reasons []string, detail string) R
 		}
 		out.IntakeOutcome = PreClaimIntakeOperatorRequired
 	case ReadinessClassificationNeedsRefine:
-		// Without a validated rewrite, a refinement need is not executable.
-		// The caller may override this to ActionableButRewritten after
-		// validating replacement text from the readiness payload.
-		out.IntakeOutcome = PreClaimIntakeOperatorRequired
+		if isReadinessBlockingMode(qualityMode) {
+			// In BLOCK/factory mode, a refinement need still parks the bead.
+			out.IntakeOutcome = PreClaimIntakeOperatorRequired
+		} else {
+			// WARN-ONLY mode reports the finding but still proceeds.
+			out.IntakeOutcome = PreClaimIntakeActionableAtomic
+		}
 	default:
 		out.Classification = ReadinessClassificationSystemUnready
 		out.Reason = ReadinessReasonSystemUnready
@@ -100,6 +111,15 @@ func ClassifyReadiness(classification string, reasons []string, detail string) R
 		out.IntakeOutcome = PreClaimIntakeError
 	}
 	return out
+}
+
+func isReadinessBlockingMode(mode string) bool {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case config.BeadQualityModeBlock, "factory":
+		return true
+	default:
+		return false
+	}
 }
 
 func normalizeReadinessClassification(classification string) string {
