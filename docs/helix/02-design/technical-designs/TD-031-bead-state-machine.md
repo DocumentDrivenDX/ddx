@@ -69,12 +69,32 @@ When a drain attempt finishes, `execute-bead` returns one of a fixed set of outc
 
 - Raw `no_changes` is attempt evidence, not a durable bead queue state. The drain loop MUST translate it into one of the rows below before mutating the bead.
 - `execute-loop-retry-after` may be set only when retrying the same bead after time passes could plausibly succeed without human/spec/dependency changes.
-  - **MUST NOT set retry-after** (cause is not time-resolvable; requires operator action or code fix): `push_failed`, `declined_needs_decomposition`, `review_spec_gap`, `review_missing_acceptance`, `review_too_large` at decomposition depth cap.
+  - **MUST NOT set retry-after** (cause is not time-resolvable by waiting): `push_failed`, `declined_needs_decomposition`, `review_spec_gap`, `review_missing_acceptance`, `review_too_large` at decomposition depth cap.
   - **MAY set retry-after** (recheckable by waiting): `push_conflict` (15 min — remote advanced), `no_viable_provider` (15 min), `land_conflict` (15 min), transient infra/quota/transport (15 min).
   - Cooldown lifetime SHOULD match the recheckable window; 15 min is the ceiling for every current recheckable outcome. A 24 h cooldown is never appropriate.
+- Continuous forward progress is the default. Before a bead can move to
+  `status=proposed`, the drain loop MUST exhaust every applicable automatic
+  path in priority order: same-result review retry, same-bead implementation
+  retry, reframe, decomposition, sibling/replacement split, or already-satisfied
+  verification. `status=proposed` is only valid when those paths failed, would
+  be lossy, or require a product/spec choice an agent cannot infer.
+- `status=blocked` is reserved for hard external recheckable blockers. Too-large
+  work, decomposition depth overflow, exhausted implementation retries,
+  exhausted reviewer retries, and no-changes uncertainty MUST NOT map to
+  `blocked` unless the evidence names an external blocker whose later resolution
+  can be rechecked mechanically.
+- Decomposition depth overflow is not, by itself, an operator-required
+  condition. At child-depth cap, the decomposer MUST try a sibling or replacement
+  split under the nearest safe parent/root. Only a failed or lossy
+  sibling/replacement split may map to `status=proposed`.
 - Every bead excluded from ordinary `ddx work` execution MUST have an explainable durable reason using existing mechanisms: dependency edge, `proposed` status, external `blocked` status, `execution-eligible=false`, `superseded-by`, epic/parent queue mode, or an active retry cooldown. Labels, events, and `extra` fields may explain that reason but do not control lifecycle.
+- `extra` is not a general rule namespace. Only fields explicitly specified by
+  TD-027 or this TD may affect queue eligibility, retry/recovery thresholds, or
+  worker selection. Optional telemetry in `extra` may improve auditability, but
+  missing optional telemetry MUST NOT by itself block, propose, cooldown, or
+  skip otherwise executable work.
 - `closed` means implementation, verification, and the default adversarial pre-close review gate have all passed, or the work was verified as already satisfied. Review failure never reopens a closed bead; it prevents close.
-- Automatic implementation retry is bounded and applies only to classifications where the implementer had valid task context and further automated work can plausibly resolve the finding. Spec gaps, missing acceptance criteria, decomposition overflow, and exhausted reviewer failures require operator resolution.
+- Automatic implementation retry is bounded and applies only to classifications where the implementer had valid task context and further automated work can plausibly resolve the finding. Spec gaps, missing acceptance criteria, decomposition overflow, and exhausted reviewer failures require operator resolution only after the automatic reframe/decompose/replacement sequence cannot produce executable work.
 - Latest terminal events and close evidence beat stale `execute-loop-*` `extra` metadata. Reconciliation may clear stale management fields, but MUST preserve append-only events and evidence.
 - `ClosureGate` (`store.go:1245`, inside `closeWithEvidence`) applies exclusively to evidence-bearing execute-bead closes via `CloseWithEvidence`. The dependency-satisfied reconcile-close path (`applyReconcilePlan` at `reconcile.go:208-254`, `CloseSatisfied=true`) is a distinct meta-close that intentionally bypasses `ClosureGate`: the bead has no execution session and no `closing_commit_sha` of its own. The bypass is safe because every transitive dependency is `closed` — each having individually passed `ClosureGate` or been a prior meta-close — so the parent's closure inherits its evidence by reference through the dependency edges.
 
@@ -85,17 +105,17 @@ When a drain attempt finishes, `execute-bead` returns one of a fixed set of outc
 | `review_pass` after merged candidate | `in_progress → closed` | remove `claimed`, add `last-merged-rev:<sha>` (optional) | `review-pass` + `closed-merged` | `extra.last-run`, `extra.last-review`, `extra.closing_commit_sha` updated; clear stale `execute-loop-*` |
 | `already_satisfied` | `in_progress → closed` | (none) | `closed-already-satisfied` | `extra.last-run`; clear stale `execute-loop-*` |
 | `review_fixable_gap` with retry budget remaining | no durable change if continuing; otherwise `in_progress → open` | no lifecycle label required | `review-fixable-gap` + retry decision | `extra.last-review` carries findings ref |
-| `review_fixable_gap` with retry budget exhausted | `in_progress → proposed` | optional explanatory review label only | `review-block` | `extra.last-review` carries findings ref and exhausted budget |
-| `review_spec_gap` / `review_missing_acceptance` | `in_progress → proposed` | add `triage:spec-gap` or `triage:missing-acceptance` | `review-block` | `extra.last-review` carries findings ref |
-| `review_too_large` | `in_progress → open` (with children + dep edges) or `in_progress → proposed` (depth cap) | add `decomposed` when children exist | `review-too-large` + optionally `triage-decomposed` / `triage-overflow` | `extra.children` + AC mapping when decomposed |
+| `review_fixable_gap` with retry budget exhausted | `in_progress → open` to enter auto-recovery; `in_progress → proposed` only after `auto_recovery_failed` | optional explanatory review label only | `review-fixable-gap` + ladder-exhausted/recovery decision | `extra.last-review` carries findings ref and exhausted budget; may increment `extra.consecutive_ladder_exhaustions` |
+| `review_spec_gap` / `review_missing_acceptance` | `in_progress → open` when a safe reframe can make the bead executable; `in_progress → proposed` only when the missing spec/AC requires operator judgment | add `triage:spec-gap` or `triage:missing-acceptance` | `review-block` + optional `reframe-applied` | `extra.last-review` carries findings ref; `extra.last-recovery` records any safe rewrite attempt |
+| `review_too_large` | `in_progress → open` with child dep edges, or sibling/replacement dep edges at child-depth cap; `in_progress → proposed` only if decomposition is lossy or no executable split can be generated | add `decomposed` when children/replacements exist | `review-too-large` + optionally `triage-decomposed` / `triage-overflow` | `extra.children` or `extra.superseded-by` + AC mapping when decomposed |
 | `review_error` below retry cap | no durable change; retry reviewer for same `result_rev` | (none) | `review-error` | `extra.last-review-error` carries class, slot, attempt count |
-| `review_error` exhausted | `in_progress → proposed` | optional explanatory review label only | `review-manual-required` | `extra.last-review-error` carries class, slot, attempt count |
+| `review_error` exhausted | `in_progress → open` unless the error proves operator action is required; `in_progress → proposed` only after the automatic review/recovery path is exhausted | optional explanatory review label only | `review-manual-required` only for operator-required classes; otherwise `review-error` + recovery decision | `extra.last-review-error` carries class, slot, attempt count |
 | `execution_failed` | `in_progress → open` | (none) | `unclaimed` + structured failure event | `extra.last-run` |
 | verified no_changes already satisfied | `in_progress → closed` | remove no_changes triage labels | `no_changes_verified` + `closed-already-satisfied` | `extra.last-run`; clear `execute-loop-*` |
 | unverified no_changes | `in_progress → open` | add `triage:no-changes-unverified` | `no_changes_unverified` | record verification command/result; do not set retry cooldown by default |
 | unjustified no_changes | `in_progress → open` | add `triage:no-changes-unjustified` | `no_changes_unjustified` | record rationale absence/detail |
-| legacy no_changes investigation (work too large) | `in_progress → open` (with children + dep edges) or `in_progress → proposed` (depth cap/lossy split) | add `decomposed` when children exist | legacy `no_changes_needs_investigation` + `triage-decomposed`/`triage-overflow` | `extra.last-rationale`, `extra.children`, AC mapping |
-| legacy no_changes investigation (non-decomposition reason) | `in_progress → proposed` (operator action) or `in_progress → open` | optional explanatory triage labels only | legacy `no_changes_needs_investigation` | `extra.last-rationale`; no retry cooldown |
+| legacy no_changes investigation (work too large) | `in_progress → open` with child dep edges, or sibling/replacement dep edges at child-depth cap; `in_progress → proposed` only if decomposition is lossy or no executable split can be generated | add `decomposed` when children/replacements exist | legacy `no_changes_needs_investigation` + `triage-decomposed`/`triage-overflow` | `extra.last-rationale`, `extra.children` or `extra.superseded-by`, AC mapping |
+| legacy no_changes investigation (non-decomposition reason) | `in_progress → open` for retriable, verifiable, or recoverable uncertainty; `in_progress → proposed` only when evidence proves operator judgment is required | optional explanatory triage labels only | legacy `no_changes_needs_investigation` + recovery decision | `extra.last-rationale`; no retry cooldown |
 | parent/epic/decomposed container | `in_progress → open` with dep edges to children, or `in_progress → open` with `execution-eligible=false` | add `decomposed` when children exist | `no_changes_decomposed` or `triage-decomposed` | `extra.children` lists child IDs + AC mapping, or `extra.execution-eligible=false` |
 | external blocker | `in_progress → blocked` (hard) or `in_progress → open` (soft) | add `blocked-on-upstream:<id>` as explanatory label when useful | `no_changes_blocked` | `extra.last-rationale` names the external blocker |
 | superseded work | no terminal success; leave open if visible history needed | (none) | structured superseded event if appended | `extra.superseded-by` names the replacement |
@@ -106,10 +126,43 @@ When a drain attempt finishes, `execute-bead` returns one of a fixed set of outc
 | dependency-satisfied reconcile close (`ddx bead reconcile`, `CloseSatisfied=true`) | `open → closed` via `UpdateWithLifecycleStatus`, `ManualClose=true`; `ClosureGate` **not** invoked | remove stale `execute-loop-*` labels; add `reconciled-nochanges-state` label | `lifecycle_reconciled` | `extra.execute-loop-*` cleared per `ReconcilePlan.ClearFields`; `externalizeEvents` called after close |
 | `reframe_applied` — reframer rewrote description/AC; bead re-enters execution-ready lane | `in_progress → open` | add `reframed` label | `reframe-applied` with `from_rev`, `to_rev`, `reframer_cost` | `extra.consecutive_ladder_exhaustions` reset to 0; `extra.last-recovery` updated |
 | `decompose_applied` — decomposer filed 2-5 child beads; parent open but not execution-eligible | `in_progress → open` with dep edges to children; parent `execution-eligible=false` | add `decomposed` label | `decompose-applied` with `child_ids` + `reframer_cost` | `extra.children` + AC mapping; `extra.execution-eligible=false`; `extra.last-recovery` updated |
-| `auto_recovery_failed` — both reframe and decompose failed, or `recovery:manual` label set | `in_progress → proposed` | add `triage:auto-recovery-failed` label | `auto-recovery-failed` with `reframe_attempt_cost` + `decompose_attempt_cost` | `extra.last-recovery` records costs and failure reasons; **DO NOT** set `execute-loop-retry-after` |
+| `auto_recovery_failed` — reframe, child decomposition, and sibling/replacement decomposition failed, or `recovery:manual` label set | `in_progress → proposed` | add `triage:auto-recovery-failed` label | `auto-recovery-failed` with `reframe_attempt_cost` + `decompose_attempt_cost` | `extra.last-recovery` records costs and failure reasons; **DO NOT** set `execute-loop-retry-after` |
 | `per_bead_budget_exhausted` — cumulative cost exceeded `escalation.per_bead_budget_usd` | `in_progress → open` (re-claimable — budget exhaustion is recheckable) | (none) | `per-bead-budget-exhausted` with `total_cost` | `extra.last-run` only; **DO NOT** set `execute-loop-retry-after` — requires operator action or config change |
 
 Legacy/backcompat `needs_human` and `triage:needs-investigation` labels are not lifecycle controls. New routing uses `status=proposed` for operator decisions; those labels may remain only as migration metadata until cleanup removes them.
+
+### 3.3 Decomposition-First Transition Sequence
+
+When any pre-claim readiness result, post-attempt triage result, review result,
+or no-changes rationale classifies the bead as too large, needing breakdown, or
+structurally non-executable, DDx applies this sequence before any
+operator-attention transition:
+
+1. **Safe in-place reframe**: if the bead can be made executable by preserving
+   commitments while tightening description or acceptance criteria, apply
+   `reframe_applied`; transition `in_progress → open` or `open → open`; reset
+   `extra.consecutive_ladder_exhaustions`.
+2. **Child decomposition**: if the bead can be split under itself, create 2-5
+   executable child beads, map every parent AC to child ACs or explicit
+   `non_scope`, add dependency edges, set the parent
+   `extra.execution-eligible=false`, add `decomposed`, append
+   `decompose-applied`, and leave the parent `status=open`.
+3. **Sibling/replacement decomposition**: if child depth is exhausted but the
+   work is still decomposable, create executable sibling or replacement beads
+   under the nearest safe parent/root, record `extra.superseded-by` on the
+   oversized bead when a replacement owns the remaining work, add dependency
+   edges so the queue advances through the replacement work, and leave the
+   oversized bead `status=open` but not execution-eligible.
+4. **Final escape**: move to `status=proposed` only when reframe,
+   child decomposition, and sibling/replacement decomposition all fail, would
+   drop explicit scope, or require operator judgment. The event body MUST record
+   which automatic actions were attempted and why each could not safely move
+   work forward.
+
+This sequence is synchronous from the state-machine perspective: there is no
+durable "needs decomposition" status. If implementation needs to release a claim
+between steps, it releases to `status=open` with evidence naming the pending
+automatic recovery action, not to `blocked`, cooldown, or `proposed`.
 
 ## 4. Worker-State Enumeration
 
@@ -132,7 +185,7 @@ Two agent roles support the cross-cycle recovery path (per ADR-024 P4; SD-025 La
 | Role | `MinPower` floor | Claim held by | Output contract | Dispatch condition |
 |---|---|---|---|---|
 | `reframer` | Strong-tier per ADR-024 P3 — `MinPower` set above the current cycle's implementer actual power | Drain proxy (not the reframer agent); reframer runs read-only against the bead record, then returns structured edits | Structured edits to bead description and/or acceptance criteria. Edits must preserve all explicit commitments (AC, non-scope, named files/tests, deps, governing artifact refs). A no-op result (no change) is valid and triggers the decomposer path. | `consecutive_ladder_exhaustions >= 2` and bead does not carry `recovery:manual` label |
-| `decomposer` | Strong-tier per ADR-024 P3 — same floor as reframer | Drain proxy; decomposer runs read-only against the bead record, then returns a list of child bead specs | List of 2-5 child bead specs for `Backend.Create`. Each spec must include title, description, numbered AC, labels (inheriting parent's labels and `spec-id`), and a parent/dep edge to the parent bead. A no-op result triggers `auto_recovery_failed`. | Reframe attempt returned no change, or reframer invocation failed |
+| `decomposer` | Strong-tier per ADR-024 P3 — same floor as reframer | Drain proxy; decomposer runs read-only against the bead record, then returns a list of child, sibling, or replacement bead specs | List of 2-5 executable bead specs for `Backend.Create`. Each spec must include title, description, numbered AC, labels (inheriting parent's labels and `spec-id`), and the required parent/dep or supersession edge. A child-depth cap switches the requested output to sibling/replacement specs under the nearest safe parent/root; a no-op result triggers `auto_recovery_failed`. | Reframe attempt returned no change, reframer invocation failed, or a too-large/depth-cap classification requires structural split |
 
 Both roles are dispatched with the same `role`, `bead_id`, `attempt_id`, `session_id`, and `review_group_id` correlation fields used by the reviewer role (ADR-024 Default Adversarial Pre-Close Review Gate). Operator-supplied passthrough constraints (`--harness`, `--provider`, `--model`) are forwarded unchanged. If those constraints prevent satisfying the strong-tier `MinPower` floor, the dispatch returns `readiness_error` and the outcome maps to `auto_recovery_failed`.
 
@@ -167,7 +220,11 @@ Bead readiness assessment is the canonical pre-claim decision for actionability 
 - `open → open` when readiness applies a validated replacement rewrite or metadata-only safe improvement before implementation. The bead remains execution-ready unless a later readiness decision parks it.
 - `open → blocked` when triage decides a bead has an external recheckable blocker.
 - `open → open` when readiness decomposes a parent and adds dependency edges to children; the parent is dependency-waiting but remains `open`.
-- `open → proposed` when readiness reaches decomposition depth overflow or finds ambiguity that cannot be safely rewritten.
+- `open → proposed` only when readiness finds ambiguity or decomposition loss
+  that cannot be safely rewritten, decomposed into children, or decomposed into
+  sibling/replacement work. Decomposition depth overflow alone stays on the
+  automatic sibling/replacement split path and does not authorize operator
+  attention.
 
 The `proposed → open` transition, recorded by `triaged`, is the operator-acceptance signal for readiness idempotency. After that durable override, readiness may re-evaluate the bead, but it must not re-park the same bead for the same rule or finding unless prompt-relevant fields changed or the operator explicitly requests re-triage.
 
