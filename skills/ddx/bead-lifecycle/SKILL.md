@@ -38,6 +38,10 @@ or cheap repository evidence. The goal is to decide whether the bead is a
 tractable, self-contained unit of work for an agent before DDx spends an
 implementation attempt.
 
+Use the exact readiness classifications: `ready`, `needs_refine`,
+`needs_split`, `operator_required`, and `system_unready`. Do not emit
+synonyms such as `safely_refinable`, `rewritten`, or `needs_human`.
+
 Readiness mode answers a different question than infrastructure preflight.
 Do not classify provider outages, quota exhaustion, missing harnesses,
 transport failures, git index locks, worktree creation failures, ENOSPC, or
@@ -90,6 +94,11 @@ Return JSON only:
       "fix": "specific amendment, split, or operator action"
     }
   ],
+  "rewrite": {
+    "changed_fields": ["description", "acceptance"],
+    "description": "PROBLEM\n...\n\nROOT CAUSE\n...\n\nPROPOSED FIX\n...\n\nNON-SCOPE\n...\n",
+    "acceptance": "1. TestFoo\n2. cd cli && go test ./internal/agent/... -count=1\n3. lefthook run pre-commit"
+  },
   "suggested_child_beads": [
     {
       "title": "imperative child title",
@@ -129,6 +138,12 @@ for `status=proposed`. Use `system_unready` only when the readiness assessment
 itself cannot run or the provided context proves an infrastructure blocker
 rather than a bead defect.
 
+In readiness mode, `rationale` is a single string. `suggested_fixes` are
+advisory diagnostics for the author or operator; `rewrite` is the machine-
+consumable replacement contract DDx may apply before claim. When
+`classification` is `needs_refine`, `rewrite.changed_fields` is required and
+`rewrite.description` / `rewrite.acceptance` must be strings, not arrays.
+
 Legacy migration input aliases only: older records or prompts may mention `needs_human`.
 Treat that as a one-way migration signal for
 `operator_required` / `status=proposed`; never emit it as a current lifecycle
@@ -166,31 +181,22 @@ Return JSON only:
 ```json
 {
   "score": 0,
-  "rationale": [
-    {
-      "criterion": "a|b|c|d|e|f|g|h",
-      "verdict": "pass|fail|waived",
-      "reason": "brief evidence-grounded reason"
-    }
-  ],
+  "rationale": "brief evidence-grounded explanation",
   "suggested_fixes": [
-    {
-      "criterion": "a|b|c|d|e|f|g|h",
-      "fix": "specific amendment to make"
-    }
+    "specific amendment to make"
   ],
   "waivers_applied": [
-    {
-      "criterion": "c|d|implementation",
-      "waiver": "doc-only|epic|deletion",
-      "reason": "why this bead qualifies"
-    }
+    "doc-only"
   ]
 }
 ```
 
 `score` is the number of pass or waived criteria after legitimate waivers. Use
 integer scores from 0 through 8.
+
+`LintResult.rationale` is a single string summary. Do not reuse the
+readiness-mode array shape here; `suggested_fixes` and `waivers_applied` are
+flat string lists in `LintResult`.
 
 ## TRIAGE MODE
 
