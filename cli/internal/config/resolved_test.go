@@ -530,3 +530,36 @@ func TestOpaquePassthroughBlocksConfigModel(t *testing.T) {
 		t.Fatalf("explicit opaque Model = %q, want gpt-5", got)
 	}
 }
+
+func TestResolveTracksExplicitRoutePinsSeparatelyFromConfigDefaults(t *testing.T) {
+	cfg := &NewConfig{
+		Version: "1.0",
+		Agent: &AgentConfig{
+			Model: "openrouter/gpt-5.4-mini",
+		},
+	}
+
+	configOnly := cfg.Resolve(CLIOverrides{})
+	if got, ok := configOnly.ExplicitModel(); ok || got != "openrouter/gpt-5.4-mini" {
+		t.Fatalf("config-only ExplicitModel = (%q, %v), want (config model, false)", got, ok)
+	}
+
+	explicit := cfg.Resolve(CLIOverrides{
+		Harness:  "codex",
+		Provider: "openai",
+		Model:    "gpt-5.4-mini",
+		ModelRef: "openai:gpt-5.4-mini",
+	})
+	if got, ok := explicit.ExplicitHarness(); !ok || got != "codex" {
+		t.Fatalf("ExplicitHarness = (%q, %v), want (codex, true)", got, ok)
+	}
+	if got, ok := explicit.ExplicitProvider(); !ok || got != "openai" {
+		t.Fatalf("ExplicitProvider = (%q, %v), want (openai, true)", got, ok)
+	}
+	if got, ok := explicit.ExplicitModel(); !ok || got != "gpt-5.4-mini" {
+		t.Fatalf("ExplicitModel = (%q, %v), want (gpt-5.4-mini, true)", got, ok)
+	}
+	if got, ok := explicit.ExplicitModelRef(); !ok || got != "openai:gpt-5.4-mini" {
+		t.Fatalf("ExplicitModelRef = (%q, %v), want (openai:gpt-5.4-mini, true)", got, ok)
+	}
+}
