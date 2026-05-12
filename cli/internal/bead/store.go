@@ -543,6 +543,24 @@ func (s *Store) Update(id string, mutate func(*Bead)) error {
 	})
 }
 
+// Apply mutates a bead through a typed Operation. When the configured raw
+// backend exposes the optional OperationApplier fast path, Apply delegates to
+// it; otherwise it falls back to the generic load-mutate-save path.
+func (s *Store) Apply(id string, op Operation) error {
+	if s == nil {
+		return fmt.Errorf("bead: nil store")
+	}
+	if op == nil {
+		return fmt.Errorf("bead: nil operation")
+	}
+	if applier, ok := s.backend.(OperationApplier); ok {
+		return applier.Apply(context.Background(), id, op)
+	}
+	return s.updateBead(id, true, func(b *Bead) error {
+		return op.Apply(b)
+	})
+}
+
 func (s *Store) updateBead(id string, allowStatusChange bool, mutate func(*Bead) error) error {
 	return s.WithLock(func() error {
 		beads, _, err := s.readAllLatestRaw()

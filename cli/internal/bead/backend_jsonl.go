@@ -1,6 +1,7 @@
 package bead
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sort"
@@ -25,6 +26,7 @@ type JSONLBackend struct {
 // directly. lockWait bounds how long WithLock spins before giving up.
 // Compile-time check: JSONLBackend satisfies RawBackend.
 var _ RawBackend = (*JSONLBackend)(nil)
+var _ OperationApplier = (*JSONLBackend)(nil)
 
 func NewJSONLBackend(dir, file, lockDir string, lockWait time.Duration) *JSONLBackend {
 	return &JSONLBackend{Dir: dir, File: file, LockDir: lockDir, LockWait: lockWait}
@@ -71,6 +73,54 @@ func (j *JSONLBackend) WriteAll(beads []Bead) error {
 		buf = append(buf, '\n')
 	}
 	return writeAtomicFile(j.File, buf)
+}
+
+// Apply mutates one bead snapshot in place and persists the updated corpus.
+// JSONLBackend keeps the generic load-mutate-save path here so higher-level
+// callers can opt into the OperationApplier fast path without having to know
+// the backend-specific write shape yet.
+func (j *JSONLBackend) Apply(ctx context.Context, id string, op Operation) error {
+	if j == nil {
+		return fmt.Errorf("bead: nil jsonl backend")
+	}
+	if op == nil {
+		return fmt.Errorf("bead: nil operation")
+	}
+	if ctx != nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
+	}
+	return j.WithLock(func() error {
+		beads, err := j.ReadAll()
+		if err != nil {
+			return err
+		}
+		found := false
+		now := time.Now().UTC()
+		for i := range beads {
+			if beads[i].ID != id {
+				continue
+			}
+			origID := beads[i].ID
+			origCreatedAt := beads[i].CreatedAt
+			if err := op.Apply(&beads[i]); err != nil {
+				return err
+			}
+			if beads[i].ID != origID || !beads[i].CreatedAt.Equal(origCreatedAt) {
+				return fmt.Errorf("bead: operation may not mutate immutable fields")
+			}
+			beads[i].UpdatedAt = now
+			found = true
+			break
+		}
+		if !found {
+			return fmt.Errorf("%w: %s", ErrNotFound, id)
+		}
+		return j.WriteAll(beads)
+	})
 }
 
 func (j *JSONLBackend) WithLock(fn func() error) error {
