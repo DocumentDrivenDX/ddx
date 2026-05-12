@@ -305,6 +305,21 @@ func adjudicateNoChangesLifecycleStatus(parsed ParsedNoChangesRationale, report 
 		if reason == "" {
 			return noChangesUnsupportedStatusOutcome(parsed.LifecycleStatus, "status: blocked requires reason: <external recheckable blocker>")
 		}
+		if noChangesBlockedReasonIsInternal(reason, suggestedAction, report.NoChangesRationale) {
+			if suggestedAction == "" {
+				suggestedAction = "decompose into executable follow-up work or retry with a stronger agent"
+			}
+			return NoChangesOutcome{
+				Satisfied:        false,
+				Action:           NoChangesActionKeepOpenSmartRetry,
+				CooldownEligible: false,
+				EventKind:        NoChangesEventAutonomousRetry,
+				EventBody:        noChangesLifecycleEventBody("open", reason, suggestedAction),
+				LifecycleStatus:  "open",
+				Reason:           reason,
+				SuggestedAction:  suggestedAction,
+			}
+		}
 		if suggestedAction == "" {
 			suggestedAction = "recheck the external blocker and move status to open when cleared"
 		}
@@ -336,6 +351,35 @@ func adjudicateNoChangesLifecycleStatus(parsed ParsedNoChangesRationale, report 
 			Label:            NoChangesLabelUnjustified,
 		}
 	}
+}
+
+func noChangesBlockedReasonIsInternal(reason, suggestedAction, rationale string) bool {
+	text := strings.ToLower(strings.Join([]string{reason, suggestedAction, rationale}, "\n"))
+	internalSignals := []string{
+		"cannot be satisfied inside this bead",
+		"inside this bead alone",
+		"outside this bead",
+		"outside the bead",
+		"outside scope",
+		"out of scope",
+		"scope is too large",
+		"too large",
+		"needs split",
+		"requires split",
+		"requires decomposition",
+		"requires a broad",
+		"broad signature migration",
+		"broad caller migration",
+		"repo-wide refactor",
+		"follow_up_needed",
+		"follow-up needed",
+	}
+	for _, signal := range internalSignals {
+		if strings.Contains(text, signal) {
+			return true
+		}
+	}
+	return false
 }
 
 func noChangesUnsupportedStatusOutcome(status, reason string) NoChangesOutcome {
