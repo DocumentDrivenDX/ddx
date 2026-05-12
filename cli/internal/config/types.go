@@ -304,10 +304,19 @@ type CostConfig struct {
 // ExecutionsConfig configures the execute-bead bundle archive (mirror).
 type ExecutionsConfig struct {
 	Mirror     *ExecutionsMirrorConfig `yaml:"mirror,omitempty" json:"mirror,omitempty"`
-	RetainDays int                     `yaml:"retain_days,omitempty" json:"retain_days,omitempty"`
+	RetainDays *int                    `yaml:"retain_days,omitempty" json:"retain_days,omitempty"`
 	// TempWorktreeRoot is the base directory for isolated execute-bead
 	// worktrees. Empty preserves the legacy default under os.TempDir().
 	TempWorktreeRoot string `yaml:"temp_worktree_root,omitempty" json:"temp_worktree_root,omitempty"`
+}
+
+// ResolveRetainDays returns the effective in-tree retention window.
+// Nil means "use the binary default"; an explicit zero disables pruning.
+func (e *ExecutionsConfig) ResolveRetainDays() int {
+	if e == nil || e.RetainDays == nil {
+		return 90
+	}
+	return *e.RetainDays
 }
 
 // ExecutionsMirrorConfig describes the out-of-band archive target for the
@@ -580,8 +589,10 @@ func (c *NewConfig) ApplyDefaults() {
 		}
 	}
 	if c.Executions == nil {
-		c.Executions = &ExecutionsConfig{RetainDays: 90}
-	} else if c.Executions.RetainDays == 0 {
-		c.Executions.RetainDays = 90
+		defaultRetainDays := 90
+		c.Executions = &ExecutionsConfig{RetainDays: &defaultRetainDays}
+	} else if c.Executions.RetainDays == nil {
+		defaultRetainDays := 90
+		c.Executions.RetainDays = &defaultRetainDays
 	}
 }
