@@ -313,18 +313,19 @@ func TestIntake_DepthCapOverflow_BlocksOperator(t *testing.T) {
 	store := bead.NewStore(t.TempDir())
 	require.NoError(t, store.Init())
 
-	// Create 3-level hierarchy. Root and child are closed so they don't appear
-	// in ReadyExecution; grandchild (depth 2) is open and will be selected.
+	// Create a hierarchy with two consecutive decomposed child layers. Ordinary
+	// epic ancestry does not count toward the cap, but decomposed descendants do.
 	root := &bead.Bead{ID: "ddx-dc-root", Title: "Root bead", Status: bead.StatusClosed}
 	require.NoError(t, store.Create(root))
 
-	child := &bead.Bead{ID: "ddx-dc-child", Title: "Child bead", Parent: "ddx-dc-root", Status: bead.StatusClosed}
+	child := &bead.Bead{ID: "ddx-dc-child", Title: "Child bead", Parent: "ddx-dc-root", Status: bead.StatusClosed, Labels: []string{"decomposed"}}
 	require.NoError(t, store.Create(child))
 
 	grandchild := &bead.Bead{
 		ID:     "ddx-dc-grand",
 		Title:  "Grandchild bead at depth 2",
 		Parent: "ddx-dc-child",
+		Labels: []string{"decomposed"},
 	}
 	require.NoError(t, store.Create(grandchild))
 

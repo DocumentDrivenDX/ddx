@@ -2141,7 +2141,7 @@ func beadDecompositionDepth(workDir string, b *bead.Bead) int {
 	}
 
 	store := bead.NewStore(filepath.Join(workDir, ".ddx"))
-	depth := 0
+	depth := beadDecomposedChildDepth(b)
 	seen := map[string]struct{}{}
 	current := b
 	for current != nil {
@@ -2149,7 +2149,6 @@ func beadDecompositionDepth(workDir string, b *bead.Bead) int {
 		if parentID == "" {
 			break
 		}
-		depth++
 		if _, ok := seen[parentID]; ok {
 			break
 		}
@@ -2158,9 +2157,25 @@ func beadDecompositionDepth(workDir string, b *bead.Bead) int {
 		if err != nil || parent == nil {
 			break
 		}
+		if beadDecomposedChildDepth(parent) == 0 {
+			break
+		}
+		depth++
 		current = parent
 	}
 	return depth
+}
+
+func beadDecomposedChildDepth(b *bead.Bead) int {
+	if b == nil || strings.TrimSpace(b.Parent) == "" {
+		return 0
+	}
+	for _, label := range b.Labels {
+		if strings.TrimSpace(label) == "decomposed" {
+			return 1
+		}
+	}
+	return 0
 }
 
 // promptSHA returns the hex-encoded sha256 of the rendered prompt bytes.

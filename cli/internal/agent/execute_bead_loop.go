@@ -2891,12 +2891,15 @@ func classifyLoopReportFailure(report *ExecuteBeadReport) {
 }
 
 // storeBeadDepth walks the parent chain of b using the loop's store and returns
-// the number of ancestor levels (0 = root, 1 = child, 2 = grandchild, …).
+// the consecutive decomposition depth, not ordinary parent ancestry. A bead only
+// consumes decomposition budget when it is a child marked with the decomposed
+// label; epics and other organizational parents do not make execution less
+// eligible.
 func storeBeadDepth(store ExecuteBeadLoopStore, b *bead.Bead) int {
 	if b == nil {
 		return 0
 	}
-	depth := 0
+	depth := beadDecomposedChildDepth(b)
 	seen := map[string]struct{}{}
 	current := b
 	for {
@@ -2910,6 +2913,9 @@ func storeBeadDepth(store ExecuteBeadLoopStore, b *bead.Bead) int {
 		seen[parentID] = struct{}{}
 		parent, err := store.Get(parentID)
 		if err != nil || parent == nil {
+			break
+		}
+		if beadDecomposedChildDepth(parent) == 0 {
 			break
 		}
 		depth++
