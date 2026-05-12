@@ -61,8 +61,10 @@ type ExecuteBeadLoopRuntime struct {
 	RoutePreflight func(ctx context.Context, harness, model string) error
 	// BudgetStop, when non-nil, is checked before selecting the next bead. It
 	// lets CLI/server callers surface already-tripped budget state as a typed
-	// work-layer StopCondition before any new bead is claimed.
-	BudgetStop func() (ExecuteBeadReport, bool)
+	// work-layer StopCondition before any new bead is claimed. The companion
+	// report is still appended for operator visibility, but the stop itself is
+	// classified through work.StopConditionBudget.
+	BudgetStop func() (work.StopDecision, ExecuteBeadReport, bool)
 	// Mode and IdleInterval are the runtime loop intent. Once and
 	// PollInterval remain for older tests/callers but production entry points
 	// should set Mode and IdleInterval directly.
@@ -798,8 +800,11 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			return result, err
 		}
 		if runtime.BudgetStop != nil {
-			if budgetReport, stopped := runtime.BudgetStop(); stopped {
-				applyStop(work.StopInput{Budget: true})
+			if budgetDecision, budgetReport, stopped := runtime.BudgetStop(); stopped {
+				if budgetDecision == (work.StopDecision{}) {
+					budgetDecision = work.StopDecision{Condition: work.StopConditionBudget, ExitReason: "budget"}
+				}
+				setExit(string(budgetDecision.Condition), budgetDecision.ExitReason)
 				if budgetReport.Status == "" {
 					budgetReport.Status = ExecuteBeadStatusExecutionFailed
 				}

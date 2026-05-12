@@ -102,8 +102,9 @@ func TestExecuteBeadWorkerStopConditionWiredIntoRun(t *testing.T) {
 			}),
 		}
 		result, exitReason, err := runStopConditionCase(t, worker, context.Background(), ExecuteBeadLoopRuntime{
-			BudgetStop: func() (ExecuteBeadReport, bool) {
-				return ExecuteBeadReport{
+			BudgetStop: func() (work.StopDecision, ExecuteBeadReport, bool) {
+				decision, _ := work.ClassifyStop(work.StopInput{Budget: true})
+				return decision, ExecuteBeadReport{
 					Status: ExecuteBeadStatusExecutionFailed,
 					Detail: "cost cap reached",
 				}, true
@@ -148,12 +149,13 @@ func TestStopCondition_BudgetAfterImplementerCostStopsBeforeNextClaim(t *testing
 	}
 
 	result, exitReason, err := runStopConditionCase(t, worker, context.Background(), ExecuteBeadLoopRuntime{
-		BudgetStop: func() (ExecuteBeadReport, bool) {
+		BudgetStop: func() (work.StopDecision, ExecuteBeadReport, bool) {
 			detail, tripped := tracker.Tripped()
 			if !tripped {
-				return ExecuteBeadReport{}, false
+				return work.StopDecision{}, ExecuteBeadReport{}, false
 			}
-			return ExecuteBeadReport{
+			decision, _ := work.ClassifyStop(work.StopInput{Budget: true})
+			return decision, ExecuteBeadReport{
 				Status: ExecuteBeadStatusExecutionFailed,
 				Detail: detail,
 			}, true
