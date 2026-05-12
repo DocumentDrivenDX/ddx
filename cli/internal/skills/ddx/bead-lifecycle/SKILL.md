@@ -129,6 +129,12 @@ for `status=proposed`. Use `system_unready` only when the readiness assessment
 itself cannot run or the provided context proves an infrastructure blocker
 rather than a bead defect.
 
+In `MODE: intake`, do not emit a `rewrite` object. If a bead is executable as
+written, classify it as `ready` even when the prose could be cleaner. Put prompt
+quality improvements in `suggested_fixes` only. Use `operator_required` only
+for actual ambiguity, missing prerequisites, hidden external blockers, or unsafe
+scope choices that prevent an implementation attempt.
+
 Legacy migration input aliases only: older records or prompts may mention `needs_human`.
 Treat that as a one-way migration signal for
 `operator_required` / `status=proposed`; never emit it as a current lifecycle
