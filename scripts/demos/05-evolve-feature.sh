@@ -6,7 +6,6 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/_lib.sh"
 
 setup_demo_dir
-register_demo_cleanup
 
 ddx init --silent --skip-claude-injection > /dev/null 2>&1
 

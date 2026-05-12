@@ -69,7 +69,6 @@ agent_run() {
 narrate "ACT 1: Setup — Install DDx and HELIX"
 
 setup_demo_dir
-register_demo_cleanup
 
 type_command ddx init
 type_command ddx install helix

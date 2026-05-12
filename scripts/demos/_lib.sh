@@ -8,6 +8,7 @@ export LINES=24
 # Create and enter temp directory
 setup_demo_dir() {
   DEMO_DIR=$(mktemp -d)
+  register_demo_cleanup
   cd "$DEMO_DIR"
   git init -q
   git config user.email "demo@ddx.dev"
