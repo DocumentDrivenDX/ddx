@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -61,90 +60,50 @@ func isolateCmdTestTempRoot() func() {
 	}
 }
 
-var (
-	testLibraryPath string
-	testLibraryOnce sync.Once
-)
+// buildTestLibraryFixture creates a per-test bare git repository that mimics
+// the upstream ddx library. The repo lives under t.TempDir() and is cleaned up
+// automatically with the test.
+func buildTestLibraryFixture(t *testing.T) string {
+	t.Helper()
 
-// GetTestLibraryPath returns the absolute path to a bare git repository
-// that mimics a real upstream library (like GitHub). This is the ONLY way
-// tests should get the test library path.
-func GetTestLibraryPath() string {
-	testLibraryOnce.Do(func() {
-		// Find the test fixtures directory
-		_, filename, _, _ := runtime.Caller(0)
-		cmdDir := filepath.Dir(filename)
-		fixtureDir := filepath.Join(cmdDir, "..", "test", "fixtures", "ddx-library")
-		fixtureDir, _ = filepath.Abs(fixtureDir)
+	_, filename, _, _ := runtime.Caller(0)
+	cmdDir := filepath.Dir(filename)
+	fixtureDir := filepath.Join(cmdDir, "..", "test", "fixtures", "ddx-library")
+	fixtureDir, err := filepath.Abs(fixtureDir)
+	require.NoError(t, err)
 
-		// Determine base temp directory: TMP -> TMPDIR -> /tmp
-		tempBase := "/tmp"
-		if tmp := os.Getenv("TMP"); tmp != "" {
-			tempBase = tmp
-		} else if tmpdir := os.Getenv("TMPDIR"); tmpdir != "" {
-			tempBase = tmpdir
+	root := t.TempDir()
+	workingRepo := filepath.Join(root, ".test-library")
+	bareRepo := filepath.Join(root, ".test-library.git")
+
+	require.NoError(t, os.MkdirAll(workingRepo, 0o755))
+	require.NoError(t, syncDirectory(fixtureDir, workingRepo))
+
+	cmds := []struct {
+		args []string
+		dir  string
+	}{
+		{[]string{"git", "init", "-b", "master"}, workingRepo},
+		{[]string{"git", "config", "user.email", "test@example.com"}, workingRepo},
+		{[]string{"git", "config", "user.name", "Test User"}, workingRepo},
+		{[]string{"git", "add", "."}, workingRepo},
+		{[]string{"git", "commit", "--allow-empty", "-m", "Test fixture"}, workingRepo},
+		{[]string{"git", "init", "--bare", bareRepo}, ""},
+		{[]string{"git", "remote", "add", "origin", bareRepo}, workingRepo},
+		{[]string{"git", "push", "origin", "master"}, workingRepo},
+	}
+
+	for _, c := range cmds {
+		cmd := exec.Command(c.args[0], c.args[1:]...)
+		if c.dir != "" {
+			cmd.Dir = c.dir
 		}
+		cmd.Env = gitpkg.CleanEnv()
+		output, err := cmd.CombinedOutput()
+		require.NoErrorf(t, err, "failed to run %v\nOutput: %s", c.args, output)
+	}
 
-		workingRepo := filepath.Join(tempBase, ".test-library")
-		bareRepo := filepath.Join(tempBase, ".test-library.git")
-		testLibraryPath = bareRepo
-
-		// Check if we need to recreate (fixtures changed or doesn't exist)
-		needsRecreate := false
-		if stat, err := os.Stat(bareRepo); err != nil || !stat.IsDir() {
-			needsRecreate = true
-		} else if os.Getenv("CI") == "" {
-			// In local dev, check if any fixture is newer than the repo
-			repoModTime := stat.ModTime()
-			filepath.Walk(fixtureDir, func(path string, info os.FileInfo, err error) error {
-				if err == nil && !info.IsDir() && info.ModTime().After(repoModTime) {
-					needsRecreate = true
-				}
-				return nil
-			})
-		}
-
-		if needsRecreate {
-			// Clean up old repos
-			os.RemoveAll(workingRepo)
-			os.RemoveAll(bareRepo)
-
-			// Create working repo and copy fixtures
-			if err := os.MkdirAll(workingRepo, 0755); err != nil {
-				panic(fmt.Sprintf("Failed to create working repo: %v", err))
-			}
-
-			if err := syncDirectory(fixtureDir, workingRepo); err != nil {
-				panic(fmt.Sprintf("Failed to copy fixtures: %v", err))
-			}
-
-			// Initialize git repo
-			cmds := []struct {
-				args []string
-				dir  string
-			}{
-				{[]string{"git", "init", "-b", "master"}, workingRepo},
-				{[]string{"git", "config", "user.email", "test@example.com"}, workingRepo},
-				{[]string{"git", "config", "user.name", "Test User"}, workingRepo},
-				{[]string{"git", "add", "."}, workingRepo},
-				{[]string{"git", "commit", "--allow-empty", "-m", "Test fixture"}, workingRepo},
-				{[]string{"git", "init", "--bare", bareRepo}, ""},
-				{[]string{"git", "remote", "add", "origin", bareRepo}, workingRepo},
-				{[]string{"git", "push", "origin", "master"}, workingRepo},
-			}
-
-			for _, c := range cmds {
-				cmd := exec.Command(c.args[0], c.args[1:]...)
-				if c.dir != "" {
-					cmd.Dir = c.dir
-				}
-				if output, err := cmd.CombinedOutput(); err != nil {
-					panic(fmt.Sprintf("Failed to run %v: %v\nOutput: %s", c.args, err, output))
-				}
-			}
-		}
-	})
-	return testLibraryPath
+	return bareRepo
 }
 
 // syncDirectory copies files from src to dst, preserving directory structure
@@ -264,7 +223,7 @@ func NewTestEnvironment(t *testing.T, opts ...TestEnvOption) *TestEnvironment {
 
 	// Set default test library URL if not customized
 	if te.TestLibraryURL == "" {
-		te.TestLibraryURL = "file://" + GetTestLibraryPath()
+		te.TestLibraryURL = "file://" + buildTestLibraryFixture(t)
 	}
 
 	// Create .ddx directory
@@ -416,6 +375,18 @@ func (te *TestEnvironment) CreateFile(relativePath, content string) {
 	dir := filepath.Dir(fullPath)
 	require.NoError(te.t, os.MkdirAll(dir, 0755))
 	require.NoError(te.t, os.WriteFile(fullPath, []byte(content), 0644))
+}
+
+func TestNoSharedTmpFixtureLeaks(t *testing.T) {
+	for _, path := range []string{"/tmp/.test-library", "/tmp/.test-library.git"} {
+		_, err := os.Stat(path)
+		if err == nil {
+			t.Fatalf("unexpected shared fixture path exists: %s", path)
+		}
+		if !os.IsNotExist(err) {
+			t.Fatalf("expected %s to be absent, got: %v", path, err)
+		}
+	}
 }
 
 // NewTestRootCommand creates a fresh root command for tests using isolated temp directory

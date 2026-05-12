@@ -11,7 +11,7 @@ import (
 
 func TestAgentCheckSuccess(t *testing.T) {
 	t.Cleanup(func() {
-		time.Sleep(250 * time.Millisecond)
+		time.Sleep(1 * time.Second)
 	})
 
 	srv := newOAIModelsStub(t, []string{"fast-model", "slow-model"})
