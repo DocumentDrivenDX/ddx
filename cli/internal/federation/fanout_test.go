@@ -469,3 +469,51 @@ func TestFanOut_PostsGraphQLPayload(t *testing.T) {
 		t.Fatalf("posted payload mismatch: %+v", got)
 	}
 }
+
+func TestForwardMutation_HeadersReachSpoke(t *testing.T) {
+	var gotMethod string
+	var gotPath string
+	var gotBody []byte
+	var gotHeaders http.Header
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		gotHeaders = r.Header.Clone()
+		gotBody, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write(okGraphQLBody(t, map[string]any{"data": map[string]any{"ok": true}}))
+	}))
+	t.Cleanup(srv.Close)
+
+	c := NewFanOutClient()
+	headers := map[string]string{
+		"X-DDx-Origin-Identity":      "origin-123",
+		"X-DDx-Coordinator-Identity": "coord-456",
+		"X-Trace-Token":              "trace-789",
+	}
+	resp, err := c.ForwardMutation(context.Background(), &SpokeRecord{NodeID: "node-1", URL: srv.URL}, []byte(`{"query":"mutation { __typename }"}`), headers)
+	if err != nil {
+		t.Fatalf("forward mutation: %v", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if gotMethod != http.MethodPost {
+		t.Fatalf("method = %s, want POST", gotMethod)
+	}
+	if gotPath != "/graphql" {
+		t.Fatalf("path = %s, want /graphql", gotPath)
+	}
+	for k, v := range headers {
+		if got := gotHeaders.Get(k); got != v {
+			t.Fatalf("header %s = %q, want %q", k, got, v)
+		}
+	}
+	if string(gotBody) != `{"query":"mutation { __typename }"}` {
+		t.Fatalf("body = %s", string(gotBody))
+	}
+	if resp.StatusCode != http.StatusCreated {
+		t.Fatalf("status = %d, want %d", resp.StatusCode, http.StatusCreated)
+	}
+}

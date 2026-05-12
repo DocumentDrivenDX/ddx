@@ -55,6 +55,11 @@ func (s *Server) EnableSpokeMode(ctx context.Context, hubURL, selfURL string, op
 		SchemaVersion: federation.CurrentSchemaVersion,
 		Logger:        func(format string, args ...any) { log.Printf("WARN: "+format, args...) },
 	}
+	for _, proj := range s.state.GetProjects() {
+		if proj.ID != "" {
+			cfg.ProjectIDs = append(cfg.ProjectIDs, proj.ID)
+		}
+	}
 	for _, opt := range opts {
 		opt(&cfg)
 	}

@@ -3,6 +3,7 @@ package server
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -85,6 +86,7 @@ func TestFederationRoutesMountedInHubMode(t *testing.T) {
 		"POST /api/federation/heartbeat",
 		"GET /api/federation/spokes",
 		"DELETE /api/federation/spokes/{id}",
+		"POST /api/federation/projects/{project}/graphql",
 	}
 	have := map[string]bool{}
 	for _, p := range s.routePatterns {
@@ -94,6 +96,71 @@ func TestFederationRoutesMountedInHubMode(t *testing.T) {
 		if !have[p] {
 			t.Errorf("expected route %q not mounted", p)
 		}
+	}
+}
+
+func TestFederationForwardMutation_RoutesToProjectOwner(t *testing.T) {
+	s := newHubServer(t, false)
+
+	var gotMethod string
+	var gotPath string
+	var gotHeaders http.Header
+	var gotBody []byte
+	spoke := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		gotMethod = r.Method
+		gotPath = r.URL.Path
+		gotHeaders = r.Header.Clone()
+		gotBody, _ = io.ReadAll(r.Body)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":{"forwarded":true}}`))
+	}))
+	t.Cleanup(spoke.Close)
+
+	s.hub.mu.Lock()
+	s.hub.registry = federation.NewRegistry()
+	if err := s.hub.registry.UpsertSpoke(federation.SpokeRecord{
+		NodeID:     "node-a",
+		Name:       "alpha",
+		URL:        spoke.URL,
+		ProjectIDs: []string{"proj-a"},
+		Status:     federation.StatusActive,
+	}); err != nil {
+		s.hub.mu.Unlock()
+		t.Fatalf("upsert spoke: %v", err)
+	}
+	s.hub.mu.Unlock()
+
+	req := httptest.NewRequest(http.MethodPost, "/api/federation/projects/proj-a/graphql", bytes.NewBufferString(`{"query":"mutation { doThing }"}`))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-DDx-Origin-Identity", "origin-123")
+	req.Header.Set("X-DDx-Coordinator-Identity", "coord-456")
+	req.RemoteAddr = "127.0.0.1:54321"
+
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	resp := rec.Result()
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("status = %d, body=%s", resp.StatusCode, rec.Body.String())
+	}
+	if gotMethod != http.MethodPost {
+		t.Fatalf("spoke method = %s, want POST", gotMethod)
+	}
+	if gotPath != "/graphql" {
+		t.Fatalf("spoke path = %s, want /graphql", gotPath)
+	}
+	if got := gotHeaders.Get("X-DDx-Origin-Identity"); got != "origin-123" {
+		t.Fatalf("origin header = %q, want %q", got, "origin-123")
+	}
+	if got := gotHeaders.Get("X-DDx-Coordinator-Identity"); got != "coord-456" {
+		t.Fatalf("coordinator header = %q, want %q", got, "coord-456")
+	}
+	if string(gotBody) != `{"query":"mutation { doThing }"}` {
+		t.Fatalf("spoke body = %s", string(gotBody))
+	}
+	if body := rec.Body.String(); body != `{"data":{"forwarded":true}}` {
+		t.Fatalf("response body = %s", body)
 	}
 }
 

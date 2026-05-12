@@ -311,3 +311,53 @@ func TestDefaultStatePathHonorsXDG(t *testing.T) {
 		t.Fatalf("default path missing ~/.local/share/ddx suffix: %q", p)
 	}
 }
+
+func TestRouteMutation_CorrectSpoke(t *testing.T) {
+	reg := NewRegistry()
+	if err := reg.UpsertSpoke(SpokeRecord{
+		NodeID:     "node-a",
+		Name:       "alpha",
+		URL:        "https://alpha.example",
+		ProjectIDs: []string{"proj-a", "proj-b"},
+		Status:     StatusActive,
+	}); err != nil {
+		t.Fatalf("upsert alpha: %v", err)
+	}
+	if err := reg.UpsertSpoke(SpokeRecord{
+		NodeID:     "node-b",
+		Name:       "beta",
+		URL:        "https://beta.example",
+		ProjectIDs: []string{"proj-c"},
+		Status:     StatusActive,
+	}); err != nil {
+		t.Fatalf("upsert beta: %v", err)
+	}
+
+	target, err := RouteMutationToProjectOwner(reg, "proj-b")
+	if err != nil {
+		t.Fatalf("route: %v", err)
+	}
+	if target.NodeID != "node-a" {
+		t.Fatalf("target node_id = %q, want %q", target.NodeID, "node-a")
+	}
+	if target.URL != "https://alpha.example" {
+		t.Fatalf("target url = %q, want %q", target.URL, "https://alpha.example")
+	}
+}
+
+func TestRouteMutation_NoOwner_ReturnsError(t *testing.T) {
+	reg := NewRegistry()
+	if err := reg.UpsertSpoke(SpokeRecord{
+		NodeID:     "node-a",
+		Name:       "alpha",
+		URL:        "https://alpha.example",
+		ProjectIDs: []string{"proj-a"},
+		Status:     StatusActive,
+	}); err != nil {
+		t.Fatalf("upsert alpha: %v", err)
+	}
+
+	if _, err := RouteMutationToProjectOwner(reg, "unknown"); err == nil {
+		t.Fatalf("expected error for unknown project owner")
+	}
+}
