@@ -44,22 +44,6 @@ jobs:
         go install github.com/evilmartians/lefthook@latest
         echo "$(go env GOPATH)/bin" >> $GITHUB_PATH
 
-    - name: Verify git-subtree availability
-      run: |
-        # git-subtree should be included with git, verify it's available
-        if ! git subtree --help >/dev/null 2>&1; then
-          echo "git-subtree not found, attempting to install..."
-          # On some distros it's a separate package
-          sudo apt-get update
-          sudo apt-get install -y git-subtree || true
-          # Verify again
-          if ! git subtree --help >/dev/null 2>&1; then
-            echo "ERROR: git-subtree is not available"
-            exit 1
-          fi
-        fi
-        echo "✓ git-subtree is available"
-
     - name: Set up Bun
       uses: oven-sh/setup-bun@v2
       with:
