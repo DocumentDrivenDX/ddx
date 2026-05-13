@@ -25,14 +25,14 @@ all: clean deps test build
 # Build SvelteKit frontend (required before Go build for //go:embed).
 # Skip rebuild when no source file is newer than the last build output.
 FRONTEND_SRC := $(shell find internal/server/frontend/src internal/server/frontend/static -type f 2>/dev/null)
-FRONTEND_STAMP := internal/server/frontend/build/index.html
+FRONTEND_STAMP := internal/server/frontend/build/.frontend-build-stamp
 
 frontend-build: $(FRONTEND_STAMP)
 
 $(FRONTEND_STAMP): $(FRONTEND_SRC) internal/server/frontend/package.json internal/server/frontend/svelte.config.js internal/server/frontend/vite.config.ts
 	@echo "Building SvelteKit frontend..."
 	cd internal/server/frontend && bun install --frozen-lockfile && bun run build
-	@$(MAKE) --no-print-directory frontend-verify
+	@touch internal/server/frontend/build/.gitkeep $(FRONTEND_STAMP)
 
 # Force a frontend rebuild regardless of timestamps
 frontend-rebuild:
@@ -81,7 +81,7 @@ copy-skills:
 	@if [ -d "../.ddx/skills/ddx" ]; then rsync -a --delete $(SKILLS_SRC)/ ../.ddx/skills/ddx/; fi
 
 # Build for current platform
-build: copy-skills frontend-build
+build: copy-skills frontend-build frontend-verify
 	@echo "Building DDx CLI..."
 	@mkdir -p $(BUILD_DIR)
 	go build $(LDFLAGS) -o $(BUILD_DIR)/ddx .
