@@ -1,0 +1,71 @@
+{
+  "attempt_id": "20260513T011254-7fe1366c",
+  "bead_id": "ddx-b383c323",
+  "base_rev": "7af2b8949cacb3133a57c4c0bd57a133fa76b80a",
+  "created_at": "2026-05-13T01:12:59.29002292Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-b383c323",
+    "title": "Document Story 16 run-detail contracts across FEAT specs",
+    "description": "PROBLEM\nStory 16 run-detail behavior spans FEAT-008, FEAT-010, and FEAT-019, so a worker given the parent bead must update multiple governing artifacts before implementation can be reviewed against an official contract.\n\nROOT CAUSE\n- docs/helix/01-frame/features/FEAT-008-web-ui.md:101 defines the Run-detail page surface and docs/helix/01-frame/features/FEAT-008-web-ui.md:106-113 is where the project-read trust boundary and evidence whitelist belong.\n- docs/helix/01-frame/features/FEAT-010-task-execution.md:1216-1267 owns run-detail access auditing, resolver fields, tool-call pagination, and bundle-file confinement.\n- docs/helix/01-frame/features/FEAT-019-agent-evaluation.md:54-74 owns evaluation UX drill-down links into the shared project-scoped run-detail surface.\n- Parent context: ddx-b4c5151a, originally split from ddx-70a432b5. Preserve dependency IDs ddx-f04faa86 and ddx-4cd64068 when filing this child.\n\nPROPOSED FIX\nUpdate FEAT-008 to state that anyone with project read access can inspect raw prompts, responses, stderr, and tool-call arguments, and to define the inline evidence whitelist (*.txt, *.md, manifest.json, prompt.md, result.json, files under 64 KB; no Markdown rendering as HTML). Update FEAT-010 to document run(id:) prompt, response, stderr, bundleFiles[], runToolCalls(id:, first:, after:), runBundleFile(id:, path:), bundle-root confinement, and drain-time ToolCallEntry normalization. Update FEAT-019 to point review/evaluation drill-downs at /runs/[runId] instead of a parallel detail page.\n\nNON-SCOPE\n- Frontend implementation; Story 16.1 and Story 16.2 own the production page and evidence tab.\n- New auth or role-based access control beyond documenting the trust boundary.\n- Backend resolver, audit-event emission, and Playwright e2e implementation assigned to sibling child beads.\n- Do not implement parent acceptance criteria assigned to sibling child beads.",
+    "acceptance": "1. Add or update TestStory16RunDetailSpecContracts to assert FEAT-008 contains the raw prompt/response/stderr/tool-args trust boundary, the exact evidence whitelist, the 64 KB inline cap, and the no-Markdown-rendering rule.\n2. TestStory16RunDetailSpecContracts also asserts FEAT-010 names prompt, response, stderr, bundleFiles[], toolCalls(first, after), bundleFile(path), bundle-root confinement, and normalized ToolCallEntry, and that FEAT-019 links evaluation drill-down to /runs/[runId].\n3. cd cli \u0026\u0026 go test ./cmd/... -run TestStory16RunDetailSpecContracts passes.\n4. cd cli \u0026\u0026 go test ./... passes.\n5. lefthook run pre-commit passes.",
+    "parent": "ddx-f129bfaf",
+    "labels": [
+      "phase:2",
+      "story:16",
+      "area:docs",
+      "kind:docs",
+      "spec:FEAT-008",
+      "spec:FEAT-010",
+      "spec:FEAT-019",
+      "decomposed",
+      "needs-human-decomposition"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-13T01:12:08Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "301506",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"depth\":3,\"max\":3}",
+          "created_at": "2026-05-13T01:12:08.930088062Z",
+          "kind": "triage-overflow",
+          "source": "ddx work",
+          "summary": "depth cap exceeded"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"bead depth 3 reached max_decomposition_depth 3; operator must split\",\"fingerprint\":\"94c841f916ea8dd55f9c10e471020fe274d118cdf54d7997ef0f8baecea57445\",\"policy_mode\":\"warn-only\",\"reason\":\"decomposition_depth_cap\",\"rule_id\":\"pre_claim_intake.decomposition_depth_cap\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T01:12:09.122106548Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "decomposition_depth_cap"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Doc-only bead is execution-ready: the title is imperative and scoped, the description includes PROBLEM/ROOT CAUSE/PROPOSED FIX/NON-SCOPE with file:line citations, the AC names `TestStory16RunDetailSpecContracts` plus the required `go test` and `lefthook` gates, labels include phase/area/kind/spec cross-refs, and parent/dependency IDs are explicit; the code-path assertion criterion is waived because this is documentation work.\",\"score\":8,\"suggested_fixes\":[],\"waivers_applied\":[\"doc-only waiver applied to criterion 4 (wired-in assertion)\"]}",
+          "created_at": "2026-05-13T01:12:54.624743353Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=8"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-13T01:12:08.737600593Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260513T011254-7fe1366c",
+    "prompt": ".ddx/executions/20260513T011254-7fe1366c/prompt.md",
+    "manifest": ".ddx/executions/20260513T011254-7fe1366c/manifest.json",
+    "result": ".ddx/executions/20260513T011254-7fe1366c/result.json",
+    "checks": ".ddx/executions/20260513T011254-7fe1366c/checks.json",
+    "usage": ".ddx/executions/20260513T011254-7fe1366c/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-b383c323-20260513T011254-7fe1366c"
+  },
+  "prompt_sha": "87d7fd00bae00e776af333f8ac531eb47216ac4f4871bd9a3960763781cbbb1d"
+}
