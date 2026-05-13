@@ -465,20 +465,30 @@ func TeeJSONL(base io.Writer, p *Probe) io.Writer {
 type teeWriter struct {
 	base  io.Writer
 	probe *Probe
+	mu    sync.Mutex
 	buf   []byte
 }
 
 func (t *teeWriter) Write(b []byte) (int, error) {
+	t.mu.Lock()
+	defer t.mu.Unlock()
+
 	n, err := t.base.Write(b)
 	// Accumulate; emit one Event per newline-terminated chunk.
-	t.buf = append(t.buf, b...)
+	if n > 0 {
+		t.buf = append(t.buf, b[:n]...)
+	}
+	var lines [][]byte
 	for {
 		i := indexByte(t.buf, '\n')
 		if i < 0 {
 			break
 		}
-		line := t.buf[:i]
+		line := append([]byte(nil), t.buf[:i]...)
 		t.buf = t.buf[i+1:]
+		lines = append(lines, line)
+	}
+	for _, line := range lines {
 		t.dispatch(line)
 	}
 	return n, err

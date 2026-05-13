@@ -2732,8 +2732,10 @@ func writeLoopEvent(sink io.Writer, sessionID, eventType string, data map[string
 	if err != nil {
 		return
 	}
-	_, _ = sink.Write(line)
-	_, _ = sink.Write([]byte("\n"))
+	frame := make([]byte, len(line)+1)
+	copy(frame, line)
+	frame[len(line)] = '\n'
+	_, _ = sink.Write(frame)
 }
 
 func resourceExhaustedCheckResult(report ExecuteBeadReport) (ExecutionResourceCheckResult, bool) {
