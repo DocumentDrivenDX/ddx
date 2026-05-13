@@ -455,6 +455,23 @@ func TestAuditEvent_RawTranscriptViewed(t *testing.T) {
 	if !strings.Contains(events[0].Body, "visibility=project_membership") {
 		t.Fatalf("raw transcript audit body missing visibility marker: %q", events[0].Body)
 	}
+
+	// Repeated transcript access for the same run must not append a duplicate
+	// raw_transcript_viewed event (AC 3).
+	resp = gqlPost(t, h, `{ run(id: "run-raw-001") { id prompt response stderr } }`)
+	if err := json.Unmarshal(resp["data"], &transcriptOut); err != nil {
+		t.Fatalf("parse repeat transcript query: %v", err)
+	}
+	if transcriptOut.Run == nil || transcriptOut.Run.Prompt == nil {
+		t.Fatalf("expected repeat transcript query to resolve run, got %+v", transcriptOut.Run)
+	}
+	events, err = store.EventsByKind(beadID, "raw_transcript_viewed")
+	if err != nil {
+		t.Fatalf("get raw transcript events after repeat query: %v", err)
+	}
+	if len(events) != 1 {
+		t.Fatalf("expected raw_transcript_viewed dedupe to keep exactly 1 event after repeat access, got %d", len(events))
+	}
 }
 
 // TestRunFilter_LayerFilter covers applyRunFilter edge cases.
