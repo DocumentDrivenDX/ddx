@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
@@ -60,7 +61,7 @@ type preClaimReadinessClassificationPromptResult struct {
 	Rationale         string                            `json:"rationale,omitempty"`
 	Detail            string                            `json:"detail,omitempty"`
 	Reasoning         string                            `json:"reasoning,omitempty"`
-	ReadinessChecks   []preClaimReadinessCheck          `json:"readiness_checks,omitempty"`
+	ReadinessChecks   preClaimReadinessChecksPayload    `json:"readiness_checks,omitempty"`
 	SuggestedFixes    []preClaimReadinessSuggestedFix   `json:"suggested_fixes,omitempty"`
 	SuggestedChildren []preClaimReadinessSuggestedChild `json:"suggested_child_beads,omitempty"`
 	WaiversApplied    []preClaimReadinessWaiver         `json:"waivers_applied,omitempty"`
@@ -92,6 +93,49 @@ type preClaimReadinessWaiver struct {
 	Reason   string   `json:"reason,omitempty"`
 	Criteria []string `json:"criteria,omitempty"`
 	Evidence string   `json:"evidence,omitempty"`
+}
+
+type preClaimReadinessChecksPayload struct {
+	Checks    []preClaimReadinessCheck
+	Present   bool
+	Malformed string
+	Evidence  string
+}
+
+func (p *preClaimReadinessChecksPayload) UnmarshalJSON(data []byte) error {
+	trimmed := strings.TrimSpace(string(data))
+	if trimmed == "" || trimmed == "null" {
+		return nil
+	}
+
+	p.Present = true
+	switch trimmed[0] {
+	case '[':
+		return json.Unmarshal(data, &p.Checks)
+	case '{':
+		var check preClaimReadinessCheck
+		if err := json.Unmarshal(data, &check); err != nil {
+			return err
+		}
+		p.Checks = []preClaimReadinessCheck{check}
+		return nil
+	case '"':
+		var value string
+		if err := json.Unmarshal(data, &value); err != nil {
+			return err
+		}
+		p.Malformed = "readiness_checks must be an object or array"
+		p.Evidence = value
+		return nil
+	default:
+		p.Malformed = "readiness_checks must be an object or array"
+		p.Evidence = trimmed
+		return nil
+	}
+}
+
+func (p preClaimReadinessChecksPayload) Len() int {
+	return len(p.Checks)
 }
 
 // NewPreClaimIntakeHook constructs the bead-intake complexity gate used
@@ -306,15 +350,13 @@ func decodePreClaimIntakePayloadResult(payload string) (PreClaimIntakeResult, er
 
 func decodePreClaimIntakePayloadResultWithMode(payload string, qualityMode string) (PreClaimIntakeResult, error) {
 	var probe struct {
-		Classification  string `json:"classification"`
-		Outcome         string `json:"outcome"`
-		Tractability    string `json:"tractability"`
-		Rationale       string `json:"rationale"`
-		Score           *int   `json:"score"`
-		ReadinessChecks []struct {
-			Reason string `json:"reason,omitempty"`
-		} `json:"readiness_checks"`
-		SuggestedFixes []struct {
+		Classification  string                         `json:"classification"`
+		Outcome         string                         `json:"outcome"`
+		Tractability    string                         `json:"tractability"`
+		Rationale       string                         `json:"rationale"`
+		Score           *int                           `json:"score"`
+		ReadinessChecks preClaimReadinessChecksPayload `json:"readiness_checks"`
+		SuggestedFixes  []struct {
 			Target string `json:"target,omitempty"`
 		} `json:"suggested_fixes"`
 	}
@@ -325,7 +367,7 @@ func decodePreClaimIntakePayloadResultWithMode(payload string, qualityMode strin
 		return decodeCanonicalReadinessPayloadWithMode(payload, qualityMode)
 	}
 	if probe.Classification != "" {
-		if isReadinessClassificationPayload(probe.Classification, probe.Tractability, probe.Rationale, probe.Score, len(probe.ReadinessChecks), len(probe.SuggestedFixes)) {
+		if isReadinessClassificationPayload(probe.Classification, probe.Tractability, probe.Rationale, probe.Score, probe.ReadinessChecks.Present, probe.ReadinessChecks.Len(), len(probe.SuggestedFixes)) {
 			return decodeReadinessClassificationPayloadWithMode(payload, qualityMode)
 		}
 		return decodeLegacyIntakePayload(payload)
@@ -333,7 +375,7 @@ func decodePreClaimIntakePayloadResultWithMode(payload string, qualityMode strin
 	return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: missing classification or outcome field")
 }
 
-func isReadinessClassificationPayload(classification, tractability, rationale string, score *int, checkCount, fixCount int) bool {
+func isReadinessClassificationPayload(classification, tractability, rationale string, score *int, readinessChecksPresent bool, checkCount, fixCount int) bool {
 	switch strings.ToLower(strings.TrimSpace(classification)) {
 	case ReadinessClassificationSystemUnready,
 		"readiness_error",
@@ -343,7 +385,8 @@ func isReadinessClassificationPayload(classification, tractability, rationale st
 		ReadinessClassificationOperatorRequired:
 		return true
 	case "ready":
-		return strings.TrimSpace(tractability) != "" ||
+		return readinessChecksPresent ||
+			strings.TrimSpace(tractability) != "" ||
 			strings.TrimSpace(rationale) != "" ||
 			score != nil ||
 			checkCount > 0 ||
@@ -399,11 +442,21 @@ func decodeReadinessClassificationPayloadWithMode(payload string, qualityMode st
 	if err := json.Unmarshal([]byte(payload), &out); err != nil {
 		return PreClaimIntakeResult{}, fmt.Errorf("pre-claim intake: decode readiness classification result: %w", err)
 	}
-	reasons := failedReadinessReasons(out.ReadinessChecks)
+	if out.ReadinessChecks.Malformed != "" {
+		detail := malformedReadinessChecksDetail(out.ReadinessChecks)
+		classified := ClassifyReadinessWithMode(ReadinessClassificationSystemUnready, nil, detail, qualityMode)
+		return PreClaimIntakeResult{
+			Outcome:      classified.IntakeOutcome,
+			Reason:       classified.Reason,
+			SystemReason: classified.SystemReason,
+			Detail:       detail,
+		}, nil
+	}
+	reasons := failedReadinessReasons(out.ReadinessChecks.Checks)
 	detail := firstNonEmptyReadinessDetail(out.Rationale, out.Detail, out.Reasoning)
 	classified := ClassifyReadinessWithMode(out.Classification, reasons, detail, qualityMode)
 	if detail == "" {
-		detail = readinessCheckEvidence(out.ReadinessChecks)
+		detail = readinessCheckEvidence(out.ReadinessChecks.Checks)
 	}
 	detail = readinessDetailWithReason(classified, detail)
 
@@ -437,6 +490,17 @@ func failedReadinessReasons(checks []preClaimReadinessCheck) []string {
 		}
 	}
 	return reasons
+}
+
+func malformedReadinessChecksDetail(checks preClaimReadinessChecksPayload) string {
+	detail := strings.TrimSpace(checks.Malformed)
+	if detail == "" {
+		detail = "readiness_checks must be an object or array"
+	}
+	if evidence := strings.TrimSpace(checks.Evidence); evidence != "" {
+		detail += ": " + strconv.Quote(evidence)
+	}
+	return detail
 }
 
 func readinessCheckEvidence(checks []preClaimReadinessCheck) string {

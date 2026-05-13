@@ -147,6 +147,27 @@ func TestReadinessClassification_DecodesReadinessSchema(t *testing.T) {
 	assert.Empty(t, refine.SystemReason)
 }
 
+func TestPreClaimReadiness_NormalizesSingletonReadinessChecksObject(t *testing.T) {
+	got, err := decodePreClaimIntakePayloadResult(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}}`)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeActionableAtomic, got.Outcome)
+	assert.Equal(t, ReadinessReasonMissingVerification, got.Reason)
+	assert.Contains(t, got.Detail, "verification is absent")
+	assert.Contains(t, got.Detail, ReadinessReasonMissingVerification)
+	assert.Empty(t, got.SystemReason)
+}
+
+func TestPreClaimReadiness_NormalizesScalarReadinessChecksString(t *testing.T) {
+	got, err := decodePreClaimIntakePayloadResult(`{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":"missing_verification"}`)
+	require.NoError(t, err)
+	assert.Equal(t, PreClaimIntakeError, got.Outcome)
+	assert.Equal(t, ReadinessReasonSystemUnready, got.Reason)
+	assert.Equal(t, ReadinessSystemReasonUnavailable, got.SystemReason)
+	assert.Contains(t, got.Detail, "readiness_checks")
+	assert.Contains(t, got.Detail, "missing_verification")
+	assert.NotContains(t, got.Detail, "Go struct field")
+}
+
 func TestReadinessClassification_NeedsRefineBlocksInBlockMode(t *testing.T) {
 	got := ClassifyReadinessWithMode(
 		ReadinessClassificationNeedsRefine,
