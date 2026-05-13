@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -223,6 +224,96 @@ func TestSessionIndexEntryFromResult_PersistsToolCalls(t *testing.T) {
 	if entry.ToolCalls[0].Tool != "Read" || entry.ToolCalls[1].Tool != "Edit" {
 		t.Fatalf("persisted tool calls do not match input: %+v", entry.ToolCalls)
 	}
+}
+
+// TestStory16RunDetailP95FixtureShape pins the Go-side fixture and resolver
+// shape that the Story 16 Playwright p95 flow asserts in the browser: the
+// run-tool-call resolver must surface exactly 200 ToolCalls (in stable seq
+// order) and the bundle-files lister must surface exactly 30 evidence files
+// (in path-sorted order with mimeType populated) for the same run.
+func TestStory16RunDetailP95FixtureShape(t *testing.T) {
+	const toolCount = 200
+	const evidenceCount = 30
+
+	workDir := t.TempDir()
+	writeConfig(t, workDir, `version: "1.0"`+"\n")
+	state := stateWithProject(workDir)
+
+	bundleID := "20260502T120000-p95shape"
+	bundleDir := filepath.Join(workDir, agent.ExecuteBeadArtifactDir, bundleID)
+	if err := os.MkdirAll(filepath.Join(bundleDir, "evidence"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < evidenceCount; i++ {
+		name := filepath.Join("evidence", "evidence-"+leftPad2(i)+".txt")
+		body := []byte("evidence body for " + name)
+		if err := os.WriteFile(filepath.Join(bundleDir, name), body, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	toolCalls := make([]agent.ToolCallEntry, toolCount)
+	for i := 0; i < toolCount; i++ {
+		toolCalls[i] = agent.ToolCallEntry{
+			Tool:     map[bool]string{true: "Bash", false: "Read"}[i%2 == 0],
+			Input:    `{"command":"echo step ` + strconv.Itoa(i) + `"}`,
+			Output:   "step-" + strconv.Itoa(i) + "-output",
+			Duration: i + 1,
+		}
+	}
+	now := time.Date(2026, 5, 2, 12, 0, 0, 0, time.UTC)
+	entry := agent.SessionIndexEntry{
+		ID:          "sess-p95-001",
+		Harness:     "claude",
+		BillingMode: "paid",
+		StartedAt:   now,
+		BundlePath:  filepath.ToSlash(filepath.Join(agent.ExecuteBeadArtifactDir, bundleID)),
+		ToolCalls:   toolCalls,
+	}
+	if err := agent.AppendSessionIndex(agent.SessionLogDirForWorkDir(workDir), entry, now); err != nil {
+		t.Fatal(err)
+	}
+
+	calls := state.GetRunToolCallsGraphQL(entry.ID)
+	if len(calls) != toolCount {
+		t.Fatalf("GetRunToolCallsGraphQL: got %d calls, want %d", len(calls), toolCount)
+	}
+	for i, c := range calls {
+		if c.Seq != i {
+			t.Fatalf("calls[%d].Seq=%d, want %d", i, c.Seq, i)
+		}
+		if c.ID != "rtc-"+strconv.Itoa(i) {
+			t.Fatalf("calls[%d].ID=%s, want rtc-%d", i, c.ID, i)
+		}
+	}
+	if calls[0].Tool != "Bash" || calls[1].Tool != "Read" || calls[toolCount-1].Tool != "Read" {
+		t.Fatalf("tool-call name pattern broken: [0]=%s [1]=%s [last]=%s",
+			calls[0].Tool, calls[1].Tool, calls[toolCount-1].Tool)
+	}
+
+	files := listRunBundleFiles(bundleDir)
+	if len(files) != evidenceCount {
+		t.Fatalf("listRunBundleFiles: got %d files, want %d", len(files), evidenceCount)
+	}
+	for i, f := range files {
+		want := "evidence/evidence-" + leftPad2(i) + ".txt"
+		if f.Path != want {
+			t.Fatalf("files[%d].Path=%s, want %s", i, f.Path, want)
+		}
+		if f.MimeType != "text/plain" {
+			t.Fatalf("files[%d].MimeType=%s, want text/plain", i, f.MimeType)
+		}
+		if f.Size == 0 {
+			t.Fatalf("files[%d].Size=0, want non-zero", i)
+		}
+	}
+}
+
+func leftPad2(n int) string {
+	if n < 10 {
+		return "0" + strconv.Itoa(n)
+	}
+	return strconv.Itoa(n)
 }
 
 // TestResolveRunBundlePath_DotDotEscape covers the canonical-path check on

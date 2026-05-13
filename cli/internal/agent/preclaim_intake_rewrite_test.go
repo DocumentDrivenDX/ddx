@@ -477,10 +477,55 @@ func TestPreClaimIntakePrompt_AsksForFitForPurposeValidatedReplacement(t *testin
 
 	assert.Contains(t, lower, "prompt-quality improvements")
 	assert.Contains(t, lower, "suggested_fixes")
-	assert.Contains(t, lower, "do not rewrite")
+	assert.Contains(t, lower, "tractability")
+	assert.Contains(t, lower, "score")
+	assert.Contains(t, lower, "rationale")
+	assert.Contains(t, lower, "suggested_child_beads")
+	assert.Contains(t, lower, "waivers_applied")
 
 	// Prompt must instruct the model to classify unclear cases as operator_required.
 	assert.Contains(t, lower, "operator_required",
 		"prompt must instruct classification as operator_required for unclear cases; got:\n%s", prompt)
 	assert.NotContains(t, lower, "ambiguous_needs_human")
+}
+
+func TestBuildPreClaimIntakePrompt_UsesDocumentedReadinessSchema(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+
+	prompt, err := buildPreClaimIntakePrompt(root, store, b)
+	require.NoError(t, err)
+
+	lower := strings.ToLower(prompt)
+	for _, want := range []string{
+		"classification",
+		"tractability",
+		"score",
+		"rationale",
+		"readiness_checks",
+		"suggested_fixes",
+		"rewrite",
+		"suggested_child_beads",
+		"waivers_applied",
+	} {
+		assert.Contains(t, lower, want)
+	}
+	assert.NotContains(t, lower, "confidence")
+	assert.NotContains(t, lower, "reasoning")
+}
+
+func TestBuildPreClaimIntakePrompt_ForbidsScalarReadinessChecks(t *testing.T) {
+	root := newPreClaimIntakeHookTestRoot(t)
+	store, b := newPreClaimIntakeHookTestStore(t, root)
+
+	prompt, err := buildPreClaimIntakePrompt(root, store, b)
+	require.NoError(t, err)
+
+	lower := strings.ToLower(prompt)
+	assert.Contains(t, lower, "readiness_checks must be a json array")
+	assert.Contains(t, lower, "must not be an object or string")
+	assert.Contains(t, lower, "reason")
+	assert.Contains(t, lower, "verdict")
+	assert.Contains(t, lower, "evidence")
+	assert.Contains(t, lower, "checkable_before_attempt")
 }

@@ -716,6 +716,76 @@ func TestExecuteBeadWorkerStdout_ReadinessResultLine(t *testing.T) {
 	assert.NotContains(t, line, candidate.ID)
 }
 
+func TestExecuteBeadWorkerStdout_ReadinessMalformedSchemaIsActionable(t *testing.T) {
+	tests := []struct {
+		name        string
+		payload     string
+		wantLogMsg  string
+		wantOutcome PreClaimIntakeOutcome
+	}{
+		{
+			name:        "singleton_object",
+			payload:     `{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":{"reason":"missing_verification","verdict":"fail","evidence":"AC lacks go test"}}`,
+			wantOutcome: PreClaimIntakeActionableAtomic,
+		},
+		{
+			name:        "string",
+			payload:     `{"classification":"needs_refine","rationale":"verification is absent","readiness_checks":"missing_verification"}`,
+			wantLogMsg:  "readiness_checks",
+			wantOutcome: PreClaimIntakeError,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			inner, _, _ := newExecuteLoopTestStore(t)
+			store := &claimCountingStore{Store: inner}
+
+			worker := &ExecuteBeadWorker{
+				Store: store,
+				Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+					return ExecuteBeadReport{
+						BeadID:    beadID,
+						Status:    ExecuteBeadStatusSuccess,
+						SessionID: "sess-readiness-malformed",
+						ResultRev: "abc791",
+					}, nil
+				}),
+				Now: func() time.Time {
+					return time.Date(2026, 5, 9, 12, 34, 56, 789000000, time.UTC)
+				},
+			}
+
+			cfgOpts := config.TestLoopConfigOpts{Assignee: "worker"}
+			rcfg := config.NewTestConfigForLoop(cfgOpts).Resolve(config.TestLoopOverrides(cfgOpts))
+
+			var log bytes.Buffer
+			result, err := worker.Run(context.Background(), rcfg, ExecuteBeadLoopRuntime{
+				Once: true,
+				Log:  &log,
+				PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+					got, err := decodePreClaimIntakePayloadResult(tt.payload)
+					require.NoError(t, err)
+					return got, nil
+				},
+			})
+			require.NoError(t, err)
+			require.NotNil(t, result)
+
+			if tt.wantLogMsg != "" {
+				line := renderedLineContaining(t, log.String(), tt.wantLogMsg)
+				assert.Contains(t, line, tt.wantLogMsg)
+				assert.NotContains(t, line, "Go struct field")
+			}
+
+			if tt.wantOutcome != "" {
+				assert.Contains(t, log.String(), "readiness check: starting")
+			}
+			assert.NotContains(t, log.String(), "Go struct field .readiness_checks")
+		})
+	}
+}
+
 func TestIntake_ActionableButRewritten_UpdatesAfterClaim(t *testing.T) {
 	inner, candidate, _ := newExecuteLoopTestStore(t)
 	require.NoError(t, inner.Update(candidate.ID, func(b *bead.Bead) {

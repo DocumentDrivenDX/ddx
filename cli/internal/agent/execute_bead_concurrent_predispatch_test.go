@@ -54,11 +54,12 @@ func TestExecuteBead_ConcurrentWorkers_NoHEADRefRace(t *testing.T) {
 		}).Resolve(config.CLIOverrides{})
 	}
 
-	// Seed caller dirt in the parent so each goroutine's SynthesizeCommit
-	// has real work to do — exercises the `git add` / `git commit` race
-	// window inside the locked critical section.
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "caller-dirt.txt"),
-		[]byte("dirt\n"), 0o644))
+	// Seed allowed DDx bookkeeping dirt in the parent so the checkpoint
+	// path has real work to do — exercises the `git add` / `git commit`
+	// race window inside the locked critical section without tripping the
+	// implementation-file rejection path.
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".ddx", "run-state.json"),
+		[]byte(`{"workers":"concurrent"}`+"\n"), 0o644))
 
 	// Run n ExecuteBeadWithConfig calls concurrently against the SAME
 	// projectRoot, with NO outer mutex serialising them. Without the

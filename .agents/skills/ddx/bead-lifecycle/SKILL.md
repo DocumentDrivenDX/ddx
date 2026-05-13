@@ -161,6 +161,10 @@ improvements in `suggested_fixes` only. Use `operator_required` only for actual
 ambiguity, missing prerequisites, hidden external blockers, or unsafe scope
 choices that prevent an implementation attempt.
 
+`readiness_checks` MUST be a JSON array. It may be empty, and every entry MUST
+be an object with `reason`, `verdict`, `evidence`, and
+`checkable_before_attempt`. It must not be an object or string.
+
 Legacy migration input aliases only: older records or prompts may mention `needs_human`.
 Treat that as a one-way migration signal for
 `operator_required` / `status=proposed`; never emit it as a current lifecycle

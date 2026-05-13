@@ -30,6 +30,7 @@ const (
 	ReadinessSystemReasonTransport         = "transport"
 	ReadinessSystemReasonResourceExhausted = "resource_exhausted"
 	ReadinessSystemReasonRepoConcurrency   = "repo_concurrency"
+	ReadinessSystemReasonTimeout           = "timeout"
 )
 
 // ReadinessClassificationResult is the deterministic bridge between the
@@ -232,6 +233,11 @@ func classifyReadinessSystemReason(detail string, reasons []string) string {
 		"usage ceiling",
 		"spend cap"):
 		return ReadinessSystemReasonQuota
+	case containsAny(combined,
+		"timeout after",
+		"timed out",
+		"context deadline exceeded"):
+		return ReadinessSystemReasonTimeout
 	case isTransportError(errors.New(combined)):
 		return ReadinessSystemReasonTransport
 	case containsAny(combined,
@@ -261,6 +267,7 @@ func triageClassificationForSystemReason(systemReason string) string {
 		return "transport"
 	case ReadinessSystemReasonResourceExhausted,
 		ReadinessSystemReasonRepoConcurrency,
+		ReadinessSystemReasonTimeout,
 		ReadinessSystemReasonUnavailable:
 		return "recoverable"
 	default:
@@ -273,6 +280,7 @@ func isDeterministicSystemOutcomeReason(reason string) bool {
 	case "routing",
 		"quota",
 		"transport",
+		"timeout",
 		"recoverable",
 		ReadinessSystemReasonResourceExhausted,
 		ReadinessSystemReasonRepoConcurrency,

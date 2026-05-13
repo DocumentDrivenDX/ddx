@@ -10,8 +10,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/DocumentDrivenDX/ddx/internal/skills"
 )
 
 // InstallPackage downloads the source release tarball and copies declared install mappings
@@ -107,29 +105,15 @@ func InstallPackage(pkg *Package, projectRoot string) (InstalledEntry, error) {
 		}
 	}
 
-	// Process Skills via the shared installer. skills.Install copies real
-	// files into <projectRoot>/.agents/skills/ and <projectRoot>/.claude/skills/.
-	// No symlinks are ever created — this is the cross-platform invariant
-	// that FEAT-015 relies on.
+	// Process Skills via the manifest mappings. Each mapping copies real files
+	// into its declared target. No symlinks are ever created -- this is the
+	// cross-platform invariant that FEAT-015 relies on.
 	if len(pkg.Install.Skills) > 0 {
-		// Use the extracted tarball as the skill source rather than the
-		// post-copy installed root: copyMapping skips broken symlinks (a
-		// known GitHub-tarball quirk), so the installed tree may have an
-		// empty .agents/skills/. The extracted dir preserves the original
-		// layout — including broken symlinks — and skills.discoverSkills
-		// recovers them via the skills/<name> fallback.
-		absExtracted, absErr := filepath.Abs(extractedDir)
-		if absErr != nil {
-			absExtracted = extractedDir
-		}
-		absProject, absErr := filepath.Abs(".")
-		if absErr != nil {
-			absProject = projectRoot
-		}
-		if err := skills.Install(os.DirFS(absExtracted), absProject, skills.Options{Force: true}); err != nil {
+		written, err := installMappings(extractedDir, pkg.Install.Skills)
+		if err != nil {
 			return entry, fmt.Errorf("installing skills: %w", err)
 		}
-		entry.Files = append(entry.Files, recordInstalledSkills(absExtracted, absProject)...)
+		entry.Files = append(entry.Files, written...)
 	}
 
 	// Process Scripts mapping — copy the script to the target path.
@@ -185,37 +169,18 @@ func InstallPackage(pkg *Package, projectRoot string) (InstalledEntry, error) {
 	return entry, nil
 }
 
-// recordInstalledSkills returns project-relative paths to the skill directories
-// installed under .agents/skills/ and .claude/skills/ that came from the given
-// plugin root.
-func recordInstalledSkills(installedRoot, projectRoot string) []string {
-	var names []string
-	for _, candidate := range []string{
-		filepath.Join(installedRoot, ".agents", "skills"),
-		filepath.Join(installedRoot, "skills"),
-	} {
-		entries, err := os.ReadDir(candidate)
+// installMappings applies each mapping relative to srcDir and returns the
+// project-relative files written by those mappings.
+func installMappings(srcDir string, mappings []InstallMapping) ([]string, error) {
+	var written []string
+	for _, mapping := range mappings {
+		files, err := copyMapping(srcDir, &mapping)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("copy %q -> %q: %w", mapping.Source, mapping.Target, err)
 		}
-		for _, e := range entries {
-			if e.IsDir() || e.Type()&os.ModeSymlink != 0 {
-				names = append(names, e.Name())
-			}
-		}
-		if len(names) > 0 {
-			break
-		}
+		written = append(written, files...)
 	}
-
-	var files []string
-	for _, name := range names {
-		for _, sub := range []string{".agents/skills", ".claude/skills"} {
-			rel := filepath.Join(filepath.FromSlash(sub), name)
-			files = append(files, rel)
-		}
-	}
-	return files
+	return written, nil
 }
 
 // InstallResource installs a single resource file (e.g. "persona/strict-code-reviewer")

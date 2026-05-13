@@ -1,0 +1,105 @@
+{
+  "attempt_id": "20260513T180409-2bc98b2b",
+  "bead_id": "ddx-f129bfaf",
+  "base_rev": "54f6ca0e236392ff9dd1ffddf746acaf2611b392",
+  "created_at": "2026-05-13T18:04:12.592465339Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f129bfaf",
+    "title": "Story 16.3: Specs + cross-cutting e2e + raw-transcript-viewed audit even: part 2",
+    "description": "PROBLEM\nParent bead ddx-b4c5151a is too broad for one execution pass. This child owns part 2 of 2 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nParent bead ddx-70a432b5 is too broad for one execution pass. This child owns part 3 of 3 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nFEAT-008, FEAT-010, and FEAT-019 specs are missing the documentation sections required to make the Story-16 run-detail page and its evidence browser official. Without spec updates, the run-detail page, trust boundary statement, and raw-transcript audit event are undocumented platform behaviors.\n\nROOT CAUSE\n- docs/helix/01-frame/features/FEAT-008-*.md: missing a Run-detail-page subsection describing the trust boundary ('Anyone with project read access sees raw prompts, responses, stderr, tool args') and evidence browser whitelist (allowed extensions + 64KB cap).\n- docs/helix/01-frame/features/FEAT-010-*.md: Run resolver contract does not include prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path) with bundle-root confinement, or normalized ToolCallEntry.\n- docs/helix/01-frame/features/FEAT-019-*.md: review surface does not point to /runs/[runId] deep page.\n- No 'raw transcript viewed' audit event exists in the server or schema.\n- Depends on ddx-f04faa86 (16.1 page) and ddx-4cd64068 (16.2 evidence tab).\n\nPROPOSED FIX\n- Update FEAT-008: add Run-detail-page subsection with trust-boundary statement + evidence whitelist (*.txt, *.md, manifest.json, prompt.md, result.json, files \u003c 64KB; no Markdown rendering in evidence tab).\n- Update FEAT-010: extend Run resolver contract with prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path) with bundle-root confinement; document normalized ToolCallEntry as canonical store populated at drain.\n- Update FEAT-019: review surface section updated to link to /runs/[runId] deep page.\n- Add 'raw transcript viewed' audit event in server (emitted on prompt/response/transcript access).\n- Add cross-cutting e2e: full prompt/response/tool-trace/evidence-list end-to-end via Playwright.\n\nNON-SCOPE\n- Frontend implementation (that is Story 16.1 and 16.2).\n- New auth or role-based access control beyond what the trust boundary statement documents.\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- p95 dataset (200 tool calls, 30 evidence files) all tabs render and become interactive within one render frame.\n- bun run test:e2e green.\n- lefthook run pre-commit passes.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- lefthook run pre-commit passes.\n- cd cli \u0026\u0026 go test ./... passes.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. lefthook run pre-commit passes.\n2. cd cli \u0026\u0026 go test ./... passes.",
+    "parent": "ddx-b4c5151a",
+    "labels": [
+      "phase:2",
+      "story:16",
+      "ac-quality:needs-refinement",
+      "decomposed"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-13T18:02:50Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "323328",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: canceled: context canceled\"}",
+          "created_at": "2026-05-13T00:01:36.561996229Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"requested_harness\":\"codex\",\"requested_model\":\"gpt-5.4-mini\"}",
+          "created_at": "2026-05-13T00:01:40.348189896Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"agent exited without a commit or no_changes_rationale.txt\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"reason\":\"context_canceled\"}",
+          "created_at": "2026-05-13T00:01:40.86748288Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "context_canceled"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260513T000136-e8b1b3fd\",\"bead_id\":\"ddx-f129bfaf\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-13T00:01:40.949094881Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic tier=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-05-13T00:01:41.108120181Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "context canceled",
+          "created_at": "2026-05-13T00:01:41.189974108Z",
+          "kind": "loop-error",
+          "source": "ddx work",
+          "summary": "addBeadLabel failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"ac_map\":[{\"parent_ac\":\"Update FEAT-008: add Run-detail-page subsection with trust-boundary statement + evidence whitelist (*.txt, *.md, manifest.json, prompt.md, result.json, files \\u003c 64KB; no Markdown rendering in evidence tab).\",\"coverage\":\"Child 1 AC1-AC2\"},{\"parent_ac\":\"Update FEAT-010: extend Run resolver contract with prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path) with bundle-root confinement; document normalized ToolCallEntry as canonical store populated at drain.\",\"coverage\":\"Child 1 AC2 and Child 2 AC1-AC5\"},{\"parent_ac\":\"Update FEAT-019: review surface section updated to link to /runs/[runId] deep page.\",\"coverage\":\"Child 1 AC2\"},{\"parent_ac\":\"Add 'raw transcript viewed' audit event in server (emitted on prompt/response/transcript access).\",\"coverage\":\"Child 3 AC1-AC5\"},{\"parent_ac\":\"Add cross-cutting e2e: full prompt/response/tool-trace/evidence-list end-to-end via Playwright.\",\"coverage\":\"Child 4 AC1 and AC5\"},{\"parent_ac\":\"p95 dataset (200 tool calls, 30 evidence files) all tabs render and become interactive within one render frame.\",\"coverage\":\"Child 4 AC2-AC4\"},{\"parent_ac\":\"bun run test:e2e green.\",\"coverage\":\"Child 4 AC5\"},{\"parent_ac\":\"lefthook run pre-commit passes.\",\"coverage\":\"Child 1 AC5; Child 2 AC6; Child 3 AC6; Child 4 AC7\"},{\"parent_ac\":\"cd cli \\u0026\\u0026 go test ./... passes.\",\"coverage\":\"Child 1 AC4; Child 2 AC5; Child 3 AC5; Child 4 AC6\"}],\"child_ids\":[\"ddx-b383c323\",\"ddx-7c256284\",\"ddx-ddeec4f1\",\"ddx-f07cb5d3\"],\"rationale\":\"Split by independently executable ownership boundary: governing docs, backend resolver/data confinement, audit-event emission, and cross-cutting e2e/performance coverage. Each child preserves the parent non-scope constraints, keeps ddx-f04faa86 and ddx-4cd64068 as dependency IDs in the body, cites concrete file:line roots, and carries named Test* symbols plus go test and lefthook gates.\"}",
+          "created_at": "2026-05-13T00:07:10.957711217Z",
+          "kind": "triage-decomposed",
+          "source": "ddx work",
+          "summary": "decomposed into ddx-b383c323, ddx-7c256284, ddx-ddeec4f1, ddx-f07cb5d3"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"The bead only clearly satisfies explicit parent/dependency metadata; it is a decomposed/truncated prompt with duplicated parent context, non-imperative multi-scope title, missing file:line root cause, weak labels, and acceptance criteria that are only broad gates with no named tests or wired assertions.\",\"score\":1,\"suggested_fixes\":[\"Rewrite the title as an imperative one-line scope that names the specific subsystem and change, and fix the 'audit even' typo.\",\"Replace the duplicated/truncated description with one standalone PROBLEM, ROOT CAUSE/CURRENT STATE, PROPOSED FIX, and NON-SCOPE set for this child only.\",\"Ground root cause/current state in specific durable files and line numbers, including the server/schema location for the raw-transcript-viewed audit event.\",\"Narrow the scope or split docs, audit-event implementation, and cross-cutting e2e/performance work into separate beads if they are independently executable.\",\"Replace acceptance criteria with numbered criteria naming specific Test* symbols or unique go test -run filters for the spec/audit/e2e assertions.\",\"Add an explicit wired assertion for prompt/response/transcript access emitting the raw-transcript-viewed audit event and for the cross-cutting e2e path.\",\"Use package-specific verification, for example cd cli \\u0026\\u0026 go test ./\\u003cpkg\\u003e/... with relevant -run filters, plus lefthook run pre-commit.\",\"Add required labels for area, kind, and cross-reference facets; do not rely only on phase/story/ac-quality/decomposed labels.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-13T18:04:09.610327833Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=1"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-13T18:02:50.11802827Z",
+      "execute-loop-no-changes-count": 1
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260513T180409-2bc98b2b",
+    "prompt": ".ddx/executions/20260513T180409-2bc98b2b/prompt.md",
+    "manifest": ".ddx/executions/20260513T180409-2bc98b2b/manifest.json",
+    "result": ".ddx/executions/20260513T180409-2bc98b2b/result.json",
+    "checks": ".ddx/executions/20260513T180409-2bc98b2b/checks.json",
+    "usage": ".ddx/executions/20260513T180409-2bc98b2b/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-f129bfaf-20260513T180409-2bc98b2b"
+  },
+  "prompt_sha": "04557abfd5e9f48e65a357534cc44d2c9b0d4e7b923c7a8a0a81a2a425b45888"
+}

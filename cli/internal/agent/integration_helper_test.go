@@ -201,6 +201,7 @@ func scriptHarnessExecutor(t *testing.T, projectRoot, directivePath string) Exec
 			}, nil
 		}
 
+		landFromRev := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 		landing, landErr := LandBeadResult(projectRoot, res, orchGitOps, BeadLandingOptions{
 			LandingAdvancer: func(r *ExecuteBeadResult) (*LandResult, error) {
 				// landMutexFor is already held (repoMu == landMutexFor(projectRoot)).
@@ -216,6 +217,13 @@ func scriptHarnessExecutor(t *testing.T, projectRoot, directivePath string) Exec
 			}, nil
 		}
 		ApplyLandingToResult(res, landing)
+		if syncErr := (RealLandingGitOps{}).SyncWorkTreeToHead(projectRoot, landFromRev); syncErr != nil {
+			return ExecuteBeadReport{
+				BeadID: beadID,
+				Status: ExecuteBeadStatusExecutionFailed,
+				Detail: syncErr.Error(),
+			}, nil
+		}
 		return executeBeadResultToReport(res), nil
 	})
 }

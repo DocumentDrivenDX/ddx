@@ -79,9 +79,16 @@ func TestWorker_RealAttemptEvents_FlowToServer(t *testing.T) {
 	// probe.
 	cmd := exec.Command(bin, "work", "--once", "--no-review", "--no-review-i-know-what-im-doing",
 		"--harness", "noop", "--project", proj)
+	home, err := os.MkdirTemp("", "ddx-workerprobe-home-*")
+	if err != nil {
+		t.Fatalf("create subprocess home: %v", err)
+	}
+	t.Cleanup(func() {
+		removeTreeWithRetry(t, home)
+	})
 	cmd.Env = append(os.Environ(),
 		"XDG_DATA_HOME="+xdg,
-		"HOME="+t.TempDir(),
+		"HOME="+home,
 	)
 	cmd.Dir = proj
 	out, err := cmd.CombinedOutput()
@@ -125,6 +132,19 @@ func TestWorker_RealAttemptEvents_FlowToServer(t *testing.T) {
 	if !hasExpected {
 		t.Errorf("expected at least one loop.* or bead.* event mirrored, got kinds=%v", kinds)
 	}
+}
+
+func removeTreeWithRetry(t *testing.T, path string) {
+	t.Helper()
+	var err error
+	for i := 0; i < 30; i++ {
+		err = os.RemoveAll(path)
+		if err == nil || os.IsNotExist(err) {
+			return
+		}
+		time.Sleep(100 * time.Millisecond)
+	}
+	t.Fatalf("remove temp tree %s: %v", path, err)
 }
 
 // repoCLIDir walks up from this file to find the cli/ directory (which

@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/agent/executeloop"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
 	"github.com/DocumentDrivenDX/ddx/internal/config"
 	"github.com/stretchr/testify/assert"
@@ -411,6 +412,59 @@ func TestExecuteBeadWorkerReadinessRejectReleasesOrParksClaim(t *testing.T) {
 		}
 		assert.True(t, foundBlocked, "an intake.blocked event must be recorded when targeted execution parks")
 		assert.Contains(t, eventSink.String(), "pre_claim_intake.blocked")
+	})
+
+	t.Run("timeout_unclaims_and_continues_in_watch_mode", func(t *testing.T) {
+		store, first, second := newExecuteLoopTestStore(t)
+		var eventSink bytes.Buffer
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		var execCalled atomic.Int32
+		worker := &ExecuteBeadWorker{
+			Store: store,
+			Executor: ExecuteBeadExecutorFunc(func(ctx context.Context, beadID string) (ExecuteBeadReport, error) {
+				if beadID == first.ID {
+					t.Fatal("timed-out readiness bead must not reach execution")
+				}
+				execCalled.Add(1)
+				cancel()
+				return ExecuteBeadReport{BeadID: beadID, Status: ExecuteBeadStatusSuccess, ResultRev: "rev"}, nil
+			}),
+		}
+		opts := config.TestLoopConfigOpts{Assignee: "worker"}
+		rcfg := config.NewTestConfigForLoop(opts).Resolve(config.TestLoopOverrides(opts))
+
+		result, err := worker.Run(ctx, rcfg, ExecuteBeadLoopRuntime{
+			Mode:            executeloop.ModeWatch,
+			IdleInterval:    time.Hour,
+			EventSink:       &eventSink,
+			PreClaimTimeout: 20 * time.Millisecond,
+			PreClaimIntakeHook: func(ctx context.Context, beadID string) (PreClaimIntakeResult, error) {
+				if beadID != first.ID {
+					return PreClaimIntakeResult{Outcome: PreClaimIntakeActionableAtomic}, nil
+				}
+				<-ctx.Done()
+				return PreClaimIntakeResult{}, ctx.Err()
+			},
+		})
+		require.ErrorIs(t, err, context.Canceled)
+		require.NotNil(t, result)
+
+		assert.Equal(t, int32(1), execCalled.Load(), "watch mode must continue to the next ready bead after a readiness timeout")
+		assert.Equal(t, 1, result.Successes)
+		assert.Equal(t, 1, result.Attempts)
+
+		gotFirst, err := store.Get(first.ID)
+		require.NoError(t, err)
+		assert.Equal(t, bead.StatusOpen, gotFirst.Status, "timed-out readiness bead must be released back to the queue")
+		assert.Empty(t, gotFirst.Owner)
+		assert.NotEmpty(t, gotFirst.Extra["execute-loop-retry-after"])
+
+		gotSecond, err := store.Get(second.ID)
+		require.NoError(t, err)
+		assert.Equal(t, bead.StatusClosed, gotSecond.Status)
+		assert.Contains(t, eventSink.String(), "pre_claim_intake.warn")
 	})
 
 	t.Run("lint_blocked_warns_and_executes_during_queue_drain", func(t *testing.T) {

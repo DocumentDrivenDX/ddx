@@ -27,6 +27,7 @@ func readSkillCopies(t *testing.T) map[string]string {
 	paths := map[string]string{
 		"agents": filepath.Join(root, ".agents", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
 		"claude": filepath.Join(root, ".claude", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
+		"cli":    filepath.Join(root, "cli", "internal", "skills", "ddx", "bead-lifecycle", "SKILL.md"),
 	}
 	out := make(map[string]string, len(paths))
 	for name, path := range paths {
@@ -63,7 +64,12 @@ func TestBeadLifecycleSkillReadinessDocumentsRewriteContract(t *testing.T) {
 			assert.Contains(t, body, "consumable replacement contract DDx may apply before claim")
 			assert.Contains(t, body, "`rewrite.changed_fields` is required")
 			assert.Contains(t, body, "`rewrite.description` / `rewrite.acceptance` must be strings, not arrays")
+			assert.Contains(t, body, "`readiness_checks` MUST be a JSON array")
+			assert.Contains(t, body, "every entry MUST")
 			assert.Contains(t, readiness, `"classification": "ready|needs_refine|needs_split|operator_required|system_unready"`)
+			assert.Contains(t, readiness, `"tractability": "tractable|too_large|ambiguous|blocked|unknown"`)
+			assert.Contains(t, readiness, `"score": 0`)
+			assert.Contains(t, readiness, `"rationale": "brief evidence-grounded explanation"`)
 			assert.Contains(t, readiness, `"changed_fields": ["description", "acceptance"]`)
 			assert.Contains(t, readiness, `"acceptance": "1. TestFoo`)
 		})

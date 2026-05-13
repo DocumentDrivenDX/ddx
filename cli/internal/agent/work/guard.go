@@ -2,11 +2,16 @@ package work
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"sync"
 	"time"
 )
+
+// DefaultPreClaimTimeout bounds pre-claim readiness hooks when callers do not
+// provide an explicit timeout.
+const DefaultPreClaimTimeout = 30 * time.Second
 
 // Guard decides whether a bead may proceed. Callers use the returned reason
 // for skip telemetry and logs.
@@ -31,6 +36,7 @@ type PreClaimGuard struct {
 	log      io.Writer
 	now      func() time.Time
 	cooldown time.Duration
+	timeout  time.Duration
 
 	mu         sync.Mutex
 	failCounts map[string]int
@@ -38,12 +44,15 @@ type PreClaimGuard struct {
 
 // NewPreClaimGuard constructs a Guard that owns the pre-claim hook retry
 // state for one worker run.
-func NewPreClaimGuard(hook PreClaimHook, store cooldownStore, log io.Writer, now func() time.Time, cooldown time.Duration) *PreClaimGuard {
+func NewPreClaimGuard(hook PreClaimHook, store cooldownStore, log io.Writer, now func() time.Time, cooldown, timeout time.Duration) *PreClaimGuard {
 	if now == nil {
 		now = time.Now
 	}
 	if cooldown <= 0 {
 		cooldown = 30 * time.Second
+	}
+	if timeout <= 0 {
+		timeout = DefaultPreClaimTimeout
 	}
 	return &PreClaimGuard{
 		hook:       hook,
@@ -51,6 +60,7 @@ func NewPreClaimGuard(hook PreClaimHook, store cooldownStore, log io.Writer, now
 		log:        log,
 		now:        now,
 		cooldown:   cooldown,
+		timeout:    timeout,
 		failCounts: make(map[string]int),
 	}
 }
@@ -60,7 +70,8 @@ func (g *PreClaimGuard) Allow(ctx context.Context, beadID string) (bool, string)
 	if g == nil || g.hook == nil {
 		return true, ""
 	}
-	if err := g.hook(ctx); err != nil {
+	err, timedOut := callPreClaimHookWithTimeout(ctx, g.hook, g.timeout)
+	if err != nil || timedOut {
 		g.mu.Lock()
 		defer g.mu.Unlock()
 
@@ -68,11 +79,25 @@ func (g *PreClaimGuard) Allow(ctx context.Context, beadID string) (bool, string)
 		if g.failCounts[beadID] >= 2 {
 			if g.store != nil {
 				until := g.now().UTC().Add(g.cooldown)
-				_ = g.store.SetExecutionCooldown(beadID, until, "preclaim-hook-failed", err.Error(), "")
+				detail := "pre-claim hook failed"
+				if err != nil {
+					detail = err.Error()
+				} else if timedOut {
+					detail = fmt.Sprintf("pre-claim hook timed out after %s", g.timeout)
+				}
+				_ = g.store.SetExecutionCooldown(beadID, until, "preclaim-hook-failed", detail, "")
 			}
 		}
 		if g.log != nil {
-			_, _ = fmt.Fprintf(g.log, "pre-claim hook: %v (skipping %s)\n", err, beadID)
+			switch {
+			case timedOut:
+				_, _ = fmt.Fprintf(g.log, "pre-claim hook timed out after %s (skipping %s)\n", g.timeout, beadID)
+			case err != nil:
+				_, _ = fmt.Fprintf(g.log, "pre-claim hook: %v (skipping %s)\n", err, beadID)
+			}
+		}
+		if timedOut {
+			return false, fmt.Sprintf("pre-claim hook timed out after %s", g.timeout)
 		}
 		return false, err.Error()
 	}
@@ -81,6 +106,39 @@ func (g *PreClaimGuard) Allow(ctx context.Context, beadID string) (bool, string)
 	delete(g.failCounts, beadID)
 	g.mu.Unlock()
 	return true, ""
+}
+
+type preClaimHookCallResult struct {
+	err error
+}
+
+func callPreClaimHookWithTimeout(ctx context.Context, hook PreClaimHook, timeout time.Duration) (error, bool) {
+	if hook == nil {
+		return nil, false
+	}
+	if timeout <= 0 {
+		timeout = DefaultPreClaimTimeout
+	}
+	hookCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	resultCh := make(chan preClaimHookCallResult, 1)
+	go func() {
+		resultCh <- preClaimHookCallResult{err: hook(hookCtx)}
+	}()
+
+	select {
+	case result := <-resultCh:
+		if errors.Is(hookCtx.Err(), context.DeadlineExceeded) || errors.Is(result.err, context.DeadlineExceeded) {
+			return context.DeadlineExceeded, true
+		}
+		return result.err, false
+	case <-hookCtx.Done():
+		if errors.Is(hookCtx.Err(), context.DeadlineExceeded) {
+			return context.DeadlineExceeded, true
+		}
+		return hookCtx.Err(), false
+	}
 }
 
 // ComplexityGuard is a compatibility wrapper that delegates to a configured
