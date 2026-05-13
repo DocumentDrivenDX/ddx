@@ -1402,7 +1402,6 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	model, _ := cmd.Flags().GetString("model")
 	profile, _ := cmd.Flags().GetString("profile")
 	provider, _ := cmd.Flags().GetString("provider")
-	modelRef, _ := cmd.Flags().GetString("model-ref")
 	effort, _ := cmd.Flags().GetString("effort")
 	once, _ := cmd.Flags().GetBool("once")
 	watch, _ := cmd.Flags().GetBool("watch")
@@ -1450,7 +1449,6 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 		Model:              model,
 		Profile:            profile,
 		Provider:           provider,
-		ModelRef:           modelRef,
 		Effort:             effort,
 		Mode:               mode,
 		IdleInterval:       idleInterval,
@@ -1513,10 +1511,10 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	// a deprecated no-op and the server-submit path is removed from this CLI
 	// surface — server-spawned workers exec `ddx work` directly.
 	noRoutingFlags := spec.Harness == "" && spec.Model == "" && spec.Provider == "" &&
-		spec.ModelRef == "" && spec.Profile == "" && spec.MinPower == 0 &&
+		spec.Profile == "" && spec.MinPower == 0 &&
 		spec.MaxPower == 0 && !cmd.Flags().Changed("harness") &&
 		!cmd.Flags().Changed("model") && !cmd.Flags().Changed("provider") &&
-		!cmd.Flags().Changed("model-ref") && !cmd.Flags().Changed("profile") &&
+		!cmd.Flags().Changed("profile") &&
 		!cmd.Flags().Changed("min-power") && !cmd.Flags().Changed("max-power")
 	autoInferTier := noRoutingFlags && !projectHasRoutingConfig(projectRoot)
 
@@ -1527,7 +1525,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	// Skipped for ddx work (treatPassthroughAsOpaque=true): harness/provider/model
 	// are opaque passthrough constraints there; DDx does not validate them.
 	if !spec.OpaquePassthrough {
-		if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, spec.Harness, spec.Model, spec.Provider, spec.ModelRef); err != nil {
+		if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, spec.Harness, spec.Model, spec.Provider); err != nil {
 			return fmt.Errorf("execute-loop: %w", err)
 		}
 	}
@@ -1608,7 +1606,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		Harness:           spec.Harness,
 		Model:             spec.Model,
 		Provider:          spec.Provider,
-		ModelRef:          spec.ModelRef,
 		Profile:           spec.Profile,
 		Effort:            spec.Effort,
 		MinPower:          spec.MinPower,
@@ -1701,7 +1698,6 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			Harness:           resolvedHarness,
 			Model:             resolvedModel,
 			Provider:          attemptProvider,
-			ModelRef:          spec.ModelRef,
 			Profile:           spec.Profile,
 			Effort:            spec.Effort,
 			MinPower:          requestedMinPower,

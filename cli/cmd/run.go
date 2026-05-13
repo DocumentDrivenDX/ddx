@@ -27,7 +27,7 @@ func (f *CommandFactory) newRunCommand() *cobra.Command {
 Execute call. It is the layer-1 primitive over which ddx try and ddx work add
 bead lifecycle, queue semantics, and retry policy.
 
-DDx passes all routing knobs (--harness, --provider, --model, --model-ref,
+DDx passes all routing knobs (--harness, --provider, --model,
 --min-power, --max-power, --profile) directly to the service without validation
 or pre-resolution. The service owns route selection within those bounds
 (CONTRACT-003 / FEAT-010).
@@ -52,7 +52,6 @@ Examples:
 	cmd.Flags().String("harness", "", "Harness constraint (passthrough; not validated by ddx run)")
 	cmd.Flags().String("model", "", "Model constraint (passthrough; not validated by ddx run)")
 	cmd.Flags().String("provider", "", "Provider constraint (passthrough; not validated by ddx run)")
-	cmd.Flags().String("model-ref", "", "Model reference passthrough, e.g. code-medium; resolved by Fizeau")
 	cmd.Flags().Int("min-power", 0, "Minimum model power required (0 = unconstrained)")
 	cmd.Flags().Int("max-power", 0, "Maximum model power allowed (0 = unconstrained)")
 	cmd.Flags().String("persona", "", "Persona name; body is prepended to the prompt as a system-prompt addendum")
@@ -72,7 +71,6 @@ func (f *CommandFactory) runRun(cmd *cobra.Command, args []string) error {
 	harness, _ := cmd.Flags().GetString("harness")
 	model, _ := cmd.Flags().GetString("model")
 	provider, _ := cmd.Flags().GetString("provider")
-	modelRef, _ := cmd.Flags().GetString("model-ref")
 	minPower, _ := cmd.Flags().GetInt("min-power")
 	maxPower, _ := cmd.Flags().GetInt("max-power")
 	personaName, _ := cmd.Flags().GetString("persona")
@@ -140,7 +138,6 @@ func (f *CommandFactory) runRun(cmd *cobra.Command, args []string) error {
 		Harness:           harness,
 		Model:             model,
 		Provider:          provider,
-		ModelRef:          modelRef,
 		Profile:           profile,
 		Effort:            effort,
 		Permissions:       permissions,

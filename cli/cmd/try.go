@@ -90,7 +90,6 @@ Exit codes:
 	cmd.Flags().String("model", "", "Model constraint (passthrough; ddx try does not validate)")
 	cmd.Flags().String("profile", "", "Routing profile: default, cheap, fast, or smart (empty = unconstrained; let the agent service choose)")
 	cmd.Flags().String("provider", "", "Provider constraint (passthrough; ddx try does not validate)")
-	cmd.Flags().String("model-ref", "", "Model reference passthrough (e.g. code-medium); resolved by Fizeau")
 	cmd.Flags().String("effort", "", "Effort level")
 	cmd.Flags().Bool("no-review", false, "Skip post-merge review (break-glass: requires --no-review-i-know-what-im-doing)")
 	cmd.Flags().Bool("no-review-i-know-what-im-doing", false, "Break-glass acknowledgement required when using --no-review")
@@ -127,7 +126,6 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	model, _ := cmd.Flags().GetString("model")
 	profile, _ := cmd.Flags().GetString("profile")
 	provider, _ := cmd.Flags().GetString("provider")
-	modelRef, _ := cmd.Flags().GetString("model-ref")
 	effort, _ := cmd.Flags().GetString("effort")
 	noReview, _ := cmd.Flags().GetBool("no-review")
 	noReviewAck, _ := cmd.Flags().GetBool("no-review-i-know-what-im-doing")
@@ -224,7 +222,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 	profile = agent.NormalizeRoutingProfile(profile)
 
 	// Determine whether zero-config auto-route applies (same logic as runWork).
-	noRoutingFlags := harness == "" && model == "" && provider == "" && modelRef == "" &&
+	noRoutingFlags := harness == "" && model == "" && provider == "" &&
 		!cmd.Flags().Changed("profile") && !cmd.Flags().Changed("min-power") &&
 		!cmd.Flags().Changed("max-power")
 	autoInferTier := noRoutingFlags && !projectHasRoutingConfig(projectRoot)
@@ -277,7 +275,6 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				Harness:           harness,
 				Model:             model,
 				Provider:          provider,
-				ModelRef:          modelRef,
 				Profile:           profile,
 				Effort:            effort,
 				MinPower:          requestMinPower,
@@ -352,7 +349,6 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		Harness:  harness,
 		Model:    model,
 		Provider: provider,
-		ModelRef: modelRef,
 		Profile:  profile,
 		Effort:   effort,
 	}

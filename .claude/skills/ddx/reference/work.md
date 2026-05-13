@@ -37,8 +37,7 @@ Flags worth knowing:
 - `--min-power <n>` / `--max-power <n>` — requested agent power bounds.
 - `--top-power` — choose a `MinPower` threshold from the service's reported
   power bands.
-- `--harness <name>` / `--provider <name>` / `--model <ref>` / `--model-ref
-  <ref>` / `--profile <name>` — passthrough constraints only. DDx sends them
+- `--harness <name>` / `--provider <name>` / `--model <ref>` / `--profile <name>` — passthrough constraints only. DDx sends them
   unchanged and does not route on them.
 
 ## Primitive: `ddx try`
@@ -135,8 +134,8 @@ that exercise the new code:
   `git merge --ff-only` or `--no-ff`; never squash/rebase/filter.
 - **Running passthrough pins without a reason**: power-bound dispatch lets the
   agent choose an appropriate route. Use `--harness`, `--provider`, `--model`,
-  `--model-ref`, or `--profile` only for explicit operator constraints, bug
-  repros, or controlled tests.
+  or `--profile` only for explicit operator constraints, bug repros, or
+  controlled tests.
 - **Parallel workers on the same claimed bead**: the tracker
   guards against this via claim semantics, but don't try to defeat
   it — each claim represents an in-flight attempt.
@@ -150,7 +149,6 @@ ddx work --watch                            # continuous worker
 ddx work --watch --idle-interval 15s        # shorter idle scan interval
 ddx work --min-power 10                     # request stronger attempts
 ddx work --harness claude                   # passthrough constraint
-ddx work --model-ref qwen/qwen3.6-27b        # passthrough constraint
 ddx work --profile default                  # passthrough constraint
 
 ddx try <id>                                # one bead attempt

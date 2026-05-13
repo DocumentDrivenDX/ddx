@@ -222,7 +222,6 @@ func TestWorkers_UnifiedSpec_PersistsToSpecJson(t *testing.T) {
 		Harness:           "fiz",
 		Model:             "qwen/qwen3.6",
 		Provider:          "openrouter",
-		ModelRef:          "openrouter/qwen/qwen3.6",
 		Profile:           "default",
 		Effort:            "high",
 		LabelFilter:       "phase:reliability",
@@ -257,7 +256,6 @@ func TestWorkers_UnifiedSpec_PersistsToSpecJson(t *testing.T) {
 	assert.Equal(t, "fiz", persisted.Harness)
 	assert.Equal(t, "qwen/qwen3.6", persisted.Model)
 	assert.Equal(t, "openrouter", persisted.Provider)
-	assert.Equal(t, "openrouter/qwen/qwen3.6", persisted.ModelRef)
 	assert.Equal(t, "default", persisted.Profile)
 	assert.Equal(t, "high", persisted.Effort)
 	assert.Equal(t, "phase:reliability", persisted.LabelFilter)
@@ -1205,7 +1203,6 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 		"model":               "qwen/qwen3.6",
 		"profile":             "default",
 		"provider":            "openrouter",
-		"model_ref":           "openrouter/qwen/qwen3.6",
 		"effort":              "high",
 		"label_filter":        "phase:reliability",
 		"mode":                "watch",
@@ -1253,7 +1250,6 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 	assert.Equal(t, "qwen/qwen3.6", persisted.Model)
 	assert.Equal(t, "default", persisted.Profile)
 	assert.Equal(t, "openrouter", persisted.Provider)
-	assert.Equal(t, "openrouter/qwen/qwen3.6", persisted.ModelRef)
 	assert.Equal(t, "high", persisted.Effort)
 	assert.Equal(t, "phase:reliability", persisted.LabelFilter)
 	assert.Equal(t, executeloop.ModeWatch, persisted.Mode)

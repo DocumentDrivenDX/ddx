@@ -14,7 +14,6 @@ import (
 
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
-	"github.com/DocumentDrivenDX/ddx/internal/skills"
 	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/spf13/cobra"
 )

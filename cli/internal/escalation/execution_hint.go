@@ -148,8 +148,7 @@ func parseDurableRoutePinField(key string, value any) (string, bool) {
 	switch lower {
 	case "harness", "agent-harness", "execution-harness", "try-harness",
 		"provider", "agent-provider", "execution-provider", "try-provider",
-		"model", "agent-model", "execution-model", "try-model",
-		"model-ref", "agent-model-ref", "execution-model-ref", "try-model-ref":
+		"model", "agent-model", "execution-model", "try-model":
 		return renderDurableRoutePin(lower, value), true
 	default:
 		return "", false

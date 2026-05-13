@@ -1858,10 +1858,8 @@ type ProviderModelsResult {
   fromCache: Boolean!
 }
 
-"""DefaultRouteStatus shows which provider/model the default model-ref resolves to."""
+"""DefaultRouteStatus shows which provider/model the default route resolves to."""
 type DefaultRouteStatus {
-  """The model-ref key (e.g. "code-medium") or empty if no default configured"""
-  modelRef: String!
   """Selected provider name, or null if no healthy candidate found"""
   resolvedProvider: String
   """Selected model identifier, or null if no healthy candidate found"""

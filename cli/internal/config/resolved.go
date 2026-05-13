@@ -14,7 +14,6 @@ type CLIOverrides struct {
 	Harness       string
 	Model         string
 	Provider      string
-	ModelRef      string
 	Profile       string
 	Effort        string
 	Permissions   string
@@ -78,9 +77,7 @@ func (c *NewConfig) Resolve(overrides CLIOverrides) ResolvedConfig {
 	}
 
 	r.provider = overrides.Provider
-	r.modelRef = overrides.ModelRef
 	r.explicitProvider = overrides.Provider != ""
-	r.explicitModelRef = overrides.ModelRef != ""
 	r.profile = overrides.Profile
 	r.minTier = overrides.MinTier
 	r.maxTier = overrides.MaxTier
@@ -178,11 +175,9 @@ type ResolvedConfig struct {
 	harness                            string
 	model                              string
 	provider                           string
-	modelRef                           string
 	explicitHarness                    bool
 	explicitModel                      bool
 	explicitProvider                   bool
-	explicitModelRef                   bool
 	profile                            string
 	minTier                            string
 	maxTier                            string
@@ -257,11 +252,6 @@ func (r ResolvedConfig) Provider() string {
 	return r.provider
 }
 
-func (r ResolvedConfig) ModelRef() string {
-	r.requireSealed()
-	return r.modelRef
-}
-
 func (r ResolvedConfig) ExplicitHarness() (string, bool) {
 	r.requireSealed()
 	return r.harness, r.explicitHarness
@@ -275,11 +265,6 @@ func (r ResolvedConfig) ExplicitModel() (string, bool) {
 func (r ResolvedConfig) ExplicitProvider() (string, bool) {
 	r.requireSealed()
 	return r.provider, r.explicitProvider
-}
-
-func (r ResolvedConfig) ExplicitModelRef() (string, bool) {
-	r.requireSealed()
-	return r.modelRef, r.explicitModelRef
 }
 
 func (r ResolvedConfig) Profile() string {

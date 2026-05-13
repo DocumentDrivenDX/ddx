@@ -25,7 +25,6 @@ func sealedFixture() ResolvedConfig {
 		harness:                 "claude",
 		model:                   "claude-opus-4-7",
 		provider:                "anthropic",
-		modelRef:                "anthropic/claude-opus-4-7",
 		profile:                 "default",
 		minTier:                 "cheap",
 		maxTier:                 "smart",
@@ -80,7 +79,6 @@ func TestResolvedConfigZeroValuePanicsOnEveryAccessor(t *testing.T) {
 		"Harness":                            func(r ResolvedConfig) { _ = r.Harness() },
 		"Model":                              func(r ResolvedConfig) { _ = r.Model() },
 		"Provider":                           func(r ResolvedConfig) { _ = r.Provider() },
-		"ModelRef":                           func(r ResolvedConfig) { _ = r.ModelRef() },
 		"Profile":                            func(r ResolvedConfig) { _ = r.Profile() },
 		"MinTier":                            func(r ResolvedConfig) { _ = r.MinTier() },
 		"MaxTier":                            func(r ResolvedConfig) { _ = r.MaxTier() },
@@ -173,15 +171,6 @@ func TestResolvedConfigProviderAccessor(t *testing.T) {
 	}
 	if got := (ResolvedConfig{sealed: true}).Provider(); got != "" {
 		t.Fatalf("zero-after-seal Provider = %q, want empty", got)
-	}
-}
-
-func TestResolvedConfigModelRefAccessor(t *testing.T) {
-	if got := sealedFixture().ModelRef(); got != "anthropic/claude-opus-4-7" {
-		t.Fatalf("ModelRef = %q", got)
-	}
-	if got := (ResolvedConfig{sealed: true}).ModelRef(); got != "" {
-		t.Fatalf("zero-after-seal ModelRef = %q, want empty", got)
 	}
 }
 
@@ -550,7 +539,6 @@ func TestResolveTracksExplicitRoutePinsSeparatelyFromConfigDefaults(t *testing.T
 		Harness:  "codex",
 		Provider: "openai",
 		Model:    "gpt-5.4-mini",
-		ModelRef: "openai:gpt-5.4-mini",
 	})
 	if got, ok := explicit.ExplicitHarness(); !ok || got != "codex" {
 		t.Fatalf("ExplicitHarness = (%q, %v), want (codex, true)", got, ok)
@@ -560,8 +548,5 @@ func TestResolveTracksExplicitRoutePinsSeparatelyFromConfigDefaults(t *testing.T
 	}
 	if got, ok := explicit.ExplicitModel(); !ok || got != "gpt-5.4-mini" {
 		t.Fatalf("ExplicitModel = (%q, %v), want (gpt-5.4-mini, true)", got, ok)
-	}
-	if got, ok := explicit.ExplicitModelRef(); !ok || got != "openai:gpt-5.4-mini" {
-		t.Fatalf("ExplicitModelRef = (%q, %v), want (openai:gpt-5.4-mini, true)", got, ok)
 	}
 }

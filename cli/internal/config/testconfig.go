@@ -78,7 +78,6 @@ type TestRunConfigOpts struct {
 	Harness       string
 	Model         string
 	Provider      string
-	ModelRef      string
 	Effort        string
 	Permissions   string
 	Timeout       time.Duration
@@ -89,7 +88,7 @@ type TestRunConfigOpts struct {
 // NewTestConfigForRun returns a *Config that, when Resolve()d with the
 // matching CLIOverrides, produces a ResolvedConfig whose run-path
 // accessors return the values supplied in opts. Pure CLI-override
-// fields (Provider, ModelRef, Effort) have no durable home on
+// fields (Provider, Effort) have no durable home on
 // AgentConfig and must be applied at Resolve time via CLIOverrides.
 func NewTestConfigForRun(opts TestRunConfigOpts) *Config {
 	return &Config{
@@ -114,7 +113,6 @@ type TestBeadConfigOpts struct {
 	Harness  string
 	Model    string
 	Provider string // CLI-only override, no durable home on AgentConfig
-	ModelRef string // CLI-only override, no durable home on AgentConfig
 	Effort   string // CLI-only override, no durable home on AgentConfig
 	Mirror   *ExecutionsMirrorConfig
 }
@@ -122,9 +120,8 @@ type TestBeadConfigOpts struct {
 // NewTestConfigForBead returns a *Config that, when Resolve()d with
 // the matching CLIOverrides, produces a ResolvedConfig whose
 // execute-bead-relevant accessors return the values supplied in opts.
-// Pure CLI-override fields (Provider, ModelRef, Effort) have no
-// durable home on AgentConfig and must be applied at Resolve time via
-// CLIOverrides.
+// Pure CLI-override fields (Provider, Effort) have no durable home on
+// AgentConfig and must be applied at Resolve time via CLIOverrides.
 func NewTestConfigForBead(opts TestBeadConfigOpts) *Config {
 	cfg := &Config{
 		Version: "1.0",
@@ -141,13 +138,12 @@ func NewTestConfigForBead(opts TestBeadConfigOpts) *Config {
 // TestBeadOverrides returns the CLIOverrides that, combined with the
 // *Config produced by NewTestConfigForBead(opts), drive a Resolve call
 // to a ResolvedConfig matching opts. Pure-override fields (Provider,
-// ModelRef, Effort) have no durable home on *Config; they are applied
-// at Resolve time only.
+// Effort) have no durable home on *Config; they are applied at Resolve
+// time only.
 func TestBeadOverrides(opts TestBeadConfigOpts) CLIOverrides {
 	return CLIOverrides{
 		Harness:  opts.Harness,
 		Provider: opts.Provider,
-		ModelRef: opts.ModelRef,
 		Effort:   opts.Effort,
 	}
 }

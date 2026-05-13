@@ -77,7 +77,6 @@ unclaimed for a later attempt.`,
 	cmd.Flags().String("harness", "", "Agent harness to use")
 	cmd.Flags().String("model", "", "Model override")
 	cmd.Flags().String("provider", "", "Provider name (e.g. vidar, openrouter); selects a named provider from config")
-	cmd.Flags().String("model-ref", "", "Model reference passthrough (e.g. code-medium); resolved by Fizeau")
 	cmd.Flags().String("effort", "", "Effort level")
 	cmd.Flags().String("context-budget", "", "Context budget for prompt: empty (full), minimal (omit large governing docs for cheap-tier)")
 	cmd.Flags().String("prompt", "", "Prompt file path (auto-generated from bead if omitted)")
@@ -99,7 +98,6 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 	harness, _ := cmd.Flags().GetString("harness")
 	model, _ := cmd.Flags().GetString("model")
 	provider, _ := cmd.Flags().GetString("provider")
-	modelRef, _ := cmd.Flags().GetString("model-ref")
 	effort, _ := cmd.Flags().GetString("effort")
 	contextBudget, _ := cmd.Flags().GetString("context-budget")
 	promptFile, _ := cmd.Flags().GetString("prompt")
@@ -114,7 +112,6 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 		Harness:       harness,
 		Model:         model,
 		Provider:      provider,
-		ModelRef:      modelRef,
 		Effort:        effort,
 		ContextBudget: contextBudget,
 		MinPower:      minPower,
@@ -158,7 +155,7 @@ func (f *CommandFactory) runAgentExecuteBead(cmd *cobra.Command, args []string) 
 	// preflight when a test runner override is in use — overrides may be
 	// fakes that bypass routing entirely.
 	if f.AgentRunnerOverride == nil {
-		if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, harness, model, provider, modelRef); err != nil {
+		if err := agent.ValidateForExecuteLoopViaService(cmd.Context(), f.WorkingDir, harness, model, provider); err != nil {
 			return err
 		}
 	}

@@ -2,7 +2,7 @@ package cmd
 
 // run_cmd_test.go verifies ddx-0248f921 AC:
 //   - ddx run --help exits 0 and describes the layer-1 command.
-//   - ddx run forwards harness/provider/model/model-ref to Execute.
+//   - ddx run forwards harness/provider/model to Execute.
 //   - ddx run forwards min-power/max-power bounds to Execute.
 //   - ddx run --persona injects persona body into the prompt.
 //   - ddx run does not call ResolveRoute (CONTRACT-003).
@@ -69,29 +69,6 @@ func TestRunPassthroughHarnessModelProviderToExecute(t *testing.T) {
 	assert.Equal(t, "codex", lastReq.Harness, "Harness must pass through unchanged")
 	assert.Equal(t, "gpt-5.4", lastReq.Model, "Model must pass through unchanged")
 	assert.Equal(t, "openai", lastReq.Provider, "Provider must pass through unchanged")
-}
-
-// TestRunPassthroughModelRefToExecute verifies AC3: ddx run forwards
-// --model-ref to ServiceExecuteRequest.
-func TestRunPassthroughModelRefToExecute(t *testing.T) {
-	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
-
-	stub := installExecuteCapturingStub(t)
-
-	dir := minimalProjectDir(t)
-	root := NewCommandFactory(dir).NewRootCommand()
-	_, err := executeCommand(root, "run",
-		"--model-ref", "code-medium",
-		"--text", "hello",
-		"--timeout", "5s",
-	)
-	require.NoError(t, err)
-
-	stub.mu.Lock()
-	executeCalled := stub.executeCalled
-	stub.mu.Unlock()
-
-	require.True(t, executeCalled, "Execute must be called")
 }
 
 // TestRunPassthroughMinMaxPowerToExecute verifies AC3: ddx run forwards
