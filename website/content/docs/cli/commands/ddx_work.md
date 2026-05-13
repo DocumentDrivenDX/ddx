@@ -83,6 +83,7 @@ ddx work [flags]
       --no-review                        Skip post-merge review (break-glass: requires --no-review-i-know-what-im-doing)
       --no-review-i-know-what-im-doing   Break-glass acknowledgement required when using --no-review
       --once                             Process at most one ready bead
+      --preclaim-timeout duration        Pre-claim readiness timeout for preflight/readiness hooks (default 30s)
       --profile string                   Routing profile: default, cheap, fast, or smart (empty = unconstrained; let the agent service choose)
       --project string                   Target project root path or name (default: CWD git root). Env: DDX_PROJECT_ROOT
       --provider string                  Provider constraint (passthrough; ddx work does not validate)
