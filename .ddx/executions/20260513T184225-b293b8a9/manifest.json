@@ -1,0 +1,60 @@
+{
+  "attempt_id": "20260513T184225-b293b8a9",
+  "bead_id": "ddx-07f1b92c",
+  "base_rev": "4dd9102802f2ff6cb93713b3c886e67d5be56291",
+  "created_at": "2026-05-13T18:42:28.832216772Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-07f1b92c",
+    "title": "workerprobe: serialize JSONL tee writes under concurrent loop events",
+    "description": "PROBLEM\nThe pre-push/full-test gate can fail under `-race` with a data race in workerprobe JSONL mirroring. This blocks otherwise unrelated worker landings and pushes, and it undermines the reliability of the worker-status/liveness work that depends on the same event path.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/workerprobe/probe.go:465-484` defines `teeWriter` with a mutable `buf []byte`, but `Write` appends to and slices that buffer without synchronization.\n- `cli/internal/agent/execute_bead_loop.go:2718-2736` calls `sink.Write(line)` and then `sink.Write(newline)`. Multiple execute-loop goroutines can write through the same sink during cleanup/progress emission.\n- Observed race evidence from the 2026-05-13 pre-push/full-test gate: `TestWorkDefaultDrainModeExitsOnEmptyQueue` in `cli/cmd/work_test.go:371-387` failed under `-race`; one goroutine wrote `workerprobe.(*teeWriter).Write` from `writeLoopEvent` during `ExecuteBeadWorker.Run`, while another wrote through the same tee from `runExecutionCleanupPass`.\n\nPROPOSED FIX\nMake the workerprobe JSONL tee concurrency-safe and preserve event parsing semantics. Add a mutex or equivalent serialization around `teeWriter.Write` buffer mutation and dispatch, and consider making `writeLoopEvent` emit the JSON line plus newline in a single `Write` to reduce interleaving. The fix must be local to event mirroring; structured logging must remain fail-open and must not block work if the probe/server is unavailable.\n\nNON-SCOPE\nDo not change worker scheduling, readiness classification, or server ingest contracts. Do not disable the race detector or loosen pre-push gates.",
+    "acceptance": "1. `TestWorkerProbeTeeJSONLConcurrentWrites` or equivalent repeatedly writes newline-delimited loop events from multiple goroutines through one `TeeJSONL` writer under `-race` and proves events are parsed without data races.\n2. `TestWriteLoopEventWritesAtomicallyToWorkerProbe` or equivalent proves a loop event plus newline is not interleaved into malformed JSON when concurrent cleanup/progress emitters share the same sink.\n3. `TestWorkDefaultDrainModeExitsOnEmptyQueue` remains green under `-race`.\n4. `cd cli \u0026\u0026 go test -race ./internal/agent/workerprobe/... ./cmd/... -run \"TestWorkerProbeTeeJSONLConcurrentWrites|TestWriteLoopEventWritesAtomicallyToWorkerProbe|TestWorkDefaultDrainModeExitsOnEmptyQueue\" -count=1` passes.\n5. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:agent",
+      "area:workerprobe",
+      "area:server",
+      "kind:bug",
+      "phase:build",
+      "reliability",
+      "race"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-13T18:41:40Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "1114808",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Title, description, acceptance criteria, verification gate, and prompt sufficiency are solid, but the bead is missing an explicit parent/deps declaration and its labels do not include a cross-reference facet, so it is not 8/8 ready for dispatch.\",\"score\":6,\"suggested_fixes\":[\"Add an explicit `parent` field and either list dependencies or state `No deps.`\",\"Add a repo-standard cross-reference label such as `spec:FEAT-006` so the label set satisfies the rubric.\",\"Tighten acceptance wording to use exact Test names rather than `or equivalent` if you want the verification to be fully concrete.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-13T18:42:25.770781153Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=6"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-13T18:41:40.549655081Z",
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Consumer of the Fizeau Execution Contract"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260513T184225-b293b8a9",
+    "prompt": ".ddx/executions/20260513T184225-b293b8a9/prompt.md",
+    "manifest": ".ddx/executions/20260513T184225-b293b8a9/manifest.json",
+    "result": ".ddx/executions/20260513T184225-b293b8a9/result.json",
+    "checks": ".ddx/executions/20260513T184225-b293b8a9/checks.json",
+    "usage": ".ddx/executions/20260513T184225-b293b8a9/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-07f1b92c-20260513T184225-b293b8a9"
+  },
+  "prompt_sha": "619d63dfee1b50a0800580708593dae453082f24101fa7979c6feaf6dbcc95a0"
+}
