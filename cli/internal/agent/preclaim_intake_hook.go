@@ -168,10 +168,6 @@ func applyLifecycleHookRouting(ctx context.Context, projectRoot string, svc agen
 		runtime.ModelOverride = strings.TrimSpace(model)
 		pinned = true
 	}
-	if modelRef, ok := rcfg.ExplicitModelRef(); ok {
-		runtime.ModelRefOverride = strings.TrimSpace(modelRef)
-		pinned = true
-	}
 	if pinned {
 		return
 	}

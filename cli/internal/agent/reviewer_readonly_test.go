@@ -20,9 +20,6 @@ func TestReviewerRuntime_ReadOnlyProfilePlumbed(t *testing.T) {
 	if rt.Role != "reviewer" {
 		t.Errorf("Role = %q; want reviewer", rt.Role)
 	}
-	if rt.ModelRefOverride != "" {
-		t.Errorf("ModelRefOverride = %q; want empty", rt.ModelRefOverride)
-	}
 	if !rt.ClearRoutingPins {
 		t.Errorf("ClearRoutingPins = false; want true")
 	}

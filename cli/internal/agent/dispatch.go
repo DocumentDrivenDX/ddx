@@ -76,10 +76,6 @@ func buildRunArgsFromConfig(ctx context.Context, rcfg config.ResolvedConfig, run
 	if model == "" && !runtime.ClearRoutingPins {
 		model = rcfg.Model()
 	}
-	modelRef := runtime.ModelRefOverride
-	if modelRef == "" && !runtime.ClearRoutingPins {
-		modelRef = rcfg.ModelRef()
-	}
 	provider := runtime.ProviderOverride
 	if provider == "" && !runtime.ClearRoutingPins {
 		provider = rcfg.Provider()
@@ -106,7 +102,6 @@ func buildRunArgsFromConfig(ctx context.Context, rcfg config.ResolvedConfig, run
 	opts.Env = runtime.Env
 	opts.Model = model
 	opts.Provider = provider
-	opts.ModelRef = modelRef
 	opts.Effort = rcfg.Effort()
 	opts.Timeout = rcfg.Timeout()
 	opts.WallClock = rcfg.WallClock()

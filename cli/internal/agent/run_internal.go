@@ -30,7 +30,6 @@ func (r *Runner) runInternal(args RunArgs) (*Result, error) {
 	opts.Env = args.Env
 	opts.Model = args.Model
 	opts.Provider = args.Provider
-	opts.ModelRef = args.ModelRef
 	opts.Effort = args.Effort
 	opts.Timeout = args.Timeout
 	opts.WallClock = args.WallClock

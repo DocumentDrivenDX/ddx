@@ -35,7 +35,6 @@ func TestExecuteBeadRuntimeDelegation(t *testing.T) {
 	rcfg := cfg.Resolve(config.CLIOverrides{
 		Harness:  "claude",
 		Provider: "anthropic",
-		ModelRef: "claude-mref",
 		Effort:   "high",
 	})
 
@@ -74,9 +73,6 @@ func TestExecuteBeadRuntimeDelegation(t *testing.T) {
 	}
 	if got.Provider != "anthropic" {
 		t.Errorf("Provider = %q, want %q", got.Provider, "anthropic")
-	}
-	if got.ModelRef != "claude-mref" {
-		t.Errorf("ModelRef = %q, want %q", got.ModelRef, "claude-mref")
 	}
 	if got.Effort != "high" {
 		t.Errorf("Effort = %q, want %q", got.Effort, "high")

@@ -801,9 +801,6 @@ type DefaultBeadReviewer struct {
 	// when both are empty, dispatch is left to the agent service.
 	Harness string
 	Model   string
-	// ModelRef is retained for tests/legacy callers that explicitly want an
-	// upstream model-ref override. Default reviewer routing uses fizeau profiles.
-	ModelRef string
 	// Caps configures the per-section evidence caps used when assembling
 	// the review prompt (FEAT-022). When zero-valued, evidence.DefaultCaps
 	// applies.
@@ -961,10 +958,6 @@ func (r *DefaultBeadReviewer) applyExplicitReviewerPins(runtime *AgentRunRuntime
 	if r.Model != "" {
 		runtime.ModelOverride = r.Model
 		return r.Model
-	}
-	if r.ModelRef != "" {
-		runtime.ModelRefOverride = r.ModelRef
-		return r.ModelRef
 	}
 	return runtime.ProfileOverride
 }
@@ -1170,8 +1163,6 @@ func (r *DefaultBeadReviewer) reviewBeadWithDiff(ctx context.Context, beadID, re
 		reviewRouteLabel := reviewProfile.Name
 		if r.Model != "" {
 			reviewRouteLabel = r.Model
-		} else if r.ModelRef != "" {
-			reviewRouteLabel = r.ModelRef
 		}
 		overflowTelemetry := &EvidenceAssemblyTelemetry{
 			Sections:    built.Sections,
