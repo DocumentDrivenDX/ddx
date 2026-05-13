@@ -78,6 +78,11 @@ type CommandFactory struct {
 	// resource preflight used by ddx try and ddx work.
 	resourceCheckerOverride agent.ExecutionResourceChecker
 
+	// workerScannerOverride, when non-nil, replaces the live-process worker
+	// scanner used by "ddx work status". Tests inject a fixed snapshot so
+	// the command can be exercised without spawning real worker processes.
+	workerScannerOverride workerStatusScanner
+
 	// preflightWarnOnce ensures the project-local skill layout warning fires at
 	// most once per process for long-running entrypoints (work, try).
 	preflightWarnOnce sync.Once

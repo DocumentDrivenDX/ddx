@@ -40,6 +40,30 @@ Flags worth knowing:
 - `--harness <name>` / `--provider <name>` / `--model <ref>` / `--profile <name>` — passthrough constraints only. DDx sends them
   unchanged and does not route on them.
 
+## Are workers running for this project?
+
+When someone asks "is the worker still working beads?" or "how is the queue
+progressing?", do not answer with a global `ps aux | grep -E 'ddx work|ddx try'`
+scan. That returns workers from every checkout on the host and falsely
+signals progress on whichever project happens to be asked about.
+
+```bash
+ddx work status                # live workers scoped to this project
+ddx work status --json         # machine-readable
+ddx work status --all-projects # explicit cross-project escape hatch
+```
+
+`ddx work status` defaults to the current project root (CLI flag → env
+`DDX_PROJECT_ROOT` → CWD git root). It reports pid, age, command line,
+project root, and — when inferable from argv or an isolated execute-bead
+worktree — the active bead ID. Always name the project root the answer
+applies to; never substitute a worker from a different repository as
+evidence that this project is progressing.
+
+`--all-projects` is the only sanctioned way to ask "what ddx workers
+exist anywhere on this host?" — use it only when the question is
+explicitly cross-project.
+
 ## Primitive: `ddx try`
 
 For targeted re-runs, debugging, or running a specific bead:
@@ -154,6 +178,10 @@ ddx work --profile default                  # passthrough constraint
 ddx try <id>                                # one bead attempt
 ddx try <id> --from <rev>                   # override base commit
 ddx try <id> --no-merge                     # preserve iteration
+
+ddx work status                             # live workers for this project
+ddx work status --json                      # machine-readable
+ddx work status --all-projects              # opt-in cross-project view
 ```
 
-Full flag list: `ddx work --help`, `ddx try --help`, `ddx run --help`.
+Full flag list: `ddx work --help`, `ddx try --help`, `ddx run --help`, `ddx work status --help`.

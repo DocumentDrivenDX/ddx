@@ -41,6 +41,39 @@ Typical answers:
 - "What is waiting on dependencies?" → `ddx bead ready` / `ddx bead status`;
   dependency waits are derived queue state, not `status=blocked`.
 
+## Are workers running for this project?
+
+"Is the worker still working beads for this project?" "How is the queue
+progressing?"
+
+```bash
+ddx work status            # live ddx work/ddx try processes for THIS project
+ddx work status --json     # machine-readable
+ddx work status --all-projects   # explicit cross-project escape hatch
+```
+
+`ddx work status` defaults to the current project root (CLI flag → env
+`DDX_PROJECT_ROOT` → git root of CWD). The default view never reports
+workers from another repository — surfacing a worker that belongs to a
+different project as evidence that this project is "still working" is the
+exact failure this command was added to prevent.
+
+**Required when answering "is the worker still running for project X?":**
+
+1. Resolve the requested project root before answering. Pass `--project`
+   if you are not already in that root.
+2. Use `ddx work status` (or `ddx work status --json`) for the live-worker
+   evidence. Never substitute a raw global `ps aux | grep -E 'ddx work|ddx try'`
+   scan: it returns workers from every checkout on the host and produces
+   a misleading "yes, working" signal for whichever project happens to be
+   asked.
+3. Always name the project root the worker status applies to ("for
+   `<project>`: …"). A bare "yes, a worker is running" answer is unsafe
+   because the reader cannot tell which project it refers to.
+4. If a live worker belongs to a *different* project, mention it only as
+   explicitly out-of-scope context (`--all-projects` view), not as
+   evidence that the asked-about project is progressing.
+
 ## Am I healthy?
 
 "Is DDx installed and working?" "Are the harnesses available?"
@@ -106,6 +139,12 @@ A user asking "what's ready to work on?" is clearly asking for
 - **Closing stale beads based on "status" alone.** `ddx bead
   status` shows counts, not quality. Use `ddx bead list
   --status open` + `ddx bead show <id>` to actually read each bead.
+- **Answering "is the worker running?" with a global `ps aux | grep -E
+  'ddx work|ddx try'` scan.** Without project-root filtering this surfaces
+  workers from other repositories and falsely signals progress on the
+  project that was asked about. Use `ddx work status` (project-scoped by
+  default) and only fall back to `--all-projects` for an explicit
+  cross-project view.
 
 ## CLI reference
 
@@ -116,6 +155,11 @@ ddx bead blocked
 ddx bead status
 ddx bead list [--status open|closed] [--label <l>]
 ddx bead show <id>
+
+# Live workers for this project (defaults to current project root)
+ddx work status
+ddx work status --json
+ddx work status --all-projects   # opt-in cross-project view
 
 # Environment health
 ddx doctor
