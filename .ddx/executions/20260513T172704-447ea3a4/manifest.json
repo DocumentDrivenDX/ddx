@@ -1,0 +1,73 @@
+{
+  "attempt_id": "20260513T172704-447ea3a4",
+  "bead_id": "ddx-f07cb5d3",
+  "base_rev": "5c17ed2835483c9deab1e9badf33fb462d231411",
+  "created_at": "2026-05-13T17:27:07.269795674Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-f07cb5d3",
+    "title": "Add Story 16 cross-cutting run-detail e2e and p95 fixture coverage",
+    "description": "PROBLEM\nStory 16 needs an end-to-end guard that the run-detail surface can move from the Runs list into prompt, response, tool trace, and evidence data, and a performance guard for a p95-shaped run with 200 tool calls and 30 evidence files.\n\nROOT CAUSE\n- cli/internal/server/frontend/e2e/runs.spec.ts:249-473 contains the existing full-stack run-detail browser flow.\n- cli/internal/server/frontend/e2e/runs-evidence.spec.ts:207-340 covers evidence whitelist, large-file, and non-whitelisted download-only behavior.\n- cli/internal/server/state_runs_detail_test.go:169-227 covers persisted tool-call and drain-time shape at the Go layer.\n- The parent bead combines browser e2e, large fixture shape, and global gates; splitting this child keeps it test-only and avoids production frontend work owned by Story 16.1 and Story 16.2.\n- Parent context: ddx-b4c5151a, originally split from ddx-70a432b5. Preserve dependency IDs ddx-f04faa86 and ddx-4cd64068 when filing this child.\n\nPROPOSED FIX\nAdd or update Playwright coverage so a mocked project exercises Runs list -\u003e run detail -\u003e prompt tab -\u003e response tab -\u003e tools tab -\u003e evidence tab with prompt, response, tool trace, and evidence-list data present. Add a p95 fixture with 200 tool calls and 30 evidence files and assert each tab is visible and interactive within one requestAnimationFrame after its mocked data resolves. Keep this child to tests, fixtures, selectors, and harmless test hooks only.\n\nNON-SCOPE\n- Production frontend implementation; Story 16.1 and Story 16.2 own the page and evidence tab behavior.\n- New auth or role-based access control beyond what the trust boundary documents.\n- Backend resolver/audit implementation and FEAT prose updates assigned to sibling child beads.\n- Do not implement parent acceptance criteria assigned to sibling child beads.",
+    "acceptance": "1. Add or update a Playwright test named Story16RunDetailFullStackP95 that covers prompt, response, tool-trace, and evidence-list traversal from the Runs list to /runs/[runId].\n2. Story16RunDetailFullStackP95 uses a p95 fixture with exactly 200 tool calls and 30 evidence files, and asserts all run-detail tabs render and become interactive within one requestAnimationFrame after data resolution.\n3. Add or update TestStory16RunDetailP95FixtureShape to pin the Go-side fixture/resolver shape for 200 tool calls and 30 bundle files.\n4. cd cli \u0026\u0026 go test ./internal/server/... -run 'TestStory16RunDetailP95FixtureShape|TestRunToolCalls_PersistedAtDrain|TestRunBundleFiles_Listing' passes.\n5. cd cli/internal/server/frontend \u0026\u0026 bun run test:e2e -- runs.spec.ts passes, or cd cli/internal/server/frontend \u0026\u0026 bun run test:e2e passes if the local script does not support a file argument.\n6. cd cli \u0026\u0026 go test ./... passes.\n7. lefthook run pre-commit passes.",
+    "parent": "ddx-f129bfaf",
+    "labels": [
+      "phase:2",
+      "story:16",
+      "area:frontend",
+      "area:e2e",
+      "area:server",
+      "kind:test",
+      "spec:FEAT-008",
+      "spec:FEAT-010",
+      "decomposed",
+      "needs-human-decomposition"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-13T17:26:47Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "323328",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"depth\":3,\"max\":3}",
+          "created_at": "2026-05-13T17:26:47.397640153Z",
+          "kind": "triage-overflow",
+          "source": "ddx work",
+          "summary": "depth cap exceeded"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"bead depth 3 reached max_decomposition_depth 3; operator must split\",\"fingerprint\":\"94c841f916ea8dd55f9c10e471020fe274d118cdf54d7997ef0f8baecea57445\",\"policy_mode\":\"warn-only\",\"reason\":\"decomposition_depth_cap\",\"rule_id\":\"pre_claim_intake.decomposition_depth_cap\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T17:26:47.593927789Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "decomposition_depth_cap"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Title is imperative and names subsystem (run-detail e2e + p95 fixture). Description has PROBLEM, ROOT CAUSE with file:line citations (runs.spec.ts:249-473, runs-evidence.spec.ts:207-340, state_runs_detail_test.go:169-227), PROPOSED FIX, and explicit NON-SCOPE. AC is numbered with 7 items, names specific test functions (Story16RunDetailFullStackP95, TestStory16RunDetailP95FixtureShape) and go test -run filters, and ends with go test + lefthook gates. Labels include phase, story, area (multiple), kind, and spec cross-refs. Parent and deps explicit. Bead is self-contained without /tmp references.\",\"score\":8,\"suggested_fixes\":[],\"waivers_applied\":[]}",
+          "created_at": "2026-05-13T17:27:04.493032161Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=8"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-13T17:26:47.231553981Z",
+      "execute-loop-last-detail": "local branch main has diverged from origin (local=6b565e9b4c2b17422da664673bb504a409aa7692 origin=80363ccfaab687e9b6737151a9b21fa5ac3d48d5); reconcile manually before claiming",
+      "execute-loop-last-status": "preclaim-hook-failed",
+      "execute-loop-retry-after": "2026-05-13T04:45:35Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260513T172704-447ea3a4",
+    "prompt": ".ddx/executions/20260513T172704-447ea3a4/prompt.md",
+    "manifest": ".ddx/executions/20260513T172704-447ea3a4/manifest.json",
+    "result": ".ddx/executions/20260513T172704-447ea3a4/result.json",
+    "checks": ".ddx/executions/20260513T172704-447ea3a4/checks.json",
+    "usage": ".ddx/executions/20260513T172704-447ea3a4/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-f07cb5d3-20260513T172704-447ea3a4"
+  },
+  "prompt_sha": "66bedc621056f9db8f1b1ef598d45e4f8dd1bbb551042057e15e982abb833acb"
+}
