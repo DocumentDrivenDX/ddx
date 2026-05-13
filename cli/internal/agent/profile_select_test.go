@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/DocumentDrivenDX/ddx/internal/escalation"
 	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -76,6 +77,103 @@ func TestSelectProfile_ReturnsEmptyWhenNothingSatisfies(t *testing.T) {
 	assert.Empty(t, SelectCheapestProfile(snap))
 	assert.Empty(t, SelectStrongestProfile(snap))
 	assert.Empty(t, SelectStrongestProfileAbove(snap, 1))
+}
+
+func TestSelectImplementationProfile_StandardUsesOpaqueMediumBand(t *testing.T) {
+	snap := ProfileSnapshot{
+		Profiles: []agentlib.PolicyInfo{
+			{Name: "p-max", MinPower: 90, MaxPower: 100},
+			{Name: "p-low", MinPower: 10, MaxPower: 20},
+			{Name: "p-balanced", MinPower: 50, MaxPower: 70},
+		},
+		Models: []agentlib.ModelInfo{
+			{ID: "low", Power: 10, Available: true, AutoRoutable: true},
+			{ID: "balanced", Power: 60, Available: true, AutoRoutable: true},
+			{ID: "max", Power: 95, Available: true, AutoRoutable: true},
+		},
+	}
+
+	got := SelectImplementationProfile(snap, escalation.TierStandard)
+
+	assert.Equal(t, "p-balanced", got.Name)
+	assert.Equal(t, 50, got.MinPower)
+	assert.False(t, got.Degraded)
+}
+
+func TestSelectImplementationProfile_DoesNotHardcodeTierNames(t *testing.T) {
+	snap := ProfileSnapshot{
+		Profiles: []agentlib.PolicyInfo{
+			{Name: "alpha", MinPower: 1, MaxPower: 2},
+			{Name: "bravo", MinPower: 3, MaxPower: 4},
+			{Name: "charlie", MinPower: 5, MaxPower: 6},
+		},
+		Models: []agentlib.ModelInfo{
+			{ID: "a", Power: 1, Available: true, AutoRoutable: true},
+			{ID: "b", Power: 3, Available: true, AutoRoutable: true},
+			{ID: "c", Power: 5, Available: true, AutoRoutable: true},
+		},
+	}
+
+	assert.Equal(t, "alpha", SelectImplementationProfile(snap, escalation.TierCheap).Name)
+	assert.Equal(t, "bravo", SelectImplementationProfile(snap, escalation.TierStandard).Name)
+	assert.Equal(t, "charlie", SelectImplementationProfile(snap, escalation.TierSmart).Name)
+}
+
+func TestSelectImplementationProfile_MetadataTieBreaksAvoidUnvalidatedLocal(t *testing.T) {
+	snap := ProfileSnapshot{
+		Profiles: []agentlib.PolicyInfo{
+			{Name: "local", MinPower: 40, MaxPower: 60, AllowLocal: true},
+			{Name: "remote", MinPower: 40, MaxPower: 60},
+		},
+		Models: []agentlib.ModelInfo{
+			{ID: "candidate", Power: 50, Available: true, AutoRoutable: true, Cost: agentlib.CostInfo{InputPerMTok: 1, OutputPerMTok: 1}, PerfSignal: agentlib.PerfSignal{SpeedTokensPerSec: 20}},
+		},
+	}
+
+	got := SelectImplementationProfile(snap, escalation.TierCheap)
+
+	assert.Equal(t, "remote", got.Name)
+}
+
+func TestSelectImplementationProfile_DegradesToOnlyAvailableProfile(t *testing.T) {
+	snap := ProfileSnapshot{
+		Profiles: []agentlib.PolicyInfo{
+			{Name: "p-low", MinPower: 10, MaxPower: 20},
+			{Name: "p-balanced", MinPower: 50, MaxPower: 70},
+		},
+		Models: []agentlib.ModelInfo{
+			{ID: "low", Power: 10, Available: true, AutoRoutable: true},
+			{ID: "balanced-offline", Power: 60, Available: false, AutoRoutable: true},
+		},
+	}
+
+	got := SelectImplementationProfile(snap, escalation.TierStandard)
+
+	assert.Equal(t, "p-low", got.Name)
+	assert.True(t, got.Degraded)
+	assert.Contains(t, got.Note, "medium profile unavailable")
+}
+
+func TestSelectImplementationProfileForMinPower_MovesOffWeakProfileOnRetry(t *testing.T) {
+	snap := ProfileSnapshot{
+		Profiles: []agentlib.PolicyInfo{
+			{Name: "p-low", MinPower: 10, MaxPower: 20},
+			{Name: "p-balanced", MinPower: 50, MaxPower: 70},
+			{Name: "p-max", MinPower: 90, MaxPower: 100},
+		},
+		Models: []agentlib.ModelInfo{
+			{ID: "low", Power: 10, Available: true, AutoRoutable: true},
+			{ID: "balanced", Power: 60, Available: true, AutoRoutable: true},
+			{ID: "max", Power: 95, Available: true, AutoRoutable: true},
+		},
+	}
+
+	got := SelectImplementationProfileForMinPower(snap, escalation.TierCheap, 50)
+
+	assert.Equal(t, "p-balanced", got.Name)
+	assert.Equal(t, 50, got.MinPower)
+	assert.False(t, got.Degraded)
+	assert.Empty(t, got.Note)
 }
 
 func TestLoadProfileSnapshot_MemoizesAndStaleOnError(t *testing.T) {

@@ -439,11 +439,12 @@ type ExecuteBeadReport struct {
 	DurationMS int64 `json:"duration_ms,omitempty"`
 	// Profile routing telemetry. Populated when execute-loop uses a profile
 	// ladder rather than an explicit harness/model pin.
-	RequestedProfile string `json:"requested_profile,omitempty"`
-	RequestedTier    string `json:"requested_tier,omitempty"`
-	ResolvedTier     string `json:"resolved_tier,omitempty"`
-	EscalationCount  int    `json:"escalation_count,omitempty"`
-	FinalTier        string `json:"final_tier,omitempty"`
+	RequestedProfile  string `json:"requested_profile,omitempty"`
+	RequestedTier     string `json:"requested_tier,omitempty"`
+	RoutingIntentNote string `json:"routing_intent_note,omitempty"`
+	ResolvedTier      string `json:"resolved_tier,omitempty"`
+	EscalationCount   int    `json:"escalation_count,omitempty"`
+	FinalTier         string `json:"final_tier,omitempty"`
 	// DecompositionRecommendation carries the structured list of recommended
 	// sub-bead titles when Status == declined_needs_decomposition. The loop
 	// records these on the bead as a `decomposition-recommendation` event so
@@ -1654,8 +1655,8 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				Source:    "ddx work",
 				CreatedAt: now().UTC(),
 			})
-	_ = incrementConsecutiveLadderExhaustions(ctx, w.Store, candidate.ID)
-	if updated, getErr := w.Store.Get(ctx, candidate.ID); getErr == nil &&
+			_ = incrementConsecutiveLadderExhaustions(ctx, w.Store, candidate.ID)
+			if updated, getErr := w.Store.Get(ctx, candidate.ID); getErr == nil &&
 				consecutiveLadderExhaustionsValue(updated.Extra[consecutiveLadderExhaustionsKey]) >= 2 {
 				hasManualLabel := false
 				for _, lbl := range candidate.Labels {
@@ -1891,7 +1892,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				// BaseRev is empty (test fixtures and genuinely-no-commit
 				// satisfied beads).
 				report.Status = ExecuteBeadStatusAlreadySatisfied
-			if noChanges.Evidence != "" {
+				if noChanges.Evidence != "" {
 					// Checker evidence explains why the bead is being closed;
 					// it takes precedence over the executor's attempt detail.
 					report.Detail = noChanges.Evidence
@@ -2370,14 +2371,15 @@ func appendLoopRoutingEvidence(store BeadEventAppender, beadID string, report Ex
 		return
 	}
 	body, err := json.Marshal(map[string]any{
-		"resolved_provider": provider,
-		"resolved_model":    report.Model,
-		"fallback_chain":    []string{},
-		"requested_profile": report.RequestedProfile,
-		"requested_tier":    report.RequestedTier,
-		"resolved_tier":     report.ResolvedTier,
-		"escalation_count":  report.EscalationCount,
-		"final_tier":        report.FinalTier,
+		"resolved_provider":   provider,
+		"resolved_model":      report.Model,
+		"fallback_chain":      []string{},
+		"requested_profile":   report.RequestedProfile,
+		"requested_tier":      report.RequestedTier,
+		"routing_intent_note": report.RoutingIntentNote,
+		"resolved_tier":       report.ResolvedTier,
+		"escalation_count":    report.EscalationCount,
+		"final_tier":          report.FinalTier,
 	})
 	if err != nil {
 		return
@@ -2401,11 +2403,16 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 		return
 	}
 	intent := escalation.ParseExecutionHint(&target)
+	requestedTier := string(intent.RequestedTier)
+	if report.RequestedTier != "" {
+		requestedTier = report.RequestedTier
+	}
 	body := map[string]any{
 		"bead_id":                 target.ID,
 		"attempt_id":              report.AttemptID,
 		"routing_intent_source":   string(intent.Source),
-		"requested_tier":          string(intent.RequestedTier),
+		"requested_tier":          requestedTier,
+		"requested_profile":       report.RequestedProfile,
 		"smart_justification":     intent.SmartJustification,
 		"actual_harness":          report.Harness,
 		"actual_provider":         report.Provider,
@@ -2421,6 +2428,12 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 		degraded = true
 		note = "missing SMART JUSTIFICATION"
 	}
+	if strings.TrimSpace(report.RoutingIntentNote) != "" {
+		degraded = true
+		if note == "" {
+			note = report.RoutingIntentNote
+		}
+	}
 	if report.Harness == "" || report.Model == "" {
 		degraded = true
 		if note == "" {
@@ -2433,7 +2446,7 @@ func appendExecutionRoutingIntentEvidence(store BeadEventAppender, target bead.B
 	if err != nil {
 		return
 	}
-	summary := fmt.Sprintf("source=%s tier=%s", intent.Source, intent.RequestedTier)
+	summary := fmt.Sprintf("source=%s tier=%s", intent.Source, requestedTier)
 	if report.Model != "" {
 		summary += " model=" + report.Model
 	}
