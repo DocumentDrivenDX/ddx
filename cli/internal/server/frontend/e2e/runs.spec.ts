@@ -1124,6 +1124,204 @@ test('tab state survives navigation', async ({ page }) => {
 	await expect(detail.locator('[data-evidence-path="result.json"]')).toBeVisible();
 });
 
+test('p95 run detail stays interactive with 200 tool calls and 30 evidence files', async ({
+	page
+}) => {
+	const toolCalls = Array.from({ length: 200 }, (_, index) => ({
+		node: {
+			id: `rtc-${index}`,
+			seq: index,
+			name: index % 2 === 0 ? 'Bash' : 'Read',
+			inputs: JSON.stringify({ command: `echo step ${index}` }),
+			output: `step-${index}-output`,
+			error: null,
+			durationMs: index + 1
+		},
+		cursor: `rtc-${index}`
+	}));
+	const evidenceFiles = Array.from({ length: 30 }, (_, index) => {
+		const path = `evidence/evidence-${String(index).padStart(2, '0')}.txt`;
+		return {
+			path,
+			size: 512 + index,
+			mimeType: 'text/plain'
+		};
+	});
+	const evidenceContent = Object.fromEntries(
+		evidenceFiles.map((file) => [
+			file.path,
+			{
+				path: file.path,
+				content: `evidence body for ${file.path}`,
+				sizeBytes: file.size,
+				truncated: false,
+				mimeType: file.mimeType
+			}
+		])
+	);
+
+	await page.route('/graphql', async (route) => {
+		const body = route.request().postDataJSON() as {
+			query: string;
+			variables?: Record<string, unknown>;
+		};
+
+		if (body.query.includes('NodeInfo')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { nodeInfo: NODE_INFO } })
+			});
+			return;
+		}
+		if (body.query.includes('ProjectsForLayout') || body.query.includes('Projects')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { projects: { edges: PROJECTS.map((node) => ({ node })) } } })
+			});
+			return;
+		}
+		if (body.query.includes('RunHeader') || body.query.includes('RunDetailExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { run: runNode } })
+			});
+			return;
+		}
+		if (body.query.includes('RunSessionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						agentSession: {
+							id: 'sess-x',
+							workerId: 'worker-run-001',
+							harness: 'claude',
+							model: 'claude-sonnet-4-6',
+							cost: 0.0876,
+							billingMode: 'usage',
+							baseRev: 'abc123def',
+							resultRev: 'def456abc',
+							stdoutPath: '.ddx/agent-logs/agent-sess-x.jsonl',
+							stderrPath: '.ddx/agent-logs/agent-sess-x.err',
+							tokens: { prompt: 12000, completion: 3400, total: 15400, cached: 0 },
+							status: 'completed',
+							outcome: 'success',
+							prompt: 'session prompt',
+							response: 'session response',
+							stderr: 'session stderr'
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunToolCallsExpand')) {
+			const after = body.variables?.['after'] as string | null | undefined;
+			const afterIndex = after ? Number(after.split('-').pop() ?? '-1') : -1;
+			const slice = toolCalls.slice(afterIndex + 1, afterIndex + 51);
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						runToolCalls: {
+							edges: slice,
+							pageInfo: {
+								hasNextPage: afterIndex + slice.length < toolCalls.length - 1,
+								endCursor: slice[slice.length - 1]?.cursor ?? null
+							},
+							totalCount: toolCalls.length
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunEvidenceFiles')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						run: {
+							id: RUN_ID,
+							bundleFiles: evidenceFiles
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunBundleFileFetch')) {
+			const path = String(body.variables?.['path'] ?? '');
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { runBundleFile: evidenceContent[path] ?? null } })
+			});
+			return;
+		}
+		if (body.query.includes('ProducedArtifact')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { artifact: null } })
+			});
+			return;
+		}
+		await route.continue();
+	});
+
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}`);
+	const detail = page.locator('[data-testid="rundetail"]');
+	await expect(detail).toBeVisible();
+	await expect(detail.locator('button[data-tab="overview"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="prompt"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="response"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="tools"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="session"]')).toBeVisible();
+	await expect(detail.locator('button[data-tab="evidence"]')).toBeVisible();
+
+	await detail.locator('button[data-tab="prompt"]').click();
+	await expect(detail.locator('[data-testid="rundetail-prompt-body"]')).toContainText(
+		'session prompt'
+	);
+
+	await detail.locator('button[data-tab="response"]').click();
+	await expect(detail.locator('[data-testid="rundetail-response-body"]')).toContainText(
+		'session response'
+	);
+
+	await detail.locator('button[data-tab="session"]').click();
+	await expect(detail.locator('[data-testid="rundetail-session"]')).toContainText('sess-x');
+
+	await detail.locator('button[data-tab="tools"]').click();
+	await expect(detail.locator('[data-testid="rundetail-tools"]')).toBeVisible();
+	await expect(detail.locator('[data-tool-seq="0"]')).toBeVisible();
+	for (const seq of [50, 100, 150]) {
+		await detail.getByRole('button', { name: 'Load more' }).click();
+		await expect(detail.locator(`[data-tool-seq="${seq}"]`)).toBeVisible();
+	}
+	await expect(detail.locator('[data-tool-seq="199"]')).toBeVisible();
+	await expect(detail.locator('[data-testid="rundetail-tools"]')).toContainText('200 of 200 tool calls');
+
+	await detail.locator('button[data-tab="evidence"]').click();
+	await expect(detail.locator('[data-testid="rundetail-evidence"]')).toBeVisible();
+	await expect(detail.locator('[data-evidence-path]')).toHaveCount(30);
+	await expect(detail.locator('[data-evidence-path="evidence/evidence-29.txt"]')).toBeVisible();
+	const firstEvidenceView = detail.locator('[data-evidence-view="evidence/evidence-00.txt"]');
+	await firstEvidenceView.click();
+	await expect(firstEvidenceView).toHaveText('Hide');
+	await expect(detail.locator('[data-testid="evidence-inline"]')).toBeVisible();
+	await expect(detail.locator('[data-testid="evidence-inline-content"]')).toContainText(
+		'evidence body for evidence/evidence-00.txt'
+	);
+});
+
 test('deep-link to tools tab', async ({ page }) => {
 	await page.route('/graphql', async (route) => {
 		const body = route.request().postDataJSON() as {
