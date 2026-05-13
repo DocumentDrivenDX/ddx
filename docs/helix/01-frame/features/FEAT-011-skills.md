@@ -220,7 +220,7 @@ wording, which remains only as an implementation detail for older hooks.
   `.agents/skills/ddx/` for Codex and agentskills-compatible harnesses,
   `.claude/skills/ddx/` for Claude Code, and `.ddx/skills/ddx/` as the
   project-local DDx-managed copy.
-- On init and on `ddx update`, stale ddx-prefixed skill directories
+- On init and on `ddx init --force`, stale ddx-prefixed skill directories
   from prior DDx versions are removed:
   `ddx-bead`, `ddx-run`, `ddx-review`, `ddx-status`,
   `ddx-doctor`, `ddx-install`, `ddx-release`. Third-party skills are
@@ -232,7 +232,7 @@ wording, which remains only as an implementation detail for older hooks.
   That target covers only the embedded copy.
 - Source skill edits that affect shipped interactive behavior must also refresh
   the project-local copies under `.agents/skills/ddx/`, `.claude/skills/ddx/`,
-  and `.ddx/skills/ddx/` through `ddx init` / `ddx update` behavior or an
+  and `.ddx/skills/ddx/` through `ddx init --force` behavior or an
   explicit repo-local sync command. Tests must compare touched files across all
   five shipped paths so a green `make copy-skills` cannot mask stale project
   copies.
@@ -294,7 +294,7 @@ load-bearing, not optional. The repo ships:
    `reference/`, `scripts/`, or `evals/` as needed.
 5. `ddx init` copies the skill, removes stale `ddx-*` dirs, and
    merges the AGENTS.md block without clobbering user content.
-6. `ddx update` refreshes `.claude/skills/ddx/` and removes stale
+6. `ddx init --force` refreshes `.claude/skills/ddx/` and removes stale
    dirs.
 7. `skills/ddx/evals/routing.jsonl` contains at least 15 rows, each
    passing the richer route schema and then passing against `claude` and
@@ -400,15 +400,14 @@ what I wrote
   everything outside.
 - Running `ddx init` a second time does not duplicate the block.
 
-### US-114: `ddx update` refreshes skills
+### US-114: `ddx init --force` refreshes skills
 **As a** user who ran `ddx init` on an older DDx version
-**I want** `ddx update` to refresh `.claude/skills/ddx/` to the
+**I want** `ddx init --force` to refresh `.claude/skills/ddx/` to the
 current shipped content
-**So that** I don't have to re-run `ddx init` to pick up skill
-improvements
+**So that** I can use one explicit project-bootstrap refresh command
 
 **Acceptance Criteria:**
-- After `ddx update`, `.claude/skills/ddx/` bytes match the embedded
+- After `ddx init --force`, `.claude/skills/ddx/` bytes match the embedded
   skill content.
 - Stale `ddx-*` dirs are removed as in US-112.
 

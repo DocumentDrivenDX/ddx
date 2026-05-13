@@ -255,7 +255,8 @@ do not affect DDx graph semantics.
 
 **Acceptance Criteria:**
 - Given I read the plugin API reference, when I create a package.yaml and
-  skills directory, then `ddx install --local /my/plugin` installs it
+  skills directory, then `ddx plugin install <name> --local /my/plugin`
+  installs it as a project-local symlink overlay
 - Given my package.yaml has `api_version: 1`, when DDx is at a compatible
   version, then install succeeds
 

@@ -23,9 +23,10 @@ HELIX plugin steps.
 
 ### TC-020: Install plugin from registry
 **Given** DDx is initialized in a fresh project
-**When** `ddx install helix` runs
-**Then** exit code 0, `ddx installed` shows helix, skills exist at
-`.agents/skills/helix-*/SKILL.md` (project-local; FEAT-015: home paths retired)
+**When** `ddx plugin install helix` runs
+**Then** exit code 0, `ddx plugin list` shows helix, skills exist at
+`.agents/skills/helix/SKILL.md` and `.claude/skills/helix/SKILL.md`
+(project-local; FEAT-015: home paths retired)
 
 ### TC-021: Offline init creates working structure
 **Given** a fresh git repo with no network access to ddx-library
@@ -113,7 +114,7 @@ ddx doc changed --since HEAD~20  # shows all artifacts touched
 ```bash
 # Phase 1: Setup (mechanical, ~10s)
 ddx init
-ddx install helix
+ddx plugin install helix
 ddx doctor
 
 # Phase 2: Frame (~60s, requires agent)

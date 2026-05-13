@@ -72,8 +72,8 @@ specifications. The PRD stays at the user- and capability-level:
 - FEAT-014 defines agent token awareness: usage tracking, budget enforcement,
   and model selection guidance across harnesses
 - FEAT-015 defines the installation architecture: clean separation of
-  install.sh (binary), ddx install --global (skills), ddx init (project),
-  and ddx install <plugin> (plugin lifecycle)
+  install.sh / `ddx upgrade` (binary), `ddx init` (project bootstrap),
+  and `ddx plugin *` (project plugin lifecycle)
 - FEAT-016 defines delivery metrics: bead lifecycle cost, rework rates, and
   derived measures computed from existing stores (beads, agent sessions).
   Distinct from FEAT-010 which covers operational metrics you *run*.
@@ -447,7 +447,7 @@ The server feature spec should also define requirements for:
 - [ ] Website: live at ddx.github.io with clear messaging and embedded demos
 - [ ] At least one workflow tool (HELIX) successfully building on DDx beads and
       agent dispatch
-- [ ] `ddx install helix` bootstraps HELIX from the registry
+- [ ] `ddx plugin install helix` bootstraps HELIX from the registry
 - [ ] Document library syncing between 2+ projects
 - [ ] CI pipeline green on every merge to main; Pages deploy gated on CI
 - [ ] README includes animated terminal recordings of core workflows

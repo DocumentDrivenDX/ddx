@@ -18,7 +18,7 @@ Use **commit SHA pinning + content tree hashing** in a version-controlled lockfi
 
 #### On Install
 
-1. User runs `ddx install helix`
+1. User runs `ddx plugin install helix`
 2. DDx resolves the package to a specific git commit SHA from the registry
 3. DDx clones/fetches at that exact commit (shallow, specific ref)
 4. DDx computes a SHA-256 hash of the content tree (all files in sorted order)
@@ -28,12 +28,12 @@ Use **commit SHA pinning + content tree hashing** in a version-controlled lockfi
 #### On Subsequent Use
 
 1. DDx reads `.ddx/lock.yaml`
-2. On `ddx update`, DDx fetches the latest commit, computes the new tree hash, and shows the diff in the lockfile
+2. On `ddx plugin upgrade`, DDx fetches the latest commit, computes the new tree hash, and shows the diff in the lockfile
 3. The developer reviews and commits the lockfile change (like reviewing `go.sum` changes)
 
 #### On Verification
 
-1. `ddx verify` re-fetches all locked packages at their pinned commits
+1. `ddx doctor --plugins` audits installed plugin integrity
 2. Re-computes tree hashes
 3. Compares against `.ddx/lock.yaml`
 4. Any mismatch = hard failure with clear error
@@ -82,7 +82,7 @@ Using SHA-256. Same content always produces the same hash. File ordering is lexi
 
 In addition to the tree hash (which covers the source), each installed file gets its own SHA-256 hash recorded in the lockfile. This enables:
 
-- `ddx verify` to check installed files haven't been tampered with post-install
+- `ddx doctor --plugins` to check installed files haven't been tampered with post-install
 - Detection of local modifications to installed skills/plugins
 - Fast verification (check file hashes) without re-fetching from git
 
@@ -109,7 +109,7 @@ When DDx fetches the registry, it verifies that the commit and tree_hash for a p
 | Registry repo compromised (modified registry.yaml) | Lockfile pins override registry. Developer reviews lockfile changes in PRs. |
 | Source repo compromised (force-push, tag mutation) | Commit SHA is immutable. Tree hash catches any content change at that commit. |
 | Man-in-the-middle during download | Tree hash computed after download must match lockfile. Any tampering detected. |
-| Installed files modified post-install | Per-file hashes in lockfile. `ddx verify` detects modifications. |
+| Installed files modified post-install | Per-file hashes in lockfile. `ddx doctor --plugins` detects modifications. |
 | Lockfile tampered with in a PR | Standard code review catches lockfile changes. Lockfile changes should be reviewed like dependency updates. |
 | Registry serves different content to different users | Tree hash is deterministic. Two users fetching the same commit get the same hash or detect a discrepancy. |
 
@@ -117,7 +117,7 @@ When DDx fetches the registry, it verifies that the commit and tree_hash for a p
 
 - **First-fetch trust (TOFU):** The first time you install a package, you're trusting whatever the registry points to. Mitigated by: registry is a git repo with PR review.
 - **Compromised developer machine:** If your local machine is compromised, all bets are off. Out of scope.
-- **Upstream author goes rogue:** If the legitimate author publishes malicious content at a new version, the lockfile protects existing installs but new `ddx update` pulls the bad version. Mitigated by: developer reviews lockfile diffs.
+- **Upstream author goes rogue:** If the legitimate author publishes malicious content at a new version, the lockfile protects existing installs but new `ddx plugin upgrade` pulls the bad version. Mitigated by: developer reviews lockfile diffs.
 
 ## Future Tiers (Deferred)
 
@@ -154,7 +154,7 @@ For the strongest guarantee that content was published by a specific identity. D
 
 - Every installed package is pinned by commit SHA and tree hash
 - `.ddx/lock.yaml` must be committed to version control and reviewed in PRs
-- `ddx verify` can check integrity at any time without network access (for installed file hashes)
+- `ddx doctor --plugins` can check integrity at any time without network access (for installed file hashes)
 - No external signing infrastructure required
 - ~100 lines of Go for tree hashing + lockfile management
 - Developers must review lockfile changes like they review `go.sum` changes
