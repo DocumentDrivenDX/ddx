@@ -341,7 +341,7 @@ func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 	assert.Equal(t, float64(91), body["actual_power"])
 }
 
-func TestTryZeroConfigInferredTaskSelectsFizeauProfileByMetadata(t *testing.T) {
+func TestTryZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
@@ -378,7 +378,7 @@ func TestTryZeroConfigInferredTaskSelectsFizeauProfileByMetadata(t *testing.T) {
 	stub.mu.Unlock()
 	require.True(t, executeCalled, "ddx try must invoke the implementation dispatch; output=%q err=%v", out, err)
 	assert.Equal(t, "default", lastReq.Policy, "dispatch should request the ordinary no-requirement Fizeau policy by metadata")
-	assert.Equal(t, 7, lastReq.MinPower, "dispatch should use the selected policy floor instead of escalating to the strongest profile")
+	assert.Equal(t, 0, lastReq.MinPower, "initial zero-config dispatch must not duplicate the selected policy floor as MinPower")
 	assert.Empty(t, lastReq.Harness, "zero-config routing must not hard-pin a harness")
 	assert.Empty(t, lastReq.Provider, "zero-config routing must not hard-pin a provider")
 	assert.Empty(t, lastReq.Model, "zero-config routing must not hard-pin a model")
@@ -421,7 +421,7 @@ func TestTryZeroConfigCheapTaskSkipsRequirementProfile(t *testing.T) {
 	stub.mu.Unlock()
 	require.True(t, executeCalled, "ddx try must invoke the implementation dispatch; output=%q err=%v", out, err)
 	assert.Equal(t, "cheap", lastReq.Policy, "cheap zero-config routing must not pick requirement-bearing air-gapped policy")
-	assert.Equal(t, 5, lastReq.MinPower, "cheap zero-config routing should use the selected policy floor")
+	assert.Equal(t, 0, lastReq.MinPower, "initial zero-config dispatch must not duplicate the selected policy floor as MinPower")
 }
 
 // TestTryInterrupt_InFlightAttemptUnclaimsTarget verifies that cancelling

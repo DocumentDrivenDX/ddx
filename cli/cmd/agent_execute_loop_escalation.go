@@ -242,13 +242,21 @@ func runEscalatingSingleTierAttempts(
 				return report, nil
 			}
 		}
-		basis := minPower
+		var nextPower int
 		if report.ActualPower > 0 {
-			basis = report.ActualPower
-		}
-		nextPower, nextErr := nextEscalationFloor(ladder, basis)
-		if nextErr != nil {
-			return report, nil
+			// Evidence-driven retry: bump MinPower one above the actual power
+			// the previous route ran at. Profile reselection in the caller's
+			// attempt callback moves to a stronger policy band only when the
+			// new floor exceeds the current band's MaxPower; otherwise the
+			// same policy intent is preserved so DDx does not duplicate
+			// Fizeau policy bounds as initial dispatch floors.
+			nextPower = report.ActualPower + 1
+		} else {
+			next, nextErr := nextEscalationFloor(ladder, minPower)
+			if nextErr != nil {
+				return report, nil
+			}
+			nextPower = next
 		}
 		minPower = nextPower
 	}
