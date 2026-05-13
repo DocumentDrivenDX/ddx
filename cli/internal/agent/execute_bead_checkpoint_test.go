@@ -1,11 +1,10 @@
 package agent
 
-// execute_bead_checkpoint_test.go — Tier-2 integration tests for FEAT-012 §22 +
-// US-126 AC#1: when ExecuteBead starts and the parent worktree has uncommitted
-// changes, DDx must capture them as a real commit on the current branch
-// (the "checkpoint commit") and use the resulting HEAD as the effective base
-// revision for the worker worktree. Caller's edits are preserved as a normal
-// commit they can `git reset HEAD~` to recover.
+// execute_bead_checkpoint_test.go — Tier-2 integration tests for the
+// pre-dispatch checkpoint guard. DDx must capture allowed bookkeeping changes
+// as a real commit on the current branch, but it must reject ordinary
+// implementation files so they stay in the bead's substantive [ddx-<id>]
+// commit instead of being absorbed into the checkpoint.
 //
 // Clean parent worktrees must NOT spawn a redundant checkpoint commit.
 
@@ -36,60 +35,35 @@ func runNoopExecuteBeadForCheckpoint(t *testing.T, projectRoot, beadID string) *
 	return res
 }
 
-// TestExecuteBead_DirtyParentTree_CheckpointCommitted seeds a repo, makes the
-// parent worktree dirty (one tracked-modified file, one untracked file),
-// runs ExecuteBead, and asserts that:
-//   - HEAD advanced by at least one commit before the worker worktree was
-//     created (the checkpoint commit captures the caller's dirt)
-//   - both the modified content and the untracked file are reachable in HEAD
-//     (changes survived as a real commit, not discarded)
-//   - the worker worktree's BaseRev points at that new HEAD (or a descendant
-//     such as a tracker commit), not at the original seed commit
+// TestExecuteBead_DirtyParentTree_CheckpointCommitted seeds a repo with
+// allowed DDx bookkeeping dirt, runs ExecuteBead, and asserts that the
+// checkpoint lands as a real commit on the current branch.
 func TestExecuteBead_DirtyParentTree_CheckpointCommitted(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
 
-	// Make the parent dirty: modify the tracked seed file and add an
-	// untracked file. The checkpoint must capture both per IsDirty semantics.
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "seed.txt"),
-		[]byte("seed\nlocal modification\n"), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "untracked.txt"),
-		[]byte("untracked content\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".ddx", "run-state.json"),
+		[]byte(`{"attempt_id":"checkpoint-test"}`+"\n"), 0o644))
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 	commitsBefore := gitCommitCount(t, projectRoot, "HEAD")
 
-	// Directive does nothing observable — we only care about the pre-execution
-	// checkpoint behavior. An empty directive yields no_changes; that's fine.
-	dirFile := filepath.Join(t.TempDir(), "directive.txt")
-	writeDirectiveFile(t, dirFile, []string{})
-
-	runner := NewRunner(Config{})
-	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script"})
-	res, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
-		AgentRunner: runner,
-	}, &RealGitOps{})
-	require.NoError(t, err)
-	require.NotNil(t, res)
+	res := runNoopExecuteBeadForCheckpoint(t, projectRoot, beadID)
 
 	headAfter := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 	commitsAfter := gitCommitCount(t, projectRoot, "HEAD")
 
 	assert.NotEqual(t, headBefore, headAfter,
-		"HEAD must advance to capture the dirty caller worktree as a checkpoint commit")
+		"HEAD must advance to capture the bookkeeping checkpoint commit")
 	assert.GreaterOrEqual(t, commitsAfter-commitsBefore, 1,
 		"at least one commit (the checkpoint) must land on the parent branch")
 
-	// The modified seed and the untracked file must be reachable in HEAD —
-	// the checkpoint preserved the caller's work, did not discard it.
-	seedAtHead := runGitInteg(t, projectRoot, "show", "HEAD:seed.txt")
-	assert.Contains(t, seedAtHead, "local modification",
-		"tracked-modified content must be present in HEAD after checkpoint")
-	untrackedAtHead := runGitInteg(t, projectRoot, "show", "HEAD:untracked.txt")
-	assert.Contains(t, untrackedAtHead, "untracked content",
-		"untracked file must be tracked in HEAD after checkpoint (git add -A)")
+	// The allowed bookkeeping file must be reachable in HEAD.
+	runStateAtHead := runGitInteg(t, projectRoot, "show", "HEAD:.ddx/run-state.json")
+	assert.Contains(t, runStateAtHead, "checkpoint-test",
+		"allowed bookkeeping content must be present in HEAD after checkpoint")
 
-	// BaseRev recorded on the result must be the new HEAD, not the original seed.
+	// BaseRev recorded on the result must be the post-checkpoint HEAD.
 	assert.NotEqual(t, headBefore, res.BaseRev,
 		"BaseRev must be the post-checkpoint HEAD, not the pre-checkpoint HEAD")
 }
@@ -136,7 +110,7 @@ func TestExecuteBead_PreDispatchCheckpointBypassesHooks(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
 	const beadID = "ddx-int-0001"
 
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "caller-dirt.txt"), []byte("dirty\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".ddx", "run-state.json"), []byte(`{"attempt_id":"hook-test"}`+"\n"), 0o644))
 
 	markerPath := filepath.Join(projectRoot, "hook-invoked.txt")
 	hookPath := filepath.Join(projectRoot, ".git", "hooks", "pre-commit")
@@ -146,42 +120,72 @@ func TestExecuteBead_PreDispatchCheckpointBypassesHooks(t *testing.T) {
 
 	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 	res := runNoopExecuteBeadForCheckpoint(t, projectRoot, beadID)
-	require.NotEqual(t, headBefore, res.BaseRev, "dirty caller worktree should still become the worker base")
+	require.NotEqual(t, headBefore, res.BaseRev, "checkpointed bookkeeping should still become the worker base")
 
 	_, statErr := os.Stat(markerPath)
 	require.True(t, os.IsNotExist(statErr), "pre-dispatch checkpoint must not invoke parent pre-commit hook")
-	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:caller-dirt.txt"), "dirty")
+	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:.ddx/run-state.json"), "hook-test")
 }
 
-func TestExecuteBead_PreDispatchCheckpointExcludesDDXBackups(t *testing.T) {
+func TestCheckpointPreDispatchDirtAllowsTrackerAndEvidencePaths(t *testing.T) {
 	projectRoot, _ := newScriptHarnessRepo(t, 1)
-	const beadID = "ddx-int-0001"
+	const attemptID = "20260513T000001-allow000"
 
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "caller-dirt.txt"), []byte("dirty\n"), 0o644))
-	backupRel := filepath.Join(".ddx", "backups", "large.jsonl")
-	backupPath := filepath.Join(projectRoot, backupRel)
-	require.NoError(t, os.MkdirAll(filepath.Dir(backupPath), 0o755))
-	require.NoError(t, os.WriteFile(backupPath, []byte("backup\n"), 0o644))
-	runGitInteg(t, projectRoot, "add", "-f", backupRel)
-
-	runNoopExecuteBeadForCheckpoint(t, projectRoot, beadID)
-
-	_, err := runGitIntegOutput(projectRoot, "show", "HEAD:.ddx/backups/large.jsonl")
-	require.Error(t, err, "pre-dispatch checkpoint must not include DDx backup artifacts")
-}
-
-func TestExecuteBead_PreDispatchCheckpointExcludesExecutionEvidence(t *testing.T) {
-	projectRoot, _ := newScriptHarnessRepo(t, 1)
-	const beadID = "ddx-int-0001"
-
-	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, "caller-dirt.txt"), []byte("dirty\n"), 0o644))
-	evidenceRel := filepath.Join(".ddx", "executions", "manual-attempt", "manifest.json")
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".ddx", "run-state.json"), []byte(`{"attempt_id":"allow"}`+"\n"), 0o644))
+	evidenceRel := filepath.Join(".ddx", "executions", attemptID, "manifest.json")
 	evidencePath := filepath.Join(projectRoot, evidenceRel)
 	require.NoError(t, os.MkdirAll(filepath.Dir(evidencePath), 0o755))
-	require.NoError(t, os.WriteFile(evidencePath, []byte(`{"attempt":"manual"}`+"\n"), 0o644))
+	require.NoError(t, os.WriteFile(evidencePath, []byte(`{"attempt_id":"`+attemptID+`"}`+"\n"), 0o644))
 
-	runNoopExecuteBeadForCheckpoint(t, projectRoot, beadID)
+	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
 
-	_, err := runGitIntegOutput(projectRoot, "show", "HEAD:.ddx/executions/manual-attempt/manifest.json")
-	require.Error(t, err, "pre-dispatch checkpoint must not include execution evidence artifacts")
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.NoError(t, err)
+	require.True(t, committed, "tracker/evidence dirt should checkpoint")
+
+	headAfter := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	assert.NotEqual(t, headBefore, headAfter, "HEAD must advance for checkpointed bookkeeping")
+	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:.ddx/run-state.json"), "allow")
+	assert.Contains(t, runGitInteg(t, projectRoot, "show", "HEAD:"+evidenceRel), attemptID)
+}
+
+func TestCheckpointPreDispatchDirtRejectsImplementationPaths(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const attemptID = "20260513T000002-block000"
+
+	implPath := filepath.Join(projectRoot, "cli", "internal", "agent", "dirty_impl.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(implPath), 0o755))
+	require.NoError(t, os.WriteFile(implPath, []byte("package agent\n"), 0o644))
+
+	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.Error(t, err)
+	require.False(t, committed)
+	assert.Contains(t, err.Error(), "cli/internal/agent/dirty_impl.go")
+	assert.Contains(t, err.Error(), "[ddx-<id>]")
+	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
+}
+
+func TestExecuteBeadCheckpointDoesNotAbsorbSubstantiveWork(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const beadID = "ddx-int-0001"
+
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".ddx", "run-state.json"), []byte(`{"attempt_id":"exec-test"}`+"\n"), 0o644))
+	implPath := filepath.Join(projectRoot, "cli", "internal", "agent", "dirty_impl.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(implPath), 0o755))
+	require.NoError(t, os.WriteFile(implPath, []byte("package agent\n"), 0o644))
+
+	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+	dirFile := filepath.Join(t.TempDir(), "directive.txt")
+	writeDirectiveFile(t, dirFile, []string{})
+	runner := NewRunner(Config{})
+	rcfg := config.NewTestConfigForBead(config.TestBeadConfigOpts{Model: dirFile}).Resolve(config.CLIOverrides{Harness: "script"})
+	_, err := ExecuteBeadWithConfig(context.Background(), projectRoot, beadID, rcfg, ExecuteBeadRuntime{
+		AgentRunner: runner,
+	}, &RealGitOps{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "checkpoint refused to absorb implementation changes")
+	assert.Contains(t, err.Error(), "cli/internal/agent/dirty_impl.go")
+	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
 }

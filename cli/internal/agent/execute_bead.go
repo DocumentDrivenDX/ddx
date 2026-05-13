@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
@@ -539,11 +540,12 @@ func (r *RealGitOps) SynthesizeCommit(dir, msg string) (bool, error) {
 	return true, nil
 }
 
-// checkpointPreDispatchDirt captures caller worktree changes as a commit on
+// checkpointPreDispatchDirt captures DDx bookkeeping changes as a commit on
 // the current branch without using the caller checkout's real index or commit
-// hooks. This keeps the execute-bead base semantics from FEAT-012 §22 while
-// avoiding parent-checkout hook failures before the isolated worker worktree
-// exists.
+// hooks. The checkpoint is intentionally narrow: if the parent checkout also
+// contains ordinary implementation files, the attempt fails with an actionable
+// error so those changes can be committed in the bead's substantive
+// [ddx-<id>] commit instead of being folded into the checkpoint.
 func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 	if err := internalgit.Command(context.Background(), projectRoot, "rev-parse", "--is-inside-work-tree").Run(); err != nil {
 		return false, nil
@@ -554,6 +556,35 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 	}
 	head := strings.TrimSpace(string(headOut))
 	if head == "" {
+		return false, nil
+	}
+
+	dirtyPaths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	if err != nil {
+		return false, err
+	}
+	if len(dirtyPaths) == 0 {
+		return false, nil
+	}
+
+	allowedPaths := make([]string, 0, len(dirtyPaths))
+	blockedPaths := make([]string, 0)
+	for _, path := range dirtyPaths {
+		if preDispatchCheckpointAllowedPath(path) {
+			allowedPaths = append(allowedPaths, path)
+			continue
+		}
+		blockedPaths = append(blockedPaths, path)
+	}
+	sort.Strings(allowedPaths)
+	sort.Strings(blockedPaths)
+	if len(blockedPaths) > 0 {
+		return false, fmt.Errorf(
+			"checkpoint refused to absorb implementation changes outside DDx bookkeeping: %s; commit those files in the bead's [ddx-<id>] substantive commit before rerunning",
+			strings.Join(blockedPaths, ", "),
+		)
+	}
+	if len(allowedPaths) == 0 {
 		return false, nil
 	}
 
@@ -576,8 +607,8 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 		return false, fmt.Errorf("initializing checkpoint index: %s: %w", strings.TrimSpace(string(out)), err)
 	}
 
-	addArgs := []string{"add", "-A", "--", "."}
-	addArgs = append(addArgs, preDispatchCheckpointExcludePathspecs(projectRoot)...)
+	addArgs := []string{"add", "-A", "--force", "--"}
+	addArgs = append(addArgs, allowedPaths...)
 	if out, err := gitWithIndex(addArgs...); err != nil {
 		return false, fmt.Errorf("staging checkpoint changes: %s: %w", strings.TrimSpace(string(out)), err)
 	}
@@ -620,27 +651,102 @@ func checkpointPreDispatchDirt(projectRoot, attemptID string) (bool, error) {
 	return true, nil
 }
 
-func preDispatchCheckpointExcludePathspecs(dir string) []string {
-	candidates := []struct {
-		pathspec    string
-		ignoreProbe string
-	}{
-		{pathspec: ":(exclude).ddx/backups", ignoreProbe: ".ddx/backups/.ddx-check-ignore"},
-		{pathspec: ":(exclude).ddx/executions", ignoreProbe: ".ddx/executions/.ddx-check-ignore/manifest.json"},
-		{pathspec: ":(exclude).ddx/runs", ignoreProbe: ".ddx/runs/.ddx-check-ignore/record.json"},
-		{pathspec: ":(exclude).ddx/run-state.json", ignoreProbe: ".ddx/run-state.json"},
-		{pathspec: ":(exclude).ddx/run-state", ignoreProbe: ".ddx/run-state/.ddx-check-ignore"},
-		{pathspec: ":(exclude).ddx/.git-tracker.lock", ignoreProbe: ".ddx/.git-tracker.lock/pid"},
-		{pathspec: ":(exclude)" + ExecutionCleanupMetadataFileName, ignoreProbe: ExecutionCleanupMetadataFileName},
+func preDispatchCheckpointDirtyPaths(projectRoot string) ([]string, error) {
+	out, err := internalgit.Command(context.Background(), projectRoot,
+		"status", "--porcelain=v1", "-z", "--untracked-files=all", "--ignored=matching", "--", ".").Output()
+	if err != nil {
+		return nil, fmt.Errorf("listing checkpoint dirt: %w", err)
 	}
-	pathspecs := make([]string, 0, len(candidates))
-	for _, c := range candidates {
-		if isGitIgnored(dir, c.ignoreProbe) {
+	if len(out) == 0 {
+		return nil, nil
+	}
+
+	seen := make(map[string]bool)
+	paths := make([]string, 0, 8)
+	for len(out) > 0 {
+		recordEnd := bytes.IndexByte(out, 0)
+		if recordEnd == -1 {
+			recordEnd = len(out)
+		}
+		record := out[:recordEnd]
+		if recordEnd < len(out) {
+			out = out[recordEnd+1:]
+		} else {
+			out = nil
+		}
+		if len(record) < 3 {
 			continue
 		}
-		pathspecs = append(pathspecs, c.pathspec)
+		path := filepath.ToSlash(string(record[3:]))
+		if preDispatchCheckpointIgnoredPath(path) {
+			continue
+		}
+		if path != "" && !seen[path] {
+			seen[path] = true
+			paths = append(paths, path)
+		}
+		if record[0] == 'R' || record[0] == 'C' {
+			recordEnd = bytes.IndexByte(out, 0)
+			if recordEnd == -1 {
+				recordEnd = len(out)
+			}
+			record = out[:recordEnd]
+			if recordEnd < len(out) {
+				out = out[recordEnd+1:]
+			} else {
+				out = nil
+			}
+			path := filepath.ToSlash(string(record))
+			if preDispatchCheckpointIgnoredPath(path) {
+				continue
+			}
+			if path != "" && !seen[path] {
+				seen[path] = true
+				paths = append(paths, path)
+			}
+		}
 	}
-	return pathspecs
+	return paths, nil
+}
+
+func preDispatchCheckpointAllowedPath(path string) bool {
+	switch {
+	case path == ".ddx/beads.jsonl":
+		return true
+	case path == ".ddx/beads-archive.jsonl":
+		return true
+	case strings.HasPrefix(path, ".ddx/executions/"):
+		return true
+	case strings.HasPrefix(path, ".ddx/runs/"):
+		return true
+	case strings.HasPrefix(path, ".ddx/run-state/"):
+		return true
+	case path == ".ddx/run-state.json":
+		return true
+	case path == ExecutionCleanupMetadataFileName:
+		return true
+	default:
+		return false
+	}
+}
+
+func preDispatchCheckpointIgnoredPath(path string) bool {
+	switch {
+	case path == ".ddx/.git-tracker.lock":
+		return true
+	case strings.HasPrefix(path, ".ddx/.git-tracker.lock/"):
+		return true
+	case path == ".ddx/beads.lock":
+		return true
+	case strings.HasPrefix(path, ".ddx/beads.lock/"):
+		return true
+	case strings.HasPrefix(path, ".ddx/attachments/"):
+		return true
+	case strings.HasPrefix(path, ".ddx/beads.jsonl.tmp-"):
+		return true
+	default:
+		return false
+	}
 }
 
 func synthesizeCommitExcludePathspecs(dir string) []string {
@@ -1008,6 +1114,7 @@ func ExecuteBeadWithConfig(ctx context.Context, projectRoot string, beadID strin
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	_ = rcfg.Harness()
 	if runtime.WorkerID == "" {
 		runtime.WorkerID = os.Getenv("DDX_WORKER_ID")
 	}
