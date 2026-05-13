@@ -12,6 +12,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DocumentDrivenDX/ddx/internal/config"
@@ -165,6 +166,64 @@ func TestCheckpointPreDispatchDirtRejectsImplementationPaths(t *testing.T) {
 	assert.Contains(t, err.Error(), "cli/internal/agent/dirty_impl.go")
 	assert.Contains(t, err.Error(), "[ddx-<id>]")
 	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
+}
+
+func TestCheckpointPreDispatchDirtIgnoresGitIgnoredGeneratedPaths(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+	const attemptID = "20260513T000003-ignore000"
+
+	ignore := strings.Join([]string{
+		"cli/build/",
+		"website/public/",
+		".ddx/agent-logs/",
+	}, "\n") + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".gitignore"), []byte(ignore), 0o644))
+	runGitInteg(t, projectRoot, "add", ".gitignore")
+	runGitInteg(t, projectRoot, "commit", "-m", "test: ignore generated paths")
+
+	ignoredFiles := map[string]string{
+		filepath.Join("cli", "build", "ddx"):             "binary",
+		filepath.Join("website", "public", "index.html"): "<html></html>",
+		filepath.Join(".ddx", "agent-logs", "log.jsonl"): "{}\n",
+	}
+	for rel, content := range ignoredFiles {
+		path := filepath.Join(projectRoot, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+		require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	}
+
+	headBefore := runGitInteg(t, projectRoot, "rev-parse", "HEAD")
+
+	committed, err := checkpointPreDispatchDirt(projectRoot, attemptID)
+	require.NoError(t, err)
+	assert.False(t, committed, "ignored generated paths should not create a checkpoint")
+	assert.Equal(t, headBefore, runGitInteg(t, projectRoot, "rev-parse", "HEAD"))
+}
+
+func TestCheckpointPreDispatchDirtyPathsExcludeIgnored(t *testing.T) {
+	projectRoot, _ := newScriptHarnessRepo(t, 1)
+
+	ignore := strings.Join([]string{
+		"cli/build/",
+		"website/public/",
+		".ddx/agent-logs/",
+	}, "\n") + "\n"
+	require.NoError(t, os.WriteFile(filepath.Join(projectRoot, ".gitignore"), []byte(ignore), 0o644))
+	runGitInteg(t, projectRoot, "add", ".gitignore")
+	runGitInteg(t, projectRoot, "commit", "-m", "test: ignore generated paths")
+
+	ignoredPath := filepath.Join(projectRoot, "cli", "build", "ddx")
+	require.NoError(t, os.MkdirAll(filepath.Dir(ignoredPath), 0o755))
+	require.NoError(t, os.WriteFile(ignoredPath, []byte("binary"), 0o644))
+
+	implPath := filepath.Join(projectRoot, "cli", "internal", "agent", "dirty_impl.go")
+	require.NoError(t, os.MkdirAll(filepath.Dir(implPath), 0o755))
+	require.NoError(t, os.WriteFile(implPath, []byte("package agent\n"), 0o644))
+
+	paths, err := preDispatchCheckpointDirtyPaths(projectRoot)
+	require.NoError(t, err)
+	assert.Contains(t, paths, "cli/internal/agent/dirty_impl.go")
+	assert.NotContains(t, paths, "cli/build/ddx")
 }
 
 func TestExecuteBeadCheckpointDoesNotAbsorbSubstantiveWork(t *testing.T) {

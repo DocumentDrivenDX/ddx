@@ -677,7 +677,11 @@ func preDispatchCheckpointDirtyPaths(projectRoot string) ([]string, error) {
 		if len(record) < 3 {
 			continue
 		}
+		status := string(record[:2])
 		path := filepath.ToSlash(string(record[3:]))
+		if status == "!!" && !preDispatchCheckpointAllowedPath(path) {
+			continue
+		}
 		if preDispatchCheckpointIgnoredPath(path) {
 			continue
 		}
@@ -697,6 +701,9 @@ func preDispatchCheckpointDirtyPaths(projectRoot string) ([]string, error) {
 				out = nil
 			}
 			path := filepath.ToSlash(string(record))
+			if status == "!!" && !preDispatchCheckpointAllowedPath(path) {
+				continue
+			}
 			if preDispatchCheckpointIgnoredPath(path) {
 				continue
 			}
