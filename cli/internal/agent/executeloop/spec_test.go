@@ -25,6 +25,7 @@ func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 		OpaquePassthrough:  true,
 		MaxCostUSD:         12.50,
 		MaxRecoveryCostUSD: 2.75,
+		PreClaimTimeout:    executeloop.Duration{Duration: 45 * time.Second},
 		RequestTimeout:     executeloop.Duration{Duration: 2 * time.Minute},
 		RateLimitMaxWait:   executeloop.Duration{Duration: 90 * time.Second},
 		MinPower:           2,
@@ -88,6 +89,9 @@ func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 	if got.MaxRecoveryCostUSD != original.MaxRecoveryCostUSD {
 		t.Errorf("MaxRecoveryCostUSD: got %v, want %v", got.MaxRecoveryCostUSD, original.MaxRecoveryCostUSD)
 	}
+	if got.PreClaimTimeout != original.PreClaimTimeout {
+		t.Errorf("PreClaimTimeout: got %v, want %v", got.PreClaimTimeout, original.PreClaimTimeout)
+	}
 	if got.RequestTimeout != original.RequestTimeout {
 		t.Errorf("RequestTimeout: got %v, want %v", got.RequestTimeout, original.RequestTimeout)
 	}
@@ -110,13 +114,16 @@ func TestExecuteLoopSpec_RoundTrip_AllFields(t *testing.T) {
 
 func TestExecuteLoopSpec_RoundTrip_NumericNanoseconds(t *testing.T) {
 	// Verify Duration unmarshals numeric nanoseconds produced by older clients.
-	raw := `{"idle_interval":30000000000,"request_timeout":120000000000,"rate_limit_max_wait":90000000000}`
+	raw := `{"idle_interval":30000000000,"preclaim_timeout":45000000000,"request_timeout":120000000000,"rate_limit_max_wait":90000000000}`
 	var s executeloop.ExecuteLoopSpec
 	if err := json.Unmarshal([]byte(raw), &s); err != nil {
 		t.Fatalf("unmarshal numeric nanoseconds: %v", err)
 	}
 	if s.IdleInterval.Duration != 30*time.Second {
 		t.Errorf("IdleInterval: got %v, want 30s", s.IdleInterval.Duration)
+	}
+	if s.PreClaimTimeout.Duration != 45*time.Second {
+		t.Errorf("PreClaimTimeout: got %v, want 45s", s.PreClaimTimeout.Duration)
 	}
 	if s.RequestTimeout.Duration != 2*time.Minute {
 		t.Errorf("RequestTimeout: got %v, want 2m0s", s.RequestTimeout.Duration)

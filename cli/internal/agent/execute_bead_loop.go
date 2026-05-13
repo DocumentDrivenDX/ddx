@@ -59,6 +59,10 @@ type ExecuteBeadLoopRuntime struct {
 	// the model. Any non-nil error stops the worker before any bead is
 	// claimed; DDx does NOT duplicate the upstream allow-list.
 	RoutePreflight func(ctx context.Context, harness, model string) error
+	// PreClaimTimeout bounds the pre-claim readiness hooks. Zero means use the
+	// binary default so a hanging readiness check cannot park the worker
+	// forever.
+	PreClaimTimeout time.Duration
 	// BudgetStop, when non-nil, is checked before selecting the next bead. It
 	// lets CLI/server callers surface already-tripped budget state as a typed
 	// work-layer StopCondition before any new bead is claimed. The companion
@@ -690,6 +694,10 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	if assignee == "" {
 		assignee = "ddx"
 	}
+	preClaimTimeout := runtime.PreClaimTimeout
+	if preClaimTimeout <= 0 {
+		preClaimTimeout = work.DefaultPreClaimTimeout
+	}
 	noProgressCooldown := rcfg.NoProgressCooldown()
 	if noProgressCooldown <= 0 {
 		noProgressCooldown = 6 * time.Hour
@@ -707,7 +715,7 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 	result := &ExecuteBeadLoopResult{}
 	resultsResetIdx := 0
 	complexityGuard := work.NewComplexityGuard(w.ComplexityGate, runtime.Log)
-	preclaimGuard := work.NewPreClaimGuard(runtime.PreClaimHook, w.Store, runtime.Log, now, 30*time.Second)
+	preclaimGuard := work.NewPreClaimGuard(runtime.PreClaimHook, w.Store, runtime.Log, now, 30*time.Second, preClaimTimeout)
 	workLog := NewWorkLogRenderer(WorkLogRendererOptions{Now: now})
 	wasIdle := false
 	lastIdleQueueSignature := ""
@@ -1125,10 +1133,94 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 				TS:        now().UTC(),
 				Message:   "readiness check",
 			})
-			intakeResult, intakeErr := runtime.PreClaimIntakeHook(ctx, candidate.ID)
+			intakeResult, intakeErr := runPreClaimIntakeHookWithTimeout(ctx, runtime.PreClaimIntakeHook, candidate.ID, preClaimTimeout)
 			intakeOutcome := intakeResult.normalizedOutcome()
+			if intakeResult.SystemReason == ReadinessSystemReasonTimeout {
+				timeoutDetail := strings.TrimSpace(intakeResult.Detail)
+				if timeoutDetail == "" {
+					timeoutDetail = fmt.Sprintf("readiness check timed out after %s", preClaimTimeout)
+				}
+				if runtime.Log != nil {
+					_, _ = fmt.Fprint(runtime.Log, workLog.FormatLifecycleLine(WorkLogLifecycleLine{
+						Phase:    "readiness",
+						BeadID:   candidate.ID,
+						Message:  fmt.Sprintf("check timed out after %s (continuing)", preClaimTimeout),
+						Harness:  harness,
+						Provider: provider,
+						Model:    model,
+					}))
+				}
+				eventBody := readinessDecisionBody(
+					"pre_claim_intake.timeout",
+					"timeout",
+					"pre_claim_intake",
+					func() string {
+						if strictIntakeBlocking() {
+							return "block"
+						}
+						return "warn-only"
+					}(),
+					func() string {
+						if strictIntakeBlocking() {
+							return "park"
+						}
+						return "continue"
+					}(),
+					func() string {
+						if strictIntakeBlocking() {
+							return "review the readiness timeout and retry the bead later"
+						}
+						return "unclaim and continue draining other ready work"
+					}(),
+					map[string]any{
+						"bead_id":       candidate.ID,
+						"command":       "ddx work readiness check",
+						"context":       "pre-claim intake",
+						"detail":        timeoutDetail,
+						"harness":       harness,
+						"model":         model,
+						"mode":          string(loopMode),
+						"outcome":       string(PreClaimIntakeError),
+						"provider":      provider,
+						"system_reason": ReadinessSystemReasonTimeout,
+						"targeted":      strictIntakeBlocking(),
+						"timeout":       preClaimTimeout.String(),
+						"worker_id":     runtime.WorkerID,
+					},
+				)
+				if strictIntakeBlocking() {
+					emit("pre_claim_intake.blocked", eventBody)
+					if parked, berr := parkBeadPostIntakeRejection(w.Store, &candidate, assignee, PreClaimIntakeError, ReadinessReasonSystemUnready, timeoutDetail, now().UTC()); berr != nil && runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "readiness park error: %v\n", berr)
+					} else if parked {
+						if runtime.Log != nil {
+							_, _ = fmt.Fprintf(runtime.Log, "readiness timeout parked bead %s for operator review\n", candidate.ID)
+						}
+					}
+					_ = w.Store.Unclaim(candidate.ID)
+					if stopAfterNonAttemptSkip() {
+						applyStop(work.StopInput{Once: true})
+						return result, nil
+					}
+					continue
+				} else {
+					emit("pre_claim_intake.warn", eventBody)
+					appendPreClaimIntakeWarning(w.Store, candidate.ID, assignee, "timeout", timeoutDetail, now().UTC())
+					if err := w.Store.SetExecutionCooldown(candidate.ID, now().UTC().Add(StoreErrorCooldown), "timeout", timeoutDetail, ""); err != nil && runtime.Log != nil {
+						_, _ = fmt.Fprintf(runtime.Log, "readiness cooldown error: %v\n", err)
+					}
+					_ = w.Store.Unclaim(candidate.ID)
+					continue
+				}
+			}
 			switch {
 			case intakeErr != nil:
+				if errors.Is(intakeErr, context.Canceled) || errors.Is(intakeErr, context.DeadlineExceeded) {
+					if exitReason == "" {
+						applyStop(work.StopInput{ContextErr: intakeErr})
+					}
+					return result, intakeErr
+				}
 				warning := trimDiagnosticPrefix(intakeErr.Error(), "pre-claim intake")
 				classified := ClassifyReadiness(ReadinessClassificationSystemUnready, nil, warning)
 				if runtime.Log != nil {
@@ -3079,6 +3171,51 @@ func appendPreClaimIntakeWarning(store ExecuteBeadLoopStore, beadID, actor, reas
 		Source:    "ddx work",
 		CreatedAt: at,
 	})
+}
+
+type preClaimIntakeHookCallResult struct {
+	result PreClaimIntakeResult
+	err    error
+}
+
+func runPreClaimIntakeHookWithTimeout(ctx context.Context, hook PreClaimIntakeHook, beadID string, timeout time.Duration) (PreClaimIntakeResult, error) {
+	if hook == nil {
+		return PreClaimIntakeResult{}, nil
+	}
+	if timeout <= 0 {
+		timeout = work.DefaultPreClaimTimeout
+	}
+	hookCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	resultCh := make(chan preClaimIntakeHookCallResult, 1)
+	go func() {
+		result, err := hook(hookCtx, beadID)
+		resultCh <- preClaimIntakeHookCallResult{result: result, err: err}
+	}()
+
+	select {
+	case call := <-resultCh:
+		if errors.Is(hookCtx.Err(), context.DeadlineExceeded) || errors.Is(call.err, context.DeadlineExceeded) {
+			return timeoutPreClaimIntakeResult(beadID, timeout), nil
+		}
+		return call.result, call.err
+	case <-hookCtx.Done():
+		if errors.Is(hookCtx.Err(), context.DeadlineExceeded) {
+			return timeoutPreClaimIntakeResult(beadID, timeout), nil
+		}
+		return PreClaimIntakeResult{}, hookCtx.Err()
+	}
+}
+
+func timeoutPreClaimIntakeResult(beadID string, timeout time.Duration) PreClaimIntakeResult {
+	detail := fmt.Sprintf("readiness check timed out after %s (%s)", timeout, beadID)
+	return PreClaimIntakeResult{
+		Outcome:      PreClaimIntakeError,
+		Reason:       ReadinessReasonSystemUnready,
+		SystemReason: ReadinessSystemReasonTimeout,
+		Detail:       detail,
+	}
 }
 
 // addBeadLabel mutates the bead in place to add a label idempotently. The

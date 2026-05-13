@@ -58,6 +58,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 	maxCostUSD, _ := cmd.Flags().GetFloat64("max-cost")
 	maxBeadCostUSD, _ := cmd.Flags().GetFloat64("max-bead-cost")
 	maxRecoveryCostUSD, _ := cmd.Flags().GetFloat64("max-recovery-cost")
+	preClaimTimeout, _ := cmd.Flags().GetDuration("preclaim-timeout")
 	requestTimeout, _ := cmd.Flags().GetDuration("request-timeout")
 	rateLimitMaxWait, _ := cmd.Flags().GetDuration("rate-limit-max-wait")
 	minPower, _ := cmd.Flags().GetInt("min-power")
@@ -98,6 +99,7 @@ func parseExecuteLoopSpec(cmd *cobra.Command, treatPassthroughAsOpaque bool) (ex
 		MaxCostUSD:         maxCostUSD,
 		MaxBeadCostUSD:     maxBeadCostUSD,
 		MaxRecoveryCostUSD: maxRecoveryCostUSD,
+		PreClaimTimeout:    executeloop.Duration{Duration: preClaimTimeout},
 		RequestTimeout:     executeloop.Duration{Duration: requestTimeout},
 		RateLimitMaxWait:   executeloop.Duration{Duration: rateLimitMaxWait},
 		MinPower:           minPower,
@@ -470,6 +472,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		SessionID:                    loopSessionID,
 		PreClaimHook:                 buildCLIPreClaimHook(projectRoot, cliLandingOps),
 		PreClaimIntakeHook:           intakeHook,
+		PreClaimTimeout:              spec.PreClaimTimeout.Duration,
 		PreDispatchLintHook:          lintHook,
 		PostAttemptTriageHook:        triageHook,
 		PostAttemptDecompositionHook: decompositionHook,
