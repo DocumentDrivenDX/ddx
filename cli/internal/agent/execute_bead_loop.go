@@ -1550,18 +1550,15 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 		provAttemptID := time.Now().UTC().Format("20060102T150405") + "-" + randomProgressID()
 		runStart := now()
 		phaseSeq := 0
-		nextPhase := func(phase string, heartbeat bool) {
-			phaseSeq++
-			emitProgress(runtime.ProgressCh, newProgressEvent(
-				runtime.WorkerID, runtime.ProjectRoot, candidate.ID, provAttemptID,
-				harness, model, profile,
-				phase, phaseSeq, heartbeat, now().Sub(runStart).Milliseconds(),
-			))
-		}
+		phaseEmitter := newLoopPhaseEmitter(runtime, harness, model, profile, runStart, now, &phaseSeq, emit)
 
-		nextPhase("queueing", false)
+		_ = work.EmitPhase(ctx, phaseEmitter, candidate.ID, work.PhaseQueueing, work.Outcome{
+			AttemptID: provAttemptID,
+		})
 
-		nextPhase("running", false)
+		_ = work.EmitPhase(ctx, phaseEmitter, candidate.ID, work.PhaseRunning, work.Outcome{
+			AttemptID: provAttemptID,
+		})
 
 		// tryExecutor preserves the legacy w.Executor.Execute(ctx, candidate.ID)
 		// invocation while letting try.Attempt own conflict recovery.
@@ -2195,47 +2192,17 @@ func (w *ExecuteBeadWorker) Run(ctx context.Context, rcfg config.ResolvedConfig,
 			}
 		}
 
-		// Emit terminal progress phase event.
-		terminalPhase := "failed"
-		if report.Status == ExecuteBeadStatusSuccess || report.Status == ExecuteBeadStatusAlreadySatisfied {
-			terminalPhase = "done"
-		} else if report.PreserveRef != "" {
-			terminalPhase = "preserved"
-		}
 		// Use the real attempt_id from the report if available.
 		finalAttemptID := report.AttemptID
 		if finalAttemptID == "" {
 			finalAttemptID = provAttemptID
 		}
-		phaseSeq++
-		emitProgress(runtime.ProgressCh, ProgressEvent{
-			EventID:   "evt-" + randomProgressID(),
-			AttemptID: finalAttemptID,
-			WorkerID:  runtime.WorkerID,
-			ProjectID: runtime.ProjectRoot,
-			BeadID:    candidate.ID,
-			Harness:   harness,
-			Model:     model,
-			Profile:   profile,
-			Phase:     terminalPhase,
-			PhaseSeq:  phaseSeq,
-			Heartbeat: false,
-			TS:        now().UTC(),
-			ElapsedMS: now().Sub(runStart).Milliseconds(),
-			Message:   report.Detail,
-		})
-
-		emit("bead.result", map[string]any{
-			"bead_id":              candidate.ID,
-			"status":               report.Status,
-			"detail":               report.Detail,
-			"session_id":           report.SessionID,
-			"result_rev":           report.ResultRev,
-			"base_rev":             report.BaseRev,
-			"preserve_ref":         report.PreserveRef,
-			"no_changes_rationale": report.NoChangesRationale,
-			"duration_ms":          now().Sub(runStart).Milliseconds(),
-		})
+		_ = work.EmitPhase(ctx, phaseEmitter, candidate.ID, work.PhaseTerminal, phaseOutcomeFromAttemptOut(
+			report,
+			attemptOut,
+			finalAttemptID,
+			now().Sub(runStart).Milliseconds(),
+		))
 
 		if runtime.Log != nil {
 			_, _ = fmt.Fprintln(runtime.Log, formatLoopResultLine(candidate.ID, report))
