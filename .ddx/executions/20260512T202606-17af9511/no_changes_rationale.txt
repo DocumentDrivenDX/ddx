@@ -1,0 +1,3 @@
+status: open
+orchestrator_action: decompose
+reason: The requested foundation slice expanded into a repo-wide Store API migration. I completed the internal/bead portion and verified `go test ./internal/bead -count=1` passes, but `go test ./... -count=1` still fails in external callers and local agent interfaces that expect the old no-context bead API. Remaining blockers are in `cmd`, `internal/agent`, `internal/exec`, `internal/processmetrics`, and `internal/server`; they need follow-up decomposition to thread ctx through their callers or add a compatibility layer before this bead can be closed.

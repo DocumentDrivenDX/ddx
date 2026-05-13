@@ -1,0 +1,400 @@
+{
+  "attempt_id": "20260512T190456-12c40262",
+  "bead_id": "ddx-c6317784",
+  "base_rev": "d7b27ce1c1b9072b11e0671872efbf240d1803a1",
+  "created_at": "2026-05-12T19:04:59.741925226Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c6317784",
+    "title": "F (Foundation): Operation pattern + IDGenerator + sentinels + ctx accessors + foundational sub-interfaces + *Store.Apply + JSONLBackend.OperationApplier (TD-027 §5-§13)",
+    "description": "# PROBLEM\nThe bead backend interface today (`cli/internal/bead/backend.go`) is JSONL-shaped: `RawBackend` requires whole-corpus `ReadAll`/`WriteAll`, and `Backend` declares only 22 of `*Store`'s 69 public methods. Per TD-027 (the canonical Bead Storage System and Lifecycle spec), the bead architecture needs:\n\n- A typed `Operation` pattern with `Apply(b *Bead) error` (CAS via error returns)\n- 11 LSP-clean storage sub-interfaces composing `Backend`\n- Pluggable `IDGenerator` and parallel `LifecycleSubscriber`\n- `context.Context` first-parameter discipline on every interface method\n- Sentinel errors (`ErrNotFound`, `ErrConflict`, `ErrInvalidID`, `ErrAlreadyClaimed`, `ErrNotClaimedByOwner`, `ErrUnsupported`)\n- The optional `OperationApplier` interface on `RawBackend` so JSONL backends can preserve heartbeat sidecar optimization\n- A canonical Bead data model (field enumeration + invariants + JSONL wire format + schema-versioning policy)\n\nThis bead lays the foundation that all per-concern beads (L/C/E/X/Q/D/A/MIG) depend on. It declares the event reader/writer interfaces but deliberately does not migrate `AppendEvent`, `Events`, or `EventsByKind`; the E bead owns event-method ctx threading and `*Store` event interface satisfaction.\n\n# ROOT CAUSE\n- `cli/internal/bead/backend.go:10-67` — `RawBackend` (4 whole-corpus methods) + `Backend` (22 high-level methods, incomplete).\n- `cli/internal/bead/store.go` — `*Store` exposes 69 public methods, none take `ctx context.Context`.\n- `cli/internal/bead/axon_backend.go:340-381` — `WriteAll` ships entire corpus per mutation (catastrophic for Postgres).\n- Operation pattern, IDGenerator, sentinel errors, context discipline — all absent.\n- Bead data model (the canonical schema of fields + invariants) — only implicit in the Go struct.\n\n# PROPOSED FIX\nImplement TD-027 §5–§13 foundation pieces that are required before the per-concern beads can execute.\n\n## New files\n\n1. `cli/internal/bead/operation.go` — `Operation` interface with `Apply(b *Bead) error`. `MutateFunc` adapter for ad-hoc mutations. Empty named-op section (per-concern beads add their op types).\n2. `cli/internal/bead/id.go` — `ValidateID`, format constants (`DefaultIDPrefix`, `MaxIDLength`, `MinIDLength`), `IDGenerator` interface, `RandomHexIDGenerator`, `SequentialIDGenerator`, `NewIDGenerator()` default.\n3. `cli/internal/bead/errors.go` — sentinel errors.\n4. `cli/internal/bead/context.go` — typed accessors `WithIdentity`/`IdentityFromContext`/`WithTrace`/`TraceFromContext`. Package docstring per TD-027 §9 enumerating allowed ctx values.\n5. `cli/internal/bead/backend.go` (expanded) — declare `BeadInitializer`, `BeadReader`, `BeadLifecycle` (Create + Apply only at this stage), `BeadEventReader`, `BeadEventWriter` interfaces. All ctx-first. Event interfaces are declarations only in this bead; no `*Store` event compile-time assertions until E. Composite `Backend` is not added yet (other sub-interfaces missing until per-concern beads land). `OperationApplier` optional interface declared. `RawBackend` retained with new docstring warning new backends off whole-corpus shape.\n\n## Modify *Store\n\n6. Add `*Store.Apply(ctx, id, op Operation) error` method per TD-027 §7.2: type-asserts wrapped `RawBackend` to `OperationApplier` and delegates; otherwise generic `WithLock + ReadAll + op.Apply + WriteAll`.\n7. Add ctx as first parameter to `*Store.Init`, `ReadAll`, `ReadAllFiltered`, `Get`, `GetWithArchive`, `Create`, `Update`, `Close`, plus `GenID`. Do not change `AppendEvent`, `Events`, or `EventsByKind` here; E owns event ctx threading.\n\n## Modify JSONLBackend\n\n8. Add `JSONLBackend.Apply(ctx, id, op Operation) error` — satisfies `OperationApplier`. Empty type-switch + generic fallback (the per-concern Claim bead adds the `SetClaimHeartbeat`/`ClearClaimHeartbeat` sidecar-optimization cases later).\n\n## Caller migration (ctx threading only — scoped to foundational non-event methods)\n\n9. Update every caller in `cli/cmd/`, `cli/internal/agent/`, `cli/internal/server/`, `cli/internal/escalation/`, `cli/internal/agentmetrics/`, `cli/internal/attemptmetrics/`, `cli/internal/processmetrics/`, `cli/internal/exec/`, `cli/internal/agent/try/` that calls the foundational non-event methods (Init/ReadAll/Get/Create/Update/Close/GenID) to pass `ctx` through. Use `cmd.Context()` for cobra commands; existing request ctx for HTTP/GraphQL handlers; `context.Background()` only where no ctx is naturally available.\n\n# NON-SCOPE\n- Event method ctx threading (`AppendEvent`, `Events`, `EventsByKind`) — E bead `ddx-f39b41b3`.\n- Helper packages (`ops/\u003cconcern\u003e/`) — per-concern beads handle these.\n- Removing any `*Store` workflow methods (Claim, Heartbeat, TransitionLifecycle, RequestCancel, SetExecutionCooldown, etc.) — per-concern beads handle removal as they migrate callers.\n- AxonStore implementation — separate bead `ddx-9c5bca8f`.\n- Caller narrowing from `*bead.Store` field types to `bead.Backend` interface — happens in BL bead `ddx-74452926` after per-concern beads complete.\n- Module boundary lockdown (relocation to `internal/storage/`) — BL bead.\n- Schema-versioning migration framework — deferred until first breaking change.\n\n# Labels\nphase:iterate, area:bead, area:storage, kind:feature, kind:refactor, spec:TD-027, reliability\n\n# Parent + Deps\nParent: ddx-8d747049\nDeps: none — this bead is the gate.\n\n# Cross-references\n- TD-027 §5 (storage vs. workflow separation)\n- TD-027 §6 (sub-interface taxonomy)\n- TD-027 §7 (Operation pattern)\n- TD-027 §7.2 (Apply routing through OperationApplier)\n- TD-027 §8 (ID generation)\n- TD-027 §9 (context discipline)\n- TD-027 §10 (sentinel errors)\n- TD-027 §11 (bead data model)\n- TD-027 §13 (event vocabulary — controlled list)\n- TD-027 §23.1 (gating bead acceptance criteria)",
+    "acceptance": "1. All five new files (`operation.go`, `id.go`, `errors.go`, `context.go`, `backend.go` expansion) exist and compile.\n2. `Operation` interface declared with `Apply(b *Bead) error`. `MutateFunc` adapter implements `Operation`. Test: `TestOperation_MutateFuncAdapter_RoundTrip`.\n3. ID generation: tests `TestValidateID_AcceptsValidIDs`, `TestValidateID_RejectsInvalidCharset`, `TestValidateID_RejectsLengthBounds`, `TestRandomHexIDGenerator_ProducesValidIDs` (100 generations all pass `ValidateID`), `TestSequentialIDGenerator_ProducesUniqueOrdered` (1000 generations all distinct + lexicographically increasing).\n4. Sentinel errors declared as distinct `error` values. Test: `TestSentinelErrors_AreErrorValues`.\n5. Context typed accessors implemented. Tests: `TestWithIdentity_RoundTrip`, `TestIdentityFromContext_AbsentReturnsFalse`, `TestWithTrace_RoundTrip`.\n6. Foundational sub-interfaces (`BeadInitializer`, `BeadReader`, `BeadLifecycle`, `BeadEventReader`, `BeadEventWriter`) declared with ctx-first signatures. `*Store` satisfies only the non-event foundation interfaces in this bead — compile-time assertions: `var _ BeadInitializer = (*Store)(nil)`, `var _ BeadReader = (*Store)(nil)`, `var _ BeadLifecycle = (*Store)(nil)`. No `BeadEventReader`/`BeadEventWriter` assertion is added until E.\n7. `*Store.Apply` method exists; type-asserts to `OperationApplier`; falls back to generic load-mutate-save. Test: `TestStore_Apply_DelegatesToOperationApplier_WhenAvailable`, `TestStore_Apply_GenericFallback_WhenNotAvailable`.\n8. `JSONLBackend` implements `OperationApplier` (empty switch + generic fallback — heartbeat-specific cases added in C bead). Compile-time assertion: `var _ OperationApplier = (*JSONLBackend)(nil)`. Test: `TestJSONLBackend_Apply_FallsThroughForUnknownOps`.\n9. Bead data model invariants (TD-027 §11.2) hold across `*Store`. Test: `TestBeadDataModel_InvariantsHold` asserts the 12 universal invariants on freshly-created and mutated beads.\n10. Legacy format handling: beads with `schema_version` absent in JSONL read as `schema_version=1` per TD-027 §11.4. Test: `TestBead_LegacyFormat_ReadsAsV1`.\n11. Every caller that uses Init/ReadAll/Get/Create/Update/Close/GenID passes ctx through. No `*Store.Init()` (no-ctx) calls remain in production code outside test fixtures. Event callers are intentionally excluded and handled by E.\n12. `RawBackend` docstring updated with the warning text from TD-027 §6.2 directing new backends to implement `Backend` directly.\n13. Existing tests in `cli/internal/bead/` (store_test.go, chaos_test.go, backend_conformance_test.go) continue to pass unchanged. `cd cli \u0026\u0026 go test ./internal/bead/...` is green.\n14. `cd cli \u0026\u0026 go test ./...` is green.\n15. `lefthook run pre-commit` passes.",
+    "parent": "ddx-8d747049",
+    "labels": [
+      "phase:iterate",
+      "area:bead",
+      "area:storage",
+      "kind:feature",
+      "kind:refactor",
+      "spec:FEAT-004",
+      "spec:TD-027",
+      "reliability",
+      "triage:no-changes-unjustified"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T19:03:59Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "3602916",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no viable routing candidate: 3 candidates rejected\"}",
+          "created_at": "2026-05-11T20:30:42.854335309Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"\",\"fallback_chain\":[]}",
+          "created_at": "2026-05-11T20:30:48.364962589Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider="
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"ResolveRoute: no viable routing candidate: 3 candidates rejected\",\"harness\":\"\",\"model\":\"\",\"reason\":\"routing\"}",
+          "created_at": "2026-05-11T20:30:48.78428123Z",
+          "kind": "disruption_detected",
+          "source": "ddx agent execute-loop",
+          "summary": "routing"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"\",\"actual_model\":\"\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260511T203042-2d17bf09\",\"bead_id\":\"ddx-c6317784\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":true,\"routing_intent_note\":\"actual route facts unavailable\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-11T20:30:48.859333116Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard note=actual route facts unavailable"
+        },
+        {
+          "actor": "erik",
+          "body": "ResolveRoute: no viable routing candidate: 3 candidates rejected\nresult_rev=f7cdc78b2f959dbb19628fb7e4198e4c1daa2b47\nbase_rev=f7cdc78b2f959dbb19628fb7e4198e4c1daa2b47\noutcome_reason=no_viable_provider",
+          "created_at": "2026-05-11T20:30:48.942501309Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "execution_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no viable routing candidate: 3 candidates rejected\"}",
+          "created_at": "2026-05-12T02:49:00.049745961Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"requested_harness\":\"codex\",\"requested_model\":\"gpt-5.4-mini\"}",
+          "created_at": "2026-05-12T02:49:59.763959737Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260512T024900-e56100f8\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":232096,\"output_tokens\":2754,\"total_tokens\":234850,\"cost_usd\":0,\"duration_ms\":47088,\"exit_code\":0}",
+          "created_at": "2026-05-12T02:49:59.98000276Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=234850 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260512T024900-e56100f8\",\"bead_id\":\"ddx-c6317784\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-12T02:50:00.7630632Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=This bead exceeds the safe single-pass execution limit: it spans core bead storage APIs, JSONL backend behavior, typed context/errors/ID generation foundation, and broad caller migration across multiple packages. The decomposition depth cap is already reached, so I cannot split it further in this worktree.\nsuggested_action=retry with a smart agent",
+          "created_at": "2026-05-12T02:50:00.947324984Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: open\nreason: This bead exceeds the safe single-pass execution limit: it spans core bead storage APIs, JSONL backend behavior, typed context/errors/ID generation foundation, and broad caller migration across multiple packages. The decomposition depth cap is already reached, so I cannot split it further in this worktree.\norchestrator_action: decompose\nresult_rev=c1bb71194a0e416d06f8d7af7fafd711df6aab50\nbase_rev=c1bb71194a0e416d06f8d7af7fafd711df6aab50\noutcome_reason=no_changes",
+          "created_at": "2026-05-12T02:50:01.174462776Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"This bead is well-specified but bundles multiple independently actionable workstreams: new storage abstractions (`Operation`, `IDGenerator`, sentinels, ctx accessors), `*Store` API changes, `JSONLBackend.Apply`, and broad caller migration across many packages. The durable anchors, named tests, non-scope, and dependency references are strong enough to split cleanly, so it is not ambiguous; the limiting factor is scope breadth, not missing context.\",\"intake_outcome\":\"too_large_decomposed\"}",
+          "created_at": "2026-05-12T04:27:24.365117507Z",
+          "kind": "intake.blocked",
+          "source": "ddx agent execute-loop",
+          "summary": "too_large_decomposed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"park\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"too_large: The bead is well-anchored, but it is not atomic. It combines at least four separable work streams: new foundational storage primitives/files (Operation, IDGenerator, context accessors, sentinel errors), interface and Store/JSONLBackend behavior changes around Apply routing, bead data-model/legacy-format invariants, and broad caller ctx-threading across many packages. That breadth makes it unsafe to claim as one execution unit, and the prompt itself already reads like a mini-epic rather than a single bead. It should be split by concern instead of merely refined.\",\"fingerprint\":\"1e1cf5c0fed3dac21196e2ae83b271e0ccf7e23d27753ade70c2f6f779537e39\",\"intake_outcome\":\"too_large_decomposed\",\"policy_mode\":\"block\",\"reason\":\"too_large\",\"rule_id\":\"pre_claim_intake.too_large_decomposed\",\"suggested_action\":\"review intake result and accept, rewrite, split, block, or cancel\"}",
+          "created_at": "2026-05-12T14:44:02.309615642Z",
+          "kind": "intake.blocked",
+          "source": "ddx work",
+          "summary": "too_large_decomposed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"too_large: The bead is well-anchored but not atomic: it combines at least four separable workstreams with different file sets, call sites, and verification gates. Specifically, it bundles core storage API foundation (`operation.go`, `id.go`, `errors.go`, `context.go`, `backend.go`), `*Store` signature and `Apply` behavior changes, `JSONLBackend` operation routing, and broad caller migration across multiple packages. The description is clear enough that the issue is decomposition, not ambiguity or missing context.\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T15:13:49.417291157Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"All rubric items except title pass; the bead has the required problem/root-cause/proposed-fix/non-scope structure, named verification, wired-in assertions, explicit parent/deps, and sufficient implementation detail, but the title reads like a scope list rather than a concise imperative subsystem change.\",\"score\":7,\"suggested_fixes\":[\"Rewrite the title as a single imperative line that names the subsystem and change, e.g. `bead: introduce foundation storage interfaces, Operation, ID generation, sentinels, and Store.Apply`.\",\"If this still feels too broad for one executor pass, split the caller-migration and bead-data-model invariant work into separate child beads.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T15:14:39.005177323Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=7"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"requested_harness\":\"codex\",\"requested_model\":\"gpt-5.4-mini\",\"requested_min_power\":8}",
+          "created_at": "2026-05-12T15:15:04.111879468Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260512T151439-5496cba1\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":79608,\"output_tokens\":1392,\"total_tokens\":81000,\"cost_usd\":0,\"duration_ms\":22412,\"exit_code\":0}",
+          "created_at": "2026-05-12T15:15:04.174948561Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=81000 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260512T151439-5496cba1\",\"bead_id\":\"ddx-c6317784\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-12T15:15:04.589912917Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic tier=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=The bead scope is too large for one execution pass and exceeds the allowed decomposition depth in this workspace. It spans new core interfaces, store method signature changes, JSONL backend changes, and broad caller migration across multiple packages, which cannot be completed and verified safely as one bead here.\nsuggested_action=retry with a smart agent",
+          "created_at": "2026-05-12T15:15:04.712807134Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx work",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: open\norchestrator_action: decompose\nreason: The bead scope is too large for one execution pass and exceeds the allowed decomposition depth in this workspace. It spans new core interfaces, store method signature changes, JSONL backend changes, and broad caller migration across multiple packages, which cannot be completed and verified safely as one bead here.\nresult_rev=4a742a5feb2db985c6386b320aab60ab774f918a\nbase_rev=4a742a5feb2db985c6386b320aab60ab774f918a\noutcome_reason=no_changes",
+          "created_at": "2026-05-12T15:15:04.916793256Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"too_large: The bead bundles several independently-scoped workstreams that should not be claimed together: new core interfaces/types, Store API changes, JSONL backend behavior, repository-wide caller migration, and data-model/schema compatibility tests. The acceptance criteria span multiple subsystems and some items are explicitly deferred to other beads (E, BL, Claim), so this is decomposable rather than safely refinable into one execution pass.\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T15:25:19.774714874Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"The bead is strong on description, verification, labels, parent/deps, and sub-agent specificity, but the title is not written as a clear imperative scope statement, so it misses the rubric’s title criterion.\",\"score\":7,\"suggested_fixes\":[\"Rewrite the title as an imperative one-liner naming the subsystem and change, e.g. `bead: introduce operation pattern, ID generation, sentinels, ctx accessors, and foundational backend interfaces`.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T15:25:46.650028217Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=7"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"requested_harness\":\"codex\",\"requested_model\":\"gpt-5.4-mini\",\"requested_min_power\":8}",
+          "created_at": "2026-05-12T15:26:21.445817007Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260512T152546-30a71afd\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":113696,\"output_tokens\":2646,\"total_tokens\":116342,\"cost_usd\":0,\"duration_ms\":32092,\"exit_code\":0}",
+          "created_at": "2026-05-12T15:26:21.51302804Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=116342 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260512T152546-30a71afd\",\"bead_id\":\"ddx-c6317784\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-12T15:26:21.945861919Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic tier=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=This bead is too large to execute as a single pass. It spans storage interface redesign, new files for operations/IDs/errors/context, ctx threading across many caller packages, backend behavior changes, and a large test matrix. The worktree is already at decomposition depth 2, so further child splitting is not allowed here.\nsuggested_action=retry with a smart agent",
+          "created_at": "2026-05-12T15:26:22.067339926Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx work",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: open\nreason: This bead is too large to execute as a single pass. It spans storage interface redesign, new files for operations/IDs/errors/context, ctx threading across many caller packages, backend behavior changes, and a large test matrix. The worktree is already at decomposition depth 2, so further child splitting is not allowed here.\norchestrator_action: decompose\nresult_rev=3347c63ff1a94fba580157e14807130dc31052b4\nbase_rev=3347c63ff1a94fba580157e14807130dc31052b4\nretry_after=2026-05-12T15:31:22Z\noutcome_reason=no_changes",
+          "created_at": "2026-05-12T15:26:22.294531503Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"too_large: This bead bundles several independently executable tracks that should not be claimed as one unit: new core primitives/files (`operation.go`, `id.go`, `errors.go`, `context.go`), storage interface redesign in `backend.go`, `*Store` method signature changes and `Apply`, `JSONLBackend.OperationApplier`, and broad caller-context migration across many packages. The description is specific and grounded, but the work is not atomic and the prior attempts already indicate decomposition pressure. Durable anchors and non-scope references are present, so this is split-worthy rather than operator-required.\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T16:17:58.294556761Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"7/8. The bead is otherwise well-formed and executable, but the title is a noun-phrase bundle rather than an imperative, subsystem-scoped action, so criterion 1 fails; the remaining rubric items are satisfied by the grounded description, numbered verification, labels, parent/deps, and concrete implementation scope.\",\"score\":7,\"suggested_fixes\":[\"Rewrite the title as an imperative action with the subsystem named, e.g. 'Implement TD-027 bead storage foundation interfaces and Apply routing'.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T16:18:38.767192147Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=7"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"requested_harness\":\"codex\",\"requested_model\":\"gpt-5.4-mini\",\"requested_min_power\":8}",
+          "created_at": "2026-05-12T16:19:16.312481174Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260512T161838-82c2837b\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":193992,\"output_tokens\":2697,\"total_tokens\":196689,\"cost_usd\":0,\"duration_ms\":33797,\"exit_code\":0}",
+          "created_at": "2026-05-12T16:19:16.377885553Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=196689 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260512T161838-82c2837b\",\"bead_id\":\"ddx-c6317784\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-12T16:19:16.810804244Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic tier=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "status=blocked\nreason=This bead is too large for one execution pass and is already at the decomposition depth cap. It spans storage-interface foundation changes plus ctx-threading across many caller packages, so it needs upstream splitting before implementation can proceed.\nsuggested_action=recheck the external blocker and move status to open when cleared",
+          "created_at": "2026-05-12T16:19:16.936943839Z",
+          "kind": "no_changes_blocked",
+          "source": "ddx work",
+          "summary": "no_changes_blocked"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: blocked\nreason: This bead is too large for one execution pass and is already at the decomposition depth cap. It spans storage-interface foundation changes plus ctx-threading across many caller packages, so it needs upstream splitting before implementation can proceed.\nresult_rev=afc2c2e03110c2fa1ce1a59cf56f5e204d6a4ee9\nbase_rev=afc2c2e03110c2fa1ce1a59cf56f5e204d6a4ee9\noutcome_reason=no_changes",
+          "created_at": "2026-05-12T16:19:17.096833304Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: canceled: context canceled\"}",
+          "created_at": "2026-05-12T19:00:58.189213821Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"requested_harness\":\"codex\",\"requested_model\":\"gpt-5.4-mini\"}",
+          "created_at": "2026-05-12T19:01:01.710285251Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"requested_harness\":\"codex\",\"requested_model\":\"gpt-5.4-mini\",\"requested_min_power\":8}",
+          "created_at": "2026-05-12T19:01:05.608338149Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"agent exited without a commit or no_changes_rationale.txt\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"reason\":\"context_canceled\"}",
+          "created_at": "2026-05-12T19:01:06.122325263Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "context_canceled"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260512T190102-0f356a1d\",\"bead_id\":\"ddx-c6317784\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-12T19:01:06.229883374Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic tier=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-05-12T19:01:06.430691812Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "",
+          "created_at": "2026-05-12T19:01:06.595229939Z",
+          "kind": "reviewer-skipped-empty-diff",
+          "source": "ddx work",
+          "summary": "reviewer skipped: empty diff (no commits produced)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt\nresult_rev=adf99eaf715435532075abfdc5f253242137ea70\nbase_rev=adf99eaf715435532075abfdc5f253242137ea70\noutcome_reason=no_evidence_produced",
+          "created_at": "2026-05-12T19:01:06.712940114Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"too_large: This bead is not atomic. It combines several independently executable workstreams: core storage-interface foundation, new operation/id/error/context files, Store and JSONLBackend API changes, broad caller ctx-threading across many packages, and a large test matrix. Prior attempts already report decomposition-depth limits. It should be split into smaller concern-specific beads before claim.\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T19:04:17.938900446Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Strong execution bead overall: the description, verification, labels, parent/deps, and sub-agent prompt quality are all solid; the only clear rubric miss is the title, which reads like a topic header rather than an imperative one-line scope.\",\"score\":7,\"suggested_fixes\":[\"Rewrite the title as an imperative scope line naming the subsystem and change, for example: `Implement TD-027 foundation interfaces and operation plumbing in bead storage`.\",\"If you want stricter traceability, add file:line citations for the `cli/internal/bead/store.go` root-cause bullets.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T19:04:56.623629344Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=7"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T19:03:59.106722104Z",
+      "execute-loop-no-changes-count": 1
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260512T190456-12c40262",
+    "prompt": ".ddx/executions/20260512T190456-12c40262/prompt.md",
+    "manifest": ".ddx/executions/20260512T190456-12c40262/manifest.json",
+    "result": ".ddx/executions/20260512T190456-12c40262/result.json",
+    "checks": ".ddx/executions/20260512T190456-12c40262/checks.json",
+    "usage": ".ddx/executions/20260512T190456-12c40262/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c6317784-20260512T190456-12c40262"
+  },
+  "prompt_sha": "f6526368a2348b91fc8ae52c133b215f55625c43f82bb15e5cafc07d047544c0"
+}

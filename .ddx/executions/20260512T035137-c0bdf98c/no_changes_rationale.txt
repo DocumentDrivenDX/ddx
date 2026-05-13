@@ -1,0 +1,2 @@
+status: open
+reason: `cd cli && go test ./internal/agent/...` has been running for 7m+ with no output and needs a retry with better visibility (for example `-json` or a narrower failing test) to finish the acceptance sweep. Targeted prompt invariant tests passed (`TestExecuteBeadInstructionsSizeFloor`, `TestPromptGuardrails_AllPresent`, `TestPromptSelector_CorrectBlock`, `TestPromptSelector_MissingGoverning`), and `lefthook run pre-commit` passed.

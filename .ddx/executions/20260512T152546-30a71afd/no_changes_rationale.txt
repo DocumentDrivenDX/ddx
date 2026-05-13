@@ -1,0 +1,3 @@
+status: open
+reason: This bead is too large to execute as a single pass. It spans storage interface redesign, new files for operations/IDs/errors/context, ctx threading across many caller packages, backend behavior changes, and a large test matrix. The worktree is already at decomposition depth 2, so further child splitting is not allowed here.
+orchestrator_action: decompose

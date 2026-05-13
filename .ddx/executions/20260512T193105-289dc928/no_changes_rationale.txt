@@ -1,0 +1,2 @@
+status: blocked
+reason: bead ddx-c6317784 exceeds the execution cap for this worktree; it spans multiple subsystems and acceptance criteria, and this attempt is already at decomposition depth 2 so no further split is allowed. Upstream decomposition or a smaller bead is required before implementation can proceed.

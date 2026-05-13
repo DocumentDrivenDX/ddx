@@ -1,0 +1,63 @@
+{
+  "attempt_id": "20260512T195112-5361d17d",
+  "bead_id": "ddx-494685af",
+  "base_rev": "8d080e2357c3b04a2611229d7aafa1dc3eaa25bd",
+  "created_at": "2026-05-12T19:51:16.290332577Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-494685af",
+    "title": "F (Foundation): Operation pattern + IDGenerator + sentinels + ctx access: part 3",
+    "description": "PROBLEM\nParent bead ddx-c6317784 is too broad for one execution pass. This child owns part 3 of 5 of that parent scope.\n\nROOT CAUSE\n# PROBLEM\nThe bead backend interface today (`cli/internal/bead/backend.go`) is JSONL-shaped: `RawBackend` requires whole-corpus `ReadAll`/`WriteAll`, and `Backend` declares only 22 of `*Store`'s 69 public methods. Per TD-027 (the canonical Bead Storage System and Lifecycle spec), the bead architecture needs:\n\n- A typed `Operation` pattern with `Apply(b *Bead) error` (CAS via error returns)\n- 11 LSP-clean storage sub-interfaces composing `Backend`\n- Pluggable `IDGenerator` and parallel `LifecycleSubscriber`\n- `context.Context` first-parameter discipline on every interface method\n- Sentinel errors (`ErrNotFound`, `ErrConflict`, `ErrInvalidID`, `ErrAlreadyClaimed`, `ErrNotClaimedByOwner`, `ErrUnsupported`)\n- The optional `OperationApplier` interface on `RawBackend` so JSONL backends can preserve heartbeat sidecar optimization\n- A canonical Bead data model (field enumeration + invariants + JSONL wire format + schema-versioning policy)\n\nThis bead lays the foundation that all per-concern beads (L/C/E/X/Q/D/A/MIG) depend on. It declares the event reader/writer interfaces but deliberately does not migrate `AppendEvent`, `Events`, or `EventsByKind`; the E bead owns event-method ctx threading and `*Store` event interface satisfaction.\n\n# ROOT CAUSE\n- `cli/internal/bead/backend.go:10-67` — `RawBackend` (4 whole-corpus methods) + `Backend` (22 high-level methods, incomplete).\n- `cli/internal/bead/store.go` — `*Store` exposes 69 public methods, none take `ctx context.Context`.\n- `cli/internal/bead/axon_backend.go:340-381` — `WriteAll` ships entire corpus per mutation (catastrophic for Postgres).\n- Operation pattern, IDGenerator, sentinel errors, context discipline — all absent.\n- Bead data model (the canonical schema of fields + invariants) — only implicit in the Go struct.\n\n# PROPOSED FIX\nImplement TD-027 §5–§13 foundation pieces that are required before the per-concern beads can execute.\n\n## New files\n\n1. `cli/internal/bead/operation.go` — `Operation` interface with `Apply(b *Bead) error`. `MutateFunc` adapter for ad-hoc mutations. Empty named-op section (per-concern beads add their op types).\n2. `cli/internal/bead/id.go` — `ValidateID`, format constants (`DefaultIDPrefix`, `MaxIDLength`, `MinIDLength`), `IDGenerator` interface, `RandomHexIDGenerator`, `SequentialIDGenerator`, `NewIDGenerator()` default.\n3. `cli/internal/bead/errors.go` — sentinel e\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- `*Store.Apply` method exists; type-asserts to `OperationApplier`; falls back to generic load-mutate-save. Test: `TestStore_Apply_DelegatesToOperationApplier_WhenAvailable`, `TestStore_Apply_GenericFallback_WhenNotAvailable`.\n- `JSONLBackend` implements `OperationApplier` (empty switch + generic fallback — heartbeat-specific cases added in C bead). Compile-time assertion: `var _ OperationApplier = (*JSONLBackend)(nil)`. Test: `TestJSONLBackend_Apply_FallsThroughForUnknownOps`.\n- Bead data model invariants (TD-027 §11.2) hold across `*Store`. Test: `TestBeadDataModel_InvariantsHold` asserts the 12 universal invariants on freshly-created and mutated beads.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. `*Store.Apply` method exists; type-asserts to `OperationApplier`; falls back to generic load-mutate-save. Test: `TestStore_Apply_DelegatesToOperationApplier_WhenAvailable`, `TestStore_Apply_GenericFallback_WhenNotAvailable`.\n2. `JSONLBackend` implements `OperationApplier` (empty switch + generic fallback — heartbeat-specific cases added in C bead). Compile-time assertion: `var _ OperationApplier = (*JSONLBackend)(nil)`. Test: `TestJSONLBackend_Apply_FallsThroughForUnknownOps`.\n3. Bead data model invariants (TD-027 §11.2) hold across `*Store`. Test: `TestBeadDataModel_InvariantsHold` asserts the 12 universal invariants on freshly-created and mutated beads.",
+    "parent": "ddx-c6317784",
+    "labels": [
+      "phase:iterate",
+      "area:bead",
+      "area:storage",
+      "kind:feature",
+      "kind:refactor",
+      "spec:FEAT-004",
+      "spec:TD-027",
+      "reliability",
+      "decomposed"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T19:49:58Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "3727397",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description drops commitment \\\"TestStore_Apply_DelegatesToOperationApplier_WhenAvailable\\\"\",\"fingerprint\":\"9a9f3e7563c088c6559b50170a909615619d5996d3af04d242043c3656f19c85\",\"policy_mode\":\"warn-only\",\"reason\":\"rewrite_rejected\",\"rule_id\":\"pre_claim_intake.rewrite_rejected\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T19:50:44.568596815Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "rewrite_rejected"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"4/8: the description is well-structured and the ACs name concrete tests and a wired-in assertion, but the title is not clearly imperative/subsystem-scoped, the bead does not explicitly list deps or state \\\"No deps.\\\", and the ACs omit the required `cd cli \\u0026\\u0026 go test ./\\u003cpkg\\u003e/...` plus `lefthook run pre-commit` verification.\",\"score\":4,\"suggested_fixes\":[\"Rewrite the title as an imperative, subsystem-scoped one-liner, e.g. \\\"bead: add OperationApplier fallback and bead invariants\\\".\",\"Add a `DEPS` section or explicitly state `No deps.` so the execution contract is complete.\",\"Add acceptance criteria that name the package-level `go test` command and `lefthook run pre-commit` pass condition.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T19:51:12.367121656Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=4"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T19:49:58.41092994Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260512T195112-5361d17d",
+    "prompt": ".ddx/executions/20260512T195112-5361d17d/prompt.md",
+    "manifest": ".ddx/executions/20260512T195112-5361d17d/manifest.json",
+    "result": ".ddx/executions/20260512T195112-5361d17d/result.json",
+    "checks": ".ddx/executions/20260512T195112-5361d17d/checks.json",
+    "usage": ".ddx/executions/20260512T195112-5361d17d/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-494685af-20260512T195112-5361d17d"
+  },
+  "prompt_sha": "9f9cd8c93bc1f8f9a4187c20e3787cc3536a24c0c865a01c8dc5a22bdb178d40"
+}

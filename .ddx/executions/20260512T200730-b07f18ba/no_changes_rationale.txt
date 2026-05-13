@@ -1,0 +1,2 @@
+status: blocked
+reason: External blocker: this bead's acceptance requires `var _ BeadInitializer = (*Store)(nil)`, `var _ BeadReader = (*Store)(nil)`, and `var _ BeadLifecycle = (*Store)(nil)` against ctx-first interfaces in `cli/internal/bead/backend.go:78-90`, but `cli/internal/bead/store.go` still defines the legacy zero-arg methods (`Init`, `ReadAll`, `Get`, `Create`, etc.) used throughout the repo. Go does not allow both method sets on the same type, so satisfying the assertions here requires a broader API migration outside this bead slice.

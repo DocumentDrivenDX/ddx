@@ -1,0 +1,1 @@
+verification_command: cd cli && go test ./internal/docprose/... ./cmd -run 'TestDocProse|TestProseQuality' && cd .. && lefthook run pre-commit

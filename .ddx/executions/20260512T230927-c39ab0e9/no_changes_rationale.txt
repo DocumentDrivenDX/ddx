@@ -1,0 +1,3 @@
+status: open
+reason: parent bead ddx-70a432b5 exceeds atomic scope and was decomposed into ddx-17388615, ddx-1664e1d2, and ddx-f7c9159f
+orchestrator_action: decompose

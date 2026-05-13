@@ -1,0 +1,88 @@
+{
+  "attempt_id": "20260513T195201-8f22a9de",
+  "bead_id": "ddx-c34b9915",
+  "base_rev": "0ca385ffba35266781d9ed956ec594eb4653dd89",
+  "created_at": "2026-05-13T19:52:07.051608544Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-c34b9915",
+    "title": "plugin install: symlink local package skill mappings safely",
+    "description": "PROBLEM\n  Local plugin installs need to make DDx skills live-editable by symlinking package-owned skill directories, but the current local path uses its own discovery rules and can choose the wrong skill source when pointed at the DDx repo root.\n\nROOT CAUSE\n  cli/cmd/install.go:254-372 implements local install separately from the registry package installer. It loads the manifest but then calls `installLocalSkillSymlinks(absPath, absProject, force)` without passing `pkg.Install.Skills`. cli/cmd/install.go:510-563 chooses `\u003cpluginRoot\u003e/.agents/skills` before `\u003cpluginRoot\u003e/skills`, so `ddx plugin install ddx --local .` can target destination copies in the repo root instead of the intended package source. The plan requires local overlays to honor manifest mappings and either resolve the repo root safely to `library/` or fail before modifying skill outputs.\n\nPROPOSED FIX\n  - cli/cmd/install.go: replace hard-coded local skill discovery with mapping-driven symlink creation from `pkg.Install.Skills`.\n  - Symlink each child skill directory from the mapping source to each mapping target, e.g. `library/skills/ddx -\u003e .agents/skills/ddx` and `.claude/skills/ddx`.\n  - Add repo-root safety: if a local path is not a package root but contains `library/package.yaml` for the requested package, resolve to that package root, or fail clearly before writing outputs.\n  - Preserve local overlay invariants: do not mutate plugin version pins and do not auto-commit.\n\nNON-SCOPE\n  - Remote registry real-file installs; sibling bead owns package mapping copy behavior.\n  - Moving the actual skill content to `library/skills/ddx`.\n  - Changing public plugin command names.\n\nPARENT + DEPS\n  Parent: ddx-6862f2ac. Depends on the registry mapping bead so local and remote installers share mapping semantics.",
+    "acceptance": "1. `TestPluginInstallLocalDDxLibrarySymlinksSkills` proves `ddx plugin install ddx --local library --force` creates `.ddx/plugins/ddx` as a local overlay and links `.agents/skills/ddx` plus `.claude/skills/ddx` to `library/skills/ddx`.\n2. `TestRepoRootLocalInstallDoesNotSelfLink` proves `ddx plugin install ddx --local . --force` either resolves safely to `library/` or fails before modifying `.agents/skills/ddx` and `.claude/skills/ddx`.\n3. `TestPluginInstallLocalHonorsManifestSkillMappings` proves local symlink overlays use `package.yaml` `install.skills[*].source` and `target`, not the hard-coded `.agents/skills` discovery order.\n4. `TestPluginInstallLocalDoesNotUpdateInstalledStateOrCommit` proves local overlays leave the recorded plugin pin unchanged and do not stage or commit files.\n5. `cd cli \u0026\u0026 go test ./cmd/... -run 'TestPluginInstallLocalDDxLibrarySymlinksSkills|TestRepoRootLocalInstallDoesNotSelfLink|TestPluginInstallLocalHonorsManifestSkillMappings|TestPluginInstallLocalDoesNotUpdateInstalledStateOrCommit' -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "parent": "ddx-6862f2ac",
+    "labels": [
+      "phase:2",
+      "area:plugins",
+      "area:skills",
+      "area:cli",
+      "kind:feature",
+      "plan-2026-05-13",
+      "spec:plan-2026-05-13-ddx-skill-package-layout"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-13T19:51:21Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "1416783",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-c34b9915)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T18:39:33.295542073Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-c34b9915)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T18:53:29.203513861Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-c34b9915)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T19:36:53.758806283Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"The bead meets all 8 lint criteria: the title is scoped to plugin install symlink behavior, the description includes PROBLEM/ROOT CAUSE/PROPOSED FIX/NON-SCOPE with file:line anchors, the acceptance criteria are numbered and include concrete Test* names plus the required go test and pre-commit gates, labels and parent/deps are explicit, and the prompt is self-contained enough for a sub-agent to execute without clarification.\",\"score\":8,\"suggested_fixes\":[],\"waivers_applied\":[]}",
+          "created_at": "2026-05-13T19:52:00.861616642Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=8"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-13T19:51:21.476681367Z",
+      "execute-loop-last-detail": "readiness check timed out after 30s (ddx-c34b9915)",
+      "execute-loop-last-status": "timeout",
+      "execute-loop-retry-after": "2026-05-13T19:41:53Z",
+      "spec-id": "plan-2026-05-13-ddx-skill-package-layout"
+    }
+  },
+  "governing": [
+    {
+      "id": "plan-2026-05-13-ddx-skill-package-layout",
+      "path": "docs/helix/02-design/plan-2026-05-13-ddx-skill-package-layout.md",
+      "title": "DDx Skill Package Layout"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260513T195201-8f22a9de",
+    "prompt": ".ddx/executions/20260513T195201-8f22a9de/prompt.md",
+    "manifest": ".ddx/executions/20260513T195201-8f22a9de/manifest.json",
+    "result": ".ddx/executions/20260513T195201-8f22a9de/result.json",
+    "checks": ".ddx/executions/20260513T195201-8f22a9de/checks.json",
+    "usage": ".ddx/executions/20260513T195201-8f22a9de/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-c34b9915-20260513T195201-8f22a9de"
+  },
+  "prompt_sha": "6439fb4ff5875904467a2c637a4ffe0740fba1ed9d8776288de173f407a6e218"
+}

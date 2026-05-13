@@ -1,0 +1,3 @@
+status: blocked
+reason: This bead exceeds the allowed single-pass execution scope. The acceptance criteria require coordinated changes across `cli/internal/bead/backend.go`, `cli/internal/bead/store.go`, `cli/internal/bead/axon_backend.go`, plus caller migration in `cli/cmd/`, `cli/internal/agent/`, `cli/internal/server/`, `cli/internal/escalation/`, and metrics packages. That is too broad for this execution bead, and the decomposition depth cap prevents splitting it further here.
+evidence: `cli/internal/bead/backend.go` is 76 lines, `cli/internal/bead/store.go` is 2568 lines, and `cli/internal/bead/axon_backend.go` is 599 lines.

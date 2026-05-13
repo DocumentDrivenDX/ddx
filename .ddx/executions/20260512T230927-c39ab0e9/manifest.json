@@ -1,0 +1,65 @@
+{
+  "attempt_id": "20260512T230927-c39ab0e9",
+  "bead_id": "ddx-70a432b5",
+  "base_rev": "32c9cd79b50f1003ad9e7b90ccf1c7acec5d308b",
+  "created_at": "2026-05-12T23:09:30.925989987Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-70a432b5",
+    "title": "Story 16.3: Specs + cross-cutting e2e + raw-transcript-viewed audit event",
+    "description": "PROBLEM\nFEAT-008, FEAT-010, and FEAT-019 specs are missing the documentation sections required to make the Story-16 run-detail page and its evidence browser official. Without spec updates, the run-detail page, trust boundary statement, and raw-transcript audit event are undocumented platform behaviors.\n\nROOT CAUSE\n- docs/helix/01-frame/features/FEAT-008-*.md: missing a Run-detail-page subsection describing the trust boundary ('Anyone with project read access sees raw prompts, responses, stderr, tool args') and evidence browser whitelist (allowed extensions + 64KB cap).\n- docs/helix/01-frame/features/FEAT-010-*.md: Run resolver contract does not include prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path) with bundle-root confinement, or normalized ToolCallEntry.\n- docs/helix/01-frame/features/FEAT-019-*.md: review surface does not point to /runs/[runId] deep page.\n- No 'raw transcript viewed' audit event exists in the server or schema.\n- Depends on ddx-f04faa86 (16.1 page) and ddx-4cd64068 (16.2 evidence tab).\n\nPROPOSED FIX\n- Update FEAT-008: add Run-detail-page subsection with trust-boundary statement + evidence whitelist (*.txt, *.md, manifest.json, prompt.md, result.json, files \u003c 64KB; no Markdown rendering in evidence tab).\n- Update FEAT-010: extend Run resolver contract with prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path) with bundle-root confinement; document normalized ToolCallEntry as canonical store populated at drain.\n- Update FEAT-019: review surface section updated to link to /runs/[runId] deep page.\n- Add 'raw transcript viewed' audit event in server (emitted on prompt/response/transcript access).\n- Add cross-cutting e2e: full prompt/response/tool-trace/evidence-list end-to-end via Playwright.\n\nNON-SCOPE\n- Frontend implementation (that is Story 16.1 and 16.2).\n- New auth or role-based access control beyond what the trust boundary statement documents.",
+    "acceptance": "1. FEAT-008 spec updated with Run-detail-page subsection + trust-boundary statement + evidence whitelist.\n2. FEAT-010 spec updated with extended Run resolver contract + drain-time persistence note + ToolCallEntry definition.\n3. FEAT-019 spec updated with link from review surface to /runs/[runId].\n4. 'raw transcript viewed' audit event emitted on access and covered by test (TestAuditEvent_RawTranscriptViewed).\n5. Cross-cutting e2e test exercises full prompt visible + response visible + tool trace visible + evidence list visible: test('full stack: prompt/response/tool-trace/evidence', ...) Playwright test.\n6. p95 dataset (200 tool calls, 30 evidence files) all tabs render and become interactive within one render frame.\n7. bun run test:e2e green.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-a8a18cb7",
+    "labels": [
+      "phase:2",
+      "story:16",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T23:07:40Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "3784393",
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"FEAT-008 spec updated with Run-detail-page subsection + trust-boundary statement + evidence whitelist.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"FEAT-010 spec updated with extended Run resolver contract + drain-time persistence note + ToolCallEntry definition.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"FEAT-019 spec updated with link from review surface to /runs/[runId].\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":4,\"text\":\"'raw transcript viewed' audit event emitted on access and covered by test (TestAuditEvent_RawTranscriptViewed).\",\"kind\":\"test-name\",\"verifiable\":true},{\"ac\":5,\"text\":\"Cross-cutting e2e test exercises full prompt visible + response visible + tool trace visible + evidence list visible: test('full stack: prompt/response/tool-trace/evidence', ...) Playwright test.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":6,\"text\":\"p95 dataset (200 tool calls, 30 evidence files) all tabs render and become interactive within one render frame.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":7,\"text\":\"bun run test:e2e green.\",\"kind\":\"build-gate\",\"verifiable\":true},{\"ac\":8,\"text\":\"lefthook run pre-commit passes.\",\"kind\":\"build-gate\",\"verifiable\":true}]",
+          "created_at": "2026-05-12T23:07:40.815136414Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.38 threshold=0.50 verifiable=3/8"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"ambiguous_scope: The bead is stale and conflicts with durable anchors. FEAT-008 already specifies the run-detail Evidence tab whitelist and the `run_detail_view` audit event at docs/helix/01-frame/features/FEAT-008-web-ui.md:835-841; FEAT-010 already defines `run_detail_view` and its body schema at docs/helix/01-frame/features/FEAT-010-task-execution.md:1215-1236; FEAT-019 already points to the shared run-detail surface and the same audit semantics at docs/helix/01-frame/features/FEAT-019-agent-evaluation.md:64-83 and 377-383. The implementation also already records `run_detail_view` in cli/internal/server/graphql/resolver_runs.go:29-145, with coverage in cli/internal/server/graphql/resolver_runs_test.go:340-357 and the Evidence tab e2e in cli/internal/server/frontend/e2e/runs-evidence.spec.ts:253-303. Because the prompt asks for a new 'raw-transcript viewed' audit event while the repo already standardizes on `run_detail_view`, rewriting would require choosing between conflicting requirements rather than safely refining one clear scope.\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T23:08:53.979889214Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"The bead is mostly execution-ready: the description has the required PROBLEM/ROOT CAUSE/PROPOSED FIX/NON-SCOPE structure, the acceptance criteria are numbered and include named tests plus the required go test and lefthook gates, the parent and deps are explicit, and the prompt is broadly sufficient for an agent. It still misses the rubric on title form and label completeness: the title is not written as an imperative subsystem change, and the labels do not include the required area/kind/cross-ref facets.\",\"score\":6,\"suggested_fixes\":[\"Rewrite the title as an imperative, subsystem-scoped one-liner, e.g. `specs: add Story 16.3 run-detail docs, audit event, and cross-cutting e2e`.\",\"Add `area:\\u003csubsystem\\u003e` and `kind:\\u003ccategory\\u003e` labels, plus an explicit cross-reference label such as `spec:FEAT-008` or `story:16` if that is the intended linkage.\",\"If exact source locations are available, tighten ROOT CAUSE with concrete file:line anchors for the spec gaps and the server audit-event insertion point.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T23:09:27.242968812Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=6"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T23:07:40.633402469Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260512T230927-c39ab0e9",
+    "prompt": ".ddx/executions/20260512T230927-c39ab0e9/prompt.md",
+    "manifest": ".ddx/executions/20260512T230927-c39ab0e9/manifest.json",
+    "result": ".ddx/executions/20260512T230927-c39ab0e9/result.json",
+    "checks": ".ddx/executions/20260512T230927-c39ab0e9/checks.json",
+    "usage": ".ddx/executions/20260512T230927-c39ab0e9/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-70a432b5-20260512T230927-c39ab0e9"
+  },
+  "prompt_sha": "c0c7575a4330667a3c8f65becc61cb364f7a90abc4bb16f7b1c8f1af68d7dc4e"
+}

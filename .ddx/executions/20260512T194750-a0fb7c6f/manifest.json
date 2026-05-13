@@ -1,0 +1,63 @@
+{
+  "attempt_id": "20260512T194750-a0fb7c6f",
+  "bead_id": "ddx-215b08a2",
+  "base_rev": "f07bca6de0f2e97d80c022d725075da142791ebd",
+  "created_at": "2026-05-12T19:47:53.928532601Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-215b08a2",
+    "title": "F (Foundation): Operation pattern + IDGenerator + sentinels + ctx access: part 2",
+    "description": "PROBLEM\nParent bead ddx-c6317784 is too broad for one execution pass. This child owns part 2 of 5 of that parent scope.\n\nROOT CAUSE\n# PROBLEM\nThe bead backend interface today (`cli/internal/bead/backend.go`) is JSONL-shaped: `RawBackend` requires whole-corpus `ReadAll`/`WriteAll`, and `Backend` declares only 22 of `*Store`'s 69 public methods. Per TD-027 (the canonical Bead Storage System and Lifecycle spec), the bead architecture needs:\n\n- A typed `Operation` pattern with `Apply(b *Bead) error` (CAS via error returns)\n- 11 LSP-clean storage sub-interfaces composing `Backend`\n- Pluggable `IDGenerator` and parallel `LifecycleSubscriber`\n- `context.Context` first-parameter discipline on every interface method\n- Sentinel errors (`ErrNotFound`, `ErrConflict`, `ErrInvalidID`, `ErrAlreadyClaimed`, `ErrNotClaimedByOwner`, `ErrUnsupported`)\n- The optional `OperationApplier` interface on `RawBackend` so JSONL backends can preserve heartbeat sidecar optimization\n- A canonical Bead data model (field enumeration + invariants + JSONL wire format + schema-versioning policy)\n\nThis bead lays the foundation that all per-concern beads (L/C/E/X/Q/D/A/MIG) depend on. It declares the event reader/writer interfaces but deliberately does not migrate `AppendEvent`, `Events`, or `EventsByKind`; the E bead owns event-method ctx threading and `*Store` event interface satisfaction.\n\n# ROOT CAUSE\n- `cli/internal/bead/backend.go:10-67` — `RawBackend` (4 whole-corpus methods) + `Backend` (22 high-level methods, incomplete).\n- `cli/internal/bead/store.go` — `*Store` exposes 69 public methods, none take `ctx context.Context`.\n- `cli/internal/bead/axon_backend.go:340-381` — `WriteAll` ships entire corpus per mutation (catastrophic for Postgres).\n- Operation pattern, IDGenerator, sentinel errors, context discipline — all absent.\n- Bead data model (the canonical schema of fields + invariants) — only implicit in the Go struct.\n\n# PROPOSED FIX\nImplement TD-027 §5–§13 foundation pieces that are required before the per-concern beads can execute.\n\n## New files\n\n1. `cli/internal/bead/operation.go` — `Operation` interface with `Apply(b *Bead) error`. `MutateFunc` adapter for ad-hoc mutations. Empty named-op section (per-concern beads add their op types).\n2. `cli/internal/bead/id.go` — `ValidateID`, format constants (`DefaultIDPrefix`, `MaxIDLength`, `MinIDLength`), `IDGenerator` interface, `RandomHexIDGenerator`, `SequentialIDGenerator`, `NewIDGenerator()` default.\n3. `cli/internal/bead/errors.go` — sentinel e\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- Sentinel errors declared as distinct `error` values. Test: `TestSentinelErrors_AreErrorValues`.\n- Context typed accessors implemented. Tests: `TestWithIdentity_RoundTrip`, `TestIdentityFromContext_AbsentReturnsFalse`, `TestWithTrace_RoundTrip`.\n- Foundational sub-interfaces (`BeadInitializer`, `BeadReader`, `BeadLifecycle`, `BeadEventReader`, `BeadEventWriter`) declared with ctx-first signatures. `*Store` satisfies only the non-event foundation interfaces in this bead — compile-time assertions: `var _ BeadInitializer = (*Store)(nil)`, `var _ BeadReader = (*Store)(nil)`, `var _ BeadLifecycle = (*Store)(nil)`. No `BeadEventReader`/`BeadEventWriter` assertion is added until E.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. Sentinel errors declared as distinct `error` values. Test: `TestSentinelErrors_AreErrorValues`.\n2. Context typed accessors implemented. Tests: `TestWithIdentity_RoundTrip`, `TestIdentityFromContext_AbsentReturnsFalse`, `TestWithTrace_RoundTrip`.\n3. Foundational sub-interfaces (`BeadInitializer`, `BeadReader`, `BeadLifecycle`, `BeadEventReader`, `BeadEventWriter`) declared with ctx-first signatures. `*Store` satisfies only the non-event foundation interfaces in this bead — compile-time assertions: `var _ BeadInitializer = (*Store)(nil)`, `var _ BeadReader = (*Store)(nil)`, `var _ BeadLifecycle = (*Store)(nil)`. No `BeadEventReader`/`BeadEventWriter` assertion is added until E.",
+    "parent": "ddx-c6317784",
+    "labels": [
+      "phase:iterate",
+      "area:bead",
+      "area:storage",
+      "kind:feature",
+      "kind:refactor",
+      "spec:FEAT-004",
+      "spec:TD-027",
+      "reliability",
+      "decomposed"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T19:46:49Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "3719454",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description drops commitment \\\"TestSentinelErrors_AreErrorValues\\\"\",\"fingerprint\":\"9a9f3e7563c088c6559b50170a909615619d5996d3af04d242043c3656f19c85\",\"policy_mode\":\"warn-only\",\"reason\":\"rewrite_rejected\",\"rule_id\":\"pre_claim_intake.rewrite_rejected\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T19:47:24.079477302Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "rewrite_rejected"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Passes the description structure, verifiable acceptance criteria with named Test* symbols, wired-in assertions, labels, and standalone prompt sufficiency, but fails title clarity, omits the required `cd cli \\u0026\\u0026 go test ./\\u003cpkg\\u003e/...` plus `lefthook run pre-commit` acceptance gate, and does not explicitly state deps or `No deps.`\",\"score\":5,\"suggested_fixes\":[\"Rewrite the title as an imperative, subsystem-scoped change (for example, `bead: add ctx-first foundation interfaces and sentinel errors`).\",\"Add an explicit deps section or state `No deps.` in the bead body.\",\"Add acceptance items that include both `cd cli \\u0026\\u0026 go test ./\\u003cpkg\\u003e/...` and `lefthook run pre-commit`.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T19:47:50.344685941Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=5"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T19:46:49.275982918Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260512T194750-a0fb7c6f",
+    "prompt": ".ddx/executions/20260512T194750-a0fb7c6f/prompt.md",
+    "manifest": ".ddx/executions/20260512T194750-a0fb7c6f/manifest.json",
+    "result": ".ddx/executions/20260512T194750-a0fb7c6f/result.json",
+    "checks": ".ddx/executions/20260512T194750-a0fb7c6f/checks.json",
+    "usage": ".ddx/executions/20260512T194750-a0fb7c6f/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-215b08a2-20260512T194750-a0fb7c6f"
+  },
+  "prompt_sha": "95a423c5abb99997c1d89b4633583e4a26480421f78d42ef02cc6a7f9900e67b"
+}

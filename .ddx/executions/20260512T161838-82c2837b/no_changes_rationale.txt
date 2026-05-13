@@ -1,0 +1,2 @@
+status: blocked
+reason: This bead is too large for one execution pass and is already at the decomposition depth cap. It spans storage-interface foundation changes plus ctx-threading across many caller packages, so it needs upstream splitting before implementation can proceed.

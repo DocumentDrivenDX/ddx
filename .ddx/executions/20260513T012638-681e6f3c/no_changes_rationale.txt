@@ -1,0 +1,8 @@
+status: blocked
+reason: `go test ./...` fails outside the bead scope in `github.com/DocumentDrivenDX/ddx/internal/agent.TestOperatorCancel_DuringRealClaudeAttempt`, which times out after 10m and prevents the repo-wide acceptance gate from completing.
+
+verification_command: go test ./internal/server/... -run 'TestRunToolCalls_PersistedAtDrain|TestSessionIndexEntryFromResult_PersistsToolCalls|TestRunBundleFile_|TestRunBundleFiles_Listing|TestIntegration_Query_Runs'
+evidence:
+- Targeted bead tests pass.
+- `lefthook run pre-commit` passes.
+- `go test ./...` fails in an unrelated package before completion.

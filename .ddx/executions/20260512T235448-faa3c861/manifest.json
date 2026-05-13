@@ -1,0 +1,58 @@
+{
+  "attempt_id": "20260512T235448-faa3c861",
+  "bead_id": "ddx-868ac26c",
+  "base_rev": "147b77071f5a1818c170b6268960b9e014f88d10",
+  "created_at": "2026-05-12T23:54:52.888119569Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-868ac26c",
+    "title": "Story 16.3: Specs + cross-cutting e2e + raw-transcript-viewed audit even: part 1",
+    "description": "PROBLEM\nParent bead ddx-b4c5151a is too broad for one execution pass. This child owns part 1 of 2 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nParent bead ddx-70a432b5 is too broad for one execution pass. This child owns part 3 of 3 of that parent scope.\n\nROOT CAUSE\nPROBLEM\nFEAT-008, FEAT-010, and FEAT-019 specs are missing the documentation sections required to make the Story-16 run-detail page and its evidence browser official. Without spec updates, the run-detail page, trust boundary statement, and raw-transcript audit event are undocumented platform behaviors.\n\nROOT CAUSE\n- docs/helix/01-frame/features/FEAT-008-*.md: missing a Run-detail-page subsection describing the trust boundary ('Anyone with project read access sees raw prompts, responses, stderr, tool args') and evidence browser whitelist (allowed extensions + 64KB cap).\n- docs/helix/01-frame/features/FEAT-010-*.md: Run resolver contract does not include prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path) with bundle-root confinement, or normalized ToolCallEntry.\n- docs/helix/01-frame/features/FEAT-019-*.md: review surface does not point to /runs/[runId] deep page.\n- No 'raw transcript viewed' audit event exists in the server or schema.\n- Depends on ddx-f04faa86 (16.1 page) and ddx-4cd64068 (16.2 evidence tab).\n\nPROPOSED FIX\n- Update FEAT-008: add Run-detail-page subsection with trust-boundary statement + evidence whitelist (*.txt, *.md, manifest.json, prompt.md, result.json, files \u003c 64KB; no Markdown rendering in evidence tab).\n- Update FEAT-010: extend Run resolver contract with prompt, response, stderr, toolCalls(first, after), bundleFiles[], bundleFile(path) with bundle-root confinement; document normalized ToolCallEntry as canonical store populated at drain.\n- Update FEAT-019: review surface section updated to link to /runs/[runId] deep page.\n- Add 'raw transcript viewed' audit event in server (emitted on prompt/response/transcript access).\n- Add cross-cutting e2e: full prompt/response/tool-trace/evidence-list end-to-end via Playwright.\n\nNON-SCOPE\n- Frontend implementation (that is Story 16.1 and 16.2).\n- New auth or role-based access control beyond what the trust boundary statement documents.\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- p95 dataset (200 tool calls, 30 evidence files) all tabs render and become interactive within one render frame.\n- bun run test:e2e green.\n- lefthook run pre-commit passes.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- p95 dataset (200 tool calls, 30 evidence files) all tabs render and become interactive within one render frame.\n- bun run test:e2e green.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. p95 dataset (200 tool calls, 30 evidence files) all tabs render and become interactive within one render frame.\n2. bun run test:e2e green.",
+    "parent": "ddx-b4c5151a",
+    "labels": [
+      "phase:2",
+      "story:16",
+      "ac-quality:needs-refinement",
+      "decomposed"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T23:54:18Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "284888",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"ambiguous_scope: The bead is not safely refinable as-is because it mixes multiple independent workstreams (spec/documentation updates, server-side audit event, and cross-cutting e2e coverage) and contains conflicting/duplicated parent scope language (ddx-b4c5151a vs ddx-70a432b5, part 1 of 2 vs part 3 of 3). Rewriting would require choosing which scope statements to trust and potentially changing acceptance criteria, so operator confirmation is needed.\",\"fingerprint\":\"4a4c61c4c495026c402b5fc3d74cf2535cc4223730d9e55d287891592f499c0c\",\"policy_mode\":\"warn-only\",\"reason\":\"readiness_best_effort\",\"rule_id\":\"pre_claim_intake.readiness_best_effort\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T23:54:31.595829212Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "readiness_best_effort"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"The bead is not lint-ready: the title is not imperative or subsystem-scoped, the description is internally repetitive/truncated and lacks file:line-backed root cause, the acceptance criteria are not tied to named tests or a unique go test filter, required verification commands are missing, labels do not cover area/kind/cross-reference facets, deps are neither listed nor stated as No deps, and the scope bundles multiple independent changes that should be split.\",\"score\":0,\"suggested_fixes\":[\"Rewrite the title as an imperative, subsystem-specific one-line scope.\",\"Replace the description with a single coherent PROBLEM / ROOT CAUSE (with file:line where applicable) / PROPOSED FIX / NON-SCOPE block.\",\"Split the bundled work into separate beads for spec updates, audit-event plumbing, and e2e coverage if they remain independently executable.\",\"Add acceptance criteria that name specific Test* symbols or a unique go test -run filter, plus a wired assertion for the introduced code path.\",\"Include both `cd cli \\u0026\\u0026 go test ./\\u003cpkg\\u003e/...` and `lefthook run pre-commit` in acceptance.\",\"Update labels to include phase, area, kind, and a cross-reference facet.\",\"Add a `deps` field or explicitly state `No deps.`\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T23:54:48.415047848Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=0"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T23:54:18.556809771Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260512T235448-faa3c861",
+    "prompt": ".ddx/executions/20260512T235448-faa3c861/prompt.md",
+    "manifest": ".ddx/executions/20260512T235448-faa3c861/manifest.json",
+    "result": ".ddx/executions/20260512T235448-faa3c861/result.json",
+    "checks": ".ddx/executions/20260512T235448-faa3c861/checks.json",
+    "usage": ".ddx/executions/20260512T235448-faa3c861/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-868ac26c-20260512T235448-faa3c861"
+  },
+  "prompt_sha": "41e9cfcf8000d1d22a6a57246cf3b7bd7706f228017bb77a2030431e2bbd919d"
+}

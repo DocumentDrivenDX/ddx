@@ -1,0 +1,2 @@
+status: open
+reason: `cd cli && go test ./internal/server/...` is still long-running in this worktree; the review-dispatcher code path is already present and the focused review tests passed, but the full package verification needs a longer timeout to complete.

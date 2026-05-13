@@ -1,0 +1,138 @@
+{
+  "attempt_id": "20260512T200444-4522f1bc",
+  "bead_id": "ddx-494685af",
+  "base_rev": "4ec1e69d725477d0344d5599af2a469f38f27051",
+  "created_at": "2026-05-12T20:04:47.296037963Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized",
+    "min_power": 8
+  },
+  "bead": {
+    "id": "ddx-494685af",
+    "title": "F (Foundation): Operation pattern + IDGenerator + sentinels + ctx access: part 3",
+    "description": "PROBLEM\nParent bead ddx-c6317784 is too broad for one execution pass. This child owns part 3 of 5 of that parent scope.\n\nROOT CAUSE\n# PROBLEM\nThe bead backend interface today (`cli/internal/bead/backend.go`) is JSONL-shaped: `RawBackend` requires whole-corpus `ReadAll`/`WriteAll`, and `Backend` declares only 22 of `*Store`'s 69 public methods. Per TD-027 (the canonical Bead Storage System and Lifecycle spec), the bead architecture needs:\n\n- A typed `Operation` pattern with `Apply(b *Bead) error` (CAS via error returns)\n- 11 LSP-clean storage sub-interfaces composing `Backend`\n- Pluggable `IDGenerator` and parallel `LifecycleSubscriber`\n- `context.Context` first-parameter discipline on every interface method\n- Sentinel errors (`ErrNotFound`, `ErrConflict`, `ErrInvalidID`, `ErrAlreadyClaimed`, `ErrNotClaimedByOwner`, `ErrUnsupported`)\n- The optional `OperationApplier` interface on `RawBackend` so JSONL backends can preserve heartbeat sidecar optimization\n- A canonical Bead data model (field enumeration + invariants + JSONL wire format + schema-versioning policy)\n\nThis bead lays the foundation that all per-concern beads (L/C/E/X/Q/D/A/MIG) depend on. It declares the event reader/writer interfaces but deliberately does not migrate `AppendEvent`, `Events`, or `EventsByKind`; the E bead owns event-method ctx threading and `*Store` event interface satisfaction.\n\n# ROOT CAUSE\n- `cli/internal/bead/backend.go:10-67` — `RawBackend` (4 whole-corpus methods) + `Backend` (22 high-level methods, incomplete).\n- `cli/internal/bead/store.go` — `*Store` exposes 69 public methods, none take `ctx context.Context`.\n- `cli/internal/bead/axon_backend.go:340-381` — `WriteAll` ships entire corpus per mutation (catastrophic for Postgres).\n- Operation pattern, IDGenerator, sentinel errors, context discipline — all absent.\n- Bead data model (the canonical schema of fields + invariants) — only implicit in the Go struct.\n\n# PROPOSED FIX\nImplement TD-027 §5–§13 foundation pieces that are required before the per-concern beads can execute.\n\n## New files\n\n1. `cli/internal/bead/operation.go` — `Operation` interface with `Apply(b *Bead) error`. `MutateFunc` adapter for ad-hoc mutations. Empty named-op section (per-concern beads add their op types).\n2. `cli/internal/bead/id.go` — `ValidateID`, format constants (`DefaultIDPrefix`, `MaxIDLength`, `MinIDLength`), `IDGenerator` interface, `RandomHexIDGenerator`, `SequentialIDGenerator`, `NewIDGenerator()` default.\n3. `cli/internal/bead/errors.go` — sentinel e\n...[truncated]\n\nPROPOSED FIX\nImplement only this child acceptance slice:\n- `*Store.Apply` method exists; type-asserts to `OperationApplier`; falls back to generic load-mutate-save. Test: `TestStore_Apply_DelegatesToOperationApplier_WhenAvailable`, `TestStore_Apply_GenericFallback_WhenNotAvailable`.\n- `JSONLBackend` implements `OperationApplier` (empty switch + generic fallback — heartbeat-specific cases added in C bead). Compile-time assertion: `var _ OperationApplier = (*JSONLBackend)(nil)`. Test: `TestJSONLBackend_Apply_FallsThroughForUnknownOps`.\n- Bead data model invariants (TD-027 §11.2) hold across `*Store`. Test: `TestBeadDataModel_InvariantsHold` asserts the 12 universal invariants on freshly-created and mutated beads.\n\nNON-SCOPE\nDo not implement parent acceptance criteria assigned to sibling child beads. Preserve every parent non-scope constraint unless this child explicitly narrows it.",
+    "acceptance": "1. `*Store.Apply` method exists; type-asserts to `OperationApplier`; falls back to generic load-mutate-save. Test: `TestStore_Apply_DelegatesToOperationApplier_WhenAvailable`, `TestStore_Apply_GenericFallback_WhenNotAvailable`.\n2. `JSONLBackend` implements `OperationApplier` (empty switch + generic fallback — heartbeat-specific cases added in C bead). Compile-time assertion: `var _ OperationApplier = (*JSONLBackend)(nil)`. Test: `TestJSONLBackend_Apply_FallsThroughForUnknownOps`.\n3. Bead data model invariants (TD-027 §11.2) hold across `*Store`. Test: `TestBeadDataModel_InvariantsHold` asserts the 12 universal invariants on freshly-created and mutated beads.",
+    "parent": "ddx-c6317784",
+    "labels": [
+      "phase:iterate",
+      "area:bead",
+      "area:storage",
+      "kind:feature",
+      "kind:refactor",
+      "spec:FEAT-004",
+      "spec:TD-027",
+      "reliability",
+      "decomposed",
+      "triage:no-changes-unjustified"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T20:02:52Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "3761472",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description drops commitment \\\"TestStore_Apply_DelegatesToOperationApplier_WhenAvailable\\\"\",\"fingerprint\":\"9a9f3e7563c088c6559b50170a909615619d5996d3af04d242043c3656f19c85\",\"policy_mode\":\"warn-only\",\"reason\":\"rewrite_rejected\",\"rule_id\":\"pre_claim_intake.rewrite_rejected\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T19:50:44.568596815Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "rewrite_rejected"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"4/8: the description is well-structured and the ACs name concrete tests and a wired-in assertion, but the title is not clearly imperative/subsystem-scoped, the bead does not explicitly list deps or state \\\"No deps.\\\", and the ACs omit the required `cd cli \\u0026\\u0026 go test ./\\u003cpkg\\u003e/...` plus `lefthook run pre-commit` verification.\",\"score\":4,\"suggested_fixes\":[\"Rewrite the title as an imperative, subsystem-scoped one-liner, e.g. \\\"bead: add OperationApplier fallback and bead invariants\\\".\",\"Add a `DEPS` section or explicitly state `No deps.` so the execution contract is complete.\",\"Add acceptance criteria that name the package-level `go test` command and `lefthook run pre-commit` pass condition.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T19:51:12.367121656Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=4"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"requested_harness\":\"codex\",\"requested_model\":\"gpt-5.4-mini\"}",
+          "created_at": "2026-05-12T19:53:43.290739044Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"agent exited without a commit or no_changes_rationale.txt\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"reason\":\"context_canceled\"}",
+          "created_at": "2026-05-12T19:53:43.902186052Z",
+          "kind": "disruption_detected",
+          "source": "ddx work",
+          "summary": "context_canceled"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260512T195112-5361d17d\",\"bead_id\":\"ddx-494685af\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-12T19:53:43.998915947Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic tier=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "(rationale absent)",
+          "created_at": "2026-05-12T19:53:44.187772594Z",
+          "kind": "no_changes_unjustified",
+          "source": "ddx work",
+          "summary": "no_changes_unjustified"
+        },
+        {
+          "actor": "erik",
+          "body": "",
+          "created_at": "2026-05-12T19:53:44.405938712Z",
+          "kind": "reviewer-skipped-empty-diff",
+          "source": "ddx work",
+          "summary": "reviewer skipped: empty diff (no commits produced)"
+        },
+        {
+          "actor": "erik",
+          "body": "agent exited without a commit or no_changes_rationale.txt\nresult_rev=8d080e2357c3b04a2611229d7aafa1dc3eaa25bd\nbase_rev=8d080e2357c3b04a2611229d7aafa1dc3eaa25bd\noutcome_reason=no_evidence_produced",
+          "created_at": "2026-05-12T19:53:44.59098335Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description drops commitment \\\"TestStore_Apply_DelegatesToOperationApplier_WhenAvailable\\\"\",\"fingerprint\":\"9a9f3e7563c088c6559b50170a909615619d5996d3af04d242043c3656f19c85\",\"policy_mode\":\"warn-only\",\"reason\":\"rewrite_rejected\",\"rule_id\":\"pre_claim_intake.rewrite_rejected\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T20:03:36.453720915Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "rewrite_rejected"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"The bead has a solid problem statement, file-backed root cause, named tests, wired-in assertions, and good labels, but it still misses several lint requirements: the title is not imperative/subsystem-scoped, dependencies are not stated as a list or `No deps.`, the acceptance criteria omit the required `cd cli \\u0026\\u0026 go test ./\\u003cpkg\\u003e/...` and `lefthook run pre-commit` checks, and the prompt is not fully self-contained without explicit verification commands.\",\"score\":4,\"suggested_fixes\":[\"Rewrite the title into an imperative, one-line subsystem scope, e.g. `\\u003csubsystem\\u003e: add OperationApplier fallback and bead invariants`.\",\"Add a `deps` section or an explicit `No deps.` statement.\",\"Append acceptance items that name the package-specific `cd cli \\u0026\\u0026 go test ./\\u003cpkg\\u003e/...` command and `lefthook run pre-commit`.\",\"Keep the current test names, but make the bead fully self-contained by stating the verification commands directly in acceptance so a sub-agent can execute without asking.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T20:04:09.080649296Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=4"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"requested_harness\":\"codex\",\"requested_model\":\"gpt-5.4-mini\"}",
+          "created_at": "2026-05-12T20:04:44.02089459Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T20:02:52.710868472Z",
+      "execute-loop-no-changes-count": 1
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260512T200444-4522f1bc",
+    "prompt": ".ddx/executions/20260512T200444-4522f1bc/prompt.md",
+    "manifest": ".ddx/executions/20260512T200444-4522f1bc/manifest.json",
+    "result": ".ddx/executions/20260512T200444-4522f1bc/result.json",
+    "checks": ".ddx/executions/20260512T200444-4522f1bc/checks.json",
+    "usage": ".ddx/executions/20260512T200444-4522f1bc/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-494685af-20260512T200444-4522f1bc"
+  },
+  "prompt_sha": "dedd1eb18123749cb8a0db0e75c8b0df7d3800624b583f693f3eeb7e5fdbb3f2"
+}

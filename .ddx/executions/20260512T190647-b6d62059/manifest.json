@@ -1,0 +1,242 @@
+{
+  "attempt_id": "20260512T190647-b6d62059",
+  "bead_id": "ddx-fcdbc731",
+  "base_rev": "822a5c8a720da994a9a50e14a2e92dc759898f4b",
+  "created_at": "2026-05-12T19:06:51.137972964Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized",
+    "min_power": 8
+  },
+  "bead": {
+    "id": "ddx-fcdbc731",
+    "title": "prompts: tighten shared blocks; add FEAT-022 guardrail-list comment block; add invariant tests",
+    "description": "PROBLEM\nBoth execute-bead prompt strings (Claude: 1078 words, Agent: 1020 words) contain prose paragraphs that consume more tokens than equivalent bullet checklists. 19 load-bearing guardrails are embedded in prose without explicit enumeration, making omission hard to detect. No invariant tests verify that selectors and the missing-governing path work correctly.\n\nROOT CAUSE\n- cli/internal/agent/execute_bead_loop.go (or prompts package): the shared blocks (extracted by ddx-e2171a2c, a dep) are prose paragraphs averaging ~25 words each. Equivalent checklists would cut to ~10 words per guardrail.\n- No FEAT-022-referencing comment block exists that enumerates all 19 guardrails inline.\n- No invariant tests exist for prompt selectors (which harness-specific block is chosen) or missing-governing path (behavior when governing doc is absent).\n- ddx-e2171a2c (shared block extraction, a dep) must land first.\n\nPROPOSED FIX\n- Tighten shared blocks: convert prose paragraphs to bullet checklists targeting \u003e= 30% word reduction on both Claude and Agent variants (~400 words saved on Claude, ~450 on Agent).\n- Verify all 19 guardrails preserved: enumerate each guardrail in a comment or test.\n- Add FEAT-022-referencing comment block listing all 19 guardrails inline (with FEAT-022 cross-reference).\n- Add invariant tests:\n  - TestPromptSelector_CorrectBlock: verifies each harness gets its specific block.\n  - TestPromptSelector_MissingGoverning: verifies missing-governing path uses fallback or errors predictably.\n\nNON-SCOPE\n- Changing prompt semantics or dropping any of the 19 guardrails.\n- Adding new guardrails (those go in the rubric update).",
+    "acceptance": "1. Both prompt variants (Claude + Agent) word count reduced by \u003e= 30% from baseline.\n2. All 19 guardrails preserved: TestPromptGuardrails_AllPresent enumerates and asserts each.\n3. FEAT-022 comment block exists listing all 19 guardrails with cross-reference.\n4. TestPromptSelector_CorrectBlock verifies each harness gets its specific block.\n5. TestPromptSelector_MissingGoverning verifies missing-governing path behavior.\n6. Existing eval suite passes (golden output unchanged beyond word-reduction reformatting).\n7. cd cli \u0026\u0026 go test ./internal/agent/... green.\n8. lefthook run pre-commit passes.",
+    "parent": "ddx-a61bf8ee",
+    "labels": [
+      "phase:2",
+      "story:12",
+      "area:agent",
+      "kind:feature",
+      "triage:no-changes-unverified"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-12T19:05:27Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "3602916",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no live provider supports prompt of 0 tokens with tools=false at tier ≥ cheap\"}",
+          "created_at": "2026-05-10T03:23:35.981837606Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"claude\",\"resolved_model\":\"sonnet\",\"fallback_chain\":[],\"requested_harness\":\"claude\",\"requested_model\":\"claude-sonnet-4-6\"}",
+          "created_at": "2026-05-10T03:44:25.908646857Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=claude model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260510T032336-a4b13508\",\"harness\":\"claude\",\"model\":\"sonnet\",\"input_tokens\":42,\"output_tokens\":55320,\"total_tokens\":55362,\"cost_usd\":2.4955162,\"duration_ms\":1237305,\"exit_code\":0}",
+          "created_at": "2026-05-10T03:44:25.974584923Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=55362 cost_usd=2.4955 model=sonnet"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"claude\",\"actual_model\":\"sonnet\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260510T032336-a4b13508\",\"bead_id\":\"ddx-fcdbc731\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-10T03:48:32.529064024Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard model=sonnet harness=claude"
+        },
+        {
+          "actor": "erik",
+          "body": "landed locally; push failed: git push origin 22d8220700c495eef566c950b02c6a5859dde8ab:refs/heads/main: ╭────────────────────────────────────╮\n│ 🥊 lefthook v2.1.6  hook: pre-push │\n╰────────────────────────────────────╯\n┃  full-tests ❯ \n\nok  \tgithub.com/DocumentDrivenDX/ddx\t1.060s\tcoverage: 0.0% of statements [no tests to run]\nok  \tgithub.com/DocumentDrivenDX/ddx/cmd\t67.568s\tcoverage: 63.4% of statements\nagent: idle timeout (60ms without meaningful event): cancelling\nagent: loop detected (command=\"Bash\" repeated ≥4 times): cancelling\nagent: tool call timeout (60ms, tool=\"Bash\"): cancelling\nagent: effort \"turbo\" is not a known reasoning level for harness \"codex\"; available levels: low, medium, high\n--- FAIL: TestLoop_StaysAliveWithEmptyQueue (0.06s)\n    execute_bead_loop_stay_alive_test.go:61: \n        \tError Trace:\t/tmp/ddx-land-finalize-1696147450/cli/internal/agent/execute_bead_loop_stay_alive_test.go:61\n        \tError:      \tShould be true\n        \tTest:       \tTestLoop_StaysAliveWithEmptyQueue\n        \tMessages:   \tloop must run until ctx cancellation; ran for 47.26461ms, expected \u003e= 50ms\nFAIL\ncoverage: 73.7% of statements\nFAIL\tgithub.com/DocumentDrivenDX/ddx/internal/agent\t41.962s\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent/escalation\t1.015s\tcoverage: 96.4% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent/executeloop\t1.012s\tcoverage: 92.3% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent/try\t1.029s\tcoverage: 62.7% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent/work\t1.011s\tcoverage: 76.3% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent/workerprobe\t17.937s\tcoverage: 61.5% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agentmetrics\t1.093s\tcoverage: 77.8% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/artifacttypes\t1.032s\tcoverage: 64.4% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/bead\t50.686s\tcoverage: 72.5% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/bead/axon\t1.068s\tcoverage: 74.0% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/checks\t1.837s\tcoverage: 93.0% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/config\t1.331s\tcoverage: 73.2% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/docgraph\t1.048s\tcoverage: 73.2% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/docprose\t1.048s\tcoverage: 84.8% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/escalation\t1.033s\tcoverage: 85.3% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/evidence\t1.023s\tcoverage: 77.9% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/exec\t2.146s\tcoverage: 69.3% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/federation\t3.148s\tcoverage: 43.3% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/git\t1.238s\tcoverage: 76.3% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/metaprompt\t1.040s\tcoverage: 83.3% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/metric\t1.730s\tcoverage: 60.0% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/persona\t1.061s\tcoverage: 62.7% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/processmetrics\t1.101s\tcoverage: 80.2% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/registry\t1.022s\tcoverage: 40.7% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/server\t149.409s\tcoverage: 69.6% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/server/graphql\t32.066s\tcoverage: 25.9% of statements\n?   \tgithub.com/DocumentDrivenDX/ddx/internal/server/perf\t[no test files]\n\tgithub.com/DocumentDrivenDX/ddx/internal/serverreg\t\tcoverage: 0.0% of statements\n\tgithub.com/DocumentDrivenDX/ddx/internal/service\t\tcoverage: 0.0% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/skills\t1.047s\tcoverage: 68.7% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/triage\t1.030s\tcoverage: 100.0% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/update\t1.036s\tcoverage: 55.0% of statements\n\tgithub.com/DocumentDrivenDX/ddx/tools/gendoc\t\tcoverage: 0.0% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/tools/lint/evidencelint\t6.052s\tcoverage: 84.8% of statements\n\tgithub.com/DocumentDrivenDX/ddx/tools/lint/evidencelint/cmd/evidencelint\t\tcoverage: 0.0% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/tools/lint/routinglint\t1.239s\tcoverage: 88.4% of statements\n\tgithub.com/DocumentDrivenDX/ddx/tools/lint/routinglint/cmd/routinglint\t\tcoverage: 0.0% of statements\nok  \tgithub.com/DocumentDrivenDX/ddx/tools/lint/runtimelint\t12.122s\tcoverage: 79.5% of statements\n\tgithub.com/DocumentDrivenDX/ddx/tools/lint/runtimelint/cmd/runtimelint\t\tcoverage: 0.0% of statements\n\tgithub.com/DocumentDrivenDX/ddx/tools/test-timing\t\tcoverage: 0.0% of statements\nFAIL\n\nexit status 1┃  git-config-health ❯ \n\n\n┃  merge-policy ❯ \n\n\n┃  no-debug ❯ \n\n\n                                      \n  ────────────────────────────────────\nsummary: (done in 181.57 seconds)     \n✔️ git-config-health (0.03 seconds)\n✔️ merge-policy (0.02 seconds)\n✔️ no-debug (0.04 seconds)\n🥊 full-tests (181.18 seconds)\nerror: failed to push some refs to 'https://github.com/DocumentDrivenDX/ddx': exit status 1; checkout_sync_deferred: .ddx/beads.jsonl\nresult_rev=22d8220700c495eef566c950b02c6a5859dde8ab\nbase_rev=96fa0684d1c68652db878b5247b457f6835fc74a\nretry_after=2026-05-11T03:48:32Z\noutcome_reason=timeout",
+          "created_at": "2026-05-10T03:49:08.803160479Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "push_failed"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"\",\"score\":0,\"suggested_fixes\":null,\"waivers_applied\":null,\"warning\":\"lint hook: dispatch-failure: ResolveRoute: no viable routing candidate: 3 candidates rejected\"}",
+          "created_at": "2026-05-12T03:51:36.804111506Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx agent execute-loop",
+          "summary": "warning score=0"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"requested_harness\":\"codex\",\"requested_model\":\"gpt-5.4-mini\"}",
+          "created_at": "2026-05-12T04:05:24.682504607Z",
+          "kind": "routing",
+          "source": "ddx agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260512T035137-c0bdf98c\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":3638278,\"output_tokens\":16455,\"total_tokens\":3654733,\"cost_usd\":0,\"duration_ms\":821329,\"exit_code\":0}",
+          "created_at": "2026-05-12T04:05:24.916621895Z",
+          "kind": "cost",
+          "source": "ddx agent execute-bead",
+          "summary": "tokens=3654733 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260512T035137-c0bdf98c\",\"bead_id\":\"ddx-fcdbc731\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-12T04:05:26.42195126Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx agent execute-loop",
+          "summary": "source=heuristic tier=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "status=open\nreason=`cd cli \u0026\u0026 go test ./internal/agent/...` has been running for 7m+ with no output and needs a retry with better visibility (for example `-json` or a narrower failing test) to finish the acceptance sweep. Targeted prompt invariant tests passed (`TestExecuteBeadInstructionsSizeFloor`, `TestPromptGuardrails_AllPresent`, `TestPromptSelector_CorrectBlock`, `TestPromptSelector_MissingGoverning`), and `lefthook run pre-commit` passed.\nsuggested_action=retry with a smart agent",
+          "created_at": "2026-05-12T04:05:26.955698626Z",
+          "kind": "no_changes_autonomous_retry",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes_autonomous_retry"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: status: open\nreason: `cd cli \u0026\u0026 go test ./internal/agent/...` has been running for 7m+ with no output and needs a retry with better visibility (for example `-json` or a narrower failing test) to finish the acceptance sweep. Targeted prompt invariant tests passed (`TestExecuteBeadInstructionsSizeFloor`, `TestPromptGuardrails_AllPresent`, `TestPromptSelector_CorrectBlock`, `TestPromptSelector_MissingGoverning`), and `lefthook run pre-commit` passed.\nresult_rev=b016c55f2eed14df1b4686beb055db9d1b1e7a36\nbase_rev=b016c55f2eed14df1b4686beb055db9d1b1e7a36\noutcome_reason=no_changes",
+          "created_at": "2026-05-12T04:05:27.663109001Z",
+          "kind": "execute-bead",
+          "source": "ddx agent execute-loop",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"detail\":\"description drops commitment \\\"non_scope:Changing prompt semantics or dropping any of the 19 guardrails.\\\"\",\"intake_outcome\":\"operator_required\"}",
+          "created_at": "2026-05-12T04:30:53.672034862Z",
+          "kind": "intake.blocked",
+          "source": "ddx agent execute-loop",
+          "summary": "operator_required"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description drops commitment \\\"non_scope:Changing prompt semantics or dropping any of the 19 guardrails.\\\"\",\"fingerprint\":\"9a9f3e7563c088c6559b50170a909615619d5996d3af04d242043c3656f19c85\",\"policy_mode\":\"warn-only\",\"reason\":\"rewrite_rejected\",\"rule_id\":\"pre_claim_intake.rewrite_rejected\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T18:41:55.851630853Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "rewrite_rejected"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"6/8: the title is clear, the ACs are numbered and verifiable, and they include named tests plus both `cd cli \\u0026\\u0026 go test ./internal/agent/...` and `lefthook run pre-commit`; parent, deps, and labels are also present. It loses points because the description does not give a file:line-grounded root cause/proposed-fix anchor, and the bead is not fully self-contained for a sub-agent due to the ambiguous target file/package and lack of precise implementation anchors.\",\"score\":6,\"suggested_fixes\":[\"Add exact file:line citations in ROOT CAUSE and PROPOSED FIX, or state CURRENT STATE for the new prompt blocks if no implementation exists yet.\",\"Remove the `cli/internal/agent/execute_bead_loop.go (or prompts package)` ambiguity by naming the exact file(s) to edit and, if needed, the exact shared block symbols or functions to touch.\",\"If your cross-reference convention requires it, add an explicit cross-ref label such as `spec:FEAT-022` or `adr:*` instead of relying on `story:12` alone.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T18:42:23.250222475Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=6"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"requested_harness\":\"codex\",\"requested_model\":\"gpt-5.4-mini\",\"requested_min_power\":8}",
+          "created_at": "2026-05-12T18:46:18.089217859Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"resolved_provider\":\"codex\",\"resolved_model\":\"gpt-5.4-mini\",\"fallback_chain\":[],\"requested_harness\":\"codex\",\"requested_model\":\"gpt-5.4-mini\",\"requested_min_power\":10}",
+          "created_at": "2026-05-12T18:51:20.568210107Z",
+          "kind": "routing",
+          "source": "legacy agent execute-bead",
+          "summary": "provider=codex model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"attempt_id\":\"20260512T184618-4e341e67\",\"harness\":\"codex\",\"model\":\"gpt-5.4-mini\",\"input_tokens\":2089027,\"output_tokens\":11088,\"total_tokens\":2100115,\"cost_usd\":0,\"duration_ms\":297762,\"exit_code\":0}",
+          "created_at": "2026-05-12T18:51:20.677507838Z",
+          "kind": "cost",
+          "source": "legacy agent execute-bead",
+          "summary": "tokens=2100115 model=gpt-5.4-mini"
+        },
+        {
+          "actor": "ddx",
+          "body": "{\"actual_harness\":\"codex\",\"actual_model\":\"gpt-5.4-mini\",\"actual_power\":0,\"actual_provider\":\"\",\"attempt_id\":\"20260512T184618-4e341e67\",\"bead_id\":\"ddx-fcdbc731\",\"rejected_route_pins\":null,\"requested_tier\":\"standard\",\"routing_intent_degraded\":false,\"routing_intent_note\":\"\",\"routing_intent_source\":\"heuristic\",\"smart_justification\":\"\"}",
+          "created_at": "2026-05-12T18:54:36.92613097Z",
+          "kind": "execution-routing-intent",
+          "source": "ddx work",
+          "summary": "source=heuristic tier=standard model=gpt-5.4-mini harness=codex"
+        },
+        {
+          "actor": "erik",
+          "body": "verification_command=cd cli \u0026\u0026 go test ./internal/agent/...\nexit_code=-1\noutput:\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent\t191.272s\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent/escalation\t(cached)\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent/executeloop\t0.009s\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent/try\t0.059s\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent/work\t0.019s\nok  \tgithub.com/DocumentDrivenDX/ddx/internal/agent/workerprobe\t9.565s\n\nrun_error: verification_command timed out after 1m0s",
+          "created_at": "2026-05-12T18:54:37.148888879Z",
+          "kind": "no_changes_unverified",
+          "source": "ddx work",
+          "summary": "no_changes_unverified"
+        },
+        {
+          "actor": "erik",
+          "body": "",
+          "created_at": "2026-05-12T18:54:37.302926617Z",
+          "kind": "reviewer-skipped-empty-diff",
+          "source": "ddx work",
+          "summary": "reviewer skipped: empty diff (no commits produced)"
+        },
+        {
+          "actor": "erik",
+          "body": "no_changes\nrationale: verification_command: cd cli \u0026\u0026 go test ./internal/agent/...\nnotes: The current tree already satisfies the bead acceptance criteria. The focused prompt invariants passed, the full internal/agent suite passed, and lefthook run pre-commit also passed.\nresult_rev=ca2616d07d3cd7e6afb773cffddea26a31a0f64e\nbase_rev=ca2616d07d3cd7e6afb773cffddea26a31a0f64e\noutcome_reason=no_changes",
+          "created_at": "2026-05-12T18:54:37.416911304Z",
+          "kind": "execute-bead",
+          "source": "ddx work",
+          "summary": "no_changes"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"description drops commitment \\\"non_scope:Changing prompt semantics or dropping any of the 19 guardrails.\\\"\",\"fingerprint\":\"9a9f3e7563c088c6559b50170a909615619d5996d3af04d242043c3656f19c85\",\"policy_mode\":\"warn-only\",\"reason\":\"rewrite_rejected\",\"rule_id\":\"pre_claim_intake.rewrite_rejected\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-12T19:06:28.706176364Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "rewrite_rejected"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Passes title clarity, numbered/verifiable acceptance with named Test* symbols, wired assertions, and required verification commands, but fails on a file:line-grounded root cause, lacks an explicit cross-reference label facet, and remains ambiguous about the exact target file/package so it is not yet a sufficient sub-agent prompt.\",\"score\":4,\"suggested_fixes\":[\"Add concrete file:line citations in ROOT CAUSE for the shared prompt blocks and missing selector path.\",\"Add an explicit cross-reference label such as `cross-ref:FEAT-022` or `cross-ref:ddx-e2171a2c` to satisfy the label facet.\",\"Resolve the file/package ambiguity by naming one primary edit location and, if needed, a secondary helper file.\",\"Tighten the description so a competent agent can select files and implement without asking follow-up questions.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-12T19:06:47.608460831Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=4"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-12T19:05:27.341724949Z",
+      "execute-loop-last-detail": "local branch main has diverged from origin (local=5a11e3364b43a3e6c115156dcb6fdff1c27cba91 origin=5de5cf32d75f83c8075354834dae5b55998c86fa); reconcile manually before claiming",
+      "execute-loop-last-status": "preclaim-hook-failed",
+      "execute-loop-no-changes-count": 2,
+      "execute-loop-retry-after": "2026-05-12T15:11:58Z",
+      "execute-loop-smart-retry": true,
+      "execute-loop-smart-retry-reason": "`cd cli \u0026\u0026 go test ./internal/agent/...` has been running for 7m+ with no output and needs a retry with better visibility (for example `-json` or a narrower failing test) to finish the acceptance sweep. Targeted prompt invariant tests passed (`TestExecuteBeadInstructionsSizeFloor`, `TestPromptGuardrails_AllPresent`, `TestPromptSelector_CorrectBlock`, `TestPromptSelector_MissingGoverning`), and `lefthook run pre-commit` passed.",
+      "execute-loop-smart-retry-suggested-action": "retry with a smart agent",
+      "execute-loop-suggested-action": "retry with a smart agent",
+      "needs-human-reason": "description drops commitment \"non_scope:Changing prompt semantics or dropping any of the 19 guardrails.\"",
+      "needs-human-since": "2026-05-12T04:30:53Z",
+      "needs-human-source": "ddx agent execute-loop",
+      "needs-human-suggested-action": "review intake result and accept, rewrite, split, block, or cancel",
+      "needs-human-summary": "pre-claim intake blocked execution",
+      "triage.tier_hint": 8
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260512T190647-b6d62059",
+    "prompt": ".ddx/executions/20260512T190647-b6d62059/prompt.md",
+    "manifest": ".ddx/executions/20260512T190647-b6d62059/manifest.json",
+    "result": ".ddx/executions/20260512T190647-b6d62059/result.json",
+    "checks": ".ddx/executions/20260512T190647-b6d62059/checks.json",
+    "usage": ".ddx/executions/20260512T190647-b6d62059/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-fcdbc731-20260512T190647-b6d62059"
+  },
+  "prompt_sha": "1469c9f557ba86fc188b972c675b4335a92aadd24d34cf67110ee0caae304f7d"
+}

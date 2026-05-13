@@ -1,0 +1,3 @@
+status: open
+reason: This bead is still too broad for one execution pass at the current decomposition depth. Its description bundles multiple independent workstreams (spec/documentation updates, server-side audit-event plumbing, and frontend/e2e performance coverage) and the contract text itself is internally conflicted. It needs orchestrator-level decomposition into a single implementation slice before execution can begin.
+orchestrator_action: decompose

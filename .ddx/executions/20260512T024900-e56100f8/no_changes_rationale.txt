@@ -1,0 +1,3 @@
+status: open
+reason: This bead exceeds the safe single-pass execution limit: it spans core bead storage APIs, JSONL backend behavior, typed context/errors/ID generation foundation, and broad caller migration across multiple packages. The decomposition depth cap is already reached, so I cannot split it further in this worktree.
+orchestrator_action: decompose
