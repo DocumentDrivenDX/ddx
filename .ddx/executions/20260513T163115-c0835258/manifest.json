@@ -1,0 +1,57 @@
+{
+  "attempt_id": "20260513T163115-c0835258",
+  "bead_id": "ddx-6781181e",
+  "base_rev": "736c1be202976ae4ca959b86d06d525ba5f19ea9",
+  "created_at": "2026-05-13T16:31:18.433663787Z",
+  "requested": {
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-6781181e",
+    "title": "routing: send MinPower only for review and fallback escalation",
+    "description": "PROBLEM\nDDx currently duplicates Fizeau policy intent with numeric power on initial zero-config implementation dispatch. In the current code path, DDx selects the `default` Fizeau policy for ordinary implementation work and then also sets `MinPower` to that policy floor. That makes the request shape `Policy=default, MinPower=7` instead of letting Fizeau fully interpret the selected policy.\n\nROOT CAUSE WITH FILE:LINE\n`cli/cmd/execute_loop_shared.go:396-401` selects an implementation profile and raises `initialMinPower` to `selection.MinPower` on the first attempt. `cli/cmd/execute_loop_shared.go:426-442` then passes `requestedMinPower` into `singleTierAttempt`, which writes it into `config.CLIOverrides.MinPower` at `cli/cmd/execute_loop_shared.go:289-294`. `cli/internal/agent/service_run.go:241-258` sends both `Policy` and `MinPower` to Fizeau. The same first-attempt pattern exists for `ddx try` at `cli/cmd/try.go:293-322`. Current command tests assert this duplicated shape in `cli/cmd/work_test.go` and `cli/cmd/try_test.go`, so the tests encode the wrong contract.\n\nDESIRED ROUTING CONTRACT\nFor initial zero-config implementation work, DDx should select an opaque Fizeau policy by metadata and send only that policy. Example: ordinary work selects `Policy=default`, `MinPower=0`. Fizeau owns the model choice and may choose a lower-power model inside that policy if the policy permits it.\n\nFor implementation fallback escalation, DDx should keep policy intent and add a numeric floor only after evidence of failure. Example: DDx selects `Policy=default`; Fizeau chooses a power-5 model; the attempt fails; DDx retries with `Policy=default, MinPower=6`. If repeated failures or ladder exhaustion require moving policy bands, DDx may reselect the appropriate policy by metadata, but numeric floors are evidence-driven retry constraints, not initial policy duplication.\n\nFor review routing, DDx may use `MinPower` immediately when the reviewer must be stronger than the implementation route or when review pairing evidence requires it.\n\nPROPOSED FIX\nChange zero-config implementation routing so first attempts do not copy the selected policy floor into `MinPower`. Preserve explicit operator `--min-power`, bead numeric tier hints, reviewer escalation, and retry escalation. On retry, derive the next floor from the actual route power when available; otherwise use the selected policy floor/ladder only as an escalation basis, not as an initial dispatch floor.\n\nNON-SCOPE\nDo not hard-code Fizeau policy names. Do not add DDx-side provider/model selection. Do not change Fizeau policy definitions. Do not remove MinPower support for explicit user flags, review escalation, or implementation retry escalation.",
+    "acceptance": "1. `TestTryZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower` asserts ordinary zero-config `ddx try` sends `Policy=default`, `MinPower=0`, and no harness/provider/model pins under the canonical Fizeau fixture.\n2. `TestWorkZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower` asserts ordinary zero-config `ddx work` sends `Policy=default`, `MinPower=0`, and no harness/provider/model pins under the canonical Fizeau fixture.\n3. `TestWorkZeroConfigRetryAddsMinPowerFloorWithinSelectedPolicy` asserts a failed first implementation attempt with actual power 5 retries with `Policy=default` and `MinPower=6` rather than sending an initial floor.\n4. Existing review escalation tests still prove reviewer dispatch can send both policy and MinPower when review pairing or review retry requires it.\n5. `cd cli \u0026\u0026 go test ./cmd/... ./internal/agent/... -run \"TestTryZeroConfig.*MinPower|TestWorkZeroConfig.*MinPower|Test.*Review.*MinPower|TestSelectImplementationProfile\" -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:routing",
+      "area:fizeau",
+      "area:work",
+      "kind:bug",
+      "phase:build",
+      "reliability"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-13T16:30:19Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "323328",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Strong bead: imperative title, root cause with file:line citations, numbered AC with three named Test* functions, explicit go test run filter and lefthook gate, proper labels with spec-id cross-ref, no /tmp or chat references. Minor gap: parent + deps not explicitly stated (no 'no deps' marker), and AC 4 references 'existing review escalation tests' without naming a specific Test* function.\",\"score\":7,\"suggested_fixes\":[\"Add explicit parent/deps line (e.g., 'No parent. No deps.') to satisfy criterion 7 of the authoring rubric\",\"Replace AC 4's vague 'Existing review escalation tests' with a named Test* function or a specific -run filter so the reviewer-pairing contract has a wired-in assertion\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-13T16:31:15.732009999Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=7"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-13T16:30:19.386203248Z",
+      "spec-id": "FEAT-006"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-006",
+      "path": "docs/helix/01-frame/features/FEAT-006-agent-service.md",
+      "title": "Feature: DDx Consumer of the Fizeau Execution Contract"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260513T163115-c0835258",
+    "prompt": ".ddx/executions/20260513T163115-c0835258/prompt.md",
+    "manifest": ".ddx/executions/20260513T163115-c0835258/manifest.json",
+    "result": ".ddx/executions/20260513T163115-c0835258/result.json",
+    "checks": ".ddx/executions/20260513T163115-c0835258/checks.json",
+    "usage": ".ddx/executions/20260513T163115-c0835258/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-6781181e-20260513T163115-c0835258"
+  },
+  "prompt_sha": "0b183d16d2f428e7b85f09e6baee60f51c71195148743e2c3af44357b1a4336f"
+}

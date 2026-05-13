@@ -125,7 +125,7 @@ func TestParseExecuteLoopSpec_RateLimitMaxWait(t *testing.T) {
 	}
 }
 
-func TestWorkZeroConfigInferredTaskSelectsFizeauProfileByMetadata(t *testing.T) {
+func TestWorkZeroConfigInferredTaskSelectsFizeauPolicyWithoutInitialMinPower(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
@@ -166,13 +166,13 @@ func TestWorkZeroConfigInferredTaskSelectsFizeauProfileByMetadata(t *testing.T) 
 	require.NotEmpty(t, requests, "ddx work must invoke implementation dispatch; output=%q err=%v", out, err)
 	lastReq := requests[0]
 	assert.Equal(t, "default", lastReq.Policy, "work should request the ordinary no-requirement Fizeau policy by metadata")
-	assert.Equal(t, 7, lastReq.MinPower, "work should use the selected policy floor instead of escalating to the strongest profile")
+	assert.Equal(t, 0, lastReq.MinPower, "initial zero-config dispatch must not duplicate the selected policy floor as MinPower")
 	assert.Empty(t, lastReq.Harness, "zero-config work must not hard-pin a harness")
 	assert.Empty(t, lastReq.Provider, "zero-config work must not hard-pin a provider")
 	assert.Empty(t, lastReq.Model, "zero-config work must not hard-pin a model")
 }
 
-func TestWorkZeroConfigRetryReselectsProfileForEscalatedFloor(t *testing.T) {
+func TestWorkZeroConfigRetryAddsMinPowerFloorWithinSelectedPolicy(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
 	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
@@ -186,7 +186,7 @@ func TestWorkZeroConfigRetryReselectsProfileForEscalatedFloor(t *testing.T) {
 		}
 		implementerCalls++
 		if implementerCalls == 1 {
-			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":1,"error":"build failed"}`)}
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":1,"error":"build failed","routing_actual":{"power":5}}`)}
 		} else {
 			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok"}`)}
 		}
@@ -205,7 +205,7 @@ func TestWorkZeroConfigRetryReselectsProfileForEscalatedFloor(t *testing.T) {
 	require.NoError(t, store.Init())
 	require.NoError(t, store.Create(&bead.Bead{
 		ID:        "ddx-zero-config-work-tier-retry",
-		Title:     "Work retries with stronger routing tier",
+		Title:     "Work retries within the selected policy at MinPower=actual+1",
 		IssueType: "bug",
 	}))
 
@@ -222,10 +222,10 @@ func TestWorkZeroConfigRetryReselectsProfileForEscalatedFloor(t *testing.T) {
 
 	requests := capturedImplementationRequests(stub)
 	require.Len(t, requests, 2, "ddx work should retry an escalatable implementation failure; output=%q err=%v", out, err)
-	assert.Equal(t, "default", requests[0].Policy, "first attempt should use the inferred medium/default policy")
-	assert.Equal(t, 7, requests[0].MinPower)
-	assert.Equal(t, "smart", requests[1].Policy, "retry should reselect by metadata for the escalated floor")
-	assert.Equal(t, 9, requests[1].MinPower)
+	assert.Equal(t, "default", requests[0].Policy, "first attempt should use the inferred no-requirement default policy")
+	assert.Equal(t, 0, requests[0].MinPower, "first attempt must not send an initial MinPower floor")
+	assert.Equal(t, "default", requests[1].Policy, "retry should stay within the selected policy band")
+	assert.Equal(t, 6, requests[1].MinPower, "retry should add MinPower=actual+1 (5+1=6) as an evidence-driven floor")
 }
 
 func TestRunAgentExecuteLoopImpl_PassesRateLimitMaxWait(t *testing.T) {

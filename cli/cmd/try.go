@@ -292,11 +292,8 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				var unavailable bool
 				if selection, selectErr := profileSelector.Select(ctx, inferredTier, requestMinPower); selectErr == nil && selection.Name != "" {
 					requestProfile = selection.Name
-					if selection.MinPower > requestMinPower {
-						requestMinPower = selection.MinPower
-					}
 					routingNote = selection.Note
-					if maxPower > 0 && requestMinPower >= maxPower {
+					if maxPower > 0 && requestMinPower > 0 && requestMinPower >= maxPower {
 						unavailableReport := smartRouteUnavailableReport(targetBead, requestMinPower, maxPower, nil)
 						unavailableReport.RequestedTier = string(inferredTier)
 						unavailableReport.RequestedProfile = requestProfile

@@ -396,10 +396,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				if selection, selectErr := profileSelector.Select(ctx, inferredTier, initialMinPower); selectErr == nil && selection.Name != "" {
 					initialProfile = selection.Name
 					initialRoutingNote = selection.Note
-					if selection.MinPower > initialMinPower {
-						initialMinPower = selection.MinPower
-					}
-					if spec.MaxPower > 0 && initialMinPower >= spec.MaxPower {
+					if spec.MaxPower > 0 && initialMinPower > 0 && initialMinPower >= spec.MaxPower {
 						unavailableReport := smartRouteUnavailableReport(targetBead, initialMinPower, spec.MaxPower, nil)
 						unavailableReport.RequestedTier = string(inferredTier)
 						unavailableReport.RequestedProfile = initialProfile
