@@ -1,0 +1,58 @@
+{
+  "attempt_id": "20260513T174646-0882a04e",
+  "bead_id": "ddx-90b84d73",
+  "base_rev": "25b324d342dd04863feb3796b7ce0425e7a531b9",
+  "created_at": "2026-05-13T17:46:49.081305142Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-90b84d73",
+    "title": "Bound ddx work readiness hooks so blocked beads cannot hang a worker forever",
+    "description": "In Niflheim, `ddx work --watch --profile smart` claimed bead `niflheim-edcb2b7c` and then parked at `readiness check: starting` without spawning an agent child, timing out, recording a terminal non-success outcome, or releasing/blocking the bead. The readiness check was for a live soak bead whose previous evidence already showed PgWire unavailable on `127.0.0.1:5433`.\n\nObserved behavior on 2026-05-13:\n- Worker was alive in tmux (`ddx` pane process), but no child agent process existed.\n- Worker log stopped after `▶ niflheim-edcb2b7c ...` and `readiness check: starting`.\n- Bead remained `in_progress`/claimed.\n- Queue had many ready beads, but the worker could not move past this readiness phase.\n\nExpected behavior: readiness hooks must be bounded. If readiness cannot complete inside a configured/default timeout, `ddx work` should write evidence explaining the failed readiness command, map the outcome to blocked/open according to the no_changes contract, unclaim the bead when appropriate, and continue draining other ready work instead of parking the whole worker.\n\nThis is separate from the underlying Niflheim PgWire availability bug; DDx should not require the target service bug to be fixed before the queue can keep moving.",
+    "acceptance": "1. `ddx work` readiness/preflight hooks run under a bounded timeout with a clear default and, if configurable, documented config/flag behavior.\n2. On readiness timeout, the attempt records evidence containing the readiness command/context, timeout duration, and resulting bead outcome.\n3. A timed-out readiness check does not leave the bead indefinitely claimed/in_progress.\n4. In watch mode, after handling the timed-out readiness outcome, the worker can continue to other eligible ready beads.\n5. Regression coverage proves a hanging readiness hook cannot block the worker indefinitely.",
+    "labels": [
+      "area:work",
+      "readiness",
+      "timeout",
+      "worker",
+      "ac-quality:needs-refinement"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-13T17:46:00Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "739503",
+      "events": [
+        {
+          "actor": "",
+          "body": "[{\"ac\":1,\"text\":\"`ddx work` readiness/preflight hooks run under a bounded timeout with a clear default and, if configurable, documented config/flag behavior.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":2,\"text\":\"On readiness timeout, the attempt records evidence containing the readiness command/context, timeout duration, and resulting bead outcome.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":3,\"text\":\"A timed-out readiness check does not leave the bead indefinitely claimed/in_progress.\",\"kind\":\"negative\",\"verifiable\":true},{\"ac\":4,\"text\":\"In watch mode, after handling the timed-out readiness outcome, the worker can continue to other eligible ready beads.\",\"kind\":\"prose\",\"verifiable\":false},{\"ac\":5,\"text\":\"Regression coverage proves a hanging readiness hook cannot block the worker indefinitely.\",\"kind\":\"negative\",\"verifiable\":true}]",
+          "created_at": "2026-05-13T17:46:00.928418092Z",
+          "kind": "ac-quality-low",
+          "source": "preclaim-ac-quality",
+          "summary": "score=0.40 threshold=0.50 verifiable=2/5"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"Only the title meets the lint bar; the bead still lacks a structured description with file:line-grounded root cause/current state, named verification symbols and required gates in acceptance, complete phase/kind/cross-ref labeling, an explicit parent, and a sufficiently self-contained prompt for a sub-agent.\",\"score\":1,\"suggested_fixes\":[\"Rewrite the description into PROBLEM / ROOT CAUSE / PROPOSED FIX / NON-SCOPE and cite the failing readiness path with file:line evidence.\",\"Add numbered acceptance criteria with specific `Test*` names or unique `go test -run` filters, plus `cd cli \\u0026\\u0026 go test ./\\u003cpkg\\u003e/...` and `lefthook run pre-commit`.\",\"Add phase and kind labels, and include an explicit parent field; if there are truly no dependencies beyond the current one, state that as `No deps.`\",\"Add a wired assertion for the timeout path and for the worker continuing after a readiness timeout.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-13T17:46:46.491116646Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=1"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-13T17:46:00.774067272Z"
+    }
+  },
+  "paths": {
+    "dir": ".ddx/executions/20260513T174646-0882a04e",
+    "prompt": ".ddx/executions/20260513T174646-0882a04e/prompt.md",
+    "manifest": ".ddx/executions/20260513T174646-0882a04e/manifest.json",
+    "result": ".ddx/executions/20260513T174646-0882a04e/result.json",
+    "checks": ".ddx/executions/20260513T174646-0882a04e/checks.json",
+    "usage": ".ddx/executions/20260513T174646-0882a04e/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-90b84d73-20260513T174646-0882a04e"
+  },
+  "prompt_sha": "df29c407eb649e4aabf9628ae3f17b20835b56a333c9cf5453f36b18f06ce165"
+}
