@@ -30,14 +30,6 @@ is canonical for the 8-criterion sufficient-sub-agent-prompt rubric.
 `MODE: intake` is the compatibility name for readiness mode. Treat it exactly
 like `MODE: readiness` unless the caller gives a narrower schema.
 
-Use the exact readiness classifications: `ready`, `needs_refine`,
-`needs_split`, `operator_required`, `system_unready`. Historical aliases
-`safely_refinable`, `rewritten`, and `needs_human` map to the same intake
-contract; keep them in the skill text so contract readers can recognize older
-payloads.
-
-The `rewrite` is the machine-consumable replacement contract DDx may apply before claim. `rewrite.changed_fields` is required. `rewrite.description` / `rewrite.acceptance` must be strings, not arrays. `suggested_fixes` are advisory diagnostics for the author or operator.
-
 ## READINESS MODE
 
 Use readiness mode before a bead is claimed or dispatched. The input is bead
@@ -45,7 +37,6 @@ JSON plus any available queue context, dependencies, prior attempt summaries,
 or cheap repository evidence. The goal is to decide whether the bead is a
 tractable, self-contained unit of work for an agent before DDx spends an
 implementation attempt.
-Example rewrite payload: {"changed_fields": ["description", "acceptance"], "acceptance": "1. TestFoo\n2. cd cli && go test ./...\n3. lefthook run pre-commit"}.
 
 Readiness mode answers a different question than infrastructure preflight.
 Do not classify provider outages, quota exhaustion, missing harnesses,
@@ -174,18 +165,23 @@ Rubric, scored one point each after applying waivers:
 
 Apply the rubric first, then apply any waiver from the waiver table only when
 the bead type or labels clearly justify it. Do not use waivers to excuse vague
-or missing context. `LintResult.rationale` is a single string summary.
-A doc-only waiver uses the exact token `"doc-only"`.
+or missing context.
 
 Return JSON only:
 
 ```json
 {
   "score": 0,
-  "rationale": "brief evidence-grounded explanation",
+  "rationale": [
+    {
+      "criterion": "a|b|c|d|e|f|g|h",
+      "verdict": "pass|fail|waived",
+      "reason": "brief evidence-grounded reason"
+    }
+  ],
   "suggested_fixes": [
     {
-      "criterion": "a|b|c|d|e|f|g|h (one entry per criterion)",
+      "criterion": "a|b|c|d|e|f|g|h",
       "fix": "specific amendment to make"
     }
   ],
