@@ -100,6 +100,14 @@ func TestSelectImplementationProfile_StandardUsesOpaqueMediumBand(t *testing.T) 
 	assert.False(t, got.Degraded)
 }
 
+func TestSelectImplementationProfile_CanonicalFizeauPolicies(t *testing.T) {
+	snap := canonicalFizeauPolicySnapshot()
+
+	assert.Equal(t, "cheap", SelectImplementationProfile(snap, escalation.TierCheap).Name)
+	assert.Equal(t, "default", SelectImplementationProfile(snap, escalation.TierStandard).Name)
+	assert.Equal(t, "smart", SelectImplementationProfile(snap, escalation.TierSmart).Name)
+}
+
 func TestSelectImplementationProfile_DoesNotHardcodeTierNames(t *testing.T) {
 	snap := ProfileSnapshot{
 		Profiles: []agentlib.PolicyInfo{
@@ -119,20 +127,29 @@ func TestSelectImplementationProfile_DoesNotHardcodeTierNames(t *testing.T) {
 	assert.Equal(t, "charlie", SelectImplementationProfile(snap, escalation.TierSmart).Name)
 }
 
-func TestSelectImplementationProfile_MetadataTieBreaksAvoidUnvalidatedLocal(t *testing.T) {
+func TestSelectImplementationProfile_DoesNotSelectRequirementProfileForOrdinaryWork(t *testing.T) {
+	snap := canonicalFizeauPolicySnapshot()
+
+	got := SelectImplementationProfile(snap, escalation.TierCheap)
+
+	assert.Equal(t, "cheap", got.Name)
+}
+
+func TestSelectImplementationProfile_MetadataTieBreaksByCostAndSpeedNotLocalPreference(t *testing.T) {
 	snap := ProfileSnapshot{
 		Profiles: []agentlib.PolicyInfo{
 			{Name: "local", MinPower: 40, MaxPower: 60, AllowLocal: true},
 			{Name: "remote", MinPower: 40, MaxPower: 60},
 		},
 		Models: []agentlib.ModelInfo{
-			{ID: "candidate", Power: 50, Available: true, AutoRoutable: true, Cost: agentlib.CostInfo{InputPerMTok: 1, OutputPerMTok: 1}, PerfSignal: agentlib.PerfSignal{SpeedTokensPerSec: 20}},
+			{ID: "local-candidate", Power: 50, Available: true, AutoRoutable: true, Cost: agentlib.CostInfo{InputPerMTok: 1, OutputPerMTok: 1}, PerfSignal: agentlib.PerfSignal{SpeedTokensPerSec: 50}},
+			{ID: "remote-candidate", Power: 50, Available: true, AutoRoutable: true, Cost: agentlib.CostInfo{InputPerMTok: 3, OutputPerMTok: 3}, PerfSignal: agentlib.PerfSignal{SpeedTokensPerSec: 10}},
 		},
 	}
 
 	got := SelectImplementationProfile(snap, escalation.TierCheap)
 
-	assert.Equal(t, "remote", got.Name)
+	assert.Equal(t, "local", got.Name)
 }
 
 func TestSelectImplementationProfile_DegradesToOnlyAvailableProfile(t *testing.T) {
@@ -174,6 +191,22 @@ func TestSelectImplementationProfileForMinPower_MovesOffWeakProfileOnRetry(t *te
 	assert.Equal(t, 50, got.MinPower)
 	assert.False(t, got.Degraded)
 	assert.Empty(t, got.Note)
+}
+
+func canonicalFizeauPolicySnapshot() ProfileSnapshot {
+	return ProfileSnapshot{
+		Profiles: []agentlib.PolicyInfo{
+			{Name: "cheap", MinPower: 5, MaxPower: 5, AllowLocal: true},
+			{Name: "default", MinPower: 7, MaxPower: 8, AllowLocal: true},
+			{Name: "smart", MinPower: 9, MaxPower: 10},
+			{Name: "air-gapped", MinPower: 5, MaxPower: 5, AllowLocal: true, Require: []string{"no_remote"}},
+		},
+		Models: []agentlib.ModelInfo{
+			{ID: "cheap-model", Power: 5, Available: true, AutoRoutable: true},
+			{ID: "default-model", Power: 7, Available: true, AutoRoutable: true},
+			{ID: "smart-model", Power: 9, Available: true, AutoRoutable: true},
+		},
+	}
 }
 
 func TestLoadProfileSnapshot_MemoizesAndStaleOnError(t *testing.T) {

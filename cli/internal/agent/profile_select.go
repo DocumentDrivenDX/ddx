@@ -5,6 +5,7 @@ import (
 	"math"
 	"reflect"
 	"sort"
+	"strings"
 	"sync"
 	"time"
 
@@ -165,12 +166,11 @@ func SelectStrongestProfileAbove(snap ProfileSnapshot, floor int) string {
 }
 
 // SelectImplementationProfile chooses an opaque Fizeau profile name for
-// implementation work. It ranks by profile metadata, not by hard-coded profile
-// names. Ordinary work starts in the middle viable band; cheap work uses the
-// lowest viable band; smart work uses the strongest available band. If the ideal
-// band is unavailable but a weaker profile can attempt the task, the weaker
-// profile is returned with Degraded=true so the caller can record the downgrade
-// rather than failing pre-dispatch.
+// implementation work. It ranks by policy metadata, not by hard-coded policy
+// names. Ordinary auto-routing avoids profiles with hard requirements (for
+// example local-only/no-remote policy requirements) unless DDx has an explicit
+// matching intent; explicit --profile remains a raw passthrough handled by
+// Fizeau.
 func SelectImplementationProfile(snap ProfileSnapshot, tier escalation.ModelTier) ImplementationProfileSelection {
 	return selectImplementationProfile(snap, tier, 0)
 }
@@ -184,48 +184,76 @@ func SelectImplementationProfileForMinPower(snap ProfileSnapshot, tier escalatio
 }
 
 func selectImplementationProfile(snap ProfileSnapshot, tier escalation.ModelTier, floor int) ImplementationProfileSelection {
-	profiles := satisfiableProfiles(snap, 0)
-	if floor > 0 {
-		filtered := profiles[:0]
-		for _, profile := range profiles {
-			if profileMaxForSort(profile) >= floor {
-				filtered = append(filtered, profile)
-			}
-		}
-		profiles = filtered
-	}
+	profiles := implementationCandidateProfiles(snap, floor)
 	if len(profiles) == 0 {
 		return ImplementationProfileSelection{}
 	}
-	sort.SliceStable(profiles, func(i, j int) bool {
-		return implementationProfileLess(snap, profiles[i], profiles[j])
-	})
-
-	target := 0
-	switch tier {
-	case escalation.TierSmart:
-		target = len(profiles) - 1
-	case escalation.TierStandard:
-		target = (len(profiles) - 1) / 2
-	case escalation.TierCheap, "":
-		target = 0
-	default:
-		target = 0
-	}
-	if target < 0 {
-		target = 0
-	}
-	if target >= len(profiles) {
-		target = len(profiles) - 1
-	}
-	selected := profiles[target]
-	note := implementationSelectionNote(tier, target, len(profiles))
+	selected, note := chooseImplementationCandidate(profiles, tier, floor)
 	return ImplementationProfileSelection{
 		Name:     selected.Name,
 		MinPower: selected.MinPower,
 		Degraded: note != "",
 		Note:     note,
 	}
+}
+
+func implementationCandidateProfiles(snap ProfileSnapshot, floor int) []agentlib.PolicyInfo {
+	profiles := satisfiableProfiles(snap, 0)
+	out := make([]agentlib.PolicyInfo, 0, len(profiles))
+	for _, profile := range profiles {
+		if hasHardPolicyRequirement(profile) {
+			continue
+		}
+		if floor > 0 && profileMaxForSort(profile) < floor {
+			continue
+		}
+		out = append(out, profile)
+	}
+	sort.SliceStable(out, func(i, j int) bool {
+		return implementationProfileLess(snap, out[i], out[j])
+	})
+	return out
+}
+
+func chooseImplementationCandidate(profiles []agentlib.PolicyInfo, tier escalation.ModelTier, floor int) (agentlib.PolicyInfo, string) {
+	if floor > 0 && tier != escalation.TierSmart {
+		return profiles[0], ""
+	}
+	switch tier {
+	case escalation.TierSmart:
+		return profiles[len(profiles)-1], ""
+	case escalation.TierStandard:
+		if selected, ok := firstBandAboveLowest(profiles); ok {
+			return selected, ""
+		}
+		return profiles[0], "medium profile unavailable; using only available profile"
+	case escalation.TierCheap, "":
+		return profiles[0], ""
+	default:
+		return profiles[0], ""
+	}
+}
+
+func firstBandAboveLowest(profiles []agentlib.PolicyInfo) (agentlib.PolicyInfo, bool) {
+	if len(profiles) <= 1 {
+		return agentlib.PolicyInfo{}, false
+	}
+	lowest := profiles[0]
+	for _, profile := range profiles[1:] {
+		if profile.MinPower > lowest.MinPower || profileMaxForSort(profile) > profileMaxForSort(lowest) {
+			return profile, true
+		}
+	}
+	return agentlib.PolicyInfo{}, false
+}
+
+func hasHardPolicyRequirement(profile agentlib.PolicyInfo) bool {
+	for _, requirement := range profile.Require {
+		if strings.TrimSpace(requirement) != "" {
+			return true
+		}
+	}
+	return false
 }
 
 func satisfiableProfiles(snap ProfileSnapshot, floor int) []agentlib.PolicyInfo {
@@ -286,9 +314,6 @@ func implementationProfileLess(snap ProfileSnapshot, left, right agentlib.Policy
 	if leftSpeedOK && rightSpeedOK && leftSpeed != rightSpeed {
 		return leftSpeed > rightSpeed
 	}
-	if left.AllowLocal != right.AllowLocal {
-		return !left.AllowLocal
-	}
 	return left.Name < right.Name
 }
 
@@ -338,23 +363,6 @@ func modelFitsProfile(profile agentlib.PolicyInfo, model agentlib.ModelInfo) boo
 		return false
 	}
 	return true
-}
-
-func implementationSelectionNote(tier escalation.ModelTier, target, count int) string {
-	if count == 0 {
-		return ""
-	}
-	switch tier {
-	case escalation.TierSmart:
-		if target < count-1 {
-			return "strong profile unavailable; using best available weaker profile"
-		}
-	case escalation.TierStandard:
-		if target == 0 && count == 1 {
-			return "medium profile unavailable; using only available profile"
-		}
-	}
-	return ""
 }
 
 func profileMaxForSort(profile agentlib.PolicyInfo) int {
