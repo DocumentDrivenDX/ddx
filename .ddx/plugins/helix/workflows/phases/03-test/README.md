@@ -85,7 +85,19 @@ Comprehensive testing strategy (follows IEEE 829):
 - Risk analysis and mitigation
 - Entry and exit criteria
 
-#### 2. Test Procedures
+#### 2. Story Test Plan
+**Artifact Location**: `artifacts/story-test-plan/`
+**Output Location**: `docs/helix/03-test/test-plans/TP-XXX-*.md`
+
+Story-scoped verification handoff for one bounded technical design:
+- Governing user story and technical design references
+- Acceptance-criteria-to-test traceability
+- Concrete failing tests, commands, or file targets
+- Fixtures, mocks, seed data, and environment needs
+- Edge cases and explicit out-of-scope boundaries
+- Build sequencing notes for the implementation handoff
+
+#### 3. Test Procedures
 **Artifact Location**: `artifacts/test-procedures/`
 **Output Location**: `docs/helix/03-test/test-procedures.md`
 
@@ -97,7 +109,7 @@ Step-by-step test execution guide:
 - Quality checklists
 - Troubleshooting guides
 
-#### 3. Test Suites
+#### 4. Test Suites
 **Artifact Location**: `artifacts/test-suites/`
 **Output Location**: `tests/`
 
@@ -108,7 +120,7 @@ Test templates and generators:
 - E2E test frameworks
 - Acceptance test scenarios
 
-#### 4. Security Test Suite
+#### 5. Security Test Suite
 **Artifact Location**: `artifacts/security-tests/`
 **Output Location**: `tests/security/`
 

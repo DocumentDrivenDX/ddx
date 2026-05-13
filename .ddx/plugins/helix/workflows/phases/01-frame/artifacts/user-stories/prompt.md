@@ -10,10 +10,23 @@ Store at: `docs/helix/01-frame/user-stories/US-NNN-<slug>.md` (one file per stor
 ## Purpose
 
 User stories are **governing design artifacts**, not throwaway tickets. Each
-story defines a complete vertical slice of the application that is
-independently implementable and testable. Tracker issues reference stories;
-stories don't reference tracker issues. Stories are more stable than the
-implementation beads that fulfill them.
+story defines one persona's complete vertical journey through feature behavior
+that is independently implementable and testable. Tracker issues reference
+stories; stories don't reference tracker issues. Stories are more stable than
+the implementation beads that fulfill them.
+
+The feature spec owns behavior and boundaries. A user story owns a journey
+through that behavior: who starts it, what they do, what the system shows, and
+what outcome proves the slice works.
+
+## Reference Anchors
+
+Use these local resource summaries as grounding:
+
+- `docs/resources/atlassian-user-stories.md` grounds persona-goal-value story
+  framing and acceptance criteria.
+- `docs/resources/cucumber-executable-specifications.md` grounds observable
+  Given/When/Then acceptance criteria without requiring BDD tooling.
 
 ## Key Principles
 
@@ -27,6 +40,20 @@ implementation beads that fulfill them.
   questions.
 - **Test-first friendly** — acceptance criteria and test scenarios should be
   concrete enough to write tests before writing code.
+- **Traceable to feature behavior** — each story should name the feature
+  requirements it exercises. Do not invent behavior outside the parent feature
+  spec.
+
+## Boundary Test
+
+| If you are writing... | Put it in... |
+|---|---|
+| Product-level scope, personas, priorities, or metrics | PRD |
+| Complete feature behavior, functional areas, and edge cases | Feature Specification |
+| One persona's journey through a feature slice | User Story |
+| Component design, data model, API shape, or build approach | Solution/Technical Design |
+| Detailed fixtures, test harnesses, or automation strategy | Story Test Plan |
+| Work assignment, status, or execution notes | DDx bead or runtime issue |
 
 ## Section-by-Section Guidance
 
@@ -38,7 +65,8 @@ internally. The "So that" must name a measurable outcome or business value —
 
 ### Context
 This is the background an implementer needs to make judgment calls. Why does
-this story exist? What's the user's situation? What pain are they hitting?
+this story exist? What's the user's situation? Which parent feature
+requirements does it exercise? What pain are they hitting?
 2-4 sentences, not a paragraph of filler. Test: would removing this section
 force the implementer to ask a question? If not, it's too generic.
 
@@ -70,6 +98,10 @@ edge case from the section above. Name specific values, not placeholders.
 Name other stories this one depends on (by ID), the parent feature spec,
 and any external systems or APIs. If another story must be done first, say so.
 
+### Traceability
+Name the parent feature requirement IDs that the story exercises. If the story
+needs behavior that is not in the feature spec, update the feature spec first.
+
 ### Out of Scope
 What this story explicitly does not cover. Each item should exclude something
 an implementer might reasonably try to include. This prevents scope creep
@@ -89,6 +121,7 @@ committing.
 - [ ] Every acceptance criterion is independently testable (one Given/When/Then)
 - [ ] Test scenarios include concrete values, not placeholders
 - [ ] Story links to parent feature spec by ID
+- [ ] Story names the parent feature requirement IDs it exercises
 
 ### Warning
 
@@ -97,3 +130,4 @@ committing.
 - [ ] Test scenarios cover both happy path and at least one edge case
 - [ ] Out of scope excludes something plausible
 - [ ] No compound acceptance criteria (split into separate items)
+- [ ] Story does not invent behavior outside the parent feature spec

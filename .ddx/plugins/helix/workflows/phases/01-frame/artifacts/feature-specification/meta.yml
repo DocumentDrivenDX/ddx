@@ -7,31 +7,11 @@ artifact:
   phase: frame
 
 description: |
-  Detailed specifications for each feature including functional and
-  non-functional requirements, constraints, and edge cases. Uses
-  [NEEDS CLARIFICATION] markers for ambiguous requirements.
-
-dependencies:
-  requires:
-    - input: PRD
-      type: artifact
-      path: prd
-      required: true
-    - input: Principles
-      type: artifact
-      path: principles
-      required: true
-
-  enables:
-    - output: Solution design
-      type: artifact
-      phase: design
-    - output: API contracts
-      type: artifact
-      phase: design
-    - output: Test specifications
-      type: artifact
-      phase: test
+  Feature-level authority document that translates PRD requirements into
+  precise behavior, boundaries, functional areas, non-functional expectations,
+  acceptance criteria, edge cases, and feature-specific success measures. Broad
+  product-surface, workflow, IA, and documentation features must state the
+  ideal future state and map functional areas before requirements.
 
 output:
   location: docs/helix/01-frame/features/
@@ -43,6 +23,7 @@ validation:
   required_sections:
     - problem_statement
     - functional_requirements
+    - acceptance_criteria
     - non_functional_requirements
     - edge_cases
     - success_metrics
@@ -53,6 +34,22 @@ validation:
     - check: requirements_testable
       description: All requirements must be testable
       severity: blocking
+
+    - check: acceptance_criteria_observable
+      description: Acceptance criteria must describe observable behavior, not implementation steps
+      severity: blocking
+
+    - check: future_state_first
+      description: Broad feature specs must define the desired future state before optimizing around current problems
+      severity: blocking
+
+    - check: functional_areas_separated
+      description: Multi-surface features must group requirements by functional area
+      severity: blocking
+
+    - check: similar_domain_objects_separated
+      description: Similar domain objects must be defined separately before requirements are written
+      severity: warning
 
     - check: nfr_measurable
       description: NFRs must have measurable criteria
@@ -95,15 +92,24 @@ prompts:
     Mark unclear requirements with [NEEDS CLARIFICATION: specific question]
     Focus on WHAT not HOW
     Make everything testable
+    For broad product-surface, workflow, IA, or documentation features, define ideal future state and functional areas before requirements
 
 template:
   file: template.md
   clarification_markers: true
-  focus: requirements_not_implementation
+  focus: future_state_and_requirements_not_implementation
+
+references:
+  - title: "IBM Requirements Management"
+    file: docs/resources/ibm-requirements-management.md
+    relationship: "Grounds traceable, prioritized, verifiable requirements"
+  - title: "Cucumber Executable Specifications"
+    file: docs/resources/cucumber-executable-specifications.md
+    relationship: "Grounds concrete examples as readable acceptance specifications without prescribing implementation"
 
 examples:
   - file: example.md
-    description: Sample specification for CLI template management
+    description: DepositMatch CSV import and column mapping feature specification
 
 workflow:
   creation_order: 4
@@ -133,11 +139,13 @@ specification_rules:
     - avoid: "The system should..."
     - avoid: "Using PostgreSQL..."
     - avoid: "Implemented with..."
+    - avoid: "A flat requirements list for multi-surface features"
 
   requirements:
     functional:
       prefix: FR-
       numbering: sequential
+      area_prefixes_allowed: true
     non_functional:
       prefix: NFR-
       categories:

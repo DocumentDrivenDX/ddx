@@ -279,9 +279,9 @@ async registerUser(userData) {
 - **Commit History** → Small, focused commits showing TDD progression
 
 ### Supporting Artifacts
-- **Code Review Notes** → `docs/helix/04-build/code-reviews/[feature-name].md`
-- **Implementation Decisions** → `docs/helix/04-build/implementation-notes/[feature-name].md`
-- **Performance Metrics** → `docs/helix/04-build/performance/[feature-name].md`
+- **Scoped Execution Evidence** → Built-in tracker issue and linked follow-on work
+- **Shared Build Plan Updates** → `docs/helix/04-build/implementation-plan.md` when project-level build sequencing changes
+- **Persistent Performance Evidence** → Existing test outputs or iterate metrics artifacts, not ad-hoc build-only docs
 
 ## Quality Gates
 

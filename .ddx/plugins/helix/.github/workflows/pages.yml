@@ -69,21 +69,9 @@ jobs:
           export DEMO_PACE=5
           export HELIX_ROOT="${GITHUB_WORKSPACE}"
           export PATH="${HOME}/.local/bin:${GITHUB_WORKSPACE}/scripts:$PATH"
-          for demo in quickstart concerns evolve experiment; do
-            echo "::group::Recording $demo"
-            dir=$(mktemp -d)
-            cast="website/static/demos/helix-${demo}.cast"
-            if (cd "$dir" && asciinema rec \
-              --cols 100 --rows 30 \
-              --command "HELIX_DEMO_RECORDING=1 bash ${GITHUB_WORKSPACE}/docs/demos/helix-${demo}/demo.sh" \
-              "/tmp/helix-${demo}.cast" 2>&1); then
-              cp -f "/tmp/helix-${demo}.cast" "$cast"
-              echo "✓ $demo recorded ($(wc -c < "$cast") bytes)"
-            else
-              echo "::warning::$demo demo failed — keeping committed .cast file"
-            fi
-            echo "::endgroup::"
-          done
+          # FEAT-007 public demo inventory: quickstart, concerns, evolve, experiment.
+          # helix-interactive remains experimental and is intentionally excluded here.
+          bash scripts/record_pages_demos.sh
 
       - name: Generate concerns catalog
         run: bash website/scripts/generate-concerns.sh

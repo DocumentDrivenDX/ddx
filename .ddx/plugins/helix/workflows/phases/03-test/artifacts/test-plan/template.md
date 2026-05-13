@@ -1,24 +1,24 @@
 ---
-dun:
-  id: helix.test-plan
-  depends_on:
-    - helix.architecture
+ddx:
+  id: "[artifact-id]"
 ---
+
 # Test Plan
 
 ## Testing Strategy
 
 **Goals**: [Primary objective] | [Quality gates]
 **Out of Scope**: [Excluded areas]
+**Traceability Source**: [PRD / FEAT / US artifacts that drive the plan]
 
 ### Test Levels
 
 | Level | Coverage Target | Priority |
 |-------|-----------------|----------|
-| Contract | [Target] | P0/P1 |
-| Integration | [Target] | P0/P1 |
-| Unit | [Target] | P0/P1 |
-| E2E | [Target] | P0/P1 |
+| Contract | [Target and scope] | P0/P1 |
+| Integration | [Target and scope] | P0/P1 |
+| Unit | [Target and scope] | P0/P1 |
+| E2E | [Target and scope] | P0/P1 |
 
 ### Frameworks
 
@@ -81,6 +81,8 @@ dun:
 
 **Commands**: `[test command]` | `[coverage command]`
 **Priority**: [Recommended order]
+
+**Blocking Gate**: [What must pass before implementation is considered done]
 
 ## Review Checklist
 

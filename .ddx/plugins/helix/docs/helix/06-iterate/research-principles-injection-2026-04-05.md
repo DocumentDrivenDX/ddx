@@ -1,5 +1,5 @@
 ---
-dun:
+ddx:
   id: research.principles-injection.2026-04-05
   depends_on:
     - SD-002

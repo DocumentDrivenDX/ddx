@@ -53,7 +53,8 @@ Issues are stored in `.ddx/beads.jsonl`.
 0c. **Refresh context digests**: For each bead in scope that has an existing
    `<context-digest>`, re-assemble per `.ddx/plugins/helix/workflows/references/context-digest.md`
    and update if material changes exist. For beads without a digest, assemble
-   one and prepend it.
+   one and prepend it. If the repo provides a digest refresh helper, use it so
+   area-label inference and digest assembly stay deterministic.
 1. Verify the built-in tracker is available.
    - If `ddx bead status` fails, stop immediately.
 2. Load all open issues for the scope.
@@ -78,8 +79,8 @@ See `.ddx/plugins/helix/workflows/references/bead-first.md` for the full pattern
    ```bash
    ddx bead create "polish: <scope description>" \
      --type task \
-     --labels helix,kind:planning,action:polish \
-     --spec-id <governing-plan-if-known> \
+     --labels helix,phase:design,kind:planning,action:polish \
+     --set spec-id=<governing-plan-if-known> \
      --description "<context-digest>...</context-digest>
    Decompose plans and refine beads for <scope>.
    Plans to decompose: <list plan docs found in Phase 0>" \
@@ -105,7 +106,7 @@ decomposed into tracker beads before refinement or implementation can proceed.
    b. Create one bead per implementable slice. Each bead must:
       - be individually completable in one `helix build` cycle
       - have `--labels helix,phase:build` (plus area labels)
-      - have `--spec-id` pointing to the governing plan or design artifact
+      - set `spec-id` with `--set spec-id=<governing-plan-or-design-artifact>`
       - have deterministic acceptance criteria derived from the plan
       - have a `<context-digest>` assembled per
         `.ddx/plugins/helix/workflows/references/context-digest.md`
@@ -148,6 +149,22 @@ Each pass performs ALL of the following checks. Track changes made per pass.
     invalid credentials returns 401 with error code AUTH_INVALID"
 - Ensure every issue has at least one concrete acceptance criterion.
 - Add verification method: what command or test proves this criterion is met?
+- For execution-ready beads (`phase:build`, `phase:deploy`, `phase:iterate`
+  implementation work), require acceptance text to name at least one explicit:
+  - command to run
+  - named check or execution doc
+  - observable repository state, file, field, or tracker condition
+- Treat "works", "correct", "complete", "aligned", or similar adjectives
+  without a named check as non-measurable acceptance text.
+- If the governing artifacts let you sharpen the bead, rewrite the acceptance
+  criteria immediately.
+- If the governing artifacts do **not** let you sharpen the bead into explicit
+  measurement criteria, flag the bead as **not execution-ready** and route it
+  back through planning/polish refinement instead of leaving hidden wrapper
+  knowledge to decide success.
+- A bead is not execute-loop-ready until DDx-managed execution could determine
+  success from the bead contract itself without a human inferring what "done"
+  means from HELIX wrapper behavior.
 
 ### Dependency Verification
 
@@ -189,6 +206,9 @@ Area labels are required for concern filtering to work. For each bead in scope:
 4. Beads that touch all areas (e.g., CI config, cross-cutting refactors) may
    omit area labels — they will match only `areas: all` concerns, which is
    correct.
+5. Area labels are routing metadata, not digest content. Refresh the
+   `<concerns>` element from matched concern names after relabeling; do not
+   leave stale area names in the digest.
 
 ### Concern-Aware Acceptance Criteria
 

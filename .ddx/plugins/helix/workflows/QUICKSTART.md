@@ -1,5 +1,5 @@
 ---
-dun:
+ddx:
   id: helix.workflow.quickstart
   depends_on:
     - helix.workflow
@@ -72,7 +72,7 @@ Typical order:
 6. Deploy in `docs/helix/05-deploy/` plus the tracker
    Keep rollout docs canonical and rollout tasks in the tracker.
 7. Iterate in `docs/helix/06-iterate/`
-   Capture backlog, lessons, reviews, and next-iteration planning.
+   Capture backlog, lessons, reviews, and the explicit next-cycle selection.
 
 ## Create Execution Work
 
@@ -113,7 +113,7 @@ If you are not using `helix run`, use the bounded manual loop from
 [EXECUTION.md](EXECUTION.md):
 
 ```bash
-while [ "$(ddx bead ready --json | ddx jq 'length')" -gt 0 ]; do
+while [ "$(ddx bead ready --json | awk 'found || /^[{[]/ { found=1; print }' | ddx jq 'length')" -gt 0 ]; do
   helix build
 done
 

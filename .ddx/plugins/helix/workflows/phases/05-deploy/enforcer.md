@@ -221,8 +221,16 @@ Deploy provides to Iterate:
 
 ## Deploy Artifacts
 
-Deploy artifacts are project-specific. Create checklists, runbooks, and
-monitoring configurations as needed for your deployment model.
+Deploy artifacts are project-specific, but HELIX treats four deploy outputs as
+the live contract under `docs/helix/05-deploy/`:
+
+- `deployment-checklist` for rollout readiness and technical go/no-go checks
+- `monitoring-setup` for dashboards, alerts, and health checks
+- `runbook` for rollback, recovery, and operator response procedures
+- `release-notes` for shipped changes, operator actions, and known caveats
+
+Keep these artifacts aligned with the canonical deploy-phase outputs rather
+than collapsing them back into a smaller, as-needed set.
 
 ## Your Mantras
 

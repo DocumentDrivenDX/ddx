@@ -8,38 +8,8 @@ artifact:
   optional: true
 
 description: |
-  A minimal working implementation that validates the feasibility and approach
-  of a key technical concept before full development. More substantial than a
-  tech spike, focusing on end-to-end validation of technical approaches.
-
-dependencies:
-  requires:
-    - input: Technical approach defined
-      type: artifact
-      path: solution-design
-      required: true
-    - input: Architecture decisions made
-      type: artifact
-      path: adr
-      required: false
-    - input: Key technical risks identified
-      type: external
-      required: true
-
-  enables:
-    - output: Implementation validation
-      type: validation
-      required: true
-    - output: Refined technical approach
-      type: artifact
-      path: solution-design
-    - output: Implementation guidance
-      type: artifact
-      path: implementation-plan
-      phase: build
-    - output: Technical constraints documentation
-      type: artifact
-      path: contracts
+  Minimal working implementation that validates a risky technical concept
+  end-to-end before production design or build commitment.
 
 output:
   location: docs/helix/02-design/proofs-of-concept/
@@ -124,7 +94,7 @@ template:
 
 examples:
   - file: example.md
-    description: Proof of concept for CLI template marketplace architecture
+    description: Proof of concept for DepositMatch CSV import and match review
 
 workflow:
   creation_order: 2.5  # After initial design, before detailed contracts
@@ -152,7 +122,7 @@ relationships:
   informs:
     - solution-design
     - architecture
-    - contracts
+    - contract
     - implementation-plan
     - adr
 

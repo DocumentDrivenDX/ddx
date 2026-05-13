@@ -8,29 +8,8 @@ artifact:
   optional: true
 
 description: |
-  A structured plan for investigating unknown requirements, exploring problem
-  spaces, or validating assumptions before committing to detailed specifications.
-  Used when the problem domain is unclear or requires investigation.
-
-dependencies:
-  requires:
-    - input: Problem or opportunity identified
-      type: external
-      required: true
-    - input: Uncertainty or knowledge gaps identified
-      type: external
-      required: true
-
-  enables:
-    - output: PRD (informed by research)
-      type: artifact
-      path: prd
-    - output: Feature specifications (evidence-based)
-      type: artifact
-      path: feature-specification
-    - output: Feasibility study
-      type: artifact
-      path: feasibility-study
+  Time-boxed plan for answering specific uncertainty before requirements,
+  design, or investment decisions harden.
 
 output:
   location: docs/helix/01-frame/research-plan.md
@@ -66,7 +45,7 @@ validation:
       severity: blocking
 
   automated_checks:
-    - pattern: "\\[RESEARCH QUESTION"
+    - pattern: "\\*\\*Question\\*\\*:"
       expected: ">0"
       message: Must define at least one research question
 
@@ -106,7 +85,15 @@ template:
 
 examples:
   - file: example.md
-    description: Research plan for exploring CLI architecture options
+    description: Research plan for DepositMatch pilot validation
+
+references:
+  - title: "NN/g UX Research Methods"
+    file: docs/resources/nng-ux-research-methods.md
+    relationship: "Grounds matching research methods to questions, evidence types, and product phase"
+  - title: "SBA Market Research and Competitive Analysis"
+    file: docs/resources/sba-market-research-competitive-analysis.md
+    relationship: "Grounds demand, pricing, customer, and market evidence expectations"
 
 workflow:
   creation_order: 0.5  # Before PRD when needed

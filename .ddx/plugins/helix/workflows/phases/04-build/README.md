@@ -38,8 +38,19 @@ Technical execution strategy:
 - **Resource Planning**: Team assignments and timeline
 - **Build Issue Strategy**: How story-level execution is decomposed into tracker issues
 
+`secure-coding` remains retired as a standalone HELIX artifact. Its useful
+responsibility is already covered by the current build contract:
+
+- `docs/helix/01-frame/security-requirements.md` defines the security obligations
+- `docs/helix/01-frame/threat-model.md` and `docs/helix/02-design/security-architecture.md` define the design-level controls
+- `docs/helix/03-test/security-tests.md` and build-phase security scans verify the implementation
+- project concerns can add stack-specific practices without promoting a generic checklist into the core workflow
+
+Reintroducing `secure-coding` as its own artifact would recreate the same thin,
+duplicative checklist that HELIX already retired.
+
 ### Story Build Issues
-**Output Location**: `.ddx/issues.jsonl` queried through `ddx bead`
+**Output Location**: `.ddx/beads.jsonl` managed through `ddx bead`
 
 Story-level implementation work is tracked as build issues rather than
 per-story markdown plans. Build issues:

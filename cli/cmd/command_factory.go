@@ -566,6 +566,7 @@ PowerShell:
 	rootCmd.AddCommand(f.newCheckpointCommand())
 	rootCmd.AddCommand(f.newServerCommand())
 	rootCmd.AddCommand(f.newSkillsCommand())
+	rootCmd.AddCommand(f.newPluginCommand())
 	rootCmd.AddCommand(f.newInstallCommand())
 	rootCmd.AddCommand(f.newInstalledCommand())
 	rootCmd.AddCommand(f.newUninstallCommand())

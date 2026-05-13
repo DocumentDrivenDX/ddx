@@ -25,5 +25,20 @@ jobs:
       - name: Run CLI tests
         run: bash tests/helix-cli.sh
 
+      - name: Run helix-ddx loop integration harness
+        run: bash tests/helix-loop-integration.sh
+
+      - name: Validate Pages demo recording
+        run: bash tests/validate-pages-demo-recording.sh
+
+      - name: Validate deploy artifact graph
+        run: bash tests/validate-deploy-artifacts.sh
+
+      - name: Validate state detection rules
+        run: bash tests/validate-state-rules.sh
+
       - name: Validate skill packages
         run: bash tests/validate-skills.sh
+
+      - name: Install integration test
+        run: bash tests/test-install.sh

@@ -7,35 +7,8 @@ artifact:
   phase: frame
 
 description: |
-  Comprehensive security requirements definition for the project.
-  Covers security user stories, compliance mapping, risk assessment,
-  and testable acceptance criteria for security controls.
-
-dependencies:
-  requires:
-    - input: Product Requirements Document
-      type: artifact
-      path: prd
-      required: true
-    - input: User Stories
-      type: artifact
-      path: user-stories
-      required: true
-    - input: Business requirements
-      type: external
-      required: true
-    - input: Compliance policies
-      type: external
-      required: true
-
-  enables:
-    - output: Solution Design (security sections)
-      type: artifact
-      path: solution-design
-      phase: design
-    - output: Security Testing Strategy
-      type: artifact
-      phase: test
+  Testable security requirements for authentication, authorization, data
+  protection, privacy, validation, logging, compliance, and risk controls.
 
 output:
   location: docs/helix/01-frame/security-requirements.md
@@ -97,6 +70,20 @@ prompts:
 
 template:
   file: template.md
+
+example:
+  file: example.md
+
+references:
+  - title: "OWASP Application Security Verification Standard"
+    file: docs/resources/owasp-asvs.md
+    relationship: "Grounds application security requirements and verification expectations"
+  - title: "FTC Safeguards Rule"
+    file: docs/resources/ftc-safeguards-rule.md
+    relationship: "Grounds financial customer information safeguards and applicability caveats"
+  - title: "NIST Privacy Framework"
+    file: docs/resources/nist-privacy-framework.md
+    relationship: "Grounds privacy risk management and data-processing controls"
 
 workflow:
   creation_order: 3

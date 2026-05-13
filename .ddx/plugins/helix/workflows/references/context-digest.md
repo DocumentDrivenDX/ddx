@@ -1,5 +1,5 @@
 ---
-dun:
+ddx:
   id: helix.workflow.context-digest
   depends_on:
     - helix.workflow.principles-resolution
@@ -37,6 +37,8 @@ summarizes all cross-cutting concerns and governing context into
 2. **Concerns**: Load active concerns per
    `.ddx/plugins/helix/workflows/references/concern-resolution.md`. Filter by bead area scope.
    Summarize matched concern names as `name | name | name`.
+   The `<concerns>` element contains concern names only; never write
+   `area:*` labels or synthetic scope labels there.
 
 3. **Practices**: Load merged practices from area-matched concerns (library
    + project overrides). Summarize as key conventions (separator: ` · `).
@@ -62,6 +64,19 @@ summarizes all cross-cutting concerns and governing context into
 
 7. **Write**: Prepend the `<context-digest>` block to the bead's
    `description` field. If a digest already exists, replace it.
+   If the repository ships a digest helper script, use it instead of
+   hand-assembling XML so the live queue and future beads stay consistent.
+   When the governing contract explicitly permits omitting the digest,
+   the bead must carry label `digest:omission-authorized`, the machine-set
+   field `digest-omission-path`, and a description that begins with
+   `Explicit omission rationale: <reason>` instead of a `<context-digest>`
+   block. The rationale must be non-empty and explain why omission is
+   allowed for that bead.
+   HELIX currently defines exactly one allowed omission path:
+   `helix-input:legacy-migration`. This path is reserved for `helix input`
+   when it creates or updates a migrated legacy bead whose upstream concern
+   mapping is not yet complete enough to assemble a trustworthy digest.
+   Any other bead class must carry a full `<context-digest>`.
 
 ## Digest Format
 

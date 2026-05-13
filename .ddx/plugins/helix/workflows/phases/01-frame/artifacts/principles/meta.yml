@@ -8,8 +8,9 @@ artifact:
 
 description: |
   Cross-cutting design principles that guide judgment calls across all HELIX
-  phases. Not workflow rules or process enforcement — these are lenses applied
-  when choosing between two valid options.
+  phases. They are not requirements, concerns, ADRs, workflow rules, or process
+  enforcement. They are stable lenses for choosing between two plausible
+  options when the artifacts do not prescribe an exact answer.
 
   Two-layer model:
     Layer 1 (HELIX defaults): .ddx/plugins/helix/workflows/principles.md — sensible defaults
@@ -17,30 +18,6 @@ description: |
 
   If the project file exists, it is the sole active source.
   If it does not exist, HELIX defaults are used.
-
-dependencies:
-  requires:
-    - input: PRD
-      type: artifact
-      path: prd
-      required: false
-    - input: Product Vision
-      type: artifact
-      required: false
-
-  enables:
-    - output: Architecture decisions
-      type: artifact
-      phase: design
-    - output: Solution designs
-      type: artifact
-      phase: design
-    - output: Implementation guidance
-      type: artifact
-      phase: build
-    - output: Review criteria
-      type: artifact
-      phase: build
 
 output:
   location: docs/helix/01-frame/principles.md
@@ -78,6 +55,17 @@ prompts:
 template:
   file: template.md
 
+example:
+  file: example.md
+
+references:
+  - title: "The 12 Principles Behind the Agile Manifesto"
+    file: docs/resources/agile-manifesto-principles.md
+    relationship: "Grounds principles as durable tradeoff preferences rather than detailed procedure"
+  - title: "GOV.UK Government Design Principles"
+    file: docs/resources/govuk-design-principles.md
+    relationship: "Grounds compact, memorable, decision-changing principles that stay distinct from rules"
+
 workflow:
   creation_order: 2
   review_cycles: 1-2
@@ -109,6 +97,6 @@ tags:
   - principles
   - judgment
   - cross-cutting
-  - governance
+  - tradeoffs
 
 version: 2.0.0

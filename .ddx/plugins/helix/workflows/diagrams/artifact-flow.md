@@ -284,7 +284,7 @@ graph LR
 ### Feedback Loops
 - Metrics feed back to Requirements
 - Incidents feed back to Security Requirements
-- Lessons Learned feed back to Principles
+- Iteration learnings feed back to Principles
 - Test Results feed back to Design
 
 ## Artifact Storage Structure
@@ -309,14 +309,14 @@ docs/
 │   ├── test-procedures.md
 │   └── test-suites/
 ├── 04-build/
-│   ├── implementation-plan.md
-│   └── code-reviews/
+│   └── implementation-plan.md
 ├── 05-deploy/
-│   ├── deployment-plan.md
-│   ├── release-notes.md
-│   └── runbooks/
+│   ├── deployment-checklist.md
+│   ├── monitoring-setup.md
+│   ├── runbook.md
+│   └── release-notes.md
 └── 06-iterate/
-    ├── metrics-reports/
-    ├── lessons-learned/
+    ├── metrics-dashboard.md
+    ├── security-metrics.md
     └── improvement-backlog.md
 ```

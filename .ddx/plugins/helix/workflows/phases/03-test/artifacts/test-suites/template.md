@@ -1,57 +1,48 @@
+---
+ddx:
+  id: "[artifact-id]"
+---
+
 # Test Suite Structure
 
 **Project**: [Project Name]
-**Coverage Target**: [Percentage]%
 **Test Framework**: [Framework]
 
-## Test Organization
+## Suite Inventory
 
-```
-tests/
-├── contract/           # API endpoint tests
-├── integration/        # Component interaction tests
-├── unit/              # Business logic tests
-├── e2e/               # End-to-end user journeys
-├── fixtures/          # Test data
-├── factories/         # Data generators
-├── mocks/             # Service mocks
-├── helpers/           # Test utilities
-└── setup/             # Test configuration
-```
+| Suite | Path | Scope | Runtime | Required |
+|-------|------|-------|---------|----------|
+| Unit | `tests/unit/` | [Business rules and pure functions] | [Target] | Yes |
+| Integration | `tests/integration/` | [Component and persistence flows] | [Target] | Yes |
+| Contract | `tests/contract/` | [API/interface contract] | [Target] | Yes |
+| E2E | `tests/e2e/` | [Critical user journeys] | [Target] | [Yes/No] |
+| Security | `tests/security/` | [Threat/control checks] | [Target] | [Yes/No] |
+
+## Coverage Mapping
 
 ## Contract Tests
 
-| Endpoint | Method | Test File | Status |
-|----------|--------|-----------|--------|
-| /api/[resource] | GET | [resource].get.test.ts | Red |
-| /api/[resource] | POST | [resource].post.test.ts | Red |
-
-Coverage: success path, validation, auth, and not-found/conflict behavior.
+| Requirement / Contract | Suite | Test File | Coverage |
+|------------------------|-------|-----------|----------|
+| [Contract item] | Contract | [file] | [Success, validation, auth, error] |
 
 ## Integration Tests
 
-| Component A | Component B | Test File | Status |
-|------------|-------------|-----------|--------|
-| [Service] | [Repository] | [service]-persistence.test.ts | Red |
-| [Service] | [External API] | [service]-api.test.ts | Red |
-
-Coverage: component coordination, persistence, and downstream failure handling.
+| Flow | Suite | Test File | Coverage |
+|------|-------|-----------|----------|
+| [Flow] | Integration | [file] | [Coordination, persistence, failure] |
 
 ## Unit Tests
 
-| Module | Function | Test File | Status |
-|--------|----------|-----------|--------|
-| [validators] | validate[Entity] | validators.test.ts | Red |
-| [calculators] | calculate[Metric] | calculators.test.ts | Red |
+| Rule / Module | Suite | Test File | Coverage |
+|---------------|-------|-----------|----------|
+| [Rule] | Unit | [file] | [Cases] |
 
-Coverage: happy path, edge/error cases, and business rules.
+## Security Tests
 
-## E2E Tests
-
-| Journey | Steps | Critical | Test File | Status |
-|---------|-------|----------|-----------|--------|
-| [User Registration] | 5 | Yes | registration.e2e.test.ts | Red |
-| [Purchase Flow] | 8 | Yes | purchase.e2e.test.ts | Red |
+| Threat / Control | Suite | Test File | Coverage |
+|------------------|-------|-----------|----------|
+| [Threat] | Security | [file] | [Control behavior] |
 
 ## Test Data
 
@@ -61,16 +52,29 @@ Coverage: happy path, edge/error cases, and business rules.
 | Factories | [Generated test objects] |
 | Mocks | [External services or time/network controls] |
 
-## Coverage Targets
+## Execution Commands
 
-| Metric | Target |
-|--------|--------|
-| Overall Line Coverage | 80% |
-| Contract Test Coverage | 100% |
-| Critical Path Coverage | 100% |
-| Error Handling Coverage | 90% |
+```bash
+[unit command]
+[integration command]
+[contract command]
+[security command]
+```
+
+## Ownership
+
+| Suite | Owner | Review Trigger |
+|-------|-------|----------------|
+| [Suite] | [Owner] | [When this suite changes] |
+
+## Evidence
+
+| Suite | Evidence Output | Required in CI |
+|-------|-----------------|----------------|
+| [Suite] | [Path/link] | [Yes/No] |
 
 ## Readiness
 - [ ] Suite boundaries are defined
 - [ ] Shared test data assets are identified
 - [ ] All planned suites begin in RED
+- [ ] Commands, owners, and evidence outputs are recorded

@@ -1,8 +1,13 @@
 # HELIX Quickstart Demo
 
-A scripted demonstration of the full HELIX lifecycle: install → frame → design → build → review.
+A scripted demonstration of the HELIX onboarding path from sparse intent to
+queue drain. New users should prefer `helix input` to shape the request and
+`ddx agent execute-loop` to drain execution-ready work.
 
-Builds a tiny Node.js temperature converter from scratch, driven entirely by HELIX artifacts and the tracker. Uses `ddx agent run` as the agent harness.
+The current recording still shows the older phase-by-phase compatibility flow
+inside the demo harness. It builds a tiny Node.js temperature converter from
+scratch, driven entirely by HELIX artifacts and the tracker, with
+`ddx agent run` used only to capture scripted agent responses during recording.
 
 ## Prerequisites
 
@@ -37,9 +42,9 @@ cd /tmp && bash /path/to/helix/docs/demos/helix-quickstart/demo.sh
 |-----|-------|-------------|
 | 1 | Install | Install HELIX skills and CLI, verify ddx agent harness |
 | 2 | Setup | Initialize git repo, tracker, and AGENTS.md |
-| 3 | Frame | Agent creates product vision, PRD, and feature spec |
-| 4 | Design | Agent creates technical design, then tracker issues |
-| 5 | Build | Red: write failing tests. Green: implement to pass. |
+| 3 | Input | `helix input` would shape the request into governed work |
+| 4 | Queue Drain | `ddx agent execute-loop` is the default execution path |
+| 5 | Build | The recording visualizes the older phase-by-phase compatibility flow |
 | 6 | Verify | Run tests, check acceptance criteria |
 | 7 | Review | Agent reviews all work for gaps |
 

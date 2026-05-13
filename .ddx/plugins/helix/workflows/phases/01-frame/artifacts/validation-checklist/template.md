@@ -1,3 +1,8 @@
+---
+ddx:
+  id: "[artifact-id]"
+---
+
 # Frame Phase Validation Checklist
 
 **Status**: [ ] Not Started | [ ] In Progress | [ ] Complete
@@ -6,13 +11,15 @@
 **Result**: [ ] Pass | [ ] Conditional Pass | [ ] Fail
 
 ## Go / No-Go Gates
-- [ ] Problem, goals, and success metrics are clear enough to judge outcomes.
-- [ ] P0 scope is identified, prioritized, and separated from non-goals.
-- [ ] Features and stories are traceable through IDs and links.
-- [ ] Acceptance criteria are testable.
-- [ ] Major risks, dependencies, and external constraints are explicit.
-- [ ] Frame artifacts do not contradict each other.
-- [ ] Required stakeholders have reviewed the plan.
+| Gate | Status | Evidence | Blocking Gap |
+|------|--------|----------|--------------|
+| Problem, goals, and success metrics are clear enough to judge outcomes | Pass / Conditional / Fail | [Artifact/link] | [Gap or None] |
+| P0 scope is identified, prioritized, and separated from non-goals | Pass / Conditional / Fail | [Artifact/link] | [Gap or None] |
+| Features and stories are traceable through IDs and links | Pass / Conditional / Fail | [Artifact/link] | [Gap or None] |
+| Acceptance criteria are testable | Pass / Conditional / Fail | [Artifact/link] | [Gap or None] |
+| Major risks, dependencies, and external constraints are explicit | Pass / Conditional / Fail | [Artifact/link] | [Gap or None] |
+| Frame artifacts do not contradict each other | Pass / Conditional / Fail | [Artifact/link] | [Gap or None] |
+| Required stakeholders have reviewed the plan | Pass / Conditional / Fail | [Artifact/link] | [Gap or None] |
 
 ## Result
 - [ ] **PASS**: Ready for Design phase
@@ -21,3 +28,9 @@
 
 **Conditions/Notes**:
 [Assessment and any conditions]
+
+## Required Follow-Up
+
+| Item | Owner | Due | Required Before |
+|------|-------|-----|-----------------|
+| [Condition] | [Owner] | [Date] | [Design start / design approval / build start] |

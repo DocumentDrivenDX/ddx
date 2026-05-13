@@ -133,8 +133,8 @@ the full pattern.
    ```bash
    ddx bead create "align: <scope description>" \
      --type task \
-     --labels helix,kind:planning,action:align \
-     --spec-id <governing-artifact-if-known> \
+     --labels helix,phase:review,kind:planning,action:align \
+     --set spec-id=<governing-artifact-if-known> \
      --description "<context-digest>...</context-digest>
    Top-down reconciliation review for <scope>.
    Scope areas: <list functional areas>" \
@@ -142,6 +142,14 @@ the full pattern.
    ```
 4. Record the bead ID. All subsequent tracker modifications and report writes
    are governed by this bead.
+5. If this action was reached through a skill or CLI entrypoint, treat that
+   entrypoint as a thin launcher only. The governing bead and stored prompt are
+   the durable contract.
+6. Whenever this action creates a new bead or materially updates an existing
+   bead description, assemble or refresh its `<context-digest>` per
+   `.ddx/plugins/helix/workflows/references/context-digest.md`. If the repo ships
+   `scripts/refresh_context_digests.py`, use it after the mutation so digests
+   and `area:*` labels stay deterministic.
 
 ## PHASE 1 - Reconstruct Intent
 
@@ -318,9 +326,21 @@ Execution issue rules:
 - assign HELIX phase/kind labels that match the actual work
 - set `spec-id` to the nearest governing canonical artifact
 - link to the source review issue using description, parenting, or `discovered-from` dependencies
+- when several execution issues belong to one larger fix, create or reuse an
+  epic parent instead of leaving them as flat siblings
+- when one issue must land before another can run safely, encode that with
+  `ddx bead dep add` rather than prose in the description
+- if a gap first requires design/doc/policy work and only then code changes,
+  create the upstream planning bead first and block the downstream
+  implementation bead on it
+- do not close the governing alignment bead while actionable findings still
+  exist only as prose in the report
 - add explicit blockers with `ddx bead dep add`
 - if canonical docs must change before implementation, create the doc/design issue before the code issue
 - do not create duplicate issues for the same gap
+- after creating or materially updating an execution issue, assemble or refresh
+  its `<context-digest>`; if the repo ships `scripts/refresh_context_digests.py`,
+  use it instead of hand-editing digest XML
 
 ### Issue Coverage Verification
 

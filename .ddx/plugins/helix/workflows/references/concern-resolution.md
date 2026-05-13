@@ -1,5 +1,5 @@
 ---
-dun:
+ddx:
   id: helix.workflow.concern-resolution
   depends_on:
     - helix.workflow.principles-resolution
@@ -42,6 +42,10 @@ The area taxonomy is **extensible per-project**. Projects declare their area
 labels in `docs/helix/01-frame/concerns.md` under `## Area Labels`. The
 defaults above cover most projects; add custom areas when needed.
 
+Common HELIX-repo extensions include `docs`, `site`, `demo`, `testing`, and
+`artifacts`. A bead may carry more than one `area:*` label when its scope spans
+more than one surface.
+
 **Matching rules**:
 - `areas: all` matches every bead regardless of labels.
 - `areas: ui` matches beads with `area:ui` or `area:frontend`.
@@ -49,6 +53,8 @@ defaults above cover most projects; add custom areas when needed.
 - A bead with multiple area labels matches any concern that declares any of
   those areas.
 - A bead with **no** `area:*` labels matches only concerns with `areas: all`.
+- Area labels drive matching only. They are not concern names and must not be
+  copied into the `<concerns>` field of a context digest.
 
 **Triage/evolve/polish must assign area labels** before assembling the
 context digest. If a bead's area is ambiguous, prefer the more inclusive

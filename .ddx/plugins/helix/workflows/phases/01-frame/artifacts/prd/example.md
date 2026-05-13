@@ -1,112 +1,173 @@
-# Product Requirements Document - DDx CLI Toolkit
+---
+ddx:
+  id: example.prd.depositmatch
+  depends_on:
+    - example.product-vision.depositmatch
+---
+# Product Requirements Document
 
-**Version**: 1.0.0
-**Date**: January 14, 2024
-**Status**: Approved
-**Author**: Product Team
+## Summary
 
-## Executive Summary
+DepositMatch is a reconciliation workspace for small bookkeeping firms. It
+imports bank deposits and invoice exports, suggests likely matches, and gives
+reviewers an exception queue for deposits that need human judgment. The first
+release targets weekly reconciliation for firms serving recurring
+small-business clients. Success means reviewers can close most clients in
+minutes, trust the evidence behind accepted matches, and keep unresolved
+deposits from disappearing into spreadsheets or email.
 
-DDx (Document-Driven Development eXperience) is a CLI toolkit designed to help development teams share templates, prompts, and patterns across projects using AI assistance. Following a medical differential diagnosis metaphor, DDx enables teams to "diagnose" project issues, "prescribe" solutions through templates and patterns, and share improvements back to the community.
+## Problem and Goals
 
-The toolkit addresses the growing need for standardized, AI-assisted development workflows while maintaining flexibility for project-specific customizations. By leveraging git subtree for version control and providing a curated library of templates and prompts, DDx accelerates development while ensuring consistency and quality.
+### Problem
 
-## Problem Statement
+Bookkeeping firms with growing client rosters spend 4-8 hours each week
+matching bank deposits to invoices across accounting exports, bank portals,
+spreadsheets, and email threads. The work is repetitive, but mistakes are
+expensive: a missed split payment or duplicate invoice can delay monthly close
+and trigger client follow-up days later.
 
-### The Problem
-Development teams struggle with:
-- **Inconsistent project setup**: Each project reinvents configuration and structure
-- **Knowledge silos**: Best practices and patterns aren't shared effectively
-- **AI integration complexity**: Difficulty leveraging AI tools consistently
-- **Template maintenance**: No systematic way to update and share improvements
+### Goals
 
-### Current State
-Teams currently:
-- Copy-paste configurations between projects (error-prone)
-- Maintain private template repositories (fragmented)
-- Write ad-hoc AI prompts (inconsistent results)
-- Struggle with contribution workflows (changes don't flow back)
-
-### Opportunity
-- **Market timing**: AI-assisted development is becoming mainstream
-- **Technology enabler**: Git subtree provides robust versioning
-- **Community need**: Developers seek standardized AI workflows
-
-## Goals and Objectives
-
-### Business Goals
-1. Accelerate project initialization by 80%
-2. Reduce configuration errors by 90%
-3. Build a community of 1,000+ active users
+1. Reviewers can reconcile routine deposits from one workspace.
+2. Every accepted match has visible evidence and reviewer attribution.
+3. Unclear deposits become owned exceptions with a next action.
 
 ### Success Metrics
-| Metric | Target | Measurement Method | Timeline |
-|--------|--------|-------------------|----------|
-| Time to project setup | <5 minutes | CLI telemetry | Q2 2024 |
-| Template reuse rate | >70% | Usage analytics | Q3 2024 |
-| Community contributions | 50+ PRs/month | GitHub metrics | Q4 2024 |
-| User satisfaction | NPS >50 | Quarterly survey | Q4 2024 |
+
+| Metric | Target | Measurement Method |
+|--------|--------|--------------------|
+| Median reconciliation time | Under 3 minutes per client per week | In-product workflow timing |
+| Suggestion acceptance accuracy | 95% of accepted suggestions remain accepted in weekly audit sample | Reviewer audit |
+| Exception ownership | 90% of unresolved deposits have owner and next action within one business day | Exception queue report |
 
 ### Non-Goals
-- Not a full IDE or development environment
-- Not a project generator (uses existing templates)
-- Not a package manager replacement
 
-## Users and Personas
+- Replacing QuickBooks, Xero, or the firm's general ledger.
+- Automatically posting journal entries.
+- Supporting payroll, inventory, or tax workflows.
+- Making irreversible match decisions without reviewer approval.
 
-### Primary Persona: Alex the Senior Developer
-**Role**: Senior Full-Stack Developer
-**Background**: 7+ years experience, leads small team
-**Goals**:
-- Standardize team practices
-- Reduce setup time for new projects
-- Share knowledge effectively
+Deferred items tracked in `docs/helix/parking-lot.md`.
 
-**Pain Points**:
-- Repeating setup for each project
-- Training juniors on best practices
-- Keeping configurations updated
+## Users and Scope
 
-**Needs**:
-- Quick project initialization
-- Customizable templates
-- Easy contribution workflow
+### Primary Persona: Maya, Reconciliation Lead
 
-## Requirements Overview
+**Role**: Senior bookkeeper responsible for weekly reconciliation across 10-20
+small-business clients.
+**Goals**: Finish routine matching quickly, catch exceptions early, and leave a
+clear audit trail for month-end review.
+**Pain Points**: Rebuilding context across exports, losing client follow-up in
+email, and repeating the same manual comparisons every week.
+
+### Secondary Persona: Andre, Firm Owner
+
+**Role**: Owner of a 12-person bookkeeping firm.
+**Goals**: Increase client capacity without hiring another reviewer and reduce
+month-end surprises.
+**Pain Points**: Spreadsheet-based processes do not scale, and quality depends
+too heavily on individual reviewer habits.
+
+## Requirements
+
+Each requirement traces to the Product Vision goal of reducing routine weekly
+reconciliation time while preserving reviewer trust and exception ownership.
 
 ### Must Have (P0)
-1. **Template Management**: Apply templates with variable substitution
-2. **Pattern Library**: Reusable code patterns for common scenarios
-3. **AI Prompt Integration**: Claude-specific prompts for development tasks
-4. **Version Control**: Git subtree for reliable updates
-5. **Configuration Management**: .ddx.yml for project settings
+
+1. Import bank deposit CSV files and invoice export CSV files for a client.
+2. Generate match suggestions using amount, date, payer, and invoice metadata.
+3. Require reviewer approval before a suggested match becomes accepted.
+4. Preserve match evidence, reviewer, timestamp, and source rows.
+5. Create an exception for every unmatched or low-confidence deposit.
 
 ### Should Have (P1)
-1. **Project Diagnostics**: Analyze project health
-2. **Community Contribution**: Share improvements upstream
-3. **Multi-language Support**: Templates for various languages
+
+1. Support split deposits that pay multiple invoices.
+2. Export a client-level reconciliation report.
+3. Assign exception owners and due dates.
 
 ### Nice to Have (P2)
-1. **Web Dashboard**: Visual template browser
-2. **Metrics Tracking**: Anonymous usage analytics
-3. **Plugin System**: Extensible architecture
 
-## Timeline and Milestones
+1. Bank feed integration.
+2. Accounting platform API sync.
+3. Client-facing question portal.
 
-### Phase 1: Core CLI (Q1 2024)
-- Basic commands (init, apply, list)
-- Template system
-- Git subtree integration
+## Functional Requirements
 
-### Phase 2: Community Features (Q2 2024)
-- Contribution workflow
-- Template marketplace
-- Documentation
+### Import
 
-### Phase 3: Advanced Features (Q3 2024)
-- Diagnostics system
-- AI prompt optimization
-- Analytics dashboard
+- The system accepts CSV uploads for bank deposits and invoice exports.
+- The user maps required columns on first import for each client.
+- The system rejects files missing amount, date, and identifier columns.
 
----
-*This PRD demonstrates the expected format and detail level for Frame phase documentation.*
+### Match Review
+
+- The system suggests matches with a confidence label and evidence summary.
+- The reviewer can accept, reject, split, or flag each suggestion.
+- Accepted matches are immutable except through a recorded correction.
+
+### Exceptions
+
+- The system creates an exception for every deposit without an accepted match.
+- Each exception has status, owner, next action, and due date.
+- Reviewers can export exceptions by client.
+
+## Acceptance Test Sketches
+
+| Requirement | Scenario | Input | Expected Output |
+|-------------|----------|-------|-----------------|
+| Import CSV files | Reviewer uploads bank and invoice exports | Two valid CSV files for one client | Imported deposits and invoices appear in review queue |
+| Generate suggestions | Deposit amount and payer match open invoice | Deposit for 1200.00 from Acme Dental; invoice INV-104 for 1200.00 | High-confidence suggestion links deposit to invoice |
+| Require approval | Reviewer views suggested match | Suggested match with evidence | Match remains pending until reviewer accepts |
+| Preserve evidence | Reviewer accepts suggestion | Accepted match | Audit log records source rows, reviewer, timestamp, and evidence |
+| Create exceptions | Deposit has no likely invoice | Deposit for 847.13 with no matching invoice | Exception is created with status `needs-review` |
+
+## Technical Context
+
+- **Language/Runtime**: TypeScript 5.x on Node 20+
+- **Key Libraries**: React 18 for UI, Fastify 5 for API, Papa Parse for CSV
+- **Data/Storage**: PostgreSQL 16
+- **APIs**: Internal REST API; no external accounting API in v1
+- **Platform Targets**: Modern desktop browsers; Chrome, Edge, Firefox, Safari
+
+## Constraints, Assumptions, Dependencies
+
+### Constraints
+
+- **Technical**: CSV import is the only v1 data ingestion path.
+- **Business**: First release must support a firm with up to 25 active clients.
+- **Legal/Compliance**: Customer financial data must be encrypted at rest and
+  excluded from analytics events.
+
+### Assumptions
+
+- Firms can export invoice data from their current accounting system.
+- Weekly reconciliation is the first workflow worth optimizing.
+- Reviewers will trust suggestions only when evidence is visible.
+
+### Dependencies
+
+- Sample CSV exports from at least three accounting systems.
+- Security review for financial-data handling.
+- Firm owner approval of audit-log retention policy.
+
+## Risks
+
+| Risk | Probability | Impact | Mitigation |
+|------|-------------|--------|------------|
+| CSV formats vary too much across clients | High | Medium | Add per-client column mapping and save mappings after first import |
+| Suggestions look opaque and reviewers reject them | Medium | High | Show amount, date, payer, and invoice evidence beside every suggestion |
+| Split payments are common enough to block adoption | Medium | Medium | Include split deposit support as P1 before paid launch |
+
+## Open Questions
+
+- [ ] Which three accounting exports define the v1 CSV compatibility set? - ask pilot firms.
+- [ ] What audit-log retention period do firms require? - ask firm owners and legal reviewer.
+- [ ] Should low-confidence suggestions appear in review or go straight to exceptions? - ask pilot reviewers.
+
+## Success Criteria
+
+DepositMatch is successful when pilot firms reconcile routine weekly deposits
+from one workspace, reviewers accept at least 95% of audited suggestions, and
+unresolved deposits consistently leave a named owner and next action.

@@ -12,6 +12,7 @@ You may receive:
 
 - no argument (default: `last-commit`)
 - `last-commit` — review the most recent commit
+- `commit:<sha>` — review one specific implementation commit
 - an issue ID — review all changes associated with that issue
 - a file list — review those specific files
 
@@ -19,6 +20,7 @@ Examples:
 
 - `helix review`
 - `helix review last-commit`
+- `helix review commit:abc1234`
 - `helix review <id>`
 - `helix review src/auth/`
 
@@ -37,9 +39,13 @@ Examples:
    and ADRs govern this work.
 1. Determine what was just implemented:
    - If `last-commit` or no argument: `git diff HEAD~1`
+   - If `commit:<sha>`: review exactly that commit's diff (`git show <sha>`)
    - If issue ID: load the issue, find associated commits via issue ID in commit
      messages, compute the aggregate diff
    - If file paths: review those files in their current state
+   - In the automated `helix run` loop, prefer `commit:<sha>` from the
+     executed bead's `closing_commit_sha` when tracker-closure bookkeeping
+     produced a newer tracker-only commit after the implementation commit.
 2. Load the governing artifacts for the reviewed code (acceptance criteria,
    test plans, design docs).
 
@@ -57,13 +63,17 @@ See `.ddx/plugins/helix/workflows/references/bead-first.md` for the full pattern
    ```bash
    ddx bead create "review: <scope description>" \
      --type task \
-     --labels helix,kind:planning,action:review \
-     --spec-id <reviewed-commit-or-issue> \
+     --labels helix,phase:review,kind:planning,action:review \
+     --set spec-id=<reviewed-commit-or-issue> \
      --description "<context-digest>...</context-digest>
    Fresh-eyes review of <target>.
    Review target: <last-commit|issue-id|file-list>" \
-     --acceptance "All review passes complete; findings filed as beads; AGENTS.md updated if needed"
+     --acceptance "All review passes complete; findings filed as beads with scope-appropriate area labels; AGENTS.md updated if needed"
    ```
+   Then assemble or refresh the bead's `<context-digest>` per
+   `.ddx/plugins/helix/workflows/references/context-digest.md`. If the repo
+   ships `scripts/refresh_context_digests.py`, use it after creation so the
+   digest and derived `area:*` labels stay deterministic.
 4. Record the bead ID. All review findings are governed by this bead.
 
 ## Pass 1 - Correctness Review
@@ -180,24 +190,42 @@ durable and appear in the ready queue for subsequent execution cycles.
 For each actionable finding, create a tracker issue:
 
 ```bash
-ddx bead create "<category>: <short description>" \
+new_id="$(ddx bead create "<category>: <short description>" \
   --type task \
-  --labels helix,phase:build,review-finding \
-  --spec-id <governing-artifact-or-file-path> \
+  --labels helix,phase:build,review-finding,<derived-area-labels> \
+  --set spec-id=<governing-artifact-or-file-path> \
   --description "Review finding from fresh-eyes review.
 File: <file>:<line>
 Category: <category>
 Severity: <severity>
 Description: <full description>
 Suggested fix: <suggested fix>" \
-  --acceptance "<deterministic verification criteria for the fix>"
+  --acceptance "<deterministic verification criteria for the fix>")"
+
+python3 scripts/refresh_context_digests.py --apply --bead "$new_id"
 ```
 
 Rules for filing:
 - `low` severity findings: do not file as issues; report them in the output
   only
 - Use label `review-finding` on every finding issue for queryability
-- Set `--spec-id` to the file path where the finding was identified
+- Include at least one scope-appropriate `area:*` label on every filed finding
+  so concern matching survives re-entry into the queue
+- If the repo ships `scripts/refresh_context_digests.py`, run it after creating
+  the finding bead so the queue entry carries the current `<context-digest>`
+  and any inferred `area:*` labels.
+- Derive `area:*` labels in this priority order:
+  1. Preserve `area:*` labels from the reviewed execution bead when the review
+     target is an issue or when the governing review bead points back to that
+     issue.
+  2. Otherwise infer the label(s) from the reviewed scope using the project
+     area taxonomy in `docs/helix/01-frame/concerns.md` (or the default
+     taxonomy in `.ddx/plugins/helix/workflows/references/concern-resolution.md`
+     when the project file does not exist).
+  3. If the finding spans multiple surfaces, assign multiple `area:*` labels
+     rather than picking one arbitrarily.
+- Set `spec-id` with `--set spec-id=<file-path>` using the file path where the
+  finding was identified
 - Write deterministic acceptance criteria (e.g., "test X passes", "no SQL
   injection in function Y") so the issue can be closed by automated build
 

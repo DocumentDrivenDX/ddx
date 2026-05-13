@@ -1,3 +1,8 @@
+---
+ddx:
+  id: "[artifact-id]"
+---
+
 # Research Plan: {{research_topic}}
 
 **Research Lead**: {{research_lead}}
@@ -27,6 +32,7 @@
 **In Scope**: [What will be investigated]
 **Out of Scope**: [What will not]
 **Assumptions**: [What we're taking as given]
+**Decision Enabled**: [What downstream decision this research will unlock]
 
 ## Research Methods
 
@@ -36,6 +42,7 @@
 - **Participants/Sources**: [Who/what]
 - **Duration**: [Time required]
 - **Deliverable**: [Specific output]
+- **Decision Use**: [How the finding changes scope, design, pricing, or go/no-go]
 
 ## Timeline
 

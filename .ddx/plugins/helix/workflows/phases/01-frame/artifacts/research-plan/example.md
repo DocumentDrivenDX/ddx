@@ -1,219 +1,135 @@
-# Research Plan: CLI Workflow Management Pain Points
+---
+ddx:
+  id: example.research-plan.depositmatch
+  depends_on:
+    - example.opportunity-canvas.depositmatch
+    - example.feasibility-study.depositmatch
+    - example.business-case.depositmatch
+---
 
-**Research Lead**: Product Manager
-**Time Budget**: 2 weeks (40 hours)
-**Created**: 2024-01-15
+# Research Plan: DepositMatch Pilot Validation
+
+**Research Lead**: Product Lead
+**Time Budget**: 2 weeks
 **Status**: Example
 
 ## Research Objectives
 
 ### Primary Research Questions
 
-1. **Question 1**: What are the top 3 workflow bottlenecks for senior developers using CLI tools at startups (50-200 employees)?
-   - **Why Important**: Understanding pain points will inform our core value proposition and feature prioritization
-   - **Success Criteria**: Identify 3 specific, measurable pain points with 80% confidence based on 8+ interviews
+1. **Question**: Do bookkeeping firms with 5-25 employees spend enough weekly
+   time on deposit reconciliation to make DepositMatch a top-three workflow
+   problem?
+   - **Why Important**: The Business Case assumes reconciliation is a capacity
+     bottleneck, not a minor annoyance.
+   - **Success Criteria**: At least 4 of 5 interviewed firms report weekly
+     reconciliation above 3 hours and can name a recent close-cycle failure
+     caused by manual matching.
 
-2. **Question 2**: How do development teams currently share project configurations and templates across team members?
-   - **Why Important**: This informs our sharing and collaboration feature requirements
-   - **Success Criteria**: Document 3 current approaches with pros/cons and identify gaps in existing solutions
+2. **Question**: Can representative pilot firms provide CSV exports that are
+   consistent enough for column mapping and suggested matches?
+   - **Why Important**: The Feasibility Study identifies CSV variability as the
+     largest technical risk.
+   - **Success Criteria**: Sample files from at least 3 firms can be mapped into
+     the target import schema with fewer than 2 unsupported required fields per
+     firm.
 
-3. **Question 3**: What evidence exists that teams would adopt and pay for a CLI workflow management tool?
-   - **Why Important**: Validates market demand and informs business model decisions
-   - **Success Criteria**: Find 5+ teams expressing willingness to pay and establish price sensitivity range
+3. **Question**: Will pilot firms pay for a narrow reconciliation workspace
+   before bank-feed integrations or ledger writeback exist?
+   - **Why Important**: The Business Case pricing and obtainable market are
+     low-confidence assumptions.
+   - **Success Criteria**: At least 3 of 5 pilot firms agree that $149/month is
+     reasonable if the pilot reaches the stated time and accuracy targets.
 
 ### Knowledge Gaps
 
-- **Gap 1**: User workflow pain points and current solutions
-  - **Impact**: High - affects entire product direction
-  - **Confidence**: Low - based only on assumptions
+| Gap | Impact | Current Confidence |
+|-----|--------|--------------------|
+| Actual weekly reconciliation time for target firms | High | Low |
+| CSV field variability across accounting systems and bank portals | High | Low |
+| Willingness to pay for CSV-first workflow | High | Low |
+| Which exception states reviewers need on day one | Medium | Medium |
 
-- **Gap 2**: Sharing and collaboration patterns in CLI tools
-  - **Impact**: Medium - affects feature design
-  - **Confidence**: Low - no direct evidence
+## Scope
 
-- **Gap 3**: Market demand and pricing willingness
-  - **Impact**: High - affects business viability
-  - **Confidence**: Low - no validation data
+**In Scope**: Interviews with target firms, sample CSV collection, lightweight
+workflow observation, pricing reaction, and exception-state discovery.
 
-## Research Scope
+**Out of Scope**: Full usability testing, production onboarding, bank-feed
+integration research, and accounting-ledger writeback.
 
-### In Scope
-- [ ] Senior developers at startups (50-200 employees)
-- [ ] Current CLI workflow management practices
-- [ ] Pain points in existing tools and processes
-- [ ] Collaboration and sharing behaviors
-- [ ] Willingness to adopt new tools
+**Assumptions**: Product Vision target segment and pilot scope remain stable
+through the research window.
 
-### Out of Scope
-- Large enterprise environments (>500 employees)
-- Junior developer needs and workflows
-- Non-startup organizational contexts
-- Detailed technical implementation preferences
-
-### Assumptions
-1. Senior developers have decision-making influence on tool adoption
-2. Startups have less rigid tool approval processes than enterprises
-3. CLI tools are used regularly by our target audience
+**Decision Enabled**: Whether the PRD can commit to CSV import, match review,
+exception ownership, pilot pricing, and success metrics.
 
 ## Research Methods
 
-### Method 1: User Interviews
-- **Objective**: Understand current workflows, pain points, and collaboration patterns
-- **Approach**: 45-minute semi-structured interviews with open-ended questions
-- **Participants/Sources**: 8 senior developers at different startups
-- **Duration**: 1 week for recruitment and interviews
-- **Deliverable**: Interview summary report with key insights and quotes
+### Target Customer Interviews
 
-### Method 2: Workflow Observation
-- **Objective**: Observe actual vs. reported behavior in CLI tool usage
-- **Approach**: Screen sharing sessions during typical development tasks
-- **Participants/Sources**: 3 volunteers from interview participants
-- **Duration**: 3 days for scheduling and observation
-- **Deliverable**: Workflow analysis with friction points identified
+- **Objective**: Address Questions 1 and 3.
+- **Approach**: Conduct five 45-minute interviews with bookkeeping firm owners
+  or reconciliation leads. Focus on recent close cycles, current tools, time
+  spent, failure modes, and pricing reaction.
+- **Participants/Sources**: Five U.S.-based bookkeeping firms with 5-25
+  employees and recurring small-business clients.
+- **Duration**: 1 week for recruiting and interviews.
+- **Deliverable**: Interview notes, problem-intensity summary, pricing signal.
+- **Decision Use**: Confirms whether to proceed with the pilot PRD or return to
+  opportunity discovery.
 
-### Method 3: Competitive Analysis
-- **Objective**: Understand existing solutions, pricing, and market positioning
-- **Approach**: Feature comparison, pricing analysis, user review analysis
-- **Participants/Sources**: 5 major CLI tools and 3 emerging solutions
-- **Duration**: 2 days for research and analysis
-- **Deliverable**: Competitive landscape report with gap analysis
+### CSV Sample Review
 
-## Success Criteria
+- **Objective**: Address Question 2.
+- **Approach**: Ask interview participants for anonymized or synthetic samples
+  matching their real bank deposit and invoice exports. Map fields into the
+  target import shape and record unsupported fields.
+- **Participants/Sources**: At least three firms using different accounting or
+  bank export patterns.
+- **Duration**: 3 days.
+- **Deliverable**: Import-compatibility matrix and required field list.
+- **Decision Use**: Defines FEAT-001 import requirements and feasibility risk.
 
-### Research Completion Criteria
-- [x] All research questions answered with evidence
-- [x] Findings documented and validated
-- [x] Recommendations are actionable
-- [x] Stakeholders aligned on conclusions
-- [x] Risk assessment complete
+### Exception Workflow Probe
 
-### Quality Standards
-- [x] Methods appropriate for research questions
-- [x] Sample size adequate for conclusions (8 interviews for qualitative insights)
-- [x] Bias identified and mitigated (diverse participant recruitment)
-- [x] Findings peer-reviewed by technical lead
-- [x] Documentation clear and comprehensive
+- **Objective**: Identify day-one exception states for FEAT-003.
+- **Approach**: Walk participants through recent unresolved deposits and ask
+  what owner, next action, and evidence they needed.
+- **Participants/Sources**: Same interview participants; use recent examples.
+- **Duration**: Included in interviews.
+- **Deliverable**: Exception-state candidates and vocabulary.
+- **Decision Use**: Prevents the PRD from inventing exception states detached
+  from real reviewer work.
 
-## Timeline and Milestones
+## Timeline
 
-| Phase | Duration | Activities | Deliverables | Responsible |
-|-------|----------|------------|--------------|-------------|
-| Planning | 1 day | Recruit participants, finalize questions | Research plan approved | Product Manager |
-| Investigation | 7 days | Conduct interviews, observations, analysis | Raw data and insights | Product Manager + Designer |
-| Analysis | 3 days | Synthesize findings, identify patterns | Research findings report | Product Manager |
-| Validation | 1 day | Review with stakeholders, finalize recommendations | Validated conclusions | Product Manager |
+| Phase | Duration | Activities | Deliverables |
+|-------|----------|------------|--------------|
+| Planning | 1 day | Finalize screener, interview guide, data-handling plan | Approved plan |
+| Investigation | 6 days | Interviews, CSV sample collection, workflow probes | Notes and sample inventory |
+| Analysis | 3 days | Synthesize findings, map CSV compatibility, summarize pricing signal | Findings summary |
+| Validation | 2 days | Review with product, engineering, and compliance | PRD readiness recommendation |
 
 **Total Duration**: 2 weeks
 
-### Key Milestones
-- **Jan 15**: Research plan approved
-- **Jan 19**: Participant recruitment complete
-- **Jan 26**: Data collection complete
-- **Jan 29**: Analysis complete
-- **Jan 30**: Findings validated and research complete
+## Research Risks
 
-## Resource Requirements
+| Risk | Probability | Impact | Mitigation |
+|------|-------------|--------|------------|
+| Firms cannot share representative CSVs | Medium | High | Accept anonymized or synthetic samples with real column shape. |
+| Interviewees overstate willingness to pay | High | Medium | Ask for pilot commitment and compare against current cost/time. |
+| Sample size is too small to generalize | High | Medium | Treat findings as pilot-scope evidence only; require follow-up before scale claims. |
+| Compliance review limits data collection | Medium | High | Use synthetic/anonymized samples and avoid live financial data during research. |
 
-### Team
-- **Research Lead**: Product Manager (20 hours)
-- **Additional Team Members**: UX Designer (8 hours for observations)
-- **External Participants**: 8 senior developers (6 hours total)
-- **Reviewers**: Technical Lead, CEO
+## Completion Criteria
 
-### Budget
-- **Personnel**: $2,400 (internal time)
-- **Tools/Software**: $0 (using existing Zoom, Miro)
-- **External Services**: $400 (participant incentives - $50 each)
-- **Travel/Meetings**: $0 (remote interviews)
-- **Total**: $2,800
-
-### Tools and Materials
-- [x] Zoom for remote interviews
-- [x] Recording software for sessions
-- [x] Miro for synthesis and analysis
-- [x] Interview guide and consent forms
-
-## Risk Assessment
-
-### Research Risks
-| Risk | Probability | Impact | Mitigation Strategy |
-|------|-------------|--------|-------------------|
-| Insufficient participant recruitment | Medium | High | Over-recruit 12 candidates, offer flexible scheduling |
-| Research timeline exceeded | Low | Medium | Build 2-day buffer into schedule |
-| Inconclusive or conflicting findings | Medium | Medium | Focus on patterns across multiple data sources |
-| Key stakeholder unavailable for validation | Low | Low | Schedule validation early, have backup reviewers |
-
-### Mitigation Strategies
-1. **Participant Recruitment Risk**:
-   - **Strategy**: Recruit through developer communities, offer $50 incentive
-   - **Contingency**: Extend to remote developers, reduce interview length
-
-2. **Timeline Risk**:
-   - **Strategy**: Daily progress check-ins, prioritize high-impact activities
-   - **Contingency**: Focus on primary research questions first
-
-## Expected Outcomes
-
-### Research Findings
-[What types of insights do we expect to discover?]
-
-- Clear ranking of workflow pain points with frequency data
-- Current solution landscape and satisfaction levels
-- Collaboration patterns and unmet needs
-- Price sensitivity and adoption criteria
-
-### Impact on Product Development
-[How will findings influence the project?]
-
-- **PRD Impact**: Pain points become problem statements, user needs inform success metrics
-- **Feature Specifications**: Collaboration patterns define sharing features
-- **Technical Decisions**: Current tool analysis informs architecture choices
-- **Timeline Adjustments**: Market readiness affects launch timeline
-
-### Decision Points
-[What decisions will be made based on research?]
-
-- **Go/No-Go**: Sufficient pain points and demand to proceed
-- **Feature Prioritization**: Which pain points to address first
-- **Business Model**: Pricing strategy based on willingness to pay
-- **Target Market**: Refine ideal customer profile
-
-## Communication Plan
-
-### Stakeholder Updates
-- **Frequency**: Daily Slack updates during research week
-- **Format**: Brief status with key insights
-- **Attendees**: Engineering lead, CEO, design team
-
-### Progress Reporting
-- **Daily**: Slack update with interviews completed, key insights
-- **Weekly**: Email summary with preliminary findings
-- **Milestones**: Slack announcement when phases complete
-
-### Final Presentation
-- **Audience**: Full team (8 people)
-- **Format**: 30-minute presentation + Q&A
-- **Duration**: 45 minutes total
-- **Date**: January 30, 2:00 PM
-
-## Validation and Approval
-
-### Review Process
-- [x] Research plan reviewed by stakeholders
-- [x] Methods validated by domain experts
-- [x] Timeline approved by project manager
-- [x] Resources allocated by leadership
-
-### Sign-off
-- **Product Owner**: Jane Smith _________________ Date: Jan 15
-- **Technical Lead**: Mike Johnson _________________ Date: Jan 15
-- **Research Lead**: Sarah Connor _________________ Date: Jan 15
-
----
-
-**Next Steps**: Upon approval, begin participant recruitment and interview scheduling.
-
-**Related Documents**:
-- [Initial Problem Statement](#)
-- [Stakeholder Map](#)
-- [Competitive Analysis Brief](#)
+- [ ] All three primary research questions answered with evidence or deferred
+  with rationale.
+- [ ] Interview notes summarize problem intensity and current alternatives.
+- [ ] CSV compatibility matrix identifies required fields and unsupported
+  cases.
+- [ ] Pricing signal is explicit enough to confirm or revise the pilot Business
+  Case.
+- [ ] PRD readiness recommendation reviewed by product, engineering, and
+  compliance.

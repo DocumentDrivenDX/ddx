@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "dev": "hugo server --bind 0.0.0.0 --port 1313 --disableFastRender",
     "test:e2e": "playwright test",
     "test:screenshots": "playwright test --update-snapshots"
   },

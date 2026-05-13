@@ -1,5 +1,5 @@
 ---
-dun:
+ddx:
   id: helix.workflow.ratchets
   depends_on:
     - helix.workflow
@@ -205,7 +205,8 @@ enforcement script validates it.
 Ratchet floor trends are iterate-phase metrics. The iterate phase should:
 
 - compare current floors to floors at the start of the cycle
-- include floor deltas in iteration reports
+- include floor deltas in the canonical iterate outputs (`metrics-dashboard`
+  and `security-metrics` when relevant)
 - use ratchet trends to prioritize next-cycle work (e.g., a stagnant coverage
   floor suggests the test strategy needs attention)
 - feed ratchet observations back into requirements updates (feedback integration)

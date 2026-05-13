@@ -1,78 +1,80 @@
 ---
-dun:
-  id: helix.architecture
-  depends_on:
-    - helix.prd
+ddx:
+  id: "[artifact-id]"
 ---
-# Architecture Diagrams
+
+# Architecture
+
+## Scope
+
+[What system this architecture covers, what is deliberately outside the
+architecture boundary, and which PRD/features/user journeys drive the design.]
 
 ## Level 1: System Context
-
-```mermaid
-graph TB
-    %% [Add users, system, external dependencies]
-```
 
 | Element | Type | Purpose | Protocol |
 |---------|------|---------|----------|
 | [User/System] | User/External | [Interaction] | [HTTP/API/etc] |
 
-## Level 2: Container Diagram
-
 ```mermaid
 graph TB
-    %% [Add containers: Web, API, DB, Cache, Queue, Worker]
+    %% Add users, system, and external dependencies
 ```
+
+## Level 2: Container Diagram
 
 | Container | Technology | Responsibilities | Communication |
 |-----------|------------|------------------|---------------|
 | [Name] | [Stack] | [What it does] | [Protocol/Format] |
 
+```mermaid
+graph TB
+    %% Add containers: Web, API, DB, Queue, Worker, external systems
+```
+
 ## Level 3: Component Diagram
+
+Include only when a container needs internal structure to support downstream
+design and review. Omit this section when container responsibilities are enough.
+
+| Component | Container | Purpose | Notes |
+|-----------|-----------|---------|-------|
+| [Name] | [Container] | [Responsibility] | [Key decisions] |
 
 ```mermaid
 graph TB
-    %% [Add components per container: Controller, Service, Repository, etc]
+    %% Optional: add components inside the container that needs detail
 ```
-
-| Component | Purpose | Implementation Notes |
-|-----------|---------|---------------------|
-| [Name] | [Responsibility] | [Key decisions] |
 
 ## Deployment
 
+| Component | Infrastructure | Instances | Scaling | Backup / Recovery |
+|-----------|----------------|-----------|---------|-------------------|
+| [Name] | [Cloud/service/runtime] | [Count] | [Trigger or limit] | [Backup/failover path] |
+
 ```mermaid
 graph TB
-    %% [Add: LB, Web Tier, App Tier, Data Tier]
+    %% Add actual deployment topology
 ```
-
-| Component | Infrastructure | Instances | Scaling |
-|-----------|---------------|-----------|---------|
-| [Name] | [Container/VM] | [Count] | [H/V] |
 
 ## Data Flow
 
 ```mermaid
 sequenceDiagram
-    %% [Add sequence for key use case]
+    %% Add sequence for the most important user journey or operational flow
 ```
-
-## Architecture Summary
-
-| Layer | Technology | Rationale |
-|-------|------------|-----------|
-| Frontend | [Tech] | [Why] |
-| Backend | [Tech] | [Why] |
-| Database | [Tech] | [Why] |
-| Infra | [Tech] | [Why] |
-
-**Patterns**: [Pattern 1: usage] | [Pattern 2: usage]
 
 ## Quality Attributes
 
-| Attribute | Strategy | Key Decisions |
-|-----------|----------|---------------|
-| Scalability | [H/V scaling] | [Approach] |
-| Security | [Controls] | [Boundaries] |
-| Observability | [Metrics/Logging/Tracing] | [Tools] |
-| Disaster Recovery | RTO: [target] / RPO: [target] | [Backup/Failover strategy] |
+| Attribute | Target | Strategy | Verification |
+|-----------|--------|----------|--------------|
+| Availability | [Target] | [How architecture supports it] | [How checked] |
+| Performance | [Target] | [How architecture supports it] | [How checked] |
+| Security | [Target] | [Controls/boundaries] | [How checked] |
+| Disaster Recovery | RTO: [target] / RPO: [target] | [Backup/failover strategy] | [How checked] |
+
+## Decisions and Tradeoffs
+
+| Decision | Status | Rationale | Follow-up |
+|----------|--------|-----------|-----------|
+| [ADR-NNN or inline decision] | [Accepted/Proposed] | [Why this shape wins] | [ADR, spike, or none] |

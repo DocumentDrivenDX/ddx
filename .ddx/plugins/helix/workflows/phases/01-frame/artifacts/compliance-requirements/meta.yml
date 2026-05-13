@@ -7,44 +7,8 @@ artifact:
   phase: frame
 
 description: |
-  Comprehensive regulatory and compliance requirements analysis.
-  Identifies applicable regulations, maps requirements to implementation
-  controls, and defines a compliance validation plan.
-
-dependencies:
-  requires:
-    - input: Product Requirements Document
-      type: artifact
-      path: prd
-      required: true
-    - input: Security Requirements
-      type: artifact
-      path: security-requirements
-      required: true
-    - input: Stakeholder Map
-      type: artifact
-      path: stakeholder-map
-      required: false
-    - input: Business context
-      type: external
-      required: true
-    - input: Regulatory landscape
-      type: external
-      required: true
-    - input: Legal counsel input
-      type: external
-      required: true
-
-  enables:
-    - output: Compliance Design Constraints
-      type: artifact
-      phase: design
-    - output: Security Controls Requirements
-      type: artifact
-      phase: design
-    - output: Audit Requirements
-      type: artifact
-      phase: deploy
+  Obligation-to-control map for applicable regulations, standards,
+  contractual duties, data handling, owners, evidence, and validation.
 
 output:
   location: docs/helix/01-frame/compliance-requirements.md
@@ -59,8 +23,8 @@ validation:
     - implementation_plan
 
   quality_checks:
-    - check: all_applicable_regulations_identified
-      description: All regulations relevant to the project must be listed
+    - check: applicability_assessed
+      description: Regulatory applicability is assessed with assumptions and counsel-review gaps
       severity: blocking
     - check: requirements_mapped_to_implementation
       description: Each compliance requirement must map to an implementation control
@@ -106,6 +70,17 @@ prompts:
 
 template:
   file: template.md
+
+example:
+  file: example.md
+
+references:
+  - title: "FTC Safeguards Rule"
+    file: docs/resources/ftc-safeguards-rule.md
+    relationship: "Grounds financial customer information security obligations and applicability caveats"
+  - title: "NIST Privacy Framework"
+    file: docs/resources/nist-privacy-framework.md
+    relationship: "Grounds privacy risk management, data processing, controls, and validation evidence"
 
 workflow:
   creation_order: 4

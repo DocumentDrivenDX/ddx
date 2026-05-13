@@ -1,16 +1,16 @@
 ---
-dun:
-  id: helix.parking-lot
-  depends_on:
-    - helix.prd
-  parking_lot: true
+ddx:
+  id: "[artifact-id]"
 ---
+
 # Parking Lot (Deferred / Future Work)
 
 ## Policy
-- Out-of-scope items do not belong here.
+- Rejected items do not belong here; close or cancel them instead.
+- Active work does not belong here; track it in the Feature Registry and DDx.
 - Deferred items must include rationale and revisit trigger.
-- Any parked artifact must set `dun.parking_lot: true` in its frontmatter.
+- Revisit triggers must be objective enough for another agent to evaluate.
+- Any parked artifact must set `ddx.parking_lot: true` in its frontmatter.
 
 ## Deferred / Future Items
 
@@ -23,6 +23,8 @@ dun:
 - **Dependencies**: [Blocked by / prerequisites]
 - **Revisit Trigger**: [What must happen before reconsidering]
 - **Target Phase/Milestone**: [Phase or release]
+- **Owner**: [Person/team responsible for review]
+- **Last Reviewed**: [Date]
 
 ## Parked Artifacts (Links)
 

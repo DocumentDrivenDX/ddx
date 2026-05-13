@@ -7,26 +7,8 @@ artifact:
   phase: frame
 
 description: |
-  Comprehensive identification and analysis of all project stakeholders,
-  their influence, interests, and engagement strategies. Includes RACI
-  matrix for clear accountability.
-
-dependencies:
-  requires:
-    - input: Project charter or initiative
-      type: external
-      required: true
-    - input: Organizational structure
-      type: external
-      required: true
-
-  enables:
-    - output: Communication plan
-      type: artifact
-      phase: all
-    - output: Risk mitigation strategies
-      type: artifact
-      phase: frame
+  Stakeholder and decision-rights map for roles, interests, influence,
+  engagement, RACI ownership, communication cadence, and escalation paths.
 
 output:
   location: docs/helix/01-frame/stakeholder-map.md
@@ -49,7 +31,7 @@ validation:
       severity: blocking
 
     - check: contact_information
-      description: Key stakeholders must have contact details
+      description: Key stakeholders should have a contact channel or escalation route
       severity: warning
 
     - check: engagement_defined
@@ -65,9 +47,9 @@ validation:
       expected: 0
       message: Replace all placeholder names
 
-    - pattern: "@|email"
+    - pattern: "Contact Channel|Escalation"
       expected: ">0"
-      message: Include contact information
+      message: Include contact channel or escalation information
 
 variables:
   - name: organization_name
@@ -98,6 +80,14 @@ template:
     - raci_matrix
     - power_interest_grid
     - communication_matrix
+
+example:
+  file: example.md
+
+references:
+  - title: "Atlassian RACI Chart"
+    file: docs/resources/atlassian-raci-chart.md
+    relationship: "Grounds responsibility assignment, accountability, consultation, and informed stakeholders"
 
 workflow:
   creation_order: 0

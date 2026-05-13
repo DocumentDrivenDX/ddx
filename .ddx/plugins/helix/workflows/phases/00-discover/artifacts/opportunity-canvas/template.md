@@ -1,3 +1,8 @@
+---
+ddx:
+  id: "[artifact-id]"
+---
+
 # Opportunity Canvas
 
 ## Problem Statement
@@ -7,16 +12,16 @@
 | Problem | [What problem are you solving?] |
 | Who | [Who has this problem?] |
 | Impact | [What is the cost/pain of this problem?] |
-| Evidence | [How do you know this is real?] |
+| Evidence / Confidence | [How do you know this is real?] |
 
 **Problem Hypothesis**: [One sentence describing the core problem]
 
 ## Customer Segments
 
-| Segment | Priority | Size | Characteristics | Current Solution |
-|---------|----------|------|-----------------|------------------|
-| [Primary] | P0 | [Size] | [Key traits] | [What they use now] |
-| [Secondary] | P1 | [Size] | [Key traits] | [What they use now] |
+| Segment | Priority | Size / Confidence | Characteristics | Current Solution |
+|---------|----------|-------------------|-----------------|------------------|
+| [Primary] | P0 | [Size, confidence] | [Key traits] | [What they use now] |
+| [Secondary] | P1 | [Size, confidence] | [Key traits] | [What they use now] |
 
 **Early Adopters**: [Who will use this first and why?]
 
@@ -28,6 +33,12 @@
 | [Value 2] | [Why it matters] | [Evidence] |
 
 **Elevator Pitch**: [2 sentences max describing the unique value]
+
+## Customer Fit
+
+| Customer Job / Pain / Gain | Solution Response | Evidence / Confidence |
+|----------------------------|-------------------|-----------------------|
+| [Job, pain, or gain] | [Pain reliever or gain creator] | [Source or assumption] |
 
 ## Solution Concept
 
@@ -57,6 +68,16 @@
 
 ## Go/No-Go Decision
 
+| Gate | Status | Evidence / Gap |
+|------|--------|----------------|
+| Problem validated | Pass / Risk / Fail | [Evidence or gap] |
+| Segment reachable | Pass / Risk / Fail | [Evidence or gap] |
+| Value differentiated | Pass / Risk / Fail | [Evidence or gap] |
+| Metrics measurable | Pass / Risk / Fail | [Evidence or gap] |
+| Risks bounded | Pass / Risk / Fail | [Evidence or gap] |
+
 **Decision**: Go | Pivot | No-Go
 
 **Rationale**: [2-3 sentences explaining decision]
+
+**Next Action**: [Proceed to Frame / run research / revise opportunity / stop]

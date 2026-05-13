@@ -3,6 +3,26 @@
 Help the user create a project principles document that guides judgment calls
 across all HELIX phases.
 
+## Purpose
+
+Project Principles define the project's durable judgment model. Their unique
+job is to help agents and humans choose between two plausible options when the
+Product Vision, PRD, feature specs, concerns, ADRs, tests, and implementation
+plans do not prescribe an exact answer.
+
+They are not a second requirements document. They are not a concern catalog.
+They are not ADRs. They are not workflow rules. A good principle changes a
+real decision without pretending to settle every future case.
+
+## Reference Anchors
+
+Use these local resource summaries as grounding:
+
+- `docs/resources/agile-manifesto-principles.md` frames principles as durable
+  tradeoff preferences that guide many decisions without becoming procedure.
+- `docs/resources/govuk-design-principles.md` models compact, memorable,
+  decision-changing principles that stay distinct from a rulebook.
+
 ## Bootstrap Flow
 
 1. **Check for existing principles**: If `docs/helix/01-frame/principles.md`
@@ -37,6 +57,8 @@ Each principle must be:
   the principle would not change any decision, it is not a principle.
 - **Actionable**: An agent or developer reading it should know which option
   to prefer in a concrete scenario.
+- **Tradeoff-shaped**: It should say what to prefer when two valid options
+  compete. "Always do X" is usually a rule, not a principle.
 - **Concise**: One sentence for the principle, one sentence for the
   rationale. If it needs a paragraph, it may be a policy, not a principle.
 
@@ -45,6 +67,21 @@ Reject or flag:
 - Workflow rules (belong in enforcers or ratchets, not principles)
 - Aspirational statements that do not change decisions
 - Principles so broad they apply to every project ("write good code")
+- Requirements that define product behavior (belong in PRD or feature specs)
+- Technology or quality domains (belong in Concerns)
+- Specific decisions already made (belong in ADRs)
+
+## Boundary Test
+
+For every candidate principle, ask:
+
+| Question | If yes |
+|---|---|
+| Does it define what the product must do? | Move it to the PRD or a feature spec. |
+| Does it name an active quality area, technology stack, or operating concern? | Move it to Concerns. |
+| Does it record a specific decision and alternatives? | Move it to an ADR. |
+| Does it require a mandatory process step? | Move it to workflow rules, enforcers, or ratchets. |
+| Does it only sound virtuous? | Delete it or rewrite it around a real tradeoff. |
 
 ## Size Thresholds
 

@@ -167,14 +167,16 @@ Sample skill body.
 	forceOut, forceErr := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin, "--force")
 	require.NoError(t, forceErr, forceOut)
 
-	// After --force, the project-local plugin dir is a real directory
-	// containing the copied plugin tree, not a symlink to anywhere.
+	// After --force, the project-local plugin dir is a developer symlink to
+	// the local plugin checkout.
 	projectInfo, err = os.Lstat(projectPluginDir)
 	require.NoError(t, err)
-	assert.False(t, projectInfo.Mode()&os.ModeSymlink != 0, "project plugin path must be a real directory (FEAT-015 no-symlinks)")
-	assert.True(t, projectInfo.IsDir(), "project plugin path must be a real directory")
+	require.True(t, projectInfo.Mode()&os.ModeSymlink != 0, "project plugin path must be a local symlink")
+	linkTarget, err := os.Readlink(projectPluginDir)
+	require.NoError(t, err)
+	assert.Equal(t, localPlugin, linkTarget)
 
-	// Plugin file from the source landed inside the project copy.
+	// Plugin file is visible through the symlinked project path.
 	_, statErr = os.Stat(filepath.Join(projectPluginDir, "skills", "sample-skill", "SKILL.md"))
 	assert.NoError(t, statErr, "plugin tree must be copied under project")
 
@@ -183,6 +185,101 @@ Sample skill body.
 
 	_, statErr = os.Stat(sentinel)
 	assert.True(t, os.IsNotExist(statErr), "sentinel file should be removed when the directory is replaced")
+}
+
+func TestPluginInstallLocalDoesNotRewriteInstalledState(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	statePath := filepath.Join(homeDir, ".ddx", "installed.yaml")
+	require.NoError(t, os.MkdirAll(filepath.Dir(statePath), 0o755))
+	beforeState := `installed:
+  - name: helix
+    version: 6.6.1
+    type: workflow
+    source: https://github.com/DocumentDrivenDX/helix
+    installed_at: 2026-05-13T00:00:00Z
+    files:
+      - .ddx/plugins/helix
+`
+	require.NoError(t, os.WriteFile(statePath, []byte(beforeState), 0o644))
+
+	localPlugin := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "package.yaml"), []byte(`name: helix
+version: 6.6.1
+description: Local HELIX checkout
+type: workflow
+source: https://github.com/DocumentDrivenDX/helix
+api_version: 1
+install:
+  root:
+    source: .
+    target: .ddx/plugins/helix
+  skills:
+    - source: .agents/skills/
+      target: .agents/skills/
+`), 0o644))
+	skillDir := filepath.Join(localPlugin, ".agents", "skills", "helix-build")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
+name: helix-build
+description: Local HELIX build skill
+---
+
+Local skill body.
+`), 0o644))
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "helix", "--local", localPlugin, "--force")
+	require.NoError(t, err, output)
+	assert.Contains(t, output, "recorded plugin pin unchanged")
+
+	afterState, err := os.ReadFile(statePath)
+	require.NoError(t, err)
+	assert.Equal(t, beforeState, string(afterState), "local installs must not rewrite the recorded plugin pin")
+
+	assert.FileExists(t, filepath.Join(workDir, ".ddx", "plugins", "helix", "package.yaml"))
+	assertLocalSymlink(t, filepath.Join(workDir, ".ddx", "plugins", "helix"), localPlugin)
+	assertLocalSymlink(t, filepath.Join(workDir, ".agents", "skills", "helix-build"), filepath.Join(localPlugin, ".agents", "skills", "helix-build"))
+	assertLocalSymlink(t, filepath.Join(workDir, ".claude", "skills", "helix-build"), filepath.Join(localPlugin, ".agents", "skills", "helix-build"))
+}
+
+func TestPluginInstallLocalMirrorsTopLevelSkillsWithoutPackageManifest(t *testing.T) {
+	workDir := t.TempDir()
+	homeDir := t.TempDir()
+	t.Setenv("HOME", homeDir)
+
+	localPlugin := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(localPlugin, ".claude-plugin"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, ".claude-plugin", "plugin.json"), []byte(`{
+  "name": "helix",
+  "version": "6.6.1",
+  "description": "Local HELIX checkout",
+  "skills": "./skills/"
+}`), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(localPlugin, "scripts"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(localPlugin, "scripts", "helix"), []byte("#!/usr/bin/env bash\n"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(localPlugin, ".agents", "skills"), 0o755))
+	skillDir := filepath.Join(localPlugin, "skills", "helix-input")
+	require.NoError(t, os.MkdirAll(skillDir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(skillDir, "SKILL.md"), []byte(`---
+name: helix-input
+description: Local HELIX input skill
+---
+
+Local skill body.
+`), 0o644))
+
+	factory := NewCommandFactory(workDir)
+	output, err := executeCommand(factory.NewRootCommand(), "plugin", "install", "helix", "--local", localPlugin, "--force")
+	require.NoError(t, err, output)
+	assert.Contains(t, output, "recorded plugin pin unchanged")
+
+	assert.FileExists(t, filepath.Join(workDir, ".ddx", "plugins", "helix", "skills", "helix-input", "SKILL.md"))
+	assertLocalSymlink(t, filepath.Join(workDir, ".ddx", "plugins", "helix"), localPlugin)
+	assertLocalSymlink(t, filepath.Join(workDir, ".agents", "skills", "helix-input"), filepath.Join(localPlugin, "skills", "helix-input"))
+	assertLocalSymlink(t, filepath.Join(workDir, ".claude", "skills", "helix-input"), filepath.Join(localPlugin, "skills", "helix-input"))
 }
 
 func TestInstallPackageRejectsMissingSkillMetadata(t *testing.T) {
@@ -389,10 +486,9 @@ func TestInstall_GlobalFlagRemoved(t *testing.T) {
 		"error must reference the unknown --global flag, got: %s", combined)
 }
 
-func TestInstall_NoSymlinksCreated(t *testing.T) {
-	// End-to-end FEAT-015 invariant: after a project-local install, no
-	// symlinks exist under .agents/skills/, .claude/skills/, or
-	// .ddx/plugins/<plugin>/.
+func TestInstallLocalCreatesDeveloperSymlinks(t *testing.T) {
+	// Local installs are developer overlays: the plugin root and harness skill
+	// surfaces should symlink back to the local checkout.
 	workDir := t.TempDir()
 	homeDir := t.TempDir()
 	t.Setenv("HOME", homeDir)
@@ -426,24 +522,29 @@ Sample body.
 	output, err := executeCommand(factory.NewRootCommand(), "install", "sample-plugin", "--local", localPlugin)
 	require.NoError(t, err, output)
 
-	for _, sub := range []string{".ddx/plugins/sample-plugin", ".agents/skills", ".claude/skills"} {
-		walkRoot := filepath.Join(workDir, filepath.FromSlash(sub))
-		require.NoError(t, filepath.Walk(walkRoot, func(path string, info os.FileInfo, walkErr error) error {
-			if walkErr != nil {
-				if os.IsNotExist(walkErr) {
-					return nil
-				}
-				return walkErr
-			}
-			if info.Mode()&os.ModeSymlink != 0 {
-				t.Errorf("FEAT-015: unexpected symlink at %s", path)
-			}
-			return nil
-		}))
-	}
+	assertLocalSymlink(t, filepath.Join(workDir, ".ddx", "plugins", "sample-plugin"), localPlugin)
+	assertLocalSymlink(t, filepath.Join(workDir, ".agents", "skills", "sample-skill"), filepath.Join(localPlugin, ".agents", "skills", "sample-skill"))
+	assertLocalSymlink(t, filepath.Join(workDir, ".claude", "skills", "sample-skill"), filepath.Join(localPlugin, ".agents", "skills", "sample-skill"))
 
 	// And no plugin tree leaked into $HOME.
 	homePluginDir := filepath.Join(homeDir, ".ddx", "plugins", "sample-plugin")
 	_, statErr := os.Stat(homePluginDir)
 	assert.True(t, os.IsNotExist(statErr), "FEAT-015: nothing must land under $HOME/.ddx/plugins/")
+}
+
+func assertLocalSymlink(t *testing.T, linkPath, expectedTarget string) {
+	t.Helper()
+	info, err := os.Lstat(linkPath)
+	require.NoError(t, err)
+	require.True(t, info.Mode()&os.ModeSymlink != 0, "%s must be a symlink", linkPath)
+	target, err := os.Readlink(linkPath)
+	require.NoError(t, err)
+	if !filepath.IsAbs(target) {
+		target = filepath.Join(filepath.Dir(linkPath), target)
+	}
+	target, err = filepath.Abs(target)
+	require.NoError(t, err)
+	expectedTarget, err = filepath.Abs(expectedTarget)
+	require.NoError(t, err)
+	assert.Equal(t, filepath.Clean(expectedTarget), filepath.Clean(target))
 }

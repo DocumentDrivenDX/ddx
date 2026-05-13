@@ -37,12 +37,13 @@ artifact_patterns:
       pattern: ".helix/"
       type: deploy-issue
       phase: deploy
-      query_command: "Inspect open tracker issues labeled helix, phase:deploy, story:US-{id}"
+      query_command: "Inspect tracker issues labeled helix, phase:deploy, story:US-{id}. Treat the story as DEPLOY while any matching deploy issue is not closed, including `status: in_progress`."
 
     iterate:
-      pattern: "docs/helix/06-iterate/iteration-reports/IR-{id}-*.md"
-      type: iteration-report
+      type: iterate-evidence
       phase: iterate
+      query_only: true
+      query_command: "Inspect tracker issues labeled helix, phase:deploy, story:US-{id}. Treat the story as ITERATE only when all matching deploy issues are complete and no matching deploy issue remains not closed. If any matching deploy issue is not closed, including `status: in_progress`, the story remains in DEPLOY. Linked tracker follow-on work is supporting evidence when present; canonical iterate outputs remain shared iteration context and are not queried by story ID."
 
   # Feature-level artifacts (epics)
   feature:
@@ -97,8 +98,6 @@ artifact_patterns:
     build:
       - pattern: "docs/helix/04-build/implementation-plan.md"
         type: master-implementation
-      - pattern: "docs/helix/04-build/build-procedures.md"
-        type: build-procedures
 
 # Phase detection strategy
 phase_detection:
@@ -132,7 +131,7 @@ naming_conventions:
       TD: "Technical Design (Design)"
       TP: "Test Plan (Test)"
       ISSUE: "Execution tracked in built-in tracker"
-      IR: "Iteration Report (Iterate)"
+      ITERATE: "All matching deploy issue(s) complete with no matching deploy issue remaining not closed, plus optional tracker-backed follow-on work; shared iterate outputs remain iteration context (no numbered story file)"
 
   feature:
     pattern: "{prefix}-{id}-{name}"
@@ -163,8 +162,8 @@ transitions:
       creates: "deploy issue(s) in tracker"
 
     deploy_to_iterate:
-      requires: ["deploy issue(s) exist", "deployed"]
-      creates: "IR-{id}"
+      requires: ["deploy issue(s) exist", "all deploy issue(s) complete", "no matching deploy issue remains not closed"]
+      creates: "story enters ITERATE only after all deploy issue(s) are complete and no matching deploy issue remains not closed; optional tracker follow-on work may capture additional iteration evidence"
 
 # Validation rules
 validation:

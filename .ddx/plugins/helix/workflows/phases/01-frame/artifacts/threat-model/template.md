@@ -1,3 +1,8 @@
+---
+ddx:
+  id: "[artifact-id]"
+---
+
 # Threat Model
 
 **Project**: [Project Name]
@@ -68,6 +73,7 @@ ID prefix: S=Spoofing, T=Tampering, R=Repudiation, I=Information Disclosure, D=D
 - **Controls**: [Preventive, detective, corrective actions]
 - **Timeline**: [When to implement]
 - **Owner**: [Who is responsible]
+- **Verification**: [Security test, design review, or audit evidence]
 
 ## Security Controls Summary
 

@@ -79,6 +79,98 @@ graph TD
 Individual metric specification: name, unit, direction (higher-is-better or
 lower-is-better), measurement command, tolerance band, and ratchet floor.
 
+#### Metrics Dashboard
+**Artifact Location**: `artifacts/metrics-dashboard/`
+**Output Location**: `docs/helix/06-iterate/metrics-dashboard.md`
+
+Iteration-level summary artifact:
+- compares the current measurement set against a baseline or ratchet floor
+- synthesizes product, operator, and stakeholder signals into one decision view
+- states whether the latest changes improved, regressed, or stayed within noise
+- links the conclusions to follow-up tracker work when action is required
+
+#### Security Metrics and Analysis
+**Artifact Location**: `artifacts/security-metrics/`
+**Output Location**: `docs/helix/06-iterate/security-metrics.md`
+
+Security posture monitoring and improvement tracking:
+- **Security incident response metrics (MTTD, MTTR)**
+- **Vulnerability management and remediation tracking**
+- **Compliance monitoring and audit findings analysis**
+- **Security training effectiveness and awareness metrics**
+- **Threat landscape analysis and defense effectiveness**
+- **Security improvement backlog prioritization and planning**
+
+**AI Capabilities**:
+- Security trend analysis and pattern recognition
+- Threat correlation and risk assessment
+- Automated compliance monitoring and reporting
+- Security control effectiveness measurement
+
+#### Improvement Backlog
+**Artifact Location**: `artifacts/improvement-backlog/`
+**Output Location**: `docs/helix/06-iterate/improvement-backlog.md`
+
+Prioritized iteration follow-up surface:
+- turns metrics, feedback, incidents, and retrospectives into ranked work
+- links each candidate to supporting evidence and tracker issues
+- makes the next iteration candidate explicit instead of leaving loose notes
+
+`lessons-learned` remains retired as a standalone HELIX artifact. Its durable
+responsibility is already covered by the current iterate contract:
+
+- `metrics-dashboard` records the iteration-level summary and non-security
+  learnings that changed the decision view
+- `security-metrics` records the security-specific lessons when incidents,
+  vulnerabilities, or compliance findings changed what the cycle taught
+- `improvement-backlog` turns those learnings into prioritized tracker-backed
+  follow-up work and an explicit next-cycle selection
+- upstream canonical docs absorb the durable behavioral change: update the PRD,
+  feature specs, stories, risk registers, or tests when the learning changes
+  future expectations
+
+Reintroducing `lessons-learned` would duplicate the same evidence across a thin
+summary doc plus the artifacts and governing updates that already need to carry
+the real decision.
+
+`feedback-analysis` remains retired as a standalone HELIX artifact. Its useful
+responsibility is already covered by the current iterate contract:
+
+- `metrics-dashboard` synthesizes cross-signal learnings into an iteration-level decision
+- `security-metrics` captures the security-specific slice when feedback is about risk or incidents
+- `improvement-backlog` turns those learnings into prioritized follow-up work
+
+Tracker issues remain the executable follow-on system. Reintroducing
+`feedback-analysis` would split one evidence trail across another thin document.
+
+`story-iteration-report` remains retired as a standalone HELIX artifact. Its
+old story-scoped intent is already covered by the current iterate contract:
+
+- deploy issues and their execution evidence record what one bounded slice
+  shipped, what happened during rollout, and what changed relative to plan
+- `metrics-dashboard` records iteration-level outcome summaries when that slice
+  materially changes the measured system state
+- `security-metrics` records the security-specific result when the slice affects
+  incidents, vulnerabilities, compliance, or operational risk
+- `improvement-backlog` and tracker issues capture the prioritized follow-on
+  work instead of leaving it in a prose-only report
+- upstream canonical docs absorb the durable behavioral change: update the PRD,
+  feature specs, stories, risk registers, or tests when the learning changes
+  future expectations
+
+For story-state detection, the deterministic ITERATE threshold remains
+completion of all matching `phase:deploy` issue(s) with no matching deploy
+issue remaining not closed. If any matching deploy issue is not closed,
+including `status: in_progress`, the story remains in DEPLOY. Shared iterate
+outputs provide iteration-wide context, and linked tracker follow-on work adds
+story-specific evidence when present; HELIX does not require a story-keyed
+iterate document.
+
+The deleted prompt and template were too thin to justify restoring a separate
+canonical report. Reintroducing `story-iteration-report` would duplicate
+evidence already owned by execution issues, iterate summary artifacts, and the
+tracker-backed follow-on system.
+
 #### Cross-Phase Action: Alignment Review
 **Action Location**: `../../actions/reconcile-alignment.md`
 **Output Location**: `docs/helix/06-iterate/alignment-reviews/AR-YYYY-MM-DD[-scope].md`
@@ -108,24 +200,6 @@ Research-first documentation reconstruction:
 - reconstructs missing HELIX artifacts conservatively from current state
 - asks for user guidance before low-confidence canonical content is finalized
 - writes a durable backfill report with assumptions, confidence, and follow-up work
-
-#### 9. Security Metrics and Analysis
-**Artifact Location**: `artifacts/security-metrics/`
-**Output Location**: `docs/helix/06-iterate/security-metrics.md`
-
-Security posture monitoring and improvement tracking:
-- **Security incident response metrics (MTTD, MTTR)**
-- **Vulnerability management and remediation tracking**
-- **Compliance monitoring and audit findings analysis**
-- **Security training effectiveness and awareness metrics**
-- **Threat landscape analysis and defense effectiveness**
-- **Security improvement backlog prioritization and planning**
-
-**AI Capabilities**:
-- Security trend analysis and pattern recognition
-- Threat correlation and risk assessment
-- Automated compliance monitoring and reporting
-- Security control effectiveness measurement
 
 ## Artifact Metadata
 
@@ -167,7 +241,7 @@ Before proceeding to the next Frame phase, ensure:
 
 ### Learning Extraction
 - [ ] Patterns identified across data sources
-- [ ] Lessons learned documented
+- [ ] Durable learnings threaded into canonical iterate outputs and upstream artifacts
 - [ ] Success factors understood
 - [ ] Failure modes analyzed
 - [ ] Knowledge base updated
@@ -292,8 +366,8 @@ judgment remains responsible for prioritization, tradeoffs, and scheduling.
 
 - **Generated Insights**: `docs/helix/06-iterate/`
   - Completed analyses and reports
-  - Lessons learned documentation
-  - Planning documents for next iteration
+  - Canonical iterate outputs and linked governing updates
+  - Prioritized backlog with explicit next-cycle selection
 
 This separation keeps analysis templates reusable while organizing insights where they're most valuable for the team.
 

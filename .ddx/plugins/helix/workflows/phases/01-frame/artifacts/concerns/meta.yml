@@ -7,33 +7,12 @@ artifact:
   phase: frame
 
 description: |
-  Declares the project's active cross-cutting concerns (tech stacks,
-  quality attributes, conventions) and any project-specific overrides.
-  Concerns are composable selections from the library at
-  .ddx/plugins/helix/workflows/concerns/. Each concern declares area scope and associated
-  practices that flow into context digests on beads.
-
-dependencies:
-  requires:
-    - input: PRD
-      type: artifact
-      path: prd
-      required: false
-    - input: Principles
-      type: artifact
-      path: principles
-      required: false
-
-  enables:
-    - output: Context Digest
-      type: reference
-      path: context-digest
-    - output: Solution Design
-      type: artifact
-      phase: design
-    - output: ADRs
-      type: artifact
-      phase: design
+  Declares the project's active cross-cutting concerns: technology stacks,
+  quality attributes, data rules, security posture, UX conventions, operating
+  practices, and project-specific overrides. A concern is active only when it
+  changes downstream work across more than one artifact or implementation area.
+  Concerns are selected from `.ddx/plugins/helix/workflows/concerns/` or
+  declared as project-local entries with area scope and practices.
 
 output:
   location: docs/helix/01-frame/concerns.md
@@ -47,8 +26,8 @@ validation:
     - area_labels
 
   quality_checks:
-    - check: concerns_exist_in_library
-      description: Each selected concern must exist in .ddx/plugins/helix/workflows/concerns/
+    - check: concerns_are_resolved
+      description: Each selected concern must either exist in .ddx/plugins/helix/workflows/concerns/ or be declared as a project-local concern with scope and practices
       severity: blocking
 
     - check: overrides_cite_adrs
@@ -62,8 +41,19 @@ validation:
 template:
   file: template.md
 
+example:
+  file: example.md
+
 prompts:
   generation: prompt.md
+
+references:
+  - title: "Microsoft Azure Well-Architected Framework"
+    file: docs/resources/microsoft-azure-well-architected-framework.md
+    relationship: "Grounds cross-cutting quality and operational concerns as actionable practices with tradeoffs"
+  - title: "SEI Reasoning About Software Quality Attributes"
+    file: docs/resources/sei-quality-attribute-scenarios.md
+    relationship: "Grounds quality attributes as concrete scenarios and practices that shape architecture"
 
 tags:
   - concerns

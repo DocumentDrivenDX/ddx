@@ -72,7 +72,7 @@ when they exist.
      TD artifacts in this session; increment by one for each additional artifact
      created. Never guess or reuse an existing number.
    - Before writing any SD or TD artifact, validate each `depends_on` entry in
-     its dun frontmatter: every referenced ID (e.g., `FEAT-XXX`) must resolve
+     its ddx frontmatter: every referenced ID (e.g., `FEAT-XXX`) must resolve
      to an existing artifact on disk. If a target does not exist, stop and
      request guidance before writing the file.
 
@@ -90,8 +90,8 @@ pass. See `.ddx/plugins/helix/workflows/references/bead-first.md` for the full p
    ```bash
    ddx bead create "design: <scope description>" \
      --type task \
-     --labels helix,kind:planning,action:design \
-     --spec-id <governing-artifact-if-known> \
+     --labels helix,phase:design,kind:planning,action:design \
+     --set spec-id=<governing-artifact-if-known> \
      --description "<context-digest>...</context-digest>
    Create comprehensive design document for <scope>.
    Inputs: <list governing artifacts loaded in Phase 0>" \

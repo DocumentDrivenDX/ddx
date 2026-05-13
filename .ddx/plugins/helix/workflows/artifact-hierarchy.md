@@ -1,5 +1,5 @@
 ---
-dun:
+ddx:
   id: helix.workflow.artifact-hierarchy
   depends_on:
     - helix.workflow
@@ -18,7 +18,7 @@ The HELIX workflow uses a consistent artifact naming system that enables:
 
 The workflow also supports a project-level **Parking Lot** registry at
 `docs/helix/parking-lot.md` for deferred and future work. Any artifact can be
-marked with `dun.parking_lot: true` to keep it out of dependency graphs and
+marked with `ddx.parking_lot: true` to keep it out of dependency graphs and
 the main PRD flow while remaining in its normal directory.
 
 ## Scope Boundary
@@ -74,12 +74,17 @@ graph TD
         US[US-XXX - User Story]
         TD[TD-XXX - Technical Design]
         TP[TP-XXX - Test Plan]
-        IR[IR-XXX - Iteration Report]
     end
 
     subgraph "Execution Layer (Non-Canonical)"
         BB[Build Issues]
         DB[Deploy Issues]
+    end
+
+    subgraph "Iterate Outputs"
+        MD[metrics-dashboard]
+        SM[security-metrics]
+        IB[improvement-backlog]
     end
 
     PRD --> FEAT
@@ -88,7 +93,11 @@ graph TD
     SD --> TD
     US --> TD --> TP
     IMP --> BB
-    TP --> BB --> DB --> IR
+    TP --> BB --> DB
+    DB --> MD
+    DB --> SM
+    MD --> IB
+    SM --> IB
 ```
 
 ## Story-Level Progression and Execution
@@ -96,7 +105,12 @@ graph TD
 Each user story progresses through all phases independently:
 
 ### Naming Pattern
-`{Prefix}-{Number}-{descriptive-name}.md`
+Canonical story document artifacts use `{Prefix}-{Number}-{descriptive-name}.md`.
+Build and deploy execution use native tracker issue IDs. A story enters
+ITERATE when all matching `phase:deploy` issues are complete and no matching
+deploy issue remains not closed. Shared iterate outputs stay project- or
+iteration-level context, while tracker-backed follow-on work adds
+story-specific evidence when needed.
 
 ### Phase Progression
 ```
@@ -105,18 +119,22 @@ Design:  TD-036-list-mcp-servers.md
 Test:    TP-036-list-mcp-servers.md
 Build:   issue `hx-a3f2dd` labeled `helix`, `phase:build`, `story:US-036`
 Deploy:  issue `hx-b4c9e1` labeled `helix`, `phase:deploy`, `story:US-036`
-Iterate: IR-036-list-mcp-servers.md
+Iterate: all `phase:deploy` issue(s) for `story:US-036` are complete and no
+         matching deploy issue remains not closed; optional tracker follow-on
+         work may remain linked to US-036
+Context: `metrics-dashboard.md`, `security-metrics.md` (when relevant), and
+         `improvement-backlog.md` provide shared iteration-wide context
 ```
 
 ### Artifact Descriptions
 
-| Prefix | Artifact Type | Phase | Purpose |
+| Surface | Artifact Type | Phase | Purpose |
 |--------|--------------|-------|---------|
 | US | User Story | Frame | Defines WHAT needs to be built |
 | TD | Technical Design | Design | Details HOW to build it |
 | TP | Test Plan | Test | Specifies tests to verify it |
 | ISSUE | Build / Deploy Issue | Build / Deploy | Tracks scoped execution work in the built-in tracker |
-| IR | Iteration Report | Iterate | Captures metrics and learnings |
+| Iterate outputs | `metrics-dashboard`, `security-metrics`, `improvement-backlog`, plus tracker follow-on work | Iterate | Shared iteration context and prioritized next work after story-level ITERATE is established by completed deploy issue(s), without a separate numbered story report |
 
 ## Feature-Level Progression (Epics)
 
@@ -165,14 +183,17 @@ docs/
     │   ├── implementation-plan.md     # Project-level
     ├── 05-deploy/
     │   ├── deployment-checklist.md    # Project-level
+    │   ├── monitoring-setup.md        # Project-level
+    │   ├── runbook.md                 # Project-level
+    │   └── release-notes.md           # Project-level
     └── 06-iterate/
+        ├── metrics-dashboard.md       # Project-level
+        ├── security-metrics.md        # Project-level
+        ├── improvement-backlog.md     # Project-level
         ├── alignment-reviews/
         │   └── AR-YYYY-MM-DD-*.md    # Cross-phase reconciliation reports
-        ├── backfill-reports/
-        │   └── BF-YYYY-MM-DD-*.md    # Research-first backfill reports
-        ├── metrics-dashboard.md       # Project-level
-        └── iteration-reports/
-            └── IR-XXX-*.md           # Story-level (NEW)
+        └── backfill-reports/
+            └── BF-YYYY-MM-DD-*.md    # Research-first backfill reports
 
 .helix/                               # Built-in tracker workspace
 ```
@@ -199,11 +220,11 @@ Each artifact references its dependencies:
 
 ### Traceability Chain
 ```
-FEAT-001 → SD-001 → US-036 → TD-036 → TP-036 → build issue(s) → deploy issue(s) → IR-036
+FEAT-001 → SD-001 → US-036 → TD-036 → TP-036 → build issue(s) → deploy issue(s) → all deploy issue(s) complete with no matching deploy issue remaining not closed + optional follow-on tracker work (ITERATE evidence)
          ↓
-         US-037 → TD-037 → TP-037 → build issue(s) → deploy issue(s) → IR-037
+         US-037 → TD-037 → TP-037 → build issue(s) → deploy issue(s) → all deploy issue(s) complete with no matching deploy issue remaining not closed + optional follow-on tracker work (ITERATE evidence)
          ↓
-         US-038 → TD-038 → TP-038 → build issue(s) → deploy issue(s) → IR-038
+         US-038 → TD-038 → TP-038 → build issue(s) → deploy issue(s) → all deploy issue(s) complete with no matching deploy issue remaining not closed + optional follow-on tracker work (ITERATE evidence)
 ```
 
 ## Naming Rules
@@ -211,8 +232,8 @@ FEAT-001 → SD-001 → US-036 → TD-036 → TP-036 → build issue(s) → depl
 ### Consistency Rules
 1. **Number stays constant**: 036 throughout all phases
 2. **Name stays constant**: "list-mcp-servers" throughout
-3. **Only canonical artifact prefix changes**: US → TD → TP → IR
-4. **Build and Deploy use native issue IDs**: execution is tracked in the built-in tracker, not numbered HELIX files
+3. **Only canonical story document prefixes change**: US → TD → TP
+4. **Build, Deploy, and Iterate use tracker issues and phase docs**: execution is tracked in the built-in tracker, and iterate outcomes land in canonical iterate outputs rather than a numbered HELIX story file
 
 ### Valid Examples
 ✅ `US-001-initialize-ddx.md`
@@ -234,8 +255,10 @@ If exists US-036: Story is in FRAME
 If exists TD-036: Story is in DESIGN
 If exists TP-036: Story is in TEST
 If open HELIX build issues exist for story US-036: Story is in BUILD
-If open HELIX deploy issues exist for story US-036: Story is in DEPLOY
-If exists IR-036: Story is in ITERATE
+If any HELIX deploy issue for story US-036 is not closed, including status: in_progress: Story is in DEPLOY
+If all deploy issues for story US-036 are complete and no matching deploy issue remains not closed: Story is in ITERATE
+Linked tracker follow-on work adds iterate evidence when present; shared
+iterate outputs provide iteration context but are not queried by story ID
 ```
 
 ### Feature State Detection
@@ -300,9 +323,9 @@ Feature Level:
   SD-001-mcp-management.md
 
 Story Level:
-  US-036-list-mcp-servers.md → ... → IR-036-list-mcp-servers.md
-  US-037-install-mcp-server.md → ... → IR-037-install-mcp-server.md
-  US-038-configure-mcp-server.md → ... → IR-038-configure-mcp-server.md
+  US-036-list-mcp-servers.md → ... → deploy issue(s) → all deploy issue(s) complete with no matching deploy issue remaining not closed + optional follow-on tracker work
+  US-037-install-mcp-server.md → ... → deploy issue(s) → all deploy issue(s) complete with no matching deploy issue remaining not closed + optional follow-on tracker work
+  US-038-configure-mcp-server.md → ... → deploy issue(s) → all deploy issue(s) complete with no matching deploy issue remaining not closed + optional follow-on tracker work
 ```
 
 ### Example 2: Story in Multiple Phases
@@ -313,7 +336,7 @@ Tuesday:  Create TD-041-user-authentication.md (DESIGN)
 Wednesday: Create TP-041-user-authentication.md (TEST)
 Thursday: Create build issue(s) for US-041 (BUILD)
 Friday:   Create deploy issue(s) for US-041 (DEPLOY)
-Next Week: Create IR-041-user-authentication.md (ITERATE)
+Next Week: Complete all deploy issue(s) and leave no matching deploy issue not closed; story enters ITERATE and any follow-on work is captured in tracker-backed iteration evidence
 ```
 
 ## Commands

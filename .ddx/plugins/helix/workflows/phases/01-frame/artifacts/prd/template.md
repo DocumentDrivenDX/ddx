@@ -1,7 +1,8 @@
 ---
-dun:
-  id: helix.prd
+ddx:
+  id: "[artifact-id]"
 ---
+
 # Product Requirements Document
 
 ## Summary
@@ -51,6 +52,10 @@ Deferred items tracked in `docs/helix/parking-lot.md`.
 [Same structure]
 
 ## Requirements
+
+Each requirement should trace to the Product Vision and be specific enough to
+drive feature specs, designs, tests, and implementation work without embedding
+the detailed design here.
 
 ### Must Have (P0)
 
@@ -142,6 +147,7 @@ Use this checklist when reviewing a PRD artifact:
 - [ ] P0 requirements are necessary for launch — removing any one makes the product unusable
 - [ ] P1/P2 requirements are correctly prioritized relative to each other
 - [ ] Every P0 requirement has an acceptance test sketch
+- [ ] Requirements can trace upward to the Product Vision and downward to downstream artifacts
 - [ ] Functional requirements are testable — each can be verified with specific inputs and expected outputs
 - [ ] Technical context names specific versions and interfaces, not vague technology areas
 - [ ] Risks have concrete mitigations ("we do X"), not vague strategies ("we monitor")

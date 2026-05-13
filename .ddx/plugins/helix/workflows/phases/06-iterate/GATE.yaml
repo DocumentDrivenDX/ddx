@@ -27,39 +27,22 @@ exit_requirements:
       description: "Metrics dashboard analysis must exist"
 
     - check: file_exists
-      path: docs/helix/06-iterate/feedback-analysis.md
-      description: "Feedback analysis must exist"
-
-    - check: file_exists
-      path: docs/helix/06-iterate/lessons-learned.md
-      description: "Lessons learned document must exist"
+      path: docs/helix/06-iterate/security-metrics.md
+      description: "Security metrics analysis must exist"
 
     - check: file_exists
       path: docs/helix/06-iterate/improvement-backlog.md
       description: "Improvement backlog must exist"
 
     - check: file_exists
-      path: .ddx/issues.jsonl
-      description: "Tracker must be initialized for actionable items"
-
-    - check: file_exists
-      path: docs/helix/06-iterate/retrospective.md
-      description: "Team retrospective must exist"
-
-    - check: file_exists
-      path: docs/helix/06-iterate/next-iteration.md
-      description: "Next iteration planning must exist"
-
-    # Security metrics
-    - check: file_exists
-      path: docs/helix/06-iterate/security-metrics.md
-      description: "Security metrics analysis must exist"
+      path: .ddx/beads.jsonl
+      description: "Built-in bead tracker must be initialized for actionable items"
 
     # Action items documented
     - check: grep_present
       pattern: "(action item|next step|improvement|TODO)"
-      path: docs/helix/06-iterate/retrospective.md
-      description: "Retrospective contains follow-up work to convert into issues"
+      path: docs/helix/06-iterate/improvement-backlog.md
+      description: "Improvement backlog contains follow-up work to convert into issues"
 
     # Backlog has prioritized items
     - check: grep_present
@@ -67,17 +50,15 @@ exit_requirements:
       path: docs/helix/06-iterate/improvement-backlog.md
       description: "Improvement backlog has prioritized items"
 
-    # Next iteration has defined goals
     - check: grep_present
-      pattern: "(goal|objective|target|metric)"
-      path: docs/helix/06-iterate/next-iteration.md
-      description: "Next iteration has defined goals"
+      pattern: "(Selection for Next Iteration|next iteration|next slot)"
+      path: docs/helix/06-iterate/improvement-backlog.md
+      description: "Improvement backlog makes the next iteration selection explicit"
 
   manual:
     - "Backlog issues created in tracker (`ddx bead`)"
     - "Improvement backlog references issue IDs or tracker queries"
-    - "Next iteration plan references selected issue IDs"
-    - "Team retrospective completed with all members"
+    - "Improvement backlog references the selected follow-up issue IDs"
     - "Improvement priorities agreed by stakeholders"
     - "Decision made: continue to next iteration or project complete"
 
