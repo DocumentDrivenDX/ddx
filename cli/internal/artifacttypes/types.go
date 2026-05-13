@@ -2,6 +2,7 @@ package artifacttypes
 
 import (
 	"fmt"
+	"log"
 	"sort"
 	"strings"
 	"unicode"
@@ -21,6 +22,7 @@ type Type struct {
 	Name           string
 	Description    string
 	Prefix         string
+	PrefixExplicit bool
 	Pattern        string
 	Phase          string
 	TemplatePath   string
@@ -124,8 +126,17 @@ func buildIndex(types []Type) (*Index, error) {
 		idx.byKey[key] = i
 		idx.byPlugin[typ.Plugin] = append(idx.byPlugin[typ.Plugin], i)
 		if typ.Prefix != "" {
-			if _, exists := idx.byPrefix[typ.Prefix]; exists {
-				return nil, fmt.Errorf("duplicate artifact type prefix %q", typ.Prefix)
+			if existingIdx, exists := idx.byPrefix[typ.Prefix]; exists {
+				existing := sorted[existingIdx]
+				if typ.PrefixExplicit && existing.PrefixExplicit {
+					return nil, fmt.Errorf("duplicate artifact type prefix %q", typ.Prefix)
+				}
+				log.Printf("artifacttypes: prefix collision %q: keeping %s/%s (%s); shadowing %s/%s (%s)",
+					typ.Prefix,
+					existing.Plugin, existing.TypeID, existing.SourceMetaPath,
+					typ.Plugin, typ.TypeID, typ.SourceMetaPath,
+				)
+				continue
 			}
 			idx.byPrefix[typ.Prefix] = i
 		}

@@ -272,7 +272,9 @@ func parseTypeMeta(rootCanonical, pluginName, metaPath string) (Type, []snapshot
 	typeID := firstNonEmpty(doc.Artifact.ID, doc.ID, filepath.Base(baseDir))
 	name := firstNonEmpty(doc.Artifact.Name, doc.Name, humanizeTypeID(typeID))
 	pattern := firstNonEmpty(doc.Output.Naming, doc.IDFormat.Pattern, doc.Output.Location)
-	prefix := firstNonEmpty(doc.Artifact.Prefix, doc.IDFormat.Prefix, doc.Prefix, inferPrefix(pattern), inferPrefixFromName(name), strings.ToUpper(typeID))
+	explicitPrefix := firstNonEmpty(doc.Artifact.Prefix, doc.IDFormat.Prefix, doc.Prefix)
+	prefix := firstNonEmpty(explicitPrefix, inferPrefix(pattern), inferPrefixFromName(name), strings.ToUpper(typeID))
+	prefixExplicit := explicitPrefix != ""
 	phase := firstNonEmpty(doc.Artifact.Phase, doc.Phase, inferPhase(metaCanonical, rootCanonical))
 	description := strings.TrimSpace(doc.Description)
 
@@ -322,6 +324,7 @@ func parseTypeMeta(rootCanonical, pluginName, metaPath string) (Type, []snapshot
 		Name:           name,
 		Description:    description,
 		Prefix:         prefix,
+		PrefixExplicit: prefixExplicit,
 		Pattern:        pattern,
 		Phase:          phase,
 		TemplatePath:   filepath.ToSlash(templateRel),
