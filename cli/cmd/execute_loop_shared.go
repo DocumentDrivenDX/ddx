@@ -255,6 +255,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 	}
 
 	costCap := escalation.NewCostCapTracker(spec.MaxCostUSD, harnessBilledLookup)
+	profileSelector := newImplementationProfileSelector(projectRoot)
 	accumulateBilledCost := func(report agent.ExecuteBeadReport) {
 		costCap.Add(report.Harness, report.CostUSD)
 	}
@@ -270,17 +271,24 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 		}, true
 	}
 
-	singleTierAttempt := func(ctx context.Context, beadID string, requestedMinPower int, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
+	singleTierAttempt := func(ctx context.Context, beadID string, requestedMinPower int, requestedProfile string, requestedTier escalation.ModelTier, routingNote string, resolvedHarness, resolvedProvider, resolvedModel string) (agent.ExecuteBeadReport, error) {
 		gitOps := &agent.RealGitOps{}
 		attemptProvider := spec.Provider
 		if resolvedProvider != "" {
 			attemptProvider = resolvedProvider
 		}
+		reportFromResult := func(res *agent.ExecuteBeadResult) agent.ExecuteBeadReport {
+			report := agent.ReportFromExecuteBeadResult(res, string(requestedTier))
+			report.RequestedTier = string(requestedTier)
+			report.RequestedProfile = requestedProfile
+			report.RoutingIntentNote = routingNote
+			return report
+		}
 		loopOverrides := config.CLIOverrides{
 			Harness:           resolvedHarness,
 			Model:             resolvedModel,
 			Provider:          attemptProvider,
-			Profile:           spec.Profile,
+			Profile:           requestedProfile,
 			Effort:            spec.Effort,
 			MinPower:          requestedMinPower,
 			MaxPower:          spec.MaxPower,
@@ -302,11 +310,11 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			return agent.ExecuteBeadReport{}, execErr
 		}
 		if res != nil && agent.IsResourceExhaustedStatus(res.Status) {
-			return agent.ReportFromExecuteBeadResult(res, ""), nil
+			return reportFromResult(res), nil
 		}
 		if execErr != nil {
 			agent.MarkResultExecutionError(res, execErr)
-			return agent.ReportFromExecuteBeadResult(res, ""), nil
+			return reportFromResult(res), nil
 		}
 		if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
 			targetBead, _ := store.Get(context.Background(), beadID)
@@ -323,7 +331,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			} else {
 				agent.MarkResultLandError(projectRoot, res, landErr)
 				_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
-				return agent.ReportFromExecuteBeadResult(res, ""), nil
+				return reportFromResult(res), nil
 			}
 		} else if res != nil && (res.Outcome == agent.ExecuteBeadOutcomeTaskFailed || res.ExitCode != 0) {
 			if res.ResultRev != "" && res.ResultRev != res.BaseRev {
@@ -336,7 +344,7 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			res.Outcome = "no-changes"
 			res.Status = agent.ClassifyExecuteBeadStatus(res.Outcome, res.ExitCode, res.Reason)
 		}
-		return agent.ReportFromExecuteBeadResult(res, ""), nil
+		return reportFromResult(res), nil
 	}
 
 	var ladderOnce sync.Once
@@ -374,9 +382,37 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 			if err != nil {
 				return agent.ExecuteBeadReport{}, err
 			}
-			initialMinPower, unavailableReport, unavailable := investigationRetryInitialMinPowerWithInference(targetBead, rcfg.MinPower(), spec.MaxPower, loadLadder(), autoInferTier)
+			inferredTier := escalation.ModelTier("")
+			if autoInferTier {
+				inferredTier = escalation.InferTier(targetBead)
+			}
+			initialMinPower, unavailableReport, unavailable := investigationRetryInitialMinPowerWithInference(targetBead, rcfg.MinPower(), spec.MaxPower, loadLadder(), false)
 			if unavailable {
 				return unavailableReport, nil
+			}
+			initialProfile := spec.Profile
+			initialRoutingNote := ""
+			if autoInferTier {
+				if selection, selectErr := profileSelector.Select(ctx, inferredTier, initialMinPower); selectErr == nil && selection.Name != "" {
+					initialProfile = selection.Name
+					initialRoutingNote = selection.Note
+					if selection.MinPower > initialMinPower {
+						initialMinPower = selection.MinPower
+					}
+					if spec.MaxPower > 0 && initialMinPower >= spec.MaxPower {
+						unavailableReport := smartRouteUnavailableReport(targetBead, initialMinPower, spec.MaxPower, nil)
+						unavailableReport.RequestedTier = string(inferredTier)
+						unavailableReport.RequestedProfile = initialProfile
+						unavailableReport.RoutingIntentNote = initialRoutingNote
+						return unavailableReport, nil
+					}
+				} else {
+					initialMinPower, unavailableReport, unavailable = zeroConfigInferredMinPower(targetBead, initialMinPower, spec.MaxPower, loadLadder())
+					if unavailable {
+						unavailableReport.RequestedTier = string(inferredTier)
+						return unavailableReport, nil
+					}
+				}
 			}
 			perBeadBudget := spec.MaxBeadCostUSD
 			if override, ok := escalation.ParseBeadBudgetLabel(targetBead.Labels); ok {
@@ -388,7 +424,17 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 				initialMinPower,
 				loadLadder(),
 				func(ctx context.Context, requestedMinPower int) (agent.ExecuteBeadReport, error) {
-					return singleTierAttempt(ctx, beadID, requestedMinPower, spec.Harness, spec.Provider, spec.Model)
+					requestProfile := initialProfile
+					routingNote := initialRoutingNote
+					if autoInferTier {
+						if selection, selectErr := profileSelector.Select(ctx, inferredTier, requestedMinPower); selectErr == nil && selection.Name != "" {
+							requestProfile = selection.Name
+							if selection.Note != "" {
+								routingNote = selection.Note
+							}
+						}
+					}
+					return singleTierAttempt(ctx, beadID, requestedMinPower, requestProfile, inferredTier, routingNote, spec.Harness, spec.Provider, spec.Model)
 				},
 				nil,
 				perBeadTracker,

@@ -90,6 +90,11 @@ Return JSON only:
       "fix": "specific amendment, split, or operator action"
     }
   ],
+  "rewrite": {
+    "changed_fields": ["description", "acceptance"],
+    "description": "PROBLEM\n...\n\nROOT CAUSE\n...\n\nPROPOSED FIX\n...\n\nNON-SCOPE\n...",
+    "acceptance": "1. TestFoo verifies the rewritten acceptance.\n2. cd cli && go test ./internal/agent/... -run TestFoo -count=1\n3. lefthook run pre-commit"
+  },
   "suggested_child_beads": [
     {
       "title": "imperative child title",
@@ -120,6 +125,25 @@ Return JSON only:
 }
 ```
 
+Use the exact readiness classifications: `ready`, `needs_refine`,
+`needs_split`, `operator_required`, and `system_unready`.
+
+Legacy migration aliases only: older plans, beads, or session transcripts may
+mention `safely_refinable`, `rewritten`, or `needs_human`. Treat
+`safely_refinable` and `rewritten` as historical signals for `needs_refine`;
+treat `needs_human` as a historical signal for `operator_required`. Never emit
+those aliases in new readiness output.
+
+`suggested_fixes` are advisory diagnostics for the author or operator. They
+describe what should improve, but DDx must not treat them as a machine-applied
+tracker patch. `rewrite` is the machine-
+consumable replacement contract DDx may apply before claim when classification
+is `needs_refine`.
+`rewrite.changed_fields` is required whenever `rewrite` is present, and every
+field listed there must also be present in `rewrite`.
+`rewrite.description` / `rewrite.acceptance` must be strings, not arrays, so
+the hook can write them directly through supported bead update commands.
+
 Use `ready` only when the bead is tractable and the sufficient-prompt rubric
 passes after legitimate waivers. Use `needs_refine` when targeted metadata or
 AC edits can make the bead ready without changing intent. Use `needs_split`
@@ -129,11 +153,13 @@ for `status=proposed`. Use `system_unready` only when the readiness assessment
 itself cannot run or the provided context proves an infrastructure blocker
 rather than a bead defect.
 
-In `MODE: intake`, do not emit a `rewrite` object. If a bead is executable as
-written, classify it as `ready` even when the prose could be cleaner. Put prompt
-quality improvements in `suggested_fixes` only. Use `operator_required` only
-for actual ambiguity, missing prerequisites, hidden external blockers, or unsafe
-scope choices that prevent an implementation attempt.
+In `MODE: intake`, emit a `rewrite` object only when the bead is not executable
+as written but can be made executable by a narrow, semantics-preserving
+metadata/AC rewrite. If a bead is executable as written, classify it as `ready`
+even when the prose could be cleaner. Put non-blocking prompt quality
+improvements in `suggested_fixes` only. Use `operator_required` only for actual
+ambiguity, missing prerequisites, hidden external blockers, or unsafe scope
+choices that prevent an implementation attempt.
 
 Legacy migration input aliases only: older records or prompts may mention `needs_human`.
 Treat that as a one-way migration signal for
@@ -172,28 +198,27 @@ Return JSON only:
 ```json
 {
   "score": 0,
-  "rationale": [
-    {
-      "criterion": "a|b|c|d|e|f|g|h",
-      "verdict": "pass|fail|waived",
-      "reason": "brief evidence-grounded reason"
-    }
-  ],
+  "rationale": "brief evidence-grounded explanation",
   "suggested_fixes": [
     {
-      "criterion": "a|b|c|d|e|f|g|h",
+      "criterion": "title|description|acceptance|code_path_assertion|verification_gate|labels|parent_deps|sufficient_prompt",
       "fix": "specific amendment to make"
     }
   ],
   "waivers_applied": [
     {
       "criterion": "c|d|implementation",
-      "waiver": "doc-only|epic|deletion",
+      "waiver": "doc-only",
       "reason": "why this bead qualifies"
     }
   ]
 }
 ```
+
+`LintResult.rationale` is a single string summary. Put per-criterion details in
+`suggested_fixes` or `waivers_applied`; do not return an array for
+`rationale`. Valid waiver values include `"doc-only"`, `"epic"`, and
+`"deletion"`.
 
 `score` is the number of pass or waived criteria after legitimate waivers. Use
 integer scores from 0 through 8.

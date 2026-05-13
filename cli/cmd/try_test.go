@@ -342,13 +342,18 @@ func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 	assert.Equal(t, float64(91), body["actual_power"])
 }
 
-func TestTryZeroConfigInferredTierSetsMinPower(t *testing.T) {
+func TestTryZeroConfigInferredTaskSelectsFizeauProfileByMetadata(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
+	stub.listPolicies = []agentlib.PolicyInfo{
+		{Name: "p-max", MinPower: 90, MaxPower: 100},
+		{Name: "p-low", MinPower: 10, MaxPower: 20},
+		{Name: "p-balanced", MinPower: 50, MaxPower: 70},
+	}
 	stub.listModels = []agentlib.ModelInfo{
-		{ID: "cheap-model", Power: 30, Available: true, AutoRoutable: true},
-		{ID: "standard-model", Power: 70, Available: true, AutoRoutable: true},
-		{ID: "smart-model", Power: 90, Available: true, AutoRoutable: true},
+		{ID: "cheap-model", Power: 10, Available: true, AutoRoutable: true},
+		{ID: "standard-model", Power: 60, Available: true, AutoRoutable: true},
+		{ID: "smart-model", Power: 95, Available: true, AutoRoutable: true},
 	}
 
 	dir := minimalProjectDir(t)
@@ -382,7 +387,11 @@ func TestTryZeroConfigInferredTierSetsMinPower(t *testing.T) {
 	lastReq := stub.lastReq
 	stub.mu.Unlock()
 	require.True(t, executeCalled, "ddx try must invoke the implementation dispatch; output=%q err=%v", out, err)
-	assert.Equal(t, 70, lastReq.MinPower, "dispatch request should preserve inferred min-power")
+	assert.Equal(t, "p-balanced", lastReq.Policy, "dispatch should request the opaque medium-power profile by metadata")
+	assert.Equal(t, 50, lastReq.MinPower, "dispatch should use the profile floor instead of escalating to the strongest profile")
+	assert.Empty(t, lastReq.Harness, "zero-config routing must not hard-pin a harness")
+	assert.Empty(t, lastReq.Provider, "zero-config routing must not hard-pin a provider")
+	assert.Empty(t, lastReq.Model, "zero-config routing must not hard-pin a model")
 }
 
 // TestTryInterrupt_InFlightAttemptUnclaimsTarget verifies that cancelling

@@ -252,6 +252,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		return ladder
 	}
 	resourceChecker := buildCLIResourceChecker(projectRoot, f.resourceCheckerOverride)
+	profileSelector := newImplementationProfileSelector(projectRoot)
 
 	var gitOps agent.GitOps = &agent.RealGitOps{}
 	if f.executeBeadGitOverride != nil {
@@ -267,6 +268,15 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 		executor = agent.ExecuteBeadExecutorFunc(func(ctx context.Context, execBeadID string) (agent.ExecuteBeadReport, error) {
 			var inferredTier escalation.ModelTier
 			requestMinPower := minPower
+			requestProfile := profile
+			var routingNote string
+			reportFromResult := func(res *agent.ExecuteBeadResult) agent.ExecuteBeadReport {
+				report := agent.ReportFromExecuteBeadResult(res, string(inferredTier))
+				report.RequestedTier = string(inferredTier)
+				report.RequestedProfile = requestProfile
+				report.RoutingIntentNote = routingNote
+				return report
+			}
 			if autoInferTier {
 				var targetBead *bead.Bead
 				if b, getErr := store.Get(context.Background(), execBeadID); getErr == nil {
@@ -275,11 +285,30 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				} else {
 					inferredTier = escalation.TierCheap
 				}
+				if floor, ok := numericTierFloorHint(targetBead); ok && floor > requestMinPower {
+					requestMinPower = floor
+				}
 				var unavailableReport agent.ExecuteBeadReport
 				var unavailable bool
-				requestMinPower, unavailableReport, unavailable = investigationRetryInitialMinPowerWithInference(targetBead, requestMinPower, maxPower, loadLadder(), true)
-				if unavailable {
-					return unavailableReport, nil
+				if selection, selectErr := profileSelector.Select(ctx, inferredTier, requestMinPower); selectErr == nil && selection.Name != "" {
+					requestProfile = selection.Name
+					if selection.MinPower > requestMinPower {
+						requestMinPower = selection.MinPower
+					}
+					routingNote = selection.Note
+					if maxPower > 0 && requestMinPower >= maxPower {
+						unavailableReport := smartRouteUnavailableReport(targetBead, requestMinPower, maxPower, nil)
+						unavailableReport.RequestedTier = string(inferredTier)
+						unavailableReport.RequestedProfile = requestProfile
+						unavailableReport.RoutingIntentNote = routingNote
+						return unavailableReport, nil
+					}
+				} else {
+					requestMinPower, unavailableReport, unavailable = investigationRetryInitialMinPowerWithInference(targetBead, requestMinPower, maxPower, loadLadder(), true)
+					if unavailable {
+						unavailableReport.RequestedTier = string(inferredTier)
+						return unavailableReport, nil
+					}
 				}
 			}
 
@@ -287,7 +316,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				Harness:           harness,
 				Model:             model,
 				Provider:          provider,
-				Profile:           profile,
+				Profile:           requestProfile,
 				Effort:            effort,
 				MinPower:          requestMinPower,
 				MaxPower:          maxPower,
@@ -307,11 +336,11 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				return agent.ExecuteBeadReport{}, execErr
 			}
 			if res != nil && agent.IsResourceExhaustedStatus(res.Status) {
-				return agent.ReportFromExecuteBeadResult(res, string(inferredTier)), nil
+				return reportFromResult(res), nil
 			}
 			if execErr != nil {
 				agent.MarkResultExecutionError(res, execErr)
-				return agent.ReportFromExecuteBeadResult(res, string(inferredTier)), nil
+				return reportFromResult(res), nil
 			}
 			if res != nil && res.ResultRev != "" && res.ResultRev != res.BaseRev && res.ExitCode == 0 {
 				if wt, ids, cleanup, ctxErr := agent.BuildLandingGateContext(projectRoot, res, gitOps); ctxErr != nil {
@@ -343,7 +372,11 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 						if inferredTier != "" {
 							tierStr = string(inferredTier)
 						}
-						return agent.ReportFromExecuteBeadResult(res, tierStr), nil
+						report := agent.ReportFromExecuteBeadResult(res, tierStr)
+						report.RequestedTier = string(inferredTier)
+						report.RequestedProfile = requestProfile
+						report.RoutingIntentNote = routingNote
+						return report, nil
 					}
 				}
 				targetBead := target
@@ -360,7 +393,7 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 				} else {
 					agent.MarkResultLandError(projectRoot, res, landErr)
 					_ = agent.WriteExecuteBeadResultArtifact(projectRoot, res)
-					return agent.ReportFromExecuteBeadResult(res, string(inferredTier)), nil
+					return reportFromResult(res), nil
 				}
 			} else if res != nil && (res.Outcome == agent.ExecuteBeadOutcomeTaskFailed || res.ExitCode != 0) {
 				if res.ResultRev != "" && res.ResultRev != res.BaseRev {
@@ -377,7 +410,11 @@ func (f *CommandFactory) runTry(cmd *cobra.Command, args []string) error {
 			if inferredTier != "" {
 				tierStr = string(inferredTier)
 			}
-			return agent.ReportFromExecuteBeadResult(res, tierStr), nil
+			report := agent.ReportFromExecuteBeadResult(res, tierStr)
+			report.RequestedTier = string(inferredTier)
+			report.RequestedProfile = requestProfile
+			report.RoutingIntentNote = routingNote
+			return report, nil
 		})
 	}
 
