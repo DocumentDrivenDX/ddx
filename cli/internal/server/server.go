@@ -17,7 +17,6 @@ import (
 	"math/big"
 	"net"
 	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -1067,37 +1066,16 @@ func (s *Server) routes() {
 	scoped("POST /api/projects/{project}/graphql", s.handleGraphQLQueryScoped)
 	scoped("GET /api/projects/{project}/graphql", s.handleGraphQLQueryScoped)
 
-	// Story 8: Sessions and Executions tabs were merged into the layer-aware
-	// Runs row expansion. Direct/bookmarked URLs return a 302 with a Sunset
-	// header so existing tooling/links keep working through the deprecation
-	// window. Client-side navigations are handled by the corresponding
-	// SvelteKit +page.ts redirects.
+	// Story 8: Sessions was merged into the layer-aware Runs row expansion.
+	// Direct/bookmarked URLs return a 302 with a Sunset header so existing
+	// tooling/links keep working through the deprecation window. Client-side
+	// navigations are handled by the corresponding SvelteKit +page.ts redirect.
 	trusted("GET /nodes/{nodeId}/projects/{projectId}/sessions",
 		runsRedirectHandler(func(r *http.Request) string {
 			q := r.URL.Query()
 			q.Set("layer", "run")
 			return fmt.Sprintf("/nodes/%s/projects/%s/runs?%s",
 				r.PathValue("nodeId"), r.PathValue("projectId"), q.Encode())
-		}))
-	trusted("GET /nodes/{nodeId}/projects/{projectId}/executions",
-		runsRedirectHandler(func(r *http.Request) string {
-			q := url.Values{}
-			if h := r.URL.Query().Get("harness"); h != "" {
-				q.Set("harness", h)
-			}
-			q.Set("layer", "try")
-			return fmt.Sprintf("/nodes/%s/projects/%s/runs?%s",
-				r.PathValue("nodeId"), r.PathValue("projectId"), q.Encode())
-		}))
-	trusted("GET /nodes/{nodeId}/projects/{projectId}/executions/{execId}",
-		runsRedirectHandler(func(r *http.Request) string {
-			execID := r.PathValue("execId")
-			runID := execID
-			if !strings.HasPrefix(runID, "exec-") {
-				runID = "exec-" + runID
-			}
-			return fmt.Sprintf("/nodes/%s/projects/%s/runs/%s",
-				r.PathValue("nodeId"), r.PathValue("projectId"), runID)
 		}))
 
 	// SvelteKit SPA — serve embedded frontend/build; fall back to index.html for deep links.

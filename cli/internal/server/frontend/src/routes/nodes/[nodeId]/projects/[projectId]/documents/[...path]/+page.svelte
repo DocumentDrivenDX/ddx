@@ -1,9 +1,9 @@
 <script lang="ts">
 	import type { PageData } from './$types';
-	import { goto, invalidateAll } from '$app/navigation';
+	import { goto, invalidateAll, replaceState } from '$app/navigation';
 	import { resolve } from '$app/paths';
 	import { page } from '$app/stores';
-	import { tick } from 'svelte';
+	import { onMount, tick } from 'svelte';
 	import { marked } from 'marked';
 	import DOMPurify from 'isomorphic-dompurify';
 	import { ArrowLeft, Pencil, Search, GitBranch, X } from 'lucide-svelte';
@@ -13,6 +13,15 @@
 	let { data }: { data: PageData } = $props();
 
 	let content = $derived(data.content ?? '');
+
+	onMount(() => {
+		const url = new URL($page.url);
+		if (url.searchParams.has('zoom') || url.searchParams.has('pan')) {
+			url.searchParams.delete('zoom');
+			url.searchParams.delete('pan');
+			replaceState(url, $page.state);
+		}
+	});
 
 	// Search
 	let searchQuery = $state('');

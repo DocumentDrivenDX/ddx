@@ -8,10 +8,10 @@ import (
 	"testing"
 )
 
-// TestRunsRedirectSessionsAndExecutions verifies Story 8 cleanup: legacy
-// /sessions and /executions routes return 302 with a Sunset header, pointing
-// to the layer-aware /runs page.
-func TestRunsRedirectSessionsAndExecutions(t *testing.T) {
+// TestRunsRedirectSessions verifies Story 8 cleanup: the legacy /sessions
+// route returns 302 with a Sunset header, pointing to the layer-aware /runs
+// page.
+func TestRunsRedirectSessions(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	dir := t.TempDir()
 	srv := New(":0", dir)
@@ -28,29 +28,6 @@ func TestRunsRedirectSessionsAndExecutions(t *testing.T) {
 			path:         "/nodes/n1/projects/p1/sessions",
 			wantPathPart: "/nodes/n1/projects/p1/runs",
 			wantLayer:    "run",
-		},
-		{
-			name:         "executions redirects to runs?layer=try",
-			path:         "/nodes/n1/projects/p1/executions",
-			wantPathPart: "/nodes/n1/projects/p1/runs",
-			wantLayer:    "try",
-		},
-		{
-			name:         "executions preserves harness query param",
-			path:         "/nodes/n1/projects/p1/executions?harness=codex",
-			wantPathPart: "/nodes/n1/projects/p1/runs",
-			wantLayer:    "try",
-			wantHarness:  "codex",
-		},
-		{
-			name:         "executions detail redirects to runs/<id>",
-			path:         "/nodes/n1/projects/p1/executions/exec-abc123",
-			wantPathPart: "/nodes/n1/projects/p1/runs/exec-abc123",
-		},
-		{
-			name:         "executions detail prepends exec- when missing",
-			path:         "/nodes/n1/projects/p1/executions/abc123",
-			wantPathPart: "/nodes/n1/projects/p1/runs/exec-abc123",
 		},
 	}
 

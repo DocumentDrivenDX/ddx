@@ -32,6 +32,7 @@
 		{ page: '', label: 'Overview', Icon: Home, exact: true },
 		{ page: 'beads', label: 'Beads', Icon: LayoutDashboard },
 		{ page: 'artifacts', label: 'Artifacts', Icon: Archive },
+		{ page: 'documents', label: 'Documents', Icon: Archive },
 		{ page: 'graph', label: 'Graph', Icon: GitBranch },
 		{ page: 'runs', label: 'Runs', Icon: Activity },
 		{ page: 'workers', label: 'Workers', Icon: Cpu },
