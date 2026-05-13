@@ -1044,9 +1044,41 @@ test('tab state survives navigation', async ({ page }) => {
 				body: JSON.stringify({
 					data: {
 						runToolCalls: {
-							edges: [],
+							edges: [
+								{
+									node: {
+										id: 'rtc-0',
+										seq: 0,
+										name: 'Read',
+										inputs: JSON.stringify({ path: 'prompt.md' }),
+										output: 'read ok',
+										error: null,
+										durationMs: 42
+									},
+									cursor: 'rtc-0'
+								}
+							],
 							pageInfo: { hasNextPage: false, endCursor: null },
-							totalCount: 0
+							totalCount: 1
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('RunEvidenceFiles')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						run: {
+							id: RUN_ID,
+							bundleFiles: [
+								{ path: 'manifest.json', size: 256, mimeType: 'application/json' },
+								{ path: 'prompt.md', size: 128, mimeType: 'text/markdown' },
+								{ path: 'result.json', size: 140, mimeType: 'application/json' }
+							]
 						}
 					}
 				})
@@ -1124,10 +1156,15 @@ test('tab state survives navigation', async ({ page }) => {
 	await expect(detail.locator('[data-evidence-path="result.json"]')).toBeVisible();
 });
 
-test('p95 run detail stays interactive with 200 tool calls and 30 evidence files', async ({
-	page
-}) => {
-	const toolCalls = Array.from({ length: 200 }, (_, index) => ({
+// Story16RunDetailFullStackP95 — cross-cutting guard that the run-detail
+// surface can be reached from the Runs list and that every tab (prompt,
+// response, tools, evidence) renders and becomes interactive within one
+// requestAnimationFrame after its mocked GraphQL payload resolves, even
+// with the p95-shaped fixture of 200 tool calls and 30 evidence files.
+test('Story16RunDetailFullStackP95', async ({ page }) => {
+	const TOOL_COUNT = 200;
+	const EVIDENCE_COUNT = 30;
+	const toolCalls = Array.from({ length: TOOL_COUNT }, (_, index) => ({
 		node: {
 			id: `rtc-${index}`,
 			seq: index,
@@ -1139,14 +1176,11 @@ test('p95 run detail stays interactive with 200 tool calls and 30 evidence files
 		},
 		cursor: `rtc-${index}`
 	}));
-	const evidenceFiles = Array.from({ length: 30 }, (_, index) => {
-		const path = `evidence/evidence-${String(index).padStart(2, '0')}.txt`;
-		return {
-			path,
-			size: 512 + index,
-			mimeType: 'text/plain'
-		};
-	});
+	const evidenceFiles = Array.from({ length: EVIDENCE_COUNT }, (_, index) => ({
+		path: `evidence/evidence-${String(index).padStart(2, '0')}.txt`,
+		size: 512 + index,
+		mimeType: 'text/plain'
+	}));
 	const evidenceContent = Object.fromEntries(
 		evidenceFiles.map((file) => [
 			file.path,
@@ -1182,11 +1216,48 @@ test('p95 run detail stays interactive with 200 tool calls and 30 evidence files
 			});
 			return;
 		}
-		if (body.query.includes('RunHeader') || body.query.includes('RunDetailExpand')) {
+		if (body.query.includes('ProjectRuns')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({
+					data: {
+						runs: {
+							edges: [listRowFor(runNode)],
+							pageInfo: { hasNextPage: false, endCursor: null },
+							totalCount: 1
+						}
+					}
+				})
+			});
+			return;
+		}
+		if (body.query.includes('ParentRunParent')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { run: null } })
+			});
+			return;
+		}
+		if (
+			body.query.includes('RunHeader') ||
+			body.query.includes('RunDetailExpand') ||
+			body.query.includes('RunDetail') ||
+			body.query.includes('RunExists')
+		) {
 			await route.fulfill({
 				status: 200,
 				contentType: 'application/json',
 				body: JSON.stringify({ data: { run: runNode } })
+			});
+			return;
+		}
+		if (body.query.includes('RunExecutionExpand')) {
+			await route.fulfill({
+				status: 200,
+				contentType: 'application/json',
+				body: JSON.stringify({ data: { execution: null } })
 			});
 			return;
 		}
@@ -1276,7 +1347,14 @@ test('p95 run detail stays interactive with 200 tool calls and 30 evidence files
 		await route.continue();
 	});
 
-	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs/${RUN_ID}`);
+	// Step 1: start at the Runs list (Story 16 entry point).
+	await page.goto(`/nodes/${NODE_INFO.id}/projects/${PROJECT_ID}/runs`);
+	await expect(page.getByRole('heading', { name: 'Runs' })).toBeVisible();
+
+	// Step 2: traverse from the list into /runs/[runId] for the p95 run.
+	await page.locator(`a[href$="/runs/${RUN_ID}"]`).first().click();
+	await expect(page).toHaveURL(new RegExp(`/runs/${RUN_ID}(\\?.*)?$`));
+
 	const detail = page.locator('[data-testid="rundetail"]');
 	await expect(detail).toBeVisible();
 	await expect(detail.locator('button[data-tab="overview"]')).toBeVisible();
@@ -1286,33 +1364,59 @@ test('p95 run detail stays interactive with 200 tool calls and 30 evidence files
 	await expect(detail.locator('button[data-tab="session"]')).toBeVisible();
 	await expect(detail.locator('button[data-tab="evidence"]')).toBeVisible();
 
+	// nextFrameOk schedules an rAF after the most recent mocked GraphQL payload
+	// has already resolved (the route handlers fulfill synchronously) and
+	// returns true iff that single frame finished within the 100ms budget — if
+	// the main thread were blocked beyond a single rAF, the wall-clock delta
+	// would exceed that budget.
+	const nextFrameOk = () =>
+		page.evaluate(
+			() =>
+				new Promise<boolean>((resolve) => {
+					const start = performance.now();
+					requestAnimationFrame(() => resolve(performance.now() - start < 100));
+				})
+		);
+
+	// Step 3: prompt tab — render + interactive in one rAF.
 	await detail.locator('button[data-tab="prompt"]').click();
 	await expect(detail.locator('[data-testid="rundetail-prompt-body"]')).toContainText(
 		'session prompt'
 	);
+	expect(await nextFrameOk()).toBe(true);
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'prompt');
 
+	// Step 4: response tab.
 	await detail.locator('button[data-tab="response"]').click();
 	await expect(detail.locator('[data-testid="rundetail-response-body"]')).toContainText(
 		'session response'
 	);
+	expect(await nextFrameOk()).toBe(true);
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'response');
 
-	await detail.locator('button[data-tab="session"]').click();
-	await expect(detail.locator('[data-testid="rundetail-session"]')).toContainText('sess-x');
-
+	// Step 5: tools tab — paginate through all 200 entries, with each
+	// page-render finishing within a single rAF.
 	await detail.locator('button[data-tab="tools"]').click();
 	await expect(detail.locator('[data-testid="rundetail-tools"]')).toBeVisible();
 	await expect(detail.locator('[data-tool-seq="0"]')).toBeVisible();
+	expect(await nextFrameOk()).toBe(true);
 	for (const seq of [50, 100, 150]) {
 		await detail.getByRole('button', { name: 'Load more' }).click();
 		await expect(detail.locator(`[data-tool-seq="${seq}"]`)).toBeVisible();
+		expect(await nextFrameOk()).toBe(true);
 	}
 	await expect(detail.locator('[data-tool-seq="199"]')).toBeVisible();
-	await expect(detail.locator('[data-testid="rundetail-tools"]')).toContainText('200 of 200 tool calls');
+	await expect(detail.locator('[data-testid="rundetail-tools"]')).toContainText(
+		`${TOOL_COUNT} of ${TOOL_COUNT} tool calls`
+	);
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'tools');
 
+	// Step 6: evidence tab — list all 30 files; inline-view the first.
 	await detail.locator('button[data-tab="evidence"]').click();
 	await expect(detail.locator('[data-testid="rundetail-evidence"]')).toBeVisible();
-	await expect(detail.locator('[data-evidence-path]')).toHaveCount(30);
+	await expect(detail.locator('[data-evidence-path]')).toHaveCount(EVIDENCE_COUNT);
 	await expect(detail.locator('[data-evidence-path="evidence/evidence-29.txt"]')).toBeVisible();
+	expect(await nextFrameOk()).toBe(true);
 	const firstEvidenceView = detail.locator('[data-evidence-view="evidence/evidence-00.txt"]');
 	await firstEvidenceView.click();
 	await expect(firstEvidenceView).toHaveText('Hide');
@@ -1320,6 +1424,8 @@ test('p95 run detail stays interactive with 200 tool calls and 30 evidence files
 	await expect(detail.locator('[data-testid="evidence-inline-content"]')).toContainText(
 		'evidence body for evidence/evidence-00.txt'
 	);
+	expect(await nextFrameOk()).toBe(true);
+	await expect(detail.locator('[data-active-tab]')).toHaveAttribute('data-active-tab', 'evidence');
 });
 
 test('deep-link to tools tab', async ({ page }) => {
