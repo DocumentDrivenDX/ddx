@@ -1,0 +1,70 @@
+{
+  "attempt_id": "20260513T185530-1bc8b7f9",
+  "bead_id": "ddx-796cb50a",
+  "base_rev": "c66cf4aaf22692f23df9c7112fbf0cc29610bfcc",
+  "created_at": "2026-05-13T18:55:35.720583826Z",
+  "requested": {
+    "harness": "codex",
+    "model": "gpt-5.4-mini",
+    "prompt": "synthesized"
+  },
+  "bead": {
+    "id": "ddx-796cb50a",
+    "title": "execute-bead: prevent checkpoints from absorbing implementation changes",
+    "description": "PROBLEM\nLive `ddx work` attempts are landing substantial implementation changes inside `chore: checkpoint pre-execute-bead ...` commits instead of the required conventional substantive commit tagged with `[ddx-\u003cid\u003e]`. This weakens the execute-bead audit trail: cost, latency, retry, and review tooling can no longer reliably treat the checkpoint as tracker/caller-dirt bookkeeping and the tagged commit as the bead implementation.\n\nROOT CAUSE WITH FILE:LINE\n- `cli/internal/agent/execute_bead.go:542-599` defines `checkpointPreDispatchDirt`, which stages `git add -A -- .` through a temporary index and creates a `chore: checkpoint pre-execute-bead \u003cattempt\u003e` commit.\n- `cli/internal/agent/execute_bead.go:1050-1064` runs `commitTrackerLocked` and then `checkpointPreDispatchDirt` before resolving the base revision and creating the isolated execute-bead worktree.\n- `cli/internal/agent/execute_bead_concurrent_predispatch_test.go:17-29` and `:124-138` assert the lock-scope and HEAD-race behavior, but not the content contract for checkpoint commits.\n- Observed evidence: `df5b591ec chore: checkpoint pre-execute-bead 20260513T175830-e116edd8` contains 305 lines of readiness-timeout implementation across seven code/test files, and `c53f2b0fe chore: checkpoint pre-execute-bead 20260513T183205-80b61705` contains 170 lines of `readiness_checks` implementation across three files. The later tagged commit for `ddx-90b84d73` contained only follow-on CLI/docs plumbing, so the main implementation was attributed to the checkpoint.\n\nPROPOSED FIX\nAdd a checkpoint content guard so pre-dispatch checkpoint commits cannot silently absorb ordinary implementation files. The guard should either: (a) restrict checkpoints to known durable tracker/evidence/caller-dirt paths and reject code/test paths with an actionable execution failure, or (b) require dirty parent checkout implementation files to be committed under the active bead's `[ddx-\u003cid\u003e]` commit before checkpointing. Preserve the existing serialized lock behavior that prevents concurrent HEAD CAS failures.\n\nNON-SCOPE\nDo not remove the pre-dispatch checkpoint mechanism entirely. Do not weaken the existing concurrent worker lock tests. Do not rewrite existing history to repair already-landed checkpoint commits.",
+    "acceptance": "1. `TestCheckpointPreDispatchDirtRejectsImplementationPaths` or equivalent proves dirty `cli/internal/...` code/test files in the parent checkout are not committed as `chore: checkpoint pre-execute-bead ...`.\n2. `TestCheckpointPreDispatchDirtAllowsTrackerAndEvidencePaths` or equivalent proves legitimate tracker/evidence bookkeeping still checkpoints when needed.\n3. `TestExecuteBeadCheckpointDoesNotAbsorbSubstantiveWork` or equivalent exercises `ExecuteBeadWithConfig` and verifies the checkpoint commit contains only allowed paths while the bead implementation remains in a `[ddx-\u003cid\u003e]` substantive commit or the attempt fails with actionable evidence.\n4. Existing concurrency regressions including `TestExecuteBead_ConcurrentWorkers_NoHEADRefRace` and `TestRun_LockScopeIncludesSynthesizeCommit` remain green.\n5. `cd cli \u0026\u0026 go test ./internal/agent/... -run \"TestCheckpointPreDispatchDirt|TestExecuteBeadCheckpointDoesNotAbsorbSubstantiveWork|TestExecuteBead_ConcurrentWorkers_NoHEADRefRace|TestRun_LockScopeIncludesSynthesizeCommit\" -count=1` passes.\n6. `lefthook run pre-commit` passes.",
+    "labels": [
+      "area:agent",
+      "area:git",
+      "kind:bug",
+      "phase:build",
+      "reliability",
+      "audit"
+    ],
+    "metadata": {
+      "claimed-at": "2026-05-13T18:54:32Z",
+      "claimed-machine": "sindri",
+      "claimed-pid": "1114808",
+      "events": [
+        {
+          "actor": "erik",
+          "body": "{\"decision\":\"warn\",\"decision_source\":\"pre_claim_intake\",\"detail\":\"readiness check timed out after 30s (ddx-796cb50a)\",\"fingerprint\":\"3de07a18c763b3c48ab0477e8e46aa75d36519a2ac4f977ef55c0e706e89d78e\",\"policy_mode\":\"warn-only\",\"reason\":\"timeout\",\"rule_id\":\"pre_claim_intake.timeout\",\"suggested_action\":\"revise the rewrite so it preserves every explicit commitment\"}",
+          "created_at": "2026-05-13T18:41:39.688201711Z",
+          "kind": "intake.warn",
+          "source": "ddx work",
+          "summary": "timeout"
+        },
+        {
+          "actor": "erik",
+          "body": "{\"rationale\":\"6/8: the title, description, acceptance criteria, verification gates, and prompt sufficiency are strong, but the bead is missing explicit parent/dependency metadata and does not expose a cross-reference facet in the labels, so it is not fully execution-ready as filed.\",\"score\":6,\"suggested_fixes\":[\"Add an explicit `parent` field, or state clearly that this bead is a root if no parent exists.\",\"Add explicit dependency metadata (`No deps.` if none) and include a cross-reference label such as `spec:FEAT-010` alongside the current phase/area/kind labels.\"],\"waivers_applied\":[]}",
+          "created_at": "2026-05-13T18:55:30.348156103Z",
+          "kind": "bead-quality.lint",
+          "source": "ddx work",
+          "summary": "score=6"
+        }
+      ],
+      "execute-loop-heartbeat-at": "2026-05-13T18:54:32.63237686Z",
+      "execute-loop-last-detail": "readiness check timed out after 30s (ddx-796cb50a)",
+      "execute-loop-last-status": "timeout",
+      "execute-loop-retry-after": "2026-05-13T18:46:39Z",
+      "spec-id": "FEAT-010"
+    }
+  },
+  "governing": [
+    {
+      "id": "FEAT-010",
+      "path": "docs/helix/01-frame/features/FEAT-010-task-execution.md",
+      "title": "Feature: Task Execution"
+    }
+  ],
+  "paths": {
+    "dir": ".ddx/executions/20260513T185530-1bc8b7f9",
+    "prompt": ".ddx/executions/20260513T185530-1bc8b7f9/prompt.md",
+    "manifest": ".ddx/executions/20260513T185530-1bc8b7f9/manifest.json",
+    "result": ".ddx/executions/20260513T185530-1bc8b7f9/result.json",
+    "checks": ".ddx/executions/20260513T185530-1bc8b7f9/checks.json",
+    "usage": ".ddx/executions/20260513T185530-1bc8b7f9/usage.json",
+    "worktree": "tmp/ddx-exec-wt/.execute-bead-wt-ddx-796cb50a-20260513T185530-1bc8b7f9"
+  },
+  "prompt_sha": "4345dd828d3e52c1c8efaa9b21be406a1c54cdc467d7f6398a1778d10e0ba57e"
+}
