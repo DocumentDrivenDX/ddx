@@ -427,9 +427,14 @@ func (f *CommandFactory) runAgentExecuteLoopImpl(cmd *cobra.Command, treatPassth
 					requestProfile := initialProfile
 					routingNote := initialRoutingNote
 					if autoInferTier {
-						if selection, selectErr := profileSelector.Select(ctx, inferredTier, requestedMinPower); selectErr == nil && selection.Name != "" {
+						if selection, selectErr := profileSelector.Select(ctx, inferredTier, requestedMinPower); selectErr == nil {
+							// Empty selection means no no-extra-requirement policy covers this
+							// retry floor. Drop the stale lower policy and send MinPower-only so
+							// Fizeau can route or report no eligible candidate from live config.
 							requestProfile = selection.Name
-							if selection.Note != "" {
+							if requestProfile == "" {
+								routingNote = ""
+							} else if selection.Note != "" {
 								routingNote = selection.Note
 							}
 						}

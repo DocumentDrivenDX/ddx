@@ -14,7 +14,6 @@ import (
 
 	"github.com/DocumentDrivenDX/ddx/internal/agent"
 	"github.com/DocumentDrivenDX/ddx/internal/bead"
-	agentlib "github.com/easel/fizeau"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -345,16 +344,7 @@ func TestTryRecordsExecutionRoutingIntent(t *testing.T) {
 func TestTryZeroConfigInferredTaskSelectsFizeauProfileByMetadata(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
-	stub.listPolicies = []agentlib.PolicyInfo{
-		{Name: "p-max", MinPower: 90, MaxPower: 100},
-		{Name: "p-low", MinPower: 10, MaxPower: 20},
-		{Name: "p-balanced", MinPower: 50, MaxPower: 70},
-	}
-	stub.listModels = []agentlib.ModelInfo{
-		{ID: "cheap-model", Power: 10, Available: true, AutoRoutable: true},
-		{ID: "standard-model", Power: 60, Available: true, AutoRoutable: true},
-		{ID: "smart-model", Power: 95, Available: true, AutoRoutable: true},
-	}
+	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
 
 	dir := minimalProjectDir(t)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
@@ -387,11 +377,51 @@ func TestTryZeroConfigInferredTaskSelectsFizeauProfileByMetadata(t *testing.T) {
 	lastReq := stub.lastReq
 	stub.mu.Unlock()
 	require.True(t, executeCalled, "ddx try must invoke the implementation dispatch; output=%q err=%v", out, err)
-	assert.Equal(t, "p-balanced", lastReq.Policy, "dispatch should request the opaque medium-power profile by metadata")
-	assert.Equal(t, 50, lastReq.MinPower, "dispatch should use the profile floor instead of escalating to the strongest profile")
+	assert.Equal(t, "default", lastReq.Policy, "dispatch should request the ordinary no-requirement Fizeau policy by metadata")
+	assert.Equal(t, 7, lastReq.MinPower, "dispatch should use the selected policy floor instead of escalating to the strongest profile")
 	assert.Empty(t, lastReq.Harness, "zero-config routing must not hard-pin a harness")
 	assert.Empty(t, lastReq.Provider, "zero-config routing must not hard-pin a provider")
 	assert.Empty(t, lastReq.Model, "zero-config routing must not hard-pin a model")
+}
+
+func TestTryZeroConfigCheapTaskSkipsRequirementProfile(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
+
+	dir := minimalProjectDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
+	require.NoError(t, exec.Command("git", "init", dir).Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
+	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:        "ddx-zero-config-try-tier-cheap",
+		Title:     "Try with inferred cheap routing tier",
+		IssueType: "chore",
+	}))
+
+	factory := NewCommandFactory(dir)
+	factory.AgentRunnerOverride = &tryHookRunnerStub{t: t}
+	root := factory.NewRootCommand()
+	out, err := executeCommand(
+		root,
+		"try",
+		"ddx-zero-config-try-tier-cheap",
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+
+	stub.mu.Lock()
+	executeCalled := stub.executeCalled
+	lastReq := stub.lastReq
+	stub.mu.Unlock()
+	require.True(t, executeCalled, "ddx try must invoke the implementation dispatch; output=%q err=%v", out, err)
+	assert.Equal(t, "cheap", lastReq.Policy, "cheap zero-config routing must not pick requirement-bearing air-gapped policy")
+	assert.Equal(t, 5, lastReq.MinPower, "cheap zero-config routing should use the selected policy floor")
 }
 
 // TestTryInterrupt_InFlightAttemptUnclaimsTarget verifies that cancelling

@@ -126,9 +126,16 @@ Default selection is weak-first and progress-biased:
 
 - choose the cheapest and fastest available profile that DDx reasonably expects
   can complete the task;
+- skip requirement-bearing profiles such as local-only/no-remote policies
+  unless DDx has explicit matching routing intent;
+- do not duplicate Fizeau-owned provider preference mappings such as
+  local-first, subscription-first, or local-only ordering;
 - reserve the strongest profiles for breakdown, debugging, high-risk review,
   architecture-sensitive work, or retries with concrete lower-tier failure
   evidence;
+- on retry, if the raised power floor has no matching no-extra-requirement
+  profile, send numeric power intent rather than reusing a stale lower-power
+  policy;
 - if no profile satisfies the ideal power band but a free/available provider can
   attempt the work, try it and record the route as degraded rather than blocking
   the bead before execution;

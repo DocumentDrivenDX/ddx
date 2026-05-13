@@ -89,8 +89,7 @@ type executeCapturingStub struct {
 	mu            sync.Mutex
 	executeCalled bool
 	lastReq       agentlib.ServiceExecuteRequest
-	executionReq  agentlib.ServiceExecuteRequest
-	executionSeen bool
+	requests      []agentlib.ServiceExecuteRequest
 	executeFn     func(agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error)
 	listModels    []agentlib.ModelInfo
 	listPolicies  []agentlib.PolicyInfo
@@ -100,10 +99,7 @@ func (s *executeCapturingStub) Execute(_ context.Context, req agentlib.ServiceEx
 	s.mu.Lock()
 	s.executeCalled = true
 	s.lastReq = req
-	if req.Role == "implementer" {
-		s.executionReq = req
-		s.executionSeen = true
-	}
+	s.requests = append(s.requests, req)
 	s.mu.Unlock()
 	if s.executeFn != nil {
 		return s.executeFn(req)
@@ -176,6 +172,31 @@ func installExecuteCapturingStub(t *testing.T) *executeCapturingStub {
 	})
 	t.Cleanup(func() { agent.SetServiceRunFactory(nil) })
 	return stub
+}
+
+func canonicalFizeauPolicyFixture() ([]agentlib.PolicyInfo, []agentlib.ModelInfo) {
+	return []agentlib.PolicyInfo{
+			{Name: "cheap", MinPower: 5, MaxPower: 5, AllowLocal: true},
+			{Name: "default", MinPower: 7, MaxPower: 8, AllowLocal: true},
+			{Name: "smart", MinPower: 9, MaxPower: 10},
+			{Name: "air-gapped", MinPower: 5, MaxPower: 5, AllowLocal: true, Require: []string{"no_remote"}},
+		}, []agentlib.ModelInfo{
+			{ID: "cheap-model", Power: 5, Available: true, AutoRoutable: true},
+			{ID: "standard-model", Power: 7, Available: true, AutoRoutable: true},
+			{ID: "smart-model", Power: 9, Available: true, AutoRoutable: true},
+		}
+}
+
+func capturedImplementationRequests(stub *executeCapturingStub) []agentlib.ServiceExecuteRequest {
+	stub.mu.Lock()
+	defer stub.mu.Unlock()
+	out := make([]agentlib.ServiceExecuteRequest, 0, len(stub.requests))
+	for _, req := range stub.requests {
+		if req.Role == "implementer" {
+			out = append(out, req)
+		}
+	}
+	return out
 }
 
 func minimalProjectDir(t *testing.T) string {

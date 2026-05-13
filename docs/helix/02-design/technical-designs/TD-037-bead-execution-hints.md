@@ -82,11 +82,12 @@ follows:
 3. Treat Fizeau profile names as opaque. Do not hard-code names such as
    `cheap`, `standard`, `smart`, `frontier`, or provider-specific aliases.
 4. Classify candidate profiles by metadata: power range, availability,
-   auto-routable model coverage, cost/billing data, speed/perf signals,
-   locality policy, and later diversity signals when exposed.
+   auto-routable model coverage, hard policy requirements, cost/billing data,
+   speed/perf signals, and later diversity signals when exposed.
 5. Choose the profile that best satisfies the task need while optimizing for
    forward progress, then cost and speed. For default implementation work, this
-   normally means the weakest viable profile expected to complete the task.
+   normally means the weakest no-extra-requirement profile expected to complete
+   the task.
 6. If the requested band has no viable profile but another free provider is
    available, try the best available free/low-cost profile instead of blocking
    the bead. Record the downgrade in routing-intent evidence.
@@ -99,6 +100,18 @@ follows:
 10. Send only the selected Fizeau profile/policy name and abstract power bounds.
    Do not send a concrete harness, provider, or model unless the operator
    supplied that passthrough explicitly.
+
+DDx must treat policy requirements such as local-only/no-remote as hard routing
+semantics, not as ordinary low-power profile variants. A requirement-bearing
+profile is eligible for automatic selection only when DDx has explicit matching
+intent; otherwise DDx leaves it for explicit `--profile` passthrough or a
+future explicit local-only workflow. DDx must not duplicate Fizeau's provider
+preference mappings such as local-first, subscription-first, or local-only
+ordering. Fizeau owns provider preference and concrete route choice inside the
+selected policy. When a retry raises `MinPower` above every available
+no-extra-requirement profile, DDx may drop the previously selected policy and
+send `MinPower` only rather than reusing a stale lower-power policy; Fizeau then
+routes from live availability or returns its normal no-eligible-candidate error.
 
 For ordinary implementation work, DDx should select the medium/default band by
 metadata, not by a hard-coded Fizeau profile name. It should not drift to the

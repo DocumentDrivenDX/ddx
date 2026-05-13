@@ -128,16 +128,7 @@ func TestParseExecuteLoopSpec_RateLimitMaxWait(t *testing.T) {
 func TestWorkZeroConfigInferredTaskSelectsFizeauProfileByMetadata(t *testing.T) {
 	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
 	stub := installExecuteCapturingStub(t)
-	stub.listPolicies = []agentlib.PolicyInfo{
-		{Name: "p-max", MinPower: 90, MaxPower: 100},
-		{Name: "p-low", MinPower: 10, MaxPower: 20},
-		{Name: "p-balanced", MinPower: 50, MaxPower: 70},
-	}
-	stub.listModels = []agentlib.ModelInfo{
-		{ID: "cheap-model", Power: 10, Available: true, AutoRoutable: true},
-		{ID: "standard-model", Power: 60, Available: true, AutoRoutable: true},
-		{ID: "smart-model", Power: 95, Available: true, AutoRoutable: true},
-	}
+	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
 	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
 		ch := make(chan agentlib.ServiceEvent, 1)
 		ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"ready\",\"rationale\":\"ok\",\"readiness_checks\":[],\"score\":9,\"suggested_fixes\":[],\"waivers_applied\":[],\"recommended_action\":\"release_claim_retry\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}"}`)}
@@ -171,16 +162,70 @@ func TestWorkZeroConfigInferredTaskSelectsFizeauProfileByMetadata(t *testing.T) 
 		"--no-review-i-know-what-im-doing",
 	)
 
-	stub.mu.Lock()
-	executeCalled := stub.executionSeen
-	lastReq := stub.executionReq
-	stub.mu.Unlock()
-	require.True(t, executeCalled, "ddx work must invoke implementation dispatch; output=%q err=%v", out, err)
-	assert.Equal(t, "p-balanced", lastReq.Policy, "work should request the opaque medium-power profile by metadata")
-	assert.Equal(t, 50, lastReq.MinPower, "work should use the profile floor instead of escalating to the strongest profile")
+	requests := capturedImplementationRequests(stub)
+	require.NotEmpty(t, requests, "ddx work must invoke implementation dispatch; output=%q err=%v", out, err)
+	lastReq := requests[0]
+	assert.Equal(t, "default", lastReq.Policy, "work should request the ordinary no-requirement Fizeau policy by metadata")
+	assert.Equal(t, 7, lastReq.MinPower, "work should use the selected policy floor instead of escalating to the strongest profile")
 	assert.Empty(t, lastReq.Harness, "zero-config work must not hard-pin a harness")
 	assert.Empty(t, lastReq.Provider, "zero-config work must not hard-pin a provider")
 	assert.Empty(t, lastReq.Model, "zero-config work must not hard-pin a model")
+}
+
+func TestWorkZeroConfigRetryReselectsProfileForEscalatedFloor(t *testing.T) {
+	t.Setenv("DDX_DISABLE_UPDATE_CHECK", "1")
+	stub := installExecuteCapturingStub(t)
+	stub.listPolicies, stub.listModels = canonicalFizeauPolicyFixture()
+	implementerCalls := 0
+	stub.executeFn = func(req agentlib.ServiceExecuteRequest) (<-chan agentlib.ServiceEvent, error) {
+		ch := make(chan agentlib.ServiceEvent, 1)
+		if req.Role != "implementer" {
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"{\"classification\":\"ready\",\"rationale\":\"ok\",\"readiness_checks\":[],\"score\":9,\"suggested_fixes\":[],\"waivers_applied\":[],\"recommended_action\":\"release_claim_retry\",\"suggested_amendments\":[],\"suggested_followup_beads\":[]}"}`)}
+			close(ch)
+			return ch, nil
+		}
+		implementerCalls++
+		if implementerCalls == 1 {
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"error","exit_code":1,"error":"build failed"}`)}
+		} else {
+			ch <- agentlib.ServiceEvent{Type: "final", Data: []byte(`{"status":"success","final_text":"ok"}`)}
+		}
+		close(ch)
+		return ch, nil
+	}
+
+	dir := minimalProjectDir(t)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "README.md"), []byte("# test\n"), 0o644))
+	require.NoError(t, exec.Command("git", "init", dir).Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.email", "test@example.com").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "config", "user.name", "Test User").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "add", ".").Run())
+	require.NoError(t, exec.Command("git", "-C", dir, "commit", "-m", "init").Run())
+	store := bead.NewStore(filepath.Join(dir, ".ddx"))
+	require.NoError(t, store.Init())
+	require.NoError(t, store.Create(&bead.Bead{
+		ID:        "ddx-zero-config-work-tier-retry",
+		Title:     "Work retries with stronger routing tier",
+		IssueType: "bug",
+	}))
+
+	factory := NewCommandFactory(dir)
+	root := factory.NewRootCommand()
+	out, err := executeCommand(
+		root,
+		"work",
+		"--once",
+		"--project", dir,
+		"--no-review",
+		"--no-review-i-know-what-im-doing",
+	)
+
+	requests := capturedImplementationRequests(stub)
+	require.Len(t, requests, 2, "ddx work should retry an escalatable implementation failure; output=%q err=%v", out, err)
+	assert.Equal(t, "default", requests[0].Policy, "first attempt should use the inferred medium/default policy")
+	assert.Equal(t, 7, requests[0].MinPower)
+	assert.Equal(t, "smart", requests[1].Policy, "retry should reselect by metadata for the escalated floor")
+	assert.Equal(t, 9, requests[1].MinPower)
 }
 
 func TestRunAgentExecuteLoopImpl_PassesRateLimitMaxWait(t *testing.T) {
