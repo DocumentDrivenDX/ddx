@@ -7,13 +7,13 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	internalgit "github.com/DocumentDrivenDX/ddx/internal/git"
 	"github.com/DocumentDrivenDX/ddx/internal/registry"
-	"github.com/DocumentDrivenDX/ddx/internal/skills"
 	"github.com/DocumentDrivenDX/ddx/internal/update"
 	"github.com/spf13/cobra"
 )
@@ -29,6 +29,7 @@ current project under .ddx/plugins/<name>/.
 Examples:
   ddx install helix                        # Install HELIX workflow
   ddx install helix --force                # Reinstall even if already up to date
+  ddx plugin install helix --local ../helix --force
   ddx install persona/strict-code-reviewer # Install a single persona`,
 		Args: cobra.ExactArgs(1),
 		RunE: f.runInstall,
@@ -148,6 +149,19 @@ func (f *CommandFactory) runInstall(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+func (f *CommandFactory) newPluginCommand() *cobra.Command {
+	cmd := &cobra.Command{
+		Use:     "plugin",
+		Aliases: []string{"plugins"},
+		Short:   "Manage DDx plugins",
+	}
+	installCmd := f.newInstallCommand()
+	installCmd.Use = "install <name>"
+	installCmd.Short = "Install a plugin"
+	cmd.AddCommand(installCmd)
+	return cmd
+}
+
 func removeStaleFilesFromInstall(oldFiles []string, newFiles []string) int {
 	if len(oldFiles) == 0 {
 		return 0
@@ -163,12 +177,31 @@ func removeStaleFilesFromInstall(oldFiles []string, newFiles []string) int {
 		if newSet[f] {
 			continue
 		}
+		if installPathContainsAny(f, newFiles) {
+			continue
+		}
 		expanded := registry.ExpandHome(f)
 		if err := os.RemoveAll(expanded); err == nil {
 			removed++
 		}
 	}
 	return removed
+}
+
+func installPathContainsAny(parent string, files []string) bool {
+	parent = filepath.ToSlash(strings.TrimSuffix(parent, string(filepath.Separator)))
+	parent = strings.TrimSuffix(parent, "/")
+	if parent == "" {
+		return false
+	}
+	prefix := parent + "/"
+	for _, f := range files {
+		f = filepath.ToSlash(f)
+		if strings.HasPrefix(f, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 // commitPluginChanges stages and commits plugin-related changes in the working tree.
@@ -214,10 +247,10 @@ func prepareSymlinkTarget(target string, force bool) error {
 	return nil
 }
 
-// installLocal installs a plugin from a local directory into the project
-// under .ddx/plugins/<name>/. The plugin tree is copied — never symlinked
-// out to a developer checkout. Skills are routed through skills.Install
-// (real-file copies into .agents/skills/ + .claude/skills/).
+// installLocal installs a plugin from a local directory into the current
+// checkout as a developer overlay. It intentionally does not update installed
+// state and does not auto-commit: the recorded plugin pin remains whatever the
+// project already declares, while this machine can test a local plugin tree.
 func (f *CommandFactory) installLocal(name, localPath string, force bool, out io.Writer) error {
 	// Resolve to absolute path.
 	absPath, err := filepath.Abs(localPath)
@@ -272,12 +305,29 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 			Target: fmt.Sprintf(".ddx/plugins/%s", pkg.Name),
 		}
 	}
+	if len(pkg.Install.Skills) == 0 && localPluginHasSkills(absPath) {
+		pkg.Install.Skills = []registry.InstallMapping{
+			{Source: "skills/", Target: ".agents/skills/"},
+		}
+	}
 
 	if strings.HasPrefix(pkg.Install.Root.Target, "~") {
 		return fmt.Errorf("FEAT-015: Root.Target must be project-relative; got %s in package %s; update the manifest to use a relative path", pkg.Install.Root.Target, pkg.Name)
 	}
 
-	if issues := registry.ValidatePackageStructure(absPath, pkg); len(issues) > 0 {
+	projectRoot := f.WorkingDir
+	if projectRoot == "" {
+		projectRoot, _ = os.Getwd()
+	}
+	var oldFiles []string
+	if state, err := registry.LoadState(); err == nil {
+		if old := state.FindInstalled(pkg.Name); old != nil {
+			oldFiles = append([]string{}, old.Files...)
+			_, _ = markLocalInstallOverlay(projectRoot, pkg.Name, oldFiles)
+		}
+	}
+
+	if issues := filterLocalInstallValidationIssues(absPath, registry.ValidatePackageStructure(absPath, pkg)); len(issues) > 0 {
 		return fmt.Errorf("validating package structure: %s", registry.JoinValidationIssues(issues))
 	}
 
@@ -291,14 +341,11 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		return fmt.Errorf("creating plugins dir: %w", err)
 	}
 
-	// Copy the plugin tree into the project. No symlinks back to the
-	// developer's checkout — the project owns its own copy.
-	written, err := copyDirTree(absPath, pluginDir)
-	if err != nil {
-		return fmt.Errorf("copying plugin into %s: %w", pluginDir, err)
+	if err := os.Symlink(absPath, pluginDir); err != nil {
+		return fmt.Errorf("linking plugin into %s: %w", pluginDir, err)
 	}
 
-	fmt.Fprintf(out, "Installed %s -> %s\n", absPath, pluginDir)
+	fmt.Fprintf(out, "Linked %s -> %s\n", pluginDir, absPath)
 
 	entry := registry.InstalledEntry{
 		Name:    pkg.Name,
@@ -306,11 +353,10 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		Type:    pkg.Type,
 		Source:  absPath,
 	}
-	entry.Files = append(entry.Files, written...)
+	entry.Files = append(entry.Files, pluginDir)
 
-	// Install skills via the shared installer.
+	// Install local skills as symlinks into each supported harness surface.
 	if len(pkg.Install.Skills) > 0 {
-		absPlugin, _ := filepath.Abs(pluginDir)
 		absProject := f.WorkingDir
 		if absProject == "" {
 			absProject, _ = os.Getwd()
@@ -318,25 +364,11 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		if !filepath.IsAbs(absProject) {
 			absProject, _ = filepath.Abs(absProject)
 		}
-		if err := skills.Install(os.DirFS(absPlugin), absProject, skills.Options{Force: force}); err != nil {
+		writtenSkills, err := installLocalSkillSymlinks(absPath, absProject, force)
+		if err != nil {
 			return fmt.Errorf("installing skills: %w", err)
 		}
-		// Record skill dirs by name for state tracking.
-		for _, candidate := range []string{
-			filepath.Join(absPlugin, ".agents", "skills"),
-			filepath.Join(absPlugin, "skills"),
-		} {
-			if entries, derr := os.ReadDir(candidate); derr == nil {
-				for _, e := range entries {
-					for _, sub := range []string{".agents/skills", ".claude/skills"} {
-						entry.Files = append(entry.Files, filepath.Join(filepath.FromSlash(sub), e.Name()))
-					}
-				}
-				if len(entries) > 0 {
-					break
-				}
-			}
-		}
+		entry.Files = append(entry.Files, writtenSkills...)
 	}
 
 	// Copy CLI script if defined (skip if target is a developer symlink).
@@ -364,20 +396,204 @@ func (f *CommandFactory) installLocal(name, localPath string, force bool, out io
 		}
 	}
 
-	// Save install state.
-	state, _ := registry.LoadState()
-	if state == nil {
-		state = &registry.InstalledState{}
-	}
 	entry.InstalledAt = time.Now()
-	state.AddOrUpdate(entry)
-	if err := registry.SaveState(state); err != nil {
-		return fmt.Errorf("saving state: %w", err)
+
+	removed := removeStaleFilesFromInstall(oldFiles, entry.Files)
+	if removed > 0 {
+		fmt.Fprintf(out, "Removed %d stale file(s) from previous install\n", removed)
 	}
 
-	fmt.Fprintf(out, "Installed %s (local) — %d file(s)\n", entry.Name, len(entry.Files))
-	commitPluginChanges(entry.Name, entry.Version)
+	if hidden, err := markLocalInstallOverlay(projectRoot, entry.Name, entry.Files); err != nil {
+		fmt.Fprintf(out, "Warning: local install is active but git overlay hiding failed: %v\n", err)
+	} else if hidden > 0 {
+		fmt.Fprintf(out, "Marked %d tracked local overlay file(s) skip-worktree\n", hidden)
+	}
+
+	fmt.Fprintf(out, "Installed %s from local path %s — %d file(s); recorded plugin pin unchanged\n", entry.Name, absPath, len(entry.Files))
 	return nil
+}
+
+func markLocalInstallOverlay(projectRoot, pluginName string, files []string) (int, error) {
+	if projectRoot == "" {
+		return 0, nil
+	}
+
+	ctx := context.Background()
+	topOut, err := internalgit.Command(ctx, projectRoot, "rev-parse", "--show-toplevel").Output()
+	if err != nil {
+		return 0, nil
+	}
+	repoRoot := strings.TrimSpace(string(topOut))
+	if repoRoot == "" {
+		return 0, nil
+	}
+
+	paths := localOverlayPaths(pluginName, files)
+	if len(paths) == 0 {
+		return 0, nil
+	}
+	if err := addLocalOverlayIgnores(repoRoot, paths); err != nil {
+		return 0, err
+	}
+
+	args := append([]string{"ls-files", "-z", "--"}, paths...)
+	trackedOut, err := internalgit.Command(ctx, repoRoot, args...).Output()
+	if err != nil {
+		return 0, err
+	}
+	var tracked []string
+	for _, p := range strings.Split(string(trackedOut), "\x00") {
+		if p != "" {
+			tracked = append(tracked, p)
+		}
+	}
+	for start := 0; start < len(tracked); start += 100 {
+		end := start + 100
+		if end > len(tracked) {
+			end = len(tracked)
+		}
+		args := append([]string{"update-index", "--skip-worktree", "--"}, tracked[start:end]...)
+		if err := internalgit.Command(ctx, repoRoot, args...).Run(); err != nil {
+			return 0, err
+		}
+	}
+	return len(tracked), nil
+}
+
+func localPluginHasSkills(root string) bool {
+	for _, candidate := range []string{
+		filepath.Join(root, ".agents", "skills"),
+		filepath.Join(root, "skills"),
+	} {
+		if info, err := os.Stat(candidate); err == nil && info.IsDir() {
+			return true
+		}
+	}
+	return false
+}
+
+func localOverlayPaths(pluginName string, files []string) []string {
+	seen := map[string]bool{}
+	add := func(path string) {
+		path = filepath.ToSlash(strings.TrimSpace(path))
+		path = strings.TrimPrefix(path, "./")
+		if path == "" || strings.HasPrefix(path, "~") || filepath.IsAbs(path) {
+			return
+		}
+		if !seen[path] {
+			seen[path] = true
+		}
+	}
+
+	add(filepath.ToSlash(filepath.Join(".ddx", "plugins", pluginName)))
+	for _, file := range files {
+		p := filepath.ToSlash(file)
+		for _, prefix := range []string{".agents/skills/", ".claude/skills/"} {
+			if strings.HasPrefix(p, prefix) {
+				rest := strings.TrimPrefix(p, prefix)
+				name := strings.Split(rest, "/")[0]
+				if name != "" {
+					add(prefix + name)
+				}
+			}
+		}
+	}
+
+	paths := make([]string, 0, len(seen))
+	for p := range seen {
+		paths = append(paths, p)
+	}
+	sort.Strings(paths)
+	return paths
+}
+
+func installLocalSkillSymlinks(pluginRoot, projectRoot string, force bool) ([]string, error) {
+	sourceRoot, entries, err := localSkillSourceEntries(pluginRoot)
+	if err != nil {
+		return nil, err
+	}
+	if len(entries) == 0 {
+		return nil, nil
+	}
+
+	var written []string
+	for _, entry := range entries {
+		if !entry.IsDir() && entry.Type()&os.ModeSymlink == 0 {
+			continue
+		}
+		name := entry.Name()
+		src := filepath.Join(sourceRoot, name)
+		if _, err := os.Stat(filepath.Join(src, "SKILL.md")); err != nil {
+			return nil, fmt.Errorf("%s: missing SKILL.md: %w", src, err)
+		}
+		for _, surface := range []string{".agents/skills", ".claude/skills"} {
+			dst := filepath.Join(projectRoot, filepath.FromSlash(surface), name)
+			if err := prepareSymlinkTarget(dst, force); err != nil {
+				return nil, err
+			}
+			if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+				return nil, fmt.Errorf("creating skills dir: %w", err)
+			}
+			target, err := filepath.Rel(filepath.Dir(dst), src)
+			if err != nil {
+				target = src
+			}
+			if err := os.Symlink(target, dst); err != nil {
+				return nil, fmt.Errorf("linking skill %s -> %s: %w", dst, target, err)
+			}
+			written = append(written, filepath.Join(filepath.FromSlash(surface), name))
+		}
+	}
+	return written, nil
+}
+
+func localSkillSourceEntries(pluginRoot string) (string, []os.DirEntry, error) {
+	for _, candidate := range []string{
+		filepath.Join(pluginRoot, ".agents", "skills"),
+		filepath.Join(pluginRoot, "skills"),
+	} {
+		entries, err := os.ReadDir(candidate)
+		if err == nil && len(entries) > 0 {
+			return candidate, entries, nil
+		}
+		if err != nil && !os.IsNotExist(err) {
+			return "", nil, err
+		}
+	}
+	return "", nil, nil
+}
+
+func addLocalOverlayIgnores(repoRoot string, paths []string) error {
+	excludePath := filepath.Join(repoRoot, ".git", "info", "exclude")
+	existing, _ := os.ReadFile(excludePath)
+	text := string(existing)
+
+	var additions []string
+	for _, p := range paths {
+		pattern := filepath.ToSlash(p)
+		if !strings.HasSuffix(pattern, "/") {
+			pattern += "/"
+		}
+		if !strings.Contains(text, "\n"+pattern+"\n") && !strings.HasPrefix(text, pattern+"\n") {
+			additions = append(additions, pattern)
+		}
+	}
+	if len(additions) == 0 {
+		return nil
+	}
+
+	var sb strings.Builder
+	if len(existing) > 0 && !strings.HasSuffix(text, "\n") {
+		sb.WriteString("\n")
+	}
+	if !strings.Contains(text, "# DDx local plugin overlays") {
+		sb.WriteString("\n# DDx local plugin overlays\n")
+	}
+	for _, pattern := range additions {
+		sb.WriteString(pattern)
+		sb.WriteString("\n")
+	}
+	return os.WriteFile(excludePath, append(existing, []byte(sb.String())...), 0o644)
 }
 
 // copyDirTree copies the source directory tree into dst as real files,
@@ -391,6 +607,12 @@ func copyDirTree(src, dst string) ([]string, error) {
 		rel, relErr := filepath.Rel(src, path)
 		if relErr != nil {
 			return relErr
+		}
+		if shouldSkipLocalInstallPath(rel, info) {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		target := filepath.Join(dst, rel)
 		if info.IsDir() {
@@ -426,6 +648,59 @@ func copyDirTree(src, dst string) ([]string, error) {
 		return nil
 	})
 	return written, err
+}
+
+func filterLocalInstallValidationIssues(root string, issues []registry.ValidationIssue) []registry.ValidationIssue {
+	filtered := issues[:0]
+	for _, issue := range issues {
+		rel, err := filepath.Rel(root, issue.Path)
+		if err == nil && shouldSkipLocalInstallIssue(filepath.ToSlash(rel)) {
+			continue
+		}
+		filtered = append(filtered, issue)
+	}
+	return filtered
+}
+
+func shouldSkipLocalInstallIssue(rel string) bool {
+	rel = strings.TrimPrefix(filepath.ToSlash(rel), "./")
+	for _, prefix := range []string{
+		".git/",
+		".ddx/plugins/",
+		".ddx/agent-logs/",
+		".ddx/executions/",
+		".ddx/exec-runs.d/",
+		".ddx/server/",
+		".ddx/tsnet/",
+		".ddx/workers/",
+		"node_modules/",
+		"tmp/",
+		"website/node_modules/",
+		"website/public/",
+		"website/resources/",
+		"website/test-results/",
+		"website/playwright-report/",
+	} {
+		if strings.HasPrefix(rel, prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+func shouldSkipLocalInstallPath(rel string, info os.FileInfo) bool {
+	rel = strings.TrimPrefix(filepath.ToSlash(rel), "./")
+	if rel == "." || rel == "" {
+		return false
+	}
+	if shouldSkipLocalInstallIssue(rel + "/") {
+		return true
+	}
+	if info.IsDir() {
+		base := filepath.Base(rel)
+		return base == ".git" || base == "node_modules" || base == "tmp"
+	}
+	return false
 }
 
 // newInstalledCommand creates the "ddx installed" command.

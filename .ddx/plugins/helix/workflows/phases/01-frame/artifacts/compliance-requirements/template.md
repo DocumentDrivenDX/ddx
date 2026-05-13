@@ -1,3 +1,8 @@
+---
+ddx:
+  id: "[artifact-id]"
+---
+
 # Compliance Requirements
 
 **Project**: [Project Name]
@@ -12,11 +17,12 @@
 
 ## Applicable Regulations
 
-For each applicable regulation, document:
+For each applicable or uncertain regulation, document:
 
 ### [Regulation Name]
 - **Jurisdiction**: [Where it applies]
-- **Applicability**: [Why it applies to this project]
+- **Applicability**: Applies / Does not apply / Needs counsel review
+- **Assumption**: [Why it applies or does not apply to this project]
 - **Key Requirements**: [Summary of main requirements]
 - **Penalties**: [Potential fines/sanctions]
 - **Timeline**: [Any specific deadlines]
@@ -32,15 +38,21 @@ For each applicable regulation, document:
 
 For each regulation, create a requirements table:
 
-| Requirement | Reference | Description | Implementation | Owner | Status |
-|-------------|-----------|-------------|----------------|-------|--------|
-| [Requirement] | [Article/Section] | [What must be done] | [How] | [Who] | [Status] |
+| Requirement | Reference | Description | Implementation Control | Evidence | Owner | Status |
+|-------------|-----------|-------------|------------------------|----------|-------|--------|
+| [Requirement] | [Article/Section] | [What must be done] | [How] | [Audit artifact] | [Who] | [Status] |
 
 ## Data Classification and Handling
 
 | Data Type | Classification | Regulations | Handling Requirements |
 |-----------|----------------|-------------|----------------------|
 | [Type] | [Sensitivity level] | [Applicable regs] | [Required controls] |
+
+## Applicability Gaps
+
+| Question | Why It Matters | Owner | Due Date |
+|----------|----------------|-------|----------|
+| [Open legal/compliance question] | [Decision affected] | [Owner] | [Date] |
 
 ### Data Retention
 

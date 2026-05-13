@@ -11,40 +11,8 @@ description: |
   Story-specific technical design that details HOW to implement a single
   user story within the context of the broader solution architecture.
   This enables vertical slicing by providing implementation details for
-  one story at a time.
-
-dependencies:
-  requires:
-    - input: User Story
-      type: artifact
-      pattern: "US-XXX-*.md"
-      phase: frame
-      required: true
-
-    - input: Solution Design
-      type: artifact
-      pattern: "SD-XXX-*.md"
-      phase: design
-      required: true
-      note: "Parent feature's solution design"
-
-    - input: Feature Specification
-      type: artifact
-      pattern: "FEAT-XXX-*.md"
-      phase: frame
-      required: false
-      note: "For additional context"
-
-  enables:
-    - output: Story Test Plan
-      type: artifact
-      pattern: "TP-XXX-*.md"
-      phase: test
-
-    - output: Story Build Issue
-      type: issue
-      pattern: "tracker issue labeled helix,phase:build,story:US-XXX"
-      phase: build
+  one story at a time: changed components, files, interfaces, data model,
+  tests, migration/rollback, and implementation sequence.
 
 output:
   location: docs/helix/02-design/technical-designs/TD-{id}-{name}.md
@@ -142,6 +110,17 @@ template:
     - api_design: "Interface specifications"
     - data_model: "Schema changes"
     - testing_approach: "How to verify"
+
+example:
+  file: example.md
+
+references:
+  - title: "Google Engineering Practices: Small CLs"
+    file: docs/resources/google-small-cls.md
+    relationship: "Grounds bounded story-level implementation slices with tests and rollback"
+  - title: "Cucumber Executable Specifications"
+    file: docs/resources/cucumber-executable-specifications.md
+    relationship: "Grounds acceptance-criteria-to-test mapping"
 
 workflow:
   creation_order: 1  # First artifact in design phase for a story

@@ -58,7 +58,9 @@ update a lower-authority artifact in a way that contradicts a higher one.
      part of Phase 4 artifact evolution.
 0b. **Context digest**: When `helix evolve` creates or modifies beads, it must
    assemble a context digest per `.ddx/plugins/helix/workflows/references/context-digest.md` and
-   prepend it to the bead description.
+   prepend it to the bead description. If a repo helper exists for digest
+   assembly, use it instead of hand-writing the XML. The `<concerns>` element
+   must contain matched concern names, never `area:*` labels.
 
 ## PHASE 0.5 — Bead Acquisition
 
@@ -73,7 +75,7 @@ pass. See `.ddx/plugins/helix/workflows/references/bead-first.md` for the full p
    ```bash
    ddx bead create "evolve: <requirement summary>" \
      --type task \
-     --labels helix,kind:planning,action:evolve \
+     --labels helix,phase:design,kind:planning,action:evolve \
      --description "<context-digest>...</context-digest>
    Thread requirement through artifact stack: <requirement description>.
    Source: <--from value if provided>" \
@@ -170,7 +172,7 @@ For each non-conflicting artifact, in authority order (highest first):
 4. For any **new** artifact being written (not an update to an existing file):
    - Confirm the ID was assigned from the scanned-next-ID computed in Phase 2,
      not guessed.
-   - Inspect the dun frontmatter `depends_on` list. For each referenced ID,
+   - Inspect the ddx frontmatter `depends_on` list. For each referenced ID,
      verify the target artifact exists on disk before writing. If a target is
      missing, either remove the dependency or stop and request guidance. Never
      write an artifact with a broken `depends_on` reference.
@@ -193,7 +195,7 @@ artifacts:
    cycle.
 3. Each issue must pass triage validation:
    - `--labels helix,phase:build,...`
-   - `--spec-id` pointing to the updated artifact
+   - set `spec-id` with `--set spec-id=<updated-artifact>`
    - `--acceptance` with deterministic criteria
 4. Set `--parent` if the issues belong to an existing epic.
 5. Group related issues under a new epic if the requirement implies

@@ -1,3 +1,8 @@
+---
+ddx:
+  id: "[artifact-id]"
+---
+
 # Competitive Analysis
 
 ## Market Landscape
@@ -8,13 +13,24 @@
 | Growth Rate | [X]% annually |
 | Key Trends | [Trend 1], [Trend 2] |
 | Entry Barriers | Low / Medium / High |
+| Buyer Power | Low / Medium / High |
+
+## Competitive Forces
+
+| Force | Pressure | Evidence / Confidence | Implication |
+|-------|----------|-----------------------|-------------|
+| Direct Rivalry | Low / Medium / High | [Source or assumption] | [So what] |
+| Substitutes | Low / Medium / High | [Source or assumption] | [So what] |
+| New Entrants | Low / Medium / High | [Source or assumption] | [So what] |
+| Buyer Power | Low / Medium / High | [Source or assumption] | [So what] |
 
 ## Competitor Profiles
 
-| Competitor | Positioning | Target Segment | Strengths | Weaknesses |
-|------------|-------------|----------------|-----------|------------|
-| [Competitor 1] | [Position] | [Segment] | [Strengths] | [Weaknesses] |
-| [Competitor 2] | [Position] | [Segment] | [Strengths] | [Weaknesses] |
+| Competitor | Type | Positioning | Target Segment | Strengths | Weaknesses | Source / Confidence |
+|------------|------|-------------|----------------|-----------|------------|---------------------|
+| [Competitor 1] | Direct / Indirect / Substitute | [Position] | [Segment] | [Strengths] | [Weaknesses] | [Source, confidence] |
+| [Competitor 2] | Direct / Indirect / Substitute | [Position] | [Segment] | [Strengths] | [Weaknesses] | [Source, confidence] |
+| [Competitor 3] | Direct / Indirect / Substitute | [Position] | [Segment] | [Strengths] | [Weaknesses] | [Source, confidence] |
 
 **Indirect Competitors**: [List alternative solutions and threat level]
 

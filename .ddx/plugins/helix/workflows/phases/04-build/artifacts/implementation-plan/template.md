@@ -1,9 +1,8 @@
 ---
-dun:
-  id: helix.implementation-plan
-  depends_on:
-    - helix.test-plan
+ddx:
+  id: "[artifact-id]"
 ---
+
 # Build Plan
 
 ## Scope
@@ -17,16 +16,16 @@ dun:
 
 - [Constraint from requirements, design, architecture, or security]
 
-## Build Sequencing
+## Implementation Slices
 
-| Order | Story / Area | Governing Artifacts | Depends On | Notes |
-|------|---------------|---------------------|------------|-------|
-| 1 | [US-XXX or area] | [TP/TD refs] | None | [Why first] |
-| 2 | [US-XXX or area] | [TP/TD refs] | [Dependency] | [Why next] |
+| Slice | Story / Area | Governing Artifacts | Depends On | Validation Gate | Notes |
+|-------|---------------|---------------------|------------|-----------------|-------|
+| [B-001] | [US-XXX or area] | [TP/TD refs] | None | [Command/evidence] | [Why first] |
+| [B-002] | [US-XXX or area] | [TP/TD refs] | [Dependency] | [Command/evidence] | [Why next] |
 
 ## Issue Decomposition
 
-Story-level work is tracked via `ddx bead` in `.ddx/issues.jsonl`.
+Story-level work is tracked via `ddx bead` in `.ddx/beads.jsonl`.
 
 **Per-issue requirements**:
 - Labels: `helix`, `phase:build`, `kind:build`, `story:US-{story-id}`
@@ -38,24 +37,25 @@ Story-level work is tracked via `ddx bead` in `.ddx/issues.jsonl`.
 |--------------|------|--------------|
 | [US-XXX] | [Outcome] | [Deps] |
 
-## Quality Gates
+## Validation Plan
 
 - [ ] Failing tests exist before implementation starts
 - [ ] All required tests pass before closing a build issue
 - [ ] Behavior changes update canonical documents
 - [ ] Code review is complete before phase exit
 
-## Risks
+## Risks and Rollbacks
 
-| Risk | Impact | Response |
-|------|--------|----------|
-| [Risk] | [H/M/L] | [Action] |
+| Risk | Impact | Response | Rollback |
+|------|--------|----------|----------|
+| [Risk] | [H/M/L] | [Action] | [How to reverse or disable] |
 
 ## Exit Criteria
 
 - [ ] Build issue set is defined with sequence and dependencies
 - [ ] Shared constraints are documented
 - [ ] Verification expectations are explicit
+- [ ] Runtime issues can be created from this plan without inventing scope
 
 ## Review Checklist
 

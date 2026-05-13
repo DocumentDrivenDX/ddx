@@ -58,10 +58,6 @@ exit_requirements:
       path: docs/helix/04-build/implementation-plan.md
       description: "Implementation plan must exist"
 
-    - check: file_exists
-      path: docs/helix/04-build/secure-coding-checklist.md
-      description: "Secure coding checklist must exist"
-
     # Source code exists
     - check: dir_not_empty
       path: src

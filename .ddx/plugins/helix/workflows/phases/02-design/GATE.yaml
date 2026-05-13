@@ -32,7 +32,7 @@ exit_requirements:
 
     - check: dir_not_empty
       path: docs/helix/02-design/contracts
-      description: "API contracts directory must contain files"
+      description: "Contracts directory must contain files"
 
     - check: dir_not_empty
       path: docs/helix/02-design/adr
@@ -65,9 +65,9 @@ exit_requirements:
 
     # Contract completeness
     - check: grep_present
-      pattern: "API-[0-9]+"
+      pattern: "(CONTRACT|API)-[0-9]+"
       path: docs/helix/02-design/contracts/**/*.md
-      description: "Contracts have API-XXX identifiers"
+      description: "Contracts have CONTRACT-XXX or API-XXX identifiers"
 
     # ADR format validation
     - check: grep_present

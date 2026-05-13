@@ -20,18 +20,6 @@ type Config struct {
 	Permissions     string              `yaml:"permissions"`      // permission level: safe, supervised, unrestricted
 }
 
-// RouteFlags holds raw CLI flag values before normalization into a RouteRequest.
-// These come directly from parsed command-line arguments.
-type RouteFlags struct {
-	Profile     string // --profile: default, cheap, fast, smart
-	Model       string // --model: logical ref or exact pin
-	Provider    string // --provider: explicit provider name
-	ModelRef    string // --model-ref: opaque model reference for Fizeau
-	Harness     string // --harness: forced harness override
-	Effort      string // --effort: low, medium, high
-	Permissions string // --permissions: safe, supervised, unrestricted
-}
-
 // RunArgs holds options for a single agent invocation.
 type RunArgs struct {
 	// Context is the caller's context. When non-nil, the Runner derives its
@@ -46,7 +34,6 @@ type RunArgs struct {
 	Correlation   map[string]string
 	Model         string
 	Provider      string // explicit provider name (e.g. "vidar", "openrouter"); bypasses default provider selection
-	ModelRef      string // opaque model-ref (e.g. "code-medium"); resolved by Fizeau
 	Effort        string
 	Timeout       time.Duration // idle (inactivity) timeout; nonzero overrides Config.TimeoutMS
 	WallClock     time.Duration // absolute wall-clock cap; nonzero overrides Config.WallClockMS
@@ -59,7 +46,7 @@ type RunArgs struct {
 }
 
 // AgentRunRuntime is the SD-024 successor to RunArgs for the agent
-// run path. Durable knobs (Harness, Model, Provider, ModelRef, Effort,
+// run path. Durable knobs (Harness, Model, Provider, Effort,
 // Permissions, Timeout, WallClock, SessionLogDir) are stripped — they
 // live on config.ResolvedConfig and are passed via RunWithConfig's
 // rcfg argument. Only non-serializable plumbing and per-invocation
@@ -78,7 +65,7 @@ type AgentRunRuntime struct {
 	EstimatedPromptTokens int
 	RequiresTools         bool
 	SessionLogDirOverride string
-	// HarnessOverride, ProviderOverride, ModelOverride, ModelRefOverride, ProfileOverride, and
+	// HarnessOverride, ProviderOverride, ModelOverride, ProfileOverride, and
 	// PermissionsOverride let a caller override one durable knob from rcfg for
 	// this single invocation without re-resolving the full ResolvedConfig.
 	// SD-024 step B22d-d: execute-bead sets permissions=unrestricted; hidden
@@ -86,10 +73,9 @@ type AgentRunRuntime struct {
 	HarnessOverride     string
 	ProviderOverride    string
 	ModelOverride       string
-	ModelRefOverride    string
 	ProfileOverride     string
 	PermissionsOverride string
-	// ClearRoutingPins drops rcfg Harness/Provider/Model/ModelRef passthrough for
+	// ClearRoutingPins drops rcfg Harness/Provider/Model passthrough for
 	// hidden DDx lifecycle calls. Explicit runtime overrides still win.
 	ClearRoutingPins bool
 	Role             string
@@ -392,16 +378,6 @@ type BurnSummary struct {
 	Trend           string    `json:"trend,omitempty"`
 	Confidence      float64   `json:"confidence,omitempty"`
 	Basis           string    `json:"basis,omitempty"`
-}
-
-// RouteRequest is the normalized routing ask built from CLI flags and config.
-type RouteRequest struct {
-	Profile         string // default, cheap, fast, smart
-	ModelRef        string // logical model ref or alias resolved by Fizeau
-	ModelPin        string // exact concrete model string passthrough
-	Effort          string // low, medium, high, etc.
-	Permissions     string // safe, supervised, unrestricted
-	HarnessOverride string // forces routing to one harness only
 }
 
 // CandidatePlan is a routing evaluation result for one harness.

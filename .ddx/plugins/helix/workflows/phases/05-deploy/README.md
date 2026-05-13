@@ -74,17 +74,53 @@ graph TD
 
 ### Artifacts
 
-Deploy artifacts are project-specific. Rather than prescribing a fixed set of
-templates, create checklists, runbooks, and monitoring configurations as needed
-for your project's deployment model.
+Deploy artifacts are project-specific, but current HELIX still treats four
+deploy surfaces as first-class in the live contract:
+`deployment-checklist`, `monitoring-setup`, `runbook`, and `release-notes`.
 
-### Story Deploy Issues
-**Output Location**: `.ddx/issues.jsonl` queried through `ddx bead`
+- `deployment-checklist` is the technical go or no-go surface for rollout.
+- `monitoring-setup` defines the dashboards, alerts, and health checks that
+  prove the rollout is safe.
+- `runbook` explains operator response procedures for rollback, recovery, and
+  incidents.
+- `release-notes` communicate the shipped changes, required actions, and known
+  caveats to users or operators.
 
-Story-level rollout work is tracked as deploy issues rather than per-story
-deployment markdown plans. Deploy issues reference the project deployment
-artifacts and the build issues they are rolling out using native tracker issue
-IDs, dependencies, and labels.
+The deleted `launch-checklist` artifact stays superseded rather than restored.
+Its former umbrella scope is now split deliberately across the current deploy
+contract: `deployment-checklist` covers technical go/no-go readiness,
+`monitoring-setup` covers observability readiness, `runbook` covers operator
+response, `release-notes` cover release communication, and linked
+`phase:deploy` tracker issues carry coordination, owners, and dependencies.
+Restoring a separate launch checklist would collapse distinct responsibilities
+back into one vague surface without adding a new prompt or template contract.
+
+The deleted `gtm-plan` artifact stays retired. Its only durable HELIX-native
+responsibilities are already covered by the current deploy contract:
+`release-notes` handle release-scoped communication, and linked `phase:deploy`
+tracker issues carry launch coordination, owners, approvals, and communication
+checkpoints. Broader go-to-market or adoption planning is project-specific
+business planning rather than a portable HELIX artifact, so restoring
+`gtm-plan` would either duplicate `release-notes` or reintroduce another thin,
+non-actionable launch stub.
+
+`CHANGELOG.md` may still exist as a repository history log, but it does not
+replace release-scoped notes that are audience-filtered and action-oriented.
+
+### Deploy Issues
+**Output Location**: `.ddx/beads.jsonl` queried through `ddx bead`
+
+Deploy work is tracked as `phase:deploy` issues rather than per-story
+deployment markdown plans. These issues cover both story-scoped rollout
+execution and release-scoped coordination slices such as owners, dependencies,
+approval handoffs, and communication checkpoints. Deploy issues reference the
+project deployment artifacts and the build issues they are rolling out using
+native tracker issue IDs, dependencies, and labels.
+
+The deleted `story-deployment-plan` artifact stays retired. Its only durable
+responsibility is to define scoped rollout work, and the built-in tracker now
+does that more directly through `phase:deploy` issues linked to the governing
+deploy artifacts.
 
 ## Artifact Metadata
 
@@ -339,11 +375,13 @@ deploy:
 ## Using AI Assistance
 
 Deploy execution is driven by deploy issues through `helix build` or
-`helix run`. Create project-specific checklists, runbooks, and monitoring
-configurations as needed for your deployment model.
+`helix run`. Create or update the deploy artifacts your release needs under
+`docs/helix/05-deploy/`: `deployment-checklist`, `monitoring-setup`,
+`runbook`, and `release-notes`.
 
-AI is useful for rollout documentation, checklists, and observability setup.
-Go/no-go decisions, incident handling, and rollback approval remain human-owned.
+AI is useful for rollout documentation, release notes, checklists, and
+observability setup. Go/no-go decisions, incident handling, and rollback
+approval remain human-owned.
 
 ## File Organization
 
@@ -352,12 +390,17 @@ Go/no-go decisions, incident handling, and rollback approval remain human-owned.
   - Templates and prompts for deployment artifacts
   - Action definitions for deployment tasks
 
-- **Generated Artifacts**: `docs/`
-  - `docs/deployment/` - Deployment checklists and procedures
-  - `docs/monitoring/` - Monitoring setup and dashboards
-  - `docs/operations/` - Runbooks and operational docs
+- **Generated Artifacts**: `docs/helix/05-deploy/`
+  - `docs/helix/05-deploy/deployment-checklist.md` - Deployment checklist and
+    release gating steps
+  - `docs/helix/05-deploy/monitoring-setup.md` - Monitoring setup,
+    dashboards, and alerts
+  - `docs/helix/05-deploy/runbook.md` - Runbooks and operational procedures
+  - `docs/helix/05-deploy/release-notes.md` - Release notes, operator actions,
+    and known issues
 
-This separation keeps deployment templates reusable while organizing operational documentation logically.
+This separation keeps deploy templates reusable while keeping the canonical
+release artifacts together in the HELIX docs tree.
 
 ---
 

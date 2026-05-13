@@ -7,41 +7,8 @@ artifact:
   phase: frame
 
 description: |
-  Systematic identification and analysis of security threats using
-  STRIDE methodology. Maps threats to system components, assesses
-  risk, and defines mitigation strategies.
-
-dependencies:
-  requires:
-    - input: Product Requirements Document
-      type: artifact
-      path: prd
-      required: true
-    - input: Security Requirements
-      type: artifact
-      path: security-requirements
-      required: true
-    - input: User Stories
-      type: artifact
-      path: user-stories
-      required: true
-    - input: System architecture
-      type: external
-      required: true
-    - input: Data flow diagrams
-      type: external
-      required: true
-
-  enables:
-    - output: Security Design Requirements
-      type: artifact
-      phase: design
-    - output: Security Controls Specification
-      type: artifact
-      phase: design
-    - output: Security Test Scenarios
-      type: artifact
-      phase: test
+  Structured analysis of assets, data flows, trust boundaries, STRIDE threats,
+  risk, mitigations, owners, and verification hooks.
 
 output:
   location: docs/helix/01-frame/threat-model.md
@@ -103,6 +70,17 @@ prompts:
 
 template:
   file: template.md
+
+example:
+  file: example.md
+
+references:
+  - title: "OWASP Threat Modeling Cheat Sheet"
+    file: docs/resources/owasp-threat-modeling-cheat-sheet.md
+    relationship: "Grounds assets, data flows, trust boundaries, STRIDE, assumptions, and mitigation mapping"
+  - title: "OWASP Application Security Verification Standard"
+    file: docs/resources/owasp-asvs.md
+    relationship: "Grounds mapping threat mitigations into verifiable security controls"
 
 workflow:
   creation_order: 5

@@ -1,3 +1,8 @@
+---
+ddx:
+  id: "[artifact-id]"
+---
+
 # Proof of Concept: {{poc_title}}
 
 **PoC ID**: {{poc_id}} | **Lead**: {{poc_lead}} | **Time Budget**: {{time_budget}} | **Status**: In Progress | Completed

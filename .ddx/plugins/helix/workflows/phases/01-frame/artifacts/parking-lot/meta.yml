@@ -7,16 +7,8 @@ artifact:
   phase: frame
 
 description: |
-  Project-level registry for deferred and future work that is kept
-  out of the main PRD flow. Parked artifacts remain in their normal
-  HELIX locations and are flagged with dun.parking_lot: true.
-
-dependencies:
-  requires:
-    - input: PRD
-      type: artifact
-      path: prd
-      required: false
+  Registry for deferred or future work that should remain visible but outside
+  current scope until a specific revisit trigger is met.
 
 output:
   location: docs/helix/parking-lot.md
@@ -61,7 +53,12 @@ template:
 
 examples:
   - file: example.md
-    description: Sample parking lot entries and parked artifact links
+    description: Parking lot entries for the DepositMatch example product
+
+references:
+  - title: "Atlassian Product Backlog"
+    file: docs/resources/atlassian-product-backlog.md
+    relationship: "Grounds visible deferred work, reprioritization, and closing items that will not be pursued"
 
 workflow:
   creation_order: 6

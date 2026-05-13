@@ -39,8 +39,8 @@ If a matching open bead exists:
 ```bash
 ddx bead create "<action>: <scope description>" \
   --type task \
-  --labels helix,kind:planning,action:<name> \
-  --spec-id <governing-artifact> \
+  --labels helix,phase:<appropriate-phase>,kind:planning,action:<name> \
+  --set spec-id=<governing-artifact> \
   --description "<context-digest>...</context-digest>
 <action-specific description of what this pass will do>" \
   --acceptance "<what done means for this action>"

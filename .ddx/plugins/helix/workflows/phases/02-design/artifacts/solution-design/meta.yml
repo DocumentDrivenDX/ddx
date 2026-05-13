@@ -11,34 +11,8 @@ description: |
   Feature-level solution design that explains the chosen approach for a
   feature or cross-component capability. It maps requirements to a concrete
   system shape, evaluates alternatives, and defines the decomposition that
-  story-level technical designs should inherit.
-
-dependencies:
-  requires:
-    - input: Feature Specification
-      type: artifact
-      pattern: "FEAT-XXX-*.md"
-      phase: frame
-      required: true
-
-    - input: Product Requirements Document
-      type: artifact
-      pattern: "prd.md"
-      phase: frame
-      required: false
-      note: "Project-level framing when the feature affects core product behavior"
-
-  enables:
-    - output: Technical Design
-      type: artifact
-      pattern: "TD-XXX-*.md"
-      phase: design
-      note: "Story-level slice design derived from the chosen solution"
-
-    - output: Story Test Plan
-      type: artifact
-      pattern: "TP-XXX-*.md"
-      phase: test
+  story-level technical designs should inherit. It applies the Architecture and
+  relevant ADRs/contracts without redefining them.
 
 output:
   location: docs/helix/02-design/solution-designs/SD-{id}-{name}.md
@@ -117,6 +91,17 @@ template:
     - domain_model: "Core entities and rules"
     - system_decomposition: "Major components and interactions"
     - traceability: "Requirement-to-design mapping"
+
+example:
+  file: example.md
+
+references:
+  - title: "arc42 Solution Strategy and Building Block View"
+    file: docs/resources/arc42-solution-strategy.md
+    relationship: "Grounds feature-level approach, decomposition, interfaces, and concise design rationale"
+  - title: "C4 Model"
+    file: docs/resources/c4-model.md
+    relationship: "Grounds component and interaction views that support feature-level decomposition"
 
 workflow:
   creation_order: 1

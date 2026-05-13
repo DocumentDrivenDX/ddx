@@ -1,6 +1,6 @@
 # Documentation Structure
 
-This document describes the organization of documentation in the DDx project, which follows the HELIX workflow phases to ensure consistency and traceability.
+This document describes the organization of documentation in the HELIX repository, which follows the HELIX workflow phases to ensure consistency and traceability.
 
 ## Overview
 
@@ -13,65 +13,69 @@ The documentation structure mirrors the HELIX workflow phases, creating a logica
 
 ## Directory Structure
 
+In this repository, the canonical HELIX phase artifacts live under `docs/helix/`.
+
 ```
 docs/
-├── README.md                    # This overview document
-├── frame/                       # Phase 01: Requirements & Problem Definition
-│   ├── prd.md                  # Product Requirements Document
-│   ├── principles.md           # Project-specific principles
-│   ├── features/               # Feature specifications (plural)
-│   │   ├── FEAT-001-[name].md # Feature specification
-│   │   ├── FEAT-002-[name].md # Feature specification
-│   │   └── feature-registry.md # Central feature tracking
-│   └── user-stories/           # User stories (plural)
-│       ├── US-001-[name].md   # User story collection
-│       └── US-002-[name].md   # User story collection
-├── design/                     # Phase 02: Technical Architecture
-│   ├── architecture.md         # System architecture diagrams (singular)
-│   ├── data-design.md         # Data architecture (singular)
-│   ├── security.md            # Security design (singular)
-│   ├── solution-designs/       # Solution designs (plural)
-│   │   ├── SD-001-[name].md   # Solution design for features
-│   │   └── SD-002-[name].md   # Solution design for features
-│   ├── contracts/              # API contracts (plural)
-│   │   ├── API-001-[name].md  # API contract specification
-│   │   └── API-002-[name].md  # API contract specification
-│   └── adr/                    # Architecture Decision Records (plural)
-│       ├── ADR-001-[title].md # Architectural decision record
-│       └── ADR-002-[title].md # Architectural decision record
-├── test/                       # Phase 03: Test Strategy & Specifications
-│   ├── test-plan.md           # Overall testing strategy (singular)
-│   └── test-procedures.md     # Test execution procedures (singular)
-├── build/                      # Phase 04: Implementation Strategy
-│   ├── implementation-plan.md  # Build strategy and planning (singular)
-│   └── build-procedures.md    # Development procedures (singular)
-├── deploy/                     # Phase 05: Deployment & Operations
-│   └── [TBD]                  # Deployment-specific documentation
-└── iterate/                    # Phase 06: Post-Deployment & Feedback
-    └── [TBD]                  # Iteration and improvement documentation
+├── README.md                     # This overview document
+└── helix/
+    ├── 00-discover/             # Phase 00: Discovery and validation
+    │   └── product-vision.md    # Product vision for HELIX
+    ├── 01-frame/                # Phase 01: Requirements & Problem Definition
+    │   ├── concerns.md          # Active project concerns and overrides
+    │   ├── prd.md               # Product Requirements Document
+    │   └── features/            # Feature specifications (plural)
+    │       ├── FEAT-001-[name].md # Feature specification
+    │       └── FEAT-011-[name].md # Feature specification
+    ├── 02-design/               # Phase 02: Technical Architecture
+    │   ├── adr/                 # Architecture Decision Records (plural)
+    │   │   ├── ADR-001-[title].md # Architectural decision record
+    │   │   └── ADR-002-[title].md # Architectural decision record
+    │   ├── contracts/           # API and workflow contracts (plural)
+    │   │   ├── API-001-[name].md # API contract specification
+    │   │   └── CONTRACT-001-[name].md # Cross-system contract
+    │   ├── data-design.md       # Data architecture
+    │   ├── security-architecture.md # Security design
+    │   ├── solution-designs/    # Solution designs (plural)
+    │   │   ├── SD-001-[name].md # Solution design for features
+    │   │   └── SD-002-[name].md # Solution design for features
+    │   └── technical-designs/   # Technical designs (plural)
+    │       ├── TD-002-[name].md # Technical implementation design
+    │       └── TD-011-[name].md # Technical implementation design
+    ├── 03-test/                 # Phase 03: Test Strategy & Specifications
+    │   ├── executions/          # Recorded execution evidence
+    │   │   └── README.md        # Execution log conventions
+    │   └── test-plans/          # Test plans (plural)
+    │       └── TP-002-[name].md # Test plan
+    ├── 04-build/                # Phase 04: Implementation Strategy
+    │   └── implementation-plan.md # Build strategy and planning
+    ├── 05-deploy/               # Phase 05: Deployment & Operations
+    │   ├── deployment-checklist.md # Release go/no-go checklist
+    │   ├── monitoring-setup.md  # Observability and alerting setup
+    │   ├── release-notes.md     # Release communication artifact
+    │   └── runbook.md           # Operator response and rollback guide
+    └── 06-iterate/              # Phase 06: Post-Deployment & Feedback
+        ├── alignment-reviews/   # Alignment and drift review reports
+        ├── improvement-backlog.md # Prioritized follow-on work
+        ├── metrics/             # Metric definitions and fixtures
+        ├── metrics-dashboard.md # Iteration health and outcome summary
+        └── security-metrics.md  # Security posture summary
 ```
 
-## Legacy Structure
+## Historical Categories
 
-The following directories contain documentation from the previous organization:
+Before this repository adopted the numbered `docs/helix/` layout, HELIX
+materials were commonly grouped into broad categories such as
+`architecture/`, `implementation/`, `usage/`, `development/`, and
+`references/`.
 
-### [Architecture](/docs/architecture/)
-Technical architecture, system design, and architectural decision records.
-
-### [Implementation](/docs/implementation/)
-Setup guides, configuration documentation, and implementation patterns.
-
-### [Usage](/docs/usage/)
-User guides, tutorials, FAQs, and troubleshooting resources.
-
-### [Development](/docs/development/)
-Developer documentation, contributing guidelines, and development standards.
-
-### [References](/docs/references/)
-External resources, research materials, and third-party documentation.
-
-### [Resources](/docs/resources/)
-Shared methodologies, principles, and workflow documentation.
+Those names are historical examples, not canonical paths in this repository,
+and this repo does not ship those directories as current `docs/` locations.
+In this repo, governed HELIX artifacts live under `docs/helix/`,
+authoritative shared workflow references live under `workflows/references/`,
+`docs/resources/` contains supporting background material, and other
+repository docs live as topic-specific files or directories directly under
+`docs/`.
 
 ## Naming Conventions
 
@@ -87,7 +91,7 @@ The documentation uses systematic identifiers to ensure traceability across phas
 
 ### File Naming
 
-- **Singular artifacts**: Project-wide documents use descriptive names (e.g., `architecture.md`, `test-plan.md`)
+- **Singular artifacts**: Project-wide documents use descriptive names (e.g., `prd.md`, `security-architecture.md`)
 - **Plural artifacts**: Feature-specific documents use ID + name format (e.g., `FEAT-001-user-authentication.md`)
 - **Collections**: Directories containing multiple related artifacts use plural names
 
@@ -95,23 +99,31 @@ The documentation uses systematic identifiers to ensure traceability across phas
 
 ### Singular vs Plural Artifacts
 
-**Singular Artifacts** (one per project):
-- Product Requirements Document (`frame/prd.md`)
-- Project Principles (`frame/principles.md`)
-- System Architecture (`design/architecture.md`)
-- Data Design (`design/data-design.md`)
-- Security Design (`design/security.md`)
-- Test Plan (`test/test-plan.md`)
-- Test Procedures (`test/test-procedures.md`)
-- Implementation Plan (`build/implementation-plan.md`)
-- Build Procedures (`build/build-procedures.md`)
+**Singular Artifacts in this repository**:
+- Product Vision (`docs/helix/00-discover/product-vision.md`)
+- Project Concerns (`docs/helix/01-frame/concerns.md`)
+- Product Requirements Document (`docs/helix/01-frame/prd.md`)
+- Data Design (`docs/helix/02-design/data-design.md`)
+- Security Architecture (`docs/helix/02-design/security-architecture.md`)
+- Implementation Plan (`docs/helix/04-build/implementation-plan.md`)
+- Deployment Checklist (`docs/helix/05-deploy/deployment-checklist.md`)
+- Monitoring Setup (`docs/helix/05-deploy/monitoring-setup.md`)
+- Runbook (`docs/helix/05-deploy/runbook.md`)
+- Release Notes (`docs/helix/05-deploy/release-notes.md`)
+- Metrics Dashboard (`docs/helix/06-iterate/metrics-dashboard.md`)
+- Security Metrics (`docs/helix/06-iterate/security-metrics.md`)
+- Improvement Backlog (`docs/helix/06-iterate/improvement-backlog.md`)
 
-**Plural Artifacts** (multiple per project):
-- Feature Specifications (`frame/features/FEAT-XXX-[name].md`)
-- User Stories (`frame/user-stories/US-XXX-[name].md`)
-- Solution Designs (`design/solution-designs/SD-XXX-[name].md`)
-- API Contracts (`design/contracts/API-XXX-[name].md`)
-- Architecture Decision Records (`design/adr/ADR-XXX-[title].md`)
+**Plural Artifacts in this repository**:
+- Feature Specifications (`docs/helix/01-frame/features`)
+- Solution Designs (`docs/helix/02-design/solution-designs`)
+- Technical Designs (`docs/helix/02-design/technical-designs`)
+- API Contracts (`docs/helix/02-design/contracts`)
+- Architecture Decision Records (`docs/helix/02-design/adr`)
+- Test Plans (`docs/helix/03-test/test-plans`)
+- Execution Records (`docs/helix/03-test/executions`)
+- Alignment Reviews (`docs/helix/06-iterate/alignment-reviews`)
+- Metrics Fixtures (`docs/helix/06-iterate/metrics`)
 
 ## Phase-Specific Details
 
@@ -178,10 +190,10 @@ The structure enables clear traceability across phases:
 4. **Maintain Traceability**: Link related artifacts across phases
 
 ### For Readers
-1. **Business Context**: Start in `frame/` for what and why
-2. **Technical Details**: Move to `design/` for how
-3. **Quality Assurance**: Check `test/` for verification approach
-4. **Implementation**: Review `build/` for development approach
+1. **Business Context**: Start in `docs/helix/01-frame/` for what and why
+2. **Technical Details**: Move to `docs/helix/02-design/` for how
+3. **Quality Assurance**: Check `docs/helix/03-test/` for verification approach
+4. **Implementation**: Review `docs/helix/04-build/` for development approach
 
 ### For Maintainers
 1. **Keep Structure Consistent**: Follow naming conventions
@@ -193,12 +205,18 @@ The structure enables clear traceability across phases:
 
 ### Using Helix Phases in Projects
 
-When applying the HELIX workflow to your project, organize documentation using the `docs/helix-phases/` convention:
+When applying the HELIX workflow to your project, organize governed workflow
+artifacts under `docs/helix/` and keep the reusable workflow library under
+`workflows/phases/`.
+
+The tree below is a generic project example, not a literal map of this
+repository:
 
 ```
 project-root/
 ├── docs/
-│   ├── helix-phases/           # HELIX phase documentation
+│   ├── helix/                 # Project-specific HELIX artifacts
+│   │   ├── 00-discover/       # Optional discovery and validation
 │   │   ├── 01-frame/          # Problem definition & requirements
 │   │   ├── 02-design/         # Architecture & design decisions
 │   │   ├── 03-test/           # Test strategies & plans
@@ -208,45 +226,55 @@ project-root/
 │   ├── reference/             # Reference documentation
 │   ├── operations/            # Operational procedures
 │   └── strategy/              # Strategic planning
+├── workflows/
+│   └── phases/                # Shared HELIX artifact prompts/templates
 ```
 
 This convention:
-- Keeps phase documentation separate from operational docs
+- Keeps governed HELIX artifacts separate from operational docs
 - Uses numbered prefixes for clear ordering
-- Places artifacts directly in phase directories (no `artifacts/` subdirectory)
+- Stores project outputs under `docs/helix/`, while shared library assets live
+  under `workflows/phases/`
 - Allows for project-specific documentation outside the phases
 
-### Why `helix-phases/`?
+### Why `docs/helix/`?
 
-The `helix-phases/` naming:
-1. Clearly indicates use of the HELIX workflow
+The `docs/helix/` layout:
+1. Matches the active HELIX workflow contract used in this repository
 2. Separates phase artifacts from other documentation
 3. Maintains consistency across projects using HELIX
-4. Enables tooling to identify and validate phase structure
+4. Keeps the project artifact tree distinct from the shared workflow library in
+   `workflows/phases/`
 
 ## Tools and Automation
 
 ### Validation
-The structure can be validated using:
+Use supported HELIX entrypoints to inspect and reconcile the workflow stack:
 ```bash
-# Check for required artifacts
-ddx validate docs-structure
+# Review the artifact stack for drift
+helix align repo
 
-# Verify cross-references
-ddx validate traceability
+# Decide the next bounded HELIX action for the repository
+helix check repo
 
-# Generate artifact inventory
-ddx list artifacts
+# Inspect execution-safe tracked work
+ddx bead ready --execution
 ```
 
 ### Templates
-Use workflow templates to create consistent artifacts:
+The reusable artifact library lives under `workflows/phases/.../artifacts/`.
+Use the HELIX commands to create or refine project artifacts, and reference the
+library paths directly when you need the underlying template assets:
 ```bash
-# Create new feature specification
-ddx apply workflows/helix/phases/01-frame/artifacts/feature-specification
+# Create or refine frame artifacts for a scope
+helix frame auth
 
-# Generate solution design
-ddx apply workflows/helix/phases/02-design/artifacts/solution-design
+# Create or refine a design document for a scope
+helix design auth
+
+# Reference the shared artifact template directories directly
+workflows/phases/01-frame/artifacts/feature-specification/
+workflows/phases/02-design/artifacts/solution-design/
 ```
 
 ## Migration Notes
@@ -258,7 +286,8 @@ This structure was established to replace the previous organization. Key changes
 3. **Singular/Plural Distinction**: Clear separation of project-wide vs feature-specific artifacts
 4. **Workflow Alignment**: Structure mirrors HELIX workflow phases
 
-For legacy documents, see the directories listed under Legacy Structure above.
+For historical context, see the category notes above rather than treating them
+as live repository paths.
 
 ---
 

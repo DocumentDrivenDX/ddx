@@ -7,29 +7,9 @@ artifact:
   phase: frame
 
 description: |
-  The PRD is the foundational business document that defines the problem,
-  solution vision, success metrics, and requirements. It serves as the
-  single source of truth for what we're building and why.
-
-dependencies:
-  requires:
-    - input: Problem or opportunity identified
-      type: external
-      required: true
-    - input: Stakeholder input gathered
-      type: external
-      required: true
-
-  enables:
-    - output: Feature specifications
-      type: artifact
-      path: feature-specification
-    - output: User stories
-      type: artifact
-      path: user-stories
-    - output: Solution design
-      type: artifact
-      phase: design
+  Product-scope authority document that translates vision into prioritized,
+  measurable requirements, success metrics, non-goals, assumptions, and
+  acceptance sketches.
 
 output:
   location: docs/helix/01-frame/prd.md
@@ -105,7 +85,7 @@ template:
 
 examples:
   - file: example.md
-    description: Sample PRD for a CLI development toolkit
+    description: Sample PRD for DepositMatch, derived from the product vision example
 
 workflow:
   creation_order: 1
@@ -127,11 +107,22 @@ relationships:
     - solution-design
     - test-plan
 
+references:
+  - title: "Atlassian Product Requirements Document"
+    file: docs/resources/atlassian-prd.md
+    relationship: "Grounds agile PRD scope, shared understanding, assumptions, and out-of-scope guidance"
+  - title: "Aha! Product Requirements Document Template"
+    file: docs/resources/aha-prd-template.md
+    relationship: "Grounds concise cross-functional PRD structure and scope guidance"
+  - title: "IBM Requirements Management"
+    file: docs/resources/ibm-requirements-management.md
+    relationship: "Grounds measurable, prioritized, traceable requirements and verification discipline"
+
 tags:
   - business
   - requirements
-  - vision
-  - strategy
+  - product-scope
+  - traceability
 
 version: 1.0.0
 last_updated: 2024-01-14

@@ -1,10 +1,8 @@
 ---
-dun:
-  id: TD-XXX
-  depends_on:
-    - US-XXX
-    - ADR-XXX
+ddx:
+  id: "[artifact-id]"
 ---
+
 # Technical Design: TD-XXX-[story-name]
 
 **User Story**: [[US-XXX]] | **Feature**: [[FEAT-XXX]] | **Solution Design**: [[SD-XXX]]
@@ -15,6 +13,7 @@ dun:
 - Use for one vertical slice or one bounded implementation story
 - Must inherit the broader approach from the parent solution design
 - Do not redefine cross-component architecture here; that belongs in `SD-XXX`
+- Governing artifacts: [User Story, Solution Design, Contracts, Concerns]
 
 ## Acceptance Criteria
 
@@ -36,10 +35,12 @@ dun:
 ### Modified: [Component Name]
 - **Current State**: [What exists]
 - **Changes**: [What changes]
+- **Files**: `[path]`
 
 ### New: [Component Name]
 - **Purpose**: [Why needed]
 - **Interfaces**: Input: [receives] / Output: [produces]
+- **Files**: `[path]`
 
 ## API/Interface Design
 

@@ -7,27 +7,8 @@ artifact:
   phase: frame
 
 description: |
-  Comprehensive identification, assessment, and management of project risks.
-  Includes both threats and opportunities with mitigation strategies and ownership.
-
-dependencies:
-  requires:
-    - input: PRD
-      type: artifact
-      path: prd
-      required: false
-    - input: Stakeholder Map
-      type: artifact
-      path: stakeholder-map
-      required: false
-
-  enables:
-    - output: Risk mitigation plans
-      type: artifact
-      phase: all
-    - output: Contingency planning
-      type: artifact
-      phase: build
+  Action register for uncertain events that could change project outcome,
+  scored with probability, impact, owner, trigger, response, and review cadence.
 
 output:
   location: docs/helix/01-frame/risk-register.md
@@ -103,6 +84,14 @@ template:
     - risk_categories
     - mitigation_strategies
     - monitoring_dashboard
+
+example:
+  file: example.md
+
+references:
+  - title: "PMI Risk Analysis and Management"
+    file: docs/resources/pmi-risk-analysis-management.md
+    relationship: "Grounds probability-impact scoring, triggers, ownership, and response planning"
 
 workflow:
   creation_order: 6

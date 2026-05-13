@@ -1,3 +1,8 @@
+---
+ddx:
+  id: "[artifact-id]"
+---
+
 # Risk Register
 
 **Status**: [Draft | Review | Approved]
@@ -17,6 +22,7 @@
 **Probability**: Very High (5) >80% | High (4) 60-80% | Medium (3) 40-60% | Low (2) 20-40% | Very Low (1) <20%
 **Impact**: Critical (5) >30% overrun | High (4) 20-30% | Medium (3) 10-20% | Low (2) 5-10% | Negligible (1) <5%
 **Risk Score** = Probability x Impact: Critical (20-25), High (12-19), Medium (6-11), Low (1-5)
+**Response**: Avoid | Mitigate | Transfer | Accept | Escalate
 
 ## Active Risks
 
@@ -31,6 +37,7 @@
 - **Probability**: [1-5] - [Justification]
 - **Impact**: [1-5] - [Justification]
 - **Risk Score**: [P x I]
+- **Response**: [Avoid | Mitigate | Transfer | Accept | Escalate]
 
 **Triggers**: [Early warning signs]
 

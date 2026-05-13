@@ -780,10 +780,8 @@ type CycleTimeSummary struct {
 	MaxMs *int `json:"maxMs,omitempty"`
 }
 
-// DefaultRouteStatus shows which provider/model the default model-ref resolves to.
+// DefaultRouteStatus shows which provider/model the default route resolves to.
 type DefaultRouteStatus struct {
-	// The model-ref key (e.g. "code-medium") or empty if no default configured
-	ModelRef string `json:"modelRef"`
 	// Selected provider name, or null if no healthy candidate found
 	ResolvedProvider *string `json:"resolvedProvider,omitempty"`
 	// Selected model identifier, or null if no healthy candidate found

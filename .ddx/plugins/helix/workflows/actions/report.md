@@ -55,7 +55,7 @@ For each follow-on item, create a bead:
 ddx bead create "<category>: <description>" \
   --type task \
   --labels helix,phase:build \
-  --spec-id <governing-artifact> \
+  --set spec-id=<governing-artifact> \
   --description "<context-digest>...</context-digest>
 Follow-on from bead <parent-id>.
 <description of the work needed>" \

@@ -52,6 +52,19 @@ Use a technical design when the scope is one story or one bounded vertical
 slice. It should inherit the broader architecture from the parent solution
 design instead of redefining feature-level structure.
 
+`ux-design` remains retired as a standalone HELIX artifact. Put user-facing
+flow rationale, wireframes, and interaction trade-offs in the governing
+solution design or technical design, and use a proof of concept when the main
+risk is validating an interactive workflow end to end.
+
+`auth-design` is retired as a standalone HELIX artifact. Put authentication
+and authorization security posture — trust boundaries, identity, session
+handling, token security, and access control policy — in `security-architecture`,
+which has a dedicated "Identity and Access" section for this purpose. Use a
+`solution-design` when the auth subsystem is a first-class implementation
+target (e.g., a custom identity provider or multi-tenant RBAC engine) that
+needs a full feature-level design artifact of its own.
+
 ### 2. Architecture Diagrams
 **Location**: `docs/helix/02-design/architecture.md`
 
@@ -62,15 +75,25 @@ Visual system documentation using C4 model:
 - **Deployment Diagram**: Infrastructure and deployment
 - **Data Flow**: How information moves through the system
 
-### 3. API/Interface Contracts
-**Location**: `docs/helix/02-design/contracts/API-XXX-[name].md`
+### 3. Contracts
+**Location**: `docs/helix/02-design/contracts/CONTRACT-XXX-[name].md`
 
-Defines all external interfaces:
+Defines normative interface and schema specifications that another team can
+implement against directly:
 - **CLI Contracts**: Command structure, options, input/output formats
-- **REST API Contracts**: Endpoints, request/response schemas, error codes
-- **Library APIs**: Public functions, parameters, return types
-- **Data Contracts**: JSON schemas, validation rules
-- **Error Contracts**: Error codes, messages, recovery actions
+- **HTTP/API Contracts**: Endpoints, request/response schemas, error codes
+- **Library Contracts**: Public functions, parameters, return types
+- **Protocol and Event Contracts**: Message shapes, sequencing, compatibility rules
+- **Data Contracts**: JSON schemas, validation rules, units, enums, formulas
+- **Error Contracts**: Error codes, messages, retry behavior, recovery actions
+
+Use a contract when the document is the authoritative field-by-field,
+schema-level, or interface-level specification. Put decision rationale in ADRs,
+feature-level approach in solution designs, and one-slice execution planning in
+technical designs.
+
+`CONTRACT-XXX` is the canonical prefix. `API-XXX` remains an allowed subtype
+for API-specific contracts when that narrower label improves clarity.
 
 ### 4. Architecture Decision Records (ADRs)
 **Location**: `docs/helix/02-design/adr/ADR-XXX-[title].md`
@@ -82,7 +105,23 @@ Documents significant architectural decisions:
 - **Consequences**: Trade-offs and impacts
 - **Success Criteria**: How to validate the decision
 
-### 5. Data Design
+### 5. Security Architecture
+**Location**: `docs/helix/02-design/security-architecture.md`
+
+Defines the design-level security posture that implementation and testing must
+follow:
+- **Trust Boundaries**: Component and integration boundaries that require controls
+- **Control Mapping**: Preventive, detective, and recovery controls tied to threats
+- **Identity and Access**: Authentication, authorization, sessions, and token handling
+- **Data Protection**: Encryption, secrets handling, and sensitive-data controls
+- **Verification Hooks**: Testable expectations for security tests and reviews
+
+Use `security-architecture` when the document is the canonical place for
+design-level security decisions. Keep requirements in Frame's
+`security-requirements` and `threat-model`; keep schema and lifecycle details
+in `data-design`.
+
+### 6. Data Design
 **Location**: `docs/helix/02-design/data-design.md`
 
 Comprehensive data architecture:
@@ -91,6 +130,11 @@ Comprehensive data architecture:
 - **Data Patterns**: Soft deletes, audit trails, versioning
 - **Access Patterns**: Common queries and optimization
 - **Migration Strategy**: Moving from current to target state
+
+`data-protection` is not a separate design artifact. Put design-level privacy,
+encryption, handling, and monitoring controls in `security-architecture`; keep
+regulatory and retention obligations in Frame's `compliance-requirements`; use
+`data-design` only for schema, storage, and lifecycle consequences.
 
 ### Technical Investigation Artifacts (Optional - When Technical Uncertainty Exists)
 
@@ -190,11 +234,15 @@ When deciding which artifact to use, ask these questions in order:
    - YES → **ADR** (e.g., "Use GraphQL for internal APIs", "Adopt microservices architecture")
    - NO → Continue to question 2
 
-2. **Are you evaluating or selecting specific technologies/libraries?**
-   - YES → **Tech Spike** (e.g., "Redis vs Hazelcast for caching", "Caliban vs Sangria for GraphQL")
+2. **Are you defining a normative interface or schema another team could implement against directly?**
+   - YES → **Contract** (e.g., "Telemetry export payload schema", "CLI mutation surface", "Execution document format")
    - NO → Continue to question 3
 
-3. **Are you defining how to implement an architectural approach?**
+3. **Are you evaluating or selecting specific technologies/libraries?**
+   - YES → **Tech Spike** (e.g., "Redis vs Hazelcast for caching", "Caliban vs Sangria for GraphQL")
+   - NO → Continue to question 4
+
+4. **Are you defining how to implement an architectural approach?**
    - YES → **Solution Design** (e.g., "GraphQL federation architecture", "Database sharding strategy")
    - NO → Consider if this belongs in Build phase as an Implementation Guide
 
@@ -205,6 +253,12 @@ When deciding which artifact to use, ask these questions in order:
 **Scope**: Protocol choices, architectural patterns, system boundaries, data strategies
 **Review Cycle**: Only when requirements fundamentally change
 **Example**: "We will separate internal and external API surfaces because they have different SLAs, security models, and evolution rates"
+
+#### Contracts - Normative Interfaces (WHAT EXACTLY)
+**Purpose**: Define the exact external surface another team can implement against directly
+**Scope**: CLI/API/library surfaces, event schemas, protocol messages, validation rules, precedence, and error semantics
+**Review Cycle**: When the governed interface changes
+**Example**: "Telemetry export payload schema including exact field names, units, enums, precedence, and error behavior"
 
 #### Tech Spikes - Technology Selection (WHAT)
 **Purpose**: Evaluate and select specific technologies to implement architectural decisions
@@ -228,8 +282,10 @@ Here's how artifacts build on each other:
 2. SPIKE-003: "GraphQL library evaluation for Scala"
    ↓ (Caliban selected)
 3. SD-005: "Internal GraphQL federation implementation"
-   ↓ (Implementation defined)
-4. Build Phase: Implementation guides and code
+   ↓ (Feature-level approach defined)
+4. CONTRACT-004: "Internal GraphQL schema and error contract"
+   ↓ (Normative interface defined)
+5. Build Phase: Implementation guides and code
 ```
 
 ### Common Mistakes to Avoid
@@ -252,6 +308,8 @@ Each artifact should reference related artifacts:
 - ADRs should note which Tech Spikes validate the decision
 - Tech Spikes should reference the ADR they support
 - Solution Designs should reference both the ADR (why) and Tech Spike (what technology)
+- Contracts should reference the ADR or design that gives them scope
+- ADRs, solution designs, and technical designs should reference contracts rather than duplicating normative fields or schemas
 
 ### Reference
 For complete artifact boundary definitions, see [ADR-011: Design Phase Artifact Boundaries](/docs/helix/02-design/adr/adr-011-design-artifact-boundaries.md) in the DDX documentation.

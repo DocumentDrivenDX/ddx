@@ -1,5 +1,5 @@
 ---
-dun:
+ddx:
   id: FEAT-008
   depends_on:
     - helix.prd
@@ -98,7 +98,7 @@ Existing artifacts must remain valid. New template features are additive.
 ## Constraints
 
 - Templates must work with the existing DDX artifact management system.
-- Relationship declarations must be compatible with the existing `dun`
+- Relationship declarations must be compatible with the existing `ddx`
   frontmatter format.
 
 ## Out of Scope

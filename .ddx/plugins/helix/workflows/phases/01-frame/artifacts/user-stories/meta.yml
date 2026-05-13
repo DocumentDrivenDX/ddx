@@ -7,33 +7,11 @@ artifact:
   phase: frame
 
 description: |
-  Standalone design artifacts defining vertical slices of the application.
-  Each story traces a complete user journey from trigger to outcome with
-  acceptance criteria concrete enough to drive test-first implementation.
-  Stories are stable governing references — tracker issues reference them,
-  not the other way around.
-
-dependencies:
-  requires:
-    - input: PRD
-      type: artifact
-      path: prd
-      required: true
-    - input: Feature specifications
-      type: artifact
-      path: feature-specification
-      required: true
-
-  enables:
-    - output: Solution designs
-      type: artifact
-      phase: design
-    - output: Test cases
-      type: artifact
-      phase: test
-    - output: Tracker issues
-      type: tracker
-      phase: build
+  Stable design artifacts defining vertical user journeys through feature
+  behavior. Each story traces one persona from trigger to outcome, references
+  parent feature requirements, and carries acceptance criteria concrete enough
+  to drive test-first implementation. Stories are governing references; tracker
+  issues reference them, not the other way around.
 
 output:
   location: docs/helix/01-frame/user-stories/
@@ -73,13 +51,25 @@ validation:
       severity: warning
 
   automated_checks:
-    - pattern: "As a .* I want .* [Ss]o that"
+    - pattern: "\\*\\*As a\\*\\*"
       expected: ">0"
-      message: Story must follow standard format
+      message: Story must name the persona
 
-    - pattern: "Given .* [Ww]hen .* [Tt]hen"
+    - pattern: "\\*\\*I want\\*\\*"
       expected: ">0"
-      message: Must include testable acceptance criteria
+      message: Story must name the user's goal
+
+    - pattern: "\\*\\*So that\\*\\*"
+      expected: ">0"
+      message: Story must name the value or outcome
+
+    - pattern: "Given .* [Ww]hen "
+      expected: ">0"
+      message: Must include testable Given/When acceptance criteria
+
+    - pattern: "[Tt]hen "
+      expected: ">0"
+      message: Must include observable outcomes in acceptance criteria
 
 variables:
   - name: feature_id
@@ -91,6 +81,17 @@ prompts:
 
 template:
   file: template.md
+
+example:
+  file: example.md
+
+references:
+  - title: "Atlassian User Stories"
+    file: docs/resources/atlassian-user-stories.md
+    relationship: "Grounds persona-goal-value story framing and acceptance criteria"
+  - title: "Cucumber Executable Specifications"
+    file: docs/resources/cucumber-executable-specifications.md
+    relationship: "Grounds observable Given/When/Then acceptance criteria without prescribing tooling"
 
 workflow:
   creation_order: 3

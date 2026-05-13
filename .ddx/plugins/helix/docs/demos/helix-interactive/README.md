@@ -1,5 +1,9 @@
 # Interactive HELIX Demo
 
+Status: experimental internal demo. This directory is not part of the shipped
+public demo inventory defined by FEAT-007, is not embedded on the microsite,
+and is not recorded by `.github/workflows/pages.yml`.
+
 Shows a complete HELIX session inside Claude Code: framing a project,
 running the autopilot, reviewing results, and evolving requirements.
 

@@ -1,10 +1,8 @@
 ---
-dun:
-  id: ADR-XXX
-  depends_on:
-    - helix.prd
-    - helix.architecture
+ddx:
+  id: "[artifact-id]"
 ---
+
 # ADR-[NUMBER]: [Title]
 
 | Date | Status | Deciders | Related | Confidence |
@@ -18,6 +16,7 @@ dun:
 | Problem | [Specific problem] |
 | Current State | [Existing situation] |
 | Requirements | [Key requirements driving this] |
+| Decision Drivers | [Forces that make this architecture-significant] |
 
 ## Decision
 
@@ -52,6 +51,11 @@ We will [decision statement].
 | Success Metric | Review Trigger |
 |----------------|----------------|
 | [Metric 1] | [Condition for reconsideration] |
+
+## Supersession
+
+- **Supersedes**: [ADR-XXX or None]
+- **Superseded by**: [ADR-YYY or None]
 
 ## Concern Impact
 

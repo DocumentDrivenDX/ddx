@@ -130,7 +130,7 @@ in the same session). Do not pick an ID by guessing — only use the scanned
 value.
 
 Before writing each feature spec, validate any `depends_on` entries in its
-dun frontmatter:
+ddx frontmatter:
 - Each dependency ID must resolve to an existing artifact on disk (e.g.,
   `prd.md` for a spec that depends on the PRD).
 - If a target does not exist, either remove the dependency or stop and

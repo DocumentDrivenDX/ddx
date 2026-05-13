@@ -1,5 +1,5 @@
 ---
-dun:
+ddx:
   id: helix.workflow.conventions
   depends_on:
     - helix.workflow
@@ -119,27 +119,23 @@ Each phase directory contains artifacts directly (no `artifacts/` subdirectory):
 
 04-build/
 ├── README.md
-├── implementation-plan.md
-├── build-procedures.md
-└── secure-coding-checklist.md
+└── implementation-plan.md
 
 05-deploy/
 ├── README.md
 ├── deployment-checklist.md
-├── runbook.md
 ├── monitoring-setup.md
-└── security-monitoring.md
+├── runbook.md
+└── release-notes.md
 
 06-iterate/
 ├── README.md
 ├── metrics-dashboard.md
-├── metrics/                 # Shared metric definitions (YAML)
-├── feedback-analysis.md
-├── lessons-learned.md
-├── alignment-reviews/
-├── backfill-reports/
+├── security-metrics.md
 ├── improvement-backlog.md
-└── refinements/
+├── metrics/                 # Shared metric definitions (YAML)
+├── alignment-reviews/
+└── backfill-reports/
 ```
 
 ### Parking Lot Registry
@@ -148,7 +144,7 @@ The parking lot is a project-level registry for deferred and future work:
 - **Location**: `docs/helix/parking-lot.md`
 - **Purpose**: Capture deferred work without adding inline sections to core artifacts
 - **Eligibility**: Any HELIX artifact may be parked
-- **Tooling**: Mark parked artifacts with `dun.parking_lot: true` to exclude them from dependency graphs
+- **Tooling**: Mark parked artifacts with `ddx.parking_lot: true` to exclude them from dependency graphs
 
 ## Tracker Conventions
 

@@ -1203,7 +1203,6 @@ func TestRESTWorkerStart_DecodeIntoExecuteLoopSpec(t *testing.T) {
 		"model":               "qwen/qwen3.6",
 		"profile":             "default",
 		"provider":            "openrouter",
-		"model_ref":           "openrouter/qwen/qwen3.6",
 		"effort":              "high",
 		"label_filter":        "phase:reliability",
 		"mode":                "watch",

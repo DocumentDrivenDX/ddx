@@ -15,13 +15,16 @@
 - Local installation exposes the mirrored HELIX command surface safely.
 
 ## Technical Approach
-Provide a thin Bash wrapper that keeps HELIX execution bounded, delegates deep
-work to documented actions, and gives the repository a local tracker and
-launcher without requiring operators to assemble prompts manually.
+Provide a thin Bash wrapper that keeps HELIX execution bounded, delegates
+supervisory decisions to documented HELIX actions, and delegates managed
+execution to DDx execution surfaces without requiring operators to assemble
+prompts manually. The wrapper is an entrypoint and compatibility layer, not
+the durable home of queue-drain mechanics.
 
 This design defines the orchestration contract for `helix run`. The wrapper is
-not allowed to invent its own workflow policy; it must execute the HELIX
-decision model exactly as specified by the authority stack.
+not allowed to invent its own workflow policy, and it must not grow a parallel
+managed-execution substrate now that DDx ships `execute-bead` and is adopting
+`execute-loop` as the queue-drain contract.
 
 ## Orchestration Contract
 
@@ -29,7 +32,13 @@ decision model exactly as specified by the authority stack.
 
 - It always starts from tracker-backed ready work, not from assumptions about
   in-progress work.
-- It executes at most one build issue per pass.
+- It delegates managed bead execution to DDx instead of owning the git-aware
+  execution mechanics itself.
+- It should converge on `ddx agent execute-loop` as the queue-drain substrate,
+  with `ddx agent execute-bead` as the bounded execution primitive underneath.
+- It treats alignment as a bead-governed planning action: acquire the
+  `kind:planning,action:align` bead, then run the stored prompt and file
+  properly ordered follow-on beads.
 - It treats `check` as the source of next-step guidance after the ready queue
   drains.
 - It revalidates selected issue state at safe boundaries so concurrent local
@@ -48,7 +57,7 @@ decision model exactly as specified by the authority stack.
 ### Modified: Wrapper entry and run loop
 - **Current State**: Bash wrapper around HELIX actions.
 - **Changes**: Enforce bounded execution, queue-drain checks, and review-aware
-  cycle control.
+  cycle control while keeping DDx as the queue-drain owner.
 
 ### Modified: Tracker integration
 - **Current State**: Local JSONL issue tracker.
@@ -66,14 +75,18 @@ decision model exactly as specified by the authority stack.
 
 When `ddx bead ready --json` reports one or more ready execution issues:
 
-1. Select the best ready execution issue using the tracker ranking rules.
+1. Select or scope the next ready execution issue using the tracker ranking
+   rules and HELIX queue policy.
 2. Re-read the issue and verify it is still a safe execution target.
-3. Claim the issue.
-4. Run one bounded build pass for that issue.
-5. Re-read the issue before close and verify no material queue drift or
-   supersession invalidates the close.
-6. Verify, commit, and close it when the issue is complete.
-7. Count the pass as a completed cycle only if the issue actually closes.
+3. Dispatch DDx-managed execution:
+   - target contract: `ddx agent execute-loop --once`
+   - compatibility path while loop parity lands: `ddx agent execute-bead <id>`
+4. Read the structured DDx outcome and treat landed vs preserved state as the
+   source of truth for what happened during the attempt.
+5. Re-check workflow drift before any HELIX-owned post-execution review or
+   follow-on work.
+6. Count the pass as a completed cycle only if the DDx-managed attempt lands
+   and the bead closes.
 
 ### Queue Drain
 
@@ -121,7 +134,7 @@ The loop must distinguish between attempted work and completed work.
 - The Codex runner must capture stdout and stderr together before token
   extraction so the `tokens used` footer is accounted for regardless of which
   stream Codex used.
-- `.ddx/context.md` must be regenerated at run start, on epic switch, and
+- `.helix/context.md` must be regenerated at run start, on epic switch, and
   after every 5 completed build cycles. The generator must include:
   - the Quick Reference build and test commands from `AGENTS.md`
   - current open, in-progress, ready-execution, and closed issue counts
@@ -233,7 +246,9 @@ consecutive empty BUILDs:
 ## Concurrent Interactive Refinement
 
 `helix run` must support the local operating mode where one session advances
-execution while another session refines specs or tracker issues.
+execution while another session refines specs or tracker issues, including
+direct conversational agent work that creates or updates beads without going
+through a CLI wrapper.
 
 ### Material Queue Drift
 
@@ -291,6 +306,10 @@ Post-build review is part of the orchestration contract.
   model rather than the implementation model.
 - When an epic closes, the loop must run a scoped post-epic review against the
   epic's governing artifact before releasing focus.
+- Actionable findings from review, alignment, measure, or report must be filed
+  as beads with explicit parent/dependency topology whenever ordering matters;
+  the wrapper must not depend on operator memory to infer the next runnable
+  slice.
 
 ## Blockers And Work Absorption
 
@@ -319,8 +338,10 @@ usage and required output trailers.
 
 ### 3. Agent Runner
 
-`run_agent_prompt` supports both Codex and Claude. It prints dry-run commands,
-streams Claude progress when possible, and enforces an agent timeout.
+`run_agent_prompt` remains the surface for non-managed prompts such as
+`check`, `review`, `align`, `design`, and `polish`. Managed implementation
+attempts should flow through DDx execution commands instead of raw
+`ddx agent run`.
 
 ### 4. Built-In Tracker Library
 
@@ -337,7 +358,7 @@ freshness metadata.
 - checks ready work before implementation
 - persists run-controller state for status and observability
 - revalidates the selected issue immediately before claim and before close
-- runs one bounded build pass at a time
+- delegates one bounded managed execution pass at a time through DDx
 - calls `check` after the queue drains
 - honors `DESIGN` and `POLISH` queue-drain results before build resumes
 - can auto-run alignment once after `ALIGN`
@@ -347,6 +368,16 @@ freshness metadata.
 - uses epic focus, bounded exponential backoff, and blocker reporting to keep
   useful work moving without losing traceability
 - must not attempt an unblock build pass after `WAIT`
+
+Migration note:
+- HELIX-owned issue selection, epic focus, batching, and queue-drain routing
+  still exist today.
+- The execution contract being designed for is DDx-managed queue drain via
+  `execute-loop`, not indefinite growth of wrapper-owned claim/execute/close
+  logic.
+- If `execute-loop` cannot yet express a required HELIX supervisory behavior,
+  that gap should become explicit DDx follow-on work, ordered in the tracker
+  with parents and dependencies where needed, rather than hidden shell policy.
 
 ### 6. Installer
 

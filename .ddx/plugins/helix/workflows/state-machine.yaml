@@ -74,13 +74,11 @@ phases:
         - architecture           # System-level first
         - solution-design        # Feature-level designs
         - technical-design       # Implementation details
-        - contracts              # API contracts
+        - contract               # Normative interface and schema contracts
       parallel:
         - adr                    # Decisions can be captured anytime
         - security-architecture
         - data-design
-        - auth-design
-        - data-protection
         - proof-of-concept
         - tech-spike
     entry_gate:
@@ -91,8 +89,14 @@ phases:
       automated:
         - check: file_exists
           path: docs/helix/02-design/architecture.md
+        - check: dir_not_empty
+          path: docs/helix/02-design/contracts
+        - check: dir_not_empty
+          path: docs/helix/02-design/adr
         - check: file_exists
-          path: docs/helix/02-design/contracts/*.yaml
+          path: docs/helix/02-design/security-architecture.md
+        - check: file_exists
+          path: docs/helix/02-design/data-design.md
         - check: grep_absent
           pattern: "\\[NEEDS CLARIFICATION\\]"
           path: docs/helix/02-design/**/*.md
@@ -131,11 +135,7 @@ phases:
     description: Implement code to pass tests (TDD Green phase)
     artifacts:
       ordered:
-        - implementation-plan    # Plan the build
-        - story-implementation-plan  # Emits per-story build issues
-      parallel:
-        - build-procedures       # Build documentation
-        - secure-coding          # Security guidelines
+        - implementation-plan    # Plan the build; story-level work decomposed into tracker issues via helix build
     entry_gate:
       automated:
         - check: phase_complete
@@ -158,11 +158,11 @@ phases:
     description: Release to production with monitoring
     artifacts:
       ordered:
-        - deployment-checklist   # Technical deployment
-        - launch-checklist       # Cross-functional launch
-        - release-notes          # User communication
-      parallel:
-        - gtm-plan              # Go-to-market
+        - deployment-checklist   # Technical go/no-go for rollout
+        - monitoring-setup       # Proves the rollout is observable
+        - runbook                # Operator rollback and recovery guidance
+        - release-notes          # User and operator communication
+      parallel: []
     entry_gate:
       automated:
         - check: phase_complete
@@ -183,10 +183,8 @@ phases:
     artifacts:
       ordered:
         - metrics-dashboard      # Collect data
-        - feedback-analysis      # Analyze feedback
-        - lessons-learned        # Document learnings
+        - security-metrics       # Security-specific learnings
         - improvement-backlog    # Plan improvements
-        - iteration-planning     # Next cycle
       parallel: []
     entry_gate:
       automated:
@@ -195,7 +193,7 @@ phases:
     exit_gate:
       automated:
         - check: file_exists
-          path: docs/helix/06-iterate/lessons-learned.md
+          path: docs/helix/06-iterate/improvement-backlog.md
       manual:
         - "Next iteration scope decided"
     next_phase: frame  # Loop back
@@ -208,7 +206,7 @@ story_flow:
     test_plan: TP
     implementation_issue: "ddx bead issue labeled phase:build"
     deployment_issue: "ddx bead issue labeled phase:deploy"
-    iteration_report: IR
+    iterate_evidence: "all deploy issue(s) complete with no matching deploy issue remaining not closed, plus optional linked tracker follow-on work; canonical iterate outputs remain shared iteration context"
 
   transitions:
     - from: US-{id}
@@ -224,7 +222,7 @@ story_flow:
       to: "tracker issue(s) labeled helix, phase:deploy, story:US-{id}"
       phase_change: build -> deploy
     - from: "tracker issue(s) labeled helix, phase:deploy, story:US-{id}"
-      to: IR-{id}
+      to: "all deploy issue(s) complete for story US-{id} with no matching deploy issue remaining not closed; optional linked tracker follow-on work"
       phase_change: deploy -> iterate
 
   state_detection:
@@ -234,8 +232,9 @@ story_flow:
       If exists TD-036: Story is in DESIGN
       If exists TP-036: Story is in TEST
       If open HELIX build issues exist for story US-036: Story is in BUILD
-      If open HELIX deploy issues exist for story US-036: Story is in DEPLOY
-      If exists IR-036: Story is in ITERATE
+      If any HELIX deploy issue for story US-036 is not closed, including status: in_progress: Story is in DEPLOY
+      If all deploy issues for story US-036 are complete and no matching deploy issue remains not closed: Story is in ITERATE
+      Linked tracker follow-on work adds iterate evidence when present; canonical iterate outputs remain shared iteration context and are not queried by story ID
 
 # Parallelization rules
 parallelization:

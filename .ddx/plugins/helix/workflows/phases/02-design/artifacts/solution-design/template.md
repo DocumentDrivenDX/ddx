@@ -1,9 +1,8 @@
 ---
-dun:
-  id: SD-XXX
-  depends_on:
-    - FEAT-XXX
+ddx:
+  id: "[artifact-id]"
 ---
+
 # Solution Design
 
 **Feature**: [[FEAT-XXX]] | **Artifact**: `docs/helix/02-design/solution-designs/SD-XXX-[name].md`
@@ -14,6 +13,7 @@ dun:
 - Use for cross-component behavior, main alternatives, domain model, and
   decomposition
 - Do not use for one-story implementation details; those belong in `TD-XXX`
+- Governing artifacts: [Architecture, ADRs, Contracts, Concerns]
 
 ## Requirements Mapping
 
@@ -44,6 +44,8 @@ dun:
 
 **Selected Approach**: [Which and why]
 
+**Architecture/ADR impact**: [No change, or name required Architecture/ADR update]
+
 ## Domain Model
 
 ```mermaid
@@ -61,6 +63,7 @@ erDiagram
 - **Responsibilities**: [List]
 - **Requirements Addressed**: [Which requirements]
 - **Interfaces**: [How it communicates]
+- **Owned by TDs**: [Story-level work that will be designed later]
 
 ### Component Interactions
 ```mermaid
@@ -69,6 +72,9 @@ graph TD
 ```
 
 ## Technology Rationale
+
+Only include feature-specific technology choices here. System-wide choices
+belong in Architecture or ADRs.
 
 | Layer | Choice | Why | Alternatives Rejected |
 |-------|--------|-----|----------------------|

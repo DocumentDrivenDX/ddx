@@ -33,7 +33,6 @@ func TestBuildReviewExecuteRequest(t *testing.T) {
 
 	assert.Equal(t, "claude", got.HarnessOverride)
 	assert.Empty(t, got.ModelOverride)
-	assert.Empty(t, got.ModelRefOverride)
 	assert.Equal(t, "review-strong", got.ProfileOverride)
 	assert.True(t, got.ClearRoutingPins)
 	assert.True(t, got.ClearProfile)
@@ -53,11 +52,10 @@ func TestBuildReviewExecuteRequest(t *testing.T) {
 	assert.Equal(t, "70", got.Correlation["impl_actual_power"])
 }
 
-func TestReviewerDispatch_UsesProfileNotModelRef(t *testing.T) {
+func TestReviewerDispatch_UsesProfilePin(t *testing.T) {
 	got := BuildReviewExecuteRequest(ImplementerRouting{Harness: "claude"}, "", "review-strong")
 	assert.Empty(t, got.HarnessOverride)
 	assert.Empty(t, got.ModelOverride)
-	assert.Empty(t, got.ModelRefOverride)
 	assert.Equal(t, "review-strong", got.ProfileOverride)
 }
 

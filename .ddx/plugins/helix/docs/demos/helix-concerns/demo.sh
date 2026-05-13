@@ -371,7 +371,7 @@ that violate the declared concerns. Be specific about which file and
 line has the drift.
 
 Create a tracker issue for each drift finding:
-ddx bead create "drift: <description>" --type task --labels helix,phase:build,review-finding
+ddx bead create "drift: <description>" --type task --labels helix,phase:build,review-finding,area:testing
 REVIEW_PROMPT
 
   echo ""

@@ -8,39 +8,8 @@ artifact:
   optional: true
 
 description: |
-  Time-boxed technical investigation to explore unknowns, validate approaches,
-  or reduce technical risk before committing to implementation. Produces
-  concrete technical insights to inform architecture and design decisions.
-
-dependencies:
-  requires:
-    - input: Technical uncertainty identified
-      type: external
-      required: true
-    - input: Solution design context
-      type: artifact
-      path: solution-design
-      required: false
-    - input: Architecture principles
-      type: artifact
-      path: principles
-      phase: frame
-      required: true
-
-  enables:
-    - output: Technical feasibility validation
-      type: insight
-      required: true
-    - output: Architecture refinement
-      type: artifact
-      path: architecture
-    - output: Implementation approach
-      type: artifact
-      path: implementation-plan
-      phase: build
-    - output: Risk mitigation
-      type: artifact
-      path: adr
+  Time-boxed investigation that answers one technical question with evidence
+  before implementation.
 
 output:
   location: docs/helix/02-design/spikes/
@@ -120,9 +89,16 @@ template:
   time_boxed: true
   evidence_focused: true
 
-examples:
-  - file: example.md
-    description: Technical spike investigating CLI architecture patterns
+example:
+  file: example.md
+
+references:
+  - title: "SAFe Spikes"
+    file: docs/resources/safe-spikes.md
+    relationship: "Grounds spikes as bounded experiments that reduce uncertainty before implementation"
+  - title: "Agile Alliance Sizing Spikes"
+    file: docs/resources/agile-alliance-sizing-spikes.md
+    relationship: "Grounds spikes as time-boxed learning work separate from normal delivery"
 
 workflow:
   creation_order: 1.5  # During design when technical uncertainties arise
@@ -151,7 +127,7 @@ relationships:
     - adr
     - solution-design
     - implementation-plan
-    - contracts
+    - contract
 
   outputs:
     - technical_validation

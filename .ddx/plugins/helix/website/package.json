@@ -3,6 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "serve:local": "bash scripts/serve-local.sh",
     "test:e2e": "playwright test",
     "test:screenshots": "playwright test --update-snapshots"
   },

@@ -3,8 +3,10 @@ set -euo pipefail
 
 export DDX_DISABLE_UPDATE_CHECK=1
 
-# Wrap ddx to filter out the update-available notice that ddx prints to stdout
-# (ddx bug: notice goes to stdout instead of stderr, corrupts JSON/arithmetic).
+# Defensive wrapper: strip advisory lines (upgrade notices) from ddx stdout
+# before they reach JSON consumers. DDx guards these with an isatty check, but
+# helix also filters defensively via strip_advisory in tracker_exec. This
+# wrapper keeps the test environment safe regardless of DDx version.
 ddx() {
   local _ddx_out _ddx_rc=0
   _ddx_out="$(command ddx "$@")" || _ddx_rc=$?
@@ -77,6 +79,8 @@ assert_fails() {
 
 make_mock_bin() {
   local root="$1"
+  local real_ddx
+  real_ddx="$(type -P ddx)"
   mkdir -p "$root/bin" "$root/state"
 
   cat >"$root/bin/codex" <<'EOF'
@@ -352,7 +356,149 @@ fi
 printf '%s\n' "${MOCK_BR_LIST_JSON:-[]}"
 EOF
 
-  chmod +x "$root/bin/codex" "$root/bin/claude" "$root/bin/bd" "$root/bin/br"
+  cat >"$root/bin/ddx" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+
+real_ddx="$real_ddx"
+state_root="\${MOCK_STATE_ROOT:-}"
+
+record_execute() {
+  [[ -n "\$state_root" ]] || return 0
+  printf '%s\n' "\$1" >> "\$state_root/ddx-calls.log"
+}
+
+close_after_show_if_configured() {
+  local issue_id="\$1"
+  [[ -n "\$state_root" ]] || return 0
+  [[ -n "\${MOCK_CLOSE_AFTER_SHOW_ID:-}" ]] || return 0
+  [[ "\$issue_id" == "\$MOCK_CLOSE_AFTER_SHOW_ID" ]] || return 0
+
+  local count_file="\$state_root/close-after-show-\$issue_id.count"
+  local done_file="\$state_root/close-after-show-\$issue_id.done"
+  local close_after_show_count="\${MOCK_CLOSE_AFTER_SHOW_COUNT:-1}"
+  local show_count=0
+
+  [[ -f "\$done_file" ]] && return 0
+  [[ -f "\$count_file" ]] && show_count="\$(cat "\$count_file")"
+  show_count=\$((show_count + 1))
+  printf '%s\n' "\$show_count" > "\$count_file"
+
+  if [[ "\$show_count" == "\$close_after_show_count" ]]; then
+    "\$real_ddx" bead close "\$issue_id" >/dev/null 2>&1 || true
+    : > "\$done_file"
+  fi
+}
+
+pick_issue() {
+  if [[ -n "\${HELIX_SELECTED_ISSUE:-}" ]] && "\$real_ddx" bead show "\$HELIX_SELECTED_ISSUE" --json >/dev/null 2>&1; then
+    printf '%s\n' "\$HELIX_SELECTED_ISSUE"
+    return 0
+  fi
+  "\$real_ddx" bead ready --json --execution 2>/dev/null | "\$real_ddx" jq -r '.[0].id // empty'
+}
+
+dispatch_managed_execution() {
+  local harness="\$1"
+  local issue_id="\$2"
+  case "\$harness" in
+    claude)
+      claude -p --dangerously-skip-permissions --no-session-persistence \
+        "implementation action" "Implementation target: \$issue_id"
+      ;;
+    *)
+      codex exec --dangerously-bypass-approvals-and-sandbox \
+        "implementation action" "Implementation target: \$issue_id"
+      ;;
+  esac
+}
+
+if [[ "\${1:-} \${2:-}" == "agent execute-loop" ]]; then
+  if [[ " \$* " == *" --help "* ]]; then
+    exec "\$real_ddx" "\$@"
+  fi
+  shift 2
+  harness="codex"
+  json_mode=0
+  while [[ \$# -gt 0 ]]; do
+    case "\$1" in
+      --harness) harness="\$2"; shift 2 ;;
+      --json) json_mode=1; shift ;;
+      --once) shift ;;
+      --model|--effort|--from|--poll-interval) shift 2 ;;
+      *) shift ;;
+    esac
+  done
+  issue_id="\$(pick_issue)"
+  record_execute "execute-loop \${issue_id:-none}"
+  if [[ -z "\$issue_id" ]]; then
+    (( json_mode )) && printf '{"processed":0}\n'
+    exit 0
+  fi
+  dispatch_managed_execution "\$harness" "\$issue_id"
+  exit \$?
+fi
+
+if [[ "\${1:-} \${2:-}" == "agent execute-bead" ]]; then
+  if [[ " \$* " == *" --help "* ]]; then
+    exec "\$real_ddx" "\$@"
+  fi
+  shift 2
+  issue_id="\${1:-}"
+  shift || true
+  harness="codex"
+  while [[ \$# -gt 0 ]]; do
+    case "\$1" in
+      --harness) harness="\$2"; shift 2 ;;
+      --json) shift ;;
+      --model|--effort|--from|--prompt) shift 2 ;;
+      --no-merge) shift ;;
+      *) shift ;;
+    esac
+  done
+  record_execute "execute-bead \$issue_id"
+  dispatch_managed_execution "\$harness" "\$issue_id"
+  exit \$?
+fi
+
+if [[ "\${1:-} \${2:-}" == "bead ready" ]] && [[ "\${MOCK_VALIDATE_TRACKER_JSON:-0}" == "1" ]]; then
+  tracker_dir="\${DDX_BEAD_DIR:-}"
+  tracker_file="\${tracker_dir:+\$tracker_dir/beads.jsonl}"
+  if [[ -f "\$tracker_file" ]]; then
+    if ! python3 - "\$tracker_file" <<'PY' >/dev/null 2>&1
+import json
+import sys
+
+path = sys.argv[1]
+with open(path, "r", encoding="utf-8") as fh:
+    for line in fh:
+        line = line.strip()
+        if not line:
+            continue
+        json.loads(line)
+PY
+    then
+      echo "mock tracker parse failure" >&2
+      exit 1
+    fi
+  fi
+fi
+
+if [[ "\${1:-} \${2:-}" == "bead show" ]] && [[ \$# -ge 3 ]] && [[ "\${3:-}" != "--help" ]]; then
+  issue_id="\$3"
+  show_output="\$("\$real_ddx" "\$@")"
+  rc=\$?
+  printf '%s\n' "\$show_output"
+  if [[ \$rc -eq 0 ]]; then
+    close_after_show_if_configured "\$issue_id"
+  fi
+  exit \$rc
+fi
+
+exec "\$real_ddx" "\$@"
+EOF
+
+  chmod +x "$root/bin/codex" "$root/bin/claude" "$root/bin/bd" "$root/bin/br" "$root/bin/ddx"
 }
 
 make_workspace() {
@@ -442,6 +588,10 @@ run_helix_with_env() {
       PATH="$root/bin:$PATH" \
       MOCK_STATE_ROOT="$root/state" \
       HELIX_LIBRARY_ROOT="$repo_root/workflows" \
+      "HELIX_FORCE_EPHEMERAL=1" \
+      "HELIX_REVIEW_AGENT=codex" \
+      "HELIX_ALT_AGENT=none" \
+      "HELIX_AUTO_ALIGN=0" \
       "DDX_BEAD_DIR=$root/work/.ddx" \
       "DDX_DISABLE_UPDATE_CHECK=1" \
       "HELIX_DIRECT_AGENT=1" \
@@ -493,9 +643,29 @@ test_help() {
   local output
   output="$(run_helix "$root" help)"
   assert_contains "$output" "helix run" "help should list run command"
+  assert_contains "$output" "helix input [--agent <harness>] [--autonomy low|medium|high] \"natural language request\"" "help should advertise input usage"
+  assert_contains "$output" "helix commit [--agent <harness>] [issue-id]" "help should advertise commit usage"
+  assert_contains "$output" "input       Accept sparse intent and shape governed HELIX work" "help should describe input command"
+  assert_contains "$output" "\`helix run\` remains a compatibility wrapper for supervisory routing" "help should document the run compatibility boundary"
+  assert_contains "$output" "\`helix build\` remains a compatibility wrapper for one bounded pass" "help should document the build compatibility boundary"
+  assert_contains "$output" "--model" "help should list the generic model override"
+  assert_contains "$output" "HELIX_MODEL" "help should list the generic model environment override"
   assert_contains "$output" "--review-every" "help should list review option"
+  assert_not_contains "$output" "--smart-model" "help should not advertise removed stage-model overrides"
+  assert_not_contains "$output" "HELIX_SMART_MODEL" "help should not advertise removed stage-model env overrides"
   assert_not_contains "$output" $'\n  tracker ' "help should not list tracker command"
   rm -rf "$root"
+}
+
+test_no_hardcoded_bead_prefix_export() {
+  local script
+  script="$(cat "$repo_root/scripts/helix")"
+  assert_not_contains "$script" 'export DDX_BEAD_PREFIX=' \
+    "helix should not hard-code DDX_BEAD_PREFIX"
+  assert_not_contains "$script" 'HELIX_SMART_MODEL' \
+    "helix should not retain the removed reasoning-stage model override"
+  assert_not_contains "$script" 'HELIX_CHEAP_MODEL' \
+    "helix should not retain the removed mechanical-stage model override"
 }
 
 test_bead_help() {
@@ -529,6 +699,310 @@ test_backfill_dry_run() {
   assert_contains "$output" "actions/backfill-helix-docs.md" "backfill dry-run should reference backfill action"
   assert_contains "$output" "This is a writable live session" "backfill dry-run should assert writable live execution"
   assert_contains "$output" "BACKFILL_STATUS" "backfill dry-run should require machine-readable trailer"
+  rm -rf "$root"
+}
+
+test_align_dry_run_mentions_governing_bead() {
+  local root
+  root="$(make_workspace)"
+  local output
+  output="$(run_helix "$root" align --dry-run repo)"
+  assert_contains "$output" "actions/reconcile-alignment.md" "align dry-run should reference the alignment action"
+  assert_contains "$output" "Governing alignment bead:" "align dry-run should describe the governing bead contract"
+  assert_contains "$output" "kind:planning,action:align bead before proceeding" "align dry-run should require bead-first alignment entry"
+  rm -rf "$root"
+}
+
+test_align_creates_governing_bead_before_prompt() {
+  local root
+  root="$(make_workspace)"
+  mkdir -p "$root/work/docs/helix/01-frame" "$root/work/workflows/concerns/custom-cli"
+  cat >"$root/work/docs/helix/01-frame/concerns.md" <<'EOF'
+# Project Concerns
+
+## Active Concerns
+- custom-cli
+
+## Area Labels
+
+| Label | Applies to |
+|-------|-----------|
+| `area:cli` | CLI wrapper code |
+| `area:workflow` | Workflow prompts |
+EOF
+  cat >"$root/work/workflows/concerns/custom-cli/concern.md" <<'EOF'
+# Concern: Custom CLI
+
+## Areas
+cli
+EOF
+  cat >"$root/work/workflows/concerns/custom-cli/practices.md" <<'EOF'
+- Use custom CLI concern practices
+EOF
+
+  run_helix "$root" align repo >/dev/null
+
+  local calls
+  calls="$(cat "$root/state/calls.log")"
+  assert_eq "align" "$calls" "align should dispatch the stored alignment prompt once"
+
+  local bead_json
+  bead_json="$(run_bead "$root" list --json | ddx jq -c '.[0]')"
+  assert_contains "$bead_json" "\"title\":\"align: repo\"" "align should create the governing bead for repo scope"
+  assert_contains "$bead_json" "\"kind:planning\"" "align bead should carry the planning label"
+  assert_contains "$bead_json" "\"action:align\"" "align bead should carry the align action label"
+  assert_contains "$bead_json" "\"area:cli\"" "align bead should seed repo-scope area labels from project concerns"
+  assert_contains "$bead_json" "\"area:workflow\"" "align bead should preserve all project area labels for repo scope"
+  assert_contains "$bead_json" "\"status\":\"open\"" "new governing align bead should remain available for the stored prompt to claim"
+  assert_contains "$bead_json" "\"<context-digest>\\n" "align bead should refresh its context digest before prompt dispatch"
+  assert_contains "$bead_json" "custom-cli" "align bead digest should include matched concerns for the reviewed scope"
+  assert_contains "$bead_json" "Use custom CLI concern practices" "align bead digest should include matched concern practices"
+  rm -rf "$root"
+}
+
+test_align_reuses_existing_governing_bead() {
+  local root
+  root="$(make_workspace)"
+
+  local bead_id
+  bead_id="$(run_bead "$root" create "align: repo" --type task --labels helix,phase:review,kind:planning,action:align --acceptance "existing align bead")"
+
+  run_helix "$root" align repo >/dev/null
+
+  local count
+  count="$(run_bead "$root" list --json | ddx jq 'length')"
+  assert_eq "1" "$count" "align should reuse the existing governing bead instead of creating a duplicate"
+
+  local status
+  status="$(run_bead "$root" show "$bead_id" --json | ddx jq -r '.status // ""')"
+  assert_eq "in_progress" "$status" "align should claim an existing open governing bead before dispatch"
+  rm -rf "$root"
+}
+
+test_align_repairs_reused_governing_bead_scope_labels_and_digest() {
+  local root
+  root="$(make_workspace)"
+
+  mkdir -p "$root/work/docs/helix/01-frame"
+  cat >"$root/work/docs/helix/01-frame/concerns.md" <<'EOF'
+# Project Concerns
+
+## Active Concerns
+- custom-cli
+
+## Area Labels
+| Label | Applies to |
+|-------|------------|
+| `area:cli` | CLI wrapper code |
+| `area:workflow` | Workflow prompts |
+EOF
+  mkdir -p "$root/work/workflows/concerns/custom-cli"
+  cat >"$root/work/workflows/concerns/custom-cli/concern.md" <<'EOF'
+# Concern: Custom CLI
+
+## Areas
+cli
+EOF
+  cat >"$root/work/workflows/concerns/custom-cli/practices.md" <<'EOF'
+- Use custom CLI concern practices
+EOF
+
+  local bead_id
+  bead_id="$(run_bead "$root" create "align: repo" --type task --labels helix,phase:review,kind:planning,action:align --acceptance "existing align bead")"
+
+  run_helix "$root" align repo >/dev/null
+
+  local count bead_json status
+  count="$(run_bead "$root" list --json | ddx jq 'length')"
+  assert_eq "1" "$count" "align should repair and reuse the existing governing bead instead of creating a duplicate"
+
+  bead_json="$(run_bead "$root" show "$bead_id" --json)"
+  status="$(printf '%s' "$bead_json" | ddx jq -r '.status // ""')"
+  assert_eq "in_progress" "$status" "align should leave the repaired governing bead claimed for dispatch"
+  assert_contains "$bead_json" "\"area:cli\"" "align should add deterministic scope labels when reusing an unlabeled governing bead"
+  assert_contains "$bead_json" "\"area:workflow\"" "align should add all repo-scope area labels when reusing an unlabeled governing bead"
+  assert_contains "$bead_json" "\"<context-digest>\\n" "align should refresh the context digest after repairing reused governing bead labels"
+  assert_contains "$bead_json" "custom-cli" "align should rebuild concern matching after repairing reused governing bead labels"
+  assert_contains "$bead_json" "Use custom CLI concern practices" "align should include concern practices in the repaired governing bead digest"
+  rm -rf "$root"
+}
+
+test_align_artifact_directory_scope_preserves_artifact_area_label() {
+  local root
+  root="$(make_workspace)"
+
+  run_helix "$root" align workflows/phases/05-deploy/artifacts >/dev/null
+
+  local bead_json
+  bead_json="$(run_bead "$root" list --json | ddx jq -c '.[0]')"
+  assert_contains "$bead_json" "\"title\":\"align: workflows/phases/05-deploy/artifacts\"" "align should create the governing bead for artifact-directory scope"
+  assert_contains "$bead_json" "\"area:workflow\"" "artifact-directory align should keep workflow scope"
+  assert_contains "$bead_json" "\"area:artifacts\"" "artifact-directory align should add artifact scope"
+  assert_contains "$bead_json" "Scope areas: workflow, artifacts." "artifact-directory align description should mention both workflow and artifact scopes"
+  rm -rf "$root"
+}
+
+test_align_rejects_in_progress_governing_bead() {
+  local root
+  root="$(make_workspace)"
+  local work_dir="$root/work"
+  mkdir -p "$work_dir/.ddx"
+  local live_ts
+  live_ts="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+  printf '{"id":"hx-align-busy","title":"align: repo","issue_type":"task","status":"in_progress","priority":2,"labels":["helix","phase:review","kind:planning","action:align"],"parent":"","spec-id":"FEAT-005","description":"","design":"","acceptance":"existing align bead","dependencies":[],"owner":"other-operator","notes":"","execution-eligible":true,"superseded-by":"","replaces":"","created_at":"2099-01-01T00:00:00Z","updated_at":"%s","claimed-at":"%s","claimed-pid":%d}\n' \
+    "$live_ts" "$live_ts" "$$" \
+    > "$work_dir/.ddx/beads.jsonl"
+
+  local output rc=0
+  output="$(run_helix "$root" align repo 2>&1)" || rc=$?
+
+  [[ "$rc" -ne 0 ]] || fail "align should fail when the governing bead is already in progress"
+  [[ ! -f "$root/state/calls.log" ]] || fail "align should not dispatch the agent when the governing bead is already in progress"
+
+  local count status claimed_pid
+  count="$(run_bead "$root" list --json | ddx jq 'length')"
+  assert_eq "1" "$count" "align should not create a duplicate governing bead when one is already active"
+  status="$(run_bead "$root" show hx-align-busy --json | ddx jq -r '.status // ""')"
+  claimed_pid="$(run_bead "$root" show hx-align-busy --json | ddx jq -r '."claimed-pid" // ""')"
+  assert_eq "in_progress" "$status" "align should leave a live governing bead claimed when refusing duplicate dispatch"
+  assert_eq "$$" "$claimed_pid" "align should not rewrite live claim metadata when refusing duplicate dispatch"
+  rm -rf "$root"
+}
+
+test_align_reclaims_stale_in_progress_governing_bead() {
+  local root
+  root="$(make_workspace)"
+  local work_dir="$root/work"
+  mkdir -p "$work_dir/.ddx"
+  local stale_ts="2024-01-01T00:00:00Z"
+
+  printf '{"id":"hx-align-stale","title":"align: repo","issue_type":"task","status":"in_progress","priority":2,"labels":["helix","phase:review","kind:planning","action:align"],"parent":"","spec-id":"FEAT-005","description":"","design":"","acceptance":"existing align bead","dependencies":[],"owner":"helix","notes":"","execution-eligible":true,"superseded-by":"","replaces":"","created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z","claimed-at":"%s","claimed-pid":99999}\n' \
+    "$stale_ts" \
+    > "$work_dir/.ddx/beads.jsonl"
+
+  run_helix "$root" align repo >/dev/null
+
+  assert_file_exists "$root/state/calls.log" "align should dispatch after reclaiming a stale governing bead"
+  assert_file_contains "$root/state/calls.log" "align" "align should run after reclaiming a stale governing bead"
+
+  local count bead_json status claimed_pid claimed_at
+  count="$(run_bead "$root" list --json | ddx jq 'length')"
+  assert_eq "1" "$count" "align should reclaim the stale governing bead instead of creating a duplicate"
+
+  bead_json="$(run_bead "$root" show hx-align-stale --json)"
+  status="$(printf '%s' "$bead_json" | ddx jq -r '.status // ""')"
+  claimed_pid="$(printf '%s' "$bead_json" | ddx jq -r '."claimed-pid" // ""')"
+  claimed_at="$(printf '%s' "$bead_json" | ddx jq -r '."claimed-at" // ""')"
+  assert_eq "in_progress" "$status" "align should leave the reclaimed governing bead claimed for dispatch"
+  [[ "$claimed_pid" != "99999" ]] || fail "align should refresh the stale claim metadata when reclaiming"
+  [[ "$claimed_at" != "$stale_ts" ]] || fail "align should replace the stale claim timestamp when reclaiming"
+  rm -rf "$root"
+}
+
+test_align_skips_reclaim_when_governing_bead_closes_mid_recheck() {
+  local root
+  root="$(make_workspace)"
+  local work_dir="$root/work"
+  mkdir -p "$work_dir/.ddx"
+  local stale_ts="2024-01-01T00:00:00Z"
+
+  printf '{"id":"hx-align-race","title":"align: repo","issue_type":"task","status":"in_progress","priority":2,"labels":["helix","phase:review","kind:planning","action:align"],"parent":"","spec-id":"FEAT-005","description":"","design":"","acceptance":"existing align bead","dependencies":[],"owner":"helix","notes":"","execution-eligible":true,"superseded-by":"","replaces":"","created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z","claimed-at":"%s","claimed-pid":99999}\n' \
+    "$stale_ts" \
+    > "$work_dir/.ddx/beads.jsonl"
+
+  local rc=0
+  run_helix_with_env "$root" MOCK_CLOSE_AFTER_SHOW_ID hx-align-race align repo >/dev/null 2>&1 || rc=$?
+
+  [[ "$rc" -ne 0 ]] || fail "align should stop rather than re-open a bead that closed during reclaim"
+  [[ ! -f "$root/state/calls.log" ]] || fail "align should not dispatch duplicate work after the governing bead closes during reclaim"
+
+  local count status
+  count="$(run_bead "$root" list --json | ddx jq 'length')"
+  assert_eq "1" "$count" "align should leave the closed governing bead untouched when reclaim races with closure"
+  status="$(run_bead "$root" show hx-align-race --json | ddx jq -r '.status // ""')"
+  assert_eq "closed" "$status" "align should not re-open a bead that closed during reclaim"
+  rm -rf "$root"
+}
+
+test_input_dispatches_request_with_intake_action() {
+  local root
+  root="$(make_workspace)"
+
+  cat >"$root/bin/codex" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+state_root="${MOCK_STATE_ROOT:?}"
+printf '%s\n' "$*" > "$state_root/input-command.log"
+echo "input complete"
+MOCK
+  chmod +x "$root/bin/codex"
+
+  run_helix_with_env "$root" HELIX_EXEC_CONTEXT 1 input --autonomy high "design a CRM" >/dev/null
+  assert_file_exists "$root/state/input-command.log" "input should dispatch to the agent"
+
+  local payload
+  payload="$(cat "$root/state/input-command.log")"
+  assert_contains "$payload" "You are processing sparse user intent through the HELIX intake surface." \
+    "input should send the intake prompt"
+  assert_contains "$payload" "User request: design a CRM" \
+    "input should include the user's request"
+  assert_contains "$payload" "Autonomy level: high" \
+    "input should pass the selected autonomy level"
+  assert_contains "$payload" "Read and follow the action at $repo_root/workflows/actions/input.md." \
+    "input should wire the request through workflows/actions/input.md"
+  rm -rf "$root"
+}
+
+test_input_accepts_request_before_autonomy_flag() {
+  local root
+  root="$(make_workspace)"
+
+  cat >"$root/bin/codex" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+state_root="${MOCK_STATE_ROOT:?}"
+printf '%s\n' "$*" > "$state_root/input-command.log"
+echo "input complete"
+MOCK
+  chmod +x "$root/bin/codex"
+
+  run_helix_with_env "$root" HELIX_EXEC_CONTEXT 1 input "design a CRM" --autonomy low >/dev/null
+  assert_file_exists "$root/state/input-command.log" "input should dispatch when autonomy follows the request"
+
+  local payload
+  payload="$(cat "$root/state/input-command.log")"
+  assert_contains "$payload" "User request: design a CRM" \
+    "input should preserve the request when autonomy trails it"
+  assert_contains "$payload" "Autonomy level: low" \
+    "input should honor request-first autonomy syntax"
+  rm -rf "$root"
+}
+
+test_input_rejects_invalid_autonomy() {
+  local root
+  root="$(make_workspace)"
+
+  local rc=0
+  run_helix_with_env "$root" HELIX_EXEC_CONTEXT 1 input --autonomy turbo "design a CRM" >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -ne 0 ]] || fail "input should fail for an invalid autonomy level"
+  [[ ! -s "$root/state/calls.log" ]] || fail "input should reject invalid autonomy before dispatching to the agent"
+  rm -rf "$root"
+}
+
+test_input_rejects_ambiguous_argument_layout() {
+  local root
+  root="$(make_workspace)"
+
+  local rc=0
+  run_helix_with_env "$root" HELIX_EXEC_CONTEXT 1 input "design a CRM" extra >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -ne 0 ]] || fail "input should reject multiple unquoted request arguments"
+  [[ ! -s "$root/state/calls.log" ]] || fail "input should reject ambiguous input before dispatching to the agent"
+
+  rc=0
+  run_helix_with_env "$root" HELIX_EXEC_CONTEXT 1 input --autonomy medium "design a CRM" --autonomy high >/dev/null 2>&1 || rc=$?
+  [[ "$rc" -ne 0 ]] || fail "input should reject duplicate autonomy flags"
+  [[ ! -s "$root/state/calls.log" ]] || fail "input should reject duplicate autonomy before dispatching to the agent"
   rm -rf "$root"
 }
 
@@ -1476,6 +1950,7 @@ test_review_dry_run() {
   output="$(run_helix "$root" review --dry-run)"
   assert_contains "$output" "actions/fresh-eyes-review.md" "review dry-run should reference fresh-eyes action"
   assert_contains "$output" "Review scope: last-commit" "review dry-run should default to last-commit"
+  assert_contains "$output" "label \`review-finding\` plus at least one scope-appropriate \`area:*\` label" "review dry-run should require area labels on filed findings"
   rm -rf "$root"
 }
 
@@ -1562,14 +2037,196 @@ test_claude_agent_timeout_kills_process() {
   rm -rf "$root"
 }
 
-test_build_prompt_references_tracker() {
+test_build_dry_run_delegates_to_execute_bead() {
   local root
   root="$(make_workspace)"
+  seed_tracker "$root" 1
   local output
   output="$(run_helix "$root" build --dry-run)"
-  assert_contains "$output" "ddx bead" "build prompt should reference ddx bead"
-  assert_contains "$output" "issues.jsonl" "build prompt should reference JSONL file"
-  assert_contains "$output" "re-read the selected issue immediately before claim and immediately before close" "build prompt should require pre-claim and pre-close revalidation"
+  assert_contains "$output" "ddx agent execute-bead hx-mock-0" "build dry-run should delegate to execute-bead for the resolved ready bead"
+  rm -rf "$root"
+}
+
+test_build_dry_run_suppresses_model_on_alternate_harness() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+
+  local output
+  output="$(
+    cd "$root/work"
+    HOME="$root/home" \
+    PATH="$root/bin:$PATH" \
+    MOCK_STATE_ROOT="$root/state" \
+    HELIX_LIBRARY_ROOT="$repo_root/workflows" \
+    HELIX_FORCE_EPHEMERAL=1 \
+    HELIX_REVIEW_AGENT="codex" \
+    HELIX_AGENT="codex" \
+    HELIX_ALT_AGENT="claude" \
+    HELIX_MODEL="gpt-5.4" \
+    HELIX_DIRECT_AGENT=1 \
+    HELIX_AUTO_ALIGN=0 \
+    DDX_BEAD_DIR="$root/work/.ddx" \
+    DDX_DISABLE_UPDATE_CHECK=1 \
+    bash "$repo_root/scripts/helix" build --quiet --dry-run 2>&1
+  )"
+
+  assert_contains "$output" "ddx agent execute-bead hx-mock-0 --harness claude" "build dry-run should rotate to the alternate harness when configured"
+  assert_not_contains "$output" " --model " "build dry-run should not leak a primary-harness model override onto the alternate harness"
+  rm -rf "$root"
+}
+
+test_build_dry_run_keeps_model_on_primary_harness() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+
+  local output
+  output="$(
+    cd "$root/work"
+    HOME="$root/home" \
+    PATH="$root/bin:$PATH" \
+    MOCK_STATE_ROOT="$root/state" \
+    HELIX_LIBRARY_ROOT="$repo_root/workflows" \
+    HELIX_FORCE_EPHEMERAL=1 \
+    HELIX_REVIEW_AGENT="codex" \
+    HELIX_AGENT="codex" \
+    HELIX_ALT_AGENT="none" \
+    HELIX_MODEL="gpt-5.4" \
+    HELIX_DIRECT_AGENT=1 \
+    HELIX_AUTO_ALIGN=0 \
+    DDX_BEAD_DIR="$root/work/.ddx" \
+    DDX_DISABLE_UPDATE_CHECK=1 \
+    bash "$repo_root/scripts/helix" build --quiet --dry-run 2>&1
+  )"
+
+  assert_contains "$output" "--model gpt-5.4" "build dry-run should preserve an explicit model override when execution stays on the primary harness"
+  rm -rf "$root"
+}
+
+test_build_dry_run_rejects_closed_selector_before_execute_bead() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+
+  local closed_id
+  closed_id="$(run_bead "$root" create "closed issue" --type task --labels helix,phase:build --acceptance "closed selector should be rejected in dry-run")"
+  run_bead "$root" close "$closed_id" >/dev/null
+
+  local output_file output log_file rc=0
+  output_file="$root/state/build-dry-run.log"
+  if run_helix_with_env "$root" HELIX_EXEC_CONTEXT 1 build --dry-run "$closed_id" >"$output_file" 2>&1; then
+    rc=0
+  else
+    rc=$?
+  fi
+  local _tries=0
+  while [[ ! -s "$output_file" ]] && (( _tries < 20 )); do
+    sleep 0.05
+    _tries=$((_tries + 1))
+  done
+  log_file="$(ls -1t "$root/work/.helix-logs"/helix-*.log 2>/dev/null | head -n1 || true)"
+  output="$(cat "$output_file")"
+  if [[ -n "$log_file" ]]; then
+    output+=$'\n'"$(cat "$log_file")"
+  fi
+
+  [[ "$rc" -ne 0 ]] || fail "build --dry-run should fail when the selected bead is closed"
+  assert_contains "$output" "no execution-ready bead matched the build selector" "build --dry-run should explain why the selector was rejected"
+  [[ "$output" != *"ddx agent execute-bead"* ]] || fail "build --dry-run should not print an execute-bead command for a closed selector"
+  [[ ! -f "$root/state/ddx-calls.log" ]] || fail "build --dry-run should not dispatch execute-bead for a closed selector"
+  rm -rf "$root"
+}
+
+test_build_dry_run_surfaces_selector_resolution_failure() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+  printf '{bad json\n' > "$root/work/.ddx/beads.jsonl"
+
+  local output rc=0
+  output="$(run_helix_with_envs "$root" MOCK_VALIDATE_TRACKER_JSON 1 -- HELIX_EXEC_CONTEXT 1 build --dry-run hx-bad 2>&1)" || rc=$?
+
+  [[ "$rc" -ne 0 ]] || fail "build --dry-run should fail when selector resolution fails"
+  assert_contains "$output" "mock tracker parse failure" "build --dry-run should surface resolver failures"
+  assert_not_contains "$output" "no execution-ready bead matched the build selector" "build --dry-run should not collapse resolver failures into selector misses"
+  [[ ! -f "$root/state/ddx-calls.log" ]] || fail "build --dry-run should not dispatch execute-bead when selector resolution fails"
+  rm -rf "$root"
+}
+
+test_build_rejects_closed_selector_before_execute_bead() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+
+  local closed_id
+  closed_id="$(run_bead "$root" create "closed issue" --type task --labels helix,phase:build --acceptance "closed selector should be rejected")"
+  run_bead "$root" close "$closed_id" >/dev/null
+
+  local output rc=0
+  output="$(run_helix_with_env "$root" HELIX_EXEC_CONTEXT 1 build "$closed_id" 2>&1)" || rc=$?
+
+  [[ "$rc" -ne 0 ]] || fail "build should fail when the selected bead is closed"
+  [[ ! -f "$root/state/ddx-calls.log" ]] || fail "build should not dispatch execute-bead for a closed selector"
+  rm -rf "$root"
+}
+
+test_build_surfaces_selector_resolution_failure() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+  printf '{bad json\n' > "$root/work/.ddx/beads.jsonl"
+
+  local output rc=0
+  output="$(run_helix_with_envs "$root" MOCK_VALIDATE_TRACKER_JSON 1 -- HELIX_EXEC_CONTEXT 1 build hx-bad 2>&1)" || rc=$?
+
+  [[ "$rc" -ne 0 ]] || fail "build should fail when selector resolution fails"
+  assert_contains "$output" "mock tracker parse failure" "build should surface resolver failures"
+  assert_not_contains "$output" "no execution-ready bead matched the build selector" "build should not collapse resolver failures into selector misses"
+  [[ ! -f "$root/state/ddx-calls.log" ]] || fail "build should not dispatch execute-bead when selector resolution fails"
+  rm -rf "$root"
+}
+
+test_run_delegates_build_cycles_to_execute_loop() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+  printf 'STOP\n' > "$root/state/next-actions"
+
+  cat >"$root/bin/codex" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+state_root="${MOCK_STATE_ROOT:?}"
+record() { printf '%s\n' "$1" >> "$state_root/calls.log"; }
+next_action() {
+  local file="$state_root/next-actions"
+  if [[ ! -s "$file" ]]; then echo STOP; return; fi
+  head -n1 "$file"
+  tail -n +2 "$file" > "$file.tmp" || true
+  mv "$file.tmp" "$file"
+}
+payload="$*"
+case "$payload" in
+  *"implementation action"*"Implementation target: hx-mock-0"*)
+    record implement
+    tmp="$(ddx jq -c 'if .id == "hx-mock-0" then .status = "closed" else . end' .ddx/beads.jsonl)"
+    printf '%s\n' "$tmp" > .ddx/beads.jsonl
+    echo "implementation complete"
+    ;;
+  *"check action"*)
+    record check
+    printf 'NEXT_ACTION: %s\n' "$(next_action)"
+    ;;
+  *) record other; echo "mock codex" ;;
+esac
+MOCK
+  chmod +x "$root/bin/codex"
+
+  run_helix "$root" run --no-auto-review --no-auto-align >/dev/null
+
+  local ddx_calls
+  ddx_calls="$(cat "$root/state/ddx-calls.log")"
+  assert_eq "execute-loop hx-mock-0" "$ddx_calls" "run should delegate the bounded build cycle to execute-loop"
   rm -rf "$root"
 }
 
@@ -1861,9 +2518,15 @@ run_test "run continues after unparseable review output" test_run_fails_on_unpar
 
 # CLI integration tests
 run_test "help" test_help
+run_test "no hardcoded bead prefix export" test_no_hardcoded_bead_prefix_export
 run_test "bead help" test_bead_help
 run_test "check dry-run" test_check_dry_run
 run_test "backfill dry-run" test_backfill_dry_run
+run_test "align dry-run" test_align_dry_run_mentions_governing_bead
+run_test "input dispatches intake action" test_input_dispatches_request_with_intake_action
+run_test "input accepts request before autonomy flag" test_input_accepts_request_before_autonomy_flag
+run_test "input rejects invalid autonomy" test_input_rejects_invalid_autonomy
+run_test "input rejects ambiguous argument layout" test_input_rejects_ambiguous_argument_layout
 run_test "quickstart demo script exists" test_quickstart_demo_script_exists
 run_test "run stops after drain" test_run_stops_after_queue_drains
 run_test "run stops on queue-drain check failure" test_run_stops_on_queue_drain_check_failure
@@ -1887,6 +2550,12 @@ run_test "run dispatches backfill" test_run_dispatches_backfill
 run_test "run stops after repeated BACKFILL" test_run_stops_after_repeated_backfill
 run_test "max cycles count completed work only" test_run_max_cycles_counts_completed_cycles_only
 run_test "periodic alignment ignores failed attempts" test_run_periodic_alignment_ignores_failed_attempts
+run_test "align creates governing bead" test_align_creates_governing_bead_before_prompt
+run_test "align reuses governing bead" test_align_reuses_existing_governing_bead
+run_test "align preserves artifact-directory scope labels" test_align_artifact_directory_scope_preserves_artifact_area_label
+run_test "align rejects in-progress governing bead" test_align_rejects_in_progress_governing_bead
+run_test "align reclaims stale in-progress governing bead" test_align_reclaims_stale_in_progress_governing_bead
+run_test "align skips reclaim when governing bead closes mid-recheck" test_align_skips_reclaim_when_governing_bead_closes_mid_recheck
 run_test "extract NEXT_ACTION from claude output" test_extract_next_action_from_claude_output
 run_test "design dry-run" test_design_dry_run
 run_test "design custom rounds" test_design_custom_rounds
@@ -1899,11 +2568,16 @@ run_test "experiment dry-run" test_experiment_dry_run
 run_test "experiment requires clean worktree" test_experiment_requires_clean_worktree
 run_test "experiment close dry-run" test_experiment_close_dry_run
 run_test "recovery preserves unrelated dirty changes" test_run_recovery_preserves_unrelated_dirty_changes
+run_test "build dry-run delegates to execute-bead" test_build_dry_run_delegates_to_execute_bead
+run_test "build dry-run suppresses model on alternate harness" test_build_dry_run_suppresses_model_on_alternate_harness
+run_test "build dry-run keeps model on primary harness" test_build_dry_run_keeps_model_on_primary_harness
+run_test "build dry-run rejects closed selector before execute-bead" test_build_dry_run_rejects_closed_selector_before_execute_bead
+run_test "build rejects closed selector before execute-bead" test_build_rejects_closed_selector_before_execute_bead
+run_test "run delegates build cycles to execute-loop" test_run_delegates_build_cycles_to_execute_loop
 # TODO: timeout test hangs in CI — the mock claude sleep subprocess isn't
 # killed reliably through the stdin pipe subshell. Fix the watchdog to
 # kill the process group, then re-enable.
 # run_test "claude agent timeout kills process" test_claude_agent_timeout_kills_process
-run_test "build prompt references tracker" test_build_prompt_references_tracker
 
 # ── triage passthrough tests ──────────────────────────────────────────
 
@@ -1912,7 +2586,12 @@ test_triage_passthrough_creates_issue() {
   root="$(make_workspace)"
   local id
   id="$(run_helix "$root" triage "Loose issue")"
-  assert_contains "$id" "hx-" "triage should delegate to ddx bead create"
+  local description
+  description="$(run_bead "$root" show "$id" --json | ddx jq -r '.description // ""')"
+  # DDx derives prefix from repo name or config; accept either hx- (configured)
+  # or work- (derived from workspace directory name after DDX_BEAD_PREFIX removal).
+  assert_contains "$id" "-" "triage should delegate to ddx bead create and return an ID"
+  assert_contains "$description" "<context-digest>" "triage should assemble a context digest for new beads"
   rm -rf "$root"
 }
 
@@ -1980,6 +2659,8 @@ run_helix_summary() {
     HELIX_ALT_AGENT="none" \
     HELIX_DIRECT_AGENT=1 \
     HELIX_AUTO_ALIGN="${HELIX_AUTO_ALIGN:-0}" \
+    DDX_BEAD_DIR="$root/work/.ddx" \
+    DDX_DISABLE_UPDATE_CHECK=1 \
     bash "$repo_root/scripts/helix" "$cmd" --summary "$@"
   )
 }
@@ -1991,7 +2672,7 @@ test_summary_flag_accepted() {
   local output
   output="$(run_helix_summary "$root" build --dry-run 2>&1)"
   # dry-run should still produce the agent command
-  assert_contains "$output" "codex" "summary dry-run should print agent command"
+  assert_contains "$output" "ddx agent execute-bead" "summary dry-run should print the DDx managed execution command"
   rm -rf "$root"
 }
 
@@ -2230,6 +2911,26 @@ test_orphan_recovery_skips_fresh() {
   rm -rf "$root"
 }
 
+test_orphan_recovery_skips_bead_closed_after_initial_snapshot() {
+  local root
+  root="$(make_workspace)"
+  seed_stale_claimed "$root" 1
+
+  printf 'STOP\n' > "$root/state/next-actions"
+
+  local output
+  output="$(run_helix_with_env "$root" MOCK_CLOSE_AFTER_SHOW_ID hx-stale-0 run --no-auto-review --no-auto-align 2>&1)" || true
+
+  local status
+  status="$(run_bead "$root" show hx-stale-0 --json | ddx jq -r '.status // ""')"
+  assert_eq "closed" "$status" "orphan recovery should leave a bead closed by another actor untouched"
+  assert_not_contains "$output" "reclaiming orphaned hx-stale-0" \
+    "orphan recovery should skip reclaim when the bead closes before the live re-check"
+  assert_not_contains "$output" "recovered 1 orphaned issue(s)" \
+    "orphan recovery should not count a bead that closed before reclaim"
+  rm -rf "$root"
+}
+
 test_build_loop_stops_after_empty_builds() {
   local root
   root="$(make_workspace)"
@@ -2409,6 +3110,7 @@ run_test "tracker unclaim clears metadata" test_tracker_unclaim_clears_metadata
 run_test "tracker unclaim on closed bead clears metadata" test_tracker_unclaim_closed_bead
 run_test "orphan recovery reclaims stale" test_orphan_recovery_reclaims_stale
 run_test "orphan recovery skips fresh" test_orphan_recovery_skips_fresh
+run_test "orphan recovery skips bead closed after initial snapshot" test_orphan_recovery_skips_bead_closed_after_initial_snapshot
 run_test "BUILD loop stops after empty builds" test_build_loop_stops_after_empty_builds
 run_test "BUILD loop recovers orphans and continues" test_build_loop_recovers_orphans_and_continues
 
@@ -2624,29 +3326,56 @@ MOCK
   rm -rf "$root"
 }
 
-# --- Area-label batching ---
+# --- Area-label queue compatibility ---
 
-test_batch_falls_back_to_area_labels() {
+test_run_dry_run_uses_execute_loop_for_area_labeled_queue() {
   local root
   root="$(make_workspace)"
   local work_dir="$root/work"
   mkdir -p "$work_dir/.ddx"
-  # Two issues with same area label but no shared parent or spec-id
   {
     printf '{"id":"hx-area-1","title":"area issue 1","issue_type":"task","status":"open","priority":2,"labels":["helix","phase:build","kind:build","area:auth"],"parent":"","spec-id":"SPEC-A","description":"","design":"","acceptance":"done","dependencies":[],"owner":"","notes":"","execution-eligible":true,"superseded-by":"","replaces":"","created_at":"2099-01-01T00:00:00Z","updated_at":"2099-01-01T00:00:00Z"}\n'
     printf '{"id":"hx-area-2","title":"area issue 2","issue_type":"task","status":"open","priority":2,"labels":["helix","phase:build","kind:build","area:auth"],"parent":"","spec-id":"SPEC-B","description":"","design":"","acceptance":"done","dependencies":[],"owner":"","notes":"","execution-eligible":true,"superseded-by":"","replaces":"","created_at":"2099-01-01T00:00:00Z","updated_at":"2099-01-01T00:00:00Z"}\n'
     printf '{"id":"hx-area-3","title":"unrelated issue","issue_type":"task","status":"open","priority":2,"labels":["helix","phase:build","kind:build","area:storage"],"parent":"","spec-id":"SPEC-C","description":"","design":"","acceptance":"done","dependencies":[],"owner":"","notes":"","execution-eligible":true,"superseded-by":"","replaces":"","created_at":"2099-01-01T00:00:00Z","updated_at":"2099-01-01T00:00:00Z"}\n'
   } > "$work_dir/.ddx/beads.jsonl"
 
-  # Use dry-run — the batch prompt should mention both area:auth siblings
   printf 'STOP\n' > "$root/state/next-actions"
   make_mock_bin "$root"
   local output
   output="$(run_helix "$root" run --dry-run --no-auto-review --no-auto-align 2>&1)" || true
 
-  # The dry-run output should show a batch containing both area:auth issues
-  # (batch=2 in the cycle line, or both IDs in the prompt)
-  assert_contains "$output" "hx-area-2" "batch should include area:auth sibling"
+  assert_contains "$output" "ddx agent execute-loop --once" "run dry-run should advertise DDx queue draining for ready area-labeled work"
+  assert_not_contains "$output" "batch=2 issues" "managed queue-drain compatibility path should not claim HELIX-side batching"
+  rm -rf "$root"
+}
+
+test_run_dry_run_suppresses_model_on_alternate_harness() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+  printf 'STOP\n' > "$root/state/next-actions"
+
+  local output
+  output="$(
+    cd "$root/work"
+    HOME="$root/home" \
+    PATH="$root/bin:$PATH" \
+    MOCK_STATE_ROOT="$root/state" \
+    HELIX_LIBRARY_ROOT="$repo_root/workflows" \
+    HELIX_FORCE_EPHEMERAL=1 \
+    HELIX_REVIEW_AGENT="codex" \
+    HELIX_AGENT="codex" \
+    HELIX_ALT_AGENT="claude" \
+    HELIX_MODEL="gpt-5.4" \
+    HELIX_DIRECT_AGENT=1 \
+    HELIX_AUTO_ALIGN=0 \
+    DDX_BEAD_DIR="$root/work/.ddx" \
+    DDX_DISABLE_UPDATE_CHECK=1 \
+    bash "$repo_root/scripts/helix" run --quiet --dry-run --no-auto-review --no-auto-align --max-cycles 1 2>&1
+  )" || true
+
+  assert_contains "$output" "ddx agent execute-loop --once --harness claude" "run dry-run should rotate the bounded build cycle to the alternate harness when configured"
+  assert_not_contains "$output" " --model " "run dry-run should not leak a primary-harness model override onto the alternate harness"
   rm -rf "$root"
 }
 
@@ -3020,7 +3749,8 @@ MOCK
 run_test "context generated at run start" test_context_generated_at_run_start
 run_test "context contains issue counts" test_context_contains_issue_counts
 run_test "epic focus selects children" test_epic_focus_selects_children
-run_test "batch falls back to area labels" test_batch_falls_back_to_area_labels
+run_test "run dry-run uses execute-loop for area-labeled queue" test_run_dry_run_uses_execute_loop_for_area_labeled_queue
+run_test "run dry-run suppresses model on alternate harness" test_run_dry_run_suppresses_model_on_alternate_harness
 run_test "drift on parent change skips close" test_drift_on_parent_change_skips_close
 run_test "acceptance failure filed as issue" test_acceptance_failure_filed_as_issue
 run_test "backoff delay formula" test_backoff_delay_formula
@@ -3376,6 +4106,524 @@ MOCK
   rm -rf "$root"
 }
 
+test_run_review_targets_closing_commit_sha_after_tracker_sync_commit() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+
+  (cd "$root/work" && git config user.email "test@test.com" && git config user.name "Test")
+  mkdir -p "$root/work/src"
+  printf 'base\n' > "$root/work/src/app.txt"
+  (
+    cd "$root/work" &&
+    git add .ddx/beads.jsonl src/app.txt &&
+    git commit -qm "seed"
+  )
+
+  awk 'BEGIN { for (i = 1; i <= 120; i++) printf "implementation line %03d\n", i }' > "$root/work/src/app.txt"
+  (
+    cd "$root/work" &&
+    git add src/app.txt &&
+    git commit -qm "hx-mock-0 implementation"
+  )
+  local impl_sha
+  impl_sha="$(cd "$root/work" && git rev-parse HEAD)"
+
+  local tracker_tmp
+  tracker_tmp="$(ddx jq -c '.notes = "tracker sync"' "$root/work/.ddx/beads.jsonl")"
+  printf '%s\n' "$tracker_tmp" > "$root/work/.ddx/beads.jsonl"
+  (
+    cd "$root/work" &&
+    git add .ddx/beads.jsonl &&
+    git commit -qm "helix-other sync tracker closure"
+  )
+
+  printf 'STOP\n' > "$root/state/next-actions"
+  cat >"$root/bin/codex" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+state_root="${MOCK_STATE_ROOT:?}"
+record() { printf '%s\n' "$1" >> "$state_root/calls.log"; }
+next_action() {
+  local file="$state_root/next-actions"
+  if [[ ! -s "$file" ]]; then echo STOP; return; fi
+  head -n1 "$file"; tail -n +2 "$file" > "$file.tmp" || true; mv "$file.tmp" "$file"
+}
+payload="$*"
+case "$payload" in
+  *"implementation action"*)
+    record implement
+    tmp="$(ddx jq -c --arg sha "$IMPL_SHA" '.status = "closed" | .closing_commit_sha = $sha' .ddx/beads.jsonl)"
+    printf '%s\n' "$tmp" > .ddx/beads.jsonl
+    echo "implementation complete"
+    ;;
+  *"fresh-eyes review"*)
+    record review
+    printf '%s\n' "$payload" > "$state_root/review-prompt.txt"
+    echo "REVIEW_STATUS: CLEAN"
+    echo "ISSUES_COUNT: 0"
+    ;;
+  *"check action"*)
+    record check
+    printf 'NEXT_ACTION: %s\n' "$(next_action)"
+    ;;
+  *)
+    record other
+    echo "mock"
+    ;;
+esac
+MOCK
+  chmod +x "$root/bin/codex"
+
+  local output
+  output="$(run_helix_with_env "$root" IMPL_SHA "$impl_sha" run --no-auto-align 2>&1)" || true
+
+  local calls
+  calls="$(cat "$root/state/calls.log" 2>/dev/null)"
+  assert_contains "$calls" "review" "run should still trigger review for the implementation diff"
+  local review_prompt
+  review_prompt="$(cat "$root/state/review-prompt.txt" 2>/dev/null)"
+  assert_contains "$review_prompt" "Review scope: commit:$impl_sha" "review should target closing_commit_sha instead of raw last-commit"
+  assert_not_contains "$output" "skipping review for small change" "tracker-only HEAD commit should not suppress review of the implementation commit"
+  rm -rf "$root"
+}
+
+test_run_syncs_closing_commit_sha_after_legacy_close_tracker_issue_commit() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+
+  (cd "$root/work" && git config user.email "test@test.com" && git config user.name "Test")
+  mkdir -p "$root/work/src"
+  printf 'base\n' > "$root/work/src/app.txt"
+  (
+    cd "$root/work" &&
+    git add .ddx/beads.jsonl src/app.txt &&
+    git commit -qm "seed"
+  )
+
+  printf 'STOP\n' > "$root/state/next-actions"
+  cat >"$root/bin/codex" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+state_root="${MOCK_STATE_ROOT:?}"
+record() { printf '%s\n' "$1" >> "$state_root/calls.log"; }
+next_action() {
+  local file="$state_root/next-actions"
+  if [[ ! -s "$file" ]]; then echo STOP; return; fi
+  head -n1 "$file"; tail -n +2 "$file" > "$file.tmp" || true; mv "$file.tmp" "$file"
+}
+payload="$*"
+case "$payload" in
+  *"implementation action"*)
+    record implement
+    awk 'BEGIN { for (i = 1; i <= 120; i++) printf "implementation line %03d\n", i }' > src/app.txt
+    git add src/app.txt
+    git commit -qm "hx-mock-0 implementation"
+    git rev-parse HEAD > "$state_root/impl-sha.txt"
+    tmp="$(ddx jq -c '.status = "closed" | .notes = "legacy tracker close"' .ddx/beads.jsonl)"
+    printf '%s\n' "$tmp" > .ddx/beads.jsonl
+    git add .ddx/beads.jsonl
+    git commit -qm "hx-mock-0 Close tracker issue"
+    echo "implementation complete"
+    ;;
+  *"fresh-eyes review"*)
+    record review
+    printf '%s\n' "$payload" > "$state_root/review-prompt.txt"
+    echo "REVIEW_STATUS: CLEAN"
+    echo "ISSUES_COUNT: 0"
+    ;;
+  *"check action"*)
+    record check
+    printf 'NEXT_ACTION: %s\n' "$(next_action)"
+    ;;
+  *)
+    record other
+    echo "mock"
+    ;;
+esac
+MOCK
+  chmod +x "$root/bin/codex"
+
+  local output
+  output="$(run_helix "$root" run --no-auto-align 2>&1)" || true
+
+  local impl_sha
+  impl_sha="$(cat "$root/state/impl-sha.txt" 2>/dev/null)"
+  local closing_sha
+  closing_sha="$(run_bead "$root" show hx-mock-0 --json | ddx jq -r '.closing_commit_sha // ""')"
+  local review_prompt
+  review_prompt="$(cat "$root/state/review-prompt.txt" 2>/dev/null)"
+  local head_subject
+  head_subject="$(cd "$root/work" && git log -1 --pretty=%s)"
+  local worktree_status
+  worktree_status="$(cd "$root/work" && git status --short --untracked-files=all | grep -Ev '^\?\? (\.helix-logs/|\.ddx/run-state\.json|\.helix/context\.md)' || true)"
+
+  [[ -n "$impl_sha" ]] || fail "mock implementation should record its commit sha"
+  assert_eq "$impl_sha" "$closing_sha" "run should repair closing_commit_sha after legacy close tracker issue commits"
+  assert_contains "$review_prompt" "Review scope: commit:$impl_sha" "review should target the implementation commit after repairing the legacy close tracker issue commit"
+  assert_contains "$head_subject" "hx-mock-0: sync closing_commit_sha" "run should create a tracker sync commit after the legacy close tracker issue path"
+  assert_not_contains "$output" "skipping review for small change" "legacy tracker close commits should not suppress review of the implementation diff"
+  assert_eq "" "$worktree_status" "run should leave a clean worktree after repairing the legacy close tracker issue path"
+  rm -rf "$root"
+}
+
+test_run_syncs_closing_commit_sha_after_tracker_only_measure_close_commit() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+
+  (cd "$root/work" && git config user.email "test@test.com" && git config user.name "Test")
+  mkdir -p "$root/work/src"
+  printf 'base\n' > "$root/work/src/app.txt"
+  (
+    cd "$root/work" &&
+    git add .ddx/beads.jsonl src/app.txt &&
+    git commit -qm "seed"
+  )
+
+  printf 'STOP\n' > "$root/state/next-actions"
+  cat >"$root/bin/codex" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+state_root="${MOCK_STATE_ROOT:?}"
+record() { printf '%s\n' "$1" >> "$state_root/calls.log"; }
+next_action() {
+  local file="$state_root/next-actions"
+  if [[ ! -s "$file" ]]; then echo STOP; return; fi
+  head -n1 "$file"; tail -n +2 "$file" > "$file.tmp" || true; mv "$file.tmp" "$file"
+}
+payload="$*"
+case "$payload" in
+  *"implementation action"*)
+    record implement
+    awk 'BEGIN { for (i = 1; i <= 120; i++) printf "implementation line %03d\n", i }' > src/app.txt
+    git add src/app.txt
+    git commit -qm "hx-mock-0 implementation"
+    git rev-parse HEAD > "$state_root/impl-sha.txt"
+    tmp="$(ddx jq -c '.status = "closed" | .notes = "tracker sync"' .ddx/beads.jsonl)"
+    printf '%s\n' "$tmp" > .ddx/beads.jsonl
+    git add .ddx/beads.jsonl
+    git commit -qm "hx-mock-0: record measure and close bead"
+    echo "implementation complete"
+    ;;
+  *"fresh-eyes review"*)
+    record review
+    printf '%s\n' "$payload" > "$state_root/review-prompt.txt"
+    echo "REVIEW_STATUS: CLEAN"
+    echo "ISSUES_COUNT: 0"
+    ;;
+  *"check action"*)
+    record check
+    printf 'NEXT_ACTION: %s\n' "$(next_action)"
+    ;;
+  *)
+    record other
+    echo "mock"
+    ;;
+esac
+MOCK
+  chmod +x "$root/bin/codex"
+
+  local output
+  output="$(run_helix "$root" run --no-auto-align 2>&1)" || true
+
+  local impl_sha
+  impl_sha="$(cat "$root/state/impl-sha.txt" 2>/dev/null)"
+  local closing_sha
+  closing_sha="$(run_bead "$root" show hx-mock-0 --json | ddx jq -r '.closing_commit_sha // ""')"
+  local review_prompt
+  review_prompt="$(cat "$root/state/review-prompt.txt" 2>/dev/null)"
+  local head_subject
+  head_subject="$(cd "$root/work" && git log -1 --pretty=%s)"
+  local worktree_status
+  worktree_status="$(cd "$root/work" && git status --short --untracked-files=all | grep -Ev '^\?\? (\.helix-logs/|\.ddx/run-state\.json|\.helix/context\.md)' || true)"
+
+  [[ -n "$impl_sha" ]] || fail "mock implementation should record its commit sha"
+  assert_eq "$impl_sha" "$closing_sha" "run should preserve the implementation sha across tracker-only measure-close commits"
+  assert_contains "$review_prompt" "Review scope: commit:$impl_sha" "review should target the implementation commit after tracker-only close bookkeeping"
+  assert_contains "$head_subject" "hx-mock-0: sync closing_commit_sha" "run should create a tracker sync commit when measure-close bookkeeping drops the implementation sha"
+  assert_not_contains "$output" "skipping review for small change" "review should still inspect the implementation diff after tracker sync"
+  assert_eq "" "$worktree_status" "run should leave a clean worktree after tracker sync"
+  rm -rf "$root"
+}
+
+test_run_rolls_back_tracker_when_closing_commit_sync_commit_fails() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+
+  mkdir -p "$root/work/src"
+  printf 'base\n' > "$root/work/src/app.txt"
+  (
+    cd "$root/work" &&
+    git -c user.email=test@test.com -c user.name=Test add .ddx/beads.jsonl src/app.txt &&
+    git -c user.email=test@test.com -c user.name=Test commit -qm "seed"
+  )
+
+  printf 'STOP\n' > "$root/state/next-actions"
+  cat >"$root/bin/codex" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+state_root="${MOCK_STATE_ROOT:?}"
+record() { printf '%s\n' "$1" >> "$state_root/calls.log"; }
+next_action() {
+  local file="$state_root/next-actions"
+  if [[ ! -s "$file" ]]; then echo STOP; return; fi
+  head -n1 "$file"; tail -n +2 "$file" > "$file.tmp" || true; mv "$file.tmp" "$file"
+}
+payload="$*"
+case "$payload" in
+  *"implementation action"*)
+    record implement
+    awk 'BEGIN { for (i = 1; i <= 120; i++) printf "implementation line %03d\n", i }' > src/app.txt
+    git -c user.email=test@test.com -c user.name=Test add src/app.txt
+    git -c user.email=test@test.com -c user.name=Test commit -qm "hx-mock-0 implementation"
+    tmp="$(ddx jq -c '.status = "closed" | .notes = "tracker sync"' .ddx/beads.jsonl)"
+    printf '%s\n' "$tmp" > .ddx/beads.jsonl
+    git -c user.email=test@test.com -c user.name=Test add .ddx/beads.jsonl
+    git -c user.email=test@test.com -c user.name=Test commit -qm "hx-mock-0: record measure and close bead"
+    echo "implementation complete"
+    ;;
+  *"fresh-eyes review"*)
+    record review
+    printf '%s\n' "$payload" > "$state_root/review-prompt.txt"
+    echo "REVIEW_STATUS: CLEAN"
+    echo "ISSUES_COUNT: 0"
+    ;;
+  *"check action"*)
+    record check
+    printf 'NEXT_ACTION: %s\n' "$(next_action)"
+    ;;
+  *)
+    record other
+    echo "mock"
+    ;;
+esac
+MOCK
+  chmod +x "$root/bin/codex"
+
+  local output
+  output="$(run_helix "$root" run --review-threshold 0 --no-auto-align 2>&1)" || true
+
+  local calls
+  calls="$(cat "$root/state/calls.log" 2>/dev/null)"
+  local closing_sha
+  closing_sha="$(run_bead "$root" show hx-mock-0 --json | ddx jq -r '.closing_commit_sha // ""')"
+  local head_subject
+  head_subject="$(cd "$root/work" && git log -1 --pretty=%s)"
+  local review_prompt
+  review_prompt="$(cat "$root/state/review-prompt.txt" 2>/dev/null)"
+  local worktree_status
+  worktree_status="$(cd "$root/work" && git status --short --untracked-files=all | grep -Ev '^\?\? (\.helix-logs/|\.ddx/run-state\.json|\.helix/context\.md)' || true)"
+
+  assert_contains "$calls" "review" "run should keep review behavior but fall back to committed history after a tracker sync commit failure"
+  assert_contains "$calls" "check" "run should continue to queue-drain after skipping the failed review sync"
+  assert_eq "" "$closing_sha" "run should roll back closing_commit_sha when the tracker sync commit fails"
+  assert_not_contains "$head_subject" "sync closing_commit_sha" "failed tracker sync should not create a bookkeeping commit"
+  assert_contains "$output" "failed to create tracker sync commit for hx-mock-0" "run should surface the tracker sync commit failure"
+  assert_contains "$output" "failed to sync closing_commit_sha for hx-mock-0; falling back to current review scope" "run should fall back instead of pretending the sync succeeded"
+  assert_contains "$review_prompt" "Review scope: last-commit" "run should review the fallback scope after rolling back the failed tracker sync"
+  assert_not_contains "$review_prompt" "Review scope: commit:" "run should not pretend the failed tracker sync established a committed closing sha"
+  assert_eq "" "$worktree_status" "run should leave a clean worktree after rolling back the failed tracker sync"
+  rm -rf "$root"
+}
+
+test_run_tracker_sync_rollback_preserves_concurrent_tracker_updates() {
+  local root
+  root="$(make_workspace)"
+
+  mkdir -p "$root/work/.ddx"
+  cat >"$root/work/.ddx/beads.jsonl" <<'EOF'
+{"id":"hx-mock-0","title":"mock issue 0","issue_type":"task","status":"open","priority":2,"labels":["helix","phase:build","kind:build"],"parent":"","spec-id":"","description":"","design":"","acceptance":"","dependencies":[],"owner":"","notes":"","execution-eligible":true,"superseded-by":"","replaces":"","created_at":"2099-01-01T00:00:00Z","updated_at":"2099-01-01T00:00:00Z"}
+{"id":"hx-mock-1","title":"mock issue 1","issue_type":"task","status":"open","priority":2,"labels":["helix","phase:design"],"parent":"","spec-id":"","description":"","design":"","acceptance":"","dependencies":[],"owner":"","notes":"","execution-eligible":false,"superseded-by":"","replaces":"","created_at":"2099-01-01T00:00:00Z","updated_at":"2099-01-01T00:00:00Z"}
+EOF
+
+  python3 - "$root/work/.ddx/beads.jsonl" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+rows = []
+for raw in path.read_text(encoding="utf-8").splitlines():
+    if not raw.strip():
+        continue
+    row = json.loads(raw)
+    if row.get("id") == "hx-mock-0":
+        row["status"] = "closed"
+        row["notes"] = "tracker sync"
+    rows.append(row)
+path.write_text("".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows), encoding="utf-8")
+PY
+
+  local issue_json
+  issue_json="$(run_bead "$root" show hx-mock-0 --json)"
+  local issue_jsonl
+  issue_jsonl="$(sed -n '1p' "$root/work/.ddx/beads.jsonl")"
+  local target_sha="deadbeefdeadbeefdeadbeefdeadbeefdeadbeef"
+  local expected_issue_json
+  local saved_repo_root="$repo_root"
+  local helix_source
+
+  # Load the helper definitions without dispatching the CLI entrypoint.
+  helix_source="$(mktemp "${TMPDIR:-/tmp}/helix-source.XXXXXX")"
+  sed '$d' "$saved_repo_root/scripts/helix" > "$helix_source"
+  source "$helix_source"
+  rm -f "$helix_source"
+  repo_root="$saved_repo_root"
+  target_root="$root/work"
+  tracker_dir="$root/work/.ddx"
+  tracker_file="$root/work/.ddx/beads.jsonl"
+  export DDX_BEAD_DIR="$tracker_dir"
+  expected_issue_json="$(expected_tracker_issue_after_closing_sha_update "$issue_json" "$target_sha")"
+
+  python3 - "$root/work/.ddx/beads.jsonl" "$target_sha" <<'PY'
+import json
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+target_sha = sys.argv[2]
+rows = []
+for raw in path.read_text(encoding="utf-8").splitlines():
+    if not raw.strip():
+        continue
+    row = json.loads(raw)
+    if row.get("id") == "hx-mock-0":
+        row["closing_commit_sha"] = target_sha
+    if row.get("id") == "hx-mock-1":
+        row["status"] = "closed"
+        row["notes"] = "concurrent close"
+    rows.append(row)
+path.write_text("".join(json.dumps(row, separators=(",", ":")) + "\n" for row in rows), encoding="utf-8")
+PY
+
+  rollback_issue_closing_commit_sha_update "hx-mock-0" "$issue_jsonl" "$expected_issue_json"
+
+  local closing_sha
+  closing_sha="$(run_bead "$root" show hx-mock-0 --json | ddx jq -r '.closing_commit_sha // ""')"
+  local concurrent_status
+  concurrent_status="$(run_bead "$root" show hx-mock-1 --json | ddx jq -r '.status')"
+  local concurrent_notes
+  concurrent_notes="$(run_bead "$root" show hx-mock-1 --json | ddx jq -r '.notes // ""')"
+
+  assert_eq "" "$closing_sha" "run should revert only hx-mock-0 closing_commit_sha after the sync commit failure"
+  assert_eq "closed" "$concurrent_status" "rollback should preserve the intervening tracker status change"
+  assert_eq "concurrent close" "$concurrent_notes" "rollback should preserve the intervening tracker metadata change"
+  rm -rf "$root"
+}
+
+test_commit_syncs_tracker_close_to_implementation_commit() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+
+  (cd "$root/work" && git config user.email "test@test.com" && git config user.name "Test")
+  printf 'base\n' > "$root/work/src.txt"
+  (
+    cd "$root/work" &&
+    git add .ddx/beads.jsonl src.txt &&
+    git commit -qm "seed"
+  )
+
+  printf 'updated\n' > "$root/work/src.txt"
+
+  local output
+  output="$(run_helix "$root" commit hx-mock-0 2>&1)" || true
+
+  local status
+  status="$(run_bead "$root" show hx-mock-0 --json | ddx jq -r '.status')"
+  local closing_sha
+  closing_sha="$(run_bead "$root" show hx-mock-0 --json | ddx jq -r '.closing_commit_sha // ""')"
+  local impl_sha
+  impl_sha="$(cd "$root/work" && git rev-list --all -n 1 --grep '^hx-mock-0 mock issue 0$')"
+  local head_subject
+  head_subject="$(cd "$root/work" && git log -1 --pretty=%s)"
+  local worktree_status
+  worktree_status="$(cd "$root/work" && git status --short --untracked-files=all | grep -Ev '^\?\? \.helix-logs/' || true)"
+
+  [[ -n "$impl_sha" ]] || fail "helix commit should create the implementation commit"
+  assert_eq "closed" "$status" "helix commit should close the issue"
+  assert_eq "$impl_sha" "$closing_sha" "tracker sync should point closing_commit_sha at the implementation commit"
+  assert_contains "$head_subject" "hx-mock-0 close tracker bead" "helix commit should create a tracker-sync commit"
+  assert_contains "$output" "helix: closed hx-mock-0" "commit output should report the tracker close"
+  assert_eq "" "$worktree_status" "helix commit should leave a clean worktree"
+  rm -rf "$root"
+}
+
+test_commit_succeeds_with_external_tracker_dir() {
+  local root
+  root="$(make_workspace)"
+  local external_tracker
+  external_tracker="$root/external-ddx/.ddx"
+  mkdir -p "$external_tracker"
+  printf '{"id":"hx-ext-0","title":"mock issue 0","issue_type":"task","status":"open","priority":2,"labels":["helix","phase:build","kind:build"],"parent":"","spec-id":"","description":"","design":"","acceptance":"","dependencies":[],"owner":"","notes":"","execution-eligible":true,"superseded-by":"","replaces":"","created_at":"2099-01-01T00:00:00Z","updated_at":"2099-01-01T00:00:00Z"}\n' > "$external_tracker/beads.jsonl"
+
+  (cd "$root/work" && git config user.email "test@test.com" && git config user.name "Test")
+  printf 'base\n' > "$root/work/src.txt"
+  (
+    cd "$root/work" &&
+    git add src.txt &&
+    git commit -qm "seed"
+  )
+
+  printf 'updated\n' > "$root/work/src.txt"
+
+  local output
+  output="$(
+    cd "$root/work" &&
+    env \
+      HOME="$root/home" \
+      PATH="$root/bin:$PATH" \
+      MOCK_STATE_ROOT="$root/state" \
+      HELIX_LIBRARY_ROOT="$repo_root/workflows" \
+      HELIX_FORCE_EPHEMERAL=1 \
+      HELIX_REVIEW_AGENT="codex" \
+      HELIX_ALT_AGENT="none" \
+      HELIX_AUTO_ALIGN=0 \
+      HELIX_DIRECT_AGENT=1 \
+      DDX_BEAD_DIR="$external_tracker" \
+      DDX_DISABLE_UPDATE_CHECK=1 \
+      bash "$repo_root/scripts/helix" commit --quiet hx-ext-0 2>&1
+  )" || true
+
+  local status
+  status="$(
+    env \
+      HOME="$root/home" \
+      PATH="$root/bin:$PATH" \
+      DDX_BEAD_DIR="$external_tracker" \
+      DDX_DISABLE_UPDATE_CHECK=1 \
+      ddx bead show hx-ext-0 --json | ddx jq -r '.status'
+  )"
+  local closing_sha
+  closing_sha="$(
+    env \
+      HOME="$root/home" \
+      PATH="$root/bin:$PATH" \
+      DDX_BEAD_DIR="$external_tracker" \
+      DDX_DISABLE_UPDATE_CHECK=1 \
+      ddx bead show hx-ext-0 --json | ddx jq -r '.closing_commit_sha // ""'
+  )"
+  local impl_sha
+  impl_sha="$(cd "$root/work" && git rev-list --all -n 1 --grep '^hx-ext-0 mock issue 0$')"
+  local head_subject
+  head_subject="$(cd "$root/work" && git log -1 --pretty=%s)"
+  local worktree_status
+  worktree_status="$(cd "$root/work" && git status --short --untracked-files=all | grep -Ev '^\?\? \.helix-logs/' || true)"
+
+  [[ -n "$impl_sha" ]] || fail "helix commit should create the implementation commit when the tracker is external"
+  assert_eq "closed" "$status" "external tracker mode should still close the issue"
+  assert_eq "$impl_sha" "$closing_sha" "external tracker mode should still sync closing_commit_sha to the implementation commit"
+  assert_eq "hx-ext-0 mock issue 0" "$head_subject" "external tracker mode should not create a repo-local tracker-sync commit"
+  assert_contains "$output" "helix: tracker file is external; skipping repo-local tracker-sync commit" "commit output should explain why the tracker-sync commit was skipped"
+  assert_contains "$output" "helix: closed hx-ext-0" "external tracker mode should still report the tracker close"
+  assert_not_contains "$output" "outside repository" "external tracker mode should avoid git add failures for out-of-repo tracker files"
+  assert_eq "" "$worktree_status" "external tracker mode should leave a clean worktree"
+  rm -rf "$root"
+}
+
 # --- Cross-model review in live run ---
 
 test_cross_model_review_switches_agent() {
@@ -3433,6 +4681,8 @@ MOCK
     HELIX_FORCE_EPHEMERAL=1 \
     HELIX_REVIEW_AGENT="codex" \
     HELIX_DIRECT_AGENT=1 \
+    DDX_BEAD_DIR="$root/work/.ddx" \
+    DDX_DISABLE_UPDATE_CHECK=1 \
     bash "$repo_root/scripts/helix" run --agent claude --quiet --no-auto-align 2>&1
   )" || true
 
@@ -3440,6 +4690,129 @@ MOCK
   calls="$(cat "$root/state/calls.log" 2>/dev/null)"
   # Review should use codex (the review agent), not claude
   assert_contains "$calls" "codex-review" "review should use the cross-model review agent (codex)"
+  rm -rf "$root"
+}
+
+# --- Explicit --agent disables adversarial rotation ---
+
+test_explicit_agent_dispatches_to_named_agent() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+  printf 'STOP\n' > "$root/state/next-actions"
+
+  # Rewrite codex mock to record calls and close issues
+  cat >"$root/bin/codex" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+state_root="${MOCK_STATE_ROOT:?}"
+record() { printf '%s\n' "$1" >> "$state_root/calls.log"; }
+next_action() {
+  local file="$state_root/next-actions"
+  if [[ ! -s "$file" ]]; then echo STOP; return; fi
+  head -n1 "$file"; tail -n +2 "$file" > "$file.tmp" || true; mv "$file.tmp" "$file"
+}
+if [[ "$*" != *"--dangerously-bypass-approvals-and-sandbox"* ]]; then
+  echo "mock codex expected flag" >&2; exit 1
+fi
+payload="$*"
+case "$payload" in
+  *"implementation action"*)
+    record codex-implement
+    if [[ -f .ddx/beads.jsonl ]]; then
+      tmp="$(ddx jq -c '.status = "closed"' .ddx/beads.jsonl)"
+      printf '%s\n' "$tmp" > .ddx/beads.jsonl
+    fi
+    echo "implementation complete"
+    ;;
+  *"check action"*) record codex-check; printf 'NEXT_ACTION: %s\n' "$(next_action)" ;;
+  *) record codex-other; echo "mock codex" ;;
+esac
+MOCK
+  chmod +x "$root/bin/codex"
+
+  # Rewrite claude mock to record if invoked (should not be called)
+  cat >"$root/bin/claude" <<'MOCK'
+#!/usr/bin/env bash
+state_root="${MOCK_STATE_ROOT:?}"
+printf 'claude-called\n' >> "$state_root/calls.log"
+echo "mock claude"
+MOCK
+  chmod +x "$root/bin/claude"
+
+  local output
+  output="$(
+    cd "$root/work"
+    HOME="$root/home" \
+    PATH="$root/bin:$PATH" \
+    MOCK_STATE_ROOT="$root/state" \
+    HELIX_LIBRARY_ROOT="$repo_root/workflows" \
+    HELIX_FORCE_EPHEMERAL=1 \
+    HELIX_DIRECT_AGENT=1 \
+    DDX_BEAD_DIR="$root/work/.ddx" \
+    DDX_DISABLE_UPDATE_CHECK=1 \
+    bash "$repo_root/scripts/helix" run --agent codex --quiet --no-auto-align --no-auto-review 2>&1
+  )" || true
+
+  local calls
+  calls="$(cat "$root/state/calls.log" 2>/dev/null)"
+  assert_contains "$calls" "codex-implement" "explicit --agent codex should dispatch implementation to codex"
+  assert_not_contains "$calls" "claude-called" "explicit --agent codex should not invoke claude for implementation"
+  rm -rf "$root"
+}
+
+test_run_state_records_explicit_agent() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+  printf 'STOP\n' > "$root/state/next-actions"
+
+  # Codex mock closes the issue and returns STOP on check
+  cat >"$root/bin/codex" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+state_root="${MOCK_STATE_ROOT:?}"
+next_action() {
+  local file="$state_root/next-actions"
+  if [[ ! -s "$file" ]]; then echo STOP; return; fi
+  head -n1 "$file"; tail -n +2 "$file" > "$file.tmp" || true; mv "$file.tmp" "$file"
+}
+if [[ "$*" != *"--dangerously-bypass-approvals-and-sandbox"* ]]; then
+  echo "mock codex expected flag" >&2; exit 1
+fi
+payload="$*"
+case "$payload" in
+  *"implementation action"*)
+    if [[ -f .ddx/beads.jsonl ]]; then
+      tmp="$(ddx jq -c '.status = "closed"' .ddx/beads.jsonl)"
+      printf '%s\n' "$tmp" > .ddx/beads.jsonl
+    fi
+    echo "implementation complete"
+    ;;
+  *"check action"*) printf 'NEXT_ACTION: %s\n' "$(next_action)" ;;
+  *) echo "mock codex" ;;
+esac
+MOCK
+  chmod +x "$root/bin/codex"
+
+  (
+    cd "$root/work"
+    HOME="$root/home" \
+    PATH="$root/bin:$PATH" \
+    MOCK_STATE_ROOT="$root/state" \
+    HELIX_LIBRARY_ROOT="$repo_root/workflows" \
+    HELIX_FORCE_EPHEMERAL=1 \
+    HELIX_DIRECT_AGENT=1 \
+    DDX_BEAD_DIR="$root/work/.ddx" \
+    DDX_DISABLE_UPDATE_CHECK=1 \
+    bash "$repo_root/scripts/helix" run --agent codex --quiet --no-auto-align --no-auto-review 2>&1
+  ) || true
+
+  local state_file="$root/work/.ddx/run-state.json"
+  [[ -f "$state_file" ]] || fail "run-state.json was not written"
+  local recorded_agent
+  recorded_agent="$(ddx jq -r '.agent // ""' "$state_file" 2>/dev/null)"
+  assert_eq "codex" "$recorded_agent" "run-state.json should record the agent as codex (not claude)"
   rm -rf "$root"
 }
 
@@ -3493,8 +4866,143 @@ run_test "drift on supersession skips close" test_drift_on_supersession_skips_cl
 run_test "drift on spec-id change skips close" test_drift_on_spec_id_change_skips_close
 run_test "review CLEAN succeeds" test_review_clean_status_succeeds
 run_test "review ISSUES_FOUND continues loop" test_review_issues_found_continues_loop
+run_test "run review targets closing commit sha after tracker sync commit" test_run_review_targets_closing_commit_sha_after_tracker_sync_commit
+run_test "run syncs closing commit sha after legacy close tracker issue commit" test_run_syncs_closing_commit_sha_after_legacy_close_tracker_issue_commit
+run_test "run syncs closing commit sha after tracker-only measure close commit" test_run_syncs_closing_commit_sha_after_tracker_only_measure_close_commit
+run_test "run tracker sync rollback preserves concurrent tracker updates" test_run_tracker_sync_rollback_preserves_concurrent_tracker_updates
+run_test "run rolls back tracker after closing commit sync failure" test_run_rolls_back_tracker_when_closing_commit_sync_commit_fails
+run_test "helix commit syncs closing commit sha to implementation commit" test_commit_syncs_tracker_close_to_implementation_commit
+run_test "helix commit succeeds with external tracker dir" test_commit_succeeds_with_external_tracker_dir
 run_test "cross-model review switches agent" test_cross_model_review_switches_agent
+run_test "explicit --agent dispatches to named agent" test_explicit_agent_dispatches_to_named_agent
+run_test "run-state records explicit agent" test_run_state_records_explicit_agent
 run_test "epic blocked when child intractable" test_epic_blocked_when_child_intractable
+
+# ── ddx-agent harness tests ────────────────────────────────────────────
+
+with_mock_ddx_list() {
+  local root="$1"
+  local list_json="$2"
+  local real_ddx
+  real_ddx="$(type -P ddx)"
+
+  cat > "$root/bin/ddx" <<EOF
+#!/usr/bin/env bash
+if [[ "\$1 \$2" == "agent list" ]] && [[ " \$* " == *" --json "* ]]; then
+  cat <<'JSON'
+$list_json
+JSON
+  exit 0
+fi
+exec "$real_ddx" "\$@"
+EOF
+  chmod +x "$root/bin/ddx"
+}
+
+test_ddx_agent_flag_resolves_to_live_agent_harness() {
+  # When DDx exposes the embedded harness as "agent", HELIX should use it and
+  # delegate model selection by omitting an implicit --model flag.
+  local root
+  root="$(make_workspace)"
+  with_mock_ddx_list "$root" '[{"name":"agent","available":true}]'
+  local output
+  output="$(
+    cd "$root/work"
+    HOME="$root/home" \
+    PATH="$root/bin:$PATH" \
+    MOCK_STATE_ROOT="$root/state" \
+    HELIX_LIBRARY_ROOT="$repo_root/workflows" \
+    HELIX_ALT_AGENT="none" \
+    DDX_BEAD_DIR="$root/work/.ddx" \
+    DDX_DISABLE_UPDATE_CHECK=1 \
+    bash "$repo_root/scripts/helix" build --ddx-agent --dry-run 2>&1
+  )"
+  assert_contains "$output" "--harness agent" "--ddx-agent should resolve to DDx's live agent harness"
+  assert_not_contains "$output" " --model " "default ddx-agent dispatch should not inject a concrete model"
+  rm -rf "$root"
+}
+
+test_ddx_agent_flag_resolves_to_live_forge_harness() {
+  # When an older DDx still exposes the embedded harness as "forge", HELIX
+  # should adapt instead of forcing the renamed surface.
+  local root
+  root="$(make_workspace)"
+  with_mock_ddx_list "$root" '[{"name":"forge","available":true}]'
+  local output
+  output="$(
+    cd "$root/work"
+    HOME="$root/home" \
+    PATH="$root/bin:$PATH" \
+    MOCK_STATE_ROOT="$root/state" \
+    HELIX_LIBRARY_ROOT="$repo_root/workflows" \
+    HELIX_ALT_AGENT="none" \
+    DDX_BEAD_DIR="$root/work/.ddx" \
+    DDX_DISABLE_UPDATE_CHECK=1 \
+    bash "$repo_root/scripts/helix" build --ddx-agent --dry-run 2>&1
+  )"
+  assert_contains "$output" "--harness forge" "--ddx-agent should resolve to forge when that is DDx's live embedded harness name"
+  assert_not_contains "$output" " --model " "default embedded-harness dispatch should let DDx choose the model"
+  rm -rf "$root"
+}
+
+test_embedded_alias_maps_to_live_embedded_harness() {
+  local root
+  root="$(make_workspace)"
+  with_mock_ddx_list "$root" '[{"name":"embedded","available":true}]'
+  local output
+  output="$(
+    cd "$root/work"
+    HOME="$root/home" \
+    PATH="$root/bin:$PATH" \
+    MOCK_STATE_ROOT="$root/state" \
+    HELIX_LIBRARY_ROOT="$repo_root/workflows" \
+    HELIX_ALT_AGENT="none" \
+    DDX_BEAD_DIR="$root/work/.ddx" \
+    DDX_DISABLE_UPDATE_CHECK=1 \
+    bash "$repo_root/scripts/helix" build --embedded --dry-run 2>&1
+  )"
+  assert_contains "$output" "--harness embedded" "--embedded alias should dispatch via DDx's embedded harness when exposed"
+  rm -rf "$root"
+}
+
+test_forge_alias_maps_to_live_agent_harness() {
+  # --forge remains accepted, but should resolve through DDx discovery.
+  local root
+  root="$(make_workspace)"
+  with_mock_ddx_list "$root" '[{"name":"agent","available":true}]'
+  local output
+  output="$(
+    cd "$root/work"
+    HOME="$root/home" \
+    PATH="$root/bin:$PATH" \
+    MOCK_STATE_ROOT="$root/state" \
+    HELIX_LIBRARY_ROOT="$repo_root/workflows" \
+    HELIX_ALT_AGENT="none" \
+    DDX_BEAD_DIR="$root/work/.ddx" \
+    DDX_DISABLE_UPDATE_CHECK=1 \
+    bash "$repo_root/scripts/helix" build --forge --dry-run 2>&1
+  )"
+  assert_contains "$output" "--harness agent" "--forge should remain a compatibility alias resolved through DDx discovery"
+  rm -rf "$root"
+}
+
+test_ddx_agent_help_mentions_ddx_agent() {
+  # Help text should teach ddx-agent as the preferred name and explain DDx delegation.
+  local root
+  root="$(make_workspace)"
+  local output
+  output="$(run_helix "$root" help 2>&1)"
+  assert_contains "$output" "ddx-agent" "help text should mention ddx-agent"
+  assert_contains "$output" "--embedded" "help text should mention the embedded shorthand"
+  assert_contains "$output" "default model selection is delegated to DDx" "help text should explain that DDx owns default model choice"
+  rm -rf "$root"
+}
+
+run_test "ddx-agent flag resolves to live agent harness" test_ddx_agent_flag_resolves_to_live_agent_harness
+run_test "ddx-agent flag resolves to live forge harness" test_ddx_agent_flag_resolves_to_live_forge_harness
+run_test "embedded alias maps to live embedded harness" test_embedded_alias_maps_to_live_embedded_harness
+run_test "forge alias resolves through DDx discovery" test_forge_alias_maps_to_live_agent_harness
+run_test "ddx-agent mentioned in help" test_ddx_agent_help_mentions_ddx_agent
 
 # ── frame tests ───────────────────────────────────────────────────────
 
@@ -3771,11 +5279,273 @@ test_status_cleans_stale_pid() {
   rm -rf "$root"
 }
 
+test_strip_advisory_pure_json_passes_through() {
+  # strip_advisory filter: pure compact JSON array passes unchanged
+  local input='[{"id":"hx-1","status":"open"}]'
+  local result
+  result="$(printf '%s\n' "$input" | awk 'found || /^[{[]/ { found=1; print }' || true)"
+  assert_eq "$input" "$result" "pure JSON array should pass through strip_advisory unchanged"
+}
+
+test_strip_advisory_pure_object_passes_through() {
+  # strip_advisory filter: pure JSON object passes unchanged
+  local input='{"id":"hx-1","status":"open"}'
+  local result
+  result="$(printf '%s\n' "$input" | awk 'found || /^[{[]/ { found=1; print }' || true)"
+  assert_eq "$input" "$result" "pure JSON object should pass through strip_advisory unchanged"
+}
+
+test_strip_advisory_removes_emoji_prefix() {
+  # strip_advisory filter: advisory line before JSON array is stripped (compact)
+  local json='[{"id":"hx-1","status":"open"}]'
+  local result
+  result="$(printf '💡 DDx 99.0.0 is available, run ddx upgrade\n%s\n' "$json" | awk 'found || /^[{[]/ { found=1; print }' || true)"
+  assert_eq "$json" "$result" "advisory line before JSON should be stripped"
+}
+
+test_strip_advisory_removes_upgrade_arrow_prefix() {
+  # strip_advisory filter: ⬆️ upgrade line before JSON is stripped (compact)
+  local json='[{"id":"hx-1"}]'
+  local result
+  result="$(printf '⬆️  Upgrade available\n%s\n' "$json" | awk 'found || /^[{[]/ { found=1; print }' || true)"
+  assert_eq "$json" "$result" "upgrade arrow advisory before JSON should be stripped"
+}
+
+test_strip_advisory_preserves_multiline_json() {
+  # strip_advisory filter: advisory line before pretty-printed JSON is stripped;
+  # all JSON lines (including those starting with spaces/} characters) are kept.
+  local expected
+  expected="$(printf '[\n  {"id":"hx-1"},\n  {"id":"hx-2"}\n]')"
+  local result
+  result="$(printf '💡 DDx 99.0.0 is available\n[\n  {"id":"hx-1"},\n  {"id":"hx-2"}\n]\n' | awk 'found || /^[{[]/ { found=1; print }' || true)"
+  assert_eq "$expected" "$result" "advisory before pretty-printed JSON should be stripped without truncating JSON body"
+}
+
+test_ready_count_survives_advisory_lines() {
+  # Integration: helix_ready_count returns correct count when ddx emits advisory lines.
+  # We create a ddx wrapper that prepends an advisory line to bead ready --json output,
+  # then verify helix status still reports the correct ready count.
+  local root real_ddx
+  root="$(make_workspace)"
+  seed_tracker "$root" 2
+  real_ddx="$(type -P ddx)"
+
+  # ddx wrapper: prepend advisory line only for bead ready --json
+  cat > "$root/bin/ddx" << SCRIPT
+#!/usr/bin/env bash
+if [[ "\$*" == *"bead ready"* ]] && [[ "\$*" == *"--json"* ]]; then
+  printf '\U0001F4A1 DDx 99.0.0 is available\\n'
+fi
+exec "$real_ddx" "\$@"
+SCRIPT
+  chmod +x "$root/bin/ddx"
+
+  local output
+  output="$(run_helix "$root" status 2>&1)"
+  assert_contains "$output" "Ready:" "helix status should show Ready count even when ddx emits advisory lines"
+  assert_not_contains "$output" "Ready:   0" "helix status ready count should not be 0 (advisory corruption would zero it)"
+  rm -rf "$root"
+}
+
+# ── helix-9044bc6c: single-pane status + parallel-run mutex ─────────
+
+test_status_json_has_required_fields() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 3
+
+  local output
+  output="$(run_helix "$root" status --json 2>/dev/null)"
+
+  # Each of the five required keys must be present (jq -e errors on null/missing).
+  printf '%s' "$output" | ddx jq -e '
+    has("current_cycle") and
+    has("running_bead") and
+    has("parked_beads") and
+    has("injected_supervisory") and
+    has("last_stop_reason")
+  ' >/dev/null || fail "status --json missing required keys"
+
+  # Type contract checks.
+  printf '%s' "$output" | ddx jq -e '(.current_cycle | type) == "number"' >/dev/null \
+    || fail "current_cycle must be a number"
+  printf '%s' "$output" | ddx jq -e '(.running_bead | type) == "object" or (.running_bead | type) == "null"' >/dev/null \
+    || fail "running_bead must be object or null"
+  printf '%s' "$output" | ddx jq -e '(.parked_beads | type) == "array"' >/dev/null \
+    || fail "parked_beads must be an array"
+  printf '%s' "$output" | ddx jq -e '(.injected_supervisory | type) == "array"' >/dev/null \
+    || fail "injected_supervisory must be an array"
+  printf '%s' "$output" | ddx jq -e '(.last_stop_reason | type) == "string"' >/dev/null \
+    || fail "last_stop_reason must be a string"
+
+  # Parked-bead entries (if any) must carry the documented sub-keys.
+  printf '%s' "$output" | ddx jq -e '
+    .parked_beads | all(has("id") and has("reason") and has("next_eligible") and has("age_seconds"))
+  ' >/dev/null || fail "parked_beads entries missing required keys"
+
+  # Injected-supervisory entries (if any) must carry the documented sub-keys.
+  printf '%s' "$output" | ddx jq -e '
+    .injected_supervisory | all(has("id") and has("type") and has("triggering_cycle") and has("triggering_bead"))
+  ' >/dev/null || fail "injected_supervisory entries missing required keys"
+
+  rm -rf "$root"
+}
+
+test_status_json_under_200ms_at_100_beads() {
+  local root
+  root="$(make_workspace)"
+  # Seed 100 open beads.
+  mkdir -p "$root/work/.ddx"
+  local i
+  : > "$root/work/.ddx/beads.jsonl"
+  for ((i = 0; i < 100; i++)); do
+    printf '{"id":"hx-perf-%d","title":"perf %d","issue_type":"task","status":"open","priority":2,"labels":["helix","phase:build"],"parent":"","spec-id":"","description":"","design":"","acceptance":"","dependencies":[],"owner":"","notes":"","execution-eligible":true,"superseded-by":"","replaces":"","created_at":"2099-01-01T00:00:00Z","updated_at":"2099-01-01T00:00:00Z"}\n' "$i" "$i" >> "$root/work/.ddx/beads.jsonl"
+  done
+
+  # Warm up (page caches, ddx jq compile).
+  run_helix "$root" status --json >/dev/null 2>&1 || true
+
+  # Measure with a coarse-grained shell timer (millisecond granularity via date +%s%N).
+  local start_ns end_ns elapsed_ms
+  start_ns="$(date +%s%N)"
+  run_helix "$root" status --json >/dev/null 2>&1
+  end_ns="$(date +%s%N)"
+  elapsed_ms=$(( (end_ns - start_ns) / 1000000 ))
+
+  if (( elapsed_ms >= 200 )); then
+    fail "helix status --json took ${elapsed_ms}ms (>= 200ms) on 100-bead tracker"
+  fi
+  rm -rf "$root"
+}
+
+test_run_parallel_run_mutex_denies_second_invocation() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+
+  # Spin up an "alive" sentinel process whose PID we plant in helix.pid.
+  # Using an external sleep avoids needing a long-lived helix run for the test.
+  sleep 30 &
+  local sentinel_pid=$!
+
+  mkdir -p "$root/work/.ddx"
+  printf '%s 2026-01-01T00:00:00Z\n' "$sentinel_pid" > "$root/work/.ddx/helix.pid"
+
+  # Snapshot the tracker so we can prove the denied run did not mutate it.
+  local tracker_before tracker_after
+  tracker_before="$(cat "$root/work/.ddx/beads.jsonl")"
+
+  # Second `helix run` must exit 2 with the documented stderr message.
+  local stderr_file rc=0
+  stderr_file="$(mktemp)"
+  local start_ns end_ns elapsed_ms
+  start_ns="$(date +%s%N)"
+  run_helix "$root" run --no-auto-review --no-auto-align >/dev/null 2>"$stderr_file" || rc=$?
+  end_ns="$(date +%s%N)"
+  elapsed_ms=$(( (end_ns - start_ns) / 1000000 ))
+
+  local stderr
+  stderr="$(cat "$stderr_file")"
+  rm -f "$stderr_file"
+
+  kill "$sentinel_pid" 2>/dev/null || true
+  wait "$sentinel_pid" 2>/dev/null || true
+
+  if (( rc != 2 )); then
+    printf 'stderr was:\n%s\n' "$stderr" >&2
+    fail "second helix run should exit 2 (got rc=$rc)"
+  fi
+  assert_contains "$stderr" "helix run: already running" "denial message must mention already-running"
+  assert_contains "$stderr" "pid=$sentinel_pid" "denial message must include the lock-holder pid"
+  if (( elapsed_ms >= 1000 )); then
+    fail "denial took ${elapsed_ms}ms (>= 1000ms) — must short-circuit before claiming any bead"
+  fi
+
+  tracker_after="$(cat "$root/work/.ddx/beads.jsonl")"
+  if [[ "$tracker_before" != "$tracker_after" ]]; then
+    fail "denied helix run must not mutate the tracker"
+  fi
+
+  rm -rf "$root"
+}
+
+test_run_state_json_records_migration_counters() {
+  local root
+  root="$(make_workspace)"
+  seed_tracker "$root" 1
+
+  # Drive a single drain cycle (mock codex closes the issue, then check returns STOP).
+  printf 'STOP\n' > "$root/state/next-actions"
+  cat >"$root/bin/codex" <<'MOCK'
+#!/usr/bin/env bash
+set -euo pipefail
+state_root="${MOCK_STATE_ROOT:?}"
+record() { printf '%s\n' "$1" >> "$state_root/calls.log"; }
+next_action() {
+  local file="$state_root/next-actions"
+  if [[ ! -s "$file" ]]; then echo STOP; return; fi
+  head -n1 "$file"; tail -n +2 "$file" > "$file.tmp" || true; mv "$file.tmp" "$file"
+}
+case "$*" in
+  *"implementation action"*)
+    record implement
+    if [[ -f .ddx/beads.jsonl ]]; then
+      tmp="$(ddx jq -c '.status = "closed"' .ddx/beads.jsonl)"
+      printf '%s\n' "$tmp" > .ddx/beads.jsonl
+    fi
+    echo "implementation complete"
+    ;;
+  *"check action"*) record check; printf 'NEXT_ACTION: %s\n' "$(next_action)" ;;
+  *) record other; echo "mock codex" ;;
+esac
+MOCK
+  chmod +x "$root/bin/codex"
+
+  run_helix "$root" run --no-auto-review --no-auto-align >/dev/null 2>&1 || true
+
+  local state_file="$root/work/.ddx/run-state.json"
+  [[ -f "$state_file" ]] || fail "run-state.json should be written after helix run"
+
+  ddx jq -e '
+    has("ddx_delegation_success_count") and
+    has("ddx_delegation_failure_count") and
+    has("parallel_run_denied_count") and
+    has("supervisory_injection_count")
+  ' "$state_file" >/dev/null || fail "run-state.json missing migration counter fields"
+
+  # Trigger a parallel-run denial so parallel_run_denied_count increments.
+  sleep 30 &
+  local sentinel=$!
+  printf '%s 2026-01-01T00:00:00Z\n' "$sentinel" > "$root/work/.ddx/helix.pid"
+  run_helix "$root" run --no-auto-review --no-auto-align >/dev/null 2>&1 || true
+  kill "$sentinel" 2>/dev/null || true
+  wait "$sentinel" 2>/dev/null || true
+
+  local denied
+  denied="$(ddx jq -r '.parallel_run_denied_count // 0' "$state_file")"
+  if (( denied < 1 )); then
+    fail "parallel_run_denied_count should have incremented (got $denied)"
+  fi
+
+  rm -rf "$root"
+}
+
+run_test "status --json has required fields" test_status_json_has_required_fields
+run_test "status --json under 200ms at 100 beads" test_status_json_under_200ms_at_100_beads
+run_test "parallel run mutex denies second invocation" test_run_parallel_run_mutex_denies_second_invocation
+run_test "run-state.json records migration counters" test_run_state_json_records_migration_counters
+
 run_test "help includes all commands" test_help_includes_all_commands
 run_test "run prefers tasks over epics" test_run_prefers_tasks_over_epics
 run_test "stop with no active run" test_stop_no_active_run
 run_test "stop cleans stale PID" test_stop_stale_pid
 run_test "status shows active run" test_status_shows_active_run
 run_test "status cleans stale PID" test_status_cleans_stale_pid
+run_test "strip_advisory: pure JSON array passes through" test_strip_advisory_pure_json_passes_through
+run_test "strip_advisory: pure JSON object passes through" test_strip_advisory_pure_object_passes_through
+run_test "strip_advisory: removes emoji advisory prefix" test_strip_advisory_removes_emoji_prefix
+run_test "strip_advisory: removes upgrade arrow prefix" test_strip_advisory_removes_upgrade_arrow_prefix
+run_test "strip_advisory: preserves multiline JSON body" test_strip_advisory_preserves_multiline_json
+run_test "ready count survives advisory lines" test_ready_count_survives_advisory_lines
 
 echo "PASS: ${test_count} helix wrapper tests"

@@ -1,287 +1,132 @@
-# Technical Spike: CLI Configuration Management Architecture
+---
+ddx:
+  id: example.tech-spike.depositmatch
+  depends_on:
+    - example.product-vision.depositmatch
+    - example.data-design.depositmatch
+    - example.security-architecture.depositmatch
+---
 
-**Spike ID**: SPIKE-001
-**Spike Lead**: Alex Rodriguez
-**Time Budget**: 3 days
-**Created**: February 5, 2024
-**Status**: Completed
+# Technical Spike: CSV Formula Neutralization
+
+**Spike ID**: SPIKE-001 | **Lead**: Platform engineer | **Time Budget**: 1 day | **Status**: Completed
 
 ## Objective
 
-**Technical Question**: Which configuration management approach (YAML files vs. embedded structs vs. hybrid) provides the best balance of flexibility, performance, and maintainability for our CLI tool?
+**Technical Question**: Can DepositMatch safely import and re-export client bank
+CSV data without allowing spreadsheet formula injection to survive into exports?
 
-**Specific Goals**:
-- [x] Compare YAML-based, embedded struct, and hybrid configuration approaches
-- [x] Measure parsing performance and memory usage for each approach
-- [x] Assess developer experience and maintenance overhead
-- [x] Validate extensibility for future requirements
+**Goals**:
+- [x] Identify the risky cell prefixes and encodings common in CSV injection.
+- [x] Test whether import-time normalization alone is enough.
+- [x] Compare import-time neutralization with export-time neutralization.
 
-**Success Criteria**:
-- Performance benchmarks for all three approaches
-- Qualitative assessment of developer experience
-- Clear recommendation with trade-off analysis
-- Implementation complexity estimates
+**Success Criteria**: Evidence from fixture files shows which control prevents
+formula execution in exported review logs.
 
-**Out of Scope**:
-- Production-ready implementation
-- Complete CLI framework integration
-- Comprehensive error handling
-- Configuration validation logic
+**Out of Scope**: Full CSV parser replacement, production import UI, antivirus
+scanning, and complete bank-format coverage.
 
 ## Hypothesis
 
-**Primary Hypothesis**: YAML-based configuration will provide the best flexibility for user customization, while embedded structs will offer better performance. A hybrid approach may provide optimal balance.
+**Primary**: Export-time neutralization is required because source values may be
+stored for auditability and later exported in a different context.
 
 **Assumptions**:
-1. Configuration files will typically be <10KB in size
-2. CLI tools are invoked frequently, so startup performance matters
-3. Users will want to customize configuration without recompiling
-4. Future requirements may include complex nested configurations
+- Source CSVs are untrusted restricted data.
+- Reviewers may open exported logs in spreadsheet software.
+- The pilot only needs UTF-8 CSV fixtures from three target bank exports.
 
-**Expected Outcome**: Hybrid approach (embedded defaults + YAML overrides) will emerge as the optimal solution.
-
-**Alternative Outcomes**: Pure YAML might be sufficient if performance impact is minimal, or embedded structs might be preferred if flexibility isn't critical.
+**Expected Outcome**: Keep raw source values restricted for audit references,
+store normalized values for matching, and neutralize risky cells at every CSV
+export boundary.
 
 ## Approach
 
-### Investigation Method
-- [x] **Prototype Development**: Build minimal working examples of each approach
-- [x] **Benchmark Testing**: Measure parsing time and memory usage
-- [x] **Comparative Analysis**: Evaluate implementation complexity and maintainability
-- [ ] **Expert Consultation**: Not needed for this scope
-- [ ] **Integration Testing**: Limited to configuration loading only
+**Method**: Minimal implementation with malicious fixtures.
 
-### Specific Activities
-
-#### Day 1: Prototype Development
-- **Objective**: Create working examples of each configuration approach
-- **Tasks**:
-  - [x] Implement YAML-based configuration with viper
-  - [x] Implement embedded struct configuration
-  - [x] Implement hybrid configuration (defaults + YAML overrides)
-  - [x] Create consistent test configuration data
-- **Expected Outcome**: Three working prototypes with identical functionality
-
-#### Day 2: Benchmarking and Analysis
-- **Objective**: Measure performance and assess implementation complexity
-- **Tasks**:
-  - [x] Create benchmark suite for configuration loading
-  - [x] Measure parsing time, memory usage, and binary size
-  - [x] Assess code complexity and maintainability
-  - [x] Test with various configuration sizes
-- **Expected Outcome**: Quantitative comparison data and qualitative assessments
-
-#### Day 3: Analysis and Recommendations
-- **Objective**: Synthesize findings and formulate recommendations
-- **Tasks**:
-  - [x] Analyze benchmark results and identify patterns
-  - [x] Evaluate trade-offs across different criteria
-  - [x] Formulate recommendations based on evidence
-  - [x] Document findings and create final report
-- **Expected Outcome**: Clear recommendation with supporting rationale
-
-### Tools and Resources
-- **Development Environment**: Go 1.21, Viper library, benchmarking tools
-- **Testing Tools**: Go benchmarking framework, memory profiler
-- **Documentation Sources**: Viper documentation, Go configuration best practices
-- **Expert Contacts**: Not utilized for this spike
-
-### Time Allocation
-| Activity | Estimated Time | Actual Time |
-|----------|----------------|-------------|
-| Setup and Planning | 4 hours | 3 hours |
-| Prototype Development | 12 hours | 14 hours |
-| Benchmarking | 6 hours | 5 hours |
-| Analysis and Documentation | 2 hours | 2 hours |
-| **Total** | 24 hours (3 days) | 24 hours |
+**Activities**:
+| Day | Activity | Objective |
+|-----|----------|-----------|
+| 1 | Build fixture CSVs with `=`, `+`, `-`, `@`, tab-prefixed, and CR-prefixed values | Exercise known formula-entry patterns |
+| 1 | Run import normalization and export generation with and without neutralization | Compare control placement |
+| 1 | Open outputs in spreadsheet software and inspect stored values | Confirm whether formulas execute |
 
 ## Findings
 
-### Key Discoveries
+**FINDING 1**: Import-time schema validation is necessary but insufficient.
+- **Evidence**: The parser rejected malformed rows and unsupported encodings,
+  but valid text fields containing `=cmd`-style values still remained valid
+  strings after normalization.
+- **Implications**: Validation protects parser behavior. It does not by itself
+  protect downstream spreadsheet interpretation.
 
-**FINDING 1**: YAML configuration has minimal performance overhead for typical CLI usage
-- **Evidence**: YAML parsing averages 0.8ms vs 0.1ms for embedded structs on 2KB configs
-- **Implications**: Performance difference is negligible for CLI startup times
+**FINDING 2**: Export-time neutralization prevented formula execution in all
+pilot fixtures.
+- **Evidence**: Prefixing risky exported cells with a single quote caused the
+  test spreadsheets to display the value as text for all six fixture patterns.
+- **Implications**: Every CSV export path needs the same safe-cell function.
 
-**FINDING 2**: Embedded structs reduce binary size but eliminate runtime customization
-- **Evidence**: Embedded approach reduces binary size by 500KB and eliminates external dependencies
-- **Implications**: Users cannot customize configuration without rebuilding
+**FINDING 3**: Mutating raw source values at import would weaken auditability.
+- **Evidence**: When raw values were rewritten during import, support could no
+  longer compare the normalized record against the original bank export without
+  a separate source attachment.
+- **Implications**: Keep raw source data restricted and retained according to
+  policy. Neutralize only when writing customer-controlled CSV output.
 
-**FINDING 3**: Hybrid approach provides best flexibility with acceptable performance
-- **Evidence**: Hybrid parsing averages 1.2ms with full customization capabilities
-- **Implications**: Slight performance cost (0.4ms) for significant flexibility gains
+### Measurements
 
-**FINDING 4**: YAML approach has the highest implementation complexity
-- **Evidence**: YAML implementation requires 3x more error handling code due to parsing edge cases
-- **Implications**: Higher maintenance overhead but better user experience
-
-### Data and Measurements
-
-| Metric | Embedded | YAML | Hybrid | Notes |
-|--------|----------|------|--------|--------|
-| Parse Time (2KB) | 0.1ms | 0.8ms | 1.2ms | Average of 1000 runs |
-| Memory Usage | 15KB | 45KB | 35KB | Peak RSS during parsing |
-| Binary Size | 8.2MB | 8.7MB | 8.5MB | Statically linked binary |
-| Lines of Code | 120 | 180 | 200 | Configuration management only |
-| External Dependencies | 0 | 2 | 2 | Viper + yaml.v3 |
-
-### Artifacts Created
-- [x] **Prototype Code**: [/tmp/config-spike/](file:///tmp/config-spike/)
-- [x] **Benchmark Results**: [benchmark-results.txt](file:///tmp/config-spike/benchmark-results.txt)
-- [x] **Test Scripts**: [run-benchmarks.sh](file:///tmp/config-spike/run-benchmarks.sh)
-- [x] **Configuration Files**: [sample-configs/](file:///tmp/config-spike/sample-configs/)
-- [x] **Documentation**: [README.md](file:///tmp/config-spike/README.md)
-
-### Unexpected Discoveries
-
-- YAML parsing performance was better than expected (sub-millisecond for typical configs)
-- Embedded struct approach still required reflection for CLI flag binding, reducing performance advantage
-- Hybrid approach complexity was lower than anticipated due to Go's struct embedding features
+| Metric | Import Neutralization | Export Neutralization | Notes |
+|--------|-----------------------|-----------------------|-------|
+| Blocks formula execution in export fixtures | Yes | Yes | Both worked for tested patterns |
+| Preserves raw source evidence | No | Yes | Raw import mutation loses fidelity |
+| Centralizes customer-output control | No | Yes | Export helper covers review-log downloads |
+| Requires every export path to opt in | No | Yes | Add test coverage for all CSV exporters |
 
 ## Analysis
 
-### Hypothesis Validation
-- **Primary Hypothesis**: PARTIALLY CONFIRMED
-- **Rationale**: Hybrid approach did emerge as optimal, but performance differences were smaller than expected, making YAML-only approach viable
+**Hypothesis**: CONFIRMED.
+**Rationale**: Formula risk appears when restricted stored values cross into a
+customer-controlled spreadsheet context. Export-time neutralization protects
+that boundary while preserving raw source evidence for audit and support.
 
-### Trade-off Analysis
-| Factor | Embedded | YAML | Hybrid | Winner | Rationale |
-|--------|----------|------|--------|--------|-----------|
-| Performance | Excellent | Good | Good | Embedded | 0.1ms vs 0.8-1.2ms |
-| Flexibility | Poor | Excellent | Excellent | YAML/Hybrid | Runtime customization |
-| Complexity | Low | Medium | Medium | Embedded | Fewer dependencies |
-| Maintainability | Good | Fair | Good | Embedded/Hybrid | Less parsing logic |
-| User Experience | Poor | Excellent | Excellent | YAML/Hybrid | Easy customization |
-| Binary Size | Excellent | Good | Good | Embedded | 500KB smaller |
+### Risks
 
-### Risk Assessment
-| Risk | Probability | Impact | Mitigation Strategy |
-|------|-------------|--------|-------------------|
-| YAML parsing errors in production | Medium | Low | Comprehensive validation and graceful degradation |
-| Performance regression with large configs | Low | Medium | Size limits and lazy loading |
-| Configuration schema evolution complexity | Medium | Medium | Versioned configuration with migration support |
+| Risk | Prob | Impact | Mitigation |
+|------|------|--------|------------|
+| Future CSV export bypasses the safe-cell helper | Medium | High | Add a shared export helper and test every CSV exporter |
+| Bank-specific encodings introduce new edge cases | Medium | Medium | Expand fixture set when Research Plan sample intake completes |
+| Spreadsheet behavior varies by tool/version | Low | Medium | Document tested tools and keep fixture-based regression tests |
 
 ## Conclusions
 
-### Primary Conclusion
-**The hybrid configuration approach provides the optimal balance of performance, flexibility, and maintainability for our CLI tool.** While embedded structs offer the best raw performance, the difference (0.4-1.1ms) is negligible for CLI startup times, and the flexibility benefits of runtime configuration far outweigh the minimal performance cost.
+**Primary Conclusion**: DepositMatch should preserve raw source values in
+restricted storage and neutralize risky cells at every CSV export boundary.
 
-### Confidence Level
-**Confidence in Findings**: High
-**Rationale**: Comprehensive benchmarking with realistic data sizes, clear performance measurements, and practical implementation experience across all approaches.
+**Confidence**: Medium.
 
-### Limitations
-- Testing limited to configuration sizes up to 10KB (typical for CLI tools)
-- Did not test complex nested configuration scenarios
-- Performance testing done on single development machine only
-
-### Areas for Further Investigation
-- Configuration validation and schema evolution strategies
-- Performance impact of very large configuration files (>100KB)
-- Integration complexity with CLI framework (Cobra)
+**Limitations**: The spike used pilot fixture files and two spreadsheet tools.
+It did not exhaustively test every bank export format or spreadsheet version.
 
 ## Recommendations
 
-### Immediate Actions
-**RECOMMENDATION 1**: Implement hybrid configuration approach with embedded defaults and YAML overrides
-- **Rationale**: Provides best balance of performance (1.2ms parsing), flexibility, and maintainability
-- **Timeline**: Next sprint (2 weeks)
-- **Responsible**: Configuration team
+**RECOMMENDATION**: Add a shared CSV export helper that neutralizes cells
+beginning with formula-risk prefixes, require all CSV exports to use it, and add
+security tests for the malicious fixture set.
 
-**RECOMMENDATION 2**: Establish configuration file size limits (10KB) with clear error messaging
-- **Rationale**: Prevents performance degradation while handling 99% of expected use cases
-- **Timeline**: Include in initial implementation
-- **Responsible**: Configuration team
+- **Rationale**: The control sits at the trust boundary where spreadsheet
+  interpretation becomes possible and preserves source-data auditability.
+- **Next Steps**: Update Security Architecture control mapping, add
+  `security-tests` coverage for malicious CSV fixtures, and create a Technical
+  Design task for the shared export helper.
+- **Concern Impact**: Reinforces the security concern that source CSVs are
+  untrusted restricted data. No ADR is needed unless the team chooses to mutate
+  source values at import instead.
 
-### Architecture Implications
-- **Design Impact**: Configuration system should use embedded structs for defaults with YAML overlay capability
-- **Technology Choices**: Viper library recommended for YAML handling, custom merger for hybrid approach
-- **Implementation Strategy**: Start with minimal embedded defaults, expand based on user feedback
+## Artifacts
 
-### Next Steps
-- [x] **Immediate** (Next 1-2 days): Document configuration structure and defaults
-- [ ] **Short-term** (Next week): Create configuration package interface design
-- [ ] **Medium-term** (Next sprint): Implement hybrid configuration system in main CLI
-
-## Validation and Sign-off
-
-### Peer Review
-- [x] Findings reviewed by technical lead (Sarah Chen)
-- [x] Approach validated by CLI expert (Mike Johnson)
-- [x] Recommendations assessed for feasibility (Architecture team)
-- [x] Performance data verified by independent testing (QA team)
-
-### Stakeholder Communication
-- [x] Results presented to architecture team (Feb 8)
-- [x] Implications discussed with product owner (Feb 8)
-- [x] Timeline impact communicated to project manager (Feb 9)
-
-### Follow-up Required
-- [ ] Additional spikes needed: None for core configuration; potential future spike for plugin configuration
-- [x] Architecture decisions to be made: ADR-003 for configuration approach (scheduled Feb 12)
-- [ ] Documentation updates: Configuration design docs, development standards
-
----
-
-## Appendix
-
-### Code Samples
-
-#### Hybrid Configuration Implementation
-```go
-// DefaultConfig provides embedded defaults
-var DefaultConfig = Config{
-    LogLevel: "info",
-    Timeout:  30 * time.Second,
-    MaxRetries: 3,
-}
-
-// LoadConfig implements hybrid approach
-func LoadConfig(path string) (*Config, error) {
-    config := DefaultConfig  // Start with embedded defaults
-
-    if path != "" && fileExists(path) {
-        // Override with YAML if provided
-        if err := viper.ReadInConfig(); err != nil {
-            return nil, fmt.Errorf("reading config: %w", err)
-        }
-        if err := viper.Unmarshal(&config); err != nil {
-            return nil, fmt.Errorf("unmarshaling config: %w", err)
-        }
-    }
-
-    return &config, nil
-}
-```
-
-### Performance Data
-
-#### Detailed Benchmark Results
-```
-BenchmarkEmbeddedConfig-8      20000000    0.10 ms/op    15234 B/op    12 allocs/op
-BenchmarkYAMLConfig-8           2000000    0.82 ms/op    45123 B/op    89 allocs/op
-BenchmarkHybridConfig-8         1500000    1.21 ms/op    35456 B/op    67 allocs/op
-
-Config Size Tests:
-1KB:   Embedded: 0.08ms, YAML: 0.65ms, Hybrid: 0.95ms
-5KB:   Embedded: 0.12ms, YAML: 1.20ms, Hybrid: 1.80ms
-10KB:  Embedded: 0.15ms, YAML: 2.10ms, Hybrid: 2.95ms
-```
-
-### References
-- [Viper Configuration Library Documentation](https://github.com/spf13/viper)
-- [Go Configuration Best Practices](https://peter.bourgon.org/go-best-practices-2016/)
-- [CLI Tool Performance Analysis](https://blog.gopheracademy.com/advent-2017/performance/)
-
----
-
-**Document Control**
-- **Version**: 1.0
-- **Last Updated**: February 8, 2024
-- **Review Status**: Approved
-- **Next Review**: Not required (spike complete)
-
-**Sign-off**
-- **Spike Lead**: Alex Rodriguez _________________ Date: Feb 8
-- **Technical Lead**: Sarah Chen _________________ Date: Feb 8
-- **Architecture Reviewer**: Mike Johnson _________________ Date: Feb 9
+- `fixtures/csv/formula-injection/*.csv`: malicious CSV fixture set.
+- `notes/csv-export-neutralization.md`: spreadsheet behavior observations and
+  tested tool versions.
+- `prototype/safe_csv_export.rb`: throwaway export helper used to compare
+  neutralization strategies.

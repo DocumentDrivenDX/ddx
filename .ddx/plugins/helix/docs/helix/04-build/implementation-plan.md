@@ -1,116 +1,103 @@
 ---
-dun:
+ddx:
   id: helix.implementation-plan
   depends_on:
-    - helix.workflow
     - TP-002
-    - TD-002
+    - TD-011
 ---
-# Implementation Plan
+# Build Plan — Slider Autonomy (FEAT-011)
 
 ## Scope
 
-This build plan defines the current HELIX execution landscape: which features
-are implemented, which have remaining work, what the governing artifacts are,
-and what ordering constraints keep implementation aligned with the authority
-stack.
+This build plan scopes the implementation of FEAT-011 (slider autonomy):
+the operator-facing autonomy slider that lets `helix run` start at a chosen
+phase (`input`, `frame`, `design`, `build`, `review`) instead of always
+beginning at intake. The plan covers wrapper changes, default-path proof,
+and public-doc updates so the shipped surface matches the governing design.
 
 **Governing Artifacts**:
-- `docs/helix/01-frame/prd.md`
-- `docs/helix/01-frame/features/FEAT-001-helix-supervisory-control.md`
-- `docs/helix/01-frame/features/FEAT-002-helix-cli.md`
-- `docs/helix/01-frame/features/FEAT-003-principles.md`
-- `docs/helix/01-frame/features/FEAT-004-plugin-packaging.md`
-- `docs/helix/01-frame/features/FEAT-005-execution-backed-output.md`
-- `docs/helix/01-frame/features/FEAT-006-concerns-practices-context-digest.md`
-- `docs/helix/02-design/adr/ADR-001-supervisory-control-model.md`
-- `docs/helix/02-design/solution-designs/SD-001-helix-supervisory-control.md`
-- `docs/helix/02-design/solution-designs/SD-002-first-class-principles.md`
-- `docs/helix/02-design/technical-designs/TD-002-helix-cli.md`
-- `docs/helix/02-design/contracts/API-001-helix-tracker-mutation.md`
-- `docs/helix/03-test/test-plans/TP-002-helix-cli.md`
-- `workflows/README.md`
-- `workflows/EXECUTION.md`
+- `docs/helix/01-frame/features/FEAT-011-slider-autonomy.md` — feature spec
+- `docs/helix/02-design/technical-designs/TD-011-slider-autonomy-implementation.md` — technical design
+- `docs/helix/03-test/test-plans/TP-002-helix-cli.md` — wrapper-CLI test plan
+- `docs/helix/02-design/contracts/CONTRACT-001-ddx-helix-boundary.md` — DDx/HELIX boundary
 
 ## Shared Constraints
 
-- Keep execution tracker-first. Active work must be selected, claimed,
-  revalidated, and closed through `ddx bead`.
-- Keep `spec-id` anchored to the nearest governing artifact.
-- Limit implementation to bounded slices that satisfy documented acceptance and
-  deterministic verification. Do not fold design reconciliation or new product
-  scope into build issues.
-- Use the proof lane for HELIX contract changes:
-  `bash tests/helix-cli.sh`, `bash tests/validate-skills.sh`, and
-  `git diff --check`.
-
-## Feature Status
-
-| Feature | Status | Remaining Work |
-|---------|--------|---------------|
-| **FEAT-001** Supervisory Control | ALIGNED | None — fully implemented, 87+ tests |
-| **FEAT-002** HELIX CLI | ALIGNED | Incremental quality work only |
-| **FEAT-003** First-Class Principles | COMPLETE | Defaults rewritten, scaffolding updated, injection wired, bootstrap in frame |
-| **FEAT-004** Plugin Packaging | PARTIAL | Manifest exists; `bin/helix` wrapper and validator updates need implementation |
-| **FEAT-005** Execution-Backed Output | BLOCKED | Depends on DDx FEAT-010 (`ddx exec`); epic `helix-4dec7483` open |
-| **FEAT-006** Concerns & Context Digest | SPECIFIED | Feature spec, reference docs, concern library, and action prompt wiring complete; no runtime implementation yet |
-
-## Current Open Issues
-
-### Execution-eligible work
-
-| Issue | Priority | Feature | Goal | Dependencies |
-|-------|----------|---------|------|-------------|
-| hx-bf99e0ee | P2 | FEAT-002 | Deduplicate blocker notes for unchanged issues | None |
-| hx-407ed8b8 | P2 | FEAT-002 | UX: helix start/stop for background operation | None (design phase) |
-
-### Blocked work
-
-| Issue | Priority | Feature | Blocked By |
-|-------|----------|---------|-----------|
-| helix-4dec7483 | P1 | FEAT-005 | DDx FEAT-010 (`ddx exec` not available) |
-| helix-6ae1e84c | P2 | FEAT-005 | Parent epic blocked |
-| helix-5f846566 | P2 | FEAT-002 | Needs concern-aware review to file structured beads |
-| hx-44a5dbfe | P3 | FEAT-002 | Review note dedup requires alignment review changes |
+- Tracker-first execution: every story-level slice is a `ddx bead` under
+  `.ddx/beads.jsonl`. No build work begins without a claimed bead.
+- `helix run --autonomy <phase>` must be backward-compatible: the default
+  remains `input` for operators who run `helix run` with no flag.
+- The CLI surface is a compatibility wrapper over DDx-managed execution per
+  CONTRACT-001. Build issues add behavior to HELIX prompts and policy, not
+  to a parallel execution stack.
+- Deterministic proof gates every change: `bash tests/helix-cli.sh` and
+  `bash tests/validate-skills.sh` must pass before any build bead closes.
+- `spec-id` on every build bead points at the nearest governing artifact
+  (FEAT-011, TD-011, or TP-002).
 
 ## Build Sequencing
 
-| Order | Area | Governing Artifacts | Notes |
-|-------|------|-------------------|-------|
-| 1 | FEAT-006 runtime implementation | FEAT-006, concern-resolution.md, context-digest.md | Wire concern loading and digest assembly into triage, polish, evolve CLI paths |
-| 2 | FEAT-004 plugin completion | FEAT-004, SD-001 | Create `bin/helix`, update `validate-skills.sh` for plugin layout |
-| 3 | FEAT-005 execution capture | FEAT-005 | Blocked on DDx FEAT-010; defer until `ddx exec` ships |
-| 4 | Quality backlog | FEAT-002, TP-002 | Blocker note dedup, review evidence dedup, helix start/stop UX |
+| Order | Story / Area | Governing Artifacts | Depends On | Notes |
+|------|---------------|---------------------|------------|-------|
+| 1 | Wrapper accepts `--autonomy <phase>` and dispatches | FEAT-011, TD-011 §3 | None | Smallest landable slice; unlocks downstream proof work |
+| 2 | `helix input` skill end-to-end against new wrapper | FEAT-011, TD-011 §4 | 1 | Intake path is the most-used autonomy stop; prove it before opening lower-stop work |
+| 3 | Lower-stop autonomy entrypoints (`frame`, `design`, `build`) | FEAT-011, TD-011 §5 | 1 | Reuse the dispatch layer from #1 |
+| 4 | Public-doc and demo refresh | FEAT-011, FEAT-007 | 1, 2, 3 | Update website intake examples and demo recordings only after the surface stabilizes |
+| 5 | Deterministic proof for every autonomy entrypoint | TP-002, TD-011 §6 | 1, 2, 3 | Extend `tests/helix-cli.sh` with one positive + one rejection case per stop |
+| 6 | Cross-model review wiring on autonomy-driven runs | TD-011 §7, TP-002 | 5 | Verify `--review-agent` still works when the run starts mid-phase |
 
-## Verification Expectations
+## Issue Decomposition
 
-| Area | Required Verification |
-|------|-----------------------|
-| Concern/digest runtime | Action prompts load concerns; triage assembles digest; polish refreshes; manual scenario verification |
-| Plugin packaging | `bash tests/validate-skills.sh`; plugin manifest validation; `bin/helix` delegation test |
-| CLI contract changes | `bash tests/helix-cli.sh`; `git diff --check` |
-| Documentation updates | `git diff --check`; cross-reference audit against governing artifacts |
+Story-level work is tracked via `ddx bead` in `.ddx/beads.jsonl`.
+
+**Per-issue requirements**:
+- Labels: `helix`, `phase:build`, `kind:build`, `area:cli`, plus
+  `story:FEAT-011-<slice>` for grouping.
+- References: FEAT-011, TD-011, TP-002, and this build plan.
+- `spec-id` pointing at the nearest governing artifact.
+- Blockers expressed as `dependencies[]` on the predecessor bead.
+
+| Story / Area | Goal | Dependencies |
+|--------------|------|--------------|
+| Wrapper dispatch (`helix run --autonomy`) | `helix run --autonomy <phase>` selects the right skill entry and rejects unknown phases | none |
+| `helix input` against new wrapper | Intake path drives `ddx agent execute-loop` with the right governing-artifact context | wrapper dispatch |
+| Lower-stop entrypoints | `frame`, `design`, `build` autonomy stops route to their corresponding skill prompts | wrapper dispatch |
+| Public docs and demos | Website intake docs + asciinema recordings reflect the slider surface | all wrapper work |
+| Proof harness | `tests/helix-cli.sh` covers one happy + one rejection case per stop, plus one cross-model review test | wrapper + intake + lower-stop work |
+| Cross-model review wiring | `helix run --autonomy <phase> --review-agent <other>` still produces a deterministic review pass | proof harness |
 
 ## Quality Gates
 
-- [ ] Failing or governing tests exist before implementation starts for code changes.
-- [ ] All required HELIX verification commands pass before a build issue closes.
-- [ ] Issue metadata cites the governing artifacts and this build plan.
-- [ ] Behavior or contract changes update the canonical HELIX docs explicitly.
-- [ ] Follow-on work outside the current issue scope is captured as new tracker
-      issues instead of absorbed silently.
+- [ ] Failing tests exist in `tests/helix-cli.sh` before each wrapper change is implemented
+- [ ] All required tests pass before closing a build issue (`bash tests/helix-cli.sh`, `bash tests/validate-skills.sh`)
+- [ ] Behavior changes update FEAT-011 / TD-011 / TP-002 explicitly
+- [ ] `helix review` is run after each landed slice; review findings file new beads rather than being absorbed silently
+- [ ] No build bead closes without a `spec-id` and a passing review
 
 ## Risks
 
 | Risk | Impact | Response |
 |------|--------|----------|
-| FEAT-005 stays blocked indefinitely on DDx FEAT-010 | Medium | HELIX operates without execution capture; status reporting limited to run-state.json |
-| FEAT-006 concern loading adds per-prompt overhead | Low | Token budget targets ~1000-1500 tokens; size ceiling on concerns mirrors principles ceiling |
-| Plugin mode requires Claude Code features not yet available | Medium | Symlink installer remains as fallback; plugin manifest ready when features ship |
+| Lower-stop autonomy exposes ungoverned skills | High | Refuse `--autonomy <phase>` when the corresponding skill prompt is missing or stale; surface as `BLOCKED` rather than running |
+| Intake-path proof drifts as default behavior changes | Medium | Lock the intake test cases to the published `helix input` contract; treat changes as governing-doc evolutions, not test updates |
+| Operators bypass the slider via direct `ddx agent execute-loop` calls | Low | Document the slider as the supported entry; the direct DDx path remains available but unsupported as a HELIX surface |
+| Cross-model review wiring regresses when the run starts mid-phase | Medium | Add a cross-model review test for at least one mid-phase autonomy stop |
 
 ## Exit Criteria
 
-- [ ] Current open issues are sequenced with explicit governing artifacts and
-      dependencies.
-- [ ] This plan reflects the live tracker queue (no stale issue references).
-- [ ] Verification expectations are explicit enough for bounded issue closure.
+- [ ] Build issue set is defined with sequence and dependencies (above table is current)
+- [ ] Shared constraints are documented and traced to FEAT-011, TD-011, and CONTRACT-001
+- [ ] Verification expectations are explicit: `tests/helix-cli.sh`, `tests/validate-skills.sh`, and a cross-model review pass on at least one autonomy stop
+- [ ] FEAT-011 acceptance criteria are mapped to specific bead IDs in the queue
+
+## Review Checklist
+
+- [x] Governing artifacts are listed and exist on disk
+- [x] Shared constraints trace back to requirements (FEAT-011), design (TD-011), and contract (CONTRACT-001)
+- [x] Build sequence has a justified ordering (wrapper before consumers; proof before public-doc updates)
+- [x] Dependencies between build steps are explicit
+- [x] Each story/area references its governing artifacts (FEAT-011, TD-011, TP-002)
+- [x] Issue decomposition follows tracker conventions (labels, spec-id, deps)
+- [x] Quality gates are specific and enforceable (named test scripts, named artifacts)
+- [x] Risks have concrete responses, not vague strategies
+- [x] Plan is consistent with TP-002 and TD-011

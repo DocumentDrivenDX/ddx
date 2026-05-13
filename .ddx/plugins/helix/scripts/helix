@@ -28,9 +28,40 @@ target_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
 tracker_dir="${DDX_BEAD_DIR:-${HELIX_TRACKER_DIR:-${target_root}/.ddx}}"
 tracker_file="${tracker_dir}/beads.jsonl"
 export DDX_BEAD_DIR="$tracker_dir"
-export DDX_BEAD_PREFIX="${DDX_BEAD_PREFIX:-hx}"
 
-agent="${HELIX_AGENT:-codex}"
+canonicalize_path() {
+  local path="$1"
+  local dir
+  dir="$(cd "$(dirname "$path")" 2>/dev/null && pwd -P)" || return 1
+  printf '%s/%s\n' "$dir" "$(basename "$path")"
+}
+
+path_is_within_root() {
+  local path="$1"
+  local root="$2"
+  local resolved_path
+  local resolved_root
+
+  resolved_path="$(canonicalize_path "$path")" || return 1
+  resolved_root="$(cd "$root" 2>/dev/null && pwd -P)" || return 1
+
+  case "$resolved_path" in
+    "$resolved_root" | "$resolved_root"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+normalize_agent_name() {
+  # Normalize DDx-embedded-harness aliases to the canonical HELIX name "agent".
+  # ddx-agent, agent, embedded, and legacy forge all map to "agent".
+  # All other harness names pass through unchanged.
+  case "${1:-}" in
+    ddx-agent|agent|embedded|forge) printf 'agent' ;;
+    *) printf '%s' "${1:-}" ;;
+  esac
+}
+
+agent="$(normalize_agent_name "${HELIX_AGENT:-codex}")"
 agent_model="${HELIX_MODEL:-}"
 agent_effort="${HELIX_EFFORT:-}"
 review_every=15
@@ -41,55 +72,65 @@ auto_align="${HELIX_AUTO_ALIGN:-1}"
 auto_review=1
 review_threshold=100
 
-# Model tiers: "smart" for reasoning-heavy stages, "cheap" for mechanical stages.
-# Override with HELIX_SMART_MODEL / HELIX_CHEAP_MODEL for the primary agent.
-smart_model="${HELIX_SMART_MODEL:-}"
-cheap_model="${HELIX_CHEAP_MODEL:-}"
-
-# resolve_model <tier> — return the model name for the current $agent and tier.
-# tier: "smart" or "cheap"
-# HELIX_SMART_MODEL / HELIX_CHEAP_MODEL override defaults for the PRIMARY agent.
-# When the current agent is the alternate (adversarial rotation), use that
-# agent's own defaults — the env overrides don't cross agent boundaries.
-resolve_model() {
-  local tier="${1:-smart}"
-  local primary="${HELIX_AGENT:-codex}"
-  case "$agent" in
-    claude)
-      if [[ "$tier" == "smart" ]]; then
-        if [[ "$agent" == "$primary" && -n "$smart_model" ]]; then
-          printf '%s' "$smart_model"
-        else
-          printf '%s' "claude-opus-4-6"
-        fi
-      else
-        if [[ "$agent" == "$primary" && -n "$cheap_model" ]]; then
-          printf '%s' "$cheap_model"
-        else
-          printf '%s' "claude-sonnet-4-6"
-        fi
-      fi
-      ;;
-    codex)
-      if [[ "$tier" == "smart" ]]; then
-        if [[ "$agent" == "$primary" && -n "$smart_model" ]]; then
-          printf '%s' "$smart_model"
-        else
-          printf '%s' "gpt-5.4"
-        fi
-      else
-        if [[ "$agent" == "$primary" && -n "$cheap_model" ]]; then
-          printf '%s' "$cheap_model"
-        else
-          printf '%s' "gpt-5.4-mini"
-        fi
-      fi
+# DDx embedded-harness alias handling.
+# HELIX should accept the user-facing rename direction (`ddx-agent`) while still
+# working against older DDx binaries that expose the embedded harness as `forge`.
+_is_ddx_embedded_alias() {
+  case "${1:-}" in
+    ddx-agent|agent|embedded|forge)
+      return 0
       ;;
     *)
-      # Unknown agent — fall through to agent default
-      printf '%s' "${agent_model:-}"
+      return 1
       ;;
   esac
+}
+
+declare -A _ddx_harness_alias_cache 2>/dev/null || true
+_resolve_ddx_dispatch_harness() {
+  local requested="${1:-}"
+  [[ -z "$requested" ]] && return 0
+  if ! _is_ddx_embedded_alias "$requested"; then
+    printf '%s' "$requested"
+    return 0
+  fi
+  if [[ -v "_ddx_harness_alias_cache[$requested]" ]]; then
+    printf '%s' "${_ddx_harness_alias_cache[$requested]}"
+    return 0
+  fi
+
+  local resolved=""
+  if command -v ddx &>/dev/null; then
+    local _list
+    _list="$(ddx agent list --json 2>/dev/null || true)"
+    if [[ -n "$_list" ]]; then
+      local candidate _avail
+      for candidate in agent embedded forge; do
+        _avail="$(printf '%s' "$_list" | ddx jq -r --arg h "$candidate" '.[] | select(.name == $h and .available == true) | .name' 2>/dev/null || true)"
+        if [[ -n "$_avail" ]]; then
+          resolved="$_avail"
+          break
+        fi
+      done
+    fi
+  fi
+
+  if [[ -z "$resolved" ]]; then
+    case "$requested" in
+      ddx-agent|agent)
+        resolved="agent"
+        ;;
+      embedded)
+        resolved="embedded"
+        ;;
+      forge)
+        resolved="forge"
+        ;;
+    esac
+  fi
+
+  _ddx_harness_alias_cache["$requested"]="$resolved"
+  printf '%s' "$resolved"
 }
 
 # Adversarial agent rotation: reasoning stages use the primary agent,
@@ -97,14 +138,28 @@ resolve_model() {
 # This ensures different models review each other's work.
 # Set HELIX_ALT_AGENT=none to explicitly disable auto-detection.
 if [[ "${HELIX_ALT_AGENT:-auto}" != "auto" ]]; then
-  alt_agent="${HELIX_ALT_AGENT}"
+  alt_agent="$(normalize_agent_name "${HELIX_ALT_AGENT}")"
   [[ "$alt_agent" == "none" ]] && alt_agent=""
 elif [[ "${agent}" == "codex" ]] && command -v claude >/dev/null 2>&1; then
   alt_agent="claude"
 elif [[ "${agent}" == "claude" ]] && command -v codex >/dev/null 2>&1; then
   alt_agent="codex"
 else
+  # For other agents (e.g. ddx-agent / agent), try ddx agent list to find a suitable alternate.
+  # Prefer claude or codex as the adversarial reviewer when available.
   alt_agent=""
+  if command -v ddx &>/dev/null; then
+    _alt_list="$(ddx agent list --json 2>/dev/null || true)"
+    for _alt_pref in claude codex; do
+      if [[ "$_alt_pref" != "$agent" ]]; then
+        _alt_avail="$(printf '%s' "$_alt_list" | ddx jq -r --arg h "$_alt_pref" '.[] | select(.name == $h and .available == true) | .name' 2>/dev/null || true)"
+        if [[ -n "$_alt_avail" ]]; then
+          alt_agent="$_alt_pref"
+          break
+        fi
+      fi
+    done
+  fi
 fi
 # review_agent kept as alias for backward compat with --review-agent flag
 review_agent="${HELIX_REVIEW_AGENT:-$alt_agent}"
@@ -126,7 +181,7 @@ _helix_tee_pid=$!
 _helix_cleanup() {
   exec 2>&3 3>&-  # restore stderr, close fd 3
   if [[ -n "${_helix_tee_pid:-}" ]]; then
-    kill "$_helix_tee_pid" 2>/dev/null
+    kill "$_helix_tee_pid" 2>/dev/null || true
     wait "$_helix_tee_pid" 2>/dev/null || true
   fi
 }
@@ -164,22 +219,24 @@ verbose_line() {
 usage() {
   cat <<EOF
 Usage:
-  helix run [--agent codex|claude] [--review-every N] [--max-cycles N] [--no-auto-align] [--no-auto-review] [--summary] [--dry-run]
-  helix frame [--agent codex|claude] [scope]
-  helix build [--agent codex|claude] [selector]
-  helix check [--agent codex|claude] [scope]
-  helix align [--agent codex|claude] [scope]
-  helix backfill [--agent codex|claude] [scope]
-  helix design [--agent codex|claude] [--rounds N] [scope]
-  helix polish [--agent codex|claude] [--rounds N] [scope]
+  helix run [--agent <harness>] [--review-every N] [--max-cycles N] [--no-auto-align] [--no-auto-review] [--summary] [--dry-run]
+  helix input [--agent <harness>] [--autonomy low|medium|high] "natural language request"
+  helix frame [--agent <harness>] [scope]
+  helix build [--agent <harness>] [selector]
+  helix check [--agent <harness>] [scope]
+  helix align [--agent <harness>] [scope]
+  helix backfill [--agent <harness>] [scope]
+  helix design [--agent <harness>] [--rounds N] [scope]
+  helix polish [--agent <harness>] [--rounds N] [scope]
   helix doctor [--fix]
   helix start [helix run options...]
   helix stop
   helix status [--json]
   helix next
-  helix review [--agent codex|claude] [scope]
-  helix experiment [--agent codex|claude] [--close] [issue-id|goal]
-  helix evolve [--agent codex|claude] [--scope S] [--artifact ID] [--from source] "requirement"
+  helix review [--agent <harness>] [scope]
+  helix experiment [--agent <harness>] [--close] [issue-id|goal]
+  helix evolve [--agent <harness>] [--scope S] [--artifact ID] [--from source] "requirement"
+  helix commit [--agent <harness>] [issue-id]
   helix triage "Title" [--type task|epic|bug|chore] [ddx bead create options...]
   ddx bead <command> [args...]
   helix help
@@ -189,6 +246,7 @@ Commands:
   doctor      Check installation health; --fix auto-repairs plugin symlinks and skills
   start       Launch helix run as a background process (PID file written)
   stop        Kill the background helix run cleanly
+  input       Accept sparse intent and shape governed HELIX work
   frame       Create or refine product vision, PRD, and feature specs
   build       Run one bounded implementation pass
   check       Run the bounded HELIX queue-health check
@@ -204,10 +262,15 @@ Commands:
   triage      Create a bead via ddx bead create
 
 Options:
-  --agent           Agent to use: codex or claude (default: ${agent})
+  --agent           Agent harness to use: codex, claude, ddx-agent,
+                    embedded, or any harness from \`ddx agent list\`
+                    (default: ${agent})
   --claude          Shorthand for --agent claude
   --codex           Shorthand for --agent codex
-  --model           Model to use (e.g., claude-sonnet-4-6, gpt-5.4)
+  --ddx-agent       Shorthand for --agent ddx-agent
+  --embedded        Shorthand for --agent embedded
+  --forge           Deprecated alias for the embedded DDx agent harness
+  --model           Explicit model override to pass through to DDx / the harness
   --effort          Reasoning effort: low, medium, high, max (defaults vary by action)
   --review-every    Run alignment every N completed implementation cycles
   --max-cycles      Stop after N completed implementation cycles
@@ -215,32 +278,40 @@ Options:
   --no-auto-review  Do not run fresh-eyes review after each implementation
   --review-threshold N  Skip review for changes below N lines (default: 100)
   --review-agent    Use a different agent for reviews (default: adversarial alternate)
-  --smart-model     Model for reasoning-heavy stages (frame, design, align, review)
-  --cheap-model     Model for mechanical stages (build, polish, check)
   --dry-run         Print the agent command instead of executing it
   --quiet, -q       Suppress progress output (command echo, prompt sizes)
   --summary, -s     Concise output with log-file line pointers (implies --quiet)
 
 Environment:
-  HELIX_AGENT          Default primary agent (codex or claude)
+  HELIX_AGENT          Default primary agent (codex, claude, ddx-agent,
+                       or any ddx harness)
   HELIX_ALT_AGENT      Alternate agent for adversarial rotation (auto-detected)
   HELIX_AGENT_TIMEOUT  Agent timeout in seconds (default: 2700)
-  HELIX_SMART_MODEL    Model for reasoning stages (default: opus / gpt-5.4)
-  HELIX_CHEAP_MODEL    Model for mechanical stages (default: sonnet / gpt-5.4-mini)
+  HELIX_MODEL          Optional model override passed through to DDx / the harness
+  HELIX_EFFORT         Optional effort override passed through to DDx / the harness
   HELIX_LIBRARY_ROOT   Override the library root that contains workflows/
-  HELIX_TRACKER_DIR    Override the tracker directory (default: .helix/)
+  HELIX_TRACKER_DIR    Override the tracker directory (default: <repo>/.ddx)
 
 Adversarial rotation:
-  Primary agent (frame, design, evolve, align, review) uses the smart model.
-  Alternate agent (build, polish, check) uses the cheap model.
-  This ensures different models review each other's work.
+  Primary agent handles frame/design/evolve/align/review.
+  Alternate agent handles build/polish/check.
+  Concrete model selection stays with DDx or the harness unless you pass --model.
 
 Logs:
   Session logs are written to .helix-logs/helix-YYYYMMDD-HHMMSS.log
   in the project root. All stderr output is captured for post-hoc inspection.
 
 Notes:
-  Codex runs as `codex --dangerously-bypass-approvals-and-sandbox exec`.
+  \`helix run\` remains a compatibility wrapper for supervisory routing, but
+  build cycles delegate to \`ddx agent execute-loop --once\` when that DDx
+  surface is available.
+  \`helix build\` remains a compatibility wrapper for one bounded pass and
+  delegates to \`ddx agent execute-bead\` after resolving a matching ready bead
+  when that DDx surface is available.
+  Codex runs as \`codex --dangerously-bypass-approvals-and-sandbox exec\`.
+  Any harness listed by \`ddx agent list\` can be passed to --agent.
+  \`ddx-agent\`, \`embedded\`, and legacy \`forge\` are resolved against the live DDx embedded harness name.
+  When HELIX dispatches through DDx, default model selection is delegated to DDx unless you pass an explicit override.
 EOF
 }
 
@@ -333,14 +404,39 @@ run_doctor() {
 
   printf '\nAgent CLIs (at least one required):\n'
   local has_agent=0
-  if command -v claude >/dev/null 2>&1; then
-    _check claude 0; has_agent=1
-  fi
-  if command -v codex >/dev/null 2>&1; then
-    _check codex 0; has_agent=1
+  # Use ddx agent list for discovery when available; fall back to hardcoded checks.
+  if command -v ddx &>/dev/null; then
+    local _agent_list
+    _agent_list="$(ddx agent list --json 2>/dev/null || true)"
+    if [[ -n "$_agent_list" ]]; then
+      local _name _avail
+      while IFS= read -r _name; do
+        _avail="$(printf '%s' "$_agent_list" | ddx jq -r --arg h "$_name" '.[] | select(.name == $h) | .available' 2>/dev/null || true)"
+        if [[ "$_avail" == "true" ]]; then
+          _check "$_name" 0; has_agent=1
+        else
+          printf '  -  %-12s not available (ddx agent list reports unavailable)\n' "$_name"
+        fi
+      done < <(printf '%s' "$_agent_list" | ddx jq -r '.[].name' 2>/dev/null || true)
+    else
+      # ddx agent list returned nothing — fall back to direct binary checks
+      if command -v claude >/dev/null 2>&1; then
+        _check claude 0; has_agent=1
+      fi
+      if command -v codex >/dev/null 2>&1; then
+        _check codex 0; has_agent=1
+      fi
+    fi
+  else
+    if command -v claude >/dev/null 2>&1; then
+      _check claude 0; has_agent=1
+    fi
+    if command -v codex >/dev/null 2>&1; then
+      _check codex 0; has_agent=1
+    fi
   fi
   if (( ! has_agent )); then
-    printf '  ✗  No agent CLI found (need claude or codex)\n'
+    printf '  ✗  No agent CLI found (need at least one from: ddx agent list)\n'
     fail=$((fail + 1))
   fi
 
@@ -468,8 +564,40 @@ require_tracker() {
   tracker_ensure
 }
 
+# Strip non-JSON advisory lines from ddx output before piping to JSON consumers.
+# Advisory lines (e.g. upgrade notices) appear before the JSON and must not
+# reach ddx jq or other JSON parsers. Skips all lines until the first JSON
+# delimiter ([ or {), then passes all subsequent lines unchanged. This handles
+# both compact and pretty-printed JSON as well as array and object output.
+# Used by tracker_exec when --json is requested.
+strip_advisory() {
+  awk 'found || /^[{[]/ { found=1; print }' || true
+}
+
 tracker_exec() {
-  ddx bead "$@"
+  local has_json=0
+  for arg in "$@"; do
+    [[ "$arg" == "--json" ]] && { has_json=1; break; }
+  done
+  if (( has_json )); then
+    ddx bead "$@" | strip_advisory
+  else
+    ddx bead "$@"
+  fi
+}
+
+refresh_context_digest_for_bead() {
+  local bead_id="$1"
+  local helper="${library_root}/scripts/refresh_context_digests.py"
+
+  [[ -f "$helper" ]] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+
+  python3 "$helper" \
+    --apply \
+    --root "$target_root" \
+    --library-root "$library_root" \
+    --bead "$bead_id" >/dev/null
 }
 
 tracker_create() {
@@ -538,6 +666,19 @@ tracker_create() {
     done
   fi
 
+  refresh_context_digest_for_bead "$id" || return 1
+
+  # supervisory injection counter (helix-9044bc6c)
+  local _supervisory_type=""
+  case ",${labels}," in
+    *,review-finding,*)     _supervisory_type="review-finding" ;;
+    *,alignment-review,*)   _supervisory_type="alignment-review" ;;
+    *,acceptance-failure,*) _supervisory_type="acceptance-failure" ;;
+  esac
+  if [[ -n "$_supervisory_type" ]]; then
+    helix_counter_inc supervisory_injection_count "$_supervisory_type" || true
+  fi
+
   printf '%s\n' "$id"
 }
 
@@ -576,6 +717,7 @@ tracker_update() {
       --superseded-by)      cmd+=(--set "superseded-by=$2"); shift 2 ;;
       --replaces)           cmd+=(--set "replaces=$2"); shift 2 ;;
       --parent)     cmd+=(--parent "$2"); shift 2 ;;
+      --unset)      cmd+=(--unset "$2"); shift 2 ;;
       *)            shift ;;
     esac
   done
@@ -602,8 +744,416 @@ tracker_update() {
   fi
 }
 
+normalize_tracker_issue_json() {
+  local issue_json="${1:-}"
+  printf '%s' "$issue_json" | ddx jq -cS 'del(.updated_at)'
+}
+
+expected_tracker_issue_after_closing_sha_update() {
+  local issue_json="${1:-}"
+  local target_sha="${2:-}"
+  printf '%s' "$issue_json" | ddx jq -cS --arg sha "$target_sha" '.closing_commit_sha = $sha'
+}
+
+tracker_issue_jsonl_line() {
+  local issue_id="$1"
+  python3 - "$tracker_file" "$issue_id" <<'PY'
+import json
+import sys
+
+path, issue_id = sys.argv[1:3]
+with open(path, "r", encoding="utf-8") as fh:
+    for raw in fh:
+        line = raw.rstrip("\n")
+        if not line.strip():
+            continue
+        if json.loads(line).get("id") == issue_id:
+            print(line)
+            raise SystemExit(0)
+raise SystemExit(1)
+PY
+}
+
+restore_tracker_issue_json() {
+  local issue_id="$1"
+  local original_issue_json="$2"
+  local tmp_file=""
+
+  tmp_file="$(mktemp "${TMPDIR:-/tmp}/helix-tracker-restore.XXXXXX")" || return 1
+  if ! python3 - "$tracker_file" "$tmp_file" "$issue_id" "$original_issue_json" <<'PY'
+import json
+import sys
+
+src, dst, issue_id, original_json = sys.argv[1:5]
+found = False
+
+with open(src, "r", encoding="utf-8") as inp, open(dst, "w", encoding="utf-8") as out:
+    for raw in inp:
+        if raw.endswith("\n"):
+            line = raw[:-1]
+            newline = "\n"
+        else:
+            line = raw
+            newline = ""
+        if not line.strip():
+            out.write(raw)
+            continue
+        obj = json.loads(line)
+        if obj.get("id") == issue_id:
+            out.write(original_json + "\n")
+            found = True
+        else:
+            out.write(line + newline)
+
+if not found:
+    raise SystemExit(2)
+PY
+  then
+    rm -f "$tmp_file"
+    return 1
+  fi
+
+  mv -f "$tmp_file" "$tracker_file"
+}
+
+rollback_issue_closing_commit_sha_update() {
+  local issue_id="$1"
+  local original_issue_json="$2"
+  local expected_issue_json="$3"
+  local current_issue_json=""
+  local current_norm=""
+  local expected_norm=""
+
+  current_issue_json="$(tracker_show "$issue_id" --json 2>/dev/null)" || {
+    echo "helix: failed to reload tracker state for $issue_id after closing_commit_sha sync failure" >&2
+    return 1
+  }
+
+  current_norm="$(normalize_tracker_issue_json "$current_issue_json")" || return 1
+  expected_norm="$(normalize_tracker_issue_json "$expected_issue_json")" || return 1
+  if [[ "$current_norm" != "$expected_norm" ]]; then
+    echo "helix: refusing to roll back closing_commit_sha for $issue_id after concurrent tracker changes" >&2
+    return 1
+  fi
+
+  restore_tracker_issue_json "$issue_id" "$original_issue_json" || return 1
+}
+
 tracker_close() {
   tracker_exec close "$@"
+}
+
+alignment_bead_title() {
+  local scope="${1:-repo}"
+  printf 'align: %s\n' "$scope"
+}
+
+alignment_bead_acceptance() {
+  printf '%s\n' \
+    'Alignment review complete; all gaps classified; execution issues created for real gaps; traceability matrix produced'
+}
+
+alignment_area_labels_from_path() {
+  local path="${1#./}"
+
+  [[ "$path" == website/* ]] && printf 'area:site\n'
+  [[ "$path" == docs/demos/* ]] && printf 'area:demo\n'
+  [[ "$path" == docs/* ]] && printf 'area:docs\n'
+  [[ "$path" == tests/* ]] && printf 'area:testing\n'
+  [[ "$path" == scripts/* || "$path" == bin/* ]] && printf 'area:cli\n'
+  [[ "$path" == workflows/* || "$path" == .ddx/* ]] && printf 'area:workflow\n'
+  [[ "$path" == *"/artifacts/"* || "$path" == */artifacts ]] && printf 'area:artifacts\n'
+}
+
+alignment_project_area_labels() {
+  local concerns_path="$target_root/docs/helix/01-frame/concerns.md"
+
+  if [[ -s "$concerns_path" ]]; then
+    awk '
+      match($0, /`area:[^`]+`/) {
+        label=substr($0, RSTART + 1, RLENGTH - 2)
+        if (!seen[label]++) print label
+      }
+    ' "$concerns_path"
+    return 0
+  fi
+
+  printf '%s\n' \
+    'area:ui' \
+    'area:api' \
+    'area:data' \
+    'area:infra' \
+    'area:cli'
+}
+
+resolve_alignment_scope_path() {
+  local scope="${1:-repo}"
+  local helper="${library_root}/scripts/refresh_context_digests.py"
+
+  [[ "$scope" == "repo" || "$scope" == area:* ]] && return 0
+  [[ -f "$helper" ]] || return 0
+  command -v python3 >/dev/null 2>&1 || return 0
+
+  python3 - "$target_root" "$library_root" "$scope" <<'PY'
+from importlib.util import module_from_spec, spec_from_file_location
+from pathlib import Path
+import sys
+
+root = Path(sys.argv[1])
+library_root = Path(sys.argv[2])
+scope = sys.argv[3]
+helper = library_root / "scripts" / "refresh_context_digests.py"
+
+spec = spec_from_file_location("refresh_context_digests", helper)
+if spec is None or spec.loader is None:
+    raise SystemExit(0)
+module = module_from_spec(spec)
+spec.loader.exec_module(module)
+path = module.resolve_artifact_path(root, scope, library_root)
+if path is None:
+    raise SystemExit(0)
+for base in (root, library_root):
+    try:
+        print(path.relative_to(base).as_posix())
+        break
+    except ValueError:
+        continue
+PY
+}
+
+alignment_scope_area_labels() {
+  local scope="${1:-repo}"
+  local resolved_path=""
+
+  if [[ "$scope" == "repo" ]]; then
+    alignment_project_area_labels | awk 'NF && !seen[$0]++'
+    return 0
+  fi
+
+  {
+    [[ "$scope" == area:* ]] && printf '%s\n' "$scope"
+    alignment_area_labels_from_path "$scope"
+    resolved_path="$(resolve_alignment_scope_path "$scope" || true)"
+    if [[ -n "$resolved_path" ]]; then
+      alignment_area_labels_from_path "$resolved_path"
+    fi
+  } | awk 'NF && !seen[$0]++'
+}
+
+alignment_scope_areas_text() {
+  local scope="${1:-repo}"
+  local label="" joined=""
+
+  while IFS= read -r label; do
+    [[ -n "$label" ]] || continue
+    if [[ -n "$joined" ]]; then
+      joined+=", "
+    fi
+    joined+="${label#area:}"
+  done < <(alignment_scope_area_labels "$scope")
+
+  printf '%s\n' "$joined"
+}
+
+alignment_bead_labels() {
+  local scope="${1:-repo}"
+  local labels='helix,phase:review,kind:planning,action:align'
+  local label=""
+
+  while IFS= read -r label; do
+    [[ -n "$label" ]] || continue
+    labels+=",${label}"
+  done < <(alignment_scope_area_labels "$scope")
+
+  printf '%s\n' "$labels"
+}
+
+merge_alignment_bead_labels() {
+  local bead_id="$1" scope="${2:-repo}"
+  local issue_json="" current_csv="" merged_csv=""
+
+  issue_json="$(tracker_show "$bead_id" --json 2>/dev/null)" || return 1
+  current_csv="$(printf '%s' "$issue_json" | ddx jq -r '(.labels // []) | join(",")' 2>/dev/null)" || return 1
+  merged_csv="$(
+    {
+      printf '%s\n' "$current_csv" | tr ',' '\n'
+      alignment_bead_labels "$scope" | tr ',' '\n'
+    } | awk '
+      NF && !seen[$0]++ {
+        labels[++count] = $0
+      }
+      END {
+        for (i = 1; i <= count; i++) {
+          printf "%s%s", labels[i], (i < count ? "," : ORS)
+        }
+      }
+    '
+  )" || return 1
+
+  [[ "$merged_csv" == "$current_csv" ]] && return 0
+  tracker_update "$bead_id" --labels "$merged_csv" >/dev/null || return 1
+}
+
+alignment_bead_description() {
+  local scope="${1:-repo}"
+  local scope_areas=""
+  scope_areas="$(alignment_scope_areas_text "$scope")"
+  cat <<EOF
+Top-down reconciliation review for ${scope}.
+Scope: ${scope}.
+${scope_areas:+Scope areas: ${scope_areas}.}
+EOF
+}
+
+infer_alignment_spec_id() {
+  local scope="${1:-repo}"
+  case "$scope" in
+    FEAT-*|US-*|SD-*|TD-*|TP-*|ADR-*|CONTRACT-*)
+      printf '%s\n' "$scope"
+      ;;
+  esac
+}
+
+find_alignment_bead() {
+  local scope="${1:-repo}" status="${2:-open}"
+  local title
+  title="$(alignment_bead_title "$scope")"
+  tracker_list --json 2>/dev/null | ddx jq -r --arg title "$title" --arg status "$status" '
+    [.[] | select(
+      (.status // "") == $status and
+      ((.labels // []) | index("kind:planning")) and
+      ((.labels // []) | index("action:align")) and
+      (.title // "") == $title
+    )][0].id // empty
+  '
+}
+
+claim_reclaim_status_reason=""
+claim_reclaim_status_pid=""
+claim_reclaim_status_age=0
+
+issue_claim_reclaimable() {
+  local issue_json="$1"
+  local process_pattern="${2:-}"
+  local stale_threshold="${HELIX_ORPHAN_THRESHOLD:-7200}"  # default 2 hours
+  local claimed_at claimed_pid updated claim_epoch=0 now_epoch age=0
+
+  claim_reclaim_status_reason=""
+  claim_reclaim_status_pid="unknown"
+  claim_reclaim_status_age=0
+
+  claimed_at="$(printf '%s' "$issue_json" | ddx jq -r '."claimed-at" // ""' 2>/dev/null)"
+  claimed_pid="$(printf '%s' "$issue_json" | ddx jq -r '."claimed-pid" // ""' 2>/dev/null)"
+  updated="$(printf '%s' "$issue_json" | ddx jq -r '.updated_at // ""' 2>/dev/null)"
+
+  [[ "$claimed_pid" == "null" ]] && claimed_pid=""
+  claim_reclaim_status_pid="${claimed_pid:-unknown}"
+
+  if [[ -n "$process_pattern" ]] && pgrep -f "$process_pattern" >/dev/null 2>&1; then
+    claim_reclaim_status_reason="busy"
+    return 1
+  fi
+
+  if [[ -n "$claimed_pid" ]] && kill -0 "$claimed_pid" 2>/dev/null; then
+    claim_reclaim_status_reason="pid_alive"
+    return 1
+  fi
+
+  if [[ -n "$claimed_at" && "$claimed_at" != "null" ]]; then
+    claim_epoch="$(date -d "$claimed_at" +%s 2>/dev/null || echo 0)"
+  elif [[ -n "$updated" && "$updated" != "null" ]]; then
+    claim_epoch="$(date -d "$updated" +%s 2>/dev/null || echo 0)"
+  fi
+
+  now_epoch="$(date +%s)"
+  if (( claim_epoch > 0 )); then
+    age=$(( now_epoch - claim_epoch ))
+  fi
+  claim_reclaim_status_age="$age"
+
+  if (( claim_epoch > 0 && age < stale_threshold )); then
+    claim_reclaim_status_reason="fresh"
+    return 1
+  fi
+
+  claim_reclaim_status_reason="stale"
+  return 0
+}
+
+ensure_alignment_bead() {
+  local scope="${1:-repo}"
+  local existing_id active_id spec_id new_id labels
+
+  existing_id="$(find_alignment_bead "$scope")" || return 1
+  if [[ -n "$existing_id" ]]; then
+    tracker_update "$existing_id" --claim >/dev/null || return 1
+    merge_alignment_bead_labels "$existing_id" "$scope" || return 1
+    refresh_context_digest_for_bead "$existing_id"
+    printf '%s\t%s\n' "$existing_id" "claimed"
+    return 0
+  fi
+
+  active_id="$(find_alignment_bead "$scope" "in_progress")" || return 1
+  if [[ -n "$active_id" ]]; then
+    local active_owner active_json active_status live_active_json live_active_status
+    active_json="$(tracker_show "$active_id" --json 2>/dev/null || true)"
+    active_status="$(printf '%s' "$active_json" | ddx jq -r '.status // ""' 2>/dev/null)" || active_status=""
+    if [[ "$active_status" != "in_progress" ]]; then
+      ensure_alignment_bead "$scope"
+      return $?
+    fi
+    if issue_claim_reclaimable "$active_json"; then
+      live_active_json="$(tracker_show "$active_id" --json 2>/dev/null || true)"
+      live_active_status="$(printf '%s' "$live_active_json" | ddx jq -r '.status // ""' 2>/dev/null)" || live_active_status=""
+      if [[ "$live_active_status" != "in_progress" ]]; then
+        verbose_line "alignment bead %s for %s changed to %s before reclaim; skipping duplicate dispatch" \
+          "$active_id" "$scope" "${live_active_status:-missing}"
+        return 1
+      fi
+      if ! issue_claim_reclaimable "$live_active_json"; then
+        verbose_line "alignment bead %s for %s is no longer reclaimable (%s); skipping duplicate dispatch" \
+          "$active_id" "$scope" "${claim_reclaim_status_reason:-unknown}"
+        return 1
+      fi
+      verbose_line "alignment bead %s for %s is orphaned (age=%ss, pid=%s); reclaiming" \
+        "$active_id" "$scope" "$claim_reclaim_status_age" "$claim_reclaim_status_pid"
+      tracker_update "$active_id" --unclaim >/dev/null || return 1
+      tracker_update "$active_id" --claim >/dev/null || return 1
+      merge_alignment_bead_labels "$active_id" "$scope" || return 1
+      refresh_context_digest_for_bead "$active_id"
+      printf '%s\t%s\n' "$active_id" "reclaimed"
+      return 0
+    fi
+    active_owner="$(printf '%s' "$active_json" | ddx jq -r '.owner // ""' 2>/dev/null)" || active_owner=""
+    if [[ -n "$active_owner" ]]; then
+      summary_line "alignment already active for %s under owner %s (%s); refusing duplicate dispatch" "$scope" "$active_owner" "$active_id"
+    else
+      summary_line "alignment already active for %s (%s); refusing duplicate dispatch" "$scope" "$active_id"
+    fi
+    return 1
+  fi
+
+  spec_id="$(infer_alignment_spec_id "$scope" || true)"
+  labels="$(alignment_bead_labels "$scope")"
+  if [[ -n "$spec_id" ]]; then
+    new_id="$(tracker_create \
+      "$(alignment_bead_title "$scope")" \
+      --type task \
+      --labels "$labels" \
+      --spec-id "$spec_id" \
+      --description "$(alignment_bead_description "$scope")" \
+      --acceptance "$(alignment_bead_acceptance)")" || return 1
+  else
+    new_id="$(tracker_create \
+      "$(alignment_bead_title "$scope")" \
+      --type task \
+      --labels "$labels" \
+      --description "$(alignment_bead_description "$scope")" \
+      --acceptance "$(alignment_bead_acceptance)")" || return 1
+  fi
+
+  refresh_context_digest_for_bead "$new_id"
+  printf '%s\t%s\n' "$new_id" "created"
 }
 
 # Unclaim an issue only if it is still in-progress.
@@ -656,18 +1206,91 @@ tracker_export() {
 }
 
 # ---------- PID file helpers (hx-407ed8b8) ----------
+#
+# Pid file format (helix-9044bc6c parallel-run mutex):
+#   "<pid> <iso8601-started-at>\n"
+# The legacy single-line "<pid>\n" format is also accepted on read.
 
 _helix_pid_file() {
   printf '%s/helix.pid' "$tracker_dir"
 }
 
-_helix_pid_alive() {
+_helix_pid_field() {
+  local idx="${1:-1}"
   local pid_file
   pid_file="$(_helix_pid_file)"
   [[ -f "$pid_file" ]] || return 1
+  awk -v i="$idx" 'NR==1 { print $i; exit }' "$pid_file" 2>/dev/null
+}
+
+_helix_pid_value() {
+  _helix_pid_field 1
+}
+
+_helix_pid_started() {
+  _helix_pid_field 2
+}
+
+_helix_pid_alive() {
   local pid
-  pid="$(cat "$pid_file" 2>/dev/null)"
+  pid="$(_helix_pid_value 2>/dev/null)" || return 1
   [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null
+}
+
+_helix_pid_write() {
+  local pid="$1" started="${2:-}"
+  [[ -z "$started" ]] && started="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  local pid_file
+  pid_file="$(_helix_pid_file)"
+  mkdir -p "$(dirname "$pid_file")" 2>/dev/null || true
+  printf '%s %s\n' "$pid" "$started" > "$pid_file"
+}
+
+_helix_pid_release() {
+  local our_pid="${1:-$$}"
+  local pid_file
+  pid_file="$(_helix_pid_file)"
+  [[ -f "$pid_file" ]] || return 0
+  local existing
+  existing="$(_helix_pid_value 2>/dev/null || true)"
+  if [[ "$existing" == "$our_pid" ]]; then
+    rm -f "$pid_file"
+  fi
+}
+
+# ---------- Migration observability counters (helix-9044bc6c) ----------
+#
+# Counters live alongside run state in .ddx/run-state.json so a scripted
+# helix run can observe delegation health and supervisory injection rates.
+#
+# Top-level keys:
+#   ddx_delegation_success_count   (int)
+#   ddx_delegation_failure_count   (object keyed by reason class)
+#       reasons: missing_binary, too_old, malformed_json, timeout, other
+#   parallel_run_denied_count      (int)
+#   supervisory_injection_count    (object keyed by injection type)
+#       types: review-finding, alignment-review, acceptance-failure
+helix_counter_inc() {
+  local key="$1" subkey="${2:-}"
+  local state_file="${tracker_dir}/run-state.json"
+  command -v ddx &>/dev/null || return 0
+  mkdir -p "$tracker_dir" 2>/dev/null || true
+  local current='{}'
+  if [[ -f "$state_file" ]]; then
+    current="$(cat "$state_file" 2>/dev/null || printf '{}')"
+    [[ -z "$current" ]] && current='{}'
+  fi
+  local updated=""
+  if [[ -n "$subkey" ]]; then
+    updated="$(printf '%s' "$current" | ddx jq -c \
+      --arg k "$key" --arg s "$subkey" \
+      'setpath([$k, $s]; ((getpath([$k, $s]) // 0) + 1))' 2>/dev/null)" || return 0
+  else
+    updated="$(printf '%s' "$current" | ddx jq -c --arg k "$key" \
+      '.[$k] = ((.[$k] // 0) + 1)' 2>/dev/null)" || return 0
+  fi
+  [[ -z "$updated" ]] && return 0
+  printf '%s\n' "$updated" > "$state_file"
 }
 
 run_start() {
@@ -676,8 +1299,8 @@ run_start() {
   pid_file="$(_helix_pid_file)"
 
   if _helix_pid_alive; then
-    local pid; pid="$(cat "$pid_file")"
-    echo "helix: run already active (pid=$pid). Use 'helix stop' first." >&2
+    local pid; pid="$(_helix_pid_value)"
+    summary_line "run already active (pid=%s). Use 'helix stop' first." "$pid"
     return 1
   fi
 
@@ -687,8 +1310,8 @@ run_start() {
   # Launch helix run in background with --summary
   "$0" run --summary "$@" &
   local bg_pid=$!
-  printf '%s\n' "$bg_pid" > "$pid_file"
-  printf 'helix: started (pid=%s, log=%s)\n' "$bg_pid" "$helix_log" >&2
+  _helix_pid_write "$bg_pid"
+  summary_line "started (pid=%s, log=%s)" "$bg_pid" "$helix_log"
 }
 
 run_stop() {
@@ -697,15 +1320,15 @@ run_stop() {
   pid_file="$(_helix_pid_file)"
 
   if [[ ! -f "$pid_file" ]]; then
-    echo "helix: no active run (no PID file)" >&2
+    summary_line "no active run (no PID file)"
     return 1
   fi
 
-  local pid; pid="$(cat "$pid_file" 2>/dev/null)"
+  local pid; pid="$(_helix_pid_value 2>/dev/null || true)"
 
-  if ! kill -0 "$pid" 2>/dev/null; then
+  if [[ -z "$pid" ]] || ! kill -0 "$pid" 2>/dev/null; then
     rm -f "$pid_file"
-    echo "helix: stale PID file removed (pid=$pid was not running)" >&2
+    summary_line "stale PID file removed (pid=%s was not running)" "$pid"
     return 1
   fi
 
@@ -775,6 +1398,132 @@ exec_wrap() {
 }
 # ----------------------------------------------------------
 
+ddx_managed_execution_available() {
+  command -v ddx >/dev/null 2>&1 || return 1
+  ddx agent execute-bead --help >/dev/null 2>&1 || return 1
+  ddx agent execute-loop --help >/dev/null 2>&1 || return 1
+  return 0
+}
+
+managed_build_agent() {
+  local exec_agent="$agent"
+  if [[ -n "$alt_agent" ]] && [[ "$alt_agent" != "$agent" ]]; then
+    exec_agent="$alt_agent"
+  fi
+  printf '%s' "$exec_agent"
+}
+
+managed_build_model_override() {
+  local exec_agent="${1:-}"
+
+  # Keep an explicit model override only when managed execution stays on the
+  # configured primary harness. This avoids leaking codex/claude-specific
+  # concrete model names across adversarial rotation boundaries.
+  if [[ -n "${agent_model:-}" ]] && [[ -z "$exec_agent" || "$exec_agent" == "$agent" ]]; then
+    printf '%s' "$agent_model"
+  fi
+}
+
+resolve_execution_target() {
+  local selector="${1:-}"
+
+  tracker_ready --json --execution | ddx jq -r --arg selector "$selector" '
+    if $selector == "" then
+      .[0].id // empty
+    else
+      [
+        .[] |
+        select(
+          .id == $selector or
+          (.parent // "") == $selector or
+          (.["spec-id"] // "") == $selector or
+          ((.labels // []) | index($selector)) or
+          ((.title // "") | contains($selector))
+        )
+      ][0].id // empty
+    end
+  '
+}
+
+run_execute_bead() {
+  local issue_id="${1:-}"
+  local exec_agent ddx_harness model_override effort_override
+  local -a ddx_flags=()
+
+  exec_agent="$(managed_build_agent)"
+  ddx_harness="$(_resolve_ddx_dispatch_harness "$exec_agent")"
+  model_override="$(managed_build_model_override "$exec_agent")"
+  effort_override="${agent_effort:-medium}"
+
+  [[ -n "$ddx_harness" ]] && ddx_flags+=(--harness "$ddx_harness")
+  [[ -n "$model_override" ]] && ddx_flags+=(--model "$model_override")
+  [[ -n "$effort_override" ]] && ddx_flags+=(--effort "$effort_override")
+
+  if (( dry_run )); then
+    printf 'ddx agent execute-bead %s' "${issue_id:-<ready-bead>}"
+    local flag
+    for flag in "${ddx_flags[@]}"; do
+      printf ' %q' "$flag"
+    done
+    printf '\n'
+    return 0
+  fi
+
+  if [[ -z "$issue_id" ]]; then
+    summary_line "no execution-ready bead matched the build selector"
+    return 1
+  fi
+
+  verbose_line "delegating helix build to ddx agent execute-bead for %s" "$issue_id"
+  env HELIX_SELECTED_ISSUE="$issue_id" ddx agent execute-bead "$issue_id" "${ddx_flags[@]}"
+}
+
+run_execute_loop_once() {
+  local selected_issue="${1:-}"
+  local exec_agent ddx_harness model_override effort_override
+  local -a ddx_flags=(--once)
+
+  exec_agent="$(managed_build_agent)"
+  ddx_harness="$(_resolve_ddx_dispatch_harness "$exec_agent")"
+  model_override="$(managed_build_model_override "$exec_agent")"
+  effort_override="${agent_effort:-medium}"
+
+  [[ -n "$ddx_harness" ]] && ddx_flags+=(--harness "$ddx_harness")
+  [[ -n "$model_override" ]] && ddx_flags+=(--model "$model_override")
+  [[ -n "$effort_override" ]] && ddx_flags+=(--effort "$effort_override")
+
+  if (( dry_run )); then
+    printf 'ddx agent execute-loop'
+    local flag
+    for flag in "${ddx_flags[@]}"; do
+      printf ' %q' "$flag"
+    done
+    printf '\n'
+    return 0
+  fi
+
+  verbose_line "delegating helix run build cycle to ddx agent execute-loop --once"
+  if ! command -v ddx &>/dev/null; then
+    helix_counter_inc ddx_delegation_failure_count missing_binary
+    return 127
+  fi
+  if ! ddx agent execute-loop --help &>/dev/null; then
+    helix_counter_inc ddx_delegation_failure_count too_old
+    return 1
+  fi
+  local _delegation_rc=0
+  env HELIX_SELECTED_ISSUE="$selected_issue" ddx agent execute-loop "${ddx_flags[@]}" \
+    || _delegation_rc=$?
+  if (( _delegation_rc == 0 )); then
+    helix_counter_inc ddx_delegation_success_count
+  elif (( _delegation_rc == 124 )); then
+    helix_counter_inc ddx_delegation_failure_count timeout
+  else
+    helix_counter_inc ddx_delegation_failure_count other
+  fi
+  return "$_delegation_rc"
+}
+
 tracker_dispatch() {
   local subcmd="${1:-}"
   require_tracker
@@ -817,7 +1566,7 @@ run_agent_prompt() {
   # the current agent matches the configured primary agent.
   # This prevents passing claude models to codex during cross-model review.
   local model_override="${2:-}"
-  if [[ -z "$model_override" ]] && [[ "$agent" == "${HELIX_AGENT:-codex}" ]]; then
+  if [[ -z "$model_override" ]] && [[ "$agent" == "$(normalize_agent_name "${HELIX_AGENT:-codex}")" ]]; then
     model_override="$agent_model"
   fi
   local effort_override="${3:-$agent_effort}"
@@ -869,11 +1618,13 @@ _extract_agent_text() {
 # Primary dispatch via ddx agent run.
 _run_agent_ddx() {
   local prompt="$1" model_override="$2" effort_override="$3" agent_timeout="$4"
+  local ddx_harness
+  ddx_harness="$(_resolve_ddx_dispatch_harness "$agent")"
   local prompt_bytes
   prompt_bytes="$(printf '%s' "$prompt" | wc -c)"
 
   local -a ddx_flags=(
-    --harness "$agent"
+    --harness "$ddx_harness"
     --permissions unrestricted
     --timeout "${agent_timeout}s"
   )
@@ -894,8 +1645,8 @@ _run_agent_ddx() {
   _start_ts="$(date +%s)"
 
   if (( ! quiet )); then
-    printf 'helix: [%s] ddx agent run --harness %s %s <prompt %s bytes> (timeout %ss)\n' \
-      "$(date +%H:%M:%S)" "$agent" "${model_override:+(model: $model_override)}" "$prompt_bytes" "$agent_timeout" >&2
+    printf 'helix: [%s] ddx agent run --harness %s%s %s <prompt %s bytes> (timeout %ss)\n' \
+      "$(date +%H:%M:%S)" "$ddx_harness" "${agent:+ (requested: $agent)}" "${model_override:+(model: $model_override)}" "$prompt_bytes" "$agent_timeout" >&2
   fi
 
   # Dispatch via ddx agent run with JSON output for metrics
@@ -910,7 +1661,7 @@ _run_agent_ddx() {
     sleep 5
     _watchdog_elapsed=$((_watchdog_elapsed + 5))
     if (( ! quiet )) && (( _watchdog_elapsed % 60 == 0 )); then
-      printf 'helix: [%s] %s still running (%ss elapsed)\n' "$(date +%H:%M:%S)" "$agent" "$_watchdog_elapsed" >&2
+      printf 'helix: [%s] %s still running (%ss elapsed)\n' "$(date +%H:%M:%S)" "$ddx_harness" "$_watchdog_elapsed" >&2
     fi
   done
   wait "$_agent_pid" || _agent_rc=$?
@@ -936,7 +1687,7 @@ _run_agent_ddx() {
   _log_start="$(log_line)"
   {
     printf -- '--- ddx agent run [%s] harness=%s rc=%s exit=%s elapsed=%ss cost=$%s tokens=%s ---\n' \
-      "$(date +%H:%M:%S)" "$agent" "$_agent_rc" "$_exit_code" "$_elapsed" "$_cost" "$_cycle_tokens"
+      "$(date +%H:%M:%S)" "$ddx_harness" "$_agent_rc" "$_exit_code" "$_elapsed" "$_cost" "$_cycle_tokens"
     printf -- '%s\n' "$_raw_output"
     printf -- '--- end ddx agent output ---\n'
   } >> "$helix_log"
@@ -944,14 +1695,14 @@ _run_agent_ddx() {
 
   if (( summary )); then
     summary_line "[%s] %s complete (rc=%s, %ss, %s tokens, \$%s) — log L%s–L%s in %s" \
-      "$(date +%H:%M:%S)" "$agent" "$_exit_code" "$_elapsed" "$_cycle_tokens" "$_cost" "$_log_start" "$_log_end" "$helix_log"
+      "$(date +%H:%M:%S)" "$ddx_harness" "$_exit_code" "$_elapsed" "$_cycle_tokens" "$_cost" "$_log_start" "$_log_end" "$helix_log"
   elif (( ! quiet )); then
     printf 'helix: [%s] %s complete (rc=%s, %ss, %s tokens, $%s, %s total)\n' \
-      "$(date +%H:%M:%S)" "$agent" "$_exit_code" "$_elapsed" "$_cycle_tokens" "$_cost" "$total_tokens" >&2
+      "$(date +%H:%M:%S)" "$ddx_harness" "$_exit_code" "$_elapsed" "$_cycle_tokens" "$_cost" "$total_tokens" >&2
   fi
 
   # Emit the agent's text result to stdout for downstream parsing
-  _extract_agent_text "$agent" "$_raw_output"
+  _extract_agent_text "$ddx_harness" "$_raw_output"
 
   return "$_exit_code"
 }
@@ -1242,7 +1993,21 @@ EOF
 }
 
 alignment_prompt() {
-  local scope="${1:-repo}"
+  local scope="${1:-repo}" governing_bead="${2:-}" governing_mode="${3:-}"
+  local governing_note="Governing alignment bead: create or claim the relevant kind:planning,action:align bead before proceeding."
+  if [[ -n "$governing_bead" ]]; then
+    case "$governing_mode" in
+      claimed)
+        governing_note="Governing alignment bead: ${governing_bead} (claimed by the wrapper entrypoint; treat Phase 0.5 as already satisfied unless tracker metadata drifted materially)."
+        ;;
+      reused)
+        governing_note="Governing alignment bead: ${governing_bead} (already active for this scope; reuse it and do not create a duplicate governing bead)."
+        ;;
+      created)
+        governing_note="Governing alignment bead: ${governing_bead} (created by the wrapper entrypoint; claim and reuse it instead of creating a duplicate governing bead)."
+        ;;
+    esac
+  fi
   cat <<EOF
 Execute the following HELIX alignment action.
 $(inline_action "${helix_docs_root}/actions/reconcile-alignment.md")
@@ -1250,6 +2015,7 @@ Use supporting references at ${helix_docs_root}/README.md and ${helix_docs_root}
 Execute in the current repository rooted at ${target_root}.
 Issue tracker: built-in JSONL at ${tracker_file} (legacy: .ddx/issues.jsonl). Use \`ddx bead\` subcommands.
 Review scope: ${scope}.
+${governing_note}
 Follow the action exactly. Do the work — do not just describe what you would do.
 EOF
 }
@@ -1284,8 +2050,8 @@ EOF
 
 run_frame() {
   local scope="${1:-}"
-  # Frame is reasoning-heavy — use primary agent with smart model
-  run_agent_prompt "$(frame_prompt "$scope")" "$(resolve_model smart)" "${agent_effort:-high}"
+  # Frame uses the primary agent and its default model/effort policy.
+  run_agent_prompt "$(frame_prompt "$scope")" "" "${agent_effort:-high}"
 }
 
 plan_prompt() {
@@ -1327,7 +2093,7 @@ Execute in the current repository rooted at ${target_root}.
 Issue tracker: built-in JSONL at ${tracker_file} (legacy: .ddx/issues.jsonl). Use \`ddx bead\` subcommands.
 Review scope: ${scope}.
 ${in_loop:+This review is running inside the automated helix run loop after an implementation cycle.}
-IMPORTANT: File each actionable finding (critical, high, medium severity) as a tracker issue with label \`review-finding\` so findings are durable and queryable via \`ddx bead list --label review-finding\`. See the "Filing Findings as Tracker Issues" section in the action for the exact command pattern.
+IMPORTANT: File each actionable finding (critical, high, medium severity) as a tracker issue with label \`review-finding\` plus at least one scope-appropriate \`area:*\` label so findings are durable, concern-aware, and queryable via \`ddx bead list --label review-finding\`. See the "Filing Findings as Tracker Issues" section in the action for the exact command pattern.
 Follow the action exactly. Do the work — do not just describe what you would do.
 EOF
 }
@@ -1349,9 +2115,9 @@ EOF
 
 require_clean_worktree() {
   if ! (cd "$target_root" && git diff --quiet && git diff --cached --quiet); then
-    echo "helix: worktree has uncommitted changes" >&2
-    echo "helix: please commit your changes before starting an experiment" >&2
-    echo "helix: experiment needs a clean worktree to safely branch and revert" >&2
+    summary_line "worktree has uncommitted changes"
+    summary_line "please commit your changes before starting an experiment"
+    summary_line "experiment needs a clean worktree to safely branch and revert"
     return 1
   fi
 }
@@ -1398,9 +2164,47 @@ run_evolve() {
   if (( ! dry_run )); then
     require_tracker
   fi
-  # Evolve is reasoning-heavy — use primary agent with smart model
-  run_agent_prompt "$(evolve_prompt "$requirement" "$scope" "$artifact" "$source")" "$(resolve_model smart)" "${agent_effort:-high}"
+  # Evolve uses the primary agent and its default model/effort policy.
+  run_agent_prompt "$(evolve_prompt "$requirement" "$scope" "$artifact" "$source")" "" "${agent_effort:-high}"
 }
+
+run_input() {
+  local request="${1:-}"
+  local autonomy="${2:-medium}"
+  if [[ -z "$request" ]]; then
+    echo "helix: input requires a natural language request" >&2
+    return 1
+  fi
+  case "$autonomy" in
+    low|medium|high) ;;
+    *)
+      echo "helix: invalid autonomy level '$autonomy' (use low, medium, or high)" >&2
+      return 1
+      ;;
+  esac
+  if (( ! dry_run )); then
+    require_tracker
+  fi
+  run_agent_prompt "$(input_prompt "$request" "$autonomy")" "" "${agent_effort:-high}"
+}
+
+input_prompt() {
+  local request="${1:-}"
+  local autonomy="${2:-medium}"
+  cat <<EOF
+You are processing sparse user intent through the HELIX intake surface.
+
+User request: $request
+Autonomy level: $autonomy
+
+$(inline_action "${helix_docs_root}/actions/input.md")
+Execute in the current repository rooted at ${target_root}.
+Issue tracker: built-in JSONL at ${tracker_file}. Use ddx bead create, ddx bead update <id>, ddx bead show <id>.
+
+Follow the action exactly. Do the work — do not just describe what you would do.
+EOF
+}
+
 
 extract_agents_md_commands() {
   # Extract the first ```bash block from the Quick Reference section of AGENTS.md.
@@ -1531,7 +2335,7 @@ helix_select_batch() {
       (
         ($parent != "" and .parent == $parent) or
         ($spec != "" and .["spec-id"] == $spec) or
-        (($areas | length) > 0 and ([(.labels // [])[] | select(startswith("area:"))] | [.[] | select(. as $a | $areas | index($a))]) | length > 0)
+        (($areas | length) > 0 and ([ (.labels // [])[] | select(startswith("area:")) | . as $label | select($areas | index($label)) ] | length > 0))
       )
     )] | .[0:($max - 1)] | .[].id
   ' 2>/dev/null)" || true
@@ -1642,15 +2446,54 @@ parse_common_flags() {
   while [[ $# -gt 0 ]]; do
     case "$1" in
       --agent)
-        agent="$2"
+        agent="$(normalize_agent_name "$2")"
+        # Explicit --agent flag overrides auto-detected adversarial rotation.
+        # If HELIX_ALT_AGENT is explicitly configured, honor it; otherwise
+        # clear the auto-detected alt_agent so the chosen agent runs all steps.
+        if [[ "${HELIX_ALT_AGENT:-auto}" == "auto" ]]; then
+          alt_agent=""
+          review_agent="${HELIX_REVIEW_AGENT:-}"
+        fi
         shift 2
         ;;
       --claude)
         agent="claude"
+        if [[ "${HELIX_ALT_AGENT:-auto}" == "auto" ]]; then
+          alt_agent=""
+          review_agent="${HELIX_REVIEW_AGENT:-}"
+        fi
         shift
         ;;
       --codex)
         agent="codex"
+        if [[ "${HELIX_ALT_AGENT:-auto}" == "auto" ]]; then
+          alt_agent=""
+          review_agent="${HELIX_REVIEW_AGENT:-}"
+        fi
+        shift
+        ;;
+      --ddx-agent)
+        agent="$(normalize_agent_name ddx-agent)"
+        if [[ "${HELIX_ALT_AGENT:-auto}" == "auto" ]]; then
+          alt_agent=""
+          review_agent="${HELIX_REVIEW_AGENT:-}"
+        fi
+        shift
+        ;;
+      --embedded)
+        agent="$(normalize_agent_name embedded)"
+        if [[ "${HELIX_ALT_AGENT:-auto}" == "auto" ]]; then
+          alt_agent=""
+          review_agent="${HELIX_REVIEW_AGENT:-}"
+        fi
+        shift
+        ;;
+      --forge)
+        agent="$(normalize_agent_name forge)"
+        if [[ "${HELIX_ALT_AGENT:-auto}" == "auto" ]]; then
+          alt_agent=""
+          review_agent="${HELIX_REVIEW_AGENT:-}"
+        fi
         shift
         ;;
       --model)
@@ -1692,7 +2535,23 @@ run_implementation() {
   if (( ! dry_run )); then
     require_tracker
   fi
-  # Build is mechanical — use alternate agent with cheap model
+  if ddx_managed_execution_available; then
+    local issue_id=""
+    if [[ -n "$selector" ]]; then
+      if ! issue_id="$(resolve_execution_target "$selector")"; then
+        return $?
+      fi
+    elif tracker_ready --json --execution >/dev/null 2>&1; then
+      issue_id="$(resolve_execution_target "" 2>/dev/null || true)"
+    fi
+    if [[ -n "$selector" ]] && [[ -z "$issue_id" ]]; then
+      summary_line "no execution-ready bead matched the build selector"
+      return 1
+    fi
+    run_execute_bead "$issue_id"
+    return $?
+  fi
+  # Build uses the alternate agent when adversarial rotation is enabled.
   local _saved_agent=""
   if [[ -n "$alt_agent" ]] && [[ "$alt_agent" != "$agent" ]]; then
     _saved_agent="$agent"
@@ -1700,7 +2559,7 @@ run_implementation() {
     (( ! quiet )) && printf 'helix: adversarial build: switching to %s\n' "$agent" >&2
   fi
   local _rc=0
-  run_agent_prompt "$(implementation_prompt "$selector")" "$(resolve_model cheap)" "${agent_effort:-medium}" || _rc=$?
+  run_agent_prompt "$(implementation_prompt "$selector")" "" "${agent_effort:-medium}" || _rc=$?
   [[ -z "$_saved_agent" ]] || agent="$_saved_agent"
   return "$_rc"
 }
@@ -1710,7 +2569,7 @@ run_batch_implementation() {
   if (( ! dry_run )); then
     require_tracker
   fi
-  # Build is mechanical — use alternate agent with cheap model
+  # Batch build uses the alternate agent when adversarial rotation is enabled.
   local _saved_agent=""
   if [[ -n "$alt_agent" ]] && [[ "$alt_agent" != "$agent" ]]; then
     _saved_agent="$agent"
@@ -1718,7 +2577,7 @@ run_batch_implementation() {
     (( ! quiet )) && printf 'helix: adversarial build: switching to %s\n' "$agent" >&2
   fi
   local _rc=0
-  run_agent_prompt "$(batch_implementation_prompt "$issues")" "$(resolve_model cheap)" "${agent_effort:-medium}" || _rc=$?
+  run_agent_prompt "$(batch_implementation_prompt "$issues")" "" "${agent_effort:-medium}" || _rc=$?
   [[ -z "$_saved_agent" ]] || agent="$_saved_agent"
   return "$_rc"
 }
@@ -1728,7 +2587,7 @@ run_check() {
   if (( ! dry_run )); then
     require_tracker
   fi
-  # Check is mechanical — use alternate agent with cheap model
+  # Check uses the alternate agent when adversarial rotation is enabled.
   local _saved_agent=""
   if [[ -n "$alt_agent" ]] && [[ "$alt_agent" != "$agent" ]]; then
     _saved_agent="$agent"
@@ -1736,34 +2595,38 @@ run_check() {
     (( ! quiet )) && printf 'helix: adversarial check: switching to %s\n' "$agent" >&2
   fi
   local _rc=0
-  run_agent_prompt "$(check_prompt "$scope")" "$(resolve_model cheap)" "${agent_effort:-low}" || _rc=$?
+  run_agent_prompt "$(check_prompt "$scope")" "" "${agent_effort:-low}" || _rc=$?
   [[ -z "$_saved_agent" ]] || agent="$_saved_agent"
   return "$_rc"
 }
 
 run_alignment() {
   local scope="${1:-repo}"
+  local governing_bead="" governing_mode="" alignment_state=""
   if (( ! dry_run )); then
     require_tracker
+    alignment_state="$(ensure_alignment_bead "$scope")" || return 1
+    governing_bead="${alignment_state%%$'\t'*}"
+    governing_mode="${alignment_state#*$'\t'}"
   fi
-  # Alignment is reasoning-heavy — use primary agent with smart model
-  run_agent_prompt "$(alignment_prompt "$scope")" "$(resolve_model smart)" "${agent_effort:-high}"
+  # Alignment uses the primary agent and its default model/effort policy.
+  run_agent_prompt "$(alignment_prompt "$scope" "$governing_bead" "$governing_mode")" "" "${agent_effort:-high}"
 }
 
 run_backfill() {
   local scope="${1:-repo}"
 
   if (( dry_run )); then
-    # Backfill is reasoning-heavy — use primary agent with smart model
-    run_agent_prompt "$(backfill_prompt "$scope")" "$(resolve_model smart)" "${agent_effort:-high}"
+    # Backfill uses the primary agent and its default model/effort policy.
+    run_agent_prompt "$(backfill_prompt "$scope")" "" "${agent_effort:-high}"
     return 0
   fi
 
   require_tracker
 
   local output
-  # Backfill is reasoning-heavy — use primary agent with smart model
-  output="$(run_agent_prompt "$(backfill_prompt "$scope")" "$(resolve_model smart)" "${agent_effort:-high}")"
+  # Backfill uses the primary agent and its default model/effort policy.
+  output="$(run_agent_prompt "$(backfill_prompt "$scope")" "" "${agent_effort:-high}")"
   printf '%s\n' "$output"
 
   local status
@@ -1849,8 +2712,8 @@ run_plan() {
   local scope="${1:-}"
   local rounds="${2:-5}"
   # Planning does NOT require tracker — it happens before issue creation
-  # Design/plan is reasoning-heavy — use primary agent with smart model
-  run_agent_prompt "$(plan_prompt "$scope" "$rounds")" "$(resolve_model smart)" "${agent_effort:-high}"
+  # Design uses the primary agent and its default model/effort policy.
+  run_agent_prompt "$(plan_prompt "$scope" "$rounds")" "" "${agent_effort:-high}"
 
   # Cross-model critique: if review_agent is configured, alternate agents
   # for additional refinement passes on the written plan
@@ -1886,7 +2749,7 @@ run_polish() {
   if (( ! dry_run )); then
     require_tracker
   fi
-  # Polish is mechanical — use alternate agent with cheap model
+  # Polish uses the alternate agent when adversarial rotation is enabled.
   local _saved_agent=""
   if [[ -n "$alt_agent" ]] && [[ "$alt_agent" != "$agent" ]]; then
     _saved_agent="$agent"
@@ -1894,9 +2757,183 @@ run_polish() {
     (( ! quiet )) && printf 'helix: adversarial polish: switching to %s\n' "$agent" >&2
   fi
   local _rc=0
-  run_agent_prompt "$(polish_prompt "$scope" "$rounds")" "$(resolve_model cheap)" "${agent_effort:-medium}" || _rc=$?
+  run_agent_prompt "$(polish_prompt "$scope" "$rounds")" "" "${agent_effort:-medium}" || _rc=$?
   [[ -z "$_saved_agent" ]] || agent="$_saved_agent"
   return "$_rc"
+}
+
+issue_commit_subject() {
+  local commit_sha="$1"
+  (cd "$target_root" && git show -s --format=%s "$commit_sha" 2>/dev/null)
+}
+
+is_issue_tracker_bookkeeping_commit() {
+  local issue_id="$1"
+  local subject="$2"
+  local suffix=""
+
+  case "$subject" in
+    "$issue_id "*) suffix="${subject#"$issue_id "}" ;;
+    "$issue_id: "*) suffix="${subject#"$issue_id: "}" ;;
+    *) return 1 ;;
+  esac
+
+  suffix="$(printf '%s' "$suffix" | tr '[:upper:]' '[:lower:]')"
+
+  case "$suffix" in
+    "close tracker bead" | \
+    "close tracker issue" | \
+    "close tracked bead" | \
+    "close tracker record" | \
+    "tracker: close bead" | \
+    "sync closing_commit_sha" | \
+    "sync tracker closure" | \
+    "sync tracker state" | \
+    "sync tracker closing commit sha" | \
+    "tracker: sync bead close state" | \
+    "record measure and close bead" | \
+    "record measure results and close bead" | \
+    "record review findings and close bead")
+      return 0
+      ;;
+  esac
+
+  return 1
+}
+
+resolve_issue_implementation_commit() {
+  local issue_id="$1"
+  local commit_sha=""
+  local subject=""
+
+  while IFS=$'\t' read -r commit_sha subject; do
+    [[ -n "$commit_sha" ]] || continue
+    if is_issue_tracker_bookkeeping_commit "$issue_id" "$subject"; then
+      continue
+    fi
+    printf '%s\n' "$commit_sha"
+    return 0
+  done < <(
+    cd "$target_root" &&
+      git log \
+        --extended-regexp \
+        --format='%H%x09%s' \
+        --grep "^${issue_id}([ :]|$)" \
+        -n 50 \
+        2>/dev/null
+  )
+
+  return 1
+}
+
+sync_issue_closing_commit_sha() {
+  local issue_id="$1"
+  local issue_json=""
+  local status=""
+  local closing_sha=""
+  local closing_subject=""
+  local target_sha=""
+  local tracker_is_repo_local=0
+  local rel_tracker=""
+  local original_issue_jsonl=""
+  local expected_issue_json=""
+
+  issue_json="$(tracker_show "$issue_id" --json 2>/dev/null)" || return 1
+  status="$(printf '%s' "$issue_json" | ddx jq -r '.status // ""')" || status=""
+  [[ "$status" == "closed" ]] || return 1
+
+  closing_sha="$(printf '%s' "$issue_json" | ddx jq -r '.closing_commit_sha // ""')" || closing_sha=""
+  if [[ -n "$closing_sha" ]] && (cd "$target_root" && git rev-parse --verify -q "${closing_sha}^{commit}" >/dev/null 2>&1); then
+    closing_subject="$(issue_commit_subject "$closing_sha" || true)"
+    if [[ -n "$closing_subject" ]] && ! is_issue_tracker_bookkeeping_commit "$issue_id" "$closing_subject"; then
+      printf '%s\n' "$closing_sha"
+      return 0
+    fi
+  fi
+
+  target_sha="$(resolve_issue_implementation_commit "$issue_id")" || return 1
+  if [[ "$closing_sha" == "$target_sha" ]]; then
+    printf '%s\n' "$target_sha"
+    return 0
+  fi
+
+  if path_is_within_root "$tracker_file" "$target_root"; then
+    tracker_is_repo_local=1
+    rel_tracker="${tracker_file#"$target_root"/}"
+    original_issue_jsonl="$(tracker_issue_jsonl_line "$issue_id")" || return 1
+  fi
+
+  expected_issue_json="$(expected_tracker_issue_after_closing_sha_update "$issue_json" "$target_sha")" || return 1
+  tracker_update "$issue_id" --set "closing_commit_sha=$target_sha" >/dev/null || {
+    return 1
+  }
+
+  if (( tracker_is_repo_local )); then
+    local tracker_msg
+    tracker_msg="$(printf '%s\n\nVerification: ddx bead show %s --json\n' \
+      "${issue_id}: sync closing_commit_sha" \
+      "$issue_id")"
+    if ! (cd "$target_root" && git commit --only -qm "$tracker_msg" -- "$rel_tracker"); then
+      if ! rollback_issue_closing_commit_sha_update "$issue_id" "$original_issue_jsonl" "$expected_issue_json"; then
+        echo "helix: failed to roll back closing_commit_sha for $issue_id after tracker sync commit failure" >&2
+        return 1
+      fi
+      echo "helix: failed to create tracker sync commit for $issue_id" >&2
+      return 1
+    fi
+  else
+    verbose_line "synced closing_commit_sha for %s in external tracker" "$issue_id"
+  fi
+
+  printf '%s\n' "$target_sha"
+}
+
+resolve_review_scope_for_issue() {
+  local issue_id="$1"
+  local closing_sha=""
+
+  if ! sync_issue_closing_commit_sha "$issue_id" >/dev/null; then
+    echo "helix: failed to sync closing_commit_sha for $issue_id; falling back to current review scope" >&2
+  fi
+  closing_sha="$(tracker_show "$issue_id" --json 2>/dev/null | ddx jq -r '.closing_commit_sha // ""')" || closing_sha=""
+
+  if [[ -z "$closing_sha" ]]; then
+    printf 'last-commit\n'
+    return 0
+  fi
+
+  if ! (cd "$target_root" && git rev-parse --verify -q "${closing_sha}^{commit}" >/dev/null 2>&1); then
+    verbose_line "review fallback: closing_commit_sha for %s is unavailable locally (%s)" "$issue_id" "$closing_sha"
+    printf 'last-commit\n'
+    return 0
+  fi
+
+  printf 'commit:%s\n' "$closing_sha"
+}
+
+review_scope_stats() {
+  local scope="${1:-last-commit}"
+  local diff_lines=999 diff_files=999
+
+  case "$scope" in
+    commit:*)
+      local commit_sha="${scope#commit:}"
+      diff_lines="$(cd "$target_root" && git show --numstat --format='' "$commit_sha" 2>/dev/null | awk '
+        NF >= 3 {
+          if ($1 ~ /^[0-9]+$/) sum += $1
+          if ($2 ~ /^[0-9]+$/) sum += $2
+        }
+        END { print sum + 0 }
+      ')" || diff_lines=999
+      diff_files="$(cd "$target_root" && git show --name-only --format='' "$commit_sha" 2>/dev/null | awk 'NF { count += 1 } END { print count + 0 }')" || diff_files=999
+      ;;
+    *)
+      diff_lines="$(cd "$target_root" && git diff --stat HEAD~1 2>/dev/null | tail -1 | grep -oE '[0-9]+ insertion|[0-9]+ deletion' | grep -oE '[0-9]+' | paste -sd+ | bc 2>/dev/null)" || diff_lines=999
+      diff_files="$(cd "$target_root" && git diff --name-only HEAD~1 2>/dev/null | wc -l | awk '{print $1}')" || diff_files=999
+      ;;
+  esac
+
+  printf '%s %s\n' "$diff_lines" "$diff_files"
 }
 
 run_review() {
@@ -1918,13 +2955,13 @@ run_review() {
 
   if (( dry_run )); then
     local _rc=0
-    run_agent_prompt "$(review_prompt "$scope" "$in_loop")" "$(resolve_model smart)" "${agent_effort:-high}" || _rc=$?
+    run_agent_prompt "$(review_prompt "$scope" "$in_loop")" "" "${agent_effort:-high}" || _rc=$?
     [[ -z "$_saved_agent" ]] || agent="$_saved_agent"
     return "$_rc"
   fi
 
   local output
-  output="$(run_agent_prompt "$(review_prompt "$scope" "$in_loop")" "$(resolve_model smart)" "${agent_effort:-high}")"
+  output="$(run_agent_prompt "$(review_prompt "$scope" "$in_loop")" "" "${agent_effort:-high}")"
   printf '%s\n' "$output"
 
   # Restore agent before returning
@@ -1972,24 +3009,11 @@ run_status() {
 
   local state_file="${tracker_dir}/run-state.json"
 
-  # Get live tracker counts
-  local tracker_json
-  tracker_json="$(tracker_status --json 2>/dev/null || echo '{}')"
-
-  # Get run state if available
+  # Run state (cheap file read).
   local run_state='{}'
   if [[ -f "$state_file" ]]; then
-    run_state="$(cat "$state_file")"
-  fi
-
-  # Get claimed issues
-  local claimed
-  claimed="$(tracker_list --status in_progress --json 2>/dev/null | ddx jq -c '[.[] | {id, title}]' 2>/dev/null || echo '[]')"
-
-  # Execution history (FEAT-005)
-  local exec_history='[]'
-  if command -v ddx &>/dev/null && ddx exec history --json &>/dev/null 2>&1; then
-    exec_history="$(ddx exec history --json 2>/dev/null | ddx jq -c 'sort_by(.started_at) | reverse | .[0:10] | [.[] | {skill: (.definition_id | ltrimstr("helix:")), artifact: (.artifact_ids | join(",")), status, started_at}]' 2>/dev/null || echo '[]')"
+    run_state="$(cat "$state_file" 2>/dev/null || printf '{}')"
+    [[ -z "$run_state" ]] && run_state='{}'
   fi
 
   # Active run PID check
@@ -1997,21 +3021,138 @@ run_status() {
   local pid_file
   pid_file="$(_helix_pid_file)"
   if _helix_pid_alive; then
-    local active_pid; active_pid="$(cat "$pid_file")"
-    active_run="$(ddx jq -n --arg pid "$active_pid" --arg log "$helix_log" '{pid: ($pid | tonumber), log: $log}')"
+    local active_pid active_started
+    active_pid="$(_helix_pid_value 2>/dev/null || true)"
+    active_started="$(_helix_pid_started 2>/dev/null || true)"
+    active_run="$(ddx jq -n \
+      --arg pid "${active_pid:-0}" \
+      --arg started "${active_started:-}" \
+      --arg log "$helix_log" \
+      '{pid: ($pid | tonumber? // 0), started: $started, log: $log}')"
   elif [[ -f "$pid_file" ]]; then
     rm -f "$pid_file"  # clean stale
   fi
 
   if (( json_flag )); then
+    # Single-pane JSON view (helix-9044bc6c).
+    # Composes blocked-bead, worker, and tracker-list primitives without
+    # any new ddx subcommand. Optimised to invoke at most three ddx calls
+    # plus one jq composition pass to stay under the 200ms target on a
+    # 100-bead tracker. Inputs flow through tempfiles via --slurpfile so
+    # large bead lists do not exceed argv limits.
+    local _scratch
+    _scratch="$(mktemp -d 2>/dev/null || mktemp -d -t helix-status)"
+    trap "rm -rf '$_scratch'" RETURN 2>/dev/null || true
+
+    # Issue every primitive read in parallel and join — this overlaps the
+    # ~30-40ms ddx CLI startup cost across calls so the JSON view stays
+    # under 200ms on a 100-bead tracker.
+    if command -v ddx &>/dev/null; then
+      ( ddx bead status --json 2>/dev/null > "$_scratch/tracker.json" || printf '{}' > "$_scratch/tracker.json" ) &
+      ( ddx bead blocked --json 2>/dev/null > "$_scratch/blocked.json" || printf '[]' > "$_scratch/blocked.json" ) &
+      ( ddx bead list --json 2>/dev/null > "$_scratch/beads.json" || printf '[]' > "$_scratch/beads.json" ) &
+      if ddx agent workers --help &>/dev/null 2>&1; then
+        ( ddx agent workers --json 2>/dev/null > "$_scratch/workers.json" || printf '[]' > "$_scratch/workers.json" ) &
+      else
+        printf '[]' > "$_scratch/workers.json"
+      fi
+      wait
+    else
+      printf '{}' > "$_scratch/tracker.json"
+      printf '[]' > "$_scratch/blocked.json"
+      printf '[]' > "$_scratch/workers.json"
+      printf '[]' > "$_scratch/beads.json"
+    fi
+    [[ -s "$_scratch/tracker.json" ]] || printf '{}' > "$_scratch/tracker.json"
+    [[ -s "$_scratch/blocked.json" ]] || printf '[]' > "$_scratch/blocked.json"
+    [[ -s "$_scratch/workers.json" ]] || printf '[]' > "$_scratch/workers.json"
+    [[ -s "$_scratch/beads.json" ]]   || printf '[]' > "$_scratch/beads.json"
+
+    printf '%s' "$run_state" > "$_scratch/run.json"
+    printf '%s' "$active_run" > "$_scratch/active.json"
+
     ddx jq -n \
-      --argjson tracker "$tracker_json" \
-      --argjson run "$run_state" \
-      --argjson claimed "$claimed" \
-      --argjson recent_actions "$exec_history" \
-      --argjson active_run "$active_run" \
-      '{tracker: $tracker, run: $run, claimed: $claimed, active_run: $active_run, recent_actions: $recent_actions}'
+      --slurpfile run "$_scratch/run.json" \
+      --slurpfile tracker "$_scratch/tracker.json" \
+      --slurpfile blocked "$_scratch/blocked.json" \
+      --slurpfile workers "$_scratch/workers.json" \
+      --slurpfile beads "$_scratch/beads.json" \
+      --slurpfile active_run "$_scratch/active.json" \
+      '
+      def supervisory_type(labels):
+        (labels // []) | map(select(. == "review-finding" or . == "alignment-review" or . == "acceptance-failure")) | .[0] // "unknown";
+      def epoch(ts): try (ts | sub("\\.[0-9]+Z$"; "Z") | fromdateiso8601) catch null;
+      def age_now(updated): (epoch(updated) as $e | if $e == null then 0 else (now - $e | floor) end);
+
+      ($run[0] // {}) as $run |
+      ($tracker[0] // {}) as $tracker |
+      ($blocked[0] // []) as $blocked |
+      ($workers[0] // []) as $workers |
+      ($beads[0] // []) as $beads |
+      ($active_run[0] // null) as $active_run |
+      ($run.attempted_cycles // 0) as $cycle |
+      ($run.stop_reason // "unknown") as $stop |
+      (
+        [ $workers[]? | select(.state == "running") ] | .[0]
+        | if . == null then null
+          else {
+            id: (.bead_id // ""),
+            worker: (.id // ""),
+            harness: (.harness // ""),
+            claim_age_seconds: (((.elapsed_ms // 0) / 1000) | floor),
+            started_at: (.started_at // null)
+          } end
+      ) as $running |
+      (
+        [ $blocked[]? | {
+            id: .id,
+            reason: (
+              (.blocker.kind // "unknown") as $k |
+              if $k == "dependency" then "dep-blocked"
+              elif $k == "retry" or $k == "cooldown" or $k == "retry_after" then "retry-parked"
+              elif $k == "orphaned" or $k == "orphaned_claim" then "orphaned-claim"
+              else $k end
+            ),
+            next_eligible: (.blocker.next_eligible_at // .blocker.retry_after // .blocker.eligible_at // null),
+            age_seconds: age_now(.updated_at)
+          } ]
+      ) as $parked |
+      (
+        [ $beads[]? |
+          select((.labels // []) | any(. == "review-finding" or . == "alignment-review" or . == "acceptance-failure"))
+          | {
+              id: .id,
+              type: supervisory_type(.labels),
+              triggering_cycle: (
+                ((.notes // "") | capture("TRIGGERING_CYCLE=(?<c>[0-9]+)"; "g") | .c | tonumber?) // null
+              ),
+              triggering_bead: (
+                ((.notes // "") | capture("TRIGGERING_BEAD=(?<b>[A-Za-z0-9_-]+)"; "g") | .b) // null
+              ),
+              created_at: (.created_at // null)
+            }
+        ] | sort_by(.created_at // "") | reverse | .[0:20]
+      ) as $injected |
+      {
+        current_cycle: ($cycle | floor),
+        running_bead: $running,
+        parked_beads: $parked,
+        injected_supervisory: $injected,
+        last_stop_reason: $stop,
+        tracker: $tracker,
+        run: $run,
+        active_run: $active_run
+      }
+      '
   else
+    # Get claimed + execution history for text rendering.
+    local tracker_json claimed exec_history='[]'
+    tracker_json="$(tracker_status --json 2>/dev/null || echo '{}')"
+    claimed="$(tracker_list --status in_progress --json 2>/dev/null | ddx jq -c '[.[] | {id, title}]' 2>/dev/null || echo '[]')"
+    if command -v ddx &>/dev/null && ddx exec history --json &>/dev/null 2>&1; then
+      exec_history="$(ddx exec history --json 2>/dev/null | ddx jq -c 'sort_by(.started_at) | reverse | .[0:10] | [.[] | {skill: (.definition_id | ltrimstr("helix:")), artifact: (.artifact_ids | join(",")), status, started_at}]' 2>/dev/null || echo '[]')"
+    fi
+
     printf 'HELIX Status\n'
     printf '============\n\n'
 
@@ -2026,15 +3167,18 @@ run_status() {
     ' 2>/dev/null
 
     # Active run (PID check)
-    local pid_file
-    pid_file="$(_helix_pid_file)"
+    local _pid_file_text
+    _pid_file_text="$(_helix_pid_file)"
     if _helix_pid_alive; then
-      local active_pid; active_pid="$(cat "$pid_file")"
+      local _txt_pid _txt_started
+      _txt_pid="$(_helix_pid_value 2>/dev/null || true)"
+      _txt_started="$(_helix_pid_started 2>/dev/null || true)"
       printf '\nActive Run:\n'
-      printf '  PID:  %s\n' "$active_pid"
-      printf '  Log:  %s\n' "$helix_log"
-    elif [[ -f "$pid_file" ]]; then
-      rm -f "$pid_file"  # clean stale
+      printf '  PID:      %s\n' "${_txt_pid:-?}"
+      [[ -n "$_txt_started" ]] && printf '  Started:  %s\n' "$_txt_started"
+      printf '  Log:      %s\n' "$helix_log"
+    elif [[ -f "$_pid_file_text" ]]; then
+      rm -f "$_pid_file_text"  # clean stale
     fi
 
     # Claimed work
@@ -2082,6 +3226,7 @@ run_status() {
 
 run_commit() {
   local issue_id="${1:-}"
+  local impl_sha=""
 
   # Check for staged changes
   if ! (cd "$target_root" && git diff --cached --quiet 2>/dev/null); then
@@ -2133,17 +3278,36 @@ run_commit() {
 
   # Commit
   (cd "$target_root" && git commit -m "$msg")
+  impl_sha="$(cd "$target_root" && git rev-parse HEAD)"
   echo "helix: committed: $summary" >&2
+
+  # Tracker update
+  if [[ -n "$issue_id" ]]; then
+    local closing_sha=""
+    local tracker_msg=""
+    if ! tracker_close "$issue_id" 2>/dev/null; then
+      echo "helix: failed to close $issue_id" >&2
+      return 1
+    fi
+    closing_sha="$(tracker_show "$issue_id" --json 2>/dev/null | ddx jq -r '.closing_commit_sha // ""')" || closing_sha=""
+    if [[ "$closing_sha" != "$impl_sha" ]]; then
+      tracker_update "$issue_id" --set "closing_commit_sha=$impl_sha" >/dev/null || {
+        echo "helix: failed to sync closing_commit_sha for $issue_id" >&2
+        return 1
+      }
+    fi
+    tracker_msg="$(printf '%s close tracker bead\n\nVerification: ddx bead show %s --json\n' "$issue_id" "$issue_id")"
+    if path_is_within_root "$tracker_file" "$target_root"; then
+      (cd "$target_root" && git add "$tracker_file" && git commit -m "$tracker_msg")
+    else
+      echo "helix: tracker file is external; skipping repo-local tracker-sync commit" >&2
+    fi
+    echo "helix: closed $issue_id" >&2
+  fi
 
   # Push
   (cd "$target_root" && git pull --rebase 2>/dev/null && git push 2>/dev/null) || true
   echo "helix: pushed" >&2
-
-  # Tracker update
-  if [[ -n "$issue_id" ]]; then
-    tracker_close "$issue_id" 2>/dev/null || true
-    echo "helix: closed $issue_id" >&2
-  fi
 }
 
 recover_prompt() {
@@ -2217,51 +3381,51 @@ recover_orphaned_issues() {
 
   local i
   for ((i = 0; i < count; i++)); do
-    local issue_id claimed_at claimed_pid
+    local issue_id issue_json live_issue_json current_orphan_status
     issue_id="$(printf '%s' "$in_progress" | ddx jq -r ".[$i].id" 2>/dev/null)"
-    claimed_at="$(printf '%s' "$in_progress" | ddx jq -r ".[$i][\"claimed-at\"] // \"\"" 2>/dev/null)"
-    claimed_pid="$(printf '%s' "$in_progress" | ddx jq -r ".[$i][\"claimed-pid\"] // \"\"" 2>/dev/null)"
+    issue_json="$(tracker_show "$issue_id" --json 2>/dev/null || true)"
+    [[ -n "$issue_json" ]] || continue
 
-    # Skip if another helix process is actively working on this issue
-    if pgrep -f "helix.*implement.*${issue_id}" >/dev/null 2>&1; then
-      verbose_line "issue %s is being worked on by another process, skipping" "$issue_id"
+    if ! issue_claim_reclaimable "$issue_json" "helix.*implement.*${issue_id}"; then
+      case "$claim_reclaim_status_reason" in
+        busy)
+          verbose_line "issue %s is being worked on by another process, skipping" "$issue_id"
+          ;;
+        pid_alive)
+          verbose_line "issue %s claimed by PID %s which is still alive, skipping" "$issue_id" "$claim_reclaim_status_pid"
+          ;;
+        fresh)
+          verbose_line "issue %s claimed %ss ago (threshold %ss), too fresh to reclaim" "$issue_id" "$claim_reclaim_status_age" "$stale_threshold"
+          ;;
+      esac
       continue
     fi
 
-    # Skip if the claiming PID is still alive
-    if [[ -n "$claimed_pid" && "$claimed_pid" != "null" ]] && kill -0 "$claimed_pid" 2>/dev/null; then
-      verbose_line "issue %s claimed by PID %s which is still alive, skipping" "$issue_id" "$claimed_pid"
+    # Orphan confirmed: reclaim — but only if still in-progress.
+    live_issue_json="$(tracker_show "$issue_id" --json 2>/dev/null || true)"
+    current_orphan_status="$(printf '%s' "$live_issue_json" | ddx jq -r '.status // ""' 2>/dev/null)" || current_orphan_status=""
+    if [[ "$current_orphan_status" != "in_progress" ]]; then
+      verbose_line "orphan %s changed to %s before reclaim — skipping" "$issue_id" "${current_orphan_status:-missing}"
       continue
     fi
-
-    # Determine claim age (use claimed-at if available, fall back to updated)
-    local claim_epoch=0
-    if [[ -n "$claimed_at" && "$claimed_at" != "null" ]]; then
-      claim_epoch="$(date -d "$claimed_at" +%s 2>/dev/null || echo 0)"
-    else
-      local updated
-      updated="$(printf '%s' "$in_progress" | ddx jq -r ".[$i].updated_at // \"\"" 2>/dev/null)"
-      [[ -n "$updated" && "$updated" != "null" ]] && claim_epoch="$(date -d "$updated" +%s 2>/dev/null || echo 0)"
-    fi
-
-    local age=$(( now_epoch - claim_epoch ))
-    if (( claim_epoch > 0 && age < stale_threshold )); then
-      verbose_line "issue %s claimed %ss ago (threshold %ss), too fresh to reclaim" "$issue_id" "$age" "$stale_threshold"
-      continue
-    fi
-
-    # Orphan confirmed: reclaim — but only if still in-progress (it may have
-    # been closed by its agent after the snapshot was taken above).
-    local current_orphan_status
-    current_orphan_status="$(tracker_show "$issue_id" --json 2>/dev/null | ddx jq -r '.status // ""')" || current_orphan_status=""
-    if [[ "$current_orphan_status" == "closed" ]]; then
-      verbose_line "orphan %s is now closed — skipping reclaim" "$issue_id"
+    if ! issue_claim_reclaimable "$live_issue_json" "helix.*implement.*${issue_id}"; then
+      case "$claim_reclaim_status_reason" in
+        busy)
+          verbose_line "issue %s became busy before reclaim, skipping" "$issue_id"
+          ;;
+        pid_alive)
+          verbose_line "issue %s is now claimed by live PID %s, skipping" "$issue_id" "$claim_reclaim_status_pid"
+          ;;
+        fresh)
+          verbose_line "issue %s is now freshly claimed (%ss old), skipping reclaim" "$issue_id" "$claim_reclaim_status_age"
+          ;;
+      esac
       continue
     fi
     if (( summary )); then
-      summary_line "reclaiming orphaned %s (age=%ss, pid=%s dead)" "$issue_id" "$age" "${claimed_pid:-unknown}"
+      summary_line "reclaiming orphaned %s (age=%ss, pid=%s dead)" "$issue_id" "$claim_reclaim_status_age" "$claim_reclaim_status_pid"
     else
-      printf 'helix: reclaiming orphaned %s (age=%ss, pid=%s dead)\n' "$issue_id" "$age" "${claimed_pid:-unknown}" >&2
+      printf 'helix: reclaiming orphaned %s (age=%ss, pid=%s dead)\n' "$issue_id" "$claim_reclaim_status_age" "$claim_reclaim_status_pid" >&2
     fi
     tracker_update "$issue_id" --unclaim 2>/dev/null || true
     recovered=$((recovered + 1))
@@ -2277,6 +3441,32 @@ recover_orphaned_issues() {
 }
 
 run_loop() {
+  # ---------- Parallel-run mutex (helix-9044bc6c) ----------
+  # Detect another active `helix run` on this project root before claiming
+  # any bead. Exit 2 with a stable diagnostic so callers can distinguish
+  # mutex denial from other failure modes.
+  require_tracker
+  {
+    local _pid_file _existing_pid _existing_started
+    _pid_file="$(_helix_pid_file)"
+    if [[ -f "$_pid_file" ]]; then
+      _existing_pid="$(_helix_pid_value 2>/dev/null || true)"
+      _existing_started="$(_helix_pid_started 2>/dev/null || true)"
+      if [[ -n "$_existing_pid" && "$_existing_pid" != "$$" ]] \
+         && kill -0 "$_existing_pid" 2>/dev/null; then
+        [[ -z "$_existing_started" ]] && _existing_started="unknown"
+        printf 'helix run: already running (pid=%s, started=%s)\n' \
+          "$_existing_pid" "$_existing_started" >&2
+        helix_counter_inc parallel_run_denied_count
+        exit 2
+      fi
+      # Stale or our own pre-written entry — clear it so we can rewrite.
+      [[ "$_existing_pid" != "$$" ]] && rm -f "$_pid_file"
+    fi
+    _helix_pid_write "$$"
+    trap '_helix_pid_release "$$"' EXIT INT TERM
+  }
+
   local attempted_cycles=0
   local completed_cycles=0
   local post_drain_alignment_ran=0
@@ -2364,7 +3554,16 @@ run_loop() {
 
     local skip_count="${#skipped_issues[@]}"
 
+    # Preserve migration counters and any other prior fields by merging
+    # the freshly-computed run-state on top of existing JSON.
+    local existing='{}'
+    if [[ -f "$state_file" ]]; then
+      existing="$(cat "$state_file" 2>/dev/null || printf '{}')"
+      [[ -z "$existing" ]] && existing='{}'
+    fi
+
     ddx jq -n \
+      --argjson existing "$existing" \
       --arg current_issue "${current_issue_id:-}" \
       --arg focused_epic "${epic_id:-}" \
       --argjson completed_cycles "$completed_cycles" \
@@ -2373,18 +3572,28 @@ run_loop() {
       --argjson total_tokens "$total_tokens" \
       --arg stop_reason "$stop_reason" \
       --arg timestamp "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
-      --arg agent "${HELIX_AGENT:-claude}" \
-      '{
-        current_issue: $current_issue,
-        focused_epic: $focused_epic,
-        completed_cycles: $completed_cycles,
-        attempted_cycles: $attempted_cycles,
-        skipped_count: $skipped_count,
-        total_tokens: $total_tokens,
-        stop_reason: $stop_reason,
-        last_run: $timestamp,
-        agent: $agent
-      }' > "$state_file" 2>/dev/null || true
+      --arg agent "$agent" \
+      '
+        # Migration observability counter defaults (helix-9044bc6c).
+        # Ensure the four documented counters always materialise, even on
+        # runs that did not happen to increment any of them.
+        ($existing + {
+          ddx_delegation_success_count: ($existing.ddx_delegation_success_count // 0),
+          ddx_delegation_failure_count: ($existing.ddx_delegation_failure_count // {}),
+          parallel_run_denied_count:    ($existing.parallel_run_denied_count // 0),
+          supervisory_injection_count:  ($existing.supervisory_injection_count // {})
+        }) + {
+          current_issue: $current_issue,
+          focused_epic: $focused_epic,
+          completed_cycles: $completed_cycles,
+          attempted_cycles: $attempted_cycles,
+          skipped_count: $skipped_count,
+          total_tokens: $total_tokens,
+          stop_reason: $stop_reason,
+          last_run: $timestamp,
+          agent: $agent
+        }
+      ' > "$state_file" 2>/dev/null || true
   }
 
   # Backoff delay for a given attempt count (exponential: 5s, 10s, 20s, 40s cap)
@@ -2527,6 +3736,18 @@ run_loop() {
             continue
           fi
         fi
+      elif [[ -z "$focused_epic" ]]; then
+        local parent_epic
+        local parent_type
+        parent_epic="$(tracker_show "$selected_issue" --json 2>/dev/null | ddx jq -r '.parent // ""')" || parent_epic=""
+        if [[ -n "$parent_epic" ]]; then
+          parent_type="$(tracker_show "$parent_epic" --json 2>/dev/null | ddx jq -r '.issue_type // ""')" || parent_type=""
+          if [[ "$parent_type" == "epic" ]]; then
+            focused_epic="$parent_epic"
+            printf 'helix: epic focus %s → child %s\n' "$focused_epic" "$selected_issue" >&2
+            generate_run_context "$focused_epic" || true
+          fi
+        fi
       fi
 
       # Exponential backoff: delay before retrying a previously-attempted issue
@@ -2538,11 +3759,17 @@ run_loop() {
         sleep "${HELIX_BACKOFF_SLEEP:-$delay}"
       fi
 
-      # Batch related issues for token efficiency
-      local batch_issues
-      batch_issues="$(helix_select_batch "$selected_issue" 3 "$skip_json")"
-      local batch_count
-      batch_count="$(printf '%s\n' "$batch_issues" | wc -l)"
+      local managed_execution=0
+      local batch_issues="$selected_issue"
+      local batch_count=1
+      if ddx_managed_execution_available; then
+        managed_execution=1
+      else
+        # Batch related issues for token efficiency when HELIX still owns
+        # the implementation dispatch path.
+        batch_issues="$(helix_select_batch "$selected_issue" 3 "$skip_json")"
+        batch_count="$(printf '%s\n' "$batch_issues" | wc -l)"
+      fi
 
       local _cycle_start
       _cycle_start="$(date +%s)"
@@ -2566,7 +3793,9 @@ run_loop() {
       fi
       attempted_cycles=$((attempted_cycles + 1))
       local _impl_cmd
-      if (( batch_count > 1 )); then
+      if (( managed_execution )); then
+        _impl_cmd="run_execute_loop_once \"$selected_issue\""
+      elif (( batch_count > 1 )); then
         _impl_cmd="run_batch_implementation \"$batch_issues\""
       else
         _impl_cmd="run_implementation \"$selected_issue\""
@@ -2576,6 +3805,11 @@ run_loop() {
         eval "$_impl_cmd" >> "$helix_log" 2>&1 || _impl_rc=$?
       else
         eval "$_impl_cmd" || _impl_rc=$?
+      fi
+
+      if (( dry_run )); then
+        finish_loop 0
+        return $?
       fi
 
       # Even when the agent exits non-zero (timeout, minor error), it may
@@ -2673,6 +3907,10 @@ run_loop() {
           fi
         fi
 
+        if ! sync_issue_closing_commit_sha "$selected_issue" >/dev/null; then
+          verbose_line "closing_commit_sha sync failed for %s; review scope may stay on committed history only" "$selected_issue"
+        fi
+
         # Epic promotion: if the agent decomposed a task into children,
         # promote the parent to an epic so epic focus mode kicks in.
         local _child_count
@@ -2744,16 +3982,16 @@ Output: ${_ac_output:0:500}" \
         # Skip review for small changes (below threshold) to save tokens.
         # Epic close reviews always run regardless of threshold.
         if (( auto_review )); then
-          local _diff_lines _diff_files _skip_review=0
-          _diff_lines="$(cd "$target_root" && git diff --stat HEAD~1 2>/dev/null | tail -1 | grep -oE '[0-9]+ insertion|[0-9]+ deletion' | grep -oE '[0-9]+' | paste -sd+ | bc 2>/dev/null)" || _diff_lines=999
-          _diff_files="$(cd "$target_root" && git diff --name-only HEAD~1 2>/dev/null | wc -l)" || _diff_files=999
+          local review_scope _diff_lines _diff_files _skip_review=0
+          review_scope="$(resolve_review_scope_for_issue "$selected_issue")"
+          read -r _diff_lines _diff_files < <(review_scope_stats "$review_scope")
           if (( review_threshold > 0 && _diff_lines < review_threshold && _diff_files < 3 )); then
             _skip_review=1
-            verbose_line "skipping review for small change (%s lines, %s files < threshold %s)" "$_diff_lines" "$_diff_files" "$review_threshold"
+            verbose_line "skipping review for small change (%s, %s lines, %s files < threshold %s)" "$review_scope" "$_diff_lines" "$_diff_files" "$review_threshold"
           fi
           if (( ! _skip_review )); then
-          verbose_line "post-implementation review after cycle %s" "$attempt_number"
-          if run_review last-commit 1; then
+          verbose_line "post-implementation review after cycle %s (%s)" "$attempt_number" "$review_scope"
+          if run_review "$review_scope" 1; then
             :
           else
             local review_status="$?"
@@ -2979,14 +4217,6 @@ main() {
             force_ephemeral=1
             shift
             ;;
-          --smart-model)
-            smart_model="$2"
-            shift 2
-            ;;
-          --cheap-model)
-            cheap_model="$2"
-            shift 2
-            ;;
           --review-agent)
             review_agent="$2"
             shift 2
@@ -3109,6 +4339,43 @@ main() {
       set -- "${REMAINING_ARGS[@]}"
       require_tracker
       exec_wrap triage tracker_create "$@"
+      ;;
+    input)
+      parse_common_flags "$@"
+      set -- "${REMAINING_ARGS[@]}"
+      local autonomy="medium"
+      local autonomy_seen=0
+      local request=""
+      while [[ $# -gt 0 ]]; do
+        case "$1" in
+          --autonomy)
+            if [[ "$#" -lt 2 || -z "${2:-}" || "${2:0:2}" == "--" ]]; then
+              echo "helix: input requires --autonomy low, medium, or high" >&2
+              exit 1
+            fi
+            if (( autonomy_seen )); then
+              echo "helix: input accepts at most one --autonomy flag" >&2
+              exit 1
+            fi
+            autonomy_seen=1
+            autonomy="$2"
+            shift 2
+            ;;
+          --*)
+            echo "helix: unknown input flag '$1'" >&2
+            exit 1
+            ;;
+          *)
+            if [[ -n "$request" ]]; then
+              echo "helix: input accepts exactly one quoted natural language request" >&2
+              exit 1
+            fi
+            request="$1"
+            shift
+            ;;
+        esac
+      done
+      exec_wrap input run_input "$request" "$autonomy"
       ;;
     *)
       echo "unknown command: $command" >&2

@@ -41,15 +41,15 @@ exit_requirements:
 
     - check: file_exists
       path: docs/helix/05-deploy/monitoring-setup.md
-      description: "Monitoring setup documentation must exist"
+      description: "Monitoring setup documentation must exist, including security alerting and audit signals when applicable"
 
     - check: file_exists
       path: docs/helix/05-deploy/runbook.md
       description: "Runbook must exist"
 
     - check: file_exists
-      path: docs/helix/05-deploy/security-monitoring.md
-      description: "Security monitoring setup must exist"
+      path: docs/helix/05-deploy/release-notes.md
+      description: "Release notes must exist"
 
     # Infrastructure as code
     - check: file_exists
@@ -94,6 +94,6 @@ exit_requirements:
   manual:
     - "Staging deployment verified successful"
     - "Production go/no-go decision approved"
-    - "Stakeholders notified of deployment"
+    - "Release notes published"
 
 next_phase: iterate

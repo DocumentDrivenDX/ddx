@@ -7,28 +7,8 @@ artifact:
   phase: frame
 
 description: |
-  Central registry tracking all features, their status, dependencies,
-  and ownership throughout the project lifecycle. Single source of
-  truth for feature identification and tracking.
-
-dependencies:
-  requires:
-    - input: PRD
-      type: artifact
-      path: prd
-      required: true
-    - input: Feature specifications
-      type: artifact
-      path: feature-specification
-      required: false
-
-  enables:
-    - output: Implementation planning
-      type: artifact
-      phase: build
-    - output: Release planning
-      type: artifact
-      phase: deploy
+  Compact source of truth for feature IDs, names, status, priority, owner,
+  dependencies, and artifact trace links.
 
 output:
   location: docs/helix/01-frame/feature-registry.md
@@ -102,7 +82,15 @@ template:
 
 examples:
   - file: example.md
-    description: Sample registry for a CLI toolkit project
+    description: Feature registry for the DepositMatch example product
+
+references:
+  - title: "IBM Requirements Management"
+    file: docs/resources/ibm-requirements-management.md
+    relationship: "Grounds requirements traceability, prioritization, validation, and change management"
+  - title: "Atlassian Product Backlog"
+    file: docs/resources/atlassian-product-backlog.md
+    relationship: "Grounds visible prioritized work, dependency awareness, and refinement"
 
 workflow:
   creation_order: 5

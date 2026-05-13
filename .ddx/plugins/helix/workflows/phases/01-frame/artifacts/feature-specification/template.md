@@ -1,9 +1,8 @@
 ---
-dun:
-  id: FEAT-XXX
-  depends_on:
-    - helix.prd
+ddx:
+  id: "[artifact-id]"
 ---
+
 # Feature Specification: FEAT-XXX — [Feature Name]
 
 **Feature ID**: FEAT-XXX
@@ -16,20 +15,53 @@ dun:
 [What this feature is and why it exists. 2-3 sentences connecting this feature
 to a specific PRD requirement.]
 
+## Ideal Future State
+
+[Describe the future product behavior once this feature is working well. Focus
+on what users can understand, decide, or accomplish. For broad product-surface,
+workflow, IA, or documentation features, this section should come before the
+problem framing so requirements are pulled toward the desired outcome instead
+of only reacting to current pain.]
+
 ## Problem Statement
 
 - **Current situation**: [What exists now — be specific]
 - **Pain points**: [What is not working and for whom]
 - **Desired outcome**: [What success looks like — measurable]
 
+## Functional Areas
+
+[For features that span more than one surface, user mode, workflow stage, or
+domain object, map the areas before writing requirements. This prevents
+unrelated requirements from collapsing into one list. Omit only when the
+feature is a single narrow capability.]
+
+| Area | User question or job | Feature responsibility |
+|------|----------------------|------------------------|
+| [Area] | [What the user needs to know or do] | [What this feature must provide] |
+
 ## Requirements
 
-### Functional Requirements
+### Functional Requirements by Area
 
-[Each requirement should be testable. Number them for traceability.]
+[Each requirement should be testable. Group requirements by functional area
+when the feature has multiple areas. Use stable prefixes that make the scope
+clear, such as `HOME-01`, `TYPE-01`, `NAV-01`, or `FR-01` for narrow features.]
 
-1. [Requirement]
-2. [Requirement]
+#### [Area Name]
+
+[PREFIX-01]. [Requirement]
+[PREFIX-02]. [Requirement]
+
+### Acceptance Criteria
+
+[Capture observable examples for the highest-risk or most important
+requirements. Given/When/Then phrasing is allowed but not required. Do not
+describe implementation steps.]
+
+| Requirement | Scenario | Given | When | Then |
+|-------------|----------|-------|------|------|
+| [PREFIX-01] | [Observable case] | [Starting state] | [User/system action] | [Expected result] |
 
 ### Non-Functional Requirements
 
@@ -81,8 +113,13 @@ plausible scope question.]
 Use this checklist when reviewing a feature specification:
 
 - [ ] Overview connects this feature to a specific PRD requirement
+- [ ] Ideal future state describes the desired user-visible outcome, not only current problems
 - [ ] Problem statement describes what exists now and what is broken — not just what is wanted
+- [ ] Functional areas are mapped when the feature spans multiple surfaces, workflows, or domain objects
+- [ ] Requirements are grouped by functional area when a flat list would mix unrelated scopes
+- [ ] Domain objects that sound similar are explicitly separated (for example, artifact instances vs artifact types)
 - [ ] Every functional requirement is testable — you can write an assertion for it
+- [ ] Acceptance criteria cover important happy paths, errors, and edge cases with observable outcomes
 - [ ] Non-functional requirements have specific numeric targets, not "must be fast"
 - [ ] Edge cases cover realistic failure scenarios, not just happy paths
 - [ ] Success metrics are specific to this feature, not product-level metrics

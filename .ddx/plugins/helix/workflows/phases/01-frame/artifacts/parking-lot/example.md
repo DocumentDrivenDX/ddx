@@ -1,66 +1,85 @@
 ---
-dun:
-  id: helix.parking-lot
+ddx:
+  id: example.parking-lot.depositmatch
   parking_lot: true
+  depends_on:
+    - example.feature-registry.depositmatch
 ---
+
 # Parking Lot (Deferred / Future Work)
 
 ## Purpose
-Track deferred and future work without cluttering core HELIX artifacts.
+
+Track DepositMatch work that may matter later without letting it distort the
+CSV-first pilot scope.
 
 ## Policy
-- Out of Scope items do not belong here.
-- Deferred items must include a rationale and revisit trigger.
-- Future items must include a source and expected value.
-- Any parked artifact must set `dun.parking_lot: true`.
+
+- Rejected items do not belong here; close or cancel them instead.
+- Active pilot work does not belong here; track it in the Feature Registry and
+  DDx.
+- Deferred items must include rationale, owner, and revisit trigger.
+- Future items must include source and expected value.
+- Any parked artifact must set `ddx.parking_lot: true`.
 
 ## Deferred / Future Items
 
-### Just-in-Time Provisioning for SSO
+### Bank Feed Integration
+
 - **Type**: Deferred
 - **Artifact Type**: Feature Spec
-- **Source**: FEAT-042
-- **Rationale**: Reduce auth scope for MVP
-- **Impact if Omitted**: Manual provisioning for enterprise customers
-- **Dependencies**: SSO base integration
-- **Revisit Trigger**: Enterprise onboarding pipeline active
-- **Target Phase/Milestone**: Post-MVP
-- **Artifact File**: docs/helix/01-frame/features/FEAT-042-sso-jit-provisioning.md
-- **Link/Owner**: #142 / Identity Team
-- **Last Reviewed**: 2026-01-15
+- **Source**: Feasibility Study alternative analysis
+- **Rationale**: Higher integration and compliance surface would slow the
+  CSV-first pilot.
+- **Impact if Omitted**: Pilot users continue exporting CSVs manually.
+- **Dependencies**: Pilot proves time savings and willingness to pay.
+- **Revisit Trigger**: At least 3 of 5 pilot firms convert at target pricing
+  and request bank-feed support.
+- **Target Phase/Milestone**: Post-pilot
+- **Owner**: Product Lead
+- **Last Reviewed**: 2026-05-12
 
-### Secrets Rotation Policy
+### Accounting Ledger Writeback
+
 - **Type**: Future
+- **Artifact Type**: Solution Design
+- **Source**: Product Vision not-in-scope boundary
+- **Rationale**: Writeback changes the trust, liability, and integration model;
+  the pilot only needs review and export.
+- **Impact if Omitted**: Reviewers must manually apply approved outcomes in
+  their accounting system.
+- **Dependencies**: Security architecture, compliance review, and integration
+  partner selection.
+- **Revisit Trigger**: Pilot customers complete review-log export workflow but
+  cite manual ledger update as a blocker to renewal.
+- **Target Phase/Milestone**: Post-pilot discovery
+- **Owner**: Product / Engineering
+- **Last Reviewed**: 2026-05-12
+
+### Automatic Approval
+
+- **Type**: Deferred
 - **Artifact Type**: ADR
-- **Source**: ADR-017
-- **Rationale**: Needs infra work and key management decision
-- **Impact if Omitted**: Elevated operational risk
-- **Dependencies**: KMS provider selection
-- **Revisit Trigger**: KMS decision approved
-- **Target Phase/Milestone**: Q3 hardening
-- **Artifact File**: docs/helix/02-design/adr/ADR-017-secrets-rotation.md
-- **Link/Owner**: #189 / Platform Team
-- **Last Reviewed**: 2026-01-15
-
-### Support-Driven Audit Trail Export
-- **Type**: Future
-- **Artifact Type**: Feature Spec
-- **Source**: Support ticket #8891
-- **Rationale**: Requires data retention policy alignment
-- **Impact if Omitted**: Manual exports remain a support burden
-- **Dependencies**: Data retention policy update
-- **Revisit Trigger**: Policy approved by legal
-- **Target Phase/Milestone**: 2026-H2
-- **Artifact File**: docs/helix/01-frame/features/FEAT-051-audit-trail-export.md
-- **Link/Owner**: #8891 / Support Ops
-- **Last Reviewed**: 2026-01-15
+- **Source**: Opportunity Canvas scope boundary
+- **Rationale**: The pilot differentiates on reviewer trust, not invisible
+  automation.
+- **Impact if Omitted**: Reviewers must approve suggested matches explicitly.
+- **Dependencies**: Match accuracy evidence, compliance review, customer risk
+  tolerance, and audit-log design.
+- **Revisit Trigger**: Accepted suggestion accuracy exceeds 98% for two months
+  and pilot firms request supervised automation.
+- **Target Phase/Milestone**: Future trust-model review
+- **Owner**: Product / Compliance
+- **Last Reviewed**: 2026-05-12
 
 ## Parked Artifacts (Links)
 
-### FEAT-042 SSO JIT Provisioning
-- **Artifact File**: docs/helix/01-frame/features/FEAT-042-sso-jit-provisioning.md
+### FEAT Future Bank Feed Integration
+
+- **Artifact File**: `docs/helix/01-frame/features/FEAT-005-bank-feed-integration.md`
 - **Status**: Parking Lot (Deferred)
 
-### ADR-017 Secrets Rotation
-- **Artifact File**: docs/helix/02-design/adr/ADR-017-secrets-rotation.md
-- **Status**: Parking Lot (Future)
+### ADR Future Automatic Approval
+
+- **Artifact File**: `docs/helix/02-design/adr/ADR-002-automatic-approval.md`
+- **Status**: Parking Lot (Deferred)

@@ -422,7 +422,6 @@ type ComplexityRoot struct {
 	}
 
 	DefaultRouteStatus struct {
-		ModelRef         func(childComplexity int) int
 		ResolvedModel    func(childComplexity int) int
 		ResolvedProvider func(childComplexity int) int
 		Strategy         func(childComplexity int) int
@@ -1130,12 +1129,12 @@ type ComplexityRoot struct {
 
 	QueueSummary struct {
 		Blocked           func(childComplexity int) int
-		InProgress        func(childComplexity int) int
-		Ready             func(childComplexity int) int
-		OperatorAttention func(childComplexity int) int
+		Cancelled         func(childComplexity int) int
 		DependencyWaiting func(childComplexity int) int
 		ExternalBlocked   func(childComplexity int) int
-		Cancelled         func(childComplexity int) int
+		InProgress        func(childComplexity int) int
+		OperatorAttention func(childComplexity int) int
+		Ready             func(childComplexity int) int
 	}
 
 	ReadyCheck struct {
@@ -3211,12 +3210,6 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 
 		return e.ComplexityRoot.CycleTimeSummary.UnknownCount(childComplexity), true
 
-	case "DefaultRouteStatus.modelRef":
-		if e.ComplexityRoot.DefaultRouteStatus.ModelRef == nil {
-			break
-		}
-
-		return e.ComplexityRoot.DefaultRouteStatus.ModelRef(childComplexity), true
 	case "DefaultRouteStatus.resolvedModel":
 		if e.ComplexityRoot.DefaultRouteStatus.ResolvedModel == nil {
 			break
@@ -6657,24 +6650,12 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.QueueSummary.Blocked(childComplexity), true
-	case "QueueSummary.inProgress":
-		if e.ComplexityRoot.QueueSummary.InProgress == nil {
+	case "QueueSummary.cancelled":
+		if e.ComplexityRoot.QueueSummary.Cancelled == nil {
 			break
 		}
 
-		return e.ComplexityRoot.QueueSummary.InProgress(childComplexity), true
-	case "QueueSummary.ready":
-		if e.ComplexityRoot.QueueSummary.Ready == nil {
-			break
-		}
-
-		return e.ComplexityRoot.QueueSummary.Ready(childComplexity), true
-	case "QueueSummary.operatorAttention":
-		if e.ComplexityRoot.QueueSummary.OperatorAttention == nil {
-			break
-		}
-
-		return e.ComplexityRoot.QueueSummary.OperatorAttention(childComplexity), true
+		return e.ComplexityRoot.QueueSummary.Cancelled(childComplexity), true
 	case "QueueSummary.dependencyWaiting":
 		if e.ComplexityRoot.QueueSummary.DependencyWaiting == nil {
 			break
@@ -6687,12 +6668,24 @@ func (e *executableSchema) Complexity(ctx context.Context, typeName, field strin
 		}
 
 		return e.ComplexityRoot.QueueSummary.ExternalBlocked(childComplexity), true
-	case "QueueSummary.cancelled":
-		if e.ComplexityRoot.QueueSummary.Cancelled == nil {
+	case "QueueSummary.inProgress":
+		if e.ComplexityRoot.QueueSummary.InProgress == nil {
 			break
 		}
 
-		return e.ComplexityRoot.QueueSummary.Cancelled(childComplexity), true
+		return e.ComplexityRoot.QueueSummary.InProgress(childComplexity), true
+	case "QueueSummary.operatorAttention":
+		if e.ComplexityRoot.QueueSummary.OperatorAttention == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QueueSummary.OperatorAttention(childComplexity), true
+	case "QueueSummary.ready":
+		if e.ComplexityRoot.QueueSummary.Ready == nil {
+			break
+		}
+
+		return e.ComplexityRoot.QueueSummary.Ready(childComplexity), true
 
 	case "ReadyCheck.name":
 		if e.ComplexityRoot.ReadyCheck.Name == nil {
@@ -18131,35 +18124,6 @@ func (ec *executionContext) fieldContext_CycleTimeSummary_maxMs(_ context.Contex
 		IsResolver: false,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			return nil, errors.New("field of type Int does not have child fields")
-		},
-	}
-	return fc, nil
-}
-
-func (ec *executionContext) _DefaultRouteStatus_modelRef(ctx context.Context, field graphql.CollectedField, obj *DefaultRouteStatus) (ret graphql.Marshaler) {
-	return graphql.ResolveField(
-		ctx,
-		ec.OperationContext,
-		field,
-		ec.fieldContext_DefaultRouteStatus_modelRef,
-		func(ctx context.Context) (any, error) {
-			return obj.ModelRef, nil
-		},
-		nil,
-		ec.marshalNString2string,
-		true,
-		true,
-	)
-}
-
-func (ec *executionContext) fieldContext_DefaultRouteStatus_modelRef(_ context.Context, field graphql.CollectedField) (fc *graphql.FieldContext, err error) {
-	fc = &graphql.FieldContext{
-		Object:     "DefaultRouteStatus",
-		Field:      field,
-		IsMethod:   false,
-		IsResolver: false,
-		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
-			return nil, errors.New("field of type String does not have child fields")
 		},
 	}
 	return fc, nil
@@ -34934,8 +34898,6 @@ func (ec *executionContext) fieldContext_Query_defaultRouteStatus(_ context.Cont
 		IsResolver: true,
 		Child: func(ctx context.Context, field graphql.CollectedField) (*graphql.FieldContext, error) {
 			switch field.Name {
-			case "modelRef":
-				return ec.fieldContext_DefaultRouteStatus_modelRef(ctx, field)
 			case "resolvedProvider":
 				return ec.fieldContext_DefaultRouteStatus_resolvedProvider(ctx, field)
 			case "resolvedModel":
@@ -47085,11 +47047,6 @@ func (ec *executionContext) _DefaultRouteStatus(ctx context.Context, sel ast.Sel
 		switch field.Name {
 		case "__typename":
 			out.Values[i] = graphql.MarshalString("DefaultRouteStatus")
-		case "modelRef":
-			out.Values[i] = ec._DefaultRouteStatus_modelRef(ctx, field, obj)
-			if out.Values[i] == graphql.Null {
-				out.Invalids++
-			}
 		case "resolvedProvider":
 			out.Values[i] = ec._DefaultRouteStatus_resolvedProvider(ctx, field, obj)
 		case "resolvedModel":

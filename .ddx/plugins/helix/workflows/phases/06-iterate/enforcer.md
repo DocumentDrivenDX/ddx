@@ -20,7 +20,7 @@ The Iterate phase analyzes production data, user feedback, and operational metri
 
 When documenting learnings:
 1. **Update original requirements**: Don't create new docs for updates
-2. **Extend feature specs**: Add lessons learned sections
+2. **Extend feature specs**: Thread durable learnings into the governing sections that changed
 3. **Update risk registers**: Add newly discovered risks
 4. **Enhance user stories**: Refine based on actual usage
 5. **Improve test plans**: Add missing test cases discovered
@@ -141,7 +141,7 @@ Learnings not being captured:
 
 Required documentation:
 1. Update relevant specs
-2. Document in lessons learned
+2. Record the learning in the canonical iterate outputs and governing docs that changed
 3. Add to risk register if applicable
 4. Update test plans
 
@@ -220,9 +220,12 @@ Iterate provides:
 ## Iterate Artifacts
 
 Key outputs to create/update:
+- **Metrics Dashboard**: Iteration-level system summary and decision report
+- **Security Metrics**: Security-specific posture, trend, and recommendation report
+- **Improvement Backlog**: Prioritized tracker-backed follow-up work
+- **Metric Definitions**: Individual metric specifications with ratchet floors
 - **Alignment Reviews**: Reconciliation of plan vs. implementation
 - **Backfill Reports**: Documentation reconstruction from evidence
-- **Metric Definitions**: Individual metric specifications with ratchet floors
 - **Tracker Issues**: Follow-up work feeding back into Frame
 
 ## Your Mantras
@@ -264,7 +267,8 @@ Track iteration-over-iteration:
 - **Ratchet Trends**: Are floors advancing? A stagnant coverage floor suggests
   the test strategy needs attention. A stagnant acceptance satisfaction floor
   suggests requirements are outpacing implementation. Include floor deltas in
-  iteration reports and use them to prioritize next-cycle work.
+  the canonical iterate outputs (`metrics-dashboard` and `security-metrics`
+  when relevant) and use them to prioritize next-cycle work.
 
 ## Stakeholder Communication
 

@@ -1,5 +1,5 @@
 ---
-dun:
+ddx:
   id: FEAT-007
   depends_on:
     - helix.prd
@@ -90,6 +90,12 @@ Each demo reel must:
 | **Evolve** | Threading a requirement change through the artifact stack | Done |
 | **Experiment** | Metric-driven optimization loop | Done |
 
+The authoritative shipped public demo inventory is the four demos above.
+`docs/demos/helix-interactive/` may exist as an experimental or internal demo
+source, but it is out of scope for the public microsite and GitHub Pages
+recording workflow unless this feature spec is updated to promote it into the
+required demo set.
+
 ### FR-4: Technology Stack
 
 The microsite uses:
@@ -172,3 +178,6 @@ concerns and must not drift without an ADR.
 - Custom theme development beyond shortcodes
 - Video (non-terminal) demos
 - User accounts or interactive features
+- Promoting `docs/demos/helix-interactive/` into the shipped public demo set
+  without matching microsite embeds, CI recording coverage, and a feature-spec
+  update

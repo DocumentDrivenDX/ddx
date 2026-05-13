@@ -7,28 +7,8 @@ artifact:
   phase: frame
 
 description: |
-  Comprehensive checklist to validate Frame phase completeness, quality,
-  and readiness for Design phase. Ensures all deliverables meet standards
-  and stakeholders are aligned.
-
-dependencies:
-  requires:
-    - input: All Frame artifacts
-      type: artifact
-      path: all
-      required: true
-    - input: Exit gates criteria
-      type: configuration
-      path: exit-gates.yml
-      required: true
-
-  enables:
-    - output: Phase gate approval
-      type: decision
-      phase: frame
-    - output: Design phase kickoff
-      type: milestone
-      phase: design
+  Frame exit gate that verifies completeness, consistency, traceability,
+  evidence, stakeholder review, and readiness to enter Design.
 
 output:
   location: docs/helix/01-frame/validation-checklist.md
@@ -92,6 +72,14 @@ template:
     - checkboxes
     - tables
     - sign_off_section
+
+example:
+  file: example.md
+
+references:
+  - title: "IBM Requirements Management"
+    file: docs/resources/ibm-requirements-management.md
+    relationship: "Grounds traceability, validation, verification, and change management expectations"
 
 workflow:
   creation_order: last

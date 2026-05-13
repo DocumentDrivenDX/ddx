@@ -56,7 +56,6 @@ func runnerRunWithConfig(r *Runner, ctx context.Context, rcfg config.ResolvedCon
 		Correlation:   runtime.Correlation,
 		Model:         rcfg.Model(),
 		Provider:      rcfg.Provider(),
-		ModelRef:      rcfg.ModelRef(),
 		Effort:        rcfg.Effort(),
 		Timeout:       rcfg.Timeout(),
 		WallClock:     rcfg.WallClock(),

@@ -22,33 +22,6 @@ description: |
   Each ADR covers exactly one decision. ADRs are immutable once accepted; new
   decisions that revise them create a new ADR marked as superseding the old one.
 
-dependencies:
-  requires:
-    - input: Product Requirements Document
-      type: artifact
-      pattern: "prd.md"
-      phase: frame
-      required: false
-      note: "For decisions tied to product requirements"
-
-    - input: Feature Specification
-      type: artifact
-      pattern: "FEAT-[0-9]{3}-*.md"
-      phase: frame
-      required: false
-      note: "For feature-scoped architecture decisions"
-
-  enables:
-    - output: Solution Design
-      type: artifact
-      pattern: "SD-[0-9]{3}-*.md"
-      phase: design
-
-    - output: Technical Design
-      type: artifact
-      pattern: "TD-[0-9]{3}-*.md"
-      phase: design
-
 output:
   location: docs/helix/02-design/adrs/ADR-{id}-{name}.md
   format: markdown
@@ -104,6 +77,17 @@ prompts:
 
 template:
   file: template.md
+
+example:
+  file: example.md
+
+references:
+  - title: "Architectural Decision Records"
+    file: docs/resources/adr-github-organization.md
+    relationship: "Grounds ADRs as single-decision records with rationale, tradeoffs, and consequences"
+  - title: "Google Cloud Architecture Decision Records Overview"
+    file: docs/resources/google-cloud-architecture-decision-records.md
+    relationship: "Grounds ADR traceability to implementation context and architecture evolution"
 
 workflow:
   review_cycles: 1

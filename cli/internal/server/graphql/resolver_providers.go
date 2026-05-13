@@ -104,7 +104,7 @@ func (r *queryResolver) DefaultRouteStatus(ctx context.Context) (*DefaultRouteSt
 	if err != nil {
 		return &DefaultRouteStatus{}, nil //nolint:nilerr
 	}
-	result := &DefaultRouteStatus{ModelRef: dec.Model}
+	result := &DefaultRouteStatus{}
 	if dec.Provider != "" {
 		p := dec.Provider
 		result.ResolvedProvider = &p

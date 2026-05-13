@@ -8,37 +8,8 @@ artifact:
   optional: true
 
 description: |
-  A systematic analysis of project viability across technical, business,
-  operational, and resource dimensions. Used to validate that a proposed
-  solution is achievable before committing significant resources.
-
-dependencies:
-  requires:
-    - input: Problem statement defined
-      type: external
-      required: true
-    - input: High-level solution approach identified
-      type: external
-      required: false
-    - input: Resource constraints known
-      type: external
-      required: true
-
-  enables:
-    - output: Go/No-Go decision
-      type: decision
-      required: true
-    - output: Risk-adjusted project plan
-      type: artifact
-      path: prd
-    - output: Technical constraints for design
-      type: artifact
-      phase: design
-
-  relates_to:
-    - research-plan
-    - risk-register
-    - principles
+  Pre-commitment viability assessment across technical, business, operational,
+  resource, schedule, compliance, risk, and alternative dimensions.
 
 output:
   location: docs/helix/01-frame/feasibility-study.md
@@ -118,7 +89,15 @@ template:
 
 examples:
   - file: example.md
-    description: Feasibility study for a CLI automation platform
+    description: Feasibility study for the DepositMatch example product
+
+references:
+  - title: "DOJ Feasibility Study"
+    file: docs/resources/doj-feasibility-study.md
+    relationship: "Grounds pre-commitment feasibility, alternatives, decision criteria, and recommendation"
+  - title: "EIB Project Feasibility"
+    file: docs/resources/eib-project-feasibility.md
+    relationship: "Grounds option analysis, cost-benefit, organizational, compliance, and risk dimensions"
 
 workflow:
   creation_order: 0.8  # After research plan, before detailed requirements

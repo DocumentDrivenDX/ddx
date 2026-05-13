@@ -125,7 +125,7 @@ Each phase produces artifacts at its level before the next phase begins:
 | **Design** | Architect the solution | Architecture, ADRs, solution designs, technical designs, contracts |
 | **Test** | Specify verification | Test plans, test procedures, executable tests |
 | **Build** | Implement the solution | Source code, work items, build artifacts |
-| **Deploy** | Release and operate | Deployment checklists, runbooks, release notes |
+| **Deploy** | Release and operate | Deployment checklists, monitoring setup, runbooks, release notes |
 | **Iterate** | Learn and improve | Alignment reviews, retrospectives, metrics |
 
 Phases are not strictly sequential — iteration sends realized artifacts
@@ -200,8 +200,8 @@ ddx adr validate --all
 ```
 
 ADRs capture binding decisions with context, rationale, alternatives, and
-consequences. DDx scaffolds them with correct ID allocation, `dun.id` /
-`dun.depends_on` frontmatter, and required section structure.
+consequences. DDx scaffolds them with correct ID allocation, `ddx.id` /
+`ddx.depends_on` frontmatter, and required section structure.
 
 ### Solution Designs
 

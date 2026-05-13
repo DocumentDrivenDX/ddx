@@ -1,5 +1,5 @@
 ---
-dun:
+ddx:
   id: SD-001
   depends_on:
     - FEAT-001
@@ -9,48 +9,50 @@ dun:
 
 ## Scope
 
-**Feature**: [[FEAT-001-helix-supervisory-control]] | **PRD**: [[helix.prd]] | **ADR**: [[ADR-001]]
+**Feature**: [FEAT-002-helix-cli](../../01-frame/features/FEAT-002-helix-cli.md) (the CLI surface that realizes the supervisory control model) | **PRD**: [docs/helix/01-frame/prd.md](../../01-frame/prd.md) | **ADR**: [ADR-001](../adr/ADR-001-supervisory-control-model.md) | **Contract**: [CONTRACT-001](../contracts/CONTRACT-001-ddx-helix-boundary.md)
 
 ## Acceptance Criteria
 
 1. **Given** a HELIX-managed repository with governing artifacts, **When** the
-   operator enters or resumes `helix-run`, **Then** HELIX selects the
+   operator enters or resumes `helix run`, **Then** HELIX selects the
    highest-leverage bounded next action that can be taken safely without human
    input.
 2. **Given** a user-requested functionality change, **When** the change has
    downstream implications for specs or designs, **Then** HELIX routes work to
    reconciliation, evolve, or design before build continues.
 3. **Given** changed specs or designs and open tracker issues, **When**
-   `helix-run` evaluates the next step, **Then** HELIX refines the issue queue
+   `helix run` evaluates the next step, **Then** HELIX refines the issue queue
    before build resumes.
 4. **Given** ready issues governed by sufficient upstream artifacts, **When**
-   `helix-run` advances execution, **Then** it prefers bounded build
+   `helix run` advances execution, **Then** it prefers bounded build
    followed by fresh-eyes review.
 5. **Given** ambiguity, missing authority, or product judgment requirements,
    **When** HELIX cannot proceed safely, **Then** it stops and requests human
    guidance instead of guessing.
 6. **Given** an epic selected for execution, **When** runnable child work
-   exists, **Then** `helix-run` stays focused on that epic until completion or
+   exists, **Then** `helix run` stays focused on that epic until completion or
    a recorded blocker releases focus.
 7. **Given** difficult but still-governed work, **When** a first attempt
-   fails, **Then** `helix-run` retries with bounded exponential backoff before
+   fails, **Then** `helix run` retries with bounded exponential backoff before
    declaring the slice blocked.
 
 ## Solution Approaches
 
-**Selected Approach**: Model `helix-run` as a supervisory controller over the HELIX
+**Selected Approach**: Model `helix run` as a supervisory controller over the HELIX
 artifact stack and tracker state. Treat companion commands and skills as
 triggered subroutines inside that control loop while preserving their direct
-interactive entrypoints.
+interactive entrypoints. Per CONTRACT-001, HELIX owns the supervisory
+("what next?") layer; managed agent execution is delegated to DDx
+(`ddx agent execute-bead`, `ddx agent execute-loop`).
 
 **Key Decisions**:
-- `helix-run` is the default autonomous control surface: users should not need
+- `helix run` is the default autonomous control surface: users should not need
   to restate phase transitions explicitly once HELIX has sufficient authority.
-- `helix-run` must remain responsive to concurrent local refinement activity:
+- `helix run` must remain responsive to concurrent local refinement activity:
   tracker and governing-artifact changes are new supervisory input, not noise.
 - The tracker is the steering wheel for execution: state mutations in
-  `.helix/issues.jsonl` are how operators and agents redirect work while a run
-  is active.
+  `.ddx/beads.jsonl` (managed via `ddx bead`, per CONTRACT-001) are how
+  operators and agents redirect work while a run is active.
 - Next-step selection follows the principle of least power: prefer refining,
   reconciling, or polishing existing artifacts before escalating to broader
   changes.
@@ -77,10 +79,10 @@ interactive entrypoints.
 
 ## Component Changes
 
-### Component: `helix-run` supervisory loop
-- **Current State**: `helix-run` is primarily framed as a bounded loop around
+### Component: `helix run` supervisory loop
+- **Current State**: `helix run` is primarily framed as a bounded loop around
   ready build work plus queue-drain decisions.
-- **Changes**: Expand `helix-run` into a supervisory controller that can detect
+- **Changes**: Expand `helix run` into a supervisory controller that can detect
   which workflow layer is weakest and route to the appropriate bounded action:
   align, evolve, design, polish, build, review, check, or backfill. Revalidate the
   selected issue before claim and before close so concurrent refinement causes
@@ -96,12 +98,13 @@ interactive entrypoints.
   waiting for explicit command recall.
 
 ### Component: Tracker refinement support
-- **Current State**: The tracker captures execution state but does not yet
-  expose all metadata mutation surfaces needed by higher-order refinement
-  workflows.
+- **Current State**: The tracker (`ddx bead` against `.ddx/beads.jsonl`)
+  captures execution state but does not yet expose all metadata mutation
+  surfaces needed by higher-order refinement workflows.
 - **Changes**: The supervisory model assumes issue refinement remains
-  tracker-first and may require richer metadata updates to support polish,
-  alignment, execution-class selection, and issue supersession cleanly.
+  tracker-first (via `ddx bead update`) and may require richer metadata
+  updates to support polish, alignment, execution-class selection, and issue
+  supersession cleanly. Tracker write safety is governed by ADR-002.
 
 ### Component: Workflow contract
 - **Current State**: The workflow docs emphasize bounded actions, but they do
@@ -128,7 +131,7 @@ interactive entrypoints.
 
 ```mermaid
 graph TD
-    Intent[User Intent] --> Supervisor[helix-run Supervisor]
+    Intent[User Intent] --> Supervisor[helix run Supervisor]
     Supervisor --> Requirements[Requirements / Specs]
     Supervisor --> Design[Design Artifacts]
     Supervisor --> Issues[Tracker Issues]
@@ -145,7 +148,7 @@ graph TD
 2. Human intervention by exception: HELIX must stop when authority, approval,
    or product judgment is missing.
 3. Interactive continuity: direct command use must not create a separate
-   control model from `helix-run`.
+   control model from `helix run`.
 4. Shared-resource integrity: any HELIX skill that depends on `workflows/`
    assumes the full HELIX package layout is present.
 5. Queue drift visibility: concurrent local tracker or spec changes must be
@@ -265,13 +268,13 @@ packaging_contract:
 
 | From | To | Method | Data |
 |------|-----|--------|------|
-| User conversation | `helix-run` supervisor | Intent classification | functionality changes, direct requests, approvals, ambiguity |
-| `helix-run` | `align` / `design` | Triggered subroutine | requirement and design drift |
-| `helix-run` | `polish` | Triggered subroutine | changed specs plus open issues |
-| `helix-run` | `build` | Triggered subroutine | ready governed issues |
-| `helix-run` | `review` | Triggered subroutine | recent implementation results |
-| `helix-run` | tracker | Query/update | issue state, dependencies, metadata, claims |
-| Companion commands | `helix-run` model | Shared control semantics | direct interactive intervention without model drift |
+| User conversation | `helix run` supervisor | Intent classification | functionality changes, direct requests, approvals, ambiguity |
+| `helix run` | `align` / `design` | Triggered subroutine | requirement and design drift |
+| `helix run` | `polish` | Triggered subroutine | changed specs plus open issues |
+| `helix run` | `build` | Triggered subroutine | ready governed issues |
+| `helix run` | `review` | Triggered subroutine | recent implementation results |
+| `helix run` | `ddx bead` (`.ddx/beads.jsonl`) | Query/update | issue state, dependencies, metadata, claims |
+| Companion commands | `helix run` model | Shared control semantics | direct interactive intervention without model drift |
 | HELIX skill pack | shared `workflows/` library | Package-relative file access | actions, templates, metadata, conventions |
 | HELIX skills | DDx execution framework | `ddx exec run` | structured skill output, raw logs, artifact linkage |
 

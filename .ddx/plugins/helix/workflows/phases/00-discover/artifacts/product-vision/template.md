@@ -1,3 +1,8 @@
+---
+ddx:
+  id: "[artifact-id]"
+---
+
 # Product Vision
 
 ## Mission Statement
@@ -60,4 +65,5 @@ Use this checklist when reviewing a product vision artifact:
 - [ ] Value propositions map to customer benefits, not internal capabilities
 - [ ] Success metrics are measurable and time-bound
 - [ ] Why Now section names a specific change, not a vague opportunity
+- [ ] Business case details, competitor matrices, requirements, and technical choices are left to their own artifacts
 - [ ] No implementation details (technology choices, architecture) — those belong in design

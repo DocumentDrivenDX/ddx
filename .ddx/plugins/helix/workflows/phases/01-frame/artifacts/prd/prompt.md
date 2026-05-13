@@ -1,8 +1,8 @@
 # PRD Generation Prompt
 
-Create a PRD that frames the problem, scope, priorities, and success criteria
-clearly enough that someone could build the product without further
-conversation.
+Create a PRD that frames the problem, product scope, priorities, and success
+criteria clearly enough that downstream feature specs, designs, tests, and
+implementation work can trace back to it.
 
 ## Storage Location
 
@@ -10,10 +10,19 @@ Store at: `docs/helix/01-frame/prd.md`
 
 ## Purpose
 
-The PRD is the **authority document for what to build and why**. It sits
-between the product vision (which defines direction) and feature specs (which
-define detailed requirements). Every design decision and implementation choice
-should trace back to a PRD requirement.
+The PRD is the **product-scope authority for what to build and why**. Its
+unique job is to translate the Product Vision into prioritized, measurable
+requirements and boundaries. It sits between the product vision (which defines
+direction) and feature specs (which define feature-level detail). Every design
+decision and implementation choice should trace back to a PRD requirement.
+
+## Reference Anchors
+
+Use these local resource summaries as grounding:
+
+- `docs/resources/atlassian-prd.md` frames a PRD as shared understanding of purpose, behavior, user needs, assumptions, out-of-scope items, and success criteria.
+- `docs/resources/aha-prd-template.md` supports concise cross-functional scope: what is being built, who it is for, and how it delivers value.
+- `docs/resources/ibm-requirements-management.md` grounds measurable, prioritized, traceable requirements and validation/verification discipline.
 
 ## Key Principles
 
@@ -23,9 +32,25 @@ should trace back to a PRD requirement.
   decision. If a section doesn't inform a decision, it's filler.
 - **Testable requirements** — every P0 requirement should be verifiable. If
   you can't describe how to test it, it's too vague.
+- **Traceable boundaries** — requirements should connect upward to the Product
+  Vision and downward to feature specs, designs, tests, and build work.
 - **Honest non-goals** — non-goals should exclude things someone might
   reasonably expect to be in scope. "Not a replacement for X" only matters if
   someone might assume it is.
+
+## Stay in Your Lane
+
+Product requirements are for product scope. If you find yourself writing about:
+
+| This content | Belongs in |
+|---|---|
+| Market sizing, ROI, investment case | `00-discover/business-case.md` |
+| Positioning, target market, long-horizon strategic success | `00-discover/product-vision.md` |
+| Detailed feature behavior and edge cases | `01-frame/features/FEAT-*.md` |
+| User journey phrasing independent of product-level requirements | `01-frame/user-stories.md` |
+| Architecture choices or implementation approach | `02-design/` |
+| Detailed test cases and fixtures | `03-test/` |
+| Build sequencing and execution slices | `04-build/implementation-plan.md` |
 
 ## Section-by-Section Guidance
 
@@ -68,6 +93,11 @@ template, not a persona.
 P0 = the product is broken without this. P1 = the product is weak without
 this. P2 = the product is better with this. If you have more than 7 P0s,
 you're not prioritizing.
+
+Each requirement should be stable enough to trace into feature specs and tests.
+If a requirement describes a screen, algorithm, API field, or implementation
+sequence in detail, move that detail downstream and keep the PRD at product
+scope.
 
 ### Functional Requirements
 These are the detailed behavioral specs. Each one should be testable — someone
@@ -131,6 +161,7 @@ committing.
 - [ ] Every P0 requirement is testable (someone could write an acceptance test)
 - [ ] Every P0 has an acceptance test sketch with inputs and expected outputs
 - [ ] Success metrics have numeric targets and named measurement methods
+- [ ] Requirements trace upward to the Product Vision and downward to downstream artifacts
 - [ ] No `[TBD]`, `[TODO]`, or `[NEEDS CLARIFICATION]` markers in any section except Open Questions
 - [ ] Non-goals exclude something a reasonable person might assume is in scope
 - [ ] Personas are specific enough to validate with a real user
