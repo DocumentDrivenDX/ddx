@@ -373,11 +373,6 @@ func profileMaxForSort(profile agentlib.PolicyInfo) int {
 }
 
 func preferProfile(left, right agentlib.PolicyInfo) bool {
-	leftLocal := left.AllowLocal
-	rightLocal := right.AllowLocal
-	if leftLocal != rightLocal {
-		return leftLocal
-	}
 	return left.Name < right.Name
 }
 

@@ -29,6 +29,20 @@ func TestSelectCheapestProfile_LowestBandWithAvailableModel(t *testing.T) {
 	assert.Equal(t, "cheap", SelectCheapestProfile(snap))
 }
 
+func TestSelectCheapestProfile_TieDoesNotPreferLocalPolicy(t *testing.T) {
+	snap := ProfileSnapshot{
+		Profiles: []agentlib.PolicyInfo{
+			{Name: "z-local", MinPower: 5, MaxPower: 5, AllowLocal: true},
+			{Name: "a-remote", MinPower: 5, MaxPower: 5},
+		},
+		Models: []agentlib.ModelInfo{
+			{ID: "candidate", Power: 5, Available: true, AutoRoutable: true},
+		},
+	}
+
+	assert.Equal(t, "a-remote", SelectCheapestProfile(snap))
+}
+
 func TestSelectStrongestProfile_HighestBandWithAvailableModel(t *testing.T) {
 	snap := ProfileSnapshot{
 		Profiles: []agentlib.PolicyInfo{
